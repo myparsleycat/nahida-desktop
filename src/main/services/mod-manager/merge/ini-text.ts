@@ -77,6 +77,24 @@ export function isControlFlowLine(raw: string) {
     return /^(?:if|else\s+if|elif|else|endif)\b/i.test(raw.trim());
 }
 
+const OVERRIDE_MATCH_KEYS = new Set([
+    "match_first_index",
+    "match_index_count",
+    "match_byte_width",
+    "match_stride",
+    "match_type",
+    "match_usage",
+    "match_format",
+    "match_width",
+    "match_height",
+    "filter_index",
+    "allow_duplicate_hash",
+]);
+
+export function isOverrideMatchKey(key: string) {
+    return OVERRIDE_MATCH_KEYS.has(key.toLowerCase());
+}
+
 export function hasControlFlow(text: string) {
     return text.split(/\r?\n/).some((line) => isControlFlowLine(line));
 }
@@ -183,6 +201,24 @@ export function extractPositionSectionHash(text: string) {
 
 export function extractPositionHash(text: string) {
     return extractPositionSectionHash(text) ?? extractHashes(text)[0] ?? null;
+}
+
+export function extractPositionSectionMatchLines(text: string) {
+    const parsed = parseIniText(text);
+    const section =
+        POSITION_SECTION_PATTERNS.map((pattern) =>
+            parsed.sections.find((entry) => pattern.test(entry.name) && sectionValues(entry).hash),
+        ).find(Boolean) ?? parsed.sections.find((entry) => sectionValues(entry).hash);
+    if (!section) return [];
+    return section.lines.flatMap((line) => {
+        if (line.kind !== "kv") return [];
+        const key = line.key.toLowerCase();
+        if (key === "hash" || key === "match_priority" || key === "allow_duplicate_hash") {
+            return [];
+        }
+        if (!isOverrideMatchKey(line.key)) return [];
+        return [`${line.key} = ${line.value}`];
+    });
 }
 
 export function hasKeySection(text: string) {

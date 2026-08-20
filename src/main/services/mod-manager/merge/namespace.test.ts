@@ -155,6 +155,96 @@ ps-t0 = ResourceTexture
         assert.doesNotMatch(wrapped, /else if \$\\Klee\\Master\\swapvar==1/);
     });
 
+    it("keeps EFMI match_index_count outside the swapvar wrap", async () => {
+        const input = `[TextureOverride_Component0]
+hash = 79a0cd6f
+match_priority = 0
+match_index_count = 48909
+$object_detected = 1
+$lod_level = 0
+if $mod_enabled && DRAW_TYPE == 4
+    handling = skip
+    run = CommandList_Draw_Component0
+endif
+`;
+        const wrapped = wrapHashedSections(input, "Liino", 1);
+        assert.match(
+            wrapped,
+            /hash = 79a0cd6f\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\Liino\\Master\\swapvar==1\n\t\$object_detected = 1\n\t\$lod_level = 0\n\tif \$mod_enabled && DRAW_TYPE == 4\n\t    handling = skip\n\t    run = CommandList_Draw_Component0\n\tendif\nendif/,
+        );
+        assert.doesNotMatch(wrapped, /if \$\\Liino\\Master\\swapvar==1\n\tmatch_index_count/);
+        assert.doesNotMatch(wrapped, /match_priority = 0/);
+
+        const unwrapped = await unwrapNamespace(wrapped);
+        assert.doesNotMatch(unwrapped, /match_priority/);
+        assert.doesNotMatch(unwrapped, /\$\\Liino\\Master\\swapvar/);
+        assert.match(unwrapped, /match_index_count = 48909/);
+        assert.match(unwrapped, /\$object_detected = 1/);
+    });
+
+    it("hoists a match filter that appears after runtime commands", () => {
+        const input = `[TextureOverride_Component0]
+hash = 79a0cd6f
+$object_detected = 1
+match_index_count = 48909
+handling = skip
+`;
+        const wrapped = wrapHashedSections(input, "Liino", 1);
+        assert.match(
+            wrapped,
+            /hash = 79a0cd6f\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\Liino\\Master\\swapvar==1\n\t\$object_detected = 1\n\thandling = skip\nendif/,
+        );
+    });
+
+    it("wraps EFMI texture overrides that already have match_priority and object_detected", () => {
+        const input = `[TextureOverride_Texture0]
+hash = 0d62f6d9
+match_priority = 0
+if $object_detected
+    this = Resource_Texture0
+endif
+`;
+        const wrapped = wrapHashedSections(input, "Liino", 1);
+        assert.match(
+            wrapped,
+            /hash = 0d62f6d9\nmatch_priority = 1\nif \$\\Liino\\Master\\swapvar==1\n\tif \$object_detected\n\t    this = Resource_Texture0\n\tendif\nendif/,
+        );
+        assert.doesNotMatch(wrapped, /match_priority = 0/);
+    });
+
+    it("copies match_index_count onto the master active overlay", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-efmi-active-"));
+        tempRoots.push(root);
+        const childPath = path.join(root, "Liino.ini");
+        await fse.writeFile(
+            childPath,
+            `[TextureOverride_Component0]
+hash = 79a0cd6f
+match_index_count = 48909
+$object_detected = 1
+`,
+        );
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Liino",
+            sources: [{ iniPath: childPath, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        assert.match(
+            master,
+            /\[TextureOverrideLiinoComponent0\]\nhash = 79a0cd6f\nmatch_index_count = 48909\n\$active = 1/,
+        );
+        assert.doesNotMatch(
+            master,
+            /\[TextureOverrideLiinoComponent0\]\nhash = 79a0cd6f\n\$active = 1/,
+        );
+    });
+
     it("does not invent extra swapvar indices from multiple vb0 lines in one child", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-multi-vb0-"));
         tempRoots.push(root);
