@@ -118,17 +118,6 @@ export async function buildMeshResult(
         }
         const unique = deduplicateDraws(group);
 
-        const texKeyFor = (relative: string | undefined, role: ViewerTextureRole = "diffuse") => {
-            if (!relative) {
-                return null;
-            }
-            const resolved = safeResourcePath(modDir, relative);
-            if (!resolved) {
-                return null;
-            }
-            return textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
-        };
-
         const ensureTexture = async (
             relative: string | undefined,
             role: ViewerTextureRole = "diffuse",
@@ -140,15 +129,16 @@ export async function buildMeshResult(
             const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
             if (!textures[key]) {
                 const encoded = await encodeTexture(resolved, role, readBuffer);
-                if (encoded) {
-                    textures[key] = {
-                        texKey: key,
-                        role,
-                        bytes: encoded.bytes,
-                        mimeType: encoded.mimeType,
-                        relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
-                    };
+                if (!encoded) {
+                    return null;
                 }
+                textures[key] = {
+                    texKey: key,
+                    role,
+                    bytes: encoded.bytes,
+                    mimeType: encoded.mimeType,
+                    relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
+                };
             }
             return key;
         };
@@ -380,7 +370,7 @@ export async function buildMeshResult(
                 uvs,
                 indices,
                 conditions: draw.conditions,
-                texKey: texKey ?? texKeyFor(draw.textureDefaultFile),
+                texKey,
                 textureVariants,
                 normalMapKey: normal.key,
                 normalMapVariants: normal.variants,
@@ -725,11 +715,11 @@ async function encodeTexture(
 async function downscaleViewerTexture(encoded: {
     bytes: Buffer;
     mimeType: "image/png" | "image/jpeg";
-}): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" }> {
+}): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" } | null> {
     try {
         const metadata = await sharp(encoded.bytes).metadata();
         if (!metadata.width || !metadata.height) {
-            return encoded;
+            return null;
         }
         const target = viewerPreviewTextureSize(metadata.width, metadata.height);
         if (target.width === metadata.width && target.height === metadata.height) {
@@ -742,6 +732,6 @@ async function downscaleViewerTexture(encoded: {
                 : await resized.png().toBuffer();
         return { bytes, mimeType: encoded.mimeType };
     } catch {
-        return encoded;
+        return null;
     }
 }
