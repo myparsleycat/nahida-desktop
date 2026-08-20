@@ -965,6 +965,12 @@
         "ready": "変換可能",
         "not_resizable": "スキップ",
         "process_single": "変換",
+        "select_all": "すべて選択",
+        "selected_count": "{{count}} 件選択",
+        "bulk_apply": "一括適用",
+        "bulk_apply_description": "選択したすべてのテクスチャに同じオプションを適用します。",
+        "process_selected": "選択項目を変換",
+        "batch_progress": "{{current}} / {{total}}",
         "run": "テクスチャを変換",
         "running": "変換中",
         "result_title": "変換結果",
@@ -988,7 +994,8 @@
         },
         "dialog": {
           "title": "テクスチャ変換オプション",
-          "description_fallback": "選択した DDS ファイル"
+          "description_fallback": "選択した DDS ファイル",
+          "description_multiple": "{{count}} 個の DDS ファイル"
         },
         "result": {
           "processed": "処理",
@@ -1000,7 +1007,8 @@
           "save_settings_failed": "テクスチャ変換設定の保存に失敗しました",
           "load_failed": "テクスチャ一覧の読み込みに失敗しました",
           "completed": "テクスチャ変換が完了しました",
-          "completed_description": "{{updated}} 件変更、{{failed}} 件失敗",
+          "completed_description": "{{updated}} 件変更、{{failed}} 件失敗、{{skipped}} 件スキップ",
+          "none_processed": "変換されたテクスチャはありません",
           "single_completed": "テクスチャ変換が完了しました",
           "single_completed_fallback": "選択したテクスチャの処理が完了しました",
           "failed": "テクスチャ変換に失敗しました"

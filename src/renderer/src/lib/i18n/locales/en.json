@@ -998,6 +998,12 @@
         "ready": "Ready",
         "not_resizable": "Skipped",
         "process_single": "Process",
+        "select_all": "Select all",
+        "selected_count": "{{count}} selected",
+        "bulk_apply": "Apply to all",
+        "bulk_apply_description": "Use the same options for every selected texture.",
+        "process_selected": "Process selected",
+        "batch_progress": "{{current}} / {{total}}",
         "run": "Process textures",
         "running": "Processing",
         "result_title": "Processing result",
@@ -1021,7 +1027,8 @@
         },
         "dialog": {
           "title": "Texture processing options",
-          "description_fallback": "Selected DDS file"
+          "description_fallback": "Selected DDS file",
+          "description_multiple": "{{count}} DDS files"
         },
         "result": {
           "processed": "Processed",
@@ -1033,7 +1040,8 @@
           "save_settings_failed": "Failed to save texture processing settings",
           "load_failed": "Failed to load the texture list",
           "completed": "Texture processing completed",
-          "completed_description": "{{updated}} updated, {{failed}} failed",
+          "completed_description": "{{updated}} updated, {{failed}} failed, {{skipped}} skipped",
+          "none_processed": "No textures were processed",
           "single_completed": "Texture processing completed",
           "single_completed_fallback": "Finished processing the selected texture",
           "failed": "Texture processing failed"
