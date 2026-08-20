@@ -17,7 +17,7 @@ This feature automates much of the DLL build process, but you still need to inst
    - **Windows 11 SDK (10.0.22621.0)**
 
 ::: warning
-Installing the build tools may require more than 10 GB of disk space. Make sure you have enough free space before proceeding.
+Installing the build tools requires approximately 4.4 GB of disk space. Make sure you have enough free space before proceeding.
 :::
 
 ## Configure the XXMI Path
