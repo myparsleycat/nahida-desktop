@@ -394,40 +394,44 @@ export function TextureResizerForm({
                   </div>
                 </div>
               </div>
-              <Slider
-                min={0}
-                max={resizeCandidates.length - 1}
-                step={1}
-                value={selectedResizeIndex}
-                disabled={disabled}
-                onValueChange={(value) => {
-                  const index = Array.isArray(value) ? (value[0] ?? 0) : value;
-                  const nextCandidate = resizeCandidates[index];
-                  if (!nextCandidate) {
-                    return;
-                  }
+              {resizeCandidates.length > 1 && (
+                <>
+                  <Slider
+                    min={0}
+                    max={resizeCandidates.length - 1}
+                    step={1}
+                    value={selectedResizeIndex}
+                    disabled={disabled}
+                    onValueChange={(value) => {
+                      const index = Array.isArray(value) ? (value[0] ?? 0) : value;
+                      const nextCandidate = resizeCandidates[index];
+                      if (!nextCandidate) {
+                        return;
+                      }
 
-                  updateSettings({
-                    customWidth: nextCandidate.width,
-                    customHeight: nextCandidate.height,
-                    mode: "custom",
-                  });
-                }}
-              />
-              <div className="flex justify-between gap-3 text-xs text-muted-foreground">
-                <span>
-                  {formatResizePercent(resizeCandidates[0].width, resizeSource.width)} /{" "}
-                  {resizeCandidates[0].width}x{resizeCandidates[0].height}
-                </span>
-                <span className="text-right">
-                  {formatResizePercent(
-                    resizeCandidates[resizeCandidates.length - 1].width,
-                    resizeSource.width,
-                  )}{" "}
-                  / {resizeCandidates[resizeCandidates.length - 1].width}x
-                  {resizeCandidates[resizeCandidates.length - 1].height}
-                </span>
-              </div>
+                      updateSettings({
+                        customWidth: nextCandidate.width,
+                        customHeight: nextCandidate.height,
+                        mode: "custom",
+                      });
+                    }}
+                  />
+                  <div className="flex justify-between gap-3 text-xs text-muted-foreground">
+                    <span>
+                      {formatResizePercent(resizeCandidates[0].width, resizeSource.width)} /{" "}
+                      {resizeCandidates[0].width}x{resizeCandidates[0].height}
+                    </span>
+                    <span className="text-right">
+                      {formatResizePercent(
+                        resizeCandidates[resizeCandidates.length - 1].width,
+                        resizeSource.width,
+                      )}{" "}
+                      / {resizeCandidates[resizeCandidates.length - 1].width}x
+                      {resizeCandidates[resizeCandidates.length - 1].height}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
