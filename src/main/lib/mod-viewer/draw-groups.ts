@@ -1,3 +1,4 @@
+import { closeSync, openSync, readSync } from "node:fs";
 import { open } from "node:fs/promises";
 import path from "node:path";
 
@@ -48,6 +49,8 @@ const AUX_MAP_CHANNELS: Record<string, "normal_map" | "light_map" | "material_ma
 };
 const HASH_TEXTURE_SUFFIX = /(Diffuse|NormalMap|LightMap|MaterialMap)$/i;
 const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+)\s+t=/i;
+const IB_COMPONENT_DUMP_RE =
+    /(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\./i;
 const DDS_SRGB_DXGI = new Set([29, 72, 75, 78, 91, 93, 99]);
 
 export type TextureAssignment = { res: string; cond: Dnf };
@@ -128,6 +131,7 @@ type SectionInfo = {
     ibHistory: TextureAssignment[];
     vb0History: TextureAssignment[];
     vb1History: TextureAssignment[];
+    thisHistory: TextureAssignment[];
     auxMaps: Record<string, AuxState>;
 };
 
@@ -151,6 +155,7 @@ export function buildDrawGroups(
     seen: Record<string, number> = {},
     gatingVars?: Set<string>,
     animation?: { vars: Set<string>; domains: Record<string, string[]> },
+    modDir?: string,
 ): DrawGroup[] {
     const scanVars = gatingVars ?? new Set<string>();
     const secInfo = scanSectionsForDraws(sections, varPrefix, scanVars, animation?.domains);
@@ -411,7 +416,9 @@ export function buildDrawGroups(
             draws,
         });
     }
-    return collapseAnimationDraws(groups, animation?.vars);
+    const collapsed = collapseAnimationDraws(groups, animation?.vars);
+    bindHashImageTextures(collapsed, secInfo, resources, modDir);
+    return collapsed;
 }
 
 export async function attachWwmiDumpTextures(
@@ -483,6 +490,290 @@ export async function attachWwmiDumpTextures(
             draw.textureDefaultFile ??= picked;
         }
     }
+}
+
+export function attachIbComponentDumpTextures(
+    groups: DrawGroup[],
+    resources: Record<string, ResourceInfo>,
+): void {
+    const dumps = Object.values(resources).flatMap((info) => {
+        const file = info.filename;
+        const match = file ? IB_COMPONENT_DUMP_RE.exec(file.replaceAll("\\", "/")) : undefined;
+        if (!file || !match) {
+            return [];
+        }
+        return [
+            {
+                file,
+                ibHash: match[1].toLowerCase(),
+                index: match[2],
+                role: match[4].toLowerCase(),
+            },
+        ];
+    });
+    if (dumps.length === 0) {
+        return;
+    }
+
+    for (const group of groups) {
+        const ref = ibComponentDumpRef(group);
+        if (!ref) {
+            continue;
+        }
+        const ibDumps = dumps.filter((entry) => entry.ibHash === ref.ibHash);
+        const diffuse = pickIbComponentDumpFile(ibDumps, ref.index, "diffusemap");
+        const light = pickIbComponentDumpFile(ibDumps, ref.index, "lightmap");
+        const normal = pickIbComponentDumpFile(ibDumps, ref.index, "normalmap");
+        const material = pickIbComponentDumpFile(ibDumps, ref.index, "materialmap");
+        group.diffuseFile ??= diffuse;
+        for (const draw of group.draws) {
+            draw.textureDefaultFile ??= diffuse;
+            draw.lightMapDefaultFile ??= light;
+            draw.normalMapDefaultFile ??= normal;
+            draw.materialMapDefaultFile ??= material;
+        }
+    }
+}
+
+function ibComponentDumpRef(group: DrawGroup): { ibHash: string; index: string } | undefined {
+    const match = /(?:^|_)IB_([0-9a-f]{8})(?:_[A-Za-z][A-Za-z0-9]*)*_Component(\d+)$/i.exec(
+        group.displayName || group.name,
+    );
+    if (!match) {
+        return undefined;
+    }
+    return { ibHash: match[1].toLowerCase(), index: match[2] };
+}
+
+function pickIbComponentDumpFile(
+    dumps: Array<{ file: string; index: string; role: string }>,
+    index: string,
+    role: string,
+): string | undefined {
+    const roleDumps = dumps.filter((entry) => entry.role === role);
+    const indexed = roleDumps.find((entry) => entry.index === index)?.file;
+    if (indexed) {
+        return indexed;
+    }
+    const unique = [...new Set(roleDumps.map((entry) => entry.file))];
+    return unique.length === 1 ? unique[0] : undefined;
+}
+
+type HashImageSlot = {
+    files: Array<{ file: string; cond: Dnf }>;
+    role: "diffuse" | "light_map";
+    vars: Set<string>;
+    area: number;
+};
+
+function bindHashImageTextures(
+    groups: DrawGroup[],
+    secInfo: Record<string, SectionInfo>,
+    resources: Record<string, ResourceInfo>,
+    modDir?: string,
+): void {
+    const needed = groups.filter(
+        (group) =>
+            ibComponentDumpRef(group) && group.draws.some((draw) => !draw.textureDefaultFile),
+    );
+    if (needed.length === 0) {
+        return;
+    }
+
+    const slots = Object.entries(secInfo).flatMap(([name, info]) => {
+        if (
+            !name.startsWith("TextureOverride") ||
+            HASH_TEXTURE_SUFFIX.test(name) ||
+            info.ib ||
+            info.draws.length > 0
+        ) {
+            return [];
+        }
+        const files = info.thisHistory.flatMap((entry) => {
+            const file = resourceLookup(resources, entry.res).filename;
+            if (!file || !/\.(dds|png|jpe?g)$/i.test(file)) {
+                return [];
+            }
+            return [{ file, cond: entry.cond }];
+        });
+        if (files.length === 0) {
+            return [];
+        }
+        const hint = hashImageHint(files[0].file, modDir);
+        return [
+            {
+                files,
+                role: hint.role,
+                vars: new Set(files.flatMap((entry) => dnfVars(entry.cond))),
+                area: hint.area,
+            } satisfies HashImageSlot,
+        ];
+    });
+    if (slots.length === 0) {
+        return;
+    }
+
+    const diffuseSlots = slots.filter((slot) => slot.role === "diffuse");
+    const lightsByArea = slots
+        .filter((slot) => slot.role === "light_map")
+        .reduce((map, slot) => {
+            const list = map.get(slot.area) ?? [];
+            list.push(slot);
+            return map.set(slot.area, list);
+        }, new Map<number, HashImageSlot[]>());
+    const paired = new Map(
+        diffuseSlots.map((slot) => {
+            const lights = lightsByArea.get(slot.area) ?? [];
+            const light = slot.area > 0 ? lights.shift() : undefined;
+            return [slot, light] as const;
+        }),
+    );
+
+    const byIb = needed.reduce((map, group) => {
+        const ibHash = ibComponentDumpRef(group)?.ibHash;
+        if (!ibHash) {
+            return map;
+        }
+        return map.set(ibHash, [...(map.get(ibHash) ?? []), group]);
+    }, new Map<string, DrawGroup[]>());
+    const unused = new Set(diffuseSlots);
+    const unbound = new Set(byIb.keys());
+
+    const scored = [...unbound].flatMap((ibHash) => {
+        const groupVars = new Set(
+            (byIb.get(ibHash) ?? []).flatMap((group) =>
+                group.draws.flatMap((draw) => dnfVars(draw.conditions)),
+            ),
+        );
+        return [...unused].flatMap((slot) => {
+            const score = overlapScore(groupVars, slot.vars);
+            return score > 0 ? [{ ibHash, slot, score, tightness: slot.vars.size }] : [];
+        });
+    });
+    for (const pick of [...scored].sort(
+        (left, right) =>
+            right.score - left.score ||
+            left.tightness - right.tightness ||
+            right.slot.area - left.slot.area,
+    )) {
+        if (!unbound.has(pick.ibHash) || !unused.has(pick.slot)) {
+            continue;
+        }
+        applyHashImageSlot(byIb.get(pick.ibHash) ?? [], pick.slot, paired.get(pick.slot));
+        unbound.delete(pick.ibHash);
+        unused.delete(pick.slot);
+    }
+
+    const leftoverIbs = [...unbound].sort(
+        (left, right) => ibDrawWeight(byIb.get(right) ?? []) - ibDrawWeight(byIb.get(left) ?? []),
+    );
+    const leftoverSlots = [...unused].sort((left, right) => right.area - left.area || 0);
+    for (const [index, ibHash] of leftoverIbs.entries()) {
+        const slot = leftoverSlots[index];
+        if (slot) {
+            applyHashImageSlot(byIb.get(ibHash) ?? [], slot, paired.get(slot));
+        }
+    }
+}
+
+function applyHashImageSlot(groups: DrawGroup[], slot: HashImageSlot, light?: HashImageSlot): void {
+    const defaultFile =
+        slot.files.find((entry) => isUnconstrained(entry.cond))?.file ?? slot.files[0]?.file;
+    const variants = slot.files.map((entry) => ({ conditions: entry.cond, file: entry.file }));
+    const keepVariants =
+        variants.length > 1 || (variants[0] && !isUnconstrained(variants[0].conditions));
+    const lightFile = light?.files[0]?.file;
+    for (const group of groups) {
+        group.diffuseFile ??= defaultFile;
+        for (const draw of group.draws) {
+            draw.textureDefaultFile ??= defaultFile;
+            if (keepVariants && !draw.textureVariants?.length) {
+                draw.textureVariants = variants;
+            }
+            if (lightFile) {
+                draw.lightMapDefaultFile ??= lightFile;
+            }
+        }
+    }
+}
+
+function hashImageHint(
+    relative: string,
+    modDir?: string,
+): { role: "diffuse" | "light_map"; area: number } {
+    const lower = relative.replaceAll("\\", "/").toLowerCase();
+    if (/hash_lightmap|_lightmap\./i.test(lower) && !/hash_diffusemap|diffuse/i.test(lower)) {
+        return { role: "light_map", area: peekImageArea(relative, modDir) };
+    }
+    if (/hash_diffusemap|diffuse/i.test(lower) || !lower.endsWith(".dds") || !modDir) {
+        return { role: "diffuse", area: peekImageArea(relative, modDir) };
+    }
+    const peeked = peekDdsRole(safeResourcePath(modDir, relative));
+    return peeked ?? { role: "diffuse", area: 0 };
+}
+
+function peekImageArea(relative: string, modDir?: string): number {
+    if (!modDir || !relative.toLowerCase().endsWith(".dds")) {
+        return 0;
+    }
+    return peekDdsRole(safeResourcePath(modDir, relative))?.area ?? 0;
+}
+
+function peekDdsRole(
+    filePath: string | null,
+): { role: "diffuse" | "light_map"; area: number } | null {
+    if (!filePath) {
+        return null;
+    }
+    try {
+        const header = readFileSyncPrefix(filePath, 148);
+        if (header.length < 128 || header.toString("ascii", 0, 4) !== "DDS ") {
+            return null;
+        }
+        const area = header.readUInt32LE(16) * header.readUInt32LE(12);
+        if (header.toString("ascii", 84, 88) !== "DX10" || header.length < 132) {
+            return { role: "diffuse", area };
+        }
+        return {
+            role: DDS_SRGB_DXGI.has(header.readUInt32LE(128)) ? "diffuse" : "light_map",
+            area,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function readFileSyncPrefix(filePath: string, length: number): Buffer {
+    const fd = openSync(filePath, "r");
+    try {
+        const header = Buffer.alloc(length);
+        const read = readSync(fd, header, 0, length, 0);
+        return header.subarray(0, read);
+    } finally {
+        closeSync(fd);
+    }
+}
+
+function dnfVars(dnf: Dnf): string[] {
+    return dnf.flatMap((group) => group.map((clause) => clause.var));
+}
+
+function overlapScore(groupVars: Set<string>, slotVars: Set<string>): number {
+    return [...slotVars].filter((slotVar) =>
+        [...groupVars].some(
+            (groupVar) =>
+                groupVar === slotVar ||
+                groupVar.startsWith(slotVar) ||
+                slotVar.startsWith(groupVar),
+        ),
+    ).length;
+}
+
+function ibDrawWeight(groups: DrawGroup[]): number {
+    return groups.reduce(
+        (sum, group) => sum + group.draws.reduce((inner, draw) => inner + (draw.count ?? 0), 0),
+        0,
+    );
 }
 
 export function pickWwmiDumpDiffuse(
@@ -709,6 +1000,11 @@ function scanSectionsForDraws(
                 }
             }
 
+            const selfAssign = /^this\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
+            if (selfAssign && selfAssign[1].toLowerCase() !== "null") {
+                info.thisHistory.push({ res: selfAssign[1], cond: stackedCond(condStack) });
+            }
+
             let diffuse = /^Resource\\[^\\]+\\Diffuse\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
             if (!diffuse) {
                 const ps = /^ps-t\d+\s*=\s*(\S+)/i.exec(line);
@@ -840,6 +1136,7 @@ function scanSectionsForDraws(
             ibHistory: [],
             vb0History: [],
             vb1History: [],
+            thisHistory: [],
             auxMaps: {},
         };
         scan(lines, info, [], new Set([name]), name);
@@ -848,6 +1145,7 @@ function scanSectionsForDraws(
         info.auxMapsAtEnd = auxSnapshot(info);
         secInfo[name] = info;
     }
+    collapseSharedHashTextureOverrides(secInfo, sections);
     attachHashTextureOverrides(secInfo);
     return secInfo;
 }
@@ -1076,6 +1374,102 @@ function lookupCompValue<T>(mapping: Record<string, T>, component: string): T | 
         return mapping[strippedWord];
     }
     return undefined;
+}
+
+function collapseSharedHashTextureOverrides(
+    secInfo: Record<string, SectionInfo>,
+    sections: IniSections,
+): void {
+    const grouped = Object.keys(secInfo).reduce((map, name) => {
+        const role = name.startsWith("TextureOverride")
+            ? HASH_TEXTURE_SUFFIX.exec(name)?.[1]
+            : undefined;
+        const meta = role ? sectionMatchMeta(sections[name] ?? []) : undefined;
+        if (!role || !meta?.hash) {
+            return map;
+        }
+        const key = `${role.toLowerCase()}:${meta.hash}:${meta.matchFirstIndex ?? ""}`;
+        return map.set(key, [...(map.get(key) ?? []), { name, role, priority: meta.priority }]);
+    }, new Map<string, Array<{ name: string; role: string; priority: number }>>());
+
+    for (const group of grouped.values()) {
+        if (group.length < 2) {
+            continue;
+        }
+        const winner = group.reduce((best, entry) =>
+            entry.priority >= best.priority ? entry : best,
+        );
+        const source = secInfo[winner.name];
+        for (const entry of group) {
+            if (entry.name !== winner.name) {
+                replaceHashTextureSection(secInfo[entry.name], source, winner.role);
+            }
+        }
+    }
+}
+
+function sectionMatchMeta(lines: IniLine[]): {
+    hash?: string;
+    matchFirstIndex?: string;
+    priority: number;
+} {
+    return lines.reduce<{ hash?: string; matchFirstIndex?: string; priority: number }>(
+        (meta, raw) => {
+            const line = stripComment(raw.text);
+            const hash = /^hash\s*=\s*([0-9a-f]+)/i.exec(line)?.[1];
+            const matchFirstIndex = /^match_first_index\s*=\s*(\S+)/i.exec(line)?.[1];
+            const priority = /^match_priority\s*=\s*(-?\d+)/i.exec(line)?.[1];
+            return {
+                hash: hash ? hash.toLowerCase() : meta.hash,
+                matchFirstIndex: matchFirstIndex ?? meta.matchFirstIndex,
+                priority: priority !== undefined ? Number(priority) : meta.priority,
+            };
+        },
+        { priority: 0 },
+    );
+}
+
+function replaceHashTextureSection(target: SectionInfo, source: SectionInfo, role: string): void {
+    if (/^Diffuse$/i.test(role)) {
+        if (!source.diffuse) {
+            return;
+        }
+        target.diffuse = source.diffuse;
+        target.diffusePool = [...source.diffusePool];
+        target.diffuseVariantsAtEnd = [...source.diffuseVariantsAtEnd];
+        target.diffuseHistoryAtEnd = [...source.diffuseHistoryAtEnd];
+        target.diffuseHistory = [...source.diffuseHistory];
+        target.curDiffuseVariants = [...source.curDiffuseVariants];
+        for (const draw of target.draws) {
+            draw.diffuseVariants = [...source.diffuseHistory];
+            draw.diffuseHistory = [...source.diffuseHistory];
+        }
+        return;
+    }
+    const channel = AUX_MAP_CHANNELS[role.toLowerCase()];
+    if (!channel) {
+        return;
+    }
+    const state = source.auxMapsAtEnd[channel] ?? source.auxMaps[channel];
+    if (!state || (state.history.length === 0 && state.variants.length === 0)) {
+        return;
+    }
+    const copied = {
+        variants: [...state.variants],
+        history: [...(state.history.length > 0 ? state.history : state.variants)],
+    };
+    target.auxMaps[channel] = {
+        ...copied,
+        chainKey: null,
+        lastCond: null,
+    };
+    target.auxMapsAtEnd[channel] = copied;
+    for (const drawState of target.auxDrawStates) {
+        drawState[channel] = {
+            variants: [...copied.variants],
+            history: [...copied.history],
+        };
+    }
 }
 
 function attachHashTextureOverrides(secInfo: Record<string, SectionInfo>): void {
