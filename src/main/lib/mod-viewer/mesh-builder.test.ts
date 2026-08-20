@@ -93,6 +93,7 @@ function makeGroup(draws: DrawRecord[]): DrawGroup {
         texcoordUvOff: 4,
         ibFile: "body.ib",
         diffusePoolFiles: [],
+        nonDiffuseTextureFiles: [],
         indexSize: 4,
         draws,
     };

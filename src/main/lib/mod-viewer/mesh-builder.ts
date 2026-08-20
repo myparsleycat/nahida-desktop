@@ -116,17 +116,6 @@ export async function buildMeshResult(
         }
         const unique = deduplicateDraws(group);
 
-        const texKeyFor = (relative: string | undefined, role: ViewerTextureRole = "diffuse") => {
-            if (!relative) {
-                return null;
-            }
-            const resolved = safeResourcePath(modDir, relative);
-            if (!resolved) {
-                return null;
-            }
-            return textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
-        };
-
         const ensureTexture = async (
             relative: string | undefined,
             role: ViewerTextureRole = "diffuse",
@@ -138,15 +127,16 @@ export async function buildMeshResult(
             const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
             if (!textures[key]) {
                 const encoded = await encodeTexture(resolved, role, readBuffer);
-                if (encoded) {
-                    textures[key] = {
-                        texKey: key,
-                        role,
-                        bytes: encoded.bytes,
-                        mimeType: encoded.mimeType,
-                        relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
-                    };
+                if (!encoded) {
+                    return null;
                 }
+                textures[key] = {
+                    texKey: key,
+                    role,
+                    bytes: encoded.bytes,
+                    mimeType: encoded.mimeType,
+                    relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
+                };
             }
             return key;
         };
@@ -378,7 +368,7 @@ export async function buildMeshResult(
                 uvs,
                 indices,
                 conditions: draw.conditions,
-                texKey: texKey ?? texKeyFor(draw.textureDefaultFile),
+                texKey,
                 textureVariants,
                 normalMapKey: normal.key,
                 normalMapVariants: normal.variants,

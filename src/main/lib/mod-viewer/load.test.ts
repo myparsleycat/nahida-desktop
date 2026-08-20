@@ -4,10 +4,11 @@ import path from "node:path";
 
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import fse from "fs-extra";
+import { PNG } from "pngjs";
 import { afterEach, describe, it } from "vitest";
 
 import { DNF_FALSE, isUnconstrained, sameDnf } from "./dnf";
-import { buildDrawGroups, pickWwmiDumpDiffuse } from "./draw-groups";
+import { buildDrawGroups, isLikelyWwmiDiffuse, pickWwmiDumpDiffuse } from "./draw-groups";
 import { extractResources, parseIniFile, parseIniText } from "./ini";
 import { loadModViewerPayload } from "./load";
 
@@ -20,6 +21,31 @@ const PNG_2X2 = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAE0lEQVR4AWP8z8DwnwEImBigAAAfFwICgH3ifwAAAABJRU5ErkJggg==",
     "base64",
 );
+
+function makeColorPng(width = 16, height = 16) {
+    const png = new PNG({ width, height });
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const offset = (y * width + x) * 4;
+            png.data[offset] = Math.round((x / Math.max(width - 1, 1)) * 255);
+            png.data[offset + 1] = Math.round((y / Math.max(height - 1, 1)) * 255);
+            png.data[offset + 2] = 90;
+            png.data[offset + 3] = 255;
+        }
+    }
+    return PNG.sync.write(png);
+}
+
+function makeFlatPng(width = 16, height = 16) {
+    const png = new PNG({ width, height });
+    for (let index = 0; index < width * height; index++) {
+        png.data[index * 4] = 240;
+        png.data[index * 4 + 1] = 240;
+        png.data[index * 4 + 2] = 240;
+        png.data[index * 4 + 3] = 255;
+    }
+    return PNG.sync.write(png);
+}
 
 afterEach(async () => {
     await Promise.all(tempRoots.splice(0).map((root) => fse.remove(root)));
@@ -1558,6 +1584,46 @@ filename = fire.png
         );
     });
 
+    it("prefers exclusive WWMI dump textures over shared Components-N-M dumps", () => {
+        assert.equal(
+            pickWwmiDumpDiffuse([
+                {
+                    file: "Textures/Components-0-1-2-3-4-5 t=e9612536.dds",
+                    srgb: true,
+                    area: 2048 * 2048,
+                    bytes: 4_194_452,
+                    order: 0,
+                },
+                {
+                    file: "Textures/Components-3 t=7d8d1ae0.dds",
+                    srgb: false,
+                    area: 512 * 512,
+                    bytes: 262_292,
+                    order: 1,
+                },
+            ]),
+            "Textures/Components-3 t=7d8d1ae0.dds",
+        );
+    });
+
+    it("rejects linear, flat, packed, and normal-looking WWMI dump hints", () => {
+        const ok: Parameters<typeof isLikelyWwmiDiffuse>[0] = {
+            srgb: true,
+            colorSpace: "srgb",
+            area: 1024,
+            bytes: 100,
+            isLikelyFlat: false,
+            isLikelyNormal: false,
+            isLikelyPacked: false,
+        };
+        assert.equal(isLikelyWwmiDiffuse(ok), true);
+        assert.equal(isLikelyWwmiDiffuse({ ...ok, colorSpace: "unknown" }), true);
+        assert.equal(isLikelyWwmiDiffuse({ ...ok, colorSpace: "linear", srgb: false }), false);
+        assert.equal(isLikelyWwmiDiffuse({ ...ok, isLikelyFlat: true }), false);
+        assert.equal(isLikelyWwmiDiffuse({ ...ok, isLikelyNormal: true }), false);
+        assert.equal(isLikelyWwmiDiffuse({ ...ok, isLikelyPacked: true }), false);
+    });
+
     it("binds WWMI Components-N dump textures when hash overrides have no Diffuse name", async () => {
         const root = await makeMod({
             ini: `[TextureOverrideComponent2]
@@ -1601,7 +1667,7 @@ this = ResourceTexture4
                 await fse.ensureDir(path.join(dir, "Textures"));
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-2 t=0454fc47.png"),
-                    PNG_1X1,
+                    makeColorPng(),
                 );
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=1944212c.jpg"),
@@ -1609,7 +1675,7 @@ this = ResourceTexture4
                 );
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
-                    PNG_2X2,
+                    makeColorPng(32, 32),
                 );
             },
         });
@@ -1691,7 +1757,7 @@ this = ResourceTexture0
                 await fse.ensureDir(path.join(dir, "Textures"));
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
-                    PNG_2X2,
+                    makeColorPng(),
                 );
             },
         });
@@ -1699,6 +1765,191 @@ this = ResourceTexture0
         const payload = await loadModViewerPayload(root);
         assert.equal(payload.meshes.length, 1);
         assert.equal(payload.meshes[0].texKey, null);
+    });
+
+    it("binds WWMI ps-t0 resources without Diffuse in the name", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $socks = 0
+[KeySocks]
+type = cycle
+$socks = 0, 1
+[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+if $socks == 0
+ps-t0 = ResourceTexture35
+ps-t3 = ResourceTexture32
+endif
+if $socks == 1
+ps-t0 = ResourceTexture35A
+ps-t3 = ResourceTexture32
+endif
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture32]
+filename = Textures/Components-3 t=348c9329.png
+[ResourceTexture35]
+filename = Textures/Components-3 t=7d8d1ae0.png
+[ResourceTexture35A]
+filename = Textures/Components-3 t=7d8d1ae0A.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=348c9329.png"),
+                    makeColorPng(32, 32),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=7d8d1ae0.png"),
+                    makeColorPng(),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=7d8d1ae0A.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("7d8d1ae0")));
+        assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("348c9329")));
+        const socksOff = evaluateViewerState(payload, { socks: "0" });
+        const socksOn = evaluateViewerState(payload, { socks: "1" });
+        assert.ok(String(socksOff.meshes[0]?.texKey).includes("7d8d1ae0.png"));
+        assert.ok(String(socksOn.meshes[0]?.texKey).includes("7d8d1ae0A.png"));
+    });
+
+    it("binds shared WWMI Components-N-M dumps onto components without exclusive files", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent5]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture11]
+filename = Textures/Components-0-1-2-3-4-5 t=e9612536.png
+[TextureOverrideTexture11]
+hash = e9612536
+this = ResourceTexture11
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-0-1-2-3-4-5 t=e9612536.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("e9612536.png")));
+    });
+
+    it("does not pick WWMI dump textures assigned to non-diffuse ps-t slots", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent2]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t1 = ResourceTexture31
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture31]
+filename = Textures/Components-2 t=e02d9167.png
+[ResourceTextureOther]
+filename = Textures/Components-2 t=742c5c7b.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-2 t=e02d9167.png"),
+                    makeColorPng(32, 32),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-2 t=742c5c7b.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("742c5c7b.png")));
+        assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("e02d9167")));
+    });
+
+    it("replaces unnamed WWMI ps-t0 when it is a flat color map", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t0 = ResourceTexture35
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture35]
+filename = Textures/Components-3 t=7d8d1ae0.png
+[ResourceTexture4]
+filename = Textures/Components-3 t=f58624fb.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=7d8d1ae0.png"),
+                    makeFlatPng(),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("f58624fb.png")));
+        assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("7d8d1ae0")));
     });
 
     it("plays Present time animations as position variants without a toggle", async () => {
