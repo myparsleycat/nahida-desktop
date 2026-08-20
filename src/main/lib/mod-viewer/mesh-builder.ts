@@ -9,6 +9,7 @@ import type {
     ViewerTextureRole,
 } from "@shared/mod-viewer/types";
 import fse from "fs-extra";
+import sharp from "sharp";
 
 import type { DrawGroup, DrawRecord } from "./draw-groups";
 import type { ShapeSlider } from "./shapes";
@@ -24,6 +25,7 @@ const MAX_BUFFER_FILE_BYTES = 512 * 1024 * 1024;
 const MAX_TOTAL_BUFFER_BYTES = 2 * 1024 * 1024 * 1024;
 const MIN_AXIS_SPREAD = 1e-4;
 const MIN_IN_RANGE = 0.95;
+const VIEWER_TEXTURE_MAX_PIXELS = 2048 * 2048;
 
 export type MeshBuildResult = {
     meshes: ViewerMesh[];
@@ -668,6 +670,22 @@ async function buildShapeBuffers(
     return result;
 }
 
+export function viewerPreviewTextureSize(
+    width: number,
+    height: number,
+): { width: number; height: number } {
+    let nextWidth = width;
+    let nextHeight = height;
+    while (
+        nextWidth * nextHeight > VIEWER_TEXTURE_MAX_PIXELS &&
+        (nextWidth > 1 || nextHeight > 1)
+    ) {
+        nextWidth = Math.max(1, Math.floor(nextWidth / 2));
+        nextHeight = Math.max(1, Math.floor(nextHeight / 2));
+    }
+    return { width: nextWidth, height: nextHeight };
+}
+
 async function encodeTexture(
     filePath: string,
     role: ViewerTextureRole,
@@ -675,10 +693,13 @@ async function encodeTexture(
 ): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" } | null> {
     const ext = path.extname(filePath).toLowerCase();
     if (ext === ".png") {
-        return { bytes: await readBuffer(filePath), mimeType: "image/png" };
+        return downscaleViewerTexture({ bytes: await readBuffer(filePath), mimeType: "image/png" });
     }
     if (ext === ".jpg" || ext === ".jpeg") {
-        return { bytes: await readBuffer(filePath), mimeType: "image/jpeg" };
+        return downscaleViewerTexture({
+            bytes: await readBuffer(filePath),
+            mimeType: "image/jpeg",
+        });
     }
     if (ext !== ".dds") {
         return null;
@@ -695,8 +716,32 @@ async function encodeTexture(
     if (!prepared?.image) {
         return null;
     }
-    return {
+    return downscaleViewerTexture({
         bytes: prepared.image,
         mimeType: prepared.mimeType === "image/jpeg" ? "image/jpeg" : "image/png",
-    };
+    });
+}
+
+async function downscaleViewerTexture(encoded: {
+    bytes: Buffer;
+    mimeType: "image/png" | "image/jpeg";
+}): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" }> {
+    try {
+        const metadata = await sharp(encoded.bytes).metadata();
+        if (!metadata.width || !metadata.height) {
+            return encoded;
+        }
+        const target = viewerPreviewTextureSize(metadata.width, metadata.height);
+        if (target.width === metadata.width && target.height === metadata.height) {
+            return encoded;
+        }
+        const resized = sharp(encoded.bytes).resize(target.width, target.height);
+        const bytes =
+            encoded.mimeType === "image/jpeg"
+                ? await resized.jpeg({ quality: 85 }).toBuffer()
+                : await resized.png().toBuffer();
+        return { bytes, mimeType: encoded.mimeType };
+    } catch {
+        return encoded;
+    }
 }

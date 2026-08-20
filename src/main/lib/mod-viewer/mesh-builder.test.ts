@@ -3,12 +3,13 @@ import os from "node:os";
 import path from "node:path";
 
 import fse from "fs-extra";
+import sharp from "sharp";
 import { afterEach, describe, it } from "vitest";
 
 import type { DrawGroup, DrawRecord } from "./draw-groups";
 
 import { DNF_TRUE } from "./dnf";
-import { buildMeshResult } from "./mesh-builder";
+import { buildMeshResult, viewerPreviewTextureSize } from "./mesh-builder";
 
 const tempRoots: string[] = [];
 
@@ -63,6 +64,39 @@ describe("buildMeshResult", () => {
         assert.deepEqual(result.textures["diffuse::diffuse.png"]?.bytes, png);
         assert.equal(result.textures["diffuse::alt.jpg"]?.mimeType, "image/jpeg");
         assert.deepEqual(result.textures["diffuse::alt.jpg"]?.bytes, jpeg);
+    });
+
+    it("downscales oversized png textures to the viewer pixel budget", async () => {
+        const root = await makeMeshDir();
+        await sharp({
+            create: {
+                width: 4096,
+                height: 4096,
+                channels: 4,
+                background: { r: 32, g: 64, b: 96, alpha: 1 },
+            },
+        })
+            .png()
+            .toFile(path.join(root, "diffuse.png"));
+        const result = await buildMeshResult(
+            [makeGroup([makeDraw({ label: "ok", textureDefaultFile: "diffuse.png" })])],
+            root,
+        );
+        const encoded = result.textures["diffuse::diffuse.png"];
+        assert.equal(encoded?.mimeType, "image/png");
+        assert.ok(encoded);
+        const metadata = await sharp(encoded.bytes).metadata();
+        assert.equal(metadata.width, 2048);
+        assert.equal(metadata.height, 2048);
+    });
+});
+
+describe("viewerPreviewTextureSize", () => {
+    it("halves until the preview pixel budget is met", () => {
+        assert.deepEqual(viewerPreviewTextureSize(8192, 8192), { width: 2048, height: 2048 });
+        assert.deepEqual(viewerPreviewTextureSize(2048, 8192), { width: 1024, height: 4096 });
+        assert.deepEqual(viewerPreviewTextureSize(4096, 4096), { width: 2048, height: 2048 });
+        assert.deepEqual(viewerPreviewTextureSize(2048, 2048), { width: 2048, height: 2048 });
     });
 });
 
