@@ -964,6 +964,571 @@ filename = light.png
         assert.ok(bodyB.every((mesh) => mesh.lightMapKey));
     });
 
+    it("uses the last same-hash Diffuse and LightMap this= like 3DMigoto", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideBodyA]
+hash = 3b4647d4
+match_first_index = 0
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyB]
+hash = 3b4647d4
+match_first_index = 14598
+ib = ResourceBodyBIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyC]
+hash = 3b4647d4
+match_first_index = 32934
+ib = ResourceBodyCIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyADiffuse]
+hash = f9761bbf
+this = ResourceBodyADiffuse
+[TextureOverrideBodyBDiffuse]
+hash = f9761bbf
+this = ResourceBodyBDiffuse
+[TextureOverrideBodyCDiffuse]
+hash = f9761bbf
+this = ResourceBodyCDiffuse
+[TextureOverrideBodyALightMap]
+hash = 87adc723
+this = ResourceBodyALightMap
+[TextureOverrideBodyCLightMap]
+hash = 87adc723
+this = ResourceBodyCLightMap
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyBIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyCIB]
+filename = bodyc.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyADiffuse]
+filename = bodya.png
+[ResourceBodyBDiffuse]
+filename = bodyb.png
+[ResourceBodyCDiffuse]
+filename = bodyc.png
+[ResourceBodyALightMap]
+filename = bodya-light.png
+[ResourceBodyCLightMap]
+filename = bodyc-light.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(
+                    path.join(dir, "bodyc.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(path.join(dir, "bodya.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodyb.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodyc.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodya-light.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodyc-light.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const bodyA = payload.meshes.filter((mesh) => mesh.component === "BodyA");
+        const bodyB = payload.meshes.filter((mesh) => mesh.component === "BodyB");
+        assert.ok(bodyA.length >= 1);
+        assert.ok(bodyB.length >= 1);
+        assert.ok(bodyA.every((mesh) => String(mesh.texKey).includes("bodyc.png")));
+        assert.ok(bodyB.every((mesh) => String(mesh.texKey).includes("bodyc.png")));
+        assert.ok(bodyA.every((mesh) => String(mesh.lightMapKey).includes("bodyc-light.png")));
+        assert.ok(bodyA.every((mesh) => !String(mesh.texKey).includes("bodya.png")));
+    });
+
+    it("keeps name-matched Diffuse when shared-hash siblings use different hashes", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideBodyA]
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyC]
+ib = ResourceBodyCIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyADiffuse]
+hash = f9761bbf
+this = ResourceBodyADiffuse
+[TextureOverrideBodyCDiffuse]
+hash = f0226f67
+this = ResourceBodyCDiffuse
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyCIB]
+filename = bodyc.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyADiffuse]
+filename = bodya.png
+[ResourceBodyCDiffuse]
+filename = bodyc.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyc.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(path.join(dir, "bodya.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodyc.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const bodyA = payload.meshes.filter((mesh) => mesh.component === "BodyA");
+        const bodyC = payload.meshes.filter((mesh) => mesh.component === "BodyC");
+        assert.ok(bodyA.every((mesh) => String(mesh.texKey).includes("bodya.png")));
+        assert.ok(bodyC.every((mesh) => String(mesh.texKey).includes("bodyc.png")));
+    });
+
+    it("binds SRMI IB-Component Hash_DiffuseMap dumps onto sibling components with one atlas", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverride_VB_3b4647d4_Position]
+hash = 3b4647d4
+vb0 = ResourcePos
+[TextureOverride_VB_3b4647d4_Texcoord]
+hash = 3b4647d4
+vb1 = ResourceTc
+[TextureOverride_IB_3b4647d4_Component1]
+hash = 3b4647d4
+match_first_index = 0
+ib = Resource_3b4647d4_Component1
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component2]
+hash = 3b4647d4
+match_first_index = 14598
+ib = Resource_3b4647d4_Component2
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[Resource_3b4647d4_Component1]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component2]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture_f9761bbf]
+filename = Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png
+[TextureOverride_f9761bbf]
+hash = f9761bbf
+this = Resource_Texture_f9761bbf
+[Resource_Texture_87adc723]
+filename = Texture/3b4647d4_1_87adc723_Hash_LightMap.png
+[TextureOverride_87adc723]
+hash = 87adc723
+this = Resource_Texture_87adc723
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.ensureDir(path.join(dir, "Texture"));
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_f9761bbf_Hash_DiffuseMap.png"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_87adc723_Hash_LightMap.png"),
+                    PNG_1X1,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const component1 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component1",
+        );
+        const component2 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component2",
+        );
+        assert.ok(component1.length >= 1);
+        assert.ok(component2.length >= 1);
+        assert.ok(component1.every((mesh) => String(mesh.texKey).includes("Hash_DiffuseMap")));
+        assert.ok(component2.every((mesh) => String(mesh.texKey).includes("Hash_DiffuseMap")));
+        assert.ok(component2.every((mesh) => String(mesh.lightMapKey).includes("Hash_LightMap")));
+    });
+
+    it("does not share distinct IB-Component dump atlases across other components", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverride_VB_3b4647d4_Position]
+hash = 3b4647d4
+vb0 = ResourcePos
+[TextureOverride_VB_3b4647d4_Texcoord]
+hash = 3b4647d4
+vb1 = ResourceTc
+[TextureOverride_IB_3b4647d4_Component1]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component1
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component2]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component2
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component3]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component3
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[Resource_3b4647d4_Component1]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component2]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component3]
+filename = bodyc.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture_aaaaaaa1]
+filename = Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png
+[Resource_Texture_aaaaaaa2]
+filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(
+                    path.join(dir, "bodyc.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.ensureDir(path.join(dir, "Texture"));
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png"),
+                    PNG_2X2,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const component1 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component1",
+        );
+        const component2 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component2",
+        );
+        const component3 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component3",
+        );
+        assert.ok(component1.length >= 1);
+        assert.ok(component2.length >= 1);
+        assert.ok(component3.length >= 1);
+        assert.ok(component1.every((mesh) => String(mesh.texKey).includes("aaaaaaa1")));
+        assert.ok(component2.every((mesh) => String(mesh.texKey).includes("aaaaaaa2")));
+        assert.ok(component3.every((mesh) => !mesh.texKey));
+    });
+
+    it("keeps per-component dump atlases when a hash-only this= leftover also exists", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverride_VB_3b4647d4_Position]
+hash = 3b4647d4
+vb0 = ResourcePos
+[TextureOverride_VB_3b4647d4_Texcoord]
+hash = 3b4647d4
+vb1 = ResourceTc
+[TextureOverride_IB_3b4647d4_Component1]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component1
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component2]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component2
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component3]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component3
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[Resource_3b4647d4_Component1]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component2]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component3]
+filename = bodyc.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture_aaaaaaa1]
+filename = Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png
+[Resource_Texture_aaaaaaa2]
+filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
+[TextureOverride_deadbeef]
+hash = deadbeef
+this = ResourceOther
+[ResourceOther]
+filename = other.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(
+                    path.join(dir, "bodyc.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.ensureDir(path.join(dir, "Texture"));
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png"),
+                    PNG_2X2,
+                );
+                await fse.writeFile(path.join(dir, "other.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const component1 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component1",
+        );
+        const component2 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component2",
+        );
+        const component3 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component3",
+        );
+        assert.ok(component1.length >= 1);
+        assert.ok(component2.length >= 1);
+        assert.ok(component3.length >= 1);
+        assert.ok(component1.every((mesh) => String(mesh.texKey).includes("aaaaaaa1")));
+        assert.ok(component2.every((mesh) => String(mesh.texKey).includes("aaaaaaa2")));
+        assert.ok(component3.every((mesh) => String(mesh.texKey).includes("other.png")));
+    });
+
+    it("does not bind IB-Component dump textures onto BodyA sections", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideBodyA]
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture_f9761bbf]
+filename = Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Texture"));
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_f9761bbf_Hash_DiffuseMap.png"),
+                    PNG_1X1,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.equal(payload.meshes.length, 1);
+        assert.equal(payload.meshes[0].texKey, null);
+    });
+
+    it("binds hash-only this= images onto IB-named parts using matching toggle vars", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $eyes = 0
+global persist $cloth = 0
+global persist $clothcolor = 0
+[KeyEyes]
+type = cycle
+$eyes = 0,1
+[KeyCloth]
+type = cycle
+$cloth = 0,1
+[KeyClothColor]
+type = cycle
+$clothcolor = 0,1
+[TextureOverride_VB_aaaaaaa1_face_Position]
+hash = aaaaaaa1
+vb0 = ResourcePos
+[TextureOverride_VB_aaaaaaa1_face_Texcoord]
+hash = aaaaaaa1
+vb1 = ResourceTc
+[TextureOverride_VB_bbbbbbbb_body_Position]
+hash = bbbbbbbb
+vb0 = ResourcePos
+[TextureOverride_VB_bbbbbbbb_body_Texcoord]
+hash = bbbbbbbb
+vb1 = ResourceTc
+[TextureOverride_IB_aaaaaaa1_face_Component1]
+hash = aaaaaaa1
+ib = ResourceFaceIB
+if $eyes == 0
+drawindexed = 3, 0, 0
+endif
+[TextureOverride_IB_bbbbbbbb_body_Component2]
+hash = bbbbbbbb
+ib = ResourceBodyIB
+if $cloth == 0
+drawindexed = 3, 0, 0
+endif
+[TextureOverride_7b3e8cd1]
+hash = 7b3e8cd1
+if $eyes == 0
+this = ResourceFaceTex
+endif
+[TextureOverride_7b6fe593]
+hash = 7b6fe593
+if $clothcolor == 0
+this = ResourceBodyTex
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceFaceIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceFaceTex]
+filename = face.png
+[ResourceBodyTex]
+filename = bodytex.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(path.join(dir, "face.png"), PNG_1X1);
+                await fse.writeFile(path.join(dir, "bodytex.png"), PNG_2X2);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const face = payload.meshes.filter((mesh) => mesh.component.includes("face_Component1"));
+        const body = payload.meshes.filter((mesh) => mesh.component.includes("body_Component2"));
+        assert.ok(face.length >= 1);
+        assert.ok(body.length >= 1);
+        assert.ok(face.every((mesh) => String(mesh.texKey).includes("face.png")));
+        assert.ok(body.every((mesh) => String(mesh.texKey).includes("bodytex.png")));
+    });
+
+    it("assigns leftover hash-only images to heavier IB parts first", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverride_VB_aaaaaaa1_weapon_Position]
+hash = aaaaaaa1
+vb0 = ResourcePos
+[TextureOverride_VB_aaaaaaa1_weapon_Texcoord]
+hash = aaaaaaa1
+vb1 = ResourceTc
+[TextureOverride_VB_bbbbbbbb_fire_Position]
+hash = bbbbbbbb
+vb0 = ResourcePos
+[TextureOverride_VB_bbbbbbbb_fire_Texcoord]
+hash = bbbbbbbb
+vb1 = ResourceTc
+[TextureOverride_IB_aaaaaaa1_weapon_Component1]
+hash = aaaaaaa1
+ib = ResourceWeaponIB
+drawindexed = 3, 0, 0
+drawindexed = 3, 0, 0
+[TextureOverride_IB_bbbbbbbb_fire_Component1]
+hash = bbbbbbbb
+ib = ResourceFireIB
+drawindexed = 3, 0, 0
+[TextureOverride_adac9211]
+hash = adac9211
+this = ResourceWeaponTex
+[TextureOverride_d2a654b2]
+hash = d2a654b2
+this = ResourceFireTex
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceWeaponIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceFireIB]
+filename = fire.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceWeaponTex]
+filename = weapon.png
+[ResourceFireTex]
+filename = fire.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "fire.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(path.join(dir, "weapon.png"), PNG_2X2);
+                await fse.writeFile(path.join(dir, "fire.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const weapon = payload.meshes.filter((mesh) =>
+            mesh.component.includes("weapon_Component1"),
+        );
+        const fire = payload.meshes.filter((mesh) => mesh.component.includes("fire_Component1"));
+        assert.ok(weapon.length >= 1);
+        assert.ok(fire.length >= 1);
+        assert.ok(weapon.every((mesh) => String(mesh.texKey).includes("weapon.png")));
+        assert.ok(fire.every((mesh) => String(mesh.texKey).includes("fire.png")));
+    });
+
     it("prefers sRGB then larger WWMI dump textures", () => {
         assert.equal(
             pickWwmiDumpDiffuse([

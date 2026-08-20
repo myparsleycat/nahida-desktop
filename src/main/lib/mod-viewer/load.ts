@@ -101,6 +101,7 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
                 vars: new Set(presentAnimations.flatMap((clip) => clip.variableIds)),
                 domains: animationDomains,
             },
+            folderPath,
         );
         await attachWwmiDumpTextures(iniGroups, resources, folderPath);
         attachShapeSliders(iniGroups, shapes);
