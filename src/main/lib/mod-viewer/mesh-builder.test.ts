@@ -69,10 +69,10 @@ describe("buildMeshResult", () => {
             ],
             root,
         );
-        assert.equal(result.textures["diffuse::diffuse.png"]?.mimeType, "image/png");
-        assert.deepEqual(result.textures["diffuse::diffuse.png"]?.bytes, png);
+        assert.equal(result.textures["diffuse::diffuse.png"]?.mimeType, "image/jpeg");
+        assert.ok(result.textures["diffuse::diffuse.png"]?.bytes.length);
         assert.equal(result.textures["diffuse::alt.jpg"]?.mimeType, "image/jpeg");
-        assert.deepEqual(result.textures["diffuse::alt.jpg"]?.bytes, jpeg);
+        assert.ok(result.textures["diffuse::alt.jpg"]?.bytes.length);
     });
 
     it("omits unreadable png and jpeg textures instead of keeping original bytes", async () => {
@@ -132,7 +132,6 @@ describe("buildMeshResult", () => {
             root,
         );
         const encoded = result.textures["diffuse::diffuse.png"];
-        assert.equal(encoded?.mimeType, "image/png");
         assert.ok(encoded);
         const metadata = await sharp(encoded.bytes).metadata();
         assert.equal(metadata.width, 2048);

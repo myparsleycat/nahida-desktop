@@ -1,15 +1,15 @@
+import os from "node:os";
 import path from "node:path";
 
-import { prepareTextureForMaterial } from "@native/static-glb";
+import { prepareViewerTexture } from "@native/static-glb";
 import type {
-    TextureVariant,
     ViewerMesh,
     ViewerShapeTarget,
     ViewerTexture,
     ViewerTextureRole,
 } from "@shared/mod-viewer/types";
 import fse from "fs-extra";
-import sharp from "sharp";
+import pLimit from "p-limit";
 
 import type { Logger } from "../../internal/logger";
 import type { DrawGroup, DrawRecord } from "./draw-groups";
@@ -44,6 +44,11 @@ export async function buildMeshResult(
     const rawBufCache = new Map<string, Buffer>();
     let textureEncodeMs = 0;
     let textureCount = 0;
+    let textureEncodeStartedAt = 0;
+    let textureEncodeEndedAt = 0;
+    const texturePromises = new Map<string, Promise<string | null>>();
+    const textureConcurrency = Math.max(1, Math.min(os.availableParallelism(), 8));
+    const limitTextureEncode = pLimit(textureConcurrency);
     const bufCache = new Map<
         string,
         {
@@ -101,6 +106,79 @@ export async function buildMeshResult(
         return entry;
     };
 
+    const scheduleTextureEncode = (
+        relative: string | undefined,
+        role: ViewerTextureRole = "diffuse",
+    ): Promise<string | null> => {
+        if (!relative) {
+            return Promise.resolve(null);
+        }
+        const resolved = safeResourcePath(modDir, relative);
+        if (!resolved) {
+            return Promise.resolve(null);
+        }
+        const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
+        const existing = texturePromises.get(key);
+        if (existing) {
+            return existing;
+        }
+        const promise = limitTextureEncode(async () => {
+            if (textures[key]) {
+                return key;
+            }
+            if (!(await fse.pathExists(resolved))) {
+                return null;
+            }
+            if (!textureEncodeStartedAt) {
+                textureEncodeStartedAt = Date.now();
+            }
+            const encoded = await encodeTexture(resolved);
+            textureEncodeEndedAt = Date.now();
+            textureCount += 1;
+            if (!encoded) {
+                return null;
+            }
+            textures[key] = {
+                texKey: key,
+                role,
+                bytes: encoded.bytes,
+                mimeType: encoded.mimeType,
+                relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
+            };
+            return key;
+        });
+        texturePromises.set(key, promise);
+        return promise;
+    };
+
+    const resolveTextureVariants = async (rules: DrawRecord["textureVariants"]) => {
+        const keys = await Promise.all(
+            (rules ?? []).map((variant) => scheduleTextureEncode(variant.file)),
+        );
+        return keys.flatMap((key, index) =>
+            key ? [{ conditions: rules![index].conditions, texKey: key }] : [],
+        );
+    };
+
+    const resolveChannel = async (
+        channel: ViewerTextureRole,
+        defaultFile: string | undefined,
+        variants: DrawRecord["normalMapVariants"],
+    ) => {
+        const [key, variantKeys] = await Promise.all([
+            scheduleTextureEncode(defaultFile, channel),
+            Promise.all(
+                (variants ?? []).map((variant) => scheduleTextureEncode(variant.file, channel)),
+            ),
+        ]);
+        return {
+            key,
+            variants: variantKeys.flatMap((variantKey, index) =>
+                variantKey ? [{ conditions: variants![index].conditions, texKey: variantKey }] : [],
+            ),
+        };
+    };
+
     for (const group of groups) {
         const posPath = safeResourcePath(modDir, group.positionFile);
         const tcPath = safeResourcePath(modDir, group.texcoordFile);
@@ -121,34 +199,6 @@ export async function buildMeshResult(
             ibCache.set(ibPath, await readBuffer(ibPath));
         }
         const unique = deduplicateDraws(group);
-
-        const ensureTexture = async (
-            relative: string | undefined,
-            role: ViewerTextureRole = "diffuse",
-        ) => {
-            const resolved = safeResourcePath(modDir, relative);
-            if (!resolved || !(await fse.pathExists(resolved))) {
-                return null;
-            }
-            const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
-            if (!textures[key]) {
-                const encodeStartedAt = Date.now();
-                const encoded = await encodeTexture(resolved, role, readBuffer);
-                textureEncodeMs += Date.now() - encodeStartedAt;
-                textureCount += 1;
-                if (!encoded) {
-                    return null;
-                }
-                textures[key] = {
-                    texKey: key,
-                    role,
-                    bytes: encoded.bytes,
-                    mimeType: encoded.mimeType,
-                    relativePath: path.relative(modDir, resolved).replaceAll("\\", "/"),
-                };
-            }
-            return key;
-        };
 
         for (const draw of unique) {
             let drawIbPath = ibPath;
@@ -287,7 +337,20 @@ export async function buildMeshResult(
             }
 
             const indices = Uint32Array.from(shifted, (value) => remap.get(value) ?? 0);
-            const texKey = await ensureTexture(draw.textureDefaultFile);
+
+            const textureRules = draw.textureAssignments ?? draw.textureVariants ?? [];
+            const [texKey, textureVariants, normal, light, material] = await Promise.all([
+                scheduleTextureEncode(draw.textureDefaultFile),
+                resolveTextureVariants(textureRules),
+                resolveChannel("normal_map", draw.normalMapDefaultFile, draw.normalMapVariants),
+                resolveChannel("light_map", draw.lightMapDefaultFile, draw.lightMapVariants),
+                resolveChannel(
+                    "material_map",
+                    draw.materialMapDefaultFile,
+                    draw.materialMapVariants,
+                ),
+            ]);
+
             const shapeTargets: ViewerShapeTarget[] = shapeBuffers.map((shape) => ({
                 var: shape.slider.var,
                 positions: shape.positions,
@@ -334,42 +397,6 @@ export async function buildMeshResult(
                 });
             }
 
-            const textureRules = draw.textureAssignments ?? draw.textureVariants ?? [];
-            const textureVariants: TextureVariant[] = [];
-            for (const variant of textureRules) {
-                const key = await ensureTexture(variant.file);
-                if (key) {
-                    textureVariants.push({ conditions: variant.conditions, texKey: key });
-                }
-            }
-
-            const aux = async (
-                channel: ViewerTextureRole,
-                defaultFile?: string,
-                variants?: DrawRecord["normalMapVariants"],
-            ) => {
-                const key = await ensureTexture(defaultFile, channel);
-                const resolved: TextureVariant[] = [];
-                for (const variant of variants ?? []) {
-                    const variantKey = await ensureTexture(variant.file, channel);
-                    if (variantKey) {
-                        resolved.push({ conditions: variant.conditions, texKey: variantKey });
-                    }
-                }
-                return { key, variants: resolved };
-            };
-            const normal = await aux(
-                "normal_map",
-                draw.normalMapDefaultFile,
-                draw.normalMapVariants,
-            );
-            const light = await aux("light_map", draw.lightMapDefaultFile, draw.lightMapVariants);
-            const material = await aux(
-                "material_map",
-                draw.materialMapDefaultFile,
-                draw.materialMapVariants,
-            );
-
             meshes.push({
                 id: draw.label,
                 component: group.displayName || group.name,
@@ -391,6 +418,9 @@ export async function buildMeshResult(
         }
     }
 
+    if (textureCount > 0) {
+        textureEncodeMs = textureEncodeEndedAt - textureEncodeStartedAt;
+    }
     logger?.info(
         `Texture encoding completed in ${textureEncodeMs}ms (textures=${textureCount})`,
         "StaticGlb.loadForViewer",
@@ -689,59 +719,20 @@ export function viewerPreviewTextureSize(
 
 async function encodeTexture(
     filePath: string,
-    role: ViewerTextureRole,
-    readBuffer: (filePath: string) => Promise<Buffer>,
 ): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" } | null> {
     const ext = path.extname(filePath).toLowerCase();
-    if (ext === ".png") {
-        return downscaleViewerTexture({ bytes: await readBuffer(filePath), mimeType: "image/png" });
-    }
-    if (ext === ".jpg" || ext === ".jpeg") {
-        return downscaleViewerTexture({
-            bytes: await readBuffer(filePath),
-            mimeType: "image/jpeg",
-        });
-    }
-    if (ext !== ".dds") {
+    if (ext !== ".dds" && ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg") {
         return null;
     }
-
-    const prepared = await prepareTextureForMaterial({
-        texturePath: filePath,
-        resourceName: role,
-        textureFormat: "png",
-        jpegQuality: 85,
-        allowCacheReuse: false,
-        cacheDir: "",
-    }).catch(() => null);
-    if (!prepared?.image) {
-        return null;
-    }
-    return downscaleViewerTexture({
-        bytes: prepared.image,
-        mimeType: prepared.mimeType === "image/jpeg" ? "image/jpeg" : "image/png",
-    });
-}
-
-async function downscaleViewerTexture(encoded: {
-    bytes: Buffer;
-    mimeType: "image/png" | "image/jpeg";
-}): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" } | null> {
     try {
-        const metadata = await sharp(encoded.bytes).metadata();
-        if (!metadata.width || !metadata.height) {
-            return null;
-        }
-        const target = viewerPreviewTextureSize(metadata.width, metadata.height);
-        if (target.width === metadata.width && target.height === metadata.height) {
-            return encoded;
-        }
-        const resized = sharp(encoded.bytes).resize(target.width, target.height);
-        const bytes =
-            encoded.mimeType === "image/jpeg"
-                ? await resized.jpeg({ quality: 85 }).toBuffer()
-                : await resized.png().toBuffer();
-        return { bytes, mimeType: encoded.mimeType };
+        const result = await prepareViewerTexture({
+            texturePath: filePath,
+            maxPixels: VIEWER_TEXTURE_MAX_PIXELS,
+        });
+        return {
+            bytes: result.bytes,
+            mimeType: result.mimeType === "image/jpeg" ? "image/jpeg" : "image/png",
+        };
     } catch {
         return null;
     }
