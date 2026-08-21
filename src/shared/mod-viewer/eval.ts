@@ -9,9 +9,19 @@ import type {
     ViewerVariable,
 } from "./types";
 
+export type IneffectiveSuggestion = {
+    display: string;
+    changes: {
+        varId: string;
+        varLabel: string;
+        fromValue: string;
+        toValue: string;
+    }[];
+};
+
 export type IneffectiveEntry = {
     blockingVars: string[];
-    suggestions: string[];
+    suggestions: IneffectiveSuggestion[];
 };
 
 export type IneffectiveMap = Map<string, Map<string, IneffectiveEntry>>;
@@ -305,7 +315,8 @@ function conflictingVariableLabels(
 }
 
 // For each blocking variable, tries its other values to find ones that make the
-// tested variable value effective. Returns "Label: value → value" suggestions.
+// tested variable value effective. Returns structured suggestions with the
+// full set of variable changes needed to unblock the tested value.
 function resolveSuggestions(
     payload: ViewerEvalInput & { variables: ViewerVariable[] },
     testedVarId: string,
@@ -313,8 +324,8 @@ function resolveSuggestions(
     blockingVars: string[],
     state: Record<string, ViewerStateValue>,
     baseline: EvaluatedViewerState,
-): string[] {
-    const suggestions: string[] = [];
+): IneffectiveSuggestion[] {
+    const suggestions: IneffectiveSuggestion[] = [];
     const testedVar = payload.variables.find((v) => v.id === testedVarId);
     if (!testedVar) return suggestions;
 
@@ -340,7 +351,27 @@ function resolveSuggestions(
                 evaluatedStatesDiffer(altBaseline, testEval) &&
                 evaluatedStatesDiffer(baseline, testEval)
             ) {
-                suggestions.push(`${blockingVar.label}: ${currentValue} → ${altEntry.value}`);
+                const changes: IneffectiveSuggestion["changes"] = [];
+                for (const variable of payload.variables) {
+                    const fromValue = String(
+                        lookupStateValue(state, variable.id) ?? variable.defaultValue,
+                    );
+                    const toValue = String(
+                        lookupStateValue(testState, variable.id) ?? variable.defaultValue,
+                    );
+                    if (toValue !== fromValue) {
+                        changes.push({
+                            varId: variable.id,
+                            varLabel: variable.label,
+                            fromValue,
+                            toValue,
+                        });
+                    }
+                }
+                suggestions.push({
+                    display: `${blockingVar.label}: ${currentValue} → ${altEntry.value}`,
+                    changes,
+                });
             }
         }
     }

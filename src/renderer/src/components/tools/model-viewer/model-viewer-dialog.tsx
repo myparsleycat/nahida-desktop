@@ -30,9 +30,10 @@ import {
   applyVariableSelection,
   computeIneffectiveValues,
   evaluateViewerState,
+  type IneffectiveSuggestion,
 } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
-import { Loader2Icon } from "lucide-react";
+import { CheckIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -569,6 +570,21 @@ export function ModelViewerDialog({
     }
   };
 
+  const handleApplyResolution = (suggestion: IneffectiveSuggestion) => {
+    if (!source || source.mode !== "payload") return;
+    setActiveState((current) => {
+      let next = current;
+      for (const change of suggestion.changes) {
+        const variable = source.transport.variables.find((v) => v.id === change.varId) ?? {
+          id: change.varId,
+        };
+        next = applyVariableSelection(next, variable, change.toValue);
+      }
+      return next;
+    });
+    setPreviewState(null);
+  };
+
   const handleAnimationTogglePlayback = () => {
     if (!activeAnimation || activeAnimation.frames.length <= 1) {
       return;
@@ -968,55 +984,124 @@ export function ModelViewerDialog({
                                           </SelectItem>
                                         );
                                       return (
-                                        <Tooltip key={String(entry.value)}>
-                                          <TooltipTrigger
-                                            closeOnClick={false}
-                                            render={
-                                              <SelectItem
-                                                value={String(entry.value)}
-                                                disabled
-                                                style={{ pointerEvents: "auto" }}
-                                                onMouseEnter={() => {
-                                                  if (source?.mode === "payload")
-                                                    setPreviewState({
-                                                      ...activeState,
-                                                      [variable.id]: entry.value,
-                                                    });
-                                                }}
-                                                onMouseLeave={() => setPreviewState(null)}
-                                              />
-                                            }
-                                          >
-                                            {entry.label}
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <div className="space-y-1 text-left">
-                                              <div>
-                                                {t(
-                                                  "page.tools.model_viewer.ineffective_blocked_by",
-                                                  {
-                                                    variables:
-                                                      ineffectiveEntry.blockingVars.join(", "),
-                                                  },
-                                                )}
-                                              </div>
-                                              {ineffectiveEntry.suggestions.length > 0 && (
+                                        <div
+                                          key={String(entry.value)}
+                                          className="group flex w-full items-center justify-between"
+                                        >
+                                          <Tooltip>
+                                            <TooltipTrigger
+                                              closeOnClick={false}
+                                              render={
+                                                <SelectItem
+                                                  value={String(entry.value)}
+                                                  disabled
+                                                  style={{ pointerEvents: "auto" }}
+                                                  onMouseEnter={() => {
+                                                    if (source?.mode === "payload")
+                                                      setPreviewState({
+                                                        ...activeState,
+                                                        [variable.id]: entry.value,
+                                                      });
+                                                  }}
+                                                  onMouseLeave={() => setPreviewState(null)}
+                                                />
+                                              }
+                                            >
+                                              {entry.label}
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <div className="space-y-1 text-left">
                                                 <div>
                                                   {t(
-                                                    "page.tools.model_viewer.ineffective_suggestion",
+                                                    "page.tools.model_viewer.ineffective_blocked_by",
+                                                    {
+                                                      variables:
+                                                        ineffectiveEntry.blockingVars.join(", "),
+                                                    },
                                                   )}
-                                                  <ul className="ml-3 list-disc">
-                                                    {ineffectiveEntry.suggestions.map(
-                                                      (suggestion) => (
-                                                        <li key={suggestion}>{suggestion}</li>
-                                                      ),
-                                                    )}
-                                                  </ul>
                                                 </div>
-                                              )}
+                                                {ineffectiveEntry.suggestions.length > 0 && (
+                                                  <div>
+                                                    {t(
+                                                      "page.tools.model_viewer.ineffective_suggestion",
+                                                    )}
+                                                    <ul className="ml-3 list-disc">
+                                                      {ineffectiveEntry.suggestions.map(
+                                                        (suggestion) => (
+                                                          <li key={suggestion.display}>
+                                                            {suggestion.display}
+                                                          </li>
+                                                        ),
+                                                      )}
+                                                    </ul>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          {ineffectiveEntry.suggestions.length > 0 && (
+                                            <div className="w-0 overflow-hidden transition-all group-hover:w-8">
+                                              <Tooltip>
+                                                <TooltipTrigger
+                                                  render={
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon-sm"
+                                                      onMouseEnter={() => {
+                                                        if (source?.mode === "payload") {
+                                                          let next = { ...activeState };
+                                                          for (const change of ineffectiveEntry
+                                                            .suggestions[0].changes) {
+                                                            const v =
+                                                              source.transport.variables.find(
+                                                                (entry) =>
+                                                                  entry.id === change.varId,
+                                                              ) ?? { id: change.varId };
+                                                            next = applyVariableSelection(
+                                                              next,
+                                                              v,
+                                                              change.toValue,
+                                                            );
+                                                          }
+                                                          setPreviewState(next);
+                                                        }
+                                                      }}
+                                                      onMouseLeave={() => setPreviewState(null)}
+                                                      onClick={() =>
+                                                        handleApplyResolution(
+                                                          ineffectiveEntry.suggestions[0],
+                                                        )
+                                                      }
+                                                    />
+                                                  }
+                                                >
+                                                  <CheckIcon className="size-4" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <div className="space-y-1 text-left">
+                                                    <div>
+                                                      {t(
+                                                        "page.tools.model_viewer.ineffective_apply",
+                                                      )}
+                                                    </div>
+                                                    <ul className="ml-3 list-disc">
+                                                      {ineffectiveEntry.suggestions[0].changes.map(
+                                                        (change) => (
+                                                          <li
+                                                            key={`${change.varId}-${change.toValue}`}
+                                                          >
+                                                            {change.varLabel}: {change.fromValue} →{" "}
+                                                            {change.toValue}
+                                                          </li>
+                                                        ),
+                                                      )}
+                                                    </ul>
+                                                  </div>
+                                                </TooltipContent>
+                                              </Tooltip>
                                             </div>
-                                          </TooltipContent>
-                                        </Tooltip>
+                                          )}
+                                        </div>
                                       );
                                     })}
                                   </SelectGroup>
