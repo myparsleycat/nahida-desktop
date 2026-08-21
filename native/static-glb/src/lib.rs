@@ -144,8 +144,7 @@ impl Task for PrepareViewerTextureTask {
 
         let (final_width, final_height) = resized.dimensions();
         let analysis = analyze_rgba(resized.as_raw(), final_width, final_height)?;
-        let uses_alpha = analysis.has_alpha
-            && (analysis.partial_ratio > 0.0 || analysis.low_ratio >= 0.005);
+        let uses_alpha = analysis.has_alpha;
         let mime_type = if uses_alpha { "image/png" } else { "image/jpeg" };
         let bytes = encode_viewer_image(&resized, mime_type, 85)?;
         Ok(PrepareViewerTextureResult {
