@@ -309,10 +309,18 @@ function buildBlockingVars(
             }
         }
     }
+    const coOccurringLower = new Set([...coOccurring].map((v) => v.toLowerCase()));
     const blockingVars: BlockingVar[] = [];
     for (const variable of payload.variables) {
         if (variable.id.toLowerCase() === testedLower) continue;
-        if (![...coOccurring].some((v) => v.toLowerCase() === variable.id.toLowerCase())) continue;
+        // A variable blocks the tested value when it co-occurs directly in a
+        // mesh condition, or when its effect writes a hidden single-value
+        // target that co-occurs (e.g. $body set by $outfit's effect).
+        const directlyCoOccurring = coOccurringLower.has(variable.id.toLowerCase());
+        const effectCoOccurring = variable.effects?.some((e) =>
+            coOccurringLower.has(e.var.toLowerCase()),
+        );
+        if (!directlyCoOccurring && !effectCoOccurring) continue;
         const currentValue = lookupStateValue(state, variable.id);
         if (currentValue === undefined) continue;
         blockingVars.push({ id: variable.id, label: variable.label, value: currentValue });
@@ -342,13 +350,9 @@ function resolveSuggestions(
         for (const altEntry of blockingVar.values) {
             if (String(altEntry.value) === currentStr) continue;
             const altState = applyVariableSelection(state, blockingVar, altEntry.value);
-            const altResolved = applyStateRules(
-                { ...payload.defaultState, ...altState },
-                payload.stateRules,
-            );
-            const testState = applyVariableSelection(altResolved, testedVar, testedValue);
+            const testState = applyVariableSelection(altState, testedVar, testedValue);
             const testEval = evaluateViewerState(payload, testState);
-            const altBaseline = evaluateViewerState(payload, altResolved);
+            const altBaseline = evaluateViewerState(payload, altState);
             if (
                 evaluatedStatesDiffer(altBaseline, testEval) &&
                 evaluatedStatesDiffer(baseline, testEval)

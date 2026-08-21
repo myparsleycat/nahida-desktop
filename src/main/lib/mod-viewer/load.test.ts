@@ -715,6 +715,74 @@ format = DXGI_FORMAT_R32_UINT
         assert.ok(!live.has("skirt") || !live.get("skirt")!.has("1"));
     });
 
+    it("resolves hidden single-value effect targets as blocking variables", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $skirt = 0
+global persist $outfit = 0
+global persist $body = 0
+global $clickedSlot
+[CommandListClickedSlot]
+if $clickedSlot == 1
+    $outfit = 1 - $outfit
+    if $outfit == 1
+        $body = 1
+    endif
+elif $clickedSlot == 2
+    $skirt = 1 - $skirt
+endif
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $skirt == 1 && $body != 0
+drawindexed = 3, 0, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const outfit = payload.variables.find((variable) => variable.id === "outfit");
+        assert.ok(outfit);
+        // body is a hidden single-value effect target, not a panel variable
+        assert.ok(!payload.variables.some((variable) => variable.id === "body"));
+        assert.ok(outfit.effects?.some((effect) => effect.var === "body"));
+
+        // outfit=0 → body stays 0 → skirt=1 is ineffective (condition needs body != 0)
+        const dead = computeIneffectiveValues(payload, {
+            outfit: "0",
+            skirt: "0",
+            body: "0",
+        });
+        const skirtIneffective = dead.get("skirt");
+        assert.ok(skirtIneffective);
+        const skirt1Entry = skirtIneffective.get("1");
+        assert.ok(skirt1Entry);
+        // outfit should be reported as the blocking variable even though only
+        // its hidden effect target body co-occurs in the mesh condition
+        assert.ok(skirt1Entry.blockingVars.some((v) => v.id === "outfit"));
+        assert.ok(!skirt1Entry.blockingVars.some((v) => v.id === "body"));
+
+        // outfit=1 → body=1 → skirt=1 is effective
+        const live = computeIneffectiveValues(payload, {
+            outfit: "1",
+            skirt: "0",
+            body: "1",
+        });
+        assert.ok(!live.has("skirt") || !live.get("skirt")!.has("1"));
+    });
+
     it("evaluates a second toggle without rebuilding geometry or converting GLB", async () => {
         const loadSource = await fse.readFile(new URL("./load.ts", import.meta.url), "utf8");
         const evalSource = await fse.readFile(
