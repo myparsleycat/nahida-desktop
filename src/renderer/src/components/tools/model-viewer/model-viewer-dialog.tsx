@@ -10,7 +10,14 @@ import {
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -883,7 +890,7 @@ export function ModelViewerDialog({
                     {t("page.tools.model_viewer.toggle_viewer")}
                   </div>
                 </div>
-                <ScrollArea className="min-h-0 flex-1">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <div className="p-4">
                     {hasVariantTileUi ? (
                       <div
@@ -913,64 +920,90 @@ export function ModelViewerDialog({
 
                     <TooltipProvider>
                       <div className="space-y-3">
-                        {tileVariables.map((variable) => (
-                          <div key={variable.id} className="rounded-md border bg-background/50 p-3">
-                            <div className="mb-2 text-sm font-medium">{variable.label}</div>
-                            <div className="flex flex-wrap gap-2">
-                              {variable.values.map((entry) => {
-                                const active =
-                                  String(activeState[variable.id]) === String(entry.value);
-                                const ineffectiveEntry = ineffectiveMap
-                                  .get(variable.id)
-                                  ?.get(String(entry.value));
-                                const isIneffective = Boolean(ineffectiveEntry);
-                                const button = (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={active ? "default" : "outline"}
-                                    disabled={isViewerBusy || isIneffective}
-                                    onClick={() => handleSelectValue(variable.id, entry.value)}
-                                  >
-                                    {entry.label}
-                                  </Button>
-                                );
-                                if (!isIneffective || !ineffectiveEntry)
-                                  return (
-                                    <span key={`${variable.id}-${String(entry.value)}`}>
-                                      {button}
-                                    </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          {tileVariables.map((variable) => (
+                            <div key={variable.id} className="border-l-4 border-l-primary/40 pl-3">
+                              <div className="mb-2 text-sm font-medium">{variable.label}</div>
+                              <Select
+                                value={String(activeState[variable.id] ?? variable.defaultValue)}
+                                onValueChange={(value) => {
+                                  if (value === null) return;
+                                  const entry = variable.values.find(
+                                    (e) => String(e.value) === value,
                                   );
-                                return (
-                                  <Tooltip key={`${variable.id}-${String(entry.value)}`}>
-                                    <TooltipTrigger className="inline-flex">
-                                      {button}
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <div className="space-y-1 text-left">
-                                        <div>
-                                          {t("page.tools.model_viewer.ineffective_blocked_by", {
-                                            variables: ineffectiveEntry.blockingVars.join(", "),
-                                          })}
-                                        </div>
-                                        {ineffectiveEntry.suggestions.length > 0 && (
-                                          <div>
-                                            {t("page.tools.model_viewer.ineffective_suggestion")}
-                                            <ul className="ml-3 list-disc">
-                                              {ineffectiveEntry.suggestions.map((suggestion) => (
-                                                <li key={suggestion}>{suggestion}</li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                );
-                              })}
+                                  if (entry) void handleSelectValue(variable.id, entry.value);
+                                }}
+                                disabled={isViewerBusy}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    {variable.values.map((entry) => {
+                                      const ineffectiveEntry = ineffectiveMap
+                                        .get(variable.id)
+                                        ?.get(String(entry.value));
+                                      const isIneffective = Boolean(ineffectiveEntry);
+                                      if (!isIneffective || !ineffectiveEntry)
+                                        return (
+                                          <SelectItem
+                                            key={String(entry.value)}
+                                            value={String(entry.value)}
+                                          >
+                                            {entry.label}
+                                          </SelectItem>
+                                        );
+                                      return (
+                                        <Tooltip key={String(entry.value)}>
+                                          <TooltipTrigger
+                                            closeOnClick={false}
+                                            render={
+                                              <SelectItem
+                                                value={String(entry.value)}
+                                                disabled
+                                                style={{ pointerEvents: "auto" }}
+                                              />
+                                            }
+                                          >
+                                            {entry.label}
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <div className="space-y-1 text-left">
+                                              <div>
+                                                {t(
+                                                  "page.tools.model_viewer.ineffective_blocked_by",
+                                                  {
+                                                    variables:
+                                                      ineffectiveEntry.blockingVars.join(", "),
+                                                  },
+                                                )}
+                                              </div>
+                                              {ineffectiveEntry.suggestions.length > 0 && (
+                                                <div>
+                                                  {t(
+                                                    "page.tools.model_viewer.ineffective_suggestion",
+                                                  )}
+                                                  <ul className="ml-3 list-disc">
+                                                    {ineffectiveEntry.suggestions.map(
+                                                      (suggestion) => (
+                                                        <li key={suggestion}>{suggestion}</li>
+                                                      ),
+                                                    )}
+                                                  </ul>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    })}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                         {sliderVariables.map((variable) => (
                           <VariantSlider
                             key={variable.id}
@@ -993,7 +1026,7 @@ export function ModelViewerDialog({
                       </div>
                     </TooltipProvider>
                   </div>
-                </ScrollArea>
+                </div>
               </div>
             ) : null}
           </div>
