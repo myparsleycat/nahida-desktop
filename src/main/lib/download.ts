@@ -761,6 +761,7 @@ class FileDownloadTask {
                                 file.urlOrigin = "presign";
                                 urlOrigin = "presign";
                                 slowReconnects = 0;
+                                errorRetries = 0;
                                 this.desktop.logger.warn(
                                     {
                                         fileId: file.id,
