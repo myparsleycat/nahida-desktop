@@ -1036,6 +1036,8 @@
       "model_viewer": {
         "title": "モデルビューアー",
         "toggle_viewer": "トグルビューアー",
+        "ineffective_blocked_by": "現在の組み合わせではこの値は効果がありません: {{variables}}",
+        "ineffective_suggestion": "この値を使用するには以下の変数を変更してください:",
         "open_file": "ファイルを開く",
         "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
         "generating_selected_state": "選択した状態を生成中",

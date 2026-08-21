@@ -1035,6 +1035,8 @@
       "model_viewer": {
         "title": "模型查看器",
         "toggle_viewer": "切换查看器",
+        "ineffective_blocked_by": "当前组合下此值无效: {{variables}}",
+        "ineffective_suggestion": "要使用此值，请更改以下变量:",
         "open_file": "打开文件",
         "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
         "generating_selected_state": "正在生成所选状态",

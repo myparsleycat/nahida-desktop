@@ -11,9 +11,19 @@ import {
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@renderer/components/ui/tooltip";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
-import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
+import {
+  applyVariableSelection,
+  computeIneffectiveValues,
+  evaluateViewerState,
+} from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -570,6 +580,10 @@ export function ModelViewerDialog({
     () => (payloadTransport ? evaluateViewerState(payloadTransport, activeState) : null),
     [activeState, payloadTransport],
   );
+  const ineffectiveMap = useMemo(
+    () => (payloadTransport ? computeIneffectiveValues(payloadTransport, activeState) : new Map()),
+    [activeState, payloadTransport],
+  );
   const variables = manifest?.variables ?? payloadTransport?.variables ?? [];
   const uiAssets = manifest?.uiAssets ?? payloadTransport?.uiAssets;
   const visibleVariables = variables.filter(
@@ -897,50 +911,87 @@ export function ModelViewerDialog({
                       </div>
                     ) : null}
 
-                    <div className="space-y-3">
-                      {tileVariables.map((variable) => (
-                        <div key={variable.id} className="rounded-md border bg-background/50 p-3">
-                          <div className="mb-2 text-sm font-medium">{variable.label}</div>
-                          <div className="flex flex-wrap gap-2">
-                            {variable.values.map((entry) => {
-                              const active =
-                                String(activeState[variable.id]) === String(entry.value);
-                              return (
-                                <Button
-                                  key={`${variable.id}-${String(entry.value)}`}
-                                  type="button"
-                                  size="sm"
-                                  variant={active ? "default" : "outline"}
-                                  disabled={isViewerBusy}
-                                  onClick={() => handleSelectValue(variable.id, entry.value)}
-                                >
-                                  {entry.label}
-                                </Button>
-                              );
-                            })}
+                    <TooltipProvider>
+                      <div className="space-y-3">
+                        {tileVariables.map((variable) => (
+                          <div key={variable.id} className="rounded-md border bg-background/50 p-3">
+                            <div className="mb-2 text-sm font-medium">{variable.label}</div>
+                            <div className="flex flex-wrap gap-2">
+                              {variable.values.map((entry) => {
+                                const active =
+                                  String(activeState[variable.id]) === String(entry.value);
+                                const ineffectiveEntry = ineffectiveMap
+                                  .get(variable.id)
+                                  ?.get(String(entry.value));
+                                const isIneffective = Boolean(ineffectiveEntry);
+                                const button = (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={active ? "default" : "outline"}
+                                    disabled={isViewerBusy || isIneffective}
+                                    onClick={() => handleSelectValue(variable.id, entry.value)}
+                                  >
+                                    {entry.label}
+                                  </Button>
+                                );
+                                if (!isIneffective || !ineffectiveEntry)
+                                  return (
+                                    <span key={`${variable.id}-${String(entry.value)}`}>
+                                      {button}
+                                    </span>
+                                  );
+                                return (
+                                  <Tooltip key={`${variable.id}-${String(entry.value)}`}>
+                                    <TooltipTrigger className="inline-flex">
+                                      {button}
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <div className="space-y-1 text-left">
+                                        <div>
+                                          {t("page.tools.model_viewer.ineffective_blocked_by", {
+                                            variables: ineffectiveEntry.blockingVars.join(", "),
+                                          })}
+                                        </div>
+                                        {ineffectiveEntry.suggestions.length > 0 && (
+                                          <div>
+                                            {t("page.tools.model_viewer.ineffective_suggestion")}
+                                            <ul className="ml-3 list-disc">
+                                              {ineffectiveEntry.suggestions.map((suggestion) => (
+                                                <li key={suggestion}>{suggestion}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {sliderVariables.map((variable) => (
-                        <VariantSlider
-                          key={variable.id}
-                          variable={variable}
-                          activeValue={activeState[variable.id]}
-                          disabled={isViewerBusy}
-                          realtime={
-                            source?.mode === "payload" ||
-                            Boolean(
-                              shapeKeys?.some((shapeKey) =>
-                                shapeKey.dimensions.some(
-                                  (dimension) => dimension.variableId === variable.id,
+                        ))}
+                        {sliderVariables.map((variable) => (
+                          <VariantSlider
+                            key={variable.id}
+                            variable={variable}
+                            activeValue={activeState[variable.id]}
+                            disabled={isViewerBusy}
+                            realtime={
+                              source?.mode === "payload" ||
+                              Boolean(
+                                shapeKeys?.some((shapeKey) =>
+                                  shapeKey.dimensions.some(
+                                    (dimension) => dimension.variableId === variable.id,
+                                  ),
                                 ),
-                              ),
-                            )
-                          }
-                          onSelect={handleSelectValue}
-                        />
-                      ))}
-                    </div>
+                              )
+                            }
+                            onSelect={handleSelectValue}
+                          />
+                        ))}
+                      </div>
+                    </TooltipProvider>
                   </div>
                 </ScrollArea>
               </div>

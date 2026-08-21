@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 
-import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
+import {
+    applyVariableSelection,
+    computeIneffectiveValues,
+    evaluateViewerState,
+} from "@shared/mod-viewer/eval";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
 import { afterEach, describe, it } from "vitest";
@@ -539,6 +543,117 @@ format = DXGI_FORMAT_R32_UINT
         const withEffects = evaluateViewerState(payload, selected);
         assert.equal(withEffects.meshes[0].visible, false);
         assert.equal(withEffects.meshes[1].visible, true);
+    });
+
+    it("applies toggle side effects but hides single-value vars from the panel", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $top = 1
+global persist $onepiece = 1
+[KeyTop]
+condition = $active == 1
+key = no_modifiers UP
+type = cycle
+$top = 0,1,2,3
+$onepiece = 0
+[KeyOnePiece]
+condition = $active == 1
+key = no_modifiers DOWN
+type = cycle
+$onepiece = 0,1
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $top == 1 && $onepiece == 0
+drawindexed = 3, 0, 0
+endif
+if $onepiece == 1
+drawindexed = 3, 3, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const top = payload.variables.find((variable) => variable.id === "top");
+        assert.ok(top);
+        assert.ok(top.effects?.some((effect) => effect.var === "onepiece"));
+        assert.ok(
+            !payload.variables.some(
+                (variable) => variable.id === "onepiece" && variable.label === "Top",
+            ),
+        );
+
+        const selected = applyVariableSelection(payload.defaultState, top, "2");
+        assert.equal(String(selected.top), "2");
+        assert.equal(String(selected.onepiece), "0");
+        const evaluated = evaluateViewerState(payload, selected);
+        assert.equal(evaluated.meshes[0].visible, false);
+        assert.equal(evaluated.meshes[1].visible, false);
+    });
+
+    it("disables toggle values that produce no visible mesh change", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $skirt = 0
+global persist $bottom = 0
+global persist $futa = 0
+[KeySkirt]
+type = cycle
+$skirt = 0,1
+[KeyBottom]
+type = cycle
+$bottom = 0,1
+[KeyFutanari]
+type = cycle
+$futa = 0,1,2,3,4
+$bottom = 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $skirt == 1 && ($bottom != 0 || ($bottom == 0 && $futa != 4))
+drawindexed = 3, 0, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+
+        // futa=4, bottom=0 → skirt=1 is ineffective (condition excludes futa==4)
+        const dead = computeIneffectiveValues(payload, { futa: "4", bottom: "0", skirt: "0" });
+        const skirtIneffective = dead.get("skirt");
+        assert.ok(skirtIneffective);
+        const skirt1Entry = skirtIneffective.get("1");
+        assert.ok(skirt1Entry);
+        assert.ok(skirt1Entry.blockingVars.some((v) => v.includes("Futanari")));
+        assert.ok(!skirtIneffective.has("0"));
+
+        // futa=0, bottom=0 → skirt=1 is effective
+        const live = computeIneffectiveValues(payload, { futa: "0", bottom: "0", skirt: "0" });
+        assert.ok(!live.has("skirt") || !live.get("skirt")!.has("1"));
     });
 
     it("evaluates a second toggle without rebuilding geometry or converting GLB", async () => {

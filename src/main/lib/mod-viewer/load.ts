@@ -248,6 +248,7 @@ function buildVariables(
                 values: values.map((value) => ({ value, label: value })),
                 order,
                 controlType: "buttons",
+                effects: info.effects.map((effect) => ({ when: null, ...effect })),
             });
         }
     }
