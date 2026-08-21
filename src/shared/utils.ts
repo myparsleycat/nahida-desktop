@@ -152,6 +152,16 @@ export const TEXTURE_UPSCALE_MODELS = [
     "realcugan-se",
     "realcugan-nose",
 ] as const;
+export const TEXTURE_UPSCALE_MODEL_GROUPS = [
+    {
+        engine: "realesrgan",
+        models: ["realesr-animevideov3", "realesrgan-x4plus-anime", "realesrgan-x4plus"],
+    },
+    {
+        engine: "realcugan",
+        models: ["realcugan-pro", "realcugan-se", "realcugan-nose"],
+    },
+] as const;
 
 const UNSUPPORTED_UPSCALE_FORMAT_MARKERS = ["BC4", "BC5", "BC6H"] as const;
 

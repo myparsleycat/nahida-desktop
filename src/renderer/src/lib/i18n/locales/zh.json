@@ -924,13 +924,17 @@
           "upscale_and_convert": "使用 AI 放大工具放大后再重新编码为其他 DDS 格式。"
         },
         "upscale_model": "放大模型",
+        "upscale_engine_labels": {
+          "realesrgan": "Real-ESRGAN",
+          "realcugan": "Real-CUGAN"
+        },
         "upscale_model_options": {
           "realesr-animevideov3": "二次元 / 游戏（默认）",
           "realesrgan-x4plus-anime": "二次元 x4+",
           "realesrgan-x4plus": "写实 x4+",
-          "realcugan-pro": "Real-CUGAN Pro",
-          "realcugan-se": "Real-CUGAN SE",
-          "realcugan-nose": "Real-CUGAN Nose"
+          "realcugan-pro": "Pro",
+          "realcugan-se": "SE",
+          "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "适合游戏和二次元纹理的默认模型，支持 2x、3x、4x。",

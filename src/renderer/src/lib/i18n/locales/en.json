@@ -960,13 +960,17 @@
           "upscale_and_convert": "Enlarge the texture with an AI upscaler and re-encode it to a different DDS format."
         },
         "upscale_model": "Upscale model",
+        "upscale_engine_labels": {
+          "realesrgan": "Real-ESRGAN",
+          "realcugan": "Real-CUGAN"
+        },
         "upscale_model_options": {
           "realesr-animevideov3": "Anime / game (default)",
           "realesrgan-x4plus-anime": "Anime x4+",
           "realesrgan-x4plus": "Photo x4+",
-          "realcugan-pro": "Real-CUGAN Pro",
-          "realcugan-se": "Real-CUGAN SE",
-          "realcugan-nose": "Real-CUGAN Nose"
+          "realcugan-pro": "Pro",
+          "realcugan-se": "SE",
+          "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "Best default for game and anime textures. Supports 2x, 3x, and 4x.",

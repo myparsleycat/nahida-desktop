@@ -944,13 +944,17 @@
           "upscale_and_convert": "AI 업스케일러로 확대한 뒤 다른 DDS 포맷으로 다시 인코딩합니다."
         },
         "upscale_model": "업스케일 모델",
+        "upscale_engine_labels": {
+          "realesrgan": "Real-ESRGAN",
+          "realcugan": "Real-CUGAN"
+        },
         "upscale_model_options": {
           "realesr-animevideov3": "애니 / 게임 (기본)",
           "realesrgan-x4plus-anime": "애니 x4+",
           "realesrgan-x4plus": "실사 x4+",
-          "realcugan-pro": "Real-CUGAN Pro",
-          "realcugan-se": "Real-CUGAN SE",
-          "realcugan-nose": "Real-CUGAN Nose"
+          "realcugan-pro": "Pro",
+          "realcugan-se": "SE",
+          "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "게임·애니 텍스처에 가장 무난한 기본 모델입니다. 2x, 3x, 4x를 지원합니다.",

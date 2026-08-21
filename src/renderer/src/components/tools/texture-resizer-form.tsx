@@ -5,6 +5,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
@@ -18,8 +19,10 @@ import {
   pickTextureResizeCandidate,
   resolveTextureUpscaleScale,
   TEXTURE_UPSCALE_MODELS,
+  TEXTURE_UPSCALE_MODEL_GROUPS,
 } from "@shared/utils";
 import { FolderOpenIcon } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 interface TextureResizerFormProps {
@@ -89,6 +92,14 @@ export function TextureResizerForm({
   const upscaleModelOptions = TEXTURE_UPSCALE_MODELS.map((model) => ({
     value: model,
     label: t(`page.tools.texture_resizer.upscale_model_options.${model}`),
+  }));
+  const upscaleModelGroups = TEXTURE_UPSCALE_MODEL_GROUPS.map((group) => ({
+    engine: group.engine,
+    label: t(`page.tools.texture_resizer.upscale_engine_labels.${group.engine}`),
+    options: group.models.map((model) => ({
+      value: model,
+      label: t(`page.tools.texture_resizer.upscale_model_options.${model}`),
+    })),
   }));
   const availableUpscaleScales = getAvailableTextureUpscaleScales(settings.upscaleModel);
   const selectedUpscaleScale = resolveTextureUpscaleScale(
@@ -174,6 +185,22 @@ export function TextureResizerForm({
     </div>
   ) : null;
 
+  const backupField = (
+    <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
+      <div>
+        <div className="text-sm font-medium">{t("page.tools.texture_resizer.backup")}</div>
+        <div className="text-xs text-muted-foreground">
+          {t("page.tools.texture_resizer.backup_description")}
+        </div>
+      </div>
+      <Switch
+        checked={settings.backup}
+        onCheckedChange={(checked) => updateSettings({ backup: checked })}
+        disabled={disabled}
+      />
+    </div>
+  );
+
   const operationField = (
     <div className="space-y-2">
       <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
@@ -213,6 +240,343 @@ export function TextureResizerForm({
     </div>
   );
 
+  const upscaleModelField = (
+    <div className="space-y-2">
+      <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        {t("page.tools.texture_resizer.upscale_model")}
+      </label>
+      <Select
+        value={settings.upscaleModel}
+        items={upscaleModelOptions}
+        onValueChange={(value) => {
+          if (value === null) return;
+          const nextModel = value as TextureUpscaleModel;
+          updateSettings({
+            upscaleModel: nextModel,
+            upscaleScale: resolveTextureUpscaleScale(nextModel, settings.upscaleScale),
+          });
+        }}
+      >
+        <SelectTrigger disabled={disabled} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {upscaleModelGroups.map((group) => (
+            <SelectGroup key={group.engine}>
+              <SelectLabel>{group.label}</SelectLabel>
+              {group.options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {t(`page.tools.texture_resizer.upscale_model_descriptions.${settings.upscaleModel}`)}
+      </p>
+    </div>
+  );
+
+  const upscaleScaleField = (
+    <div className="space-y-2">
+      <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        {t("page.tools.texture_resizer.upscale_scale")}
+      </label>
+      <Select
+        value={String(selectedUpscaleScale)}
+        items={availableUpscaleScales.map((scale) => ({
+          value: String(scale),
+          label: t("page.tools.texture_resizer.upscale_scale_option", { scale }),
+        }))}
+        onValueChange={(value) => {
+          if (value === null) return;
+          updateSettings({
+            upscaleScale: resolveTextureUpscaleScale(
+              settings.upscaleModel,
+              Number.parseInt(value, 10),
+            ),
+          });
+        }}
+      >
+        <SelectTrigger disabled={disabled} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {availableUpscaleScales.map((scale) => (
+              <SelectItem key={scale} value={String(scale)}>
+                {t("page.tools.texture_resizer.upscale_scale_option", { scale })}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {t("page.tools.texture_resizer.upscale_scale_description")}
+      </p>
+    </div>
+  );
+
+  const upscaleNormalWarning =
+    currentColorSpace === "linear" ? (
+      <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+        {t("page.tools.texture_resizer.upscale_normal_warning")}
+      </div>
+    ) : null;
+
+  const modeField = sharedResize ? (
+    <div className="space-y-2">
+      <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        {t("page.tools.texture_resizer.mode")}
+      </label>
+      <Select
+        value={settings.mode}
+        items={modeOptions}
+        onValueChange={(value) => {
+          if (value === null) return;
+          const nextMode = modeOptions.find((option) => option.value === value)?.value;
+          if (!nextMode) return;
+          updateSettings({ mode: nextMode });
+        }}
+      >
+        <SelectTrigger disabled={disabled} className="w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {modeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {t(`page.tools.texture_resizer.mode_descriptions.${settings.mode}`)}
+      </p>
+    </div>
+  ) : (
+    <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+      {t("page.tools.texture_resizer.custom_hint")}
+    </div>
+  );
+
+  const outputFormatField = (
+    <div className="space-y-2">
+      <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        {t("page.tools.texture_resizer.output_format")}
+      </label>
+      <Select
+        value={outputFormatValue}
+        items={visibleOutputFormats.map((format) => ({
+          value: format,
+          label: formatTextureFormatLabel(format),
+        }))}
+        onValueChange={(value) => {
+          if (value === null) return;
+          updateSettings({ outputFormat: value });
+        }}
+      >
+        <SelectTrigger disabled={disabled || visibleOutputFormats.length === 0} className="w-52">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {visibleOutputFormats.map((format) => (
+              <SelectItem key={format} value={format}>
+                {formatTextureFormatLabel(format)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {formatConversionMessage ?? t("page.tools.texture_resizer.output_format_description")}
+      </p>
+    </div>
+  );
+
+  const percentSlider = (
+    <div className="space-y-3 rounded-md border bg-background/40 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">{t("page.tools.texture_resizer.percent")}</div>
+          <div className="text-xs text-muted-foreground">
+            {t("page.tools.texture_resizer.mode_descriptions.percent")}
+          </div>
+        </div>
+        <div className="text-sm font-medium">{settings.percent}%</div>
+      </div>
+      <Slider
+        min={1}
+        max={99}
+        step={1}
+        value={settings.percent}
+        disabled={disabled}
+        onValueChange={(value) => {
+          const percent = Array.isArray(value) ? (value[0] ?? 1) : value;
+          updateSettings({
+            percent,
+            mode: "percent",
+          });
+        }}
+      />
+    </div>
+  );
+
+  const customSizeInputs = (
+    <div className="space-y-3 rounded-md border bg-background/40 p-3">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            {t("page.tools.texture_resizer.custom_width")}
+          </label>
+          <Input
+            type="number"
+            min={1024}
+            step={1024}
+            value={settings.customWidth}
+            disabled={disabled}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              updateSettings({
+                customWidth: Number.isFinite(parsed) ? parsed : 0,
+                mode: "custom",
+              });
+            }}
+            onBlur={() => {
+              updateSettings({
+                customWidth: snapDimension(settings.customWidth),
+                mode: "custom",
+              });
+            }}
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            {t("page.tools.texture_resizer.custom_height")}
+          </label>
+          <Input
+            type="number"
+            min={1024}
+            step={1024}
+            value={settings.customHeight}
+            disabled={disabled}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              updateSettings({
+                customHeight: Number.isFinite(parsed) ? parsed : 0,
+                mode: "custom",
+              });
+            }}
+            onBlur={() => {
+              updateSettings({
+                customHeight: snapDimension(settings.customHeight),
+                mode: "custom",
+              });
+            }}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("page.tools.texture_resizer.custom_hint")}</p>
+    </div>
+  );
+
+  const resizeStepSlider =
+    resizeSource && resizeCandidates.length > 0 && selectedResizeCandidate ? (
+      <div className="space-y-3 rounded-md border bg-background/40 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium">{t("page.tools.texture_resizer.resize_step")}</div>
+            <div className="text-xs text-muted-foreground">
+              {t("page.tools.texture_resizer.resize_step_description")}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-medium">
+              {formatResizePercent(selectedResizeCandidate.width, resizeSource.width)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {selectedResizeCandidate.width}x{selectedResizeCandidate.height}
+            </div>
+          </div>
+        </div>
+        {resizeCandidates.length > 1 && (
+          <>
+            <Slider
+              min={0}
+              max={resizeCandidates.length - 1}
+              step={1}
+              value={selectedResizeIndex}
+              disabled={disabled}
+              onValueChange={(value) => {
+                const index = Array.isArray(value) ? (value[0] ?? 0) : value;
+                const nextCandidate = resizeCandidates[index];
+                if (!nextCandidate) {
+                  return;
+                }
+
+                updateSettings({
+                  customWidth: nextCandidate.width,
+                  customHeight: nextCandidate.height,
+                  mode: "custom",
+                });
+              }}
+            />
+            <div className="flex justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                {formatResizePercent(resizeCandidates[0].width, resizeSource.width)} /{" "}
+                {resizeCandidates[0].width}x{resizeCandidates[0].height}
+              </span>
+              <span className="text-right">
+                {formatResizePercent(
+                  resizeCandidates[resizeCandidates.length - 1].width,
+                  resizeSource.width,
+                )}{" "}
+                / {resizeCandidates[resizeCandidates.length - 1].width}x
+                {resizeCandidates[resizeCandidates.length - 1].height}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    ) : (
+      <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+        {t("page.tools.texture_resizer.resize_step_unavailable")}
+      </div>
+    );
+
+  const gridFields: ReactNode[] = isUpscale
+    ? [
+        operationField,
+        upscaleModelField,
+        upscaleScaleField,
+        upscaleNormalWarning,
+        backupField,
+      ].filter((field) => field != null)
+    : showResizeInputs
+      ? [operationField, modeField, backupField]
+      : useHorizontalConvertLayout && showOutputFormat
+        ? [operationField, colorSpaceField, outputFormatField, backupField].filter(
+            (field) => field != null,
+          )
+        : [operationField, backupField];
+
+  const fullSpanFields: ReactNode[] = isUpscale
+    ? []
+    : showResizeInputs && sharedResize && settings.mode === "percent"
+      ? [percentSlider]
+      : showResizeInputs && sharedResize && settings.mode === "custom"
+        ? [customSizeInputs]
+        : showResizeInputs && !sharedResize
+          ? [resizeStepSlider]
+          : !showResizeInputs && !useHorizontalConvertLayout && showOutputFormat
+            ? [colorSpaceField, outputFormatField].filter((field) => field != null)
+            : [];
+
   return (
     <div className="grid gap-4 rounded-lg border bg-card p-4">
       {showTargetPath && (
@@ -241,388 +605,15 @@ export function TextureResizerForm({
         </div>
       )}
 
-      {isUpscale ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {operationField}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.upscale_model")}
-              </label>
-              <Select
-                value={settings.upscaleModel}
-                items={upscaleModelOptions}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  const nextModel = value as TextureUpscaleModel;
-                  updateSettings({
-                    upscaleModel: nextModel,
-                    upscaleScale: resolveTextureUpscaleScale(nextModel, settings.upscaleScale),
-                  });
-                }}
-              >
-                <SelectTrigger disabled={disabled} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {upscaleModelOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  `page.tools.texture_resizer.upscale_model_descriptions.${settings.upscaleModel}`,
-                )}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.upscale_scale")}
-              </label>
-              <Select
-                value={String(selectedUpscaleScale)}
-                items={availableUpscaleScales.map((scale) => ({
-                  value: String(scale),
-                  label: t("page.tools.texture_resizer.upscale_scale_option", { scale }),
-                }))}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  updateSettings({
-                    upscaleScale: resolveTextureUpscaleScale(
-                      settings.upscaleModel,
-                      Number.parseInt(value, 10),
-                    ),
-                  });
-                }}
-              >
-                <SelectTrigger disabled={disabled} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {availableUpscaleScales.map((scale) => (
-                      <SelectItem key={scale} value={String(scale)}>
-                        {t("page.tools.texture_resizer.upscale_scale_option", { scale })}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("page.tools.texture_resizer.upscale_scale_description")}
-              </p>
-            </div>
-            {currentColorSpace === "linear" && (
-              <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
-                {t("page.tools.texture_resizer.upscale_normal_warning")}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : showResizeInputs ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {operationField}
-          {sharedResize ? (
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.mode")}
-              </label>
-              <Select
-                value={settings.mode}
-                items={modeOptions}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  const nextMode = modeOptions.find((option) => option.value === value)?.value;
-                  if (!nextMode) return;
-                  updateSettings({ mode: nextMode });
-                }}
-              >
-                <SelectTrigger disabled={disabled} className="w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {modeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t(`page.tools.texture_resizer.mode_descriptions.${settings.mode}`)}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
-              {t("page.tools.texture_resizer.custom_hint")}
-            </div>
-          )}
-        </div>
-      ) : useHorizontalConvertLayout && showOutputFormat ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {operationField}
-          <div className="space-y-4">
-            {colorSpaceField}
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.output_format")}
-              </label>
-              <Select
-                value={outputFormatValue}
-                items={visibleOutputFormats.map((format) => ({
-                  value: format,
-                  label: formatTextureFormatLabel(format),
-                }))}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  updateSettings({ outputFormat: value });
-                }}
-              >
-                <SelectTrigger
-                  disabled={disabled || visibleOutputFormats.length === 0}
-                  className="w-52"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {visibleOutputFormats.map((format) => (
-                      <SelectItem key={format} value={format}>
-                        {formatTextureFormatLabel(format)}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {formatConversionMessage ??
-                  t("page.tools.texture_resizer.output_format_description")}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        operationField
-      )}
-
-      {showResizeInputs && sharedResize && settings.mode === "percent" && (
-        <div className="space-y-3 rounded-md border bg-background/40 p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">{t("page.tools.texture_resizer.percent")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("page.tools.texture_resizer.mode_descriptions.percent")}
-              </div>
-            </div>
-            <div className="text-sm font-medium">{settings.percent}%</div>
-          </div>
-          <Slider
-            min={1}
-            max={99}
-            step={1}
-            value={settings.percent}
-            disabled={disabled}
-            onValueChange={(value) => {
-              const percent = Array.isArray(value) ? (value[0] ?? 1) : value;
-              updateSettings({
-                percent,
-                mode: "percent",
-              });
-            }}
-          />
-        </div>
-      )}
-
-      {showResizeInputs && sharedResize && settings.mode === "custom" && (
-        <div className="space-y-3 rounded-md border bg-background/40 p-3">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.custom_width")}
-              </label>
-              <Input
-                type="number"
-                min={1024}
-                step={1024}
-                value={settings.customWidth}
-                disabled={disabled}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  updateSettings({
-                    customWidth: Number.isFinite(parsed) ? parsed : 0,
-                    mode: "custom",
-                  });
-                }}
-                onBlur={() => {
-                  updateSettings({
-                    customWidth: snapDimension(settings.customWidth),
-                    mode: "custom",
-                  });
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-                {t("page.tools.texture_resizer.custom_height")}
-              </label>
-              <Input
-                type="number"
-                min={1024}
-                step={1024}
-                value={settings.customHeight}
-                disabled={disabled}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  updateSettings({
-                    customHeight: Number.isFinite(parsed) ? parsed : 0,
-                    mode: "custom",
-                  });
-                }}
-                onBlur={() => {
-                  updateSettings({
-                    customHeight: snapDimension(settings.customHeight),
-                    mode: "custom",
-                  });
-                }}
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t("page.tools.texture_resizer.custom_hint")}
-          </p>
-        </div>
-      )}
-
-      {showResizeInputs && !sharedResize && (
-        <>
-          {resizeSource && resizeCandidates.length > 0 && selectedResizeCandidate ? (
-            <div className="space-y-3 rounded-md border bg-background/40 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium">
-                    {t("page.tools.texture_resizer.resize_step")}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("page.tools.texture_resizer.resize_step_description")}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium">
-                    {formatResizePercent(selectedResizeCandidate.width, resizeSource.width)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {selectedResizeCandidate.width}x{selectedResizeCandidate.height}
-                  </div>
-                </div>
-              </div>
-              {resizeCandidates.length > 1 && (
-                <>
-                  <Slider
-                    min={0}
-                    max={resizeCandidates.length - 1}
-                    step={1}
-                    value={selectedResizeIndex}
-                    disabled={disabled}
-                    onValueChange={(value) => {
-                      const index = Array.isArray(value) ? (value[0] ?? 0) : value;
-                      const nextCandidate = resizeCandidates[index];
-                      if (!nextCandidate) {
-                        return;
-                      }
-
-                      updateSettings({
-                        customWidth: nextCandidate.width,
-                        customHeight: nextCandidate.height,
-                        mode: "custom",
-                      });
-                    }}
-                  />
-                  <div className="flex justify-between gap-3 text-xs text-muted-foreground">
-                    <span>
-                      {formatResizePercent(resizeCandidates[0].width, resizeSource.width)} /{" "}
-                      {resizeCandidates[0].width}x{resizeCandidates[0].height}
-                    </span>
-                    <span className="text-right">
-                      {formatResizePercent(
-                        resizeCandidates[resizeCandidates.length - 1].width,
-                        resizeSource.width,
-                      )}{" "}
-                      / {resizeCandidates[resizeCandidates.length - 1].width}x
-                      {resizeCandidates[resizeCandidates.length - 1].height}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
-              {t("page.tools.texture_resizer.resize_step_unavailable")}
-            </div>
-          )}
-        </>
-      )}
-
-      {showOutputFormat && !useHorizontalConvertLayout && (
-        <div className={colorSpaceField ? "grid gap-4 md:grid-cols-2" : "space-y-2"}>
-          {colorSpaceField}
-          <div className="space-y-2">
-            <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-              {t("page.tools.texture_resizer.output_format")}
-            </label>
-            <Select
-              value={outputFormatValue}
-              items={visibleOutputFormats.map((format) => ({
-                value: format,
-                label: formatTextureFormatLabel(format),
-              }))}
-              onValueChange={(value) => {
-                if (value === null) return;
-                updateSettings({ outputFormat: value });
-              }}
-            >
-              <SelectTrigger
-                disabled={disabled || visibleOutputFormats.length === 0}
-                className="w-52"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {visibleOutputFormats.map((format) => (
-                    <SelectItem key={format} value={format}>
-                      {formatTextureFormatLabel(format)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {formatConversionMessage ?? t("page.tools.texture_resizer.output_format_description")}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
-        <div>
-          <div className="text-sm font-medium">{t("page.tools.texture_resizer.backup")}</div>
-          <div className="text-xs text-muted-foreground">
-            {t("page.tools.texture_resizer.backup_description")}
-          </div>
-        </div>
-        <Switch
-          checked={settings.backup}
-          onCheckedChange={(checked) => updateSettings({ backup: checked })}
-          disabled={disabled}
-        />
+      <div className="grid gap-4 md:grid-cols-2">
+        {gridFields.map((field, index) => (
+          <Fragment key={index}>{field}</Fragment>
+        ))}
       </div>
+
+      {fullSpanFields.map((field, index) => (
+        <Fragment key={index}>{field}</Fragment>
+      ))}
     </div>
   );
 }

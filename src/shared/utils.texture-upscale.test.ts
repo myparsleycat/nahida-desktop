@@ -7,6 +7,8 @@ import {
     isTextureUpscaleOperation,
     isUnsupportedTextureUpscaleFormat,
     resolveTextureUpscaleScale,
+    TEXTURE_UPSCALE_MODELS,
+    TEXTURE_UPSCALE_MODEL_GROUPS,
 } from "./utils";
 
 describe("texture upscale helpers", () => {
@@ -51,5 +53,16 @@ describe("texture upscale helpers", () => {
         expect(getTextureUpscaleEngine("realcugan-nose")).toBe("realcugan");
         expect(getTextureUpscaleEngine("realesr-animevideov3")).toBe("realesrgan");
         expect(getTextureUpscaleEngine("realesrgan-x4plus")).toBe("realesrgan");
+    });
+
+    it("keeps TEXTURE_UPSCALE_MODEL_GROUPS consistent with TEXTURE_UPSCALE_MODELS", () => {
+        const grouped = TEXTURE_UPSCALE_MODEL_GROUPS.flatMap((group) => group.models);
+        expect(grouped).toEqual([...TEXTURE_UPSCALE_MODELS]);
+
+        for (const group of TEXTURE_UPSCALE_MODEL_GROUPS) {
+            for (const model of group.models) {
+                expect(getTextureUpscaleEngine(model)).toBe(group.engine);
+            }
+        }
     });
 });
