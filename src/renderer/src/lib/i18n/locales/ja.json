@@ -1736,7 +1736,9 @@
       "transfer": {
         "downloading": "ダウンロード中",
         "uploading": "アップロード中",
-        "transferring": "転送中"
+        "transferring": "転送中",
+        "finalizing": "仕上げ中",
+        "paused": "一時停止"
       },
       "fixer4001": {
         "building": "DLLをビルド中",

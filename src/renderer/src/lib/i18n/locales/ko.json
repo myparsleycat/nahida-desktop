@@ -1755,7 +1755,9 @@
       "transfer": {
         "downloading": "다운로드 중",
         "uploading": "업로드 중",
-        "transferring": "전송 중"
+        "transferring": "전송 중",
+        "finalizing": "마무리 중",
+        "paused": "일시정지"
       },
       "fixer4001": {
         "building": "DLL 빌드 중",

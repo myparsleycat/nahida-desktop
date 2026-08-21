@@ -7,7 +7,6 @@ import {
   useTitlebarActivityStore,
 } from "@renderer/store/titlebar-activity";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2Icon, PauseIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -39,6 +38,7 @@ export function TitlebarActivityBadges() {
         };
 
         const isInteractive = clickNavigate && (!!activity.onClick || !!activity.href);
+        const Icon = activity.icon;
         const badge = (
           <Badge
             variant="secondary"
@@ -48,11 +48,7 @@ export function TitlebarActivityBadges() {
             )}
             render={isInteractive ? <button type="button" onClick={activate} /> : undefined}
           >
-            {activity.status === "paused" ? (
-              <PauseIcon className="size-3!" />
-            ) : (
-              <Loader2Icon className="size-3! animate-spin" />
-            )}
+            <Icon className={cn("size-3!", activity.status === "paused" && "opacity-60")} />
             <span className="truncate">
               {activity.label}
               {activity.detail ? ` · ${activity.detail}` : ""}

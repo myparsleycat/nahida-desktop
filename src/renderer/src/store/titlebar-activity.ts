@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import { createStore, useStore } from "zustand";
 
 export type TitlebarActivityStatus = "running" | "paused" | "error";
@@ -6,6 +7,7 @@ export type TitlebarActivity = {
     id: string;
     label: string;
     status: TitlebarActivityStatus;
+    icon: LucideIcon;
     detail?: string;
     tooltip?: string;
     progress?: number;
@@ -26,6 +28,7 @@ function isSameActivity(a: TitlebarActivity, b: TitlebarActivity) {
         a.id === b.id &&
         a.label === b.label &&
         a.status === b.status &&
+        a.icon === b.icon &&
         a.detail === b.detail &&
         a.tooltip === b.tooltip &&
         a.progress === b.progress &&

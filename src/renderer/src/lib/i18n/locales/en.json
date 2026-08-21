@@ -1769,7 +1769,9 @@
       "transfer": {
         "downloading": "Downloading",
         "uploading": "Uploading",
-        "transferring": "Transferring"
+        "transferring": "Transferring",
+        "finalizing": "Finalizing",
+        "paused": "Paused"
       },
       "fixer4001": {
         "building": "Building DLL",

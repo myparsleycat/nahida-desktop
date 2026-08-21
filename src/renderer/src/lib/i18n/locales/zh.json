@@ -1735,7 +1735,9 @@
       "transfer": {
         "downloading": "下载中",
         "uploading": "上传中",
-        "transferring": "传输中"
+        "transferring": "传输中",
+        "finalizing": "收尾中",
+        "paused": "已暂停"
       },
       "fixer4001": {
         "building": "正在构建 DLL",

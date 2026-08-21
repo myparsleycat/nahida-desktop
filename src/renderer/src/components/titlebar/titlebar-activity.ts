@@ -8,6 +8,7 @@ import type {
     TransferWithoutData,
 } from "@shared/types";
 import { formatSize } from "@shared/utils";
+import { ArrowUpDownIcon, GitCompareIcon, ScalingIcon, WrenchIcon } from "lucide-react";
 
 type Translate = {
     (key: string): string;
@@ -22,6 +23,10 @@ function getActiveTransfers(transfers: TransferWithoutData[]) {
     );
 }
 
+function isFinalizingTransfer(transfer: TransferWithoutData) {
+    return isOpenTransferQueueStatus(transfer.status) && transfer.progress >= 100;
+}
+
 export function buildTransferTitlebarActivity(
     transfers: TransferWithoutData[],
     t: Translate,
@@ -31,27 +36,36 @@ export function buildTransferTitlebarActivity(
 
     const activeDownloads = activeTransfers.filter((transfer) => transfer.type === "download");
     const activeUploads = activeTransfers.filter((transfer) => transfer.type === "upload");
-    const label =
-        activeDownloads.length > 0 && activeUploads.length === 0
+    const progressingTransfers = activeTransfers.filter((transfer) =>
+        isOpenTransferQueueStatus(transfer.status),
+    );
+    const allFinalizing =
+        progressingTransfers.length > 0 && progressingTransfers.every(isFinalizingTransfer);
+    const allPaused = activeTransfers.every((transfer) => transfer.status === "paused");
+    const label = allPaused
+        ? t("titlebar.activity.transfer.paused")
+        : allFinalizing
+          ? t("titlebar.activity.transfer.finalizing")
+          : activeDownloads.length > 0 && activeUploads.length === 0
             ? t("titlebar.activity.transfer.downloading")
             : activeUploads.length > 0 && activeDownloads.length === 0
               ? t("titlebar.activity.transfer.uploading")
               : t("titlebar.activity.transfer.transferring");
 
     const speed = activeTransfers
-        .filter((transfer) => transfer.status === "progress")
+        .filter((transfer) => transfer.status === "progress" && !isFinalizingTransfer(transfer))
         .reduce((sum, transfer) => sum + transfer.speed, 0);
     const progress = getAggregateTransferProgress(transfers);
     const detailParts = [
         speed > 0 ? `${formatSize(speed)}/s` : null,
         progress !== null ? `${Math.round(progress)}%` : null,
     ].filter((part): part is string => part !== null);
-    const allPaused = activeTransfers.every((transfer) => transfer.status === "paused");
 
     return {
         id: "transfer",
         label,
         status: allPaused ? "paused" : "running",
+        icon: ArrowUpDownIcon,
         detail: detailParts.length > 0 ? detailParts.join(" · ") : undefined,
         progress: progress ?? undefined,
         order: 0,
@@ -88,6 +102,7 @@ export function build4001FixerTitlebarActivity(
         id: "tools:4001-fixer",
         label: t(getFixerTaskLabelKey(task)),
         status: "running",
+        icon: WrenchIcon,
         tooltip: resolveFixerStageTooltip(code, t),
         order: 10,
         href: "/tools",
@@ -108,6 +123,7 @@ export function buildModBisectTitlebarActivity(
         id: "tools:mod-bisect",
         label: t("titlebar.activity.modBisect.running"),
         status: "running",
+        icon: GitCompareIcon,
         order: 20,
         href: "/tools",
     };
@@ -141,6 +157,7 @@ export function buildTextureResizerTitlebarActivity(
         id: "tools:texture-resizer",
         label: t(getTextureResizerLabelKey(event.operation)),
         status: "running",
+        icon: ScalingIcon,
         detail: detail || undefined,
         order: 30,
         href: "/tools",
