@@ -84,6 +84,7 @@ export function ModelViewerDialog({
 }) {
   const { t } = useTranslation();
   const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>({});
+  const [previewState, setPreviewState] = useState<Record<string, VariableStateValue> | null>(null);
   const [manifest, setManifest] = useState<ModelViewerVariantManifest | null>(null);
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
   const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
@@ -583,9 +584,10 @@ export function ModelViewerDialog({
     viewerRefs.current[0]?.setAnimationFrame(0);
   };
 
+  const effectiveState = previewState ?? activeState;
   const payloadEval = useMemo(
-    () => (payloadTransport ? evaluateViewerState(payloadTransport, activeState) : null),
-    [activeState, payloadTransport],
+    () => (payloadTransport ? evaluateViewerState(payloadTransport, effectiveState) : null),
+    [effectiveState, payloadTransport],
   );
   const ineffectiveMap = useMemo(
     () => (payloadTransport ? computeIneffectiveValues(payloadTransport, activeState) : new Map()),
@@ -933,6 +935,9 @@ export function ModelViewerDialog({
                                   );
                                   if (entry) void handleSelectValue(variable.id, entry.value);
                                 }}
+                                onOpenChange={(open) => {
+                                  if (!open) setPreviewState(null);
+                                }}
                                 disabled={isViewerBusy}
                               >
                                 <SelectTrigger className="w-full">
@@ -950,6 +955,14 @@ export function ModelViewerDialog({
                                           <SelectItem
                                             key={String(entry.value)}
                                             value={String(entry.value)}
+                                            onMouseEnter={() => {
+                                              if (source?.mode === "payload")
+                                                setPreviewState({
+                                                  ...activeState,
+                                                  [variable.id]: entry.value,
+                                                });
+                                            }}
+                                            onMouseLeave={() => setPreviewState(null)}
                                           >
                                             {entry.label}
                                           </SelectItem>
@@ -963,6 +976,14 @@ export function ModelViewerDialog({
                                                 value={String(entry.value)}
                                                 disabled
                                                 style={{ pointerEvents: "auto" }}
+                                                onMouseEnter={() => {
+                                                  if (source?.mode === "payload")
+                                                    setPreviewState({
+                                                      ...activeState,
+                                                      [variable.id]: entry.value,
+                                                    });
+                                                }}
+                                                onMouseLeave={() => setPreviewState(null)}
                                               />
                                             }
                                           >
