@@ -2,12 +2,18 @@ import type { IniSections } from "./ini";
 
 import { canonicalVarNames } from "./ini";
 
+export type ToggleEffect = {
+    var: string;
+    value: string;
+};
+
 export type ToggleKey = {
     name: string;
     key: string;
     back: string;
     keyDisplay: string;
     vars: Record<string, string[]>;
+    effects: ToggleEffect[];
     source?: string;
     iniPath?: string;
     section: string;
@@ -29,6 +35,7 @@ export function extractToggleKeys(
         let backCombo = "";
         let keyType: string | undefined;
         const cvars: Record<string, string[]> = {};
+        const effects: ToggleEffect[] = [];
         let iniPath: string | undefined;
         for (const line of lines) {
             iniPath ??= line.iniPath;
@@ -51,8 +58,15 @@ export function extractToggleKeys(
                     .split(",")
                     .map((entry) => entry.trim())
                     .filter(Boolean);
-                if (variable && values.length > 0) {
+                if (variable && values.length >= 2) {
                     cvars[varPrefix ? `${varPrefix}${variable}` : variable] = values;
+                } else if (variable && values.length === 1) {
+                    // Single-value entries (e.g. "$onepiece = 0") are side effects
+                    // that reset another variable when this key cycles, not toggle values.
+                    effects.push({
+                        var: varPrefix ? `${varPrefix}${variable}` : variable,
+                        value: values[0],
+                    });
                 }
             }
         }
@@ -66,6 +80,7 @@ export function extractToggleKeys(
             back: backCombo,
             keyDisplay: formatKeyCombo(keyCombo),
             vars: cvars,
+            effects,
             source,
             iniPath,
             section: name,

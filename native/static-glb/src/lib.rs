@@ -12,6 +12,20 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 #[napi(object)]
+pub struct PrepareViewerTextureInput {
+    pub texture_path: String,
+    pub max_pixels: u32,
+}
+
+#[napi(object)]
+pub struct PrepareViewerTextureResult {
+    pub bytes: Buffer,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[napi(object)]
 pub struct PngAnalysis {
     pub has_alpha: bool,
     pub low_ratio: f64,
@@ -83,6 +97,110 @@ pub fn prepare_texture_for_material(
     input: PrepareTextureForMaterialInput,
 ) -> AsyncTask<PrepareTextureForMaterialTask> {
     AsyncTask::new(PrepareTextureForMaterialTask { input })
+}
+
+#[napi(ts_return_type = "Promise<PrepareViewerTextureResult>")]
+pub fn prepare_viewer_texture(
+    input: PrepareViewerTextureInput,
+) -> AsyncTask<PrepareViewerTextureTask> {
+    AsyncTask::new(PrepareViewerTextureTask { input })
+}
+
+pub struct PrepareViewerTextureTask {
+    input: PrepareViewerTextureInput,
+}
+
+impl Task for PrepareViewerTextureTask {
+    type Output = PrepareViewerTextureResult;
+    type JsValue = PrepareViewerTextureResult;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let input = &self.input;
+        let texture_path = Path::new(&input.texture_path);
+        let extension = texture_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+
+        let rgba = if extension == "dds" {
+            load_dds_rgba(texture_path)?.0
+        } else if extension == "png" || extension == "jpg" || extension == "jpeg" {
+            load_png_rgba(texture_path)?.0
+        } else {
+            return Err(napi::Error::from_reason(format!(
+                "Unsupported texture type for viewer: {}",
+                input.texture_path
+            )));
+        };
+
+        let (width, height) = rgba.dimensions();
+        let target = viewer_texture_target_size(width, height, input.max_pixels);
+        let resized = if target.0 != width || target.1 != height {
+            image::imageops::resize(&rgba, target.0, target.1, image::imageops::FilterType::Triangle)
+        } else {
+            rgba
+        };
+
+        let (final_width, final_height) = resized.dimensions();
+        let analysis = analyze_rgba(resized.as_raw(), final_width, final_height)?;
+        let uses_alpha = analysis.has_alpha;
+        let mime_type = if uses_alpha { "image/png" } else { "image/jpeg" };
+        let bytes = encode_viewer_image(&resized, mime_type, 85)?;
+        Ok(PrepareViewerTextureResult {
+            bytes: bytes.into(),
+            mime_type: mime_type.to_string(),
+            width: final_width,
+            height: final_height,
+        })
+    }
+
+    fn resolve(&mut self, _: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+fn viewer_texture_target_size(width: u32, height: u32, max_pixels: u32) -> (u32, u32) {
+    if width == 0 || height == 0 {
+        return (width, height);
+    }
+    let mut next_width = width;
+    let mut next_height = height;
+    while (next_width as u64) * (next_height as u64) > max_pixels as u64
+        && (next_width > 1 || next_height > 1)
+    {
+        next_width = std::cmp::max(1, next_width / 2);
+        next_height = std::cmp::max(1, next_height / 2);
+    }
+    (next_width, next_height)
+}
+
+fn encode_viewer_image(
+    rgba: &RgbaImage,
+    mime_type: &str,
+    jpeg_quality: u32,
+) -> napi::Result<Vec<u8>> {
+    let mut output = Vec::new();
+    if mime_type == "image/png" {
+        let encoder = PngEncoder::new(&mut output);
+        encoder
+            .write_image(
+                rgba.as_raw(),
+                rgba.width(),
+                rgba.height(),
+                ColorType::Rgba8.into(),
+            )
+            .map_err(|error| {
+                napi::Error::from_reason(format!("Failed to encode viewer PNG: {error}"))
+            })?;
+        return Ok(output);
+    }
+
+    let mut encoder = JpegEncoder::new_with_quality(&mut output, jpeg_quality.clamp(1, 100) as u8);
+    encoder.encode_image(rgba).map_err(|error| {
+        napi::Error::from_reason(format!("Failed to encode viewer JPEG: {error}"))
+    })?;
+    Ok(output)
 }
 
 impl Task for PrepareTextureForMaterialTask {

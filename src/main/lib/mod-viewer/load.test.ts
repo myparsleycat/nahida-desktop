@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 
-import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
+import {
+    applyVariableSelection,
+    computeIneffectiveValues,
+    evaluateViewerState,
+} from "@shared/mod-viewer/eval";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
+import sharp from "sharp";
 import { afterEach, describe, it } from "vitest";
 
 import { DNF_FALSE, isUnconstrained, sameDnf } from "./dnf";
@@ -36,14 +41,17 @@ function makeColorPng(width = 16, height = 16) {
     return PNG.sync.write(png);
 }
 
-function makePngIhdr(width: number, height: number) {
-    const header = Buffer.alloc(24);
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
-    header.writeUInt32BE(13, 8);
-    header.write("IHDR", 12);
-    header.writeUInt32BE(width, 16);
-    header.writeUInt32BE(height, 20);
-    return header;
+function makeOversizedPng(width: number, height: number) {
+    return sharp({
+        create: {
+            width,
+            height,
+            channels: 4,
+            background: { r: 32, g: 64, b: 96, alpha: 1 },
+        },
+    })
+        .png()
+        .toBuffer();
 }
 
 function makeDdsHeader(width: number, height: number) {
@@ -539,6 +547,240 @@ format = DXGI_FORMAT_R32_UINT
         const withEffects = evaluateViewerState(payload, selected);
         assert.equal(withEffects.meshes[0].visible, false);
         assert.equal(withEffects.meshes[1].visible, true);
+    });
+
+    it("applies toggle side effects but hides single-value vars from the panel", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $top = 1
+global persist $onepiece = 1
+[KeyTop]
+condition = $active == 1
+key = no_modifiers UP
+type = cycle
+$top = 0,1,2,3
+$onepiece = 0
+[KeyOnePiece]
+condition = $active == 1
+key = no_modifiers DOWN
+type = cycle
+$onepiece = 0,1
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $top == 1 && $onepiece == 0
+drawindexed = 3, 0, 0
+endif
+if $onepiece == 1
+drawindexed = 3, 3, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const top = payload.variables.find((variable) => variable.id === "top");
+        assert.ok(top);
+        assert.ok(top.effects?.some((effect) => effect.var === "onepiece"));
+        assert.ok(
+            !payload.variables.some(
+                (variable) => variable.id === "onepiece" && variable.label === "Top",
+            ),
+        );
+
+        const selected = applyVariableSelection(payload.defaultState, top, "2");
+        assert.equal(String(selected.top), "2");
+        assert.equal(String(selected.onepiece), "0");
+        const evaluated = evaluateViewerState(payload, selected);
+        assert.equal(evaluated.meshes[0].visible, false);
+        assert.equal(evaluated.meshes[1].visible, false);
+    });
+
+    it("tracks toggle effect variables as gating vars for draw conditions", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $top = 0
+global persist $resetvar = 0
+[KeyTop]
+condition = $active == 1
+key = no_modifiers UP
+type = cycle
+$top = 0,1,2,3
+$resetvar = 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $top == 1
+if $resetvar == 0
+drawindexed = 3, 0, 0
+endif
+endif
+if $resetvar == 1
+drawindexed = 3, 3, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+
+        // With resetvar=0 (default), top=0 should hide both draws.
+        const baseline = evaluateViewerState(payload, { top: "0", resetvar: "0" });
+        assert.equal(baseline.meshes[0].visible, false);
+        assert.equal(baseline.meshes[1].visible, false);
+
+        // With resetvar=1, the second draw should appear regardless of top.
+        const reset = evaluateViewerState(payload, { top: "0", resetvar: "1" });
+        assert.equal(reset.meshes[0].visible, false);
+        assert.equal(reset.meshes[1].visible, true);
+
+        // With top=1 and resetvar=0, the first draw should appear.
+        const active = evaluateViewerState(payload, { top: "1", resetvar: "0" });
+        assert.equal(active.meshes[0].visible, true);
+        assert.equal(active.meshes[1].visible, false);
+    });
+
+    it("disables toggle values that produce no visible mesh change", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $skirt = 0
+global persist $bottom = 0
+global persist $futa = 0
+[KeySkirt]
+type = cycle
+$skirt = 0,1
+[KeyBottom]
+type = cycle
+$bottom = 0,1
+[KeyFutanari]
+type = cycle
+$futa = 0,1,2,3,4
+$bottom = 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $skirt == 1 && ($bottom != 0 || ($bottom == 0 && $futa != 4))
+drawindexed = 3, 0, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+
+        // futa=4, bottom=0 → skirt=1 is ineffective (condition excludes futa==4)
+        const dead = computeIneffectiveValues(payload, { futa: "4", bottom: "0", skirt: "0" });
+        const skirtIneffective = dead.get("skirt");
+        assert.ok(skirtIneffective);
+        const skirt1Entry = skirtIneffective.get("1");
+        assert.ok(skirt1Entry);
+        assert.ok(skirt1Entry.blockingVars.some((v) => v.label.includes("Futanari")));
+        assert.ok(!skirtIneffective.has("0"));
+
+        // futa=0, bottom=0 → skirt=1 is effective
+        const live = computeIneffectiveValues(payload, { futa: "0", bottom: "0", skirt: "0" });
+        assert.ok(!live.has("skirt") || !live.get("skirt")!.has("1"));
+    });
+
+    it("resolves hidden single-value effect targets as blocking variables", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $skirt = 0
+global persist $outfit = 0
+global persist $body = 0
+global $clickedSlot
+[CommandListClickedSlot]
+if $clickedSlot == 1
+    $outfit = 1 - $outfit
+    if $outfit == 1
+        $body = 1
+    endif
+elif $clickedSlot == 2
+    $skirt = 1 - $skirt
+endif
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $skirt == 1 && $body != 0
+drawindexed = 3, 0, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const outfit = payload.variables.find((variable) => variable.id === "outfit");
+        assert.ok(outfit);
+        // body is a hidden single-value effect target, not a panel variable
+        assert.ok(!payload.variables.some((variable) => variable.id === "body"));
+        assert.ok(outfit.effects?.some((effect) => effect.var === "body"));
+
+        // outfit=0 → body stays 0 → skirt=1 is ineffective (condition needs body != 0)
+        const dead = computeIneffectiveValues(payload, {
+            outfit: "0",
+            skirt: "0",
+            body: "0",
+        });
+        const skirtIneffective = dead.get("skirt");
+        assert.ok(skirtIneffective);
+        const skirt1Entry = skirtIneffective.get("1");
+        assert.ok(skirt1Entry);
+        // outfit should be reported as the blocking variable even though only
+        // its hidden effect target body co-occurs in the mesh condition
+        assert.ok(skirt1Entry.blockingVars.some((v) => v.id === "outfit"));
+        assert.ok(!skirt1Entry.blockingVars.some((v) => v.id === "body"));
+
+        // outfit=1 → body=1 → skirt=1 is effective
+        const live = computeIneffectiveValues(payload, {
+            outfit: "1",
+            skirt: "0",
+            body: "1",
+        });
+        assert.ok(!live.has("skirt") || !live.get("skirt")!.has("1"));
     });
 
     it("evaluates a second toggle without rebuilding geometry or converting GLB", async () => {
@@ -2004,7 +2246,7 @@ filename = Textures/Components-3 t=f58624fb.png
                 await fse.ensureDir(path.join(dir, "Textures"));
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=7d8d1ae0.png"),
-                    makePngIhdr(8192, 8192),
+                    await makeOversizedPng(8192, 8192),
                 );
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=f58624fb.png"),

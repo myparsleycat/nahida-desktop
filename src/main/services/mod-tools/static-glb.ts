@@ -247,7 +247,7 @@ export class StaticGlb {
         this.desktop.logger.info("Starting model viewer load", "StaticGlb.loadForViewer");
         const memorySessionId = createModelViewerMemorySession();
         try {
-            const payload = await loadModViewerPayload(modPath);
+            const payload = await loadModViewerPayload(modPath, this.desktop.logger);
             const writeBuffer = (bufferId: string, buffer: Buffer, contentType?: string) =>
                 writeModelViewerMemoryBuffer(memorySessionId, bufferId, buffer, contentType);
 
