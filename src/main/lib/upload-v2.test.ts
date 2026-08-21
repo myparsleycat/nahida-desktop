@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rm, truncate, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NahidaDesktop } from "..";
 import type { FinalFile, UploadProgress } from "./upload";
 
+import { prepareDirectUploadFile } from "./upload-compress";
+import { DIRECT_UPLOAD_THRESHOLD } from "./upload-pack";
 import { MAX_UPLOAD_FILE_SIZE, paginateUploadFiles, uploadDriveFilesV2 } from "./upload-v2";
 
 const mocks = vi.hoisted(() => ({
@@ -864,7 +866,7 @@ describe("uploadDriveFilesV2", () => {
 
     it("fails multipart upload when the source file ends before the planned size", async () => {
         const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
-        const size = 80 * 1024 * 1024;
+        const size = DIRECT_UPLOAD_THRESHOLD;
         await writeFile(filePath, Buffer.from([0]));
         mocks.networkFetch.mockResolvedValue(
             sseResponse([
@@ -894,7 +896,8 @@ describe("uploadDriveFilesV2", () => {
                     requestId: "request-id",
                     files: [{ ...file("large"), fullPath: filePath, size }],
                     queue: new PQueue({ concurrency: 1 }),
-                    prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+                    prepareDirectFile: (source) =>
+                        prepareDirectUploadFile(source, async (data) => data),
                 }),
             ).rejects.toThrow("Unexpected EOF while reading large.txt");
         } finally {
@@ -905,10 +908,7 @@ describe("uploadDriveFilesV2", () => {
     });
 
     it("rolls back multipart progress when completion fails", async () => {
-        const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
-        const size = 80 * 1024 * 1024;
-        await writeFile(filePath, "");
-        await truncate(filePath, size);
+        const size = DIRECT_UPLOAD_THRESHOLD;
         mocks.networkFetch.mockResolvedValue(
             sseResponse([
                 {
@@ -938,22 +938,216 @@ describe("uploadDriveFilesV2", () => {
         );
         const progress: UploadProgress[] = [];
 
-        try {
-            await expect(
-                uploadDriveFilesV2({
-                    desktop,
-                    currentId: "current",
-                    requestId: "request-id",
-                    files: [{ ...file("large"), fullPath: filePath, size }],
-                    queue: new PQueue({ concurrency: 1 }),
-                    prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
-                    onProgress: (event) => progress.push(event),
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [{ ...file("large"), size }],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({
+                    data: Buffer.from("compressed-payload"),
+                    compAlg: "zstd",
                 }),
-            ).rejects.toThrow("chunk_owner_mismatch");
+                onProgress: (event) => progress.push(event),
+            }),
+        ).rejects.toThrow("chunk_owner_mismatch");
+
+        expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(0);
+        expect(mocks.post).toHaveBeenCalledWith(
+            "https://api.nahida.live/akasha/v2/uploads/intent/complete",
+            expect.objectContaining({
+                json: { token: "token", compAlg: "zstd" },
+            }),
+        );
+    });
+
+    it("reports multipart progress against the logical file size", async () => {
+        const size = DIRECT_UPLOAD_THRESHOLD;
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "large", status: "pending", intentId: "intent" }],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.request.mockImplementation(async (_url, options: { body: ReadableStream }) => {
+            const reader = options.body.getReader();
+            while (!(await reader.read()).done) {}
+            return new Response(JSON.stringify({ status: "pending" }), { status: 202 });
+        });
+        let progressAtComplete = 0;
+        const progress: UploadProgress[] = [];
+        mocks.post.mockImplementation(async () => {
+            progressAtComplete = progress.reduce((sum, event) => sum + event.bytes, 0);
+            return new Response(JSON.stringify({ status: "completed" }), { status: 200 });
+        });
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [{ ...file("large"), size }],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async () => ({
+                data: Buffer.from("compressed-payload"),
+                byteLength: Buffer.byteLength("compressed-payload"),
+                compAlg: "zstd",
+            }),
+            onProgress: (event) => progress.push(event),
+        });
+
+        expect(progressAtComplete).toBe(size);
+        expect(mocks.post).toHaveBeenCalledWith(
+            "https://api.nahida.live/akasha/v2/uploads/intent/complete",
+            expect.objectContaining({
+                json: { token: "token", compAlg: "zstd" },
+            }),
+        );
+    });
+
+    it("streams multipart parts from a prepared path", async () => {
+        const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
+        const payload = Buffer.from("path-payload-".repeat(8));
+        await writeFile(filePath, payload);
+        const size = DIRECT_UPLOAD_THRESHOLD;
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "large", status: "pending", intentId: "intent" }],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        const sent: Buffer[] = [];
+        mocks.request.mockImplementation(async (_url, options: { body: ReadableStream }) => {
+            const reader = options.body.getReader();
+            const chunks: Uint8Array[] = [];
+            for (;;) {
+                const next = await reader.read();
+                if (next.done) break;
+                chunks.push(next.value);
+            }
+            sent.push(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
+            return new Response(JSON.stringify({ status: "pending" }), { status: 202 });
+        });
+        mocks.post.mockResolvedValue(
+            new Response(JSON.stringify({ status: "completed" }), { status: 200 }),
+        );
+
+        try {
+            await uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [{ ...file("large"), fullPath: filePath, size }],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({
+                    path: filePath,
+                    byteLength: payload.byteLength,
+                    compAlg: "zstd",
+                }),
+            });
         } finally {
             await rm(filePath, { force: true });
         }
 
-        expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(0);
+        expect(sent.some((body) => body.includes(payload))).toBe(true);
+        expect(mocks.post).toHaveBeenCalledWith(
+            "https://api.nahida.live/akasha/v2/uploads/intent/complete",
+            expect.objectContaining({
+                json: { token: "token", compAlg: "zstd" },
+            }),
+        );
+    });
+
+    it("sends compressed pack members with per-file compAlg", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "first", status: "pending", intentId: "intent-a" },
+                            { clientId: "second", status: "pending", intentId: "intent-b" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent-a",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-a",
+                                method: "POST",
+                                form: { token: "token-a", sha256: "a".repeat(64) },
+                            },
+                            {
+                                intentId: "intent-b",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-b",
+                                method: "POST",
+                                form: { token: "token-b", sha256: "b".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        let packBody = "";
+        mocks.request.mockImplementation(async (_url, options: { body: ReadableStream }) => {
+            const reader = options.body.getReader();
+            const chunks: Uint8Array[] = [];
+            for (;;) {
+                const next = await reader.read();
+                if (next.done) break;
+                chunks.push(next.value);
+            }
+            packBody = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+            return new Response(
+                JSON.stringify({
+                    results: [
+                        { intentId: "intent-a", status: "completed", fileId: "file-a" },
+                        { intentId: "intent-b", status: "completed", fileId: "file-b" },
+                    ],
+                }),
+                { status: 200 },
+            );
+        });
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [file("first"), file("second")],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async (source) => ({
+                data: Buffer.from(`zstd-${source.FID}`),
+                compAlg: "zstd",
+            }),
+        });
+
+        expect(packBody).toContain('"compAlg":"zstd"');
+        expect(packBody).toContain("zstd-first");
+        expect(packBody).toContain("zstd-second");
     });
 });

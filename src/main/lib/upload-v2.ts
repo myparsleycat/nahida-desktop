@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { open } from "node:fs/promises";
+import { open, rm, type FileHandle } from "node:fs/promises";
 
 import { networkFetch } from "@main/internal/network-fetch";
 import { parseHttpBody, readApiBody } from "@main/lib/cbor-response";
@@ -13,6 +13,7 @@ import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 import type { FinalFile, UploadProgress } from "./upload";
+import type { PreparedDirectFile } from "./upload-compress";
 
 import {
     creditedLogicalBytesForMember,
@@ -157,7 +158,7 @@ export async function uploadDriveFilesV2({
     requestId: string;
     files: FinalFile[];
     queue: PQueue;
-    prepareDirectFile: (file: FinalFile) => Promise<{ data: Buffer; compAlg?: "zstd" }>;
+    prepareDirectFile: (file: FinalFile) => Promise<PreparedDirectFile>;
     onProgress?: (progress: UploadProgress) => void;
     onPlanProgress?: (progress: { phase: PlanPhase; processed: number; total: number }) => void;
     onPlanComplete?: () => void;
@@ -450,12 +451,25 @@ export async function uploadDriveFilesV2({
             if (source.size >= DIRECT_UPLOAD_THRESHOLD) {
                 void queue.add(async () => {
                     try {
-                        await multipartLimit(() =>
-                            uploadParts(desktop, upload, source, targetsSignal, (bytes) =>
-                                reportFileBytes(source, bytes, false),
-                            ),
-                        );
-                        markIntentReady(source, targets.slice(1));
+                        await multipartLimit(async () => {
+                            let prepared: PreparedDirectFile | undefined;
+                            try {
+                                prepared = await prepareDirectFile(source);
+                                await uploadParts(
+                                    desktop,
+                                    upload,
+                                    source,
+                                    prepared,
+                                    targetsSignal,
+                                    (bytes) => reportFileBytes(source, bytes, false),
+                                );
+                                markIntentReady(source, targets.slice(1));
+                            } finally {
+                                if (prepared?.cleanupPath && prepared.path) {
+                                    await rm(prepared.path, { force: true });
+                                }
+                            }
+                        });
                     } catch (error) {
                         if (signal?.aborted) return;
                         const targetBundleIds = targets
@@ -473,18 +487,26 @@ export async function uploadDriveFilesV2({
                 });
                 continue;
             }
-            let prepared: { data: Buffer; compAlg?: "zstd" };
+            let prepared: PreparedDirectFile;
             try {
                 prepared = await prepareDirectFile(source);
             } catch (error) {
                 failTargets(error, targets, `prepare:${intentId}`);
                 continue;
             }
+            if (!prepared.data) {
+                failTargets(
+                    new Error("prepared_payload_missing"),
+                    targets,
+                    `prepare:${intentId}`,
+                );
+                continue;
+            }
             const member = {
                 upload,
                 source,
                 copies: targets.slice(1),
-                prepared,
+                prepared: { data: prepared.data, compAlg: prepared.compAlg },
                 payloadBytes: prepared.data.byteLength,
                 logicalSize: source.size,
             };
@@ -756,44 +778,77 @@ async function uploadDirect(
     }
 }
 
+function preparedPayloadLength(prepared: PreparedDirectFile) {
+    return prepared.data?.byteLength ?? prepared.byteLength ?? 0;
+}
+
+async function readPreparedPart(
+    prepared: PreparedDirectFile,
+    index: number,
+    handle?: FileHandle,
+) {
+    const total = preparedPayloadLength(prepared);
+    const start = index * PART_SIZE;
+    const size = Math.min(PART_SIZE, total - start);
+    if (prepared.data) return prepared.data.subarray(start, start + size);
+    if (!prepared.path) throw new Error("prepared_payload_missing");
+    const dest = Buffer.allocUnsafe(size);
+    const fileHandle = handle ?? (await open(prepared.path, "r"));
+    try {
+        const { bytesRead } = await fileHandle.read(dest, 0, size, start);
+        if (bytesRead !== size) {
+            throw new Error(`Unexpected EOF while reading ${prepared.path}`);
+        }
+        return dest;
+    } finally {
+        if (!handle) await fileHandle.close();
+    }
+}
+
 async function uploadParts(
     desktop: NahidaDesktop,
     upload: UploadPlanEntry,
     file: FinalFile,
+    prepared: PreparedDirectFile,
     signal?: AbortSignal,
     onProgress?: (bytes: number) => void,
 ) {
     signal?.throwIfAborted();
-    const totalParts = Math.ceil(file.size / PART_SIZE);
+    const payloadLength = Math.max(1, preparedPayloadLength(prepared));
+    const totalParts = Math.max(1, Math.ceil(preparedPayloadLength(prepared) / PART_SIZE));
+    let uploadedPayloadBytes = 0;
     let reportedBytes = 0;
-    const reportProgress = (bytes: number) => {
-        reportedBytes += bytes;
-        onProgress?.(bytes);
+    const applyPayloadProgress = (payloadAbsolute: number) => {
+        uploadedPayloadBytes = payloadAbsolute;
+        const target = Math.min(
+            file.size,
+            Math.floor((uploadedPayloadBytes / payloadLength) * file.size),
+        );
+        const delta = target - reportedBytes;
+        reportedBytes = target;
+        if (delta !== 0) onProgress?.(delta);
+    };
+    const reportPayloadDelta = (delta: number) => {
+        applyPayloadProgress(uploadedPayloadBytes + delta);
     };
     const completeProgress = () => {
-        if (reportedBytes < file.size) reportProgress(file.size - reportedBytes);
+        if (reportedBytes < file.size) {
+            onProgress?.(file.size - reportedBytes);
+            reportedBytes = file.size;
+        }
+    };
+    const resetProgress = () => {
+        if (reportedBytes > 0) onProgress?.(-reportedBytes);
+        uploadedPayloadBytes = 0;
+        reportedBytes = 0;
     };
     const sendAllParts = async () => {
-        const handle = await open(file.fullPath, "r");
+        const handle =
+            prepared.data || !prepared.path ? undefined : await open(prepared.path, "r");
         try {
             for (let index = 0; index < totalParts; index++) {
                 signal?.throwIfAborted();
-                const start = index * PART_SIZE;
-                const size = Math.min(PART_SIZE, file.size - start);
-                const buffer = Buffer.allocUnsafe(size);
-                let bytesRead = 0;
-                while (bytesRead < size) {
-                    const result = await handle.read(
-                        buffer,
-                        bytesRead,
-                        size - bytesRead,
-                        start + bytesRead,
-                    );
-                    if (result.bytesRead === 0) {
-                        throw new Error(`Unexpected EOF while reading ${file.name}`);
-                    }
-                    bytesRead += result.bytesRead;
-                }
+                const buffer = await readPreparedPart(prepared, index, handle);
                 for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
                     signal?.throwIfAborted();
                     let attemptReportedBytes = 0;
@@ -810,7 +865,7 @@ async function uploadParts(
                         signal,
                         onProgress: (bytes) => {
                             attemptReportedBytes += bytes;
-                            reportProgress(bytes);
+                            reportPayloadDelta(bytes);
                         },
                     });
                     if (result.payload?.status === "completed") {
@@ -818,15 +873,15 @@ async function uploadParts(
                         return true;
                     }
                     if (result.status >= 200 && result.status < 300) break;
-                    if (attemptReportedBytes > 0) reportProgress(-attemptReportedBytes);
+                    if (attemptReportedBytes > 0) reportPayloadDelta(-attemptReportedBytes);
                     if (!isRetryable(result) || attempt === RETRY_LIMIT) throw httpError(result);
                     await retryDelay(attempt, signal);
                 }
             }
+            return false;
         } finally {
-            await handle.close();
+            await handle?.close();
         }
-        return false;
     };
 
     try {
@@ -840,6 +895,7 @@ async function uploadParts(
                 `${upload.url}/complete`,
                 {
                     token: upload.form.token,
+                    ...(prepared.compAlg ? { compAlg: prepared.compAlg } : {}),
                 },
                 signal,
             );
@@ -853,7 +909,7 @@ async function uploadParts(
                     result.reason === "chunks_incomplete")
             ) {
                 resetAfterMissingManifest = true;
-                reportProgress(-reportedBytes);
+                resetProgress();
                 if (await sendAllParts()) return;
                 continue;
             }
@@ -862,7 +918,7 @@ async function uploadParts(
         }
         throw new Error("complete_timeout");
     } catch (error) {
-        if (reportedBytes > 0) reportProgress(-reportedBytes);
+        resetProgress();
         throw error;
     }
 }

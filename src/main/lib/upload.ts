@@ -6,7 +6,6 @@ import { collectFiles } from "@native/fs";
 import type { Content, PlanPhase } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { orderBy, sumBy } from "es-toolkit";
-import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
@@ -14,6 +13,7 @@ import Piscina from "piscina";
 
 import type { NahidaDesktop } from "..";
 
+import { prepareDirectUploadFile } from "./upload-compress";
 import { uploadDriveFilesV2, uploadErrorCode } from "./upload-v2";
 
 const SYSTEM_FILE_PATTERNS = [
@@ -204,58 +204,6 @@ export class UploadLib {
         return { files, directories: filteredDirectories ?? [] };
     }
 
-    private isMediaByMagicNumbers(file: Buffer) {
-        const slicedBuffer = file.subarray(0, 8);
-
-        const startsWith = (signature: number[]) => {
-            if (slicedBuffer.length < signature.length) {
-                return false;
-            }
-            return signature.every((byte, index) => byte === slicedBuffer[index]);
-        };
-
-        const mediaSignatures = [
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-            [0x47, 0x49, 0x46, 0x38],
-            [0xff, 0xd8, 0xff],
-            [0x42, 0x4d],
-            [0x49, 0x49, 0x2a, 0x00],
-            [0x4d, 0x4d, 0x00, 0x2a],
-            [0x00, 0x00, 0x01, 0x00],
-            [0x1a, 0x45, 0xdf, 0xa3],
-        ];
-
-        const isMP4 =
-            slicedBuffer.length >= 8 &&
-            slicedBuffer[4] === 0x66 &&
-            slicedBuffer[5] === 0x74 &&
-            slicedBuffer[6] === 0x79 &&
-            slicedBuffer[7] === 0x70;
-
-        return mediaSignatures.some((sig) => startsWith(sig)) || isMP4;
-    }
-
-    private async isPreviewFile(file: Buffer, name?: string) {
-        if (file.length === 0) return false;
-
-        const fileSlice = file.subarray(0, 4100);
-
-        const fileType = await fileTypeFromBuffer(fileSlice).catch(() => undefined);
-        const isByMimeType = Boolean(
-            fileType && (fileType.mime.startsWith("image/") || fileType.mime.startsWith("video/")),
-        );
-        if (isByMimeType || this.isMediaByMagicNumbers(fileSlice)) return true;
-
-        let isByName = false;
-        if (name) {
-            isByName =
-                /\.(gif|jpe?g|tiff?|png|webp|bmp|ico)$/i.test(name) ||
-                /\.(mp4|webm|ogg|mov|avi|flv|mkv)$/i.test(name);
-        }
-
-        return isByName;
-    }
-
     public async calculateHashes(
         files: ParentIdFiles[],
         onProgress?: (count: number) => void,
@@ -393,16 +341,10 @@ export class UploadLib {
                 onProgress,
                 onPlanProgress,
                 onPlanComplete,
-                prepareDirectFile: async (file) => {
-                    const data = await fse.readFile(file.fullPath);
-                    if (file.size <= 100 || (await this.isPreviewFile(data, file.name))) {
-                        return { data };
-                    }
-                    return {
-                        data: await this.desktop.lib.compressor.zstd.compress(data),
-                        compAlg: "zstd",
-                    };
-                },
+                prepareDirectFile: (file) =>
+                    prepareDirectUploadFile(file, (data) =>
+                        this.desktop.lib.compressor.zstd.compress(data),
+                    ),
             });
         } finally {
             signal?.removeEventListener("abort", clearQueue);
