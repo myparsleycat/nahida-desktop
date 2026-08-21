@@ -30,6 +30,7 @@ import {
   applyVariableSelection,
   computeIneffectiveValues,
   evaluateViewerState,
+  type IneffectiveMap,
   type IneffectiveSuggestion,
 } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
@@ -202,6 +203,8 @@ export function ModelViewerDialog({
     const nextSourceSessionKey = getSourceSessionKey(source);
     const shouldResetOrientation = sourceSessionKeyRef.current !== nextSourceSessionKey;
     sourceSessionKeyRef.current = nextSourceSessionKey;
+
+    setPreviewState(null);
 
     if (!source) {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
@@ -605,7 +608,7 @@ export function ModelViewerDialog({
     () => (payloadTransport ? evaluateViewerState(payloadTransport, effectiveState) : null),
     [effectiveState, payloadTransport],
   );
-  const ineffectiveMap = useMemo(
+  const ineffectiveMap = useMemo<IneffectiveMap>(
     () => (payloadTransport ? computeIneffectiveValues(payloadTransport, activeState) : new Map()),
     [activeState, payloadTransport],
   );
@@ -1015,8 +1018,9 @@ export function ModelViewerDialog({
                                                   {t(
                                                     "page.tools.model_viewer.ineffective_blocked_by",
                                                     {
-                                                      variables:
-                                                        ineffectiveEntry.blockingVars.join(", "),
+                                                      variables: ineffectiveEntry.blockingVars
+                                                        .map((v) => `${v.label}=${v.value}`)
+                                                        .join(", "),
                                                     },
                                                   )}
                                                 </div>
@@ -1040,7 +1044,7 @@ export function ModelViewerDialog({
                                             </TooltipContent>
                                           </Tooltip>
                                           {ineffectiveEntry.suggestions.length > 0 && (
-                                            <div className="w-0 overflow-hidden transition-all group-hover:w-8">
+                                            <div className="w-0 overflow-hidden transition-all group-hover:w-8 focus-within:w-8">
                                               <Tooltip>
                                                 <TooltipTrigger
                                                   render={

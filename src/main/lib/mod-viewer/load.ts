@@ -2,6 +2,8 @@ import path from "node:path";
 
 import type { ViewerStateValue, ViewerVariable, ModViewerPayload } from "@shared/mod-viewer/types";
 
+import type { Logger } from "../../internal/logger";
+
 import { animationFrameValues, extractPresentAnimations } from "./animations";
 import {
     attachShapeSliders,
@@ -23,7 +25,10 @@ import { extractShapeSliders } from "./shapes";
 import { extractStateRules } from "./state-rules";
 import { extractToggleKeys, extractVariableDefaults } from "./toggles";
 
-export async function loadModViewerPayload(modPath: string): Promise<ModViewerPayload> {
+export async function loadModViewerPayload(
+    modPath: string,
+    logger?: Logger,
+): Promise<ModViewerPayload> {
     const folderPath = path.resolve(modPath);
     const iniPaths = await discoverIniPaths(folderPath);
     if (iniPaths.length === 0) {
@@ -79,6 +84,7 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
 
         const gatingVars = new Set<string>([
             ...Object.values(toggles).flatMap((info) => Object.keys(info.vars)),
+            ...Object.values(toggles).flatMap((info) => info.effects.map((effect) => effect.var)),
             ...Object.values(menu).map((info) => info.var),
             ...Object.values(menu).flatMap((info) => info.effects.map((effect) => effect.var)),
             ...rules.map((rule) => rule.var),
@@ -124,7 +130,7 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
         throw new Error(`No mesh geometry found across ${iniPaths.length} ini file(s).`);
     }
 
-    const built = await buildMeshResult(groups, folderPath);
+    const built = await buildMeshResult(groups, folderPath, logger);
     if (built.meshes.length === 0) {
         throw new Error("No mesh data could be extracted (buffer files missing?).");
     }

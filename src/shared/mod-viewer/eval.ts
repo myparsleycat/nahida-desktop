@@ -19,8 +19,14 @@ export type IneffectiveSuggestion = {
     }[];
 };
 
+export type BlockingVar = {
+    id: string;
+    label: string;
+    value: ViewerStateValue;
+};
+
 export type IneffectiveEntry = {
-    blockingVars: string[];
+    blockingVars: BlockingVar[];
     suggestions: IneffectiveSuggestion[];
 };
 
@@ -225,7 +231,7 @@ export function computeIneffectiveValues(
             const nextState = applyVariableSelection(resolved, variable, entry.value);
             const nextEval = evaluateViewerState(payload, nextState);
             if (!evaluatedStatesDiffer(baseline, nextEval)) {
-                const blockingVars = conflictingVariableLabels(payload, variable.id, resolved);
+                const blockingVars = buildBlockingVars(payload, variable.id, resolved);
                 ineffective.set(String(entry.value), {
                     blockingVars,
                     suggestions: resolveSuggestions(
@@ -262,11 +268,11 @@ function evaluatedStatesDiffer(left: EvaluatedViewerState, right: EvaluatedViewe
 
 // Identifies other variables whose current values co-occur with the tested variable
 // in mesh conditions, producing the dead combination.
-function conflictingVariableLabels(
+function buildBlockingVars(
     payload: ViewerEvalInput & { variables: ViewerVariable[] },
     testedVar: string,
     state: Record<string, ViewerStateValue>,
-): string[] {
+): BlockingVar[] {
     const testedLower = testedVar.toLowerCase();
     const coOccurring = new Set<string>();
     for (const mesh of payload.meshes) {
@@ -303,15 +309,15 @@ function conflictingVariableLabels(
             }
         }
     }
-    const labels: string[] = [];
+    const blockingVars: BlockingVar[] = [];
     for (const variable of payload.variables) {
         if (variable.id.toLowerCase() === testedLower) continue;
         if (![...coOccurring].some((v) => v.toLowerCase() === variable.id.toLowerCase())) continue;
         const currentValue = lookupStateValue(state, variable.id);
         if (currentValue === undefined) continue;
-        labels.push(`${variable.label}=${currentValue}`);
+        blockingVars.push({ id: variable.id, label: variable.label, value: currentValue });
     }
-    return labels;
+    return blockingVars;
 }
 
 // For each blocking variable, tries its other values to find ones that make the
@@ -321,7 +327,7 @@ function resolveSuggestions(
     payload: ViewerEvalInput & { variables: ViewerVariable[] },
     testedVarId: string,
     testedValue: string,
-    blockingVars: string[],
+    blockingVars: BlockingVar[],
     state: Record<string, ViewerStateValue>,
     baseline: EvaluatedViewerState,
 ): IneffectiveSuggestion[] {
@@ -329,17 +335,13 @@ function resolveSuggestions(
     const testedVar = payload.variables.find((v) => v.id === testedVarId);
     if (!testedVar) return suggestions;
 
-    for (const blockingLabel of blockingVars) {
-        const blockingVarId = findVariableIdByLabel(payload, blockingLabel);
-        if (!blockingVarId) continue;
+    for (const { id: blockingVarId, label: blockingLabel, value: currentValue } of blockingVars) {
         const blockingVar = payload.variables.find((v) => v.id === blockingVarId);
         if (!blockingVar) continue;
-        const currentValue = String(
-            lookupStateValue(state, blockingVarId) ?? blockingVar.defaultValue,
-        );
+        const currentStr = String(currentValue);
         for (const altEntry of blockingVar.values) {
-            if (String(altEntry.value) === currentValue) continue;
-            const altState = { ...state, [blockingVarId]: altEntry.value };
+            if (String(altEntry.value) === currentStr) continue;
+            const altState = applyVariableSelection(state, blockingVar, altEntry.value);
             const altResolved = applyStateRules(
                 { ...payload.defaultState, ...altState },
                 payload.stateRules,
@@ -369,22 +371,11 @@ function resolveSuggestions(
                     }
                 }
                 suggestions.push({
-                    display: `${blockingVar.label}: ${currentValue} → ${altEntry.value}`,
+                    display: `${blockingLabel}: ${currentStr} → ${altEntry.value}`,
                     changes,
                 });
             }
         }
     }
     return suggestions;
-}
-
-function findVariableIdByLabel(
-    payload: ViewerEvalInput & { variables: ViewerVariable[] },
-    label: string,
-): string | undefined {
-    const eqIndex = label.indexOf("=");
-    if (eqIndex < 0) return undefined;
-    const labelName = label.slice(0, eqIndex);
-    const variable = payload.variables.find((v) => v.label === labelName);
-    return variable?.id;
 }

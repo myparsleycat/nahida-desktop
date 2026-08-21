@@ -11,6 +11,7 @@ import type {
 import fse from "fs-extra";
 import sharp from "sharp";
 
+import type { Logger } from "../../internal/logger";
 import type { DrawGroup, DrawRecord } from "./draw-groups";
 import type { ShapeSlider } from "./shapes";
 
@@ -35,11 +36,14 @@ export type MeshBuildResult = {
 export async function buildMeshResult(
     groups: DrawGroup[],
     modDir: string,
+    logger?: Logger,
 ): Promise<MeshBuildResult> {
     const meshes: ViewerMesh[] = [];
     const textures: Record<string, ViewerTexture> = {};
     const ibCache = new Map<string, Buffer>();
     const rawBufCache = new Map<string, Buffer>();
+    let textureEncodeMs = 0;
+    let textureCount = 0;
     const bufCache = new Map<
         string,
         {
@@ -128,7 +132,10 @@ export async function buildMeshResult(
             }
             const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
             if (!textures[key]) {
+                const encodeStartedAt = Date.now();
                 const encoded = await encodeTexture(resolved, role, readBuffer);
+                textureEncodeMs += Date.now() - encodeStartedAt;
+                textureCount += 1;
                 if (!encoded) {
                     return null;
                 }
@@ -384,6 +391,10 @@ export async function buildMeshResult(
         }
     }
 
+    logger?.info(
+        `Texture encoding completed in ${textureEncodeMs}ms (textures=${textureCount})`,
+        "StaticGlb.loadForViewer",
+    );
     return {
         meshes: meshes.map((mesh) => ({
             ...mesh,

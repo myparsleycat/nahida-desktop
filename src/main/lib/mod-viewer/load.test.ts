@@ -607,6 +607,61 @@ format = DXGI_FORMAT_R32_UINT
         assert.equal(evaluated.meshes[1].visible, false);
     });
 
+    it("tracks toggle effect variables as gating vars for draw conditions", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $top = 0
+global persist $resetvar = 0
+[KeyTop]
+condition = $active == 1
+key = no_modifiers UP
+type = cycle
+$top = 0,1,2,3
+$resetvar = 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $top == 1
+if $resetvar == 0
+drawindexed = 3, 0, 0
+endif
+endif
+if $resetvar == 1
+drawindexed = 3, 3, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+
+        // With resetvar=0 (default), top=0 should hide both draws.
+        const baseline = evaluateViewerState(payload, { top: "0", resetvar: "0" });
+        assert.equal(baseline.meshes[0].visible, false);
+        assert.equal(baseline.meshes[1].visible, false);
+
+        // With resetvar=1, the second draw should appear regardless of top.
+        const reset = evaluateViewerState(payload, { top: "0", resetvar: "1" });
+        assert.equal(reset.meshes[0].visible, false);
+        assert.equal(reset.meshes[1].visible, true);
+
+        // With top=1 and resetvar=0, the first draw should appear.
+        const active = evaluateViewerState(payload, { top: "1", resetvar: "0" });
+        assert.equal(active.meshes[0].visible, true);
+        assert.equal(active.meshes[1].visible, false);
+    });
+
     it("disables toggle values that produce no visible mesh change", async () => {
         const root = await makeMod({
             ini: `[Constants]
@@ -652,7 +707,7 @@ format = DXGI_FORMAT_R32_UINT
         assert.ok(skirtIneffective);
         const skirt1Entry = skirtIneffective.get("1");
         assert.ok(skirt1Entry);
-        assert.ok(skirt1Entry.blockingVars.some((v) => v.includes("Futanari")));
+        assert.ok(skirt1Entry.blockingVars.some((v) => v.label.includes("Futanari")));
         assert.ok(!skirtIneffective.has("0"));
 
         // futa=0, bottom=0 → skirt=1 is effective
