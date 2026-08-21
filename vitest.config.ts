@@ -10,6 +10,7 @@ export default defineConfig({
             "@main": resolve("src/main"),
             "@preload": resolve("src/preload"),
             "@": resolve("src"),
+            "@renderer": resolve("src/renderer/src"),
             "@backend": resolve("../backend/src"),
             // mnemonist subpath exports are require-only; Vite ESM resolve needs explicit files
             "mnemonist/lru-cache": resolve("node_modules/mnemonist/lru-cache.js"),
