@@ -9,6 +9,7 @@ import {
 } from "@shared/mod-viewer/eval";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
+import sharp from "sharp";
 import { afterEach, describe, it } from "vitest";
 
 import { DNF_FALSE, isUnconstrained, sameDnf } from "./dnf";
@@ -40,14 +41,17 @@ function makeColorPng(width = 16, height = 16) {
     return PNG.sync.write(png);
 }
 
-function makePngIhdr(width: number, height: number) {
-    const header = Buffer.alloc(24);
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
-    header.writeUInt32BE(13, 8);
-    header.write("IHDR", 12);
-    header.writeUInt32BE(width, 16);
-    header.writeUInt32BE(height, 20);
-    return header;
+function makeOversizedPng(width: number, height: number) {
+    return sharp({
+        create: {
+            width,
+            height,
+            channels: 4,
+            background: { r: 32, g: 64, b: 96, alpha: 1 },
+        },
+    })
+        .png()
+        .toBuffer();
 }
 
 function makeDdsHeader(width: number, height: number) {
@@ -2119,7 +2123,7 @@ filename = Textures/Components-3 t=f58624fb.png
                 await fse.ensureDir(path.join(dir, "Textures"));
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=7d8d1ae0.png"),
-                    makePngIhdr(8192, 8192),
+                    await makeOversizedPng(8192, 8192),
                 );
                 await fse.writeFile(
                     path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
