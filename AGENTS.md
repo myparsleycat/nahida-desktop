@@ -3,7 +3,7 @@
 
 ## Code Generation
 
-Three auto-generated files are gitignored (`*.gen.ts`). On a fresh clone, run `pnpm dev` or `pnpm build` to generate them:
+Three auto-generated files are gitignored (`*.gen.ts`). On a fresh clone, run `pnpm build` to generate them:
 
 | File                                | Generator                  | Trigger                               |
 | ----------------------------------- | -------------------------- | ------------------------------------- |
@@ -16,7 +16,7 @@ Three auto-generated files are gitignored (`*.gen.ts`). On a fresh clone, run `p
 - Handlers: use `rh("channel:name", handlerFn)` from `src/main/ipc/helper.ts` (typed wrapper around `ipcMain.handle`)
 - Preload exposes `window.api.invoke(channel, ...args)` (typed handler calls), `window.api.send(channel, ...args)`, and `window.api.on(channel, listener)` (typed events)
 - Channel whitelisting is enforced at runtime via the generated `IPC_HANDLER_CHANNELS` / `IPC_SEND_CHANNELS` / `IPC_EVENT_CHANNELS` constant arrays
-- To add a new IPC channel: add a handler file in `src/main/ipc/handlers/` using `rh()`, then restart dev server to regenerate types
+- To add a new IPC channel: add a handler file in `src/main/ipc/handlers/` using `rh()`, then run `pnpm build` to regenerate types
 
 ## Error Logging
 
@@ -134,13 +134,17 @@ const handleItemHighlighted = (item) => {
 };
 
 // Imperative handle on the child component
-useImperativeHandle(ref, () => ({
-  updateColors: (regions) => {
-    const displayWeights = composeDisplayWeights(vertexCount, regions, { ignoreAmount: true });
-    writeWeightColors(displayWeights, colorsRef.current);
-    colorAttribute.needsUpdate = true;
-  },
-}), []);
+useImperativeHandle(
+  ref,
+  () => ({
+    updateColors: (regions) => {
+      const displayWeights = composeDisplayWeights(vertexCount, regions, { ignoreAmount: true });
+      writeWeightColors(displayWeights, colorsRef.current);
+      colorAttribute.needsUpdate = true;
+    },
+  }),
+  [],
+);
 ```
 
 ```tsx
@@ -155,6 +159,7 @@ const handleItemHighlighted = (item) => {
 ```
 
 Guidelines:
+
 - Use refs (`useRef`) for values that only affect imperative visual output, not React-rendered UI
 - Expose imperative methods via `useImperativeHandle` on child components (e.g. `updateColors`, `updatePositions`)
 - Keep React state for values that affect JSX structure or text content
@@ -163,6 +168,13 @@ Guidelines:
 ## Type Checking
 
 - Do not run tsc directly; instead, execute pnpm lint -- file/to/path file/to/path2.
+
+## Verification
+
+- This is a desktop (Electron) app with no browser verification tooling available. Do NOT run `pnpm dev` to verify changes.
+- To regenerate `*.gen.ts` files after adding or modifying IPC handlers, run `pnpm build`.
+- To verify that the project compiles and types are correct, run `pnpm build`.
+- `pnpm build` is sufficient for both type regeneration and build verification. There is no need to start the dev server.
 
 ## Formatting
 
