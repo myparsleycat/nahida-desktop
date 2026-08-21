@@ -691,6 +691,115 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         expect(performDownload).toHaveBeenCalledTimes(3);
         performDownload.mockRestore();
     });
+
+    it("falls back to a presigned url after CDN error retries are exhausted", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+        const cdnFile = {
+            ...file,
+            size: 11,
+            url: "https://n1.nahida.live/fil/file.bin",
+        };
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const performDownload = vi.spyOn(task, "performDownload");
+        performDownload
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
+                expect(currentFile.url).toBe("https://r2.test/signed");
+                expect(currentFile.urlOrigin).toBe("presign");
+                expect(options?.resumeFrom).toBe(5);
+                await writeFile(currentTarget, "hello world");
+            });
+
+        const onComplete = vi.fn();
+        await task.executeWithSlowRetry({
+            file: cdnFile,
+            filePath,
+            signal: new AbortController().signal,
+            onComplete,
+        });
+
+        expect(cdnFile.url).toBe("https://r2.test/signed");
+        expect(cdnFile.urlOrigin).toBe("presign");
+        expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(1);
+        expect(performDownload).toHaveBeenCalledTimes(5);
+        expect(onComplete).toHaveBeenCalledOnce();
+        performDownload.mockRestore();
+    });
+
+    it("resets errorRetries when slow-chunk fallback switches to a presigned url", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+        const cdnFile = {
+            ...file,
+            size: 11,
+            url: "https://n1.nahida.live/fil/file.bin",
+        };
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const registered: Array<{ abortSlow: () => void }> = [];
+        const register = vi.spyOn(slowChunkMonitor, "register").mockImplementation((input) => {
+            const transfer = {
+                key: `transfer-${registered.length}`,
+                abortReason: null as "slow-chunk" | null,
+                detect: null as "stall" | null,
+                chunkSpeedBps: 0,
+                peerMedianBps: 0,
+            };
+            registered.push({
+                abortSlow: () => {
+                    transfer.abortReason = "slow-chunk";
+                    transfer.detect = "stall";
+                    input.attemptController.abort();
+                },
+            });
+            return transfer as never;
+        });
+        const performDownload = vi.spyOn(task, "performDownload");
+        performDownload
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockImplementationOnce(async (_currentFile, _target, signal) => {
+                await waitForSlowAbort(signal);
+            })
+            .mockImplementationOnce(async (_currentFile, _target, signal) => {
+                await waitForSlowAbort(signal);
+            })
+            .mockRejectedValueOnce(new Error("net::ERR_CONNECTION_RESET"))
+            .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
+                expect(currentFile.url).toBe("https://r2.test/signed");
+                expect(currentFile.urlOrigin).toBe("presign");
+                expect(options?.resumeFrom).toBe(5);
+                await writeFile(currentTarget, "hello world");
+            });
+
+        const onComplete = vi.fn();
+        const run = task.executeWithSlowRetry({
+            file: cdnFile,
+            filePath,
+            signal: new AbortController().signal,
+            onComplete,
+        });
+
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(2));
+        registered[1]?.abortSlow();
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(3));
+        registered[2]?.abortSlow();
+        await run;
+
+        expect(cdnFile.url).toBe("https://r2.test/signed");
+        expect(cdnFile.urlOrigin).toBe("presign");
+        expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(1);
+        expect(performDownload).toHaveBeenCalledTimes(5);
+        expect(onComplete).toHaveBeenCalledOnce();
+        register.mockRestore();
+        performDownload.mockRestore();
+    });
 });
 
 describe("DownloadLib existing file handling", () => {

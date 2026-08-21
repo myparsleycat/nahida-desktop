@@ -659,7 +659,8 @@ class FileDownloadTask {
         }
 
         const targetPath = `${filePath}.ntmp`;
-        const MAX_ERROR_RETRIES = 3;
+        const MAX_ERROR_RETRIES = 2;
+        const MAX_PRESIGN_RETRIES = 1;
         const monitor = this.desktop.service.transfer.slowChunkMonitor;
 
         let slowReconnects = 0;
@@ -760,6 +761,7 @@ class FileDownloadTask {
                                 file.urlOrigin = "presign";
                                 urlOrigin = "presign";
                                 slowReconnects = 0;
+                                errorRetries = 0;
                                 this.desktop.logger.warn(
                                     {
                                         fileId: file.id,
@@ -830,15 +832,46 @@ class FileDownloadTask {
                         }
                     }
 
-                    if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
+                    const maxRetries =
+                        urlOrigin === "cdn" ? MAX_ERROR_RETRIES : MAX_PRESIGN_RETRIES;
+                    if (!isAbortError(err) && errorRetries < maxRetries) {
                         errorRetries += 1;
-                        const retryDelayMs = 2 ** errorRetries * 1000;
+                        const retryDelayMs = 2 ** errorRetries * 100;
                         this.desktop.logger.warn(
-                            `Retrying download for ${file.name} (${errorRetries}/${MAX_ERROR_RETRIES}) after ${toErrorMessage(err)}; waiting ${retryDelayMs}ms`,
+                            `Retrying download for ${file.name} (${errorRetries}/${maxRetries}) after ${toErrorMessage(err)}; waiting ${retryDelayMs}ms`,
                             "FileDownloadTask:retry",
                         );
                         await sleepWithAbort(retryDelayMs, signal);
                         continue;
+                    }
+
+                    if (urlOrigin === "cdn") {
+                        const freshUrl = await this.fetchPresignedDownloadUrl({
+                            fileId: file.id,
+                            link,
+                            signal,
+                        }).catch((presignErr: unknown) => {
+                            err = presignErr;
+                            return null;
+                        });
+                        if (freshUrl) {
+                            file.url = freshUrl;
+                            file.urlOrigin = "presign";
+                            urlOrigin = "presign";
+                            errorRetries = 0;
+                            this.desktop.logger.warn(
+                                {
+                                    fileId: file.id,
+                                    fileName: file.name,
+                                    remainingBytes: Math.max(0, file.size - reportedResumeBytes),
+                                    resumeFrom: reportedResumeBytes,
+                                    url: getSafeUrlResource(freshUrl),
+                                },
+                                "FileDownloadTask:presignFallback",
+                            );
+                            await resetAndWait(0);
+                            continue;
+                        }
                     }
 
                     throw err;
