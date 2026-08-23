@@ -9,6 +9,7 @@ import Download, {
     BATCH_ROOT_ID,
     type DownloadMetadata,
     type DownloadParams,
+    logicalFileBytes,
 } from "@main/lib/download";
 import Upload, {
     type DirectoriesComponent,
@@ -1934,14 +1935,19 @@ export class DriveService {
         const listedContentBytes = items.every((item) => typeof item.size === "number")
             ? items.reduce((total, item) => total + (item.size ?? 0), 0)
             : undefined;
-        if (listedContentBytes !== undefined && listedContentBytes !== data.totalBytes) {
+        const downloadLogicalBytes = data.files.reduce(
+            (total, file) => total + logicalFileBytes(file),
+            0,
+        );
+        if (listedContentBytes !== undefined && listedContentBytes !== downloadLogicalBytes) {
             this.desktop.logger.warn(
                 {
                     itemIds: items.map((item) => item.id),
                     itemNames: items.map((item) => item.name),
                     listedContentBytes,
+                    downloadLogicalBytes,
                     downloadMetadataBytes: data.totalBytes,
-                    deltaBytes: listedContentBytes - data.totalBytes,
+                    deltaBytes: listedContentBytes - downloadLogicalBytes,
                     fileCount: data.files.length,
                     directoryCount: data.dirs.length,
                     savePath,

@@ -8,7 +8,7 @@ import type { NahidaDesktop } from "..";
 import type { DownloadMetadata } from "./download";
 
 import { BandwidthLimiter } from "./bandwidth-limiter";
-import { DownloadHttpError, DownloadLib } from "./download";
+import { DownloadHttpError, DownloadLib, logicalFileBytes } from "./download";
 import { SlowChunkMonitor } from "./slow-chunk-monitor";
 
 const mocks = vi.hoisted(() => ({
@@ -118,6 +118,17 @@ function createDesktop() {
         },
     } as unknown as NahidaDesktop;
 }
+
+describe("logicalFileBytes", () => {
+    it("uses uncompSize when present", () => {
+        expect(logicalFileBytes({ size: 12, uncompSize: 40 })).toBe(40);
+    });
+
+    it("falls back to stored size when uncompSize is missing", () => {
+        expect(logicalFileBytes({ size: 12 })).toBe(12);
+        expect(logicalFileBytes({ size: 12, uncompSize: null })).toBe(12);
+    });
+});
 
 const file: DownloadMetadata["files"][number] = {
     id: "file-id",

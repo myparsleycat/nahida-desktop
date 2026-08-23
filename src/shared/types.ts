@@ -500,21 +500,25 @@ export type TransferStatus =
     | "canceled"
     | "error";
 
+export type DownloadFile = {
+    id: string;
+    fileId: string;
+    parentId: string | null;
+    name: string;
+    size: number;
+    uncompSize?: number | null;
+    compAlg: "gzip" | "zstd" | null;
+    url: string;
+    urlOrigin?: "cdn" | "presign";
+};
+
 export interface TransferData {
     root?: {
         id: string;
         parentId: string | null;
         name: string;
     };
-    files: {
-        id: string;
-        fileId: string;
-        parentId: string | null;
-        name: string;
-        size: number;
-        compAlg: "gzip" | "zstd" | null;
-        url: string;
-    }[];
+    files: DownloadFile[];
     dirs: {
         id: string;
         parentId: string | null;

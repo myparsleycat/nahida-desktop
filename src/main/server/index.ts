@@ -39,6 +39,7 @@ const liveData = z.object({
                     parentId: z.string().nullable(),
                     name: z.string(),
                     size: z.number(),
+                    uncompSize: z.number().nullable().optional(),
                     compAlg: z.enum(["gzip", "zstd"]).nullable(),
                     url: z.string(),
                 }),

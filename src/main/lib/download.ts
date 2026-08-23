@@ -7,7 +7,7 @@ import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
 import { BACKEND_URL } from "@shared/const";
-import type { TransferData } from "@shared/types";
+import type { DownloadFile, TransferData } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
 import { chunk, retry, throttle, uniqBy } from "es-toolkit";
@@ -45,22 +45,17 @@ export type DownloadParams = {
 export type DownloadMetadata = {
     root: { id: string; parentId: string | null; name: string };
     totalBytes: number;
-    files: Array<{
-        id: string;
-        fileId: string;
-        parentId: string | null;
-        name: string;
-        size: number;
-        compAlg: "gzip" | "zstd" | null;
-        url: string;
-        urlOrigin?: "cdn" | "presign";
-    }>;
+    files: DownloadFile[];
     dirs: Array<{
         id: string;
         parentId: string | null;
         name: string;
     }>;
 };
+
+export function logicalFileBytes(file: Pick<DownloadFile, "size" | "uncompSize">) {
+    return file.uncompSize ?? file.size;
+}
 
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
@@ -262,6 +257,7 @@ class DownloadStreamer {
             parentId: null,
             name: file.name,
             size: file.size,
+            uncompSize: file.uncompSize,
             compAlg: (file.compAlg as DownloadMetadata["files"][0]["compAlg"]) ?? null,
             url: file.url,
         }));
