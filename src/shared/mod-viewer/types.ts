@@ -26,6 +26,8 @@ export type ViewerMesh = {
     id: string;
     component: string;
     positions: Float32Array;
+    normals?: Float32Array;
+    tangents?: Float32Array;
     uvs?: Float32Array;
     indices: Uint32Array;
     conditions: Dnf;
@@ -42,6 +44,7 @@ export type ViewerMesh = {
 };
 
 export type ViewerTextureRole = "diffuse" | "normal_map" | "light_map" | "material_map";
+export type ViewerMaterialProfile = "zzmi";
 
 export type ViewerTexture = {
     texKey: string;
@@ -120,6 +123,7 @@ export type ViewerAnimationClip = {
 export type ModViewerPayload = {
     iniPath: string;
     modDir: string;
+    materialProfile?: ViewerMaterialProfile;
     meshes: ViewerMesh[];
     textures: Record<string, ViewerTexture>;
     variables: ViewerVariable[];
@@ -169,6 +173,8 @@ export type ViewerEvalInput = {
 export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positionVariants"> & {
     component: string;
     positionsUrl: string;
+    normalsUrl?: string;
+    tangentsUrl?: string;
     uvsUrl?: string;
     indicesUrl: string;
     shapeTargets: Array<{
@@ -185,6 +191,7 @@ export type ModViewerTransport = {
     iniPath: string;
     modPath: string;
     name: string;
+    materialProfile?: ViewerMaterialProfile;
     meshes: ViewerMeshTransport[];
     textures: Record<string, { url: string; role: ViewerTextureRole }>;
     variables: ViewerVariable[];

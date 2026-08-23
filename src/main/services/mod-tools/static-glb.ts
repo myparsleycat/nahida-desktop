@@ -267,6 +267,20 @@ export class StaticGlb {
                     typedArrayBuffer(mesh.positions),
                     "application/octet-stream",
                 ),
+                normalsUrl: mesh.normals
+                    ? writeBuffer(
+                          `${mesh.id}.normal`,
+                          typedArrayBuffer(mesh.normals),
+                          "application/octet-stream",
+                      )
+                    : undefined,
+                tangentsUrl: mesh.tangents
+                    ? writeBuffer(
+                          `${mesh.id}.tangent`,
+                          typedArrayBuffer(mesh.tangents),
+                          "application/octet-stream",
+                      )
+                    : undefined,
                 uvsUrl: mesh.uvs
                     ? writeBuffer(
                           `${mesh.id}.uv`,
@@ -326,6 +340,7 @@ export class StaticGlb {
                 iniPath: payload.iniPath,
                 modPath,
                 name: path.basename(modPath.replace(/[\\/]+$/, "")),
+                materialProfile: payload.materialProfile,
                 meshes,
                 textures,
                 variables: payload.variables,

@@ -312,6 +312,7 @@ filename = material.png
         });
 
         const payload = await loadModViewerPayload(root);
+        assert.equal(payload.materialProfile, "zzmi");
         const mesh = payload.meshes[0];
         assert.ok(mesh.textureVariants.length >= 3);
         assert.ok(mesh.normalMapVariants.length >= 2);

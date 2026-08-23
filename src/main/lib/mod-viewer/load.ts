@@ -44,9 +44,19 @@ export async function loadModViewerPayload(
     const animations: ReturnType<typeof extractPresentAnimations> = [];
     const seenLabels: Record<string, number> = {};
     const multi = iniPaths.length > 1;
+    let materialProfile: ModViewerPayload["materialProfile"];
 
     for (const iniPath of iniPaths) {
         const sections = await parseIniFile(iniPath);
+        if (
+            Object.values(sections).some((lines) =>
+                lines.some((line) =>
+                    /Resource\\ZZMI\\(?:Diffuse|NormalMap|LightMap|MaterialMap)/i.test(line.text),
+                ),
+            )
+        ) {
+            materialProfile = "zzmi";
+        }
         const { prefix, source } = iniScope(iniPath, folderPath, multi);
         const resources = rebaseResources(extractResources(sections), iniPath, folderPath);
         const canonicalVars = canonicalVarNames(sections);
@@ -154,6 +164,7 @@ export async function loadModViewerPayload(
     return {
         iniPath: iniPaths[0],
         modDir: folderPath,
+        materialProfile,
         meshes: built.meshes,
         textures: built.textures,
         variables: variables.filter((variable) => !animationVarIds.has(variable.id)),

@@ -19,6 +19,22 @@ afterEach(async () => {
 });
 
 describe("buildMeshResult", () => {
+    it("preserves authored normals and tangents from 40-byte position frames", async () => {
+        const root = await makeMeshDir({ authoredFrame: true });
+        const result = await buildMeshResult([makeGroup([makeDraw({ label: "authored" })])], root);
+
+        assert.deepEqual([...result.meshes[0].normals!], [0, 1, 0, 0, 1, 0, 0, 1, 0]);
+        assert.deepEqual([...result.meshes[0].tangents!], [1, 0, 0, -1, 1, 0, 0, -1, 1, 0, 0, -1]);
+    });
+
+    it("does not treat zero-padded position frames as authored TBN data", async () => {
+        const root = await makeMeshDir();
+        const result = await buildMeshResult([makeGroup([makeDraw({ label: "generated" })])], root);
+
+        assert.equal(result.meshes[0].normals, undefined);
+        assert.equal(result.meshes[0].tangents, undefined);
+    });
+
     it("skips draws with negative start, count, or base instead of reading buffers", async () => {
         const root = await makeMeshDir();
         for (const draw of [
@@ -159,7 +175,7 @@ describe("viewerPreviewTextureSize", () => {
     });
 });
 
-async function makeMeshDir() {
+async function makeMeshDir(options?: { authoredFrame?: boolean }) {
     const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-mesh-builder-"));
     tempRoots.push(root);
     const vertexCount = 8;
@@ -168,6 +184,11 @@ async function makeMeshDir() {
         pos.writeFloatLE(index, index * 40);
         pos.writeFloatLE(index, index * 40 + 4);
         pos.writeFloatLE(index, index * 40 + 8);
+        if (options?.authoredFrame) {
+            pos.writeFloatLE(1, index * 40 + 16);
+            pos.writeFloatLE(1, index * 40 + 24);
+            pos.writeFloatLE(-1, index * 40 + 36);
+        }
     }
     await fse.writeFile(path.join(root, "pos.buf"), pos);
     await fse.writeFile(path.join(root, "tc.buf"), Buffer.alloc(vertexCount * 20));

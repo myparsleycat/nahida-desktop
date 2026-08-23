@@ -16,6 +16,7 @@ import {
     Texture,
     TextureLoader,
 } from "three";
+import type { WebGLProgramParametersWithUniforms } from "three";
 
 type PayloadMeshUserData = {
     meshId: string;
@@ -28,6 +29,7 @@ type PayloadMeshUserData = {
     }>;
     positionVariants: Float32Array[];
     normalCache: Map<number, Float32Array>;
+    materialProfile?: ModViewerTransport["materialProfile"];
     lastPositionVariantIndex?: number | null;
     lastMaps?: {
         texKey: string | null;
@@ -89,6 +91,7 @@ export async function buildPayloadModel(
                 mesh.positionVariants.map((variant) => fetchFloat32(variant.positionsUrl)),
             ),
             normalCache: new Map(),
+            materialProfile: transport.materialProfile,
             lastPositionVariantIndex: null,
         } satisfies PayloadMeshUserData;
         applyEvaluatedMesh(object, evaluated, textures);
@@ -142,6 +145,9 @@ function applyEvaluatedMaps(
     evaluated: EvaluatedViewerState["meshes"][number],
     textures: Map<string, Texture>,
 ): void {
+    if (userData.materialProfile === "zzmi") {
+        configurePackedMaterialShader(material);
+    }
     const last = userData.lastMaps;
     if (
         last &&
@@ -153,17 +159,27 @@ function applyEvaluatedMaps(
         return;
     }
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
-    material.normalMap = evaluated.normalMapKey
-        ? (textures.get(evaluated.normalMapKey) ?? null)
-        : null;
+    material.normalMap =
+        evaluated.normalMapKey && object.geometry.attributes.tangent
+            ? (textures.get(evaluated.normalMapKey) ?? null)
+            : null;
     if (material.normalMap) {
         material.normalScale.y = -1;
     }
-    material.aoMap = evaluated.lightMapKey ? (textures.get(evaluated.lightMapKey) ?? null) : null;
-    material.aoMapIntensity = material.aoMap ? 0.5 : 1;
-    if (material.aoMap && object.geometry.attributes.uv && !object.geometry.attributes.uv2) {
-        object.geometry.setAttribute("uv2", object.geometry.attributes.uv);
-    }
+    // ZZMI's packed maps are not generic Three.js AO/PBR maps. LightMap.G is
+    // metallic and MaterialMap.G is glossiness; the shader adapter below
+    // performs the required channel selection and glossiness inversion.
+    material.aoMap = null;
+    material.metalnessMap =
+        userData.materialProfile === "zzmi" && evaluated.lightMapKey
+            ? (textures.get(evaluated.lightMapKey) ?? null)
+            : null;
+    material.metalness = material.metalnessMap ? 1 : 0.05;
+    material.roughnessMap =
+        userData.materialProfile === "zzmi" && evaluated.materialMapKey
+            ? (textures.get(evaluated.materialMapKey) ?? null)
+            : null;
+    material.roughness = material.roughnessMap ? 1 : 0.65;
     material.needsUpdate = true;
     userData.lastMaps = {
         texKey: evaluated.texKey,
@@ -171,6 +187,33 @@ function applyEvaluatedMaps(
         lightMapKey: evaluated.lightMapKey,
         materialMapKey: evaluated.materialMapKey,
     };
+}
+
+function configurePackedMaterialShader(material: MeshStandardMaterial): void {
+    if (material.userData.zzmiPackedMaterial) {
+        return;
+    }
+    material.userData.zzmiPackedMaterial = true;
+    material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+        shader.fragmentShader = shader.fragmentShader
+            .replace(
+                "#include <roughnessmap_fragment>",
+                `float roughnessFactor = roughness;
+#ifdef USE_ROUGHNESSMAP
+    vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
+    roughnessFactor *= 1.0 - texelRoughness.g;
+#endif`,
+            )
+            .replace(
+                "#include <metalnessmap_fragment>",
+                `float metalnessFactor = metalness;
+#ifdef USE_METALNESSMAP
+    vec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );
+    metalnessFactor *= texelMetalness.g;
+#endif`,
+            );
+    };
+    material.customProgramCacheKey = () => "zzmi-packed-material-v1";
 }
 
 function applyPositionVariant(
@@ -259,18 +302,28 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
 }
 
 async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry> {
-    const [positions, uvs, indices] = await Promise.all([
+    const [positions, normals, tangents, uvs, indices] = await Promise.all([
         fetchFloat32(mesh.positionsUrl),
+        mesh.normalsUrl ? fetchFloat32(mesh.normalsUrl) : Promise.resolve(undefined),
+        mesh.tangentsUrl ? fetchFloat32(mesh.tangentsUrl) : Promise.resolve(undefined),
         mesh.uvsUrl ? fetchFloat32(mesh.uvsUrl) : Promise.resolve(undefined),
         fetchUint32(mesh.indicesUrl),
     ]);
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    if (normals) {
+        geometry.setAttribute("normal", new BufferAttribute(normals, 3));
+    }
+    if (tangents) {
+        geometry.setAttribute("tangent", new BufferAttribute(tangents, 4));
+    }
     if (uvs) {
         geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
     }
     geometry.setIndex(new BufferAttribute(indices, 1));
-    geometry.computeVertexNormals();
+    if (!normals) {
+        geometry.computeVertexNormals();
+    }
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     return geometry;

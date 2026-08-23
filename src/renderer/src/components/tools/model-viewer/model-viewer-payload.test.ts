@@ -1,5 +1,5 @@
 import type { EvaluatedViewerState } from "@shared/mod-viewer/types";
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial } from "three";
+import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial, Texture } from "three";
 import { describe, expect, it } from "vitest";
 
 import { applyPayloadEval } from "./model-viewer-payload";
@@ -115,5 +115,97 @@ describe("applyPayloadEval midpoint targets", () => {
         applyPayloadEval(root, evalState({ broken: 1 }));
 
         expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([1, 2, 3]);
+    });
+});
+
+describe("applyPayloadEval packed maps", () => {
+    it("uses ZZMI material channels without binding packed light maps as AO", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
+        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        const material = new MeshStandardMaterial();
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            normalCache: new Map(),
+            materialProfile: "zzmi",
+        };
+        const diffuse = new Texture();
+        const normal = new Texture();
+        const light = new Texture();
+        const packedMaterial = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([
+            ["diffuse", diffuse],
+            ["normal", normal],
+            ["light", light],
+            ["material", packedMaterial],
+        ]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: "diffuse",
+                    normalMapKey: "normal",
+                    lightMapKey: "light",
+                    materialMapKey: "material",
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect(material.map).toBe(diffuse);
+        expect(material.normalMap).toBe(normal);
+        expect(material.normalScale.y).toBe(-1);
+        expect(material.aoMap).toBeNull();
+        expect(material.metalnessMap).toBe(light);
+        expect(material.metalness).toBe(1);
+        expect(material.roughnessMap).toBe(packedMaterial);
+        expect(material.roughness).toBe(1);
+
+        const shader = {
+            fragmentShader: "#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>",
+            uniforms: {},
+        };
+        material.onBeforeCompile(shader as never, {} as never);
+        expect(shader.fragmentShader).toContain("1.0 - texelRoughness.g");
+        expect(shader.fragmentShader).toContain("metalnessFactor *= texelMetalness.g");
+        expect(shader.fragmentShader).not.toContain("#include <roughnessmap_fragment>");
+        expect(shader.fragmentShader).not.toContain("#include <metalnessmap_fragment>");
+    });
+
+    it("does not bind tangent-space normal maps without authored tangents", () => {
+        const mesh = meshWithTargets([0, 0, 0], []);
+        const normal = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["normal", normal]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: "normal",
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
     });
 });

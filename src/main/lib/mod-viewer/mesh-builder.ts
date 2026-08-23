@@ -20,6 +20,8 @@ import { safeResourcePath } from "./ini";
 
 const POSITION_STRIDE = 40;
 const POSITION_OFFSET = 0;
+const NORMAL_OFFSET = 12;
+const TANGENT_OFFSET = 24;
 const INDEX_SIZE = 4;
 const MAX_DRAWS = 10_000;
 const MAX_BUFFER_FILE_BYTES = 512 * 1024 * 1024;
@@ -255,6 +257,12 @@ export async function buildMeshResult(
             }
 
             const positions = new Float32Array(used.length * 3);
+            const hasAuthoredFrame = detectPositionFrame(
+                drawBuffers.posData,
+                drawBuffers.posStride,
+            );
+            const normals = hasAuthoredFrame ? new Float32Array(used.length * 3) : undefined;
+            const tangents = hasAuthoredFrame ? new Float32Array(used.length * 4) : undefined;
             const uvs = new Float32Array(used.length * 2);
             const uvSize = drawBuffers.uvFmt === "f32" ? 8 : 4;
             const shapeBuffers = await buildShapeBuffers(
@@ -284,6 +292,27 @@ export async function buildMeshResult(
                 positions[outIndex * 3] = x;
                 positions[outIndex * 3 + 1] = y;
                 positions[outIndex * 3 + 2] = z;
+                if (normals && tangents) {
+                    normals[outIndex * 3] = drawBuffers.posData.readFloatLE(posOff + NORMAL_OFFSET);
+                    normals[outIndex * 3 + 1] = drawBuffers.posData.readFloatLE(
+                        posOff + NORMAL_OFFSET + 4,
+                    );
+                    normals[outIndex * 3 + 2] = drawBuffers.posData.readFloatLE(
+                        posOff + NORMAL_OFFSET + 8,
+                    );
+                    tangents[outIndex * 4] = drawBuffers.posData.readFloatLE(
+                        posOff + TANGENT_OFFSET,
+                    );
+                    tangents[outIndex * 4 + 1] = drawBuffers.posData.readFloatLE(
+                        posOff + TANGENT_OFFSET + 4,
+                    );
+                    tangents[outIndex * 4 + 2] = drawBuffers.posData.readFloatLE(
+                        posOff + TANGENT_OFFSET + 8,
+                    );
+                    tangents[outIndex * 4 + 3] = drawBuffers.posData.readFloatLE(
+                        posOff + TANGENT_OFFSET + 12,
+                    );
+                }
                 for (const shape of shapeBuffers) {
                     if (shape.sparse) {
                         const delta = shape.sparse.get(vertex) ?? [0, 0, 0];
@@ -401,6 +430,8 @@ export async function buildMeshResult(
                 id: draw.label,
                 component: group.displayName || group.name,
                 positions,
+                normals,
+                tangents,
                 uvs,
                 indices,
                 conditions: draw.conditions,
@@ -436,6 +467,46 @@ export async function buildMeshResult(
         })),
         textures,
     };
+}
+
+function detectPositionFrame(data: Buffer, stride: number): boolean {
+    if (stride < POSITION_STRIDE || data.length < stride) {
+        return false;
+    }
+    const vertexCount = Math.floor(data.length / stride);
+    const sampleCount = Math.min(vertexCount, 2_000);
+    const sampleStep = Math.max(1, Math.floor(vertexCount / sampleCount));
+    let sampled = 0;
+    let valid = 0;
+    for (let vertex = 0; vertex < vertexCount && sampled < sampleCount; vertex += sampleStep) {
+        const offset = vertex * stride;
+        const normalLength = Math.hypot(
+            data.readFloatLE(offset + NORMAL_OFFSET),
+            data.readFloatLE(offset + NORMAL_OFFSET + 4),
+            data.readFloatLE(offset + NORMAL_OFFSET + 8),
+        );
+        const tangentLength = Math.hypot(
+            data.readFloatLE(offset + TANGENT_OFFSET),
+            data.readFloatLE(offset + TANGENT_OFFSET + 4),
+            data.readFloatLE(offset + TANGENT_OFFSET + 8),
+        );
+        const tangentW = data.readFloatLE(offset + TANGENT_OFFSET + 12);
+        sampled += 1;
+        if (
+            Number.isFinite(normalLength) &&
+            Number.isFinite(tangentLength) &&
+            Number.isFinite(tangentW) &&
+            normalLength >= 0.9 &&
+            normalLength <= 1.1 &&
+            tangentLength >= 0.9 &&
+            tangentLength <= 1.1 &&
+            Math.abs(tangentW) >= 0.9 &&
+            Math.abs(tangentW) <= 1.1
+        ) {
+            valid += 1;
+        }
+    }
+    return sampled > 0 && valid / sampled >= MIN_IN_RANGE;
 }
 
 function textureKey(relativePath: string, role: ViewerTextureRole): string {
