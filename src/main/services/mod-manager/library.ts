@@ -57,12 +57,12 @@ export class ModLibraryService {
             throw new Error(`No mod folder path set for ${game}`);
         }
 
-        if (isNteImporter(gameConfig.importer)) {
-            return await getNteCharacters(this.desktop, getNteRoots(gameConfig));
-        }
-
         const shouldFallback =
             searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
+
+        if (isNteImporter(gameConfig.importer)) {
+            return await getNteCharacters(this.desktop, getNteRoots(gameConfig), shouldFallback);
+        }
 
         try {
             return await this.addManualSubGroupFlags(
@@ -82,7 +82,12 @@ export class ModLibraryService {
         try {
             const game = await this.getGameByPath(folderPath);
             if (game && isNteImporter(game.importer)) {
-                return await getNteSubGroups(this.desktop, getNteRoots(game), folderPath);
+                return await getNteSubGroups(
+                    this.desktop,
+                    getNteRoots(game),
+                    folderPath,
+                    shouldFallback,
+                );
             }
 
             const relativePath = game
@@ -134,11 +139,16 @@ export class ModLibraryService {
         }
     }
 
-    public async mods(groupPath: string): Promise<FolderGroup> {
+    public async mods(groupPath: string, searchModPreview?: boolean): Promise<FolderGroup> {
         try {
             const game = await this.getGameByPath(groupPath);
             if (game && isNteImporter(game.importer)) {
-                return await getNteMods(this.desktop, getNteRoots(game), groupPath);
+                return await getNteMods(
+                    this.desktop,
+                    getNteRoots(game),
+                    groupPath,
+                    searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview()),
+                );
             }
 
             const group = await getMods(groupPath);

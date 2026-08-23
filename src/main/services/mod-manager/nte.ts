@@ -18,12 +18,16 @@ import {
     toPowerShellString,
 } from "../../lib/elevated-fs";
 import {
+    DISABLED_FILE_SUFFIX,
     DISABLED_PREFIX_REGEX,
+    isDisabledFile,
     isSameOrChildPath,
     normalizeModPath,
     renameWithUniqueName,
+    stripDisabledFileSuffix,
     stripDisabledPrefix,
 } from "./path-utils";
+import { findPreview } from "./preview";
 
 const NTE_EXE_NAME = "HTGame.exe";
 const NTE_COMMON_EXE_RELATIVE_PATH = path.join(
@@ -38,8 +42,6 @@ const NTE_COMMON_EXE_RELATIVE_PATH = path.join(
 const NTE_MODS_RELATIVE_PATH = path.join("Content", "Paks", "Mods");
 const NTE_DEFAULT_MOD_SUBFOLDERS = ["Character", "UI", "Enemy", "NPC"] as const;
 const NTE_USER_MODS_FOLDER_NAME = "NTE-Mods";
-const DISABLED_FILE_SUFFIX = ".disabled";
-const PREVIEW_FILE_REGEX = /^preview\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i;
 
 export interface NtePathResolution {
     gameRootPath: string;
@@ -157,14 +159,16 @@ export function findNteGameByPath(games: GameConfig[], targetPath: string) {
 export async function getNteCharacters(
     desktop: NahidaDesktop,
     roots: NteGameRoots,
+    searchModPreview: boolean,
 ): Promise<FolderGroup[]> {
-    return await getNteSubGroups(desktop, roots, roots.modRoot);
+    return await getNteSubGroups(desktop, roots, roots.modRoot, searchModPreview);
 }
 
 export async function getNteSubGroups(
     _desktop: NahidaDesktop,
     roots: NteGameRoots,
     groupPath: string,
+    searchModPreview: boolean,
 ): Promise<FolderGroup[]> {
     const relativePath = getNteRelativePath(roots, groupPath);
     const groupDir = path.join(roots.modRoot, relativePath);
@@ -177,7 +181,7 @@ export async function getNteSubGroups(
             if (await hasDirectPak(nextPath)) return null;
             if (await isNtePakWrapper(roots, nextPath)) return null;
 
-            const preview = await findPreview(nextPath);
+            const preview = await findPreview(nextPath, searchModPreview);
             const modCounts = await countDirectMods(roots, nextPath);
             return {
                 name: groupName,
@@ -199,6 +203,7 @@ export async function getNteMods(
     desktop: NahidaDesktop,
     roots: NteGameRoots,
     groupPath: string,
+    searchModPreview: boolean,
 ): Promise<FolderGroup> {
     const relativePath = getNteRelativePath(roots, groupPath);
     const groupDir = path.join(roots.modRoot, relativePath);
@@ -213,7 +218,7 @@ export async function getNteMods(
         )
     ).sort((a, b) => a.name.localeCompare(b.name));
 
-    const preview = await findPreview(groupDir);
+    const preview = await findPreview(groupDir, searchModPreview);
     return {
         name: path.basename(groupPath),
         path: groupDir,
@@ -281,7 +286,7 @@ export async function setNteModEnabled(
                 .map((entry) =>
                     fse.rename(
                         path.join(modPath, entry.name),
-                        path.join(modPath, entry.name.slice(0, -DISABLED_FILE_SUFFIX.length)),
+                        path.join(modPath, stripDisabledFileSuffix(entry.name)),
                     ),
                 ),
         );
@@ -962,16 +967,8 @@ async function isNtePakWrapper(roots: NteGameRoots, dirPath: string) {
     return childInfos.every((child) => child.hasPak || !child.hasSubdirs);
 }
 
-function isDisabledFile(fileName: string) {
-    return fileName.toLowerCase().endsWith(DISABLED_FILE_SUFFIX);
-}
-
 function isPakModFile(fileName: string) {
-    const baseName = isDisabledFile(fileName)
-        ? fileName.slice(0, -DISABLED_FILE_SUFFIX.length)
-        : fileName;
-
-    return baseName.toLowerCase().endsWith(".pak");
+    return stripDisabledFileSuffix(fileName).toLowerCase().endsWith(".pak");
 }
 
 async function hasDirectPak(dirPath: string) {
@@ -995,17 +992,6 @@ async function countDirectMods(roots: NteGameRoots, groupDir: string) {
     };
 }
 
-async function findPreview(dirPath: string) {
-    if (!(await fse.pathExists(dirPath))) return undefined;
-
-    const preview = (await fse.readdir(dirPath)).find((entry) =>
-        PREVIEW_FILE_REGEX.test(
-            isDisabledFile(entry) ? entry.slice(0, -DISABLED_FILE_SUFFIX.length) : entry,
-        ),
-    );
-    return preview ? path.join(dirPath, preview) : undefined;
-}
-
 async function createNteModInfo(
     desktop: NahidaDesktop,
     modPath: string,
@@ -1014,8 +1000,10 @@ async function createNteModInfo(
 ) {
     const stat = await fse.stat(modPath);
     const preview =
-        (await findPreview(modPath)) ??
-        (options?.previewFallbackDir ? await findPreview(options.previewFallbackDir) : undefined);
+        (await findPreview(modPath, true)) ??
+        (options?.previewFallbackDir
+            ? await findPreview(options.previewFallbackDir, false)
+            : undefined);
 
     return {
         id: modPath,

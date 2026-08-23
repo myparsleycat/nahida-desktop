@@ -4,9 +4,12 @@ import { describe, it } from "vitest";
 
 import {
     DISABLED_PREFIX_REGEX,
+    isDisabledFile,
+    isDisabledFolderName,
     manualSubGroupSegmentMatches,
     normalizeRelativePath,
     restoreDisabledPrefix,
+    stripDisabledFileSuffix,
     stripDisabledPrefix,
 } from "./path-utils.ts";
 
@@ -98,6 +101,24 @@ describe("stripDisabledPrefix", () => {
         assert.equal(stripDisabledPrefix("disableddisableddisabled Foo"), "Foo");
         assert.equal(stripDisabledPrefix("disabled_disabled_disabled_foo"), "foo");
         assert.equal(stripDisabledPrefix("disabled disabled disabled foo"), "foo");
+    });
+});
+
+describe("disabled file suffix", () => {
+    it("detects and strips a trailing .disabled suffix", () => {
+        assert.equal(isDisabledFile("preview.png.disabled"), true);
+        assert.equal(isDisabledFile("preview.png.DISABLED"), true);
+        assert.equal(isDisabledFile("preview.png"), false);
+        assert.equal(stripDisabledFileSuffix("preview.png.disabled"), "preview.png");
+        assert.equal(stripDisabledFileSuffix("preview.png"), "preview.png");
+    });
+});
+
+describe("isDisabledFolderName", () => {
+    it("detects disabled folder prefixes", () => {
+        assert.equal(isDisabledFolderName("DISABLED Foo"), true);
+        assert.equal(isDisabledFolderName("DISABLED_Foo"), true);
+        assert.equal(isDisabledFolderName("Foo"), false);
     });
 });
 
