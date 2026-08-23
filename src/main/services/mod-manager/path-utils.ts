@@ -6,6 +6,22 @@ import type { NahidaDesktop } from "../..";
 
 export { DISABLED_PREFIX_REGEX, stripDisabledPrefix } from "@shared/mod";
 
+export const DISABLED_FILE_SUFFIX = ".disabled";
+
+export function isDisabledFile(fileName: string) {
+    return fileName.toLowerCase().endsWith(DISABLED_FILE_SUFFIX);
+}
+
+export function stripDisabledFileSuffix(fileName: string) {
+    if (!isDisabledFile(fileName)) return fileName;
+    return fileName.slice(0, -DISABLED_FILE_SUFFIX.length);
+}
+
+export function isDisabledFolderName(folderName: string) {
+    const trimmed = folderName.trim();
+    return stripDisabledPrefix(trimmed) !== trimmed;
+}
+
 export function normalizeModPath(modPath: string): string {
     return path.normalize(modPath).toLowerCase();
 }

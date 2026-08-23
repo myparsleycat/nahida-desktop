@@ -51,7 +51,7 @@ describe("NTE wrapped pak folders", () => {
         await fse.writeFile(path.join(sparkle, "preview.png"), "preview");
 
         const roots = { modRoot, linkedRoot: null };
-        const group = await getNteMods(desktopStub(), roots, shinku);
+        const group = await getNteMods(desktopStub(), roots, shinku, false);
 
         assert.deepEqual(
             group.mods.map((mod) => ({ name: mod.name, isEnabled: mod.isEnabled })),
@@ -81,7 +81,12 @@ describe("NTE wrapped pak folders", () => {
             "Shinku Natsu Sparkle_P.pak",
         );
 
-        const groups = await getNteSubGroups(desktopStub(), { modRoot, linkedRoot: null }, shinku);
+        const groups = await getNteSubGroups(
+            desktopStub(),
+            { modRoot, linkedRoot: null },
+            shinku,
+            false,
+        );
 
         assert.deepEqual(
             groups.map((group) => group.name),
@@ -100,8 +105,8 @@ describe("NTE wrapped pak folders", () => {
         );
 
         const roots = { modRoot, linkedRoot: null };
-        const characterMods = await getNteMods(desktopStub(), roots, character);
-        const characterGroups = await getNteSubGroups(desktopStub(), roots, character);
+        const characterMods = await getNteMods(desktopStub(), roots, character, false);
+        const characterGroups = await getNteSubGroups(desktopStub(), roots, character, false);
         const shinkuGroup = characterGroups.find((group) => group.name === "Shinku");
 
         assert.deepEqual(
@@ -124,9 +129,9 @@ describe("NTE wrapped pak folders", () => {
         );
 
         const roots = { modRoot, linkedRoot: null };
-        const group = await getNteMods(desktopStub(), roots, npc);
-        const npcGroups = await getNteSubGroups(desktopStub(), roots, npc);
-        const rootGroups = await getNteSubGroups(desktopStub(), roots, modRoot);
+        const group = await getNteMods(desktopStub(), roots, npc, false);
+        const npcGroups = await getNteSubGroups(desktopStub(), roots, npc, false);
+        const rootGroups = await getNteSubGroups(desktopStub(), roots, modRoot, false);
 
         assert.deepEqual(
             group.mods.map((mod) => ({ name: mod.name, isEnabled: mod.isEnabled })),
@@ -151,8 +156,8 @@ describe("NTE wrapped pak folders", () => {
         await writePak(path.join(shinku, "DISABLED ShinkuSwim"), "mod_P.pak.disabled");
 
         const roots = { modRoot, linkedRoot: null };
-        const characterMods = await getNteMods(desktopStub(), roots, character);
-        const characterGroups = await getNteSubGroups(desktopStub(), roots, character);
+        const characterMods = await getNteMods(desktopStub(), roots, character, false);
+        const characterGroups = await getNteSubGroups(desktopStub(), roots, character, false);
 
         assert.deepEqual(
             characterMods.mods.map((mod) => mod.name),
@@ -171,7 +176,12 @@ describe("NTE wrapped pak folders", () => {
         await writePak(path.join(daffodil, "longhairdaff", "Alt Skin"), "mod_P.pak");
         await writePak(path.join(daffodil, "longhairdaff", "Default Skin"), "mod_P.pak");
 
-        const group = await getNteMods(desktopStub(), { modRoot, linkedRoot: null }, daffodil);
+        const group = await getNteMods(
+            desktopStub(),
+            { modRoot, linkedRoot: null },
+            daffodil,
+            false,
+        );
 
         assert.deepEqual(
             group.mods.map((mod) => mod.name),
@@ -181,5 +191,102 @@ describe("NTE wrapped pak folders", () => {
             group.mods.every((mod) => mod.isEnabled),
             true,
         );
+    });
+});
+
+describe("NTE preview discovery", () => {
+    it("uses a generic media file in the mod folder as the preview", async () => {
+        const modRoot = await makeModRoot();
+        const shopGirl = path.join(modRoot, "NPC", "NPC_Shop Girl");
+        await writePak(shopGirl, "NPC_023_NSFW_P.pak");
+        const cover = path.join(shopGirl, "cover.jpg");
+        await fse.writeFile(cover, "preview");
+
+        const group = await getNteMods(
+            desktopStub(),
+            { modRoot, linkedRoot: null },
+            path.join(modRoot, "NPC"),
+            false,
+        );
+
+        assert.equal(group.mods[0]?.preview, cover);
+    });
+
+    it("finds a nested preview inside the mod folder", async () => {
+        const modRoot = await makeModRoot();
+        const shopGirl = path.join(modRoot, "NPC", "NPC_Shop Girl");
+        await writePak(shopGirl, "NPC_023_NSFW_P.pak");
+        const nested = path.join(shopGirl, "images", "shot.png");
+        await fse.ensureDir(path.dirname(nested));
+        await fse.writeFile(nested, "preview");
+
+        const group = await getNteMods(
+            desktopStub(),
+            { modRoot, linkedRoot: null },
+            path.join(modRoot, "NPC"),
+            false,
+        );
+
+        assert.equal(group.mods[0]?.preview, nested);
+    });
+
+    it("falls back to a non-preview filename on a wrapper folder", async () => {
+        const modRoot = await makeModRoot();
+        const sparkle = path.join(modRoot, "Character", "Shinku", "Shinku Natsu Sparkle 1.3");
+        await writePak(path.join(sparkle, "shinku"), "Shinku Natsu Sparkle_P.pak");
+        const cover = path.join(sparkle, "cover.jpg");
+        await fse.writeFile(cover, "preview");
+
+        const group = await getNteMods(
+            desktopStub(),
+            { modRoot, linkedRoot: null },
+            path.join(modRoot, "Character", "Shinku"),
+            false,
+        );
+
+        assert.equal(
+            group.mods.find((mod) => mod.name === "Shinku Natsu Sparkle 1.3 / shinku")?.preview,
+            cover,
+        );
+    });
+
+    it("searches child folders for a group preview only when enabled", async () => {
+        const modRoot = await makeModRoot();
+        const shinku = path.join(modRoot, "Character", "Shinku");
+        const nestedPreview = path.join(shinku, "Shinku Mod", "preview.png");
+        await writePak(path.join(shinku, "Shinku Mod"), "mod_P.pak");
+        await fse.writeFile(nestedPreview, "preview");
+
+        const roots = { modRoot, linkedRoot: null };
+        const withSearch = await getNteSubGroups(
+            desktopStub(),
+            roots,
+            path.join(modRoot, "Character"),
+            true,
+        );
+        const withoutSearch = await getNteSubGroups(
+            desktopStub(),
+            roots,
+            path.join(modRoot, "Character"),
+            false,
+        );
+
+        assert.equal(withSearch.find((group) => group.name === "Shinku")?.preview, nestedPreview);
+        assert.equal(withoutSearch.find((group) => group.name === "Shinku")?.preview, undefined);
+    });
+
+    it("uses the search setting for the group preview when listing mods", async () => {
+        const modRoot = await makeModRoot();
+        const npc = path.join(modRoot, "NPC");
+        const nestedPreview = path.join(npc, "NPC_Shop Girl", "preview.png");
+        await writePak(path.join(npc, "NPC_Shop Girl"), "NPC_023_NSFW_P.pak");
+        await fse.writeFile(nestedPreview, "preview");
+
+        const roots = { modRoot, linkedRoot: null };
+        const withSearch = await getNteMods(desktopStub(), roots, npc, true);
+        const withoutSearch = await getNteMods(desktopStub(), roots, npc, false);
+
+        assert.equal(withSearch.preview, nestedPreview);
+        assert.equal(withoutSearch.preview, undefined);
     });
 });
