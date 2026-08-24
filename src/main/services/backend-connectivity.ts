@@ -46,12 +46,7 @@ export class BackendConnectivity {
                     "User-Agent": `Nahida Desktop/${appVersion}`,
                 },
             });
-            await resp.arrayBuffer();
-
-            const body = await resp
-                .clone()
-                .json()
-                .catch(() => null) as { status?: string } | null;
+            const body = (await resp.json().catch(() => null)) as { status?: string } | null;
 
             if (body?.status === "maintenance") {
                 this.setStatus("maintenance");
