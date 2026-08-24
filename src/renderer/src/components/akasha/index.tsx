@@ -81,7 +81,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
     }
 
     return [
-      { id: session?.drive.rootId!, name: t("page.drive.title"), parentId: null },
+      { id: session?.drive.rootId ?? "", name: t("page.drive.title"), parentId: null },
       ...ancestors,
     ];
   }, [ancestors, location.pathname, session?.drive.rootId, t]);
@@ -124,7 +124,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
                 ? current.parentId
                 : isSharePath
                   ? "share"
-                  : session?.drive.rootId!;
+                  : (session?.drive.rootId ?? "");
+
+              if (!parentId) return;
 
               queueRevealForDestination(parentId);
 

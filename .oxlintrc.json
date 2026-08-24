@@ -4,7 +4,8 @@
   "categories": {},
   "rules": {
     "typescript/no-explicit-any": "warn",
-    "react/exhaustive-deps": "off"
+    "react/exhaustive-deps": "off",
+    "react/incompatible-library": "off"
   },
   "overrides": [
     {

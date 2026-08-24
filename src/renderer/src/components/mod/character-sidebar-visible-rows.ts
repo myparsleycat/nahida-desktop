@@ -117,7 +117,7 @@ export function collectManualSubGroupPaths(
         expandedGroups: Set<string>;
         persistentGroups: Set<string>;
         subGroupsByPath: Map<string, FolderGroup[]>;
-        manualSubGroupsByPath: Map<string, FolderGroup[]>;
+        manualSubGroupsByPath: { get(path: string): FolderGroup[] | undefined };
     },
 ) {
     const paths: string[] = [];

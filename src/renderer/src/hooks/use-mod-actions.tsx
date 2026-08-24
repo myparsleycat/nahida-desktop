@@ -138,7 +138,6 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       return;
     }
 
-    setRenameValue(getRenameDefaultValue(renameDialogState.mod.name));
     queueMicrotask(() => {
       renameInputRef.current?.focus();
       renameInputRef.current?.select();
@@ -382,7 +381,10 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openDeletePreview,
     openModelViewer,
     openPastePreview,
-    openRenameDialog: (mod) => setRenameDialogState({ mod, groupPath: selectedGroupPath }),
+    openRenameDialog: (mod) => {
+      setRenameValue(getRenameDefaultValue(mod.name));
+      setRenameDialogState({ mod, groupPath: selectedGroupPath });
+    },
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
     openTouchProfileDialog: (mod) => setTouchProfileMod(mod),

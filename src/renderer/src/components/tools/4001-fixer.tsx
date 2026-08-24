@@ -93,42 +93,30 @@ export default function FourThousandOneFixer() {
   }, []);
 
   useEffect(() => {
-    const fetchVersions = async () => {
-      const requestId = ++versionsRequestId.current;
-      const requestedProvider = provider;
+    if (isUpdating) return;
 
-      try {
-        const v: string[] = await window.api.invoke(
-          "tools:4001FixerGetProviderReleases",
-          requestedProvider,
-        );
+    const requestId = ++versionsRequestId.current;
+    const requestedProvider = provider;
+
+    void window.api
+      .invoke("tools:4001FixerGetProviderReleases", requestedProvider)
+      .then((v: string[]) => {
         if (versionsRequestId.current !== requestId) return;
 
         setVersions(v);
         setVersion(v[0] ?? "");
         setFetchError(false);
-      } catch {
+      })
+      .catch(() => {
         if (versionsRequestId.current !== requestId) return;
 
         setVersion("");
         setFetchError(true);
-      }
-    };
-
-    if (!isUpdating) {
-      setVersions(null);
-      setVersion("");
-      setFetchError(false);
-      void fetchVersions();
-    }
+      });
   }, [provider, isUpdating]);
 
   useEffect(() => {
-    if (!selectedImporter) {
-      setBackupPath("");
-      setRequiresElevation(false);
-      return;
-    }
+    if (!selectedImporter) return;
 
     let cancelled = false;
 
@@ -284,8 +272,11 @@ export default function FourThousandOneFixer() {
             <button
               key={importer.key}
               onClick={() => {
+                if (selectedImporter === importer.importerFolder) return;
                 setSelectedImporter(importer.importerFolder);
                 setSelectedImporterKey(importer.key);
+                setBackupPath("");
+                setRequiresElevation(false);
               }}
               className={`rounded border px-3 py-1.5 font-mono text-xs transition-all ${
                 selectedImporter === importer.importerFolder
@@ -333,7 +324,13 @@ export default function FourThousandOneFixer() {
                 {["SpectrumQT"].map((v) => (
                   <button
                     key={v}
-                    onClick={() => setProvider(v)}
+                    onClick={() => {
+                      if (provider === v) return;
+                      setProvider(v);
+                      setVersions(null);
+                      setVersion("");
+                      setFetchError(false);
+                    }}
                     className={`rounded border px-3 py-1.5 font-mono text-xs transition-all ${
                       provider === v
                         ? "border-accent bg-accent text-accent-foreground"

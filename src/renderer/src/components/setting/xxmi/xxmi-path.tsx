@@ -3,24 +3,23 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { InfoIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: () => void }) {
   const { t } = useTranslation();
   const [showAutoSearchAlert, setShowAutoSearchAlert] = useState(false);
-  const [xxmiPath, setXXMIPath] = useState("");
+  const [customPath, setCustomPath] = useState<string | null>(null);
 
-  useEffect(() => {
-    setXXMIPath(xxmiData?.xxmiPath || "");
-  }, [xxmiData]);
+  const xxmiPath = customPath ?? xxmiData?.xxmiPath ?? "";
 
   const saveXXMIPath = async () => {
     try {
       await window.api.invoke("xxmi:saveXXMIPath", xxmiPath);
       toast.success(t("page.setting.xxmi.fn.saveXXMIPath.success"));
       setShowAutoSearchAlert(false);
+      setCustomPath(null);
       refetch();
     } catch (rawErr) {
       const err = (rawErr as Error).message;
@@ -40,7 +39,7 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
         <Input
           value={xxmiPath}
           onChange={(e) => {
-            setXXMIPath(e.target.value);
+            setCustomPath(e.target.value);
           }}
         />
         <Button
@@ -54,7 +53,7 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
               return;
             }
 
-            setXXMIPath(path);
+            setCustomPath(path);
             setShowAutoSearchAlert(true);
           }}
         >

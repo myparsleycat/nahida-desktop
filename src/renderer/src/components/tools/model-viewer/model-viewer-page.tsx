@@ -1,4 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -25,9 +26,31 @@ export function ModelViewerPage({
   artifactRoot?: string;
 }) {
   const { t } = useTranslation();
-  const [manifest, setManifest] = useState<ModelViewerPageManifest | null>(null);
+  const [prevManifestPath, setPrevManifestPath] = useState(manifestPath);
   const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
   const [animationPlaying, setAnimationPlaying] = useState(false);
+
+  if (prevManifestPath !== manifestPath) {
+    setPrevManifestPath(manifestPath);
+    setAnimationFrameIndex(0);
+    setAnimationPlaying(false);
+  }
+
+  const { data: manifest = null } = useQuery({
+    queryKey: ["modelViewerManifest", manifestPath],
+    queryFn: async () => {
+      if (!manifestPath) {
+        return null;
+      }
+      const response = await fetch(modelViewerSourceToUrl(manifestPath));
+      if (!response.ok) {
+        throw new Error(`Failed to load manifest: ${manifestPath}`);
+      }
+      return (await response.json()) as ModelViewerPageManifest;
+    },
+    enabled: Boolean(manifestPath),
+  });
+
   const modelName = name || t("page.tools.model_viewer.title");
   const modelSrc = path ? modelViewerSourceToUrl(path) : "";
   const sourceContext = {
@@ -37,42 +60,6 @@ export function ModelViewerPage({
   const displayPath = sourceContext.artifactRoot || path;
   const activeAnimation = manifest?.animations?.[0] ?? null;
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!manifestPath) {
-      setManifest(null);
-      setAnimationFrameIndex(0);
-      setAnimationPlaying(false);
-      return;
-    }
-
-    fetch(modelViewerSourceToUrl(manifestPath))
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load manifest: ${manifestPath}`);
-        }
-        return (await response.json()) as ModelViewerPageManifest;
-      })
-      .then((nextManifest) => {
-        if (cancelled) {
-          return;
-        }
-        setManifest(nextManifest);
-        setAnimationFrameIndex(0);
-        setAnimationPlaying(false);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setManifest(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [manifestPath]);
 
   useEffect(() => {
     if (!activeAnimation || !animationPlaying || activeAnimation.frames.length <= 1) {
