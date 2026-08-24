@@ -4,18 +4,27 @@ import { Input } from "@renderer/components/ui/input";
 import { useSetting } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
-import { useModStore } from "@renderer/store/mod";
+import { type DownloadMode, useModStore } from "@renderer/store/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function DownloadConfirmationOverlay() {
+  const downloadMode = useModStore((s) => s.downloadMode);
+
+  if (!downloadMode) return null;
+
+  return (
+    <DownloadConfirmationOverlayContent key={downloadMode.downloadId} downloadMode={downloadMode} />
+  );
+}
+
+function DownloadConfirmationOverlayContent({ downloadMode }: { downloadMode: DownloadMode }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
   const resetUserSelectedDuringDownload = useModStore((s) => s.resetUserSelectedDuringDownload);
   const selectedGroup = useModStore((s) => s.selectedGroup);
@@ -24,21 +33,12 @@ export function DownloadConfirmationOverlay() {
 
   const selectedPath = selectedGroup?.path || null;
   const selectedGroupName = selectedGroup?.name;
-  const suggestedName = downloadMode?.suggestedName;
+  const suggestedName = downloadMode.suggestedName;
 
   const [fileName, setFileName] = useState(suggestedName || "");
-  const [shouldReturnToGamebanana, setShouldReturnToGamebanana] = useState(returnToGamebanana);
-
-  useEffect(() => {
-    setFileName(suggestedName || "");
-  }, [suggestedName]);
-
-  useEffect(() => {
-    setShouldReturnToGamebanana(returnToGamebanana);
-  }, [returnToGamebanana]);
 
   const handleConfirm = async () => {
-    if (!downloadMode || !selectedGroup) return;
+    if (!selectedGroup) return;
 
     try {
       await window.api.invoke(
@@ -50,7 +50,7 @@ export function DownloadConfirmationOverlay() {
 
       setDownloadMode(null);
       resetUserSelectedDuringDownload();
-      if (downloadMode.downloadSource === "gamebanana" && shouldReturnToGamebanana) {
+      if (downloadMode.downloadSource === "gamebanana" && returnToGamebanana) {
         void navigate({ to: "/gamebanana" });
       }
     } catch (error) {
@@ -60,8 +60,6 @@ export function DownloadConfirmationOverlay() {
   };
 
   const handleCancel = async () => {
-    if (!downloadMode) return;
-
     try {
       await window.api.invoke("pathSelector:cancel", downloadMode.downloadId);
       setDownloadMode(null);
@@ -70,8 +68,6 @@ export function DownloadConfirmationOverlay() {
       Logger.error(error, "DownloadConfirmationOverlay:handleCancel");
     }
   };
-
-  if (!downloadMode) return null;
 
   return (
     <div
@@ -133,9 +129,8 @@ export function DownloadConfirmationOverlay() {
           {downloadMode.downloadSource === "gamebanana" && (
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
-                checked={shouldReturnToGamebanana}
+                checked={returnToGamebanana}
                 onCheckedChange={(checked) => {
-                  setShouldReturnToGamebanana(checked);
                   void setSetting("mod.returnToGamebananaAfterDownload", checked);
                 }}
               />

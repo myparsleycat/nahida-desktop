@@ -279,7 +279,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           : Promise.resolve(),
       ]);
     },
-    [queryClient, selectedGame, selectedGroup?.path],
+    [queryClient, selectedGame, selectedGroup],
   );
 
   const savePreviewFile = useCallback(

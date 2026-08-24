@@ -1,23 +1,27 @@
 import { useEffect, useState } from "react";
 
 export function useDelayedSkeleton(isLoading: boolean, delay = 1000) {
-    const [shouldShow, setShouldShow] = useState(false);
+    const [delayed, setDelayed] = useState(false);
+    const [prevLoading, setPrevLoading] = useState(isLoading);
+
+    if (isLoading !== prevLoading) {
+        setPrevLoading(isLoading);
+        setDelayed(false);
+    }
 
     useEffect(() => {
-        let timer: NodeJS.Timeout;
-
-        if (isLoading) {
-            timer = setTimeout(() => {
-                setShouldShow(true);
-            }, delay);
-        } else {
-            setShouldShow(false);
+        if (!isLoading) {
+            return;
         }
 
+        const timer = setTimeout(() => {
+            setDelayed(true);
+        }, delay);
+
         return () => {
-            if (timer) clearTimeout(timer);
+            clearTimeout(timer);
         };
     }, [isLoading, delay]);
 
-    return shouldShow;
+    return isLoading && delayed;
 }

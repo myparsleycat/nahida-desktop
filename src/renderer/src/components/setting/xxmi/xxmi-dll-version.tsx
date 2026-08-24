@@ -9,8 +9,9 @@ import {
 } from "@renderer/components/ui/select";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { toErrorMessage } from "@shared/utils";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -22,48 +23,19 @@ export function XXMIDllVersion({
   refetch: () => void;
 }) {
   const { t } = useTranslation();
-  const [versions, setVersions] = useState<string[] | null>(null);
-  const [version, setVersion] = useState("");
-  const [fetchError, setFetchError] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 
+  const query = useQuery({
+    queryKey: ["xxmi:getLibsReleases"],
+    queryFn: () => window.api.invoke("xxmi:getLibsReleases"),
+  });
+
+  const versions = query.data;
+  const version = selectedVersion ?? versions?.[0] ?? "";
   const hasPath = !!xxmiData?.xxmiPath;
   const isCurrentVersion = (value: string) => isSameDllVersion(value, xxmiData?.dllVersion);
   const currentVersionLabel =
     versions?.find((item) => isCurrentVersion(item)) ?? xxmiData?.dllVersion;
-
-  const fetchReleases = (cancelled: { current: boolean }) => {
-    setVersions(null);
-    setFetchError(false);
-
-    void window.api
-      .invoke("xxmi:getLibsReleases")
-      .then((releases) => {
-        if (cancelled.current) return;
-        setVersions(releases);
-        setVersion(releases[0] ?? "");
-        setFetchError(false);
-      })
-      .catch(() => {
-        if (cancelled.current) return;
-        setVersions([]);
-        setVersion("");
-        setFetchError(true);
-      });
-  };
-
-  useEffect(() => {
-    const cancelled = { current: false };
-    fetchReleases(cancelled);
-
-    return () => {
-      cancelled.current = true;
-    };
-  }, []);
-
-  const handleRetry = () => {
-    const cancelled = { current: false };
-    fetchReleases(cancelled);
-  };
 
   const applyVersion = async () => {
     try {
@@ -99,19 +71,21 @@ export function XXMIDllVersion({
           <p className="text-sm text-muted-foreground">
             {t("page.setting.xxmi.persistNotFoundXXMI")}
           </p>
-        ) : fetchError ? (
+        ) : query.isError ? (
           <>
-            <p className="text-sm text-destructive">{t("page.setting.xxmi.dllVersionLoadFailed")}</p>
-            <Button variant="outline" size="sm" onClick={handleRetry}>
+            <p className="text-sm text-destructive">
+              {t("page.setting.xxmi.dllVersionLoadFailed")}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
               {t("page.setting.xxmi.dllVersionRetry")}
             </Button>
           </>
-        ) : versions === null ? (
+        ) : query.isPending ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2Icon className="size-3.5 animate-spin" />
             {t("page.setting.xxmi.dllVersionLoading")}
           </div>
-        ) : versions.length === 0 ? (
+        ) : !versions || versions.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("page.setting.xxmi.dllVersionEmpty")}</p>
         ) : (
           <>
@@ -120,7 +94,7 @@ export function XXMIDllVersion({
               value={version}
               onValueChange={(value) => {
                 if (value === null) return;
-                setVersion(value);
+                setSelectedVersion(value);
               }}
             >
               <SelectTrigger className="w-36">
@@ -139,7 +113,11 @@ export function XXMIDllVersion({
             <Button
               onClickPromise={applyVersion}
               disabled={
-                !hasPath || !version || fetchError || versions === null || isCurrentVersion(version)
+                !hasPath ||
+                !version ||
+                query.isError ||
+                query.isPending ||
+                isCurrentVersion(version)
               }
             >
               {t("g.confirm")}

@@ -25,7 +25,7 @@ import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Plus, ShieldAlert, XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -56,6 +56,36 @@ interface NteResolution {
 }
 
 export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGameDialogProps) {
+  const isOpen = useModStore((s) => s.isAddGameDialogOpen);
+  const setIsOpen = useModStore((s) => s.setIsAddGameDialogOpen);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger render={<Button variant="outline" size="icon" />}>
+        <Plus className="size-4" />
+      </DialogTrigger>
+      {isOpen && (
+        <AddGameDialogContent
+          isAddingGame={isAddingGame}
+          onPickFolder={onPickFolder}
+          onAddGame={onAddGame}
+          onClose={() => setIsOpen(false)}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+interface AddGameDialogContentProps extends AddGameDialogProps {
+  onClose: () => void;
+}
+
+function AddGameDialogContent({
+  isAddingGame,
+  onPickFolder,
+  onAddGame,
+  onClose,
+}: AddGameDialogContentProps) {
   const formId = "add-game-dialog-form";
   const { t } = useTranslation();
   const navi = useNavigate();
@@ -64,8 +94,6 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
   const [selectedImporter, setSelectedImporter] = useState(NO_IMPORTER_VALUE);
   const isNteSelected = isNteImporter(selectedImporter);
 
-  const isOpen = useModStore((s) => s.isAddGameDialogOpen);
-  const setIsOpen = useModStore((s) => s.setIsAddGameDialogOpen);
   const { data: xxmiData } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
     queryFn: () => window.api.invoke("xxmi:getXXMIData"),
@@ -127,14 +155,6 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
     },
   });
 
-  useEffect(() => {
-    if (!isOpen) {
-      form.reset();
-      setNteResolution(null);
-      setSelectedImporter(NO_IMPORTER_VALUE);
-    }
-  }, [form, isOpen]);
-
   const handlePickFolder = async () => {
     const path = await onPickFolder();
     if (!path) return;
@@ -154,17 +174,8 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
     }
   };
 
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
-    if (!open) {
-      form.reset();
-      setNteResolution(null);
-      setSelectedImporter(NO_IMPORTER_VALUE);
-    }
-  };
-
   const handleOpenXXMISettings = () => {
-    handleOpenChange(false);
+    onClose();
     void navi({ to: "/setting/xxmi" });
   };
 
@@ -200,221 +211,212 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button variant="outline" size="icon" />}>
-        <Plus className="size-4" />
-      </DialogTrigger>
-      <DialogContent className="w-100">
-        <DialogHeader>
-          <DialogTitle>{t("page.mod.dialog.add-game.title")}</DialogTitle>
-        </DialogHeader>
-        <form
-          id={formId}
-          className="space-y-4 py-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            void form.handleSubmit();
+    <DialogContent className="w-100">
+      <DialogHeader>
+        <DialogTitle>{t("page.mod.dialog.add-game.title")}</DialogTitle>
+      </DialogHeader>
+      <form
+        id={formId}
+        className="space-y-4 py-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void form.handleSubmit();
+        }}
+      >
+        <form.Field
+          name="name"
+          validators={{
+            onChange: ({ value }) => (value.trim() ? undefined : t("page.mod.dialog.add-game.#.0")),
           }}
-        >
-          <form.Field
-            name="name"
-            validators={{
-              onChange: ({ value }) =>
-                value.trim() ? undefined : t("page.mod.dialog.add-game.#.0"),
-            }}
-            children={(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>
-                  {t("page.mod.dialog.add-game.name_input_placeholder")}
-                </FieldLabel>
+          children={(field) => (
+            <Field>
+              <FieldLabel htmlFor={field.name}>
+                {t("page.mod.dialog.add-game.name_input_placeholder")}
+              </FieldLabel>
+              <Input
+                id={field.name}
+                value={field.state.value}
+                readOnly={isNteSelected}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+              {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+              ) : null}
+            </Field>
+          )}
+        />
+
+        <form.Field
+          name="path"
+          validators={{
+            onChange: ({ value }) => (value.trim() ? undefined : t("page.mod.dialog.add-game.#.1")),
+          }}
+          children={(field) => (
+            <Field>
+              <FieldLabel htmlFor={field.name}>
+                {isNteSelected
+                  ? t("page.mod.dialog.add-game.nte_install_path")
+                  : t("page.mod.dialog.add-game.path_input_placeholder")}
+              </FieldLabel>
+              <div className="flex gap-2">
                 <Input
                   id={field.name}
                   value={field.state.value}
-                  readOnly={isNteSelected}
+                  readOnly={!isNteSelected}
+                  hideFocusRing
                   onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value);
+                    setNteResolution(null);
+                  }}
                 />
-                {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                  <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
-                ) : null}
-              </Field>
-            )}
-          />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={isNteSelected && isResolvingNte}
+                  onClick={() => void handlePickFolder()}
+                >
+                  <FolderOpen className="size-4" />
+                </Button>
+              </div>
+              {nteResolution && isNteSelected ? (
+                <p className="text-xs break-all text-muted-foreground">
+                  {nteResolution.modFolderPath}
+                </p>
+              ) : null}
+              {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+              ) : null}
+            </Field>
+          )}
+        />
 
+        {isNteSelected && (
           <form.Field
-            name="path"
-            validators={{
-              onChange: ({ value }) =>
-                value.trim() ? undefined : t("page.mod.dialog.add-game.#.1"),
-            }}
+            name="customModFolderPath"
             children={(field) => (
               <Field>
-                <FieldLabel htmlFor={field.name}>
-                  {isNteSelected
-                    ? t("page.mod.dialog.add-game.nte_install_path")
-                    : t("page.mod.dialog.add-game.path_input_placeholder")}
-                </FieldLabel>
+                <FieldLabel>{t("page.mod.dialog.add-game.nte_custom_mod_folder")}</FieldLabel>
                 <div className="flex gap-2">
                   <Input
                     id={field.name}
                     value={field.state.value}
-                    readOnly={!isNteSelected}
+                    readOnly
                     hideFocusRing
                     onBlur={field.handleBlur}
-                    onChange={(e) => {
-                      field.handleChange(e.target.value);
-                      setNteResolution(null);
-                    }}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    disabled={isNteSelected && isResolvingNte}
-                    onClick={() => void handlePickFolder()}
+                    onClick={handlePickCustomModFolder}
                   >
                     <FolderOpen className="size-4" />
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!field.state.value}
+                    onClick={() => field.handleChange("")}
+                  >
+                    <XIcon className="size-4" />
+                  </Button>
                 </div>
-                {nteResolution && isNteSelected ? (
-                  <p className="text-xs break-all text-muted-foreground">
-                    {nteResolution.modFolderPath}
-                  </p>
-                ) : null}
-                {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                  <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
-                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  {t("page.mod.dialog.add-game.nte_custom_mod_folder_description")}
+                </p>
               </Field>
             )}
           />
+        )}
 
-          {isNteSelected && (
-            <form.Field
-              name="customModFolderPath"
-              children={(field) => (
-                <Field>
-                  <FieldLabel>{t("page.mod.dialog.add-game.nte_custom_mod_folder")}</FieldLabel>
-                  <div className="flex gap-2">
-                    <Input
-                      id={field.name}
-                      value={field.state.value}
-                      readOnly
-                      hideFocusRing
-                      onBlur={field.handleBlur}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={handlePickCustomModFolder}
-                    >
-                      <FolderOpen className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={!field.state.value}
-                      onClick={() => field.handleChange("")}
-                    >
-                      <XIcon className="size-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.mod.dialog.add-game.nte_custom_mod_folder_description")}
-                  </p>
-                </Field>
-              )}
-            />
-          )}
+        {isNteSelected && nteResolution?.requiresElevation ? (
+          <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
+            <ShieldAlert className="size-4" />
+            <AlertTitle>{t("page.mod.dialog.add-game.nte_system_folder_warning_title")}</AlertTitle>
+            <AlertDescription className="text-current/80">
+              {t("page.mod.dialog.add-game.nte_system_folder_warning_description")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-          {isNteSelected && nteResolution?.requiresElevation ? (
-            <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
-              <ShieldAlert className="size-4" />
-              <AlertTitle>
-                {t("page.mod.dialog.add-game.nte_system_folder_warning_title")}
-              </AlertTitle>
-              <AlertDescription className="text-current/80">
-                {t("page.mod.dialog.add-game.nte_system_folder_warning_description")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+        <NteBootstrapProgressView active={isAddingGame && isNteSelected} />
 
-          <NteBootstrapProgressView active={isAddingGame && isNteSelected} />
-
-          <form.Field
-            name="importer"
-            children={(field) => (
-              <Field>
-                <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
-                <Select
-                  value={field.state.value}
-                  items={[
-                    { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
-                    ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
-                  ]}
-                  onValueChange={(value) => {
-                    if (value === null) return;
-                    handleImporterChange(value, field.handleChange);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("g.select")} />
-                  </SelectTrigger>
-                  <SelectContent aria-describedby={undefined}>
-                    <SelectGroup>
-                      <SelectItem value={NO_IMPORTER_VALUE}>
-                        {t("page.mod.dialog.edit-game.no_importer")}
-                      </SelectItem>
-                      {importers.map((importer) => (
-                        <SelectItem key={importer.key} value={importer.key}>
-                          {importer.key}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {!isXXMIConfigured && !isNteImporter(field.state.value) && (
-                  <Alert>
-                    <AlertDescription>
-                      <div className="flex flex-col gap-3">
-                        <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-fit"
-                          onClick={handleOpenXXMISettings}
-                        >
-                          {t("page.mod.dialog.add-game.open_xxmi_settings")}
-                        </Button>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </Field>
-            )}
-          />
-        </form>
-        <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            {t("g.cancel")}
-          </DialogClose>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-            children={([canSubmit, isSubmitting]) => (
-              <Button
-                form={formId}
-                type="submit"
-                disabled={!canSubmit || isSubmitting || isAddingGame}
+        <form.Field
+          name="importer"
+          children={(field) => (
+            <Field>
+              <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
+              <Select
+                value={field.state.value}
+                items={[
+                  { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
+                  ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
+                ]}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  handleImporterChange(value, field.handleChange);
+                }}
               >
-                {t("g.add")}
-              </Button>
-            )}
-          />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("g.select")} />
+                </SelectTrigger>
+                <SelectContent aria-describedby={undefined}>
+                  <SelectGroup>
+                    <SelectItem value={NO_IMPORTER_VALUE}>
+                      {t("page.mod.dialog.edit-game.no_importer")}
+                    </SelectItem>
+                    {importers.map((importer) => (
+                      <SelectItem key={importer.key} value={importer.key}>
+                        {importer.key}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {!isXXMIConfigured && !isNteImporter(field.state.value) && (
+                <Alert>
+                  <AlertDescription>
+                    <div className="flex flex-col gap-3">
+                      <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-fit"
+                        onClick={handleOpenXXMISettings}
+                      >
+                        {t("page.mod.dialog.add-game.open_xxmi_settings")}
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </Field>
+          )}
+        />
+      </form>
+      <DialogFooter>
+        <DialogClose render={<Button type="button" variant="outline" />}>
+          {t("g.cancel")}
+        </DialogClose>
+        <form.Subscribe
+          selector={(state) => [state.canSubmit, state.isSubmitting]}
+          children={([canSubmit, isSubmitting]) => (
+            <Button
+              form={formId}
+              type="submit"
+              disabled={!canSubmit || isSubmitting || isAddingGame}
+            >
+              {t("g.add")}
+            </Button>
+          )}
+        />
+      </DialogFooter>
+    </DialogContent>
   );
 }
 

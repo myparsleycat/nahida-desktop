@@ -17,6 +17,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Switch } from "@renderer/components/ui/switch";
+import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
 import { cn } from "@renderer/lib/utils";
 import type {
   TextureColorSpace,
@@ -81,6 +82,7 @@ export function TextureResizerWorkspace({
   >({});
   const [upscaleProgress, setUpscaleProgress] = useState<TextureUpscaleProgressEvent | null>(null);
   const batchRunningRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const settingsForm = useForm({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
@@ -100,31 +102,55 @@ export function TextureResizerWorkspace({
     selectedPaths.has(texture.filePath),
   );
 
-  useEffect(() => {
+  const [prevFixedTargetPath, setPrevFixedTargetPath] = useState(fixedTargetPath);
+  if (fixedTargetPath !== prevFixedTargetPath) {
+    setPrevFixedTargetPath(fixedTargetPath);
     setTargetPath(fixedTargetPath ?? "");
-  }, [fixedTargetPath]);
+  }
 
-  useEffect(() => {
-    return window.api.on("tools:textureUpscaleProgress", (event) => {
-      setUpscaleProgress(event);
-    });
-  }, []);
+  const loadTextures = async (
+    nextTargetPath = targetPath,
+    nextSettings = settingsForm.state.values,
+    requestId = ++loadRequestIdRef.current,
+  ) => {
+    const normalizedTargetPath = nextTargetPath.trim();
+    if (!normalizedTargetPath) {
+      return;
+    }
 
-  useEffect(() => {
-    window.api
-      .invoke("tools:getTextureResizeSettings")
-      .then((nextSettings) => {
-        settingsForm.reset(nextSettings);
-        if (mode === "mod" && fixedTargetPath) {
-          void loadTextures(fixedTargetPath, nextSettings);
-        }
-      })
-      .catch((error) => {
-        toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
-          description: toErrorMessage(error),
-        });
+    if (isCurrentRequest(requestId, loadRequestIdRef)) {
+      setIsListing(true);
+    }
+    try {
+      const nextTextures = await resolveIfCurrent(requestId, loadRequestIdRef, () =>
+        mode === "mod"
+          ? window.api.invoke("tools:listTextureMod", normalizedTargetPath, nextSettings)
+          : window.api.invoke("tools:listTextureFolder", normalizedTargetPath, nextSettings),
+      );
+      if (nextTextures === undefined) {
+        return;
+      }
+      setTextures(nextTextures);
+      setLoadedTargetPath(normalizedTargetPath);
+      const available = new Set(
+        nextTextures.filter((texture) => texture.canProcess).map((texture) => texture.filePath),
+      );
+      setSelectedPaths(
+        (current) => new Set([...current].filter((filePath) => available.has(filePath))),
+      );
+    } catch (error) {
+      if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+        return;
+      }
+      toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
+        description: toErrorMessage(error),
       });
-  }, [fixedTargetPath, mode, settingsForm, t]);
+    } finally {
+      if (isCurrentRequest(requestId, loadRequestIdRef)) {
+        setIsListing(false);
+      }
+    }
+  };
 
   const browseTargetPath = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -137,37 +163,34 @@ export function TextureResizerWorkspace({
     }
   };
 
-  const loadTextures = async (
-    nextTargetPath = targetPath,
-    nextSettings = settingsForm.state.values,
-  ) => {
-    const normalizedTargetPath = nextTargetPath.trim();
-    if (!normalizedTargetPath) {
-      return;
-    }
+  useEffect(() => {
+    return window.api.on("tools:textureUpscaleProgress", (event) => {
+      setUpscaleProgress(event);
+    });
+  }, []);
 
-    setIsListing(true);
-    try {
-      const nextTextures =
-        mode === "mod"
-          ? await window.api.invoke("tools:listTextureMod", normalizedTargetPath, nextSettings)
-          : await window.api.invoke("tools:listTextureFolder", normalizedTargetPath, nextSettings);
-      setTextures(nextTextures);
-      setLoadedTargetPath(normalizedTargetPath);
-      const available = new Set(
-        nextTextures.filter((texture) => texture.canProcess).map((texture) => texture.filePath),
-      );
-      setSelectedPaths(
-        (current) => new Set([...current].filter((filePath) => available.has(filePath))),
-      );
-    } catch (error) {
-      toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
-        description: toErrorMessage(error),
+  useEffect(() => {
+    const requestId = ++loadRequestIdRef.current;
+    window.api
+      .invoke("tools:getTextureResizeSettings")
+      .then((nextSettings) => {
+        if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+          return;
+        }
+        settingsForm.reset(nextSettings);
+        if (mode === "mod" && fixedTargetPath) {
+          void loadTextures(fixedTargetPath, nextSettings, requestId);
+        }
+      })
+      .catch((error) => {
+        if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+          return;
+        }
+        toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
+          description: toErrorMessage(error),
+        });
       });
-    } finally {
-      setIsListing(false);
-    }
-  };
+  }, [fixedTargetPath, mode, settingsForm, t]);
 
   const toggleTexture = (filePath: string, selected: boolean) => {
     setSelectedPaths((current) => {

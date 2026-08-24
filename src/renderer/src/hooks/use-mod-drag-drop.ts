@@ -27,6 +27,12 @@ export function useModDragDrop(
 ) {
     const { t } = useTranslation();
     const [isDragging, setIsDragging] = useState(false);
+    const [prevGroupPath, setPrevGroupPath] = useState(groupPath);
+
+    if (groupPath !== prevGroupPath) {
+        setPrevGroupPath(groupPath);
+        setIsDragging(false);
+    }
     const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<string | null>(
         null,
     );
@@ -110,12 +116,6 @@ export function useModDragDrop(
             archivePromptQueueRef.current = [];
         };
     }, []);
-
-    useEffect(() => {
-        if (!groupPath) {
-            setIsDragging(false);
-        }
-    }, [groupPath]);
 
     const isArchive = (filePath: string): boolean => {
         const ext = path.extname(filePath).toLowerCase();

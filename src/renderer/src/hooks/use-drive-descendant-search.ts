@@ -13,13 +13,18 @@ export function useDriveDescendantSearch(effectiveId: string) {
     const includeSubdirs = useViewStore((s) => s.includeSubdirs);
 
     const [debouncedQ, setDebouncedQ] = useState("");
+    const [prevEffectiveId, setPrevEffectiveId] = useState(effectiveId);
+
+    if (effectiveId !== prevEffectiveId) {
+        setPrevEffectiveId(effectiveId);
+        setDebouncedQ("");
+    }
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: <>
     useEffect(() => {
         if (searchInDirQuery) {
             setSearchInDirQuery("");
         }
-        setDebouncedQ("");
     }, [effectiveId]);
 
     useEffect(() => {

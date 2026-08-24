@@ -240,6 +240,56 @@ function buildHighlightRegions(
   ];
 }
 
+function buildLoadedMeshes(
+  rawMeshes: Array<{
+    id: string;
+    name: string;
+    positions: unknown;
+    positionPath: string;
+    positionRelativePath: string;
+    positionStride: number;
+    vertexCount: number;
+    indices?: unknown;
+    vectorPath?: string;
+    vectorLayout?: "snorm8-tangent-normal" | null;
+    blendBytes?: unknown;
+    blendStride?: number;
+    bones?: BlendBoneInfo[];
+  }>,
+): LoadedMesh[] {
+  return rawMeshes.map((mesh) => {
+    const originalPositions = toFloat32(mesh.positions);
+    const indices = toUint32(mesh.indices);
+    const adjacency = indices ? buildVertexAdjacency(mesh.vertexCount, indices) : undefined;
+    const componentIds = adjacency
+      ? buildConnectedComponents(mesh.vertexCount, adjacency)
+      : undefined;
+    const symmetryMap = buildSymmetryMap(originalPositions, "x", 1e-3);
+    return {
+      id: mesh.id,
+      name: mesh.name,
+      positionPath: mesh.positionPath,
+      positionRelativePath: mesh.positionRelativePath,
+      positionStride: mesh.positionStride,
+      vertexCount: mesh.vertexCount,
+      originalPositions,
+      previewPositions: new Float32Array(originalPositions),
+      indices,
+      vectorPath: mesh.vectorPath,
+      vectorLayout: mesh.vectorLayout ?? null,
+      blendBytes: toUint8(mesh.blendBytes),
+      blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
+      bones: mesh.bones ?? [],
+      weightCache: new Map(),
+      selectionWeights: new Float32Array(mesh.vertexCount),
+      adjacency,
+      originalNormals: indices ? computeVertexNormals(originalPositions, indices) : undefined,
+      componentIds,
+      symmetryMap,
+    };
+  });
+}
+
 export default function BodyShapeTool({
   fixedTargetPath,
   modName,
@@ -251,7 +301,8 @@ export default function BodyShapeTool({
 } = {}) {
   const { t } = useTranslation();
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
-  const [loading, setLoading] = useState(false);
+  const [prevFixedTargetPath, setPrevFixedTargetPath] = useState(fixedTargetPath);
+  const [loading, setLoading] = useState(Boolean(fixedTargetPath));
   const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
   const [selectedMeshId, setSelectedMeshId] = useState<string>("");
@@ -274,24 +325,31 @@ export default function BodyShapeTool({
 
   const isFixedTarget = Boolean(fixedTargetPath);
   const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
-  const prevPositionInputsRef = useRef<{
-    regions: readonly ActiveRegionDeform[] | null;
-    showOriginal: boolean;
-  }>({ regions: null, showOriginal: false });
   const previewKeyRef = useRef<string | null>(null);
   const selectionStrokeBeforeRef = useRef<Float32Array | null>(null);
   const selectionHistoryRef = useRef<{
     undo: SelectionHistoryEntry[];
     redo: SelectionHistoryEntry[];
   }>({ undo: [], redo: [] });
-  const [, setHistoryVersion] = useState(0);
+  const [{ canUndoSelection, canRedoSelection }, setHistoryState] = useState({
+    canUndoSelection: false,
+    canRedoSelection: false,
+  });
+
+  if (fixedTargetPath !== prevFixedTargetPath) {
+    setPrevFixedTargetPath(fixedTargetPath);
+    if (fixedTargetPath) {
+      setLoading(true);
+      setLoaded(null);
+    }
+  }
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
     return loaded.meshes.find((mesh) => mesh.id === selectedMeshId) ?? loaded.meshes[0] ?? null;
   }, [loaded, selectedMeshId]);
 
-  const useBones = !!selectedMesh && selectedMesh.bones.length > 0;
+  const useBones = Boolean(selectedMesh && selectedMesh.bones.length > 0);
 
   const selectableItems = useMemo(() => {
     if (!selectedMesh) return [] as { key: string; label: string }[];
@@ -337,10 +395,17 @@ export default function BodyShapeTool({
     ];
   }, [selectedMesh, hasSelection, unifiedControl, deformOperation, weightVersion]);
 
+  const updateHistoryState = () => {
+    setHistoryState({
+      canUndoSelection: selectionHistoryRef.current.undo.length > 0,
+      canRedoSelection: selectionHistoryRef.current.redo.length > 0,
+    });
+  };
+
   const resetSelectionHistory = () => {
     selectionHistoryRef.current = { undo: [], redo: [] };
     selectionStrokeBeforeRef.current = null;
-    setHistoryVersion((version) => version + 1);
+    updateHistoryState();
   };
 
   const commitSelectionHistory = (before: Float32Array) => {
@@ -352,7 +417,7 @@ export default function BodyShapeTool({
       selectionHistoryRef.current.undo.shift();
     }
     selectionHistoryRef.current.redo = [];
-    setHistoryVersion((version) => version + 1);
+    updateHistoryState();
   };
 
   const handleBrushStroke = (stroke: BrushStrokeInput) => {
@@ -496,7 +561,7 @@ export default function BodyShapeTool({
     selectedMesh.selectionWeights.set(entry.before);
     selectionHistoryRef.current.redo.push(entry);
     setSelectedKeys([]);
-    setHistoryVersion((version) => version + 1);
+    updateHistoryState();
     setWeightVersion((version) => version + 1);
   };
 
@@ -507,7 +572,7 @@ export default function BodyShapeTool({
     selectedMesh.selectionWeights.set(entry.after);
     selectionHistoryRef.current.undo.push(entry);
     setSelectedKeys([]);
-    setHistoryVersion((version) => version + 1);
+    updateHistoryState();
     setWeightVersion((version) => version + 1);
   };
 
@@ -542,13 +607,6 @@ export default function BodyShapeTool({
     return displacementMetrics(selectedMesh.originalPositions, selectedMesh.previewPositions);
   }, [selectedMesh, activeRegions, showOriginal, weightVersion]);
 
-  const positionsChanged =
-    prevPositionInputsRef.current.regions !== activeRegions ||
-    prevPositionInputsRef.current.showOriginal !== showOriginal;
-  useEffect(() => {
-    prevPositionInputsRef.current = { regions: activeRegions, showOriginal };
-  }, [activeRegions, showOriginal]);
-
   const selectFolder = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
       properties: ["openDirectory"],
@@ -557,42 +615,10 @@ export default function BodyShapeTool({
     setModPath(selected.filePaths[0]);
   };
 
-  const loadMod = async (path = modPath) => {
-    if (!path || loading) return;
-    setLoading(true);
+  const loadModFromPath = async (path: string) => {
     try {
       const result = await window.api.invoke("tools:bodyShapeLoadMod", path);
-      const meshes: LoadedMesh[] = result.meshes.map((mesh) => {
-        const originalPositions = toFloat32(mesh.positions);
-        const indices = toUint32(mesh.indices);
-        const adjacency = indices ? buildVertexAdjacency(mesh.vertexCount, indices) : undefined;
-        const componentIds = adjacency
-          ? buildConnectedComponents(mesh.vertexCount, adjacency)
-          : undefined;
-        const symmetryMap = buildSymmetryMap(originalPositions, "x", 1e-3);
-        return {
-          id: mesh.id,
-          name: mesh.name,
-          positionPath: mesh.positionPath,
-          positionRelativePath: mesh.positionRelativePath,
-          positionStride: mesh.positionStride,
-          vertexCount: mesh.vertexCount,
-          originalPositions,
-          previewPositions: new Float32Array(originalPositions),
-          indices,
-          vectorPath: mesh.vectorPath,
-          vectorLayout: mesh.vectorLayout ?? null,
-          blendBytes: toUint8(mesh.blendBytes),
-          blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
-          bones: mesh.bones ?? [],
-          weightCache: new Map(),
-          selectionWeights: new Float32Array(mesh.vertexCount),
-          adjacency,
-          originalNormals: indices ? computeVertexNormals(originalPositions, indices) : undefined,
-          componentIds,
-          symmetryMap,
-        };
-      });
+      const meshes = buildLoadedMeshes(result.meshes);
       setLoaded({
         modRoot: result.modRoot,
         iniPath: result.iniPath,
@@ -616,28 +642,64 @@ export default function BodyShapeTool({
     }
   };
 
+  const loadMod = async (path = modPath) => {
+    if (!path || loading) return;
+    setModPath(path);
+    setLoading(true);
+    await loadModFromPath(path);
+  };
+
   useEffect(() => {
     if (!fixedTargetPath) return;
-    setModPath(fixedTargetPath);
-    void loadMod(fixedTargetPath);
+    let active = true;
+    const loadInitial = async () => {
+      try {
+        const result = await window.api.invoke("tools:bodyShapeLoadMod", fixedTargetPath);
+        if (!active) return;
+        const meshes = buildLoadedMeshes(result.meshes);
+        setLoaded({
+          modRoot: result.modRoot,
+          iniPath: result.iniPath,
+          meshes,
+        });
+        setSelectedMeshId(meshes[0]?.id ?? "");
+        setSelectedKeys([]);
+        resetSelectionHistory();
+        previewKeyRef.current = null;
+        setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+        setDeformOperation("scale");
+        setWeightVersion((v) => v + 1);
+        setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+        setShowWeights(true);
+      } catch (error) {
+        if (!active) return;
+        toast.error(t("page.tools.body_shape.toast.load_failed"), {
+          description: toErrorMessage(error),
+        });
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void loadInitial();
+    return () => {
+      active = false;
+    };
   }, [fixedTargetPath]);
 
   const applySelectedKeys = (nextKeys: string[]) => {
     setSelectedKeys(nextKeys);
     if (!selectedMesh) return;
     const before = new Float32Array(selectedMesh.selectionWeights);
-    selectedMesh.selectionWeights.fill(0);
+    const newWeights = new Float32Array(selectedMesh.vertexCount);
     for (const key of nextKeys) {
       const source = parseWeightKey(key);
       if (!source) continue;
       const boneWeights = getOrCreateWeights(selectedMesh, source);
       for (let index = 0; index < selectedMesh.vertexCount; index++) {
-        selectedMesh.selectionWeights[index] = Math.max(
-          selectedMesh.selectionWeights[index],
-          boneWeights[index] ?? 0,
-        );
+        newWeights[index] = Math.max(newWeights[index], boneWeights[index] ?? 0);
       }
     }
+    selectedMesh.selectionWeights.set(newWeights);
     commitSelectionHistory(before);
     setWeightVersion((version) => version + 1);
   };
@@ -756,8 +818,6 @@ export default function BodyShapeTool({
   };
 
   const selectedItems = selectableItems.filter((item) => selectedKeys.includes(item.key));
-  const canUndoSelection = selectionHistoryRef.current.undo.length > 0;
-  const canRedoSelection = selectionHistoryRef.current.redo.length > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
@@ -799,7 +859,6 @@ export default function BodyShapeTool({
               showOriginal={showOriginal}
               showWeights={showWeights}
               weightVersion={weightVersion}
-              positionsChanged={positionsChanged}
               orientation={modelOrientation}
               brushEnabled={brushEnabled}
               brushMode={brushMode}

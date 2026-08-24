@@ -292,18 +292,6 @@ export function ModDetailPanel({
     }
   };
 
-  useEffect(() => {
-    setLightboxPreviewIndex(null);
-  }, [modOverviewQuery.data?.profile._idRow]);
-
-  useEffect(() => {
-    setCommentSort("popular");
-  }, [modId, modelName]);
-
-  useEffect(() => {
-    setLikeOverride((current) => (current?.key === likeOperationKey ? current : null));
-  }, [likeOperationKey]);
-
   const comments = useMemo(() => {
     const seen = new Set<number>();
 

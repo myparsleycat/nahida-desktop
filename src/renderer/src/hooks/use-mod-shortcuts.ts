@@ -1,26 +1,19 @@
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
-import { modStore, useModStore } from "@renderer/store/mod";
+import { modStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
     const latestSearchQueryRef = useRef(searchQuery);
     const latestFilteredModsRef = useRef(filteredMods);
-    const isMergeMode = useModStore((s) => s.isMergeMode);
-    const exitMergeMode = useModStore((s) => s.exitMergeMode);
-    const setSearchQuery = useModStore((s) => s.setSearchQuery);
-    const setSearchQueryRef = useRef(setSearchQuery);
     const { exclusiveToggleModMutation } = useModMutations();
     const exclusiveToggleRef = useRef(exclusiveToggleModMutation.mutate);
 
-    const isMergeModeRef = useRef(isMergeMode);
-    const exitMergeModeRef = useRef(exitMergeMode);
-    latestSearchQueryRef.current = searchQuery;
-    latestFilteredModsRef.current = filteredMods;
-    setSearchQueryRef.current = setSearchQuery;
-    exclusiveToggleRef.current = exclusiveToggleModMutation.mutate;
-    isMergeModeRef.current = isMergeMode;
-    exitMergeModeRef.current = exitMergeMode;
+    useLayoutEffect(() => {
+        latestSearchQueryRef.current = searchQuery;
+        latestFilteredModsRef.current = filteredMods;
+        exclusiveToggleRef.current = exclusiveToggleModMutation.mutate;
+    });
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,12 +39,16 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
             }
 
             if (e.key === "Escape") {
-                if (e.defaultPrevented || !isMergeModeRef.current || hasOpenDialogOrOverlay()) {
+                if (
+                    e.defaultPrevented ||
+                    !modStore.getState().isMergeMode ||
+                    hasOpenDialogOrOverlay()
+                ) {
                     return;
                 }
 
                 e.preventDefault();
-                exitMergeModeRef.current();
+                modStore.getState().exitMergeMode();
                 return;
             }
 
@@ -59,7 +56,7 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
                 return;
             }
 
-            if (isMergeModeRef.current) {
+            if (modStore.getState().isMergeMode) {
                 return;
             }
 
@@ -74,7 +71,7 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
 
             e.preventDefault();
             exclusiveToggleRef.current(latestFilteredModsRef.current[0]);
-            setSearchQueryRef.current("");
+            modStore.getState().setSearchQuery("");
         };
 
         window.addEventListener("keydown", handleKeyDown);
