@@ -50,7 +50,7 @@ export function useCharacterSidebarVisibleRows(
         return map;
     }, [subGroupPaths, subGroupQueries]);
 
-    const manualPaths = collectManualSubGroupPaths(groups, {
+    const collectedManualPaths = collectManualSubGroupPaths(groups, {
         isSearching,
         expandedGroups,
         persistentGroups,
@@ -59,6 +59,8 @@ export function useCharacterSidebarVisibleRows(
             get: (path) => queryClient.getQueryData<FolderGroup[]>(["manualSubGroups", path]),
         },
     });
+    const manualPathsKey = collectedManualPaths.join("\0");
+    const manualPaths = useMemo(() => collectedManualPaths, [manualPathsKey]);
 
     const manualQueries = useQueries({
         queries: manualPaths.map((path) => ({

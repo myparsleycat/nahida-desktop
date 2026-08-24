@@ -1,4 +1,3 @@
-// oxlint-disable react/immutability, react/set-state-in-effect
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
@@ -257,17 +256,21 @@ function ThreeModelScene({
   }, [orientation]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/immutability
     gl.outputColorSpace = SRGBColorSpace;
+    // oxlint-disable-next-line react/immutability
     gl.toneMapping =
       threeToneMapping === "aces"
         ? ACESFilmicToneMapping
         : threeToneMapping === "none"
           ? NoToneMapping
           : NeutralToneMapping;
+    // oxlint-disable-next-line react/immutability
     gl.toneMappingExposure = Number.isFinite(threeExposure) ? threeExposure : 1;
     gl.setClearAlpha(0);
 
     if (threeEnvironment === "none") {
+      // oxlint-disable-next-line react/immutability
       scene.environment = null;
       invalidate();
       return;
@@ -279,11 +282,13 @@ function ThreeModelScene({
     roomEnvironment.scale.setScalar(threeEnvironment === "soft" ? 0.85 : 1);
     const environmentTarget = pmremGenerator.fromScene(environmentScene.add(roomEnvironment));
 
+    // oxlint-disable-next-line react/immutability
     scene.environment = environmentTarget.texture;
     invalidate();
 
     return () => {
       if (scene.environment === environmentTarget.texture) {
+        // oxlint-disable-next-line react/immutability
         scene.environment = null;
       }
       environmentTarget.dispose();
@@ -345,6 +350,7 @@ function ThreeModelScene({
     }
     orientedCenterRef.current = null;
     materialRef.current = [];
+    // oxlint-disable-next-line react/set-state-in-effect
     setModelRoot((current) => (current ? null : current));
 
     if (!src && !payloadTransport) {
@@ -366,6 +372,7 @@ function ThreeModelScene({
           }
           materialRef.current = collectStandardMaterials(nextRoot);
           activeObjectRef.current = nextRoot;
+          // oxlint-disable-next-line react/set-state-in-effect
           setModelRoot(nextRoot);
         })
         .catch((error) => {
@@ -393,6 +400,7 @@ function ThreeModelScene({
         const nextRoot = gltf.scene;
         materialRef.current = collectStandardMaterials(nextRoot);
         activeObjectRef.current = nextRoot;
+        // oxlint-disable-next-line react/set-state-in-effect
         setModelRoot(nextRoot);
       },
       undefined,
@@ -475,6 +483,7 @@ function ThreeModelScene({
   }, [camera, invalidate, modelRoot, rotation]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/immutability
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),

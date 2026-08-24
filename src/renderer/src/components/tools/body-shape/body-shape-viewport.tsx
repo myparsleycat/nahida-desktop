@@ -14,6 +14,7 @@ import {
   type MutableRefObject,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -158,7 +159,6 @@ function BodyShapeMesh({
 }) {
   const meshRef = useRef<Mesh>(null);
   const brushRingRef = useRef<LineLoop>(null);
-  const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
   const framedKeyRef = useRef<string | Float32Array | null>(null);
   const isPaintingRef = useRef(false);
   const { camera, raycaster, gl } = useThree();
@@ -170,6 +170,17 @@ function BodyShapeMesh({
   const onBrushStrokeRef = useRef(onBrushStroke);
   const onBrushStrokeStartRef = useRef(onBrushStrokeStart);
   const onBrushStrokeEndRef = useRef(onBrushStrokeEnd);
+
+  const initialColors = useMemo(
+    () => new Float32Array(Math.floor(originalPositions.length / 3) * 3),
+    [originalPositions],
+  );
+  const colorsRef = useRef(initialColors);
+  useLayoutEffect(() => {
+    if (colorsRef.current.length === initialColors.length) {
+      colorsRef.current = initialColors;
+    }
+  }, [initialColors]);
 
   useEffect(() => {
     heatmapRegionsRef.current = regions;
@@ -193,11 +204,6 @@ function BodyShapeMesh({
   useEffect(() => {
     onRegisterUpdateColors(writeColors);
   });
-
-  const initialColors = useMemo(
-    () => new Float32Array(Math.floor(originalPositions.length / 3) * 3),
-    [originalPositions],
-  );
 
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
@@ -226,7 +232,7 @@ function BodyShapeMesh({
 
     const vertexCount = Math.floor(originalPositions.length / 3);
     if (colorsRef.current.length !== vertexCount * 3) {
-      colorsRef.current = new Float32Array(vertexCount * 3);
+      colorsRef.current = initialColors;
       geometry.setAttribute("color", new BufferAttribute(colorsRef.current, 3));
     }
 
@@ -260,6 +266,7 @@ function BodyShapeMesh({
     }
   }, [
     geometry,
+    initialColors,
     originalPositions,
     previewPositions,
     regions,

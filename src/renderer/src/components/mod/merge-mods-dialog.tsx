@@ -26,7 +26,7 @@ import type {
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownIcon, ArrowUpIcon, GroupIcon, Loader2Icon, UngroupIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -41,19 +41,22 @@ export function MergeModsDialog() {
 
   const selectedPathsArray = useMemo(() => Array.from(selectedModPaths), [selectedModPaths]);
 
-  const { data: classification, isLoading } = useQuery({
+  const {
+    data: classification,
+    isLoading,
+    error: classificationError,
+  } = useQuery({
     queryKey: ["mod:classifyMergePacks", selectedPathsArray],
-    queryFn: async () => {
-      try {
-        return await window.api.invoke("mod:classifyMergePacks", selectedPathsArray);
-      } catch (error) {
-        toast.error(toErrorMessage(error) || t("page.mod.merge.classify_failed"));
-        setOpen(false);
-        throw error;
-      }
-    },
+    queryFn: () => window.api.invoke("mod:classifyMergePacks", selectedPathsArray),
     enabled: open && selectedPathsArray.length > 0,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (!open || !classificationError) return;
+    toast.error(toErrorMessage(classificationError) || t("page.mod.merge.classify_failed"));
+    setOpen(false);
+  }, [classificationError, open, setOpen, t]);
 
   const [userPlan, setUserPlan] = useState<MergePlanGroup | null>(null);
   const [userPackName, setUserPackName] = useState<string | null>(null);

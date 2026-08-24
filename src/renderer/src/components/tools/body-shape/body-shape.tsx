@@ -301,6 +301,7 @@ export default function BodyShapeTool({
 } = {}) {
   const { t } = useTranslation();
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
+  const [prevFixedTargetPath, setPrevFixedTargetPath] = useState(fixedTargetPath);
   const [loading, setLoading] = useState(Boolean(fixedTargetPath));
   const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
@@ -334,6 +335,14 @@ export default function BodyShapeTool({
     canUndoSelection: false,
     canRedoSelection: false,
   });
+
+  if (fixedTargetPath !== prevFixedTargetPath) {
+    setPrevFixedTargetPath(fixedTargetPath);
+    if (fixedTargetPath) {
+      setLoading(true);
+      setLoaded(null);
+    }
+  }
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;

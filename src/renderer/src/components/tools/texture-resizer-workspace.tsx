@@ -17,6 +17,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Switch } from "@renderer/components/ui/switch";
+import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
 import { cn } from "@renderer/lib/utils";
 import type {
   TextureColorSpace,
@@ -81,6 +82,7 @@ export function TextureResizerWorkspace({
   >({});
   const [upscaleProgress, setUpscaleProgress] = useState<TextureUpscaleProgressEvent | null>(null);
   const batchRunningRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const settingsForm = useForm({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
@@ -109,18 +111,25 @@ export function TextureResizerWorkspace({
   const loadTextures = async (
     nextTargetPath = targetPath,
     nextSettings = settingsForm.state.values,
+    requestId = ++loadRequestIdRef.current,
   ) => {
     const normalizedTargetPath = nextTargetPath.trim();
     if (!normalizedTargetPath) {
       return;
     }
 
-    setIsListing(true);
+    if (isCurrentRequest(requestId, loadRequestIdRef)) {
+      setIsListing(true);
+    }
     try {
-      const nextTextures =
+      const nextTextures = await resolveIfCurrent(requestId, loadRequestIdRef, () =>
         mode === "mod"
-          ? await window.api.invoke("tools:listTextureMod", normalizedTargetPath, nextSettings)
-          : await window.api.invoke("tools:listTextureFolder", normalizedTargetPath, nextSettings);
+          ? window.api.invoke("tools:listTextureMod", normalizedTargetPath, nextSettings)
+          : window.api.invoke("tools:listTextureFolder", normalizedTargetPath, nextSettings),
+      );
+      if (nextTextures === undefined) {
+        return;
+      }
       setTextures(nextTextures);
       setLoadedTargetPath(normalizedTargetPath);
       const available = new Set(
@@ -130,11 +139,16 @@ export function TextureResizerWorkspace({
         (current) => new Set([...current].filter((filePath) => available.has(filePath))),
       );
     } catch (error) {
+      if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+        return;
+      }
       toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
         description: toErrorMessage(error),
       });
     } finally {
-      setIsListing(false);
+      if (isCurrentRequest(requestId, loadRequestIdRef)) {
+        setIsListing(false);
+      }
     }
   };
 
@@ -156,15 +170,22 @@ export function TextureResizerWorkspace({
   }, []);
 
   useEffect(() => {
+    const requestId = ++loadRequestIdRef.current;
     window.api
       .invoke("tools:getTextureResizeSettings")
       .then((nextSettings) => {
+        if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+          return;
+        }
         settingsForm.reset(nextSettings);
         if (mode === "mod" && fixedTargetPath) {
-          void loadTextures(fixedTargetPath, nextSettings);
+          void loadTextures(fixedTargetPath, nextSettings, requestId);
         }
       })
       .catch((error) => {
+        if (!isCurrentRequest(requestId, loadRequestIdRef)) {
+          return;
+        }
         toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
           description: toErrorMessage(error),
         });

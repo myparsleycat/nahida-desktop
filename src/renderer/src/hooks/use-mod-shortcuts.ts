@@ -1,7 +1,7 @@
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { modStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
     const latestSearchQueryRef = useRef(searchQuery);
@@ -9,7 +9,7 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
     const { exclusiveToggleModMutation } = useModMutations();
     const exclusiveToggleRef = useRef(exclusiveToggleModMutation.mutate);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         latestSearchQueryRef.current = searchQuery;
         latestFilteredModsRef.current = filteredMods;
         exclusiveToggleRef.current = exclusiveToggleModMutation.mutate;

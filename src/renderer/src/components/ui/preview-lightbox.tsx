@@ -33,7 +33,7 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, isControlled, props.onOpenChange]);
 
   return (
     <>

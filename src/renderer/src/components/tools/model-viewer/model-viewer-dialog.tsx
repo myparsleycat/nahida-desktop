@@ -259,7 +259,9 @@ export function ModelViewerDialog({
       if (inactiveUrl && inactiveUrl !== currentUrl) {
         cleanupModelViewerUrl(inactiveUrl);
       }
-      viewerUrlsRef.current = [currentUrl, ""];
+      const nextUrls: [string, string] = [currentUrl, ""];
+      viewerUrlsRef.current = nextUrls;
+      setViewerUrls(nextUrls);
       activeViewerIndexRef.current = 0;
       loadingViewerIndexRef.current = null;
       pendingCameraStateRef.current = null;
@@ -274,7 +276,7 @@ export function ModelViewerDialog({
       pendingVariantRequestRef.current = null;
     }
 
-    const nextUrls = getInitialViewerUrls(source);
+    const nextUrls = viewerUrls;
     const prevUrls = viewerUrlsRef.current;
     for (const url of prevUrls) {
       if (url && !nextUrls.includes(url)) {

@@ -92,9 +92,10 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
             key: K,
             updateValue: SettingUpdate<SettingsShape<TConfig>[K]>,
         ) => {
-            const currentSettings =
-                queryClient.getQueryData<SettingsShape<TConfig>>(queryKey) ??
-                ({} as SettingsShape<TConfig>);
+            const currentSettings = queryClient.getQueryData<SettingsShape<TConfig>>(queryKey);
+            if (currentSettings == null) {
+                return;
+            }
             const value =
                 typeof updateValue === "function"
                     ? (

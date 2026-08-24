@@ -32,7 +32,7 @@ import { modStore, useModStore } from "@renderer/store/mod";
 import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { FolderGroup } from "@shared/types";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/mod/")({
@@ -82,6 +82,7 @@ function ModRouteContent() {
     game: string;
     group: FolderGroup;
   } | null>(null);
+  const [pendingTargetVersion, setPendingTargetVersion] = useState(0);
   const resolvedDownloadIdsRef = useRef(new Set<string>());
 
   useModRefreshOnFocus(selectedGame, queryClient);
@@ -250,6 +251,7 @@ function ModRouteContent() {
           game: targetGame,
           group: result.group,
         };
+        setPendingTargetVersion((version) => version + 1);
         resolvedDownloadIdsRef.current.add(downloadId);
         return;
       }
@@ -309,6 +311,7 @@ function ModRouteContent() {
   }, [
     characters,
     downloadMode?.downloadId,
+    pendingTargetVersion,
     selectedGame,
     setExpandedGroup,
     setSelectedGroup,
@@ -337,7 +340,7 @@ function ModRouteContent() {
     } else {
       setSelectedGroup(null);
     }
-  }, [characters, selectedGroupPath, setSelectedGroup, downloadMode]);
+  }, [characters, downloadMode, pendingTargetVersion, selectedGroupPath, setSelectedGroup]);
 
   useEffect(() => {
     if (selectedGame) {

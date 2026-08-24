@@ -31,9 +31,7 @@ export function useModDragDrop(
 
     if (groupPath !== prevGroupPath) {
         setPrevGroupPath(groupPath);
-        if (!groupPath && isDragging) {
-            setIsDragging(false);
-        }
+        setIsDragging(false);
     }
     const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<string | null>(
         null,

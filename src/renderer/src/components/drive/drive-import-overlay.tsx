@@ -32,7 +32,7 @@ import {
   LockIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -550,6 +550,10 @@ function DriveImportDialog({
       tryAutoPasswords,
     ],
   );
+  const handleResolveRef = useRef(handleResolve);
+  useLayoutEffect(() => {
+    handleResolveRef.current = handleResolve;
+  });
 
   useEffect(() => {
     requestAnimationFrame(() => urlInputRef.current?.focus());
@@ -580,10 +584,10 @@ function DriveImportDialog({
     if (!session) return;
     const seq = ++loadSeqRef.current;
     const timer = setTimeout(() => {
-      if (seq === loadSeqRef.current) void handleResolve(seq);
+      if (seq === loadSeqRef.current) void handleResolveRef.current(seq);
     }, 500);
     return () => clearTimeout(timer);
-  }, [url, session, handleResolve]);
+  }, [url, session]);
 
   // focus password when required
   useEffect(() => {

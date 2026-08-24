@@ -38,6 +38,9 @@ import {
 } from "@renderer/components/ui/select";
 import { Slider } from "@renderer/components/ui/slider";
 import { Switch } from "@renderer/components/ui/switch";
+// vision-llm disabled — progress event type no longer used
+// import type { TouchProfileProgressEvent } from "@shared/types";
+import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
 import { cn } from "@renderer/lib/utils";
 import {
   computeBoundingCenter,
@@ -63,8 +66,6 @@ import {
   type TouchZoneSettings,
   type TouchZoneStrengthPreset,
 } from "@shared/touch-profile-settings";
-// vision-llm disabled — progress event type no longer used
-// import type { TouchProfileProgressEvent } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import {
   FolderOpenIcon,
@@ -154,6 +155,7 @@ export default function TouchProfileTool({
   const viewportRef = useRef<BodyShapeViewportHandle | null>(null);
   const draftSessionRef = useRef<string | null>(null);
   const bonePreviewRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
   const [loading, setLoading] = useState(false);
@@ -274,8 +276,12 @@ export default function TouchProfileTool({
 
   const loadMod = async (pathOverride?: string) => {
     const targetPath = pathOverride ?? modPath;
-    if (!targetPath || loading) return;
-    if (pathOverride) setModPath(pathOverride);
+    if (!targetPath) return;
+    const requestId = ++loadGenerationRef.current;
+    if (pathOverride && isCurrentRequest(requestId, loadGenerationRef)) {
+      setModPath(pathOverride);
+    }
+    if (!isCurrentRequest(requestId, loadGenerationRef)) return;
     setLoading(true);
     setDraft(null);
     setResult(null);
@@ -290,9 +296,12 @@ export default function TouchProfileTool({
     setLinkedComponents({});
     setBoneZoneAssignments({});
     try {
-      const next = await window.api.invoke("tools:touchProfilePrepare", {
-        modPath: targetPath,
-      });
+      const next = await resolveIfCurrent(requestId, loadGenerationRef, () =>
+        window.api.invoke("tools:touchProfilePrepare", {
+          modPath: targetPath,
+        }),
+      );
+      if (next === undefined) return;
       setInspection(next);
       setSelectedMeshIds(
         new Set(
@@ -301,6 +310,7 @@ export default function TouchProfileTool({
       );
       setPhase("select");
     } catch (error) {
+      if (!isCurrentRequest(requestId, loadGenerationRef)) return;
       const inputErrorCode = getTouchProfileInputError(toErrorMessage(error));
       if (inputErrorCode) {
         setInputError(inputErrorCode);
@@ -313,7 +323,9 @@ export default function TouchProfileTool({
         });
       }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest(requestId, loadGenerationRef)) {
+        setLoading(false);
+      }
     }
   };
 
