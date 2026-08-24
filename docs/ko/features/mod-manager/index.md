@@ -71,6 +71,8 @@ C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\Character\SomeCharacterMod
 
 서브 그룹으로 지정된 그룹은 클릭하여 접거나 펼칠 수 있습니다.
 
+`Ctrl`을 누른 채 그룹을 클릭하면 서브폴더가 트리에 펼쳐집니다(이미 펼쳐진 경우 유지)와 함께 그룹이 선택됩니다. `Alt`를 누른 채 서브 그룹을 클릭하면 부모 그룹을 접거나 펼칠 수 있습니다.
+
 ## 모드 추가
 
 사이드바에서 그룹을 선택한 상태에서 새 모드를 다음 방법으로 추가할 수 있습니다.

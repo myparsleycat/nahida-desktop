@@ -54,7 +54,6 @@ export function CharacterSidebarRow({
   onOpenWuwaFixer,
 }: CharacterSidebarRowProps) {
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
-  const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const expandedGroups = useModStore((s) => s.expandedGroups);
   const persistentGroups = useModStore((s) => s.persistentGroups);
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
@@ -149,11 +148,6 @@ export function CharacterSidebarRow({
 
   const handleItemClick = useCallback(
     (group: FolderGroup, e: React.MouseEvent, collapseGroupPath?: string) => {
-      if (e.ctrlKey && collapseGroupPath) {
-        toggleExpandedGroup(collapseGroupPath);
-        return;
-      }
-
       if (collapseGroupPath) {
         const isExpanded = expandedGroups.has(collapseGroupPath);
         const showSubGroups =
@@ -166,14 +160,7 @@ export function CharacterSidebarRow({
       skipNextScrollRef.current = true;
       onItemClick(group, e);
     },
-    [
-      expandedGroups,
-      isSearching,
-      onItemClick,
-      persistentGroups,
-      setExpandedGroup,
-      toggleExpandedGroup,
-    ],
+    [expandedGroups, isSearching, onItemClick, persistentGroups, setExpandedGroup],
   );
 
   if (showSkeleton) {
@@ -195,6 +182,7 @@ export function CharacterSidebarRow({
             itemRefs={itemRefs}
             group={row.group}
             onClick={(group, e) => handleItemClick(group, e, row.collapseGroupPath)}
+            collapseGroupPath={row.collapseGroupPath}
             onDrop={onItemDrop}
             canAcceptDrop={canAcceptDrop}
             onCreateFolder={onCreateFolder}
@@ -248,6 +236,7 @@ export function CharacterSidebarRow({
               itemRefs={itemRefs}
               group={row.group}
               onClick={(group, e) => handleItemClick(group, e, row.collapseGroupPath)}
+              collapseGroupPath={row.collapseGroupPath}
               onDrop={onItemDrop}
               canAcceptDrop={canAcceptDrop}
               onCreateFolder={onCreateFolder}

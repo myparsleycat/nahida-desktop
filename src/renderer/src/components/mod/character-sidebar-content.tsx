@@ -115,7 +115,6 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
 }: CharacterSidebarItemWithChildrenProps) {
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
-  const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const isSearching = normalizedSearch.length > 0;
@@ -152,18 +151,6 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
     [group.path, isExpanded, onItemClick, setExpandedGroup, showSubGroups],
   );
 
-  const handleItemClickInternal = useCallback(
-    (clickedGroup: FolderGroup, e: React.MouseEvent) => {
-      if (e.ctrlKey && collapseGroupPath) {
-        toggleExpandedGroup(collapseGroupPath);
-        return;
-      }
-
-      onItemClick(clickedGroup, e);
-    },
-    [collapseGroupPath, onItemClick, toggleExpandedGroup],
-  );
-
   if (!shouldShowParent && !showChildGroups) {
     return null;
   }
@@ -174,7 +161,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
         <CharacterSidebarItem
           itemRefs={itemRefs}
           group={group}
-          onClick={handleItemClickInternal}
+          onClick={onItemClick}
+          collapseGroupPath={collapseGroupPath}
           onDrop={onItemDrop}
           canAcceptDrop={canAcceptDrop}
           onCreateFolder={onCreateFolder}

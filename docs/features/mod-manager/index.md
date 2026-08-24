@@ -71,6 +71,8 @@ Groups such as `Character` that contain one or more subfolders can be marked as 
 
 Groups marked as subgroups can be collapsed and expanded by clicking them.
 
+While holding `Ctrl`, clicking a group expands it to reveal its subfolders in the tree (or keeps it expanded) and selects it. While holding `Alt`, clicking a subgroup collapses/expands its parent group.
+
 ## Add Mods
 
 With a group selected in the sidebar, you can add a new mod in the following ways:
