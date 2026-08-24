@@ -71,6 +71,8 @@ C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\Character\SomeCharacterMod
 
 被标记为子分组的项目可以通过点击来折叠或展开。
 
+按住 `Ctrl` 点击分组会将其子文件夹展开到树中（已展开时保持展开）并选中该分组。按住 `Alt` 点击子分组可以折叠/展开其父分组。
+
 ## 添加模组
 
 在侧边栏中选中某个分组后，可以通过以下方式添加新模组：

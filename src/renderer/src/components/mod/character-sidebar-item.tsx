@@ -57,6 +57,7 @@ interface CharacterSidebarItemProps {
   onOpenWuwaFixer?: (path: string) => Promise<void>;
   forceSelectOnClick?: boolean;
   autoScrollOnSelect?: boolean;
+  collapseGroupPath?: string;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -79,12 +80,14 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   onOpenWuwaFixer,
   forceSelectOnClick,
   autoScrollOnSelect = true,
+  collapseGroupPath,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const isSelected = useModStore((s) => s.selectedGroup?.path === group.path);
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
+  const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
   const bulkModToggle = useBulkModToggle();
   const isGridLayout = layout === "grid";
@@ -170,9 +173,18 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   };
 
   const handlePrimaryClick = (e: React.MouseEvent) => {
-    if (!forceSelectOnClick && (isPersistent || isExpanded)) {
+    if (e.altKey) {
+      toggleExpandedGroup(collapseGroupPath ?? group.path);
+      return;
+    }
+
+    if (!forceSelectOnClick && !e.ctrlKey && (isPersistent || isExpanded)) {
       toggleExpandedGroup(group.path);
       return;
+    }
+
+    if (e.ctrlKey) {
+      setExpandedGroup(group.path, true);
     }
 
     userClickedRef.current = true;
