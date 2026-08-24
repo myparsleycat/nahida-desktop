@@ -135,7 +135,9 @@ class DownloadStreamer {
             signal,
         });
         if (!response.ok) {
-            if (isBackendUnavailableStatus(response.status)) {
+            if (response.status === 503) {
+                void this.desktop.service.backendConnectivity.probe();
+            } else if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
             const body = await readApiBody(response).catch(() => response.statusText);

@@ -69,7 +69,7 @@ export function useAuth() {
         backendStatus,
         hasToken,
         isLoggedIn: !!session,
-        isBackendOffline: backendStatus === "offline",
+        isBackendOffline: backendStatus === "offline" || backendStatus === "maintenance",
         refreshSession: async () => {
             const nextSession = await window.api.invoke("auth:getSession");
             setSession(nextSession);

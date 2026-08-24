@@ -1738,6 +1738,8 @@
     }
   },
   "titlebar": {
+    "server_inactive_badge": "サーバー無効",
+    "server_inactive_tooltip": "サーバーが無効化またはメンテナンス中のため、nahida.liveの機能を利用できません。",
     "activity": {
       "more": "+{{count}}",
       "transfer": {

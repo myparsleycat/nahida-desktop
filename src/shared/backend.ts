@@ -1,1 +1,1 @@
-export type BackendStatus = "unknown" | "online" | "offline";
+export type BackendStatus = "unknown" | "online" | "offline" | "maintenance";

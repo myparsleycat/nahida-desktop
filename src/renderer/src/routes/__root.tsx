@@ -7,8 +7,10 @@ import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-
 import { useTextureResizerTitlebarActivity } from "@renderer/components/titlebar/use-texture-resizer-titlebar-activity";
 import { useTransferTitlebarActivity } from "@renderer/components/titlebar/use-transfer-titlebar-activity";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
+import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Toaster } from "@renderer/components/ui/sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
 import { DEFAULT_BG } from "@renderer/const";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
@@ -26,13 +28,14 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router";
-import { ArrowLeftIcon, DownloadIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon, RefreshCwIcon, ServerOffIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
+  const backendStatus = useGlobalStore((state) => state.backendStatus);
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
   const setUpdateAvailable = useGlobalStore((state) => state.setUpdateAvailable);
@@ -176,6 +179,28 @@ function RootComponent() {
           isDarwin ? "pl-21" : "pl-2",
         )}
       >
+        {backendStatus !== "online" && backendStatus !== "unknown" && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <div className="no-drag flex min-w-0 shrink-0 items-center">
+                  <Badge
+                    variant="secondary"
+                    className="h-5 gap-1 border-border/60 bg-muted/70 px-1.5 text-[11px] font-medium text-muted-foreground"
+                  >
+                    <ServerOffIcon className="size-3!" />
+                    <span className="truncate">
+                      {t("titlebar.server_inactive_badge")}
+                    </span>
+                  </Badge>
+                </div>
+              }
+            />
+            <TooltipContent side="bottom">
+              {t("titlebar.server_inactive_tooltip")}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <TitlebarActivityBadges />
         <div className="ml-auto flex h-full shrink-0 items-center gap-2 pr-2">
           {shouldShowUpdateButton && (

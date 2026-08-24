@@ -1737,6 +1737,8 @@
     }
   },
   "titlebar": {
+    "server_inactive_badge": "服务器已停用",
+    "server_inactive_tooltip": "服务器已停用或正在维护中，nahida.live 功能无法使用。",
     "activity": {
       "more": "+{{count}}",
       "transfer": {

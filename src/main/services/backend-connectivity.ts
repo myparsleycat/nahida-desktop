@@ -38,7 +38,7 @@ export class BackendConnectivity {
         this.probing = true;
 
         try {
-            const resp = await ky.get(`${BACKEND_URL}/ping`, {
+            const resp = await ky.get(`${BACKEND_URL}/status`, {
                 timeout: PROBE_TIMEOUT_MS,
                 retry: 0,
                 throwHttpErrors: false,
@@ -46,9 +46,14 @@ export class BackendConnectivity {
                     "User-Agent": `Nahida Desktop/${appVersion}`,
                 },
             });
-            await resp.arrayBuffer();
-            if (resp.status > 0 && !isBackendUnavailableStatus(resp.status)) {
-                this.setOnline();
+            const body = (await resp.json().catch(() => null)) as { status?: string } | null;
+
+            if (body?.status === "maintenance") {
+                this.setStatus("maintenance");
+            } else if (body?.status === "online") {
+                this.setStatus("online");
+            } else if (resp.status > 0 && !isBackendUnavailableStatus(resp.status)) {
+                this.setStatus("online");
             } else {
                 this.setOffline();
             }
@@ -72,7 +77,9 @@ export class BackendConnectivity {
     private scheduleProbe() {
         if (this.probeTimer) clearTimeout(this.probeTimer);
         const delay =
-            this.status === "offline" ? OFFLINE_PROBE_INTERVAL_MS : ONLINE_PROBE_INTERVAL_MS;
+            this.status === "offline" || this.status === "maintenance"
+                ? OFFLINE_PROBE_INTERVAL_MS
+                : ONLINE_PROBE_INTERVAL_MS;
         this.probeTimer = setTimeout(() => {
             void this.probe();
         }, delay);

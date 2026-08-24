@@ -1220,7 +1220,9 @@ export class DriveService {
         const preexistingChildIds = await this.listDestinationChildIds(destinationId, signal);
         const response = await networkFetch(requestUrl, { headers, signal });
         if (!response.ok) {
-            if (isBackendUnavailableStatus(response.status)) {
+            if (response.status === 503) {
+                void this.desktop.service.backendConnectivity.probe();
+            } else if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
             const body = await readApiBody(response).catch(() => response.statusText);
@@ -1511,7 +1513,9 @@ export class DriveService {
         });
 
         if (!response.ok) {
-            if (isBackendUnavailableStatus(response.status)) {
+            if (response.status === 503) {
+                void this.desktop.service.backendConnectivity.probe();
+            } else if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
             const body = await readApiBody(response).catch(() => response.statusText);

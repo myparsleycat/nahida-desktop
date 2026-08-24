@@ -1771,6 +1771,8 @@
     }
   },
   "titlebar": {
+    "server_inactive_badge": "Server inactive",
+    "server_inactive_tooltip": "The server is inactive or under maintenance, so nahida.live features are unavailable.",
     "activity": {
       "more": "+{{count}}",
       "transfer": {

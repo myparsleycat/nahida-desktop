@@ -1,9 +1,9 @@
-import ky, { isNetworkError, isTimeoutError } from "ky";
+import ky, { isHTTPError, isNetworkError, isTimeoutError } from "ky";
 
 import type { NahidaDesktop } from "../index";
 
 import { appVersion } from "../const";
-import { isBackendUnavailableStatus } from "../services/drive-errors";
+import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
@@ -32,7 +32,16 @@ export class DesktopHttpService {
 
     public async fetcher(url: string, options?: FetcherOptions) {
         const isNHD = this.isNHD(url);
-        const isSessionRequest = URL.parse(url)?.pathname === "/api/auth/get-session";
+        const parsedUrl = URL.parse(url);
+        const isSessionRequest = parsedUrl?.pathname === "/api/auth/get-session";
+
+        if (isNHD && !isSessionRequest) {
+            const status = this.desktop.service.backendConnectivity.getStatus();
+            if (status === "offline" || status === "maintenance") {
+                throw createDriveApiError(new Error("backend unavailable"), "fetch", 503);
+            }
+        }
+
         const optionHeaders =
             options?.headers instanceof Headers
                 ? Object.fromEntries(options.headers.entries())
@@ -117,7 +126,9 @@ export class DesktopHttpService {
             });
 
             if (isNHD) {
-                if (isBackendUnavailableStatus(resp.status)) {
+                if (resp.status === 503) {
+                    void this.desktop.service.backendConnectivity.probe();
+                } else if (isBackendUnavailableStatus(resp.status)) {
                     this.desktop.service.backendConnectivity.setOffline();
                 } else {
                     this.desktop.service.backendConnectivity.setOnline();
@@ -125,8 +136,17 @@ export class DesktopHttpService {
             }
             return resp;
         } catch (error) {
-            if (isNHD && isUnreachableError(error)) {
-                this.desktop.service.backendConnectivity.setOffline();
+            if (isNHD) {
+                if (isHTTPError(error) && error.response.status === 503) {
+                    void this.desktop.service.backendConnectivity.probe();
+                } else if (
+                    isHTTPError(error) &&
+                    isBackendUnavailableStatus(error.response.status)
+                ) {
+                    this.desktop.service.backendConnectivity.setOffline();
+                } else if (isUnreachableError(error)) {
+                    this.desktop.service.backendConnectivity.setOffline();
+                }
             }
             throw error;
         }
