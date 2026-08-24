@@ -7,7 +7,7 @@ import {
   type WuwaFixerPrepareResult,
   type FixToolLogEvent,
 } from "@shared/types";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -47,24 +47,48 @@ export function useModFixRunner() {
   const [showOptionsDialog, setShowOptionsDialog] = useState(false);
   const [optionsTab, setOptionsTab] = useState<"fix" | "rollback">("fix");
   const [logs, setLogs] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const [isRunning, setIsRunning] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const [prepareResult, setPrepareResult] = useState<WuwaFixerPrepareResult | null>(null);
   const [wuwaOptions, setWuwaOptions] = useState<WuwaFixerOptions>(defaultWuwaOptions);
-  const [backupGroups, setBackupGroups] = useState<WuwaBackupGroup[]>([]);
-  const [backupSize, setBackupSize] = useState<WuwaBackupSize>({ bytes: 0, count: 0 });
-  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
   const [isRollbackBusy, setIsRollbackBusy] = useState(false);
   const [pendingRollbackKey, setPendingRollbackKey] = useState<string | null>(null);
   const [showAdvancedRollback, setShowAdvancedRollback] = useState(false);
   const [showCleanConfirm, setShowCleanConfirm] = useState(false);
   const [cleanConfirmInput, setCleanConfirmInput] = useState("");
   const runInProgressRef = useRef(false);
-  const backupRefreshTokenRef = useRef(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const translationKey = "page.mod.dialog.wuwa-fix-runner";
+
+  const { data: backupsData, isLoading: isLoadingBackups } = useQuery({
+    queryKey: ["wuwaFixer:backups", activeModPath],
+    queryFn: async () => {
+      if (!activeModPath) {
+        return {
+          groups: [] as WuwaBackupGroup[],
+          size: { bytes: 0, count: 0 } as WuwaBackupSize,
+        };
+      }
+      const [groups, size] = await Promise.all([
+        window.api.invoke("wuwaFixer:scanBackups", activeModPath),
+        window.api.invoke("wuwaFixer:getBackupSize", activeModPath),
+      ]);
+      return { groups, size };
+    },
+    enabled: showOptionsDialog && optionsTab === "rollback" && !!activeModPath,
+  });
+
+  const backupGroups = backupsData?.groups ?? [];
+  const backupSize = backupsData?.size ?? { bytes: 0, count: 0 };
+
+  const refreshBackups = useCallback(
+    async (modPath = activeModPath) => {
+      if (!modPath) return;
+      await queryClient.invalidateQueries({ queryKey: ["wuwaFixer:backups", modPath] });
+    },
+    [activeModPath, queryClient],
+  );
 
   useEffect(() => {
     if (!showLogModal) return;
@@ -79,62 +103,6 @@ export function useModFixRunner() {
     });
     return () => removeListener();
   }, [showLogModal]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  const refreshBackups = useCallback(
-    async (modPath = activeModPath) => {
-      const requestToken = ++backupRefreshTokenRef.current;
-      const isCurrent = () => backupRefreshTokenRef.current === requestToken;
-
-      if (!modPath) {
-        if (!isCurrent()) return;
-        setBackupGroups([]);
-        setBackupSize({ bytes: 0, count: 0 });
-        setPendingRollbackKey(null);
-        setShowCleanConfirm(false);
-        setCleanConfirmInput("");
-        setIsLoadingBackups(false);
-        return;
-      }
-
-      setIsLoadingBackups(true);
-      setPendingRollbackKey(null);
-      setShowCleanConfirm(false);
-      setCleanConfirmInput("");
-      try {
-        const [groups, size] = await Promise.all([
-          window.api.invoke("wuwaFixer:scanBackups", modPath),
-          window.api.invoke("wuwaFixer:getBackupSize", modPath),
-        ]);
-        if (!isCurrent()) return;
-        setBackupGroups(groups);
-        setBackupSize(size);
-      } catch (error) {
-        if (!isCurrent()) return;
-        setBackupGroups([]);
-        setBackupSize({ bytes: 0, count: 0 });
-        toast.error((error as Error).message);
-      } finally {
-        if (isCurrent()) {
-          setIsLoadingBackups(false);
-        }
-      }
-    },
-    [activeModPath],
-  );
-
-  useEffect(() => {
-    if (!showOptionsDialog || optionsTab !== "rollback") {
-      return;
-    }
-
-    void refreshBackups();
-  }, [showOptionsDialog, optionsTab, refreshBackups]);
 
   const handleRun = async (type: "tool" | "preset", id: string, modPath: string) => {
     if (runInProgressRef.current) {
@@ -355,8 +323,6 @@ export function useModFixRunner() {
     isPreparing,
     inputCmd,
     setInputCmd,
-    inputRef,
-    scrollRef,
     prepareResult,
     wuwaOptions,
     setWuwaOptions,

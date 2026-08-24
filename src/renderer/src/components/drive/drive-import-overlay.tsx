@@ -82,14 +82,31 @@ function isValidDriveUrl(value: string) {
 }
 
 export function DriveImportOverlay({ destinationId }: { destinationId: string }) {
+  const importOverlay = useViewStore((s) => s.importOverlay);
+  if (!importOverlay) return null;
+  return (
+    <DriveImportDialog
+      key={importOverlay.url}
+      importOverlay={importOverlay}
+      destinationId={destinationId}
+    />
+  );
+}
+
+function DriveImportDialog({
+  importOverlay,
+  destinationId,
+}: {
+  importOverlay: { url: string };
+  destinationId: string;
+}) {
   const { t } = useTranslation();
   const { session, sessionInitialized, startLogin } = useAuth();
   const queryClient = useQueryClient();
 
-  const importOverlay = useViewStore((s) => s.importOverlay);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
 
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(importOverlay.url);
   const [password, setPassword] = useState("");
   const [createCollectionFolders, setCreateCollectionFolders] = useState(true);
   const [requiresPassword, setRequiresPassword] = useState(false);
@@ -116,76 +133,9 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
 
   const destinationQuery = useQuery({
     queryKey: ["drive", "import-destination", destinationId],
-    enabled: !!importOverlay && !!destinationId,
+    enabled: !!destinationId,
     queryFn: async () => await window.api.invoke("drive:get:item", destinationId),
   });
-
-  // reset when overlay opens
-  useEffect(() => {
-    if (!importOverlay) return;
-    setUrl(importOverlay.url);
-    setPassword("");
-    setCreateCollectionFolders(true);
-    setRequiresPassword(false);
-    setPasswordInvalid(false);
-    setResolveFailed(false);
-    setStep(1);
-    setResolving(false);
-    setSourceInfo(null);
-    setTreeData(new Map());
-    setRootId(null);
-    setExpanded(new Set());
-    setSelected(new Set());
-    setLoadingIds(new Set());
-    setCopyProgress(null);
-    setIsImporting(false);
-    copyOperationIdRef.current = undefined;
-    isPendingRef.current = false;
-    loadSeqRef.current = 0;
-    lastResolvedUrlRef.current = "";
-    requestAnimationFrame(() => urlInputRef.current?.focus());
-  }, [importOverlay]);
-
-  useEffect(() => {
-    if (!importOverlay) return;
-    return window.api.on("drive:copy-progress", (progress) => {
-      if (progress.operationId !== copyOperationIdRef.current) return;
-      setCopyProgress(progress);
-    });
-  }, [importOverlay]);
-
-  // auto-resolve when the URL becomes a valid drive source URL
-  useEffect(() => {
-    if (!importOverlay) return;
-    const trimmed = url.trim();
-    if (trimmed === lastResolvedUrlRef.current) return;
-    loadSeqRef.current += 1;
-    setSourceInfo(null);
-    setTreeData(new Map());
-    setRootId(null);
-    setExpanded(new Set());
-    setSelected(new Set());
-    setStep(1);
-    setRequiresPassword(false);
-    setPasswordInvalid(false);
-    setResolveFailed(false);
-    if (!isValidDriveUrl(trimmed)) return;
-    if (!session) return;
-    const seq = ++loadSeqRef.current;
-    const timer = setTimeout(() => {
-      if (seq === loadSeqRef.current) void handleResolve(seq);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [url, importOverlay, session]);
-
-  // 가져오기는 transfer로 승격되어 백그라운드에서 계속되므로
-  // overlay 닫힘/페이지 이동이 전송을 취소하면 안된다.
-  // 취소는 명시적 handleCancel 또는 transfer 탭에서만 수행한다.
-
-  // focus password when required
-  useEffect(() => {
-    if (requiresPassword) requestAnimationFrame(() => passwordInputRef.current?.focus());
-  }, [requiresPassword]);
 
   const descendantMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -204,12 +154,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
           result.add(childId);
           const sub = getDescendants(childId, visited);
           for (const s of sub) result.add(s);
-        } else {
-          // files not counted for folder selection descendantMap, but we still traverse if it were folder
         }
-        // also need to consider deeper via child's descendants already
-        // Actually we already added via recursion, but need to ensure we also add grandchildren via child's descendant set
-        // The recursion above handles.
       }
       return result;
     };
@@ -252,6 +197,272 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
     }
     return result;
   }, [rootId, treeData, expanded]);
+
+  const loadLinkChildren = useCallback(
+    async (
+      parentId: string,
+      linkId: string,
+      linkToken: string,
+      currentMap?: Map<string, NodeData>,
+      _currentRootId?: string | null,
+    ) => {
+      setLoadingIds((prev) => new Set(prev).add(parentId));
+      try {
+        const result: DriveListChildrenResult = await window.api.invoke(
+          "drive:fn:listLinkChildren",
+          {
+            linkId,
+            linkToken,
+            itemId: parentId,
+          },
+        );
+        setTreeData((prev) => {
+          const base = currentMap ? new Map(currentMap) : new Map(prev);
+          const parentNode = base.get(parentId);
+          if (!parentNode) return prev;
+          const parentDepth = parentNode.depth;
+          const childIds: string[] = [];
+          for (const child of result.children) {
+            const cid = child.id;
+            childIds.push(cid);
+            if (!base.has(cid)) {
+              base.set(cid, {
+                content: child,
+                children: [],
+                depth: parentDepth + 1,
+                loaded: false,
+              });
+            }
+          }
+          base.set(parentId, { ...parentNode, children: childIds, loaded: true });
+          return base;
+        });
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          toast.error("링크가 만료되었습니다. 처음부터 다시 시도하세요.");
+          setSourceInfo(null);
+          setTreeData(new Map());
+          setRootId(null);
+          setExpanded(new Set());
+          setSelected(new Set());
+          setStep(1);
+          setRequiresPassword(false);
+          return;
+        }
+        toast.error("폴더 목록을 불러오지 못했습니다", { description: toErrorMessage(error) });
+      } finally {
+        setLoadingIds((prev) => {
+          const n = new Set(prev);
+          n.delete(parentId);
+          return n;
+        });
+      }
+    },
+    [],
+  );
+
+  const loadModChildren = useCallback(
+    async (
+      parentId: string,
+      modToken?: string,
+      modSig?: string,
+      currentMap?: Map<string, NodeData>,
+      _virtualRoot?: string | null,
+    ) => {
+      setLoadingIds((prev) => new Set(prev).add(parentId));
+      try {
+        const result: DriveListChildrenResult = await window.api.invoke(
+          "drive:fn:listModChildren",
+          {
+            itemId: parentId,
+            modToken,
+            modSig,
+          },
+        );
+        setTreeData((prev) => {
+          const base = currentMap ? new Map(currentMap) : new Map(prev);
+          const parentNode = base.get(parentId);
+          if (!parentNode) return prev;
+          const parentDepth = parentNode.depth;
+          const childIds: string[] = [];
+          for (const child of result.children) {
+            const cid = child.id;
+            childIds.push(cid);
+            if (!base.has(cid)) {
+              base.set(cid, {
+                content: child,
+                children: [],
+                depth: parentDepth + 1,
+                loaded: false,
+              });
+            }
+          }
+          base.set(parentId, { ...parentNode, children: childIds, loaded: true });
+          return base;
+        });
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          toast.error("컬렉션을 불러오지 못했습니다. 링크가 만료되었을 수 있습니다.");
+          setSourceInfo(null);
+          setTreeData(new Map());
+          setRootId(null);
+          setExpanded(new Set());
+          setSelected(new Set());
+          setStep(1);
+          return;
+        }
+        toast.error("폴더 목록을 불러오지 못했습니다", { description: toErrorMessage(error) });
+      } finally {
+        setLoadingIds((prev) => {
+          const n = new Set(prev);
+          n.delete(parentId);
+          return n;
+        });
+      }
+    },
+    [],
+  );
+
+  const applyResolvedResult = useCallback(
+    (resolved: DriveResolveImportSourceResult, seq: number, trimmedUrl: string) => {
+      if (seq !== loadSeqRef.current) return;
+      setSourceInfo(resolved);
+      lastResolvedUrlRef.current = trimmedUrl;
+      // Build initial tree
+      if (resolved.source === "link") {
+        const rid = resolved.parent.id;
+        const rootContent: DriveImportContent = {
+          id: rid,
+          name: resolved.parent.name,
+          isDir: true,
+          size: null,
+          mimeType: null,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        const newMap = new Map<string, NodeData>();
+        newMap.set(rid, { content: rootContent, children: [], depth: 0, loaded: false });
+        setTreeData(newMap);
+        setRootId(rid);
+        setExpanded(new Set([rid]));
+        setSelected(new Set());
+        setStep(3);
+        // load children
+        void loadLinkChildren(rid, resolved.linkId, resolved.token, newMap, rid);
+      } else {
+        // mod
+        const virtualId = `mod:virtual:${resolved.modId}`;
+        const modTitle =
+          (resolved.modData as unknown as { mod?: { title?: string } }).mod?.title ??
+          (resolved.modData as unknown as { title?: string }).title ??
+          resolved.modId;
+        const virtualContent: DriveImportContent = {
+          id: virtualId,
+          name: String(modTitle),
+          isDir: true,
+          size: null,
+          mimeType: null,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        const newMap = new Map<string, NodeData>();
+        newMap.set(virtualId, { content: virtualContent, children: [], depth: 0, loaded: true });
+        const collectionNodes: NodeData[] = [];
+        for (const col of resolved.modData.collections as Array<{
+          id: string;
+          name: string;
+          rootId: string | null;
+          private: boolean;
+        }>) {
+          if (!col.rootId) continue;
+          // skip private already filtered in backend, but keep
+          const colContent: DriveImportContent = {
+            id: col.rootId,
+            name: col.name,
+            isDir: true,
+            size: null,
+            mimeType: null,
+            parentId: virtualId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          collectionNodes.push({ content: colContent, children: [], depth: 1, loaded: false });
+          newMap.get(virtualId)!.children.push(col.rootId);
+          newMap.set(col.rootId, { content: colContent, children: [], depth: 1, loaded: false });
+        }
+        if (collectionNodes.length === 0) {
+          toast.warning("가져올 수 있는 컬렉션이 없습니다.");
+        }
+        setTreeData(newMap);
+        setRootId(virtualId);
+        setExpanded(new Set([virtualId, ...collectionNodes.map((n) => n.content.id)]));
+        setSelected(new Set());
+        setStep(3);
+        // Optionally auto-load first collection's children
+        for (const n of collectionNodes) {
+          void loadModChildren(n.content.id, resolved.token, resolved.sig, newMap, virtualId);
+        }
+      }
+      setRequiresPassword(false);
+      setPasswordInvalid(false);
+    },
+    [loadLinkChildren, loadModChildren],
+  );
+
+  const tryAutoPasswords = useCallback(
+    async (trimmedUrl: string, seq: number): Promise<boolean> => {
+      try {
+        const settings = await getSetting(["drive.autoTryPasswords", "drive.passwordList"]);
+        if (seq !== loadSeqRef.current) return true;
+        if (!settings["drive.autoTryPasswords"]) return false;
+
+        const candidates = settings["drive.passwordList"].filter(Boolean);
+        if (candidates.length === 0) return false;
+
+        const winner = await new Promise<{
+          resolved: DriveResolveImportSourceResult;
+          password: string;
+        } | null>((resolve) => {
+          let pending = candidates.length;
+          let settled = false;
+
+          for (const candidate of candidates) {
+            void window.api
+              .invoke("drive:fn:resolveImportSource", {
+                url: trimmedUrl,
+                password: candidate,
+              })
+              .then((resolved) => {
+                if (settled) return;
+                settled = true;
+                resolve({
+                  resolved: resolved as unknown as DriveResolveImportSourceResult,
+                  password: candidate,
+                });
+              })
+              .catch(() => {
+                pending -= 1;
+                if (!settled && pending === 0) resolve(null);
+              });
+          }
+        });
+
+        if (seq !== loadSeqRef.current) return true;
+        if (!winner) return false;
+
+        setPassword(winner.password);
+        setRequiresPassword(false);
+        setPasswordInvalid(false);
+        applyResolvedResult(winner.resolved, seq, trimmedUrl);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [applyResolvedResult],
+  );
 
   const handleResolve = useCallback(
     async (seqArg?: number) => {
@@ -328,263 +539,56 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
         if (seq === loadSeqRef.current) setResolving(false);
       }
     },
-    [url, password, session, sessionInitialized, startLogin, t],
+    [
+      url,
+      password,
+      session,
+      sessionInitialized,
+      startLogin,
+      t,
+      applyResolvedResult,
+      tryAutoPasswords,
+    ],
   );
 
-  const tryAutoPasswords = useCallback(
-    async (trimmedUrl: string, seq: number): Promise<boolean> => {
-      try {
-        const settings = await getSetting(["drive.autoTryPasswords", "drive.passwordList"]);
-        if (seq !== loadSeqRef.current) return true;
-        if (!settings["drive.autoTryPasswords"]) return false;
+  useEffect(() => {
+    requestAnimationFrame(() => urlInputRef.current?.focus());
+  }, []);
 
-        const candidates = settings["drive.passwordList"].filter(Boolean);
-        if (candidates.length === 0) return false;
+  useEffect(() => {
+    return window.api.on("drive:copy-progress", (progress) => {
+      if (progress.operationId !== copyOperationIdRef.current) return;
+      setCopyProgress(progress);
+    });
+  }, []);
 
-        const winner = await new Promise<{
-          resolved: DriveResolveImportSourceResult;
-          password: string;
-        } | null>((resolve) => {
-          let pending = candidates.length;
-          let settled = false;
-
-          for (const candidate of candidates) {
-            void window.api
-              .invoke("drive:fn:resolveImportSource", {
-                url: trimmedUrl,
-                password: candidate,
-              })
-              .then((resolved) => {
-                if (settled) return;
-                settled = true;
-                resolve({
-                  resolved: resolved as unknown as DriveResolveImportSourceResult,
-                  password: candidate,
-                });
-              })
-              .catch(() => {
-                pending -= 1;
-                if (!settled && pending === 0) resolve(null);
-              });
-          }
-        });
-
-        if (seq !== loadSeqRef.current) return true;
-        if (!winner) return false;
-
-        setPassword(winner.password);
-        setRequiresPassword(false);
-        setPasswordInvalid(false);
-        applyResolvedResult(winner.resolved, seq, trimmedUrl);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    [],
-  );
-
-  function applyResolvedResult(
-    resolved: DriveResolveImportSourceResult,
-    seq: number,
-    trimmedUrl: string,
-  ) {
-    if (seq !== loadSeqRef.current) return;
-    setSourceInfo(resolved);
-    lastResolvedUrlRef.current = trimmedUrl;
-    // Build initial tree
-    if (resolved.source === "link") {
-      const rid = resolved.parent.id;
-      const rootContent: DriveImportContent = {
-        id: rid,
-        name: resolved.parent.name,
-        isDir: true,
-        size: null,
-        mimeType: null,
-        parentId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const newMap = new Map<string, NodeData>();
-      newMap.set(rid, { content: rootContent, children: [], depth: 0, loaded: false });
-      setTreeData(newMap);
-      setRootId(rid);
-      setExpanded(new Set([rid]));
-      setSelected(new Set());
-      setStep(3);
-      // load children
-      void loadLinkChildren(rid, resolved.linkId, resolved.token, newMap, rid);
-    } else {
-      // mod
-      const virtualId = `mod:virtual:${resolved.modId}`;
-      const modTitle =
-        (resolved.modData as unknown as { mod?: { title?: string } }).mod?.title ??
-        (resolved.modData as unknown as { title?: string }).title ??
-        resolved.modId;
-      const virtualContent: DriveImportContent = {
-        id: virtualId,
-        name: String(modTitle),
-        isDir: true,
-        size: null,
-        mimeType: null,
-        parentId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const newMap = new Map<string, NodeData>();
-      newMap.set(virtualId, { content: virtualContent, children: [], depth: 0, loaded: true });
-      const collectionNodes: NodeData[] = [];
-      for (const col of resolved.modData.collections as Array<{
-        id: string;
-        name: string;
-        rootId: string | null;
-        private: boolean;
-      }>) {
-        if (!col.rootId) continue;
-        // skip private already filtered in backend, but keep
-        const colContent: DriveImportContent = {
-          id: col.rootId,
-          name: col.name,
-          isDir: true,
-          size: null,
-          mimeType: null,
-          parentId: virtualId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        collectionNodes.push({ content: colContent, children: [], depth: 1, loaded: false });
-        newMap.get(virtualId)!.children.push(col.rootId);
-        newMap.set(col.rootId, { content: colContent, children: [], depth: 1, loaded: false });
-      }
-      if (collectionNodes.length === 0) {
-        toast.warning("가져올 수 있는 컬렉션이 없습니다.");
-      }
-      setTreeData(newMap);
-      setRootId(virtualId);
-      setExpanded(new Set([virtualId, ...collectionNodes.map((n) => n.content.id)]));
-      setSelected(new Set());
-      setStep(3);
-      // Optionally auto-load first collection's children
-      for (const n of collectionNodes) {
-        void loadModChildren(n.content.id, resolved.token, resolved.sig, newMap, virtualId);
-      }
-    }
+  // auto-resolve when the URL becomes a valid drive source URL
+  useEffect(() => {
+    const trimmed = url.trim();
+    if (trimmed === lastResolvedUrlRef.current) return;
+    loadSeqRef.current += 1;
+    setSourceInfo(null);
+    setTreeData(new Map());
+    setRootId(null);
+    setExpanded(new Set());
+    setSelected(new Set());
+    setStep(1);
     setRequiresPassword(false);
     setPasswordInvalid(false);
-  }
+    setResolveFailed(false);
+    if (!isValidDriveUrl(trimmed)) return;
+    if (!session) return;
+    const seq = ++loadSeqRef.current;
+    const timer = setTimeout(() => {
+      if (seq === loadSeqRef.current) void handleResolve(seq);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [url, session, handleResolve]);
 
-  const loadLinkChildren = async (
-    parentId: string,
-    linkId: string,
-    linkToken: string,
-    currentMap?: Map<string, NodeData>,
-    _currentRootId?: string | null,
-  ) => {
-    setLoadingIds((prev) => new Set(prev).add(parentId));
-    try {
-      const result: DriveListChildrenResult = await window.api.invoke("drive:fn:listLinkChildren", {
-        linkId,
-        linkToken,
-        itemId: parentId,
-      });
-      setTreeData((prev) => {
-        const base = currentMap ? new Map(currentMap) : new Map(prev);
-        const parentNode = base.get(parentId);
-        if (!parentNode) return prev;
-        const parentDepth = parentNode.depth;
-        const childIds: string[] = [];
-        for (const child of result.children) {
-          const cid = child.id;
-          childIds.push(cid);
-          if (!base.has(cid)) {
-            base.set(cid, {
-              content: child,
-              children: [],
-              depth: parentDepth + 1,
-              loaded: false,
-            });
-          }
-        }
-        base.set(parentId, { ...parentNode, children: childIds, loaded: true });
-        return base;
-      });
-    } catch (error) {
-      if (isNotFoundError(error)) {
-        toast.error("링크가 만료되었습니다. 처음부터 다시 시도하세요.");
-        setSourceInfo(null);
-        setTreeData(new Map());
-        setRootId(null);
-        setExpanded(new Set());
-        setSelected(new Set());
-        setStep(1);
-        setRequiresPassword(false);
-        return;
-      }
-      toast.error("폴더 목록을 불러오지 못했습니다", { description: toErrorMessage(error) });
-    } finally {
-      setLoadingIds((prev) => {
-        const n = new Set(prev);
-        n.delete(parentId);
-        return n;
-      });
-    }
-  };
-
-  const loadModChildren = async (
-    parentId: string,
-    modToken?: string,
-    modSig?: string,
-    currentMap?: Map<string, NodeData>,
-    _virtualRoot?: string | null,
-  ) => {
-    setLoadingIds((prev) => new Set(prev).add(parentId));
-    try {
-      const result: DriveListChildrenResult = await window.api.invoke("drive:fn:listModChildren", {
-        itemId: parentId,
-        modToken,
-        modSig,
-      });
-      setTreeData((prev) => {
-        const base = currentMap ? new Map(currentMap) : new Map(prev);
-        const parentNode = base.get(parentId);
-        if (!parentNode) return prev;
-        const parentDepth = parentNode.depth;
-        const childIds: string[] = [];
-        for (const child of result.children) {
-          const cid = child.id;
-          childIds.push(cid);
-          if (!base.has(cid)) {
-            base.set(cid, {
-              content: child,
-              children: [],
-              depth: parentDepth + 1,
-              loaded: false,
-            });
-          }
-        }
-        base.set(parentId, { ...parentNode, children: childIds, loaded: true });
-        return base;
-      });
-    } catch (error) {
-      if (isNotFoundError(error)) {
-        toast.error("컬렉션을 불러오지 못했습니다. 링크가 만료되었을 수 있습니다.");
-        setSourceInfo(null);
-        setTreeData(new Map());
-        setRootId(null);
-        setExpanded(new Set());
-        setSelected(new Set());
-        setStep(1);
-        return;
-      }
-      toast.error("폴더 목록을 불러오지 못했습니다", { description: toErrorMessage(error) });
-    } finally {
-      setLoadingIds((prev) => {
-        const n = new Set(prev);
-        n.delete(parentId);
-        return n;
-      });
-    }
-  };
+  // focus password when required
+  useEffect(() => {
+    if (requiresPassword) requestAnimationFrame(() => passwordInputRef.current?.focus());
+  }, [requiresPassword]);
 
   const handleExpand = useCallback(
     (id: string) => {
@@ -597,7 +601,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
         void loadModChildren(id, sourceInfo.token, sourceInfo.sig);
       }
     },
-    [treeData, sourceInfo],
+    [treeData, sourceInfo, loadLinkChildren, loadModChildren],
   );
 
   const handleCollapse = useCallback((id: string) => {
@@ -617,7 +621,6 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
         ancestors.push(pid);
         cur = treeData.get(pid);
       }
-      // for mod virtual root, also need to handle virtual parent
       return ancestors;
     },
     [treeData],
@@ -766,8 +769,6 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
     setIsImporting(false);
     setImportOverlay(null);
   };
-
-  if (!importOverlay) return null;
 
   const isUrlStep = step === 1;
   const isTreeStep = step === 3;

@@ -4,6 +4,7 @@ import { createStore, useStore } from "zustand";
 
 export type FolderSortKey = "name" | "mod-count" | "enabled-mod-count";
 export type FolderSortDirection = "ascending" | "descending";
+export type DownloadMode = NonNullable<ModState["downloadMode"]>;
 
 interface ModState {
     selectedGame: string;

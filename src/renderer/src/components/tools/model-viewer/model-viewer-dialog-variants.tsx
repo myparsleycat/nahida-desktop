@@ -97,12 +97,14 @@ export function VariantSlider({
       : Number(variable.values[0]?.value ?? 0);
   const resolvedValue =
     typeof activeValue === "number" ? activeValue : Number(activeValue ?? fallbackValue);
+  const [prevResolvedValue, setPrevResolvedValue] = useState(resolvedValue);
   const [draftValue, setDraftValue] = useState(resolvedValue);
   const commitTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  if (prevResolvedValue !== resolvedValue) {
+    setPrevResolvedValue(resolvedValue);
     setDraftValue(resolvedValue);
-  }, [resolvedValue]);
+  }
 
   useEffect(() => {
     return () => {

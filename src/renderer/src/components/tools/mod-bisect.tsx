@@ -43,13 +43,15 @@ function createExcludeRow(): ExcludeRow {
 export default function ModBisect() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [selectedGame, setSelectedGame] = useState<string>("");
+  const [userSelectedGame, setUserSelectedGame] = useState<string>("");
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
   const excludeListRef = useRef<{ flush: () => Promise<string[] | null> }>(null);
   const { data: preserveD3dx = true } = useSetting("general.bisectPreserveD3dx");
 
   const { data: games = [] } = useGames();
+  const defaultGame = games.find((g) => !isNteImporter(g.importer))?.game ?? "";
+  const selectedGame = userSelectedGame || defaultGame;
 
   const { data: snapshot } = useQuery<BisectSnapshot | null>({
     queryKey: ["tools:bisectState"],
@@ -68,13 +70,6 @@ export default function ModBisect() {
     });
     return unsubscribe;
   }, [queryClient]);
-
-  useEffect(() => {
-    if (!selectedGame && games.length > 0) {
-      const first = games.find((g) => !isNteImporter(g.importer));
-      if (first) setSelectedGame(first.game);
-    }
-  }, [games, selectedGame]);
 
   const startMutation = useMutation({
     mutationFn: ({ game, excludePaths }: { game: string; excludePaths: string[] }) =>
@@ -150,7 +145,7 @@ export default function ModBisect() {
             <GameSelect
               games={games}
               value={selectedGame}
-              onChange={setSelectedGame}
+              onChange={setUserSelectedGame}
               disabled={isActive || isBusy}
             />
             <Button
@@ -212,6 +207,7 @@ export default function ModBisect() {
           </div>
 
           <ExcludePathList
+            key={selectedGame}
             ref={excludeListRef}
             game={selectedGame}
             disabled={isActive || isBusy || !selectedGame}
@@ -270,11 +266,6 @@ function ExcludePathList({
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
-
-  useEffect(() => {
-    rowsRef.current = [];
-    setRows([]);
-  }, [game]);
 
   const commitRow = (id: string): Promise<boolean> => {
     const inFlight = committingRef.current.get(id);

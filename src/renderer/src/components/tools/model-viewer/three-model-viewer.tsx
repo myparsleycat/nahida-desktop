@@ -1,3 +1,4 @@
+// oxlint-disable react/immutability, react/set-state-in-effect
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
@@ -230,29 +231,11 @@ function ThreeModelScene({
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
   const payloadEvalRef = useRef(payloadEval);
-  payloadEvalRef.current = payloadEval;
   const payloadTransportRef = useRef(payloadTransport);
-  payloadTransportRef.current = payloadTransport;
   const animationClipRef = useRef(animationClip);
-  animationClipRef.current = animationClip;
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
-  modelRootRef.current = modelRoot;
   const applyPayloadVisualsRef = useRef(() => {});
-  applyPayloadVisualsRef.current = () => {
-    const root = modelRootRef.current;
-    const transport = payloadTransportRef.current;
-    const toggleEval = payloadEvalRef.current;
-    if (!root || !transport || !toggleEval) {
-      return;
-    }
-    const animationValues = animationValuesRef.current;
-    const evalResult = Object.keys(animationValues).length
-      ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
-      : toggleEval;
-    applyPayloadEval(root, evalResult);
-    invalidate();
-  };
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
@@ -318,32 +301,57 @@ function ThreeModelScene({
   }, [onError]);
 
   useEffect(() => {
+    payloadEvalRef.current = payloadEval;
+  }, [payloadEval]);
+
+  useEffect(() => {
+    payloadTransportRef.current = payloadTransport;
+  }, [payloadTransport]);
+
+  useEffect(() => {
+    animationClipRef.current = animationClip;
+  }, [animationClip]);
+
+  useEffect(() => {
+    modelRootRef.current = modelRoot;
+  }, [modelRoot]);
+
+  useEffect(() => {
+    applyPayloadVisualsRef.current = () => {
+      const root = modelRootRef.current;
+      const transport = payloadTransportRef.current;
+      const toggleEval = payloadEvalRef.current;
+      if (!root || !transport || !toggleEval) {
+        return;
+      }
+      const animationValues = animationValuesRef.current;
+      const evalResult = Object.keys(animationValues).length
+        ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
+        : toggleEval;
+      applyPayloadEval(root, evalResult);
+      invalidate();
+    };
+  }, [invalidate]);
+
+  useEffect(() => {
     const loadId = pendingLoadIdRef.current + 1;
     pendingLoadIdRef.current = loadId;
 
-    const loader = new GLTFLoader();
     let disposed = false;
 
-    if (!src && !payloadTransport) {
-      if (activeObjectRef.current) {
-        disposeObjectTree(activeObjectRef.current);
-      }
-      setModelRoot(null);
+    if (activeObjectRef.current) {
+      disposeObjectTree(activeObjectRef.current);
       activeObjectRef.current = null;
-      orientedCenterRef.current = null;
-      materialRef.current = [];
+    }
+    orientedCenterRef.current = null;
+    materialRef.current = [];
+    setModelRoot((current) => (current ? null : current));
+
+    if (!src && !payloadTransport) {
       return () => {
         disposed = true;
       };
     }
-
-    setModelRoot((current) => {
-      if (current) {
-        disposeObjectTree(current);
-      }
-      orientedCenterRef.current = null;
-      return null;
-    });
 
     if (payloadTransport) {
       void buildPayloadModel(
@@ -373,6 +381,7 @@ function ThreeModelScene({
       };
     }
 
+    const loader = new GLTFLoader();
     loader.load(
       src,
       (gltf) => {

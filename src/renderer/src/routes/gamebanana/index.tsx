@@ -573,6 +573,7 @@ function RouteComponent() {
 
             {isViewingMod && (
               <ModDetailPanel
+                key={selectedMod ? `${selectedMod.modelName}:${selectedMod.id}` : undefined}
                 t={t}
                 language={i18n.language}
                 selection={selectedMod}

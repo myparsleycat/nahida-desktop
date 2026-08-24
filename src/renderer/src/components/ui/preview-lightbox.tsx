@@ -1,6 +1,6 @@
 import { Button } from "@renderer/components/ui/button";
 import { XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface PreviewLightboxProps {
@@ -17,16 +17,13 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = props.open !== undefined;
 
-  const onOpenChangeRef = useRef(props.onOpenChange);
-  onOpenChangeRef.current = props.onOpenChange;
-
   const open = isControlled ? props.open : internalOpen;
 
   const change = (next: boolean) => {
     if (!isControlled) {
       setInternalOpen(next);
     }
-    onOpenChangeRef.current?.(next);
+    props.onOpenChange?.(next);
   };
 
   useEffect(() => {

@@ -32,6 +32,7 @@ import {
   TerminalSquareIcon,
 } from "lucide-react";
 import path from "path-browserify";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 type ModFixRunner = ReturnType<typeof useModFixRunner>;
@@ -40,6 +41,14 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
   const { t } = useTranslation();
   const translationKey = "page.mod.dialog.wuwa-fix-runner";
   const aeroEnabled = runner.wuwaOptions.aeroFix !== "none";
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [runner.logs]);
 
   return (
     <>
@@ -514,7 +523,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
         onOpenChange={(nextOpen, eventDetails) => {
           if (nextOpen) {
             runner.setShowLogModal(true);
-            queueMicrotask(() => runner.inputRef.current?.focus());
+            queueMicrotask(() => inputRef.current?.focus());
             return;
           }
 
@@ -531,7 +540,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
             <AlertDialogTitle>{runner.labels.logTitle}</AlertDialogTitle>
           </AlertDialogHeader>
           <ScrollArea
-            viewportRef={runner.scrollRef}
+            viewportRef={scrollRef}
             className="h-[calc(100vh-430px)] w-full rounded-md border bg-muted font-mono text-xs break-all whitespace-pre-wrap"
           >
             <div className="space-y-2 p-3">
@@ -556,7 +565,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
           </ScrollArea>
           <div className="flex gap-2">
             <Input
-              ref={runner.inputRef}
+              ref={inputRef}
               placeholder={t(`${translationKey}.log.input_placeholder`)}
               value={runner.inputCmd}
               disabled={!runner.isRunning}

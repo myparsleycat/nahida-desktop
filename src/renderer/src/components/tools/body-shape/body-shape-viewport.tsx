@@ -55,8 +55,8 @@ export type BodyShapeViewportProps = {
   showWeights: boolean;
   /** Bumped when region selection or amounts change. */
   weightVersion: number;
-  /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. */
-  positionsChanged: boolean;
+  /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. If omitted, tracked automatically. */
+  positionsChanged?: boolean;
   /** Stable identity for the mesh frame; changing mask data should not reframe the camera. */
   frameKey?: string;
   orientation?: string;
@@ -162,14 +162,21 @@ function BodyShapeMesh({
   const framedKeyRef = useRef<string | Float32Array | null>(null);
   const isPaintingRef = useRef(false);
   const { camera, raycaster, gl } = useThree();
+  const prevPositionsRef = useRef<{
+    regions: readonly ActiveRegionDeform[];
+    showOriginal: boolean;
+  } | null>(null);
   const heatmapRegionsRef = useRef<ActiveRegionDeform[]>(regions);
-  heatmapRegionsRef.current = regions;
   const onBrushStrokeRef = useRef(onBrushStroke);
-  onBrushStrokeRef.current = onBrushStroke;
   const onBrushStrokeStartRef = useRef(onBrushStrokeStart);
-  onBrushStrokeStartRef.current = onBrushStrokeStart;
   const onBrushStrokeEndRef = useRef(onBrushStrokeEnd);
-  onBrushStrokeEndRef.current = onBrushStrokeEnd;
+
+  useEffect(() => {
+    heatmapRegionsRef.current = regions;
+    onBrushStrokeRef.current = onBrushStroke;
+    onBrushStrokeStartRef.current = onBrushStrokeStart;
+    onBrushStrokeEndRef.current = onBrushStrokeEnd;
+  });
 
   const writeColors = (regions: ActiveRegionDeform[]) => {
     const vertexCount = Math.floor(originalPositions.length / 3);
@@ -187,13 +194,18 @@ function BodyShapeMesh({
     onRegisterUpdateColors(writeColors);
   });
 
+  const initialColors = useMemo(
+    () => new Float32Array(Math.floor(originalPositions.length / 3) * 3),
+    [originalPositions],
+  );
+
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
     const positionAttr = new BufferAttribute(previewPositions, 3);
     positionAttr.setUsage(35048);
     geo.setAttribute("position", positionAttr);
 
-    const colorAttr = new BufferAttribute(colorsRef.current, 3);
+    const colorAttr = new BufferAttribute(initialColors, 3);
     colorAttr.setUsage(35048);
     geo.setAttribute("color", colorAttr);
 
@@ -203,16 +215,22 @@ function BodyShapeMesh({
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
     return geo;
-  }, [indices, originalPositions, previewPositions]);
+  }, [indices, initialColors, originalPositions, previewPositions]);
 
   useEffect(() => {
+    const isPositionsChanged =
+      positionsChanged ??
+      (prevPositionsRef.current?.regions !== regions ||
+        prevPositionsRef.current?.showOriginal !== showOriginal);
+    prevPositionsRef.current = { regions, showOriginal };
+
     const vertexCount = Math.floor(originalPositions.length / 3);
     if (colorsRef.current.length !== vertexCount * 3) {
       colorsRef.current = new Float32Array(vertexCount * 3);
       geometry.setAttribute("color", new BufferAttribute(colorsRef.current, 3));
     }
 
-    if (positionsChanged) {
+    if (isPositionsChanged) {
       if (showOriginal || regions.length === 0) {
         previewPositions.set(originalPositions);
       } else {
@@ -236,7 +254,7 @@ function BodyShapeMesh({
     const colorAttr = geometry.getAttribute("color") as BufferAttribute;
     colorAttr.needsUpdate = true;
 
-    if (positionsChanged) {
+    if (isPositionsChanged) {
       geometry.computeVertexNormals();
       geometry.computeBoundingSphere();
     }

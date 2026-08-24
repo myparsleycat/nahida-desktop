@@ -17,7 +17,6 @@ import { useModStore } from "@renderer/store/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
 import { stripDisabledPrefix } from "@shared/mod";
 import type {
-  ClassifyMergePacksResult,
   MergeEngine,
   MergePackClassification,
   MergePlacement,
@@ -25,9 +24,9 @@ import type {
   MergePlanNode,
 } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownIcon, ArrowUpIcon, GroupIcon, Loader2Icon, UngroupIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -40,54 +39,63 @@ export function MergeModsDialog() {
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const exitMergeMode = useModStore((s) => s.exitMergeMode);
 
-  const [classification, setClassification] = useState<ClassifyMergePacksResult | null>(null);
-  const [plan, setPlan] = useState<MergePlanGroup | null>(null);
+  const selectedPathsArray = useMemo(() => Array.from(selectedModPaths), [selectedModPaths]);
+
+  const { data: classification, isLoading } = useQuery({
+    queryKey: ["mod:classifyMergePacks", selectedPathsArray],
+    queryFn: async () => {
+      try {
+        return await window.api.invoke("mod:classifyMergePacks", selectedPathsArray);
+      } catch (error) {
+        toast.error(toErrorMessage(error) || t("page.mod.merge.classify_failed"));
+        setOpen(false);
+        throw error;
+      }
+    },
+    enabled: open && selectedPathsArray.length > 0,
+  });
+
+  const [userPlan, setUserPlan] = useState<MergePlanGroup | null>(null);
+  const [userPackName, setUserPackName] = useState<string | null>(null);
   const [placement, setPlacement] = useState<MergePlacement>("new_folder");
-  const [packName, setPackName] = useState("Merged");
-  const [isLoading, setIsLoading] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [editingKey, setEditingKey] = useState<"forward" | "back" | null>(null);
+  const [prevClassification, setPrevClassification] = useState(classification);
+
+  if (classification !== prevClassification) {
+    setPrevClassification(classification);
+    setUserPlan(null);
+    setUserPackName(null);
+  }
+
+  const defaultPackName = useMemo(() => {
+    if (!classification) return "Merged";
+    return (
+      stripDisabledPrefix(classification.packs[0]?.name ?? "Merged").replace(/\s+/g, "") || "Merged"
+    );
+  }, [classification]);
+
+  const defaultPlan = useMemo(() => {
+    if (!classification) return null;
+    return buildDefaultPlan(classification, defaultPackName);
+  }, [classification, defaultPackName]);
+
+  const packName = userPackName ?? defaultPackName;
+  const plan = userPlan ?? defaultPlan;
+
+  const setPackName = (name: string) => setUserPackName(name);
+  const setPlan = (
+    nextPlan: MergePlanGroup | ((prev: MergePlanGroup | null) => MergePlanGroup | null),
+  ) => {
+    setUserPlan((prev) =>
+      typeof nextPlan === "function" ? nextPlan(prev ?? defaultPlan) : nextPlan,
+    );
+  };
 
   const packsByPath = useMemo(
     () => new Map((classification?.packs ?? []).map((pack) => [pack.path, pack])),
     [classification],
   );
-
-  useEffect(() => {
-    if (!open) {
-      setClassification(null);
-      setPlan(null);
-      setEditingKey(null);
-      return;
-    }
-
-    let cancelled = false;
-    const paths = Array.from(selectedModPaths);
-    setIsLoading(true);
-    void window.api
-      .invoke("mod:classifyMergePacks", paths)
-      .then((result) => {
-        if (cancelled) return;
-        setClassification(result);
-        const nextName =
-          stripDisabledPrefix(result.packs[0]?.name ?? "Merged").replace(/\s+/g, "") || "Merged";
-        setPackName(nextName);
-        setPlan(buildDefaultPlan(result, nextName));
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        toast.error(toErrorMessage(error) || t("page.mod.merge.classify_failed"));
-        setOpen(false);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, selectedModPaths, setOpen]);
 
   const classicLocked = plan ? planHasClassicViolation(plan, packsByPath) : false;
   const canSubmit = Boolean(plan && selectedGroupPath && planIsValid(plan) && !classicLocked);

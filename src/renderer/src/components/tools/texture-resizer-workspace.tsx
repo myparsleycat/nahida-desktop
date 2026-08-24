@@ -100,42 +100,11 @@ export function TextureResizerWorkspace({
     selectedPaths.has(texture.filePath),
   );
 
-  useEffect(() => {
+  const [prevFixedTargetPath, setPrevFixedTargetPath] = useState(fixedTargetPath);
+  if (fixedTargetPath !== prevFixedTargetPath) {
+    setPrevFixedTargetPath(fixedTargetPath);
     setTargetPath(fixedTargetPath ?? "");
-  }, [fixedTargetPath]);
-
-  useEffect(() => {
-    return window.api.on("tools:textureUpscaleProgress", (event) => {
-      setUpscaleProgress(event);
-    });
-  }, []);
-
-  useEffect(() => {
-    window.api
-      .invoke("tools:getTextureResizeSettings")
-      .then((nextSettings) => {
-        settingsForm.reset(nextSettings);
-        if (mode === "mod" && fixedTargetPath) {
-          void loadTextures(fixedTargetPath, nextSettings);
-        }
-      })
-      .catch((error) => {
-        toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
-          description: toErrorMessage(error),
-        });
-      });
-  }, [fixedTargetPath, mode, settingsForm, t]);
-
-  const browseTargetPath = async () => {
-    const selected = await window.api.invoke("util:showOpenDialog", {
-      properties: ["openDirectory"],
-    });
-    const filePath = selected.filePaths[0];
-    if (filePath) {
-      setTargetPath(filePath);
-      await loadTextures(filePath, settingsForm.state.values);
-    }
-  };
+  }
 
   const loadTextures = async (
     nextTargetPath = targetPath,
@@ -168,6 +137,39 @@ export function TextureResizerWorkspace({
       setIsListing(false);
     }
   };
+
+  const browseTargetPath = async () => {
+    const selected = await window.api.invoke("util:showOpenDialog", {
+      properties: ["openDirectory"],
+    });
+    const filePath = selected.filePaths[0];
+    if (filePath) {
+      setTargetPath(filePath);
+      await loadTextures(filePath, settingsForm.state.values);
+    }
+  };
+
+  useEffect(() => {
+    return window.api.on("tools:textureUpscaleProgress", (event) => {
+      setUpscaleProgress(event);
+    });
+  }, []);
+
+  useEffect(() => {
+    window.api
+      .invoke("tools:getTextureResizeSettings")
+      .then((nextSettings) => {
+        settingsForm.reset(nextSettings);
+        if (mode === "mod" && fixedTargetPath) {
+          void loadTextures(fixedTargetPath, nextSettings);
+        }
+      })
+      .catch((error) => {
+        toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
+          description: toErrorMessage(error),
+        });
+      });
+  }, [fixedTargetPath, mode, settingsForm, t]);
 
   const toggleTexture = (filePath: string, selected: boolean) => {
     setSelectedPaths((current) => {

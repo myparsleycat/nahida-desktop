@@ -1,7 +1,7 @@
 import { getSetting, setSetting, settingsManyQueryKey } from "@renderer/lib/settings";
 import type { AppSettings, SettingKey } from "@shared/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, type SetStateAction } from "react";
 
 type SettingsConfig = Record<string, SettingKey>;
 
@@ -70,48 +70,56 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
         refetchOnWindowFocus: false,
     });
 
-    const [settings, setSettings] = useState<SettingsShape<TConfig>>({} as SettingsShape<TConfig>);
-    const settingsRef = useRef(settings);
     const settingUpdateQueueRef = useRef(Promise.resolve());
-    const [isInitialized, setIsInitialized] = useState(false);
 
-    useEffect(() => {
-        if (data) {
-            settingsRef.current = data;
-            setSettings(data);
-            setIsInitialized(true);
-        }
-    }, [data]);
+    const setSettings = useCallback(
+        (action: SetStateAction<SettingsShape<TConfig>>) => {
+            queryClient.setQueryData<SettingsShape<TConfig>>(queryKey, (prev) => {
+                const current = prev ?? ({} as SettingsShape<TConfig>);
+                if (typeof action === "function") {
+                    return (action as (current: SettingsShape<TConfig>) => SettingsShape<TConfig>)(
+                        current,
+                    );
+                }
+                return action;
+            });
+        },
+        [queryClient, queryKey],
+    );
 
-    const update = async <K extends keyof TConfig>(
-        key: K,
-        updateValue: SettingUpdate<SettingsShape<TConfig>[K]>,
-    ) => {
-        const value =
-            typeof updateValue === "function"
-                ? (
-                      updateValue as (
-                          current: SettingsShape<TConfig>[K],
-                      ) => SettingsShape<TConfig>[K]
-                  )(settingsRef.current[key])
-                : updateValue;
-        const nextSettings = { ...settingsRef.current, [key]: value };
-        const singleSettingQueryKey = ["settings", settingsConfig[key]] as const;
-        settingsRef.current = nextSettings;
-        setSettings(nextSettings);
-        queryClient.setQueryData(queryKey, nextSettings);
-        queryClient.setQueryData<SettingsShape<TConfig>[K]>(singleSettingQueryKey, value);
-        const pendingUpdate = settingUpdateQueueRef.current
-            .catch(() => {})
-            .then(() => setSetting(settingsConfig[key], value));
-        settingUpdateQueueRef.current = pendingUpdate;
-        await pendingUpdate;
-    };
+    const update = useCallback(
+        async <K extends keyof TConfig>(
+            key: K,
+            updateValue: SettingUpdate<SettingsShape<TConfig>[K]>,
+        ) => {
+            const currentSettings =
+                queryClient.getQueryData<SettingsShape<TConfig>>(queryKey) ??
+                ({} as SettingsShape<TConfig>);
+            const value =
+                typeof updateValue === "function"
+                    ? (
+                          updateValue as (
+                              current: SettingsShape<TConfig>[K],
+                          ) => SettingsShape<TConfig>[K]
+                      )(currentSettings[key])
+                    : updateValue;
+            const nextSettings = { ...currentSettings, [key]: value };
+            const singleSettingQueryKey = ["settings", settingsConfig[key]] as const;
+            queryClient.setQueryData(queryKey, nextSettings);
+            queryClient.setQueryData<SettingsShape<TConfig>[K]>(singleSettingQueryKey, value);
+            const pendingUpdate = settingUpdateQueueRef.current
+                .catch(() => {})
+                .then(() => setSetting(settingsConfig[key], value));
+            settingUpdateQueueRef.current = pendingUpdate;
+            await pendingUpdate;
+        },
+        [queryClient, queryKey, settingsConfig],
+    );
 
     return {
-        settings,
+        settings: data ?? ({} as SettingsShape<TConfig>),
         update,
-        isLoading: isQueryLoading || !isInitialized,
+        isLoading: isQueryLoading || data === undefined,
         setSettings,
     };
 }

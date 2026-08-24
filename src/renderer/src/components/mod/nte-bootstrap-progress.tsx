@@ -11,14 +11,18 @@ interface NteBootstrapProgressViewProps {
 export function NteBootstrapProgressView({ active }: NteBootstrapProgressViewProps) {
   const { t } = useTranslation();
   const [progress, setProgress] = useState<NteBootstrapProgress | null>(null);
+  const [prevActive, setPrevActive] = useState(active);
+
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (active) {
+      setProgress(null);
+    }
+  }
 
   useEffect(() => {
     return window.api.on("mod:nte-bootstrap-progress", setProgress);
   }, []);
-
-  useEffect(() => {
-    if (active) setProgress(null);
-  }, [active]);
 
   const showPanel = active || progress?.phase === "failed";
   if (!showPanel) return null;
@@ -59,7 +63,7 @@ export function NteBootstrapProgressView({ active }: NteBootstrapProgressViewPro
         className={displayProgress.progress === null ? "animate-pulse" : undefined}
       />
       {displayProgress.message ? (
-        <p className="break-all text-xs text-muted-foreground">{displayProgress.message}</p>
+        <p className="text-xs break-all text-muted-foreground">{displayProgress.message}</p>
       ) : null}
     </div>
   );

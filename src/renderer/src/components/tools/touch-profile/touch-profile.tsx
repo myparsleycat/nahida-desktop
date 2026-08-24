@@ -250,13 +250,21 @@ export default function TouchProfileTool({
       ),
     [draft?.components],
   );
-  const firstComponentId = interactiveComponents[0]?.componentId ?? "";
+  const activeComponentId =
+    interactiveComponents.find((component) => component.componentId === selectedComponentId)
+      ?.componentId ??
+    interactiveComponents[0]?.componentId ??
+    "";
   const selectedComponent = interactiveComponents.find(
-    (component) => component.componentId === selectedComponentId,
+    (component) => component.componentId === activeComponentId,
   );
-  const selectedComponentIsValid = selectedComponent !== undefined;
-  const selectedZone = selectedComponent?.zones.find((zone) => zone.id === selectedZoneId);
-  const activePreview = preview?.componentId === selectedComponentId ? preview : null;
+  const activeZoneId =
+    selectedZoneId === ALL_ZONES ||
+    selectedComponent?.zones.some((zone) => zone.id === selectedZoneId)
+      ? selectedZoneId
+      : ALL_ZONES;
+  const selectedZone = selectedComponent?.zones.find((zone) => zone.id === activeZoneId);
+  const activePreview = preview?.componentId === activeComponentId ? preview : null;
   // While a new component's preview is loading, keep the previous component's
   // mesh on the Canvas instead of unmounting/remounting the WebGL context (which
   // forces shader recompilation and stalls the renderer main thread). Falls back
@@ -264,137 +272,10 @@ export default function TouchProfileTool({
   // previewLoading so the user knows the displayed mesh is not the current one.
   const displayPreview = activePreview ?? (previewLoading ? lastValidPreview : null);
 
-  useEffect(() => {
-    if (activePreview) setLastValidPreview(activePreview);
-  }, [activePreview]);
-
-  useEffect(() => {
-    draftSessionRef.current = draft?.sessionId ?? null;
-  }, [draft?.sessionId]);
-
-  useEffect(() => {
-    return () => {
-      const sessionId = draftSessionRef.current;
-      if (!sessionId) return;
-      void window.api.invoke("tools:touchProfileDiscardDraft", sessionId);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!fixedTargetPath) return;
-    setModPath(fixedTargetPath);
-    void loadMod(fixedTargetPath);
-  }, [fixedTargetPath]);
-  useEffect(() => {
-    if (selectedComponentIsValid) return;
-    setSelectedComponentId(firstComponentId);
-  }, [firstComponentId, selectedComponentIsValid]);
-
-  useEffect(() => {
-    setSelectedZoneId(ALL_ZONES);
-  }, [selectedComponentId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!draft?.sessionId || !selectedComponentId) {
-      if (!draft) return;
-      setPreview(null);
-      setLastValidPreview(null);
-      setPreviewError(null);
-      setPreviewLoading(false);
-      return;
-    }
-
-    setPreviewError(null);
-    setPreviewLoading(true);
-
-    void window.api
-      .invoke("tools:touchProfileGetPreview", {
-        sessionId: draft.sessionId,
-        componentId: selectedComponentId,
-      })
-      .then((next) => {
-        if (cancelled) return;
-        setPreview(next);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setPreviewError(toErrorMessage(error));
-      })
-      .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [draft?.sessionId, selectedComponentId, previewReloadVersion]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (phase !== "select" || !inspection?.sessionId || !selectedMeshComponentId) {
-      if (phase !== "select") return;
-      setMeshPreview(null);
-      setMeshPreviewError(null);
-      setMeshPreviewLoading(false);
-      return;
-    }
-
-    setMeshPreviewError(null);
-    setMeshPreviewLoading(true);
-
-    void window.api
-      .invoke("tools:touchProfileGetMeshPreview", {
-        sessionId: inspection.sessionId,
-        componentId: selectedMeshComponentId,
-      })
-      .then((next) => {
-        if (cancelled) return;
-        setMeshPreview(next);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setMeshPreviewError(toErrorMessage(error));
-      })
-      .finally(() => {
-        if (!cancelled) setMeshPreviewLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, inspection?.sessionId, selectedMeshComponentId]);
-
-  const visibleZones = useMemo(() => {
-    if (!activePreview) return [];
-    if (selectedZoneId === ALL_ZONES) return activePreview.zones;
-    return activePreview.zones.filter((zone) => zone.id === selectedZoneId);
-  }, [activePreview, selectedZoneId]);
-
-  const previewRegions = useMemo(
-    () =>
-      visibleZones.map((zone) => ({
-        id: zone.id,
-        weights: zone.weights,
-        amount: 1,
-        axisScale: [1, 1, 1] as [number, number, number],
-        pivot: zone.center,
-      })),
-    [visibleZones],
-  );
-
-  const selectFolder = async () => {
-    const selected = await window.api.invoke("util:showOpenDialog", {
-      properties: ["openDirectory"],
-    });
-    if (selected && !selected.canceled && selected.filePaths[0]) {
-      setModPath(selected.filePaths[0]);
-    }
-  };
-
   const loadMod = async (pathOverride?: string) => {
     const targetPath = pathOverride ?? modPath;
     if (!targetPath || loading) return;
+    if (pathOverride) setModPath(pathOverride);
     setLoading(true);
     setDraft(null);
     setResult(null);
@@ -433,6 +314,115 @@ export default function TouchProfileTool({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    draftSessionRef.current = draft?.sessionId ?? null;
+  }, [draft?.sessionId]);
+
+  useEffect(() => {
+    return () => {
+      const sessionId = draftSessionRef.current;
+      if (!sessionId) return;
+      void window.api.invoke("tools:touchProfileDiscardDraft", sessionId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!fixedTargetPath) return;
+    queueMicrotask(() => {
+      void loadMod(fixedTargetPath);
+    });
+  }, [fixedTargetPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!draft?.sessionId || !activeComponentId) {
+      return;
+    }
+
+    const fetchPreview = async () => {
+      setPreviewError(null);
+      setPreviewLoading(true);
+      try {
+        const next = await window.api.invoke("tools:touchProfileGetPreview", {
+          sessionId: draft.sessionId,
+          componentId: activeComponentId,
+        });
+        if (cancelled) return;
+        setPreview(next);
+        setLastValidPreview(next);
+      } catch (error) {
+        if (cancelled) return;
+        setPreviewError(toErrorMessage(error));
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+
+    void fetchPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft?.sessionId, activeComponentId, previewReloadVersion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (phase !== "select" || !inspection?.sessionId || !selectedMeshComponentId) {
+      return;
+    }
+
+    const fetchMeshPreview = async () => {
+      setMeshPreviewError(null);
+      setMeshPreviewLoading(true);
+      try {
+        const next = await window.api.invoke("tools:touchProfileGetMeshPreview", {
+          sessionId: inspection.sessionId,
+          componentId: selectedMeshComponentId,
+        });
+        if (cancelled) return;
+        setMeshPreview(next);
+      } catch (error) {
+        if (cancelled) return;
+        setMeshPreviewError(toErrorMessage(error));
+      } finally {
+        if (!cancelled) setMeshPreviewLoading(false);
+      }
+    };
+
+    void fetchMeshPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, inspection?.sessionId, selectedMeshComponentId]);
+
+  const visibleZones = useMemo(() => {
+    if (!activePreview) return [];
+    if (activeZoneId === ALL_ZONES) return activePreview.zones;
+    return activePreview.zones.filter((zone) => zone.id === activeZoneId);
+  }, [activePreview, activeZoneId]);
+
+  const previewRegions = useMemo(
+    () =>
+      visibleZones.map((zone) => ({
+        id: zone.id,
+        weights: zone.weights,
+        amount: 1,
+        axisScale: [1, 1, 1] as [number, number, number],
+        pivot: zone.center,
+      })),
+    [visibleZones],
+  );
+
+  const selectFolder = async () => {
+    const selected = await window.api.invoke("util:showOpenDialog", {
+      properties: ["openDirectory"],
+    });
+    if (selected && !selected.canceled && selected.filePaths[0]) {
+      setModPath(selected.filePaths[0]);
     }
   };
 
@@ -1394,13 +1384,16 @@ export default function TouchProfileTool({
                   <Field>
                     <FieldLabel>{t("page.tools.touch_profile.component")}</FieldLabel>
                     <Select
-                      value={selectedComponentId}
+                      value={activeComponentId}
                       items={interactiveComponents.map((component) => ({
                         value: component.componentId,
                         label: `${component.componentId} (${component.zones.length})`,
                       }))}
                       onValueChange={(value) => {
-                        if (value) setSelectedComponentId(value);
+                        if (value) {
+                          setSelectedComponentId(value);
+                          setSelectedZoneId(ALL_ZONES);
+                        }
                       }}
                       disabled={interactiveComponents.length === 0 || previewLoading}
                     >
@@ -1424,7 +1417,7 @@ export default function TouchProfileTool({
                   <Field>
                     <FieldLabel>{t("page.tools.touch_profile.zone")}</FieldLabel>
                     <Select
-                      value={selectedZoneId}
+                      value={activeZoneId}
                       items={[
                         { value: ALL_ZONES, label: t("page.tools.touch_profile.all_zones") },
                         ...(activePreview?.zones ?? []).map((zone) => ({
@@ -1537,7 +1530,7 @@ export default function TouchProfileTool({
                         )
                         .map((zone) => {
                           const source = sourceLabel(zone.source, t);
-                          const isSelected = selectedZoneId === zone.id;
+                          const isSelected = activeZoneId === zone.id;
                           const isLinked = linkedComponents[selectedComponent.componentId] ?? true;
                           const linkedZoneIds = isLinked
                             ? selectedComponent.zones.map((item) => item.id)
@@ -1949,7 +1942,7 @@ export default function TouchProfileTool({
                   )}
 
                   {selectedZone &&
-                  selectedZoneId !== ALL_ZONES &&
+                  activeZoneId !== ALL_ZONES &&
                   selectedComponent &&
                   !(linkedComponents[selectedComponent.componentId] ?? true) ? (
                     <div className="rounded-md border border-border/80 p-3">

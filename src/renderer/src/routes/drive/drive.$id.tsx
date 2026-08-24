@@ -97,8 +97,9 @@ function RouteComponent() {
   }, [effectiveId, location.pathname]);
 
   const rawContents = useMemo(() => {
-    if (!query.data?.children) return [];
-    return commonSort([...query.data.children], sortType, nameSortPolicy);
+    const children = query.data?.children;
+    if (!children) return [];
+    return commonSort([...children], sortType, nameSortPolicy);
   }, [query.data?.children, sortType, nameSortPolicy]);
 
   const localContents = useMemo(() => {

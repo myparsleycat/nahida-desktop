@@ -12,7 +12,7 @@ import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useGlobalStore } from "@renderer/store/global";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const RELEASE_NOTE_LINK_PATTERN = /\[(https?:\/\/[^\]\s]+)\]/g;
@@ -133,18 +133,16 @@ export function UpdateAlertDialog() {
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const isDismissingRef = useRef(false);
   const skipNextDismissRef = useRef(false);
-  const [showOriginalReleaseNotes, setShowOriginalReleaseNotes] = useState(false);
+  const [showOriginalFor, setShowOriginalFor] = useState<string | null>(null);
   const versionRangeText =
     appStatus?.version && releaseVersion ? ` (${appStatus.version} → ${releaseVersion})` : "";
   const hasTranslatedReleaseNotes = !!(releaseNotes?.translated && releaseNotes?.original);
+  const releaseNotesKey = `${releaseNotes?.original ?? ""}:${releaseNotes?.translated ?? ""}:${releaseNotes?.translatedLanguage ?? ""}`;
+  const showOriginalReleaseNotes = hasTranslatedReleaseNotes && showOriginalFor === releaseNotesKey;
   const displayedReleaseNotesText =
     hasTranslatedReleaseNotes && !showOriginalReleaseNotes
       ? releaseNotes.translated
       : (releaseNotes?.original ?? releaseNotes?.translated ?? null);
-
-  useEffect(() => {
-    setShowOriginalReleaseNotes(false);
-  }, [releaseNotes?.original, releaseNotes?.translated, releaseNotes?.translatedLanguage]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -191,7 +189,9 @@ export function UpdateAlertDialog() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowOriginalReleaseNotes((current) => !current)}
+                  onClick={() =>
+                    setShowOriginalFor(showOriginalReleaseNotes ? null : releaseNotesKey)
+                  }
                 >
                   {showOriginalReleaseNotes
                     ? t("updater.toast.available.showTranslation")

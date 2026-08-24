@@ -71,6 +71,48 @@ import { ThreeModelViewer } from "./three-model-viewer";
 
 export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
 
+function getInitialViewerUrls(source: ModelViewerDialogSource | null): [string, string] {
+  if (!source) {
+    return ["", ""];
+  }
+  if (source.mode === "single") {
+    return [source.glbPath ? withCacheBuster(modelViewerSourceToUrl(source.glbPath)) : "", ""];
+  }
+  if (source.mode === "variant-set") {
+    const glbPath = source.activeGlbPath || source.defaultGlbPath;
+    return [glbPath ? withCacheBuster(modelViewerSourceToUrl(glbPath)) : "", ""];
+  }
+  return ["", ""];
+}
+
+function getInitialActiveState(
+  source: ModelViewerDialogSource | null,
+): Record<string, VariableStateValue> {
+  if (!source) {
+    return {};
+  }
+  if (source.mode === "payload") {
+    return source.transport.defaultState;
+  }
+  if (source.mode === "variant-set") {
+    return source.manifest.defaultState;
+  }
+  return {};
+}
+
+function getInitialActiveAnimationId(source: ModelViewerDialogSource | null): string | null {
+  if (!source) {
+    return null;
+  }
+  if (source.mode === "payload") {
+    return source.transport.animations[0]?.id ?? null;
+  }
+  if (source.mode === "variant-set") {
+    return source.manifest.animations?.[0]?.id ?? null;
+  }
+  return null;
+}
+
 export function ModelViewerDialog({
   open,
   onOpenChange,
@@ -85,16 +127,25 @@ export function ModelViewerDialog({
   onPreviewSaved?: () => void | Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>({});
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevSource, setPrevSource] = useState(source);
+  const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>(() =>
+    getInitialActiveState(source),
+  );
   const [previewState, setPreviewState] = useState<Record<string, VariableStateValue> | null>(null);
-  const [manifest, setManifest] = useState<ModelViewerVariantManifest | null>(null);
-  const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
+  const [manifest, setManifest] = useState<ModelViewerVariantManifest | null>(() =>
+    source?.mode === "variant-set" ? source.manifest : null,
+  );
+  const [activeAnimationId, setActiveAnimationId] = useState<string | null>(() =>
+    getInitialActiveAnimationId(source),
+  );
   const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
   const [animationPlaying, setAnimationPlaying] = useState(false);
   const animationFrameIndexRef = useRef(0);
-  animationFrameIndexRef.current = animationFrameIndex;
   const [isResolving, setIsResolving] = useState(false);
-  const [viewerUrls, setViewerUrls] = useState<[string, string]>(["", ""]);
+  const [viewerUrls, setViewerUrls] = useState<[string, string]>(() =>
+    getInitialViewerUrls(source),
+  );
   const [activeViewerIndex, setActiveViewerIndex] = useState<0 | 1>(0);
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
@@ -107,7 +158,7 @@ export function ModelViewerDialog({
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
   const viewerRefs = useRef<[ModelViewerHandle | null, ModelViewerHandle | null]>([null, null]);
   const doubleSidedEnabledRef = useRef(true);
-  const viewerUrlsRef = useRef<[string, string]>(["", ""]);
+  const viewerUrlsRef = useRef<[string, string]>(viewerUrls);
   const activeViewerIndexRef = useRef<0 | 1>(0);
   const loadingViewerIndexRef = useRef<0 | 1 | null>(null);
   const pendingCameraStateRef = useRef<ModelViewerCameraState | null>(null);
@@ -120,6 +171,58 @@ export function ModelViewerDialog({
     viewerIndex: 0 | 1;
     stateKey: string;
   } | null>(null);
+
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) {
+      setShowOverwritePreviewDialog(false);
+      setIsSavingPreview(false);
+      setActiveViewerIndex(0);
+      setLoadingViewerIndex(null);
+      setIsViewerReady(false);
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    }
+  }
+
+  if (prevSource !== source) {
+    setPrevSource(source);
+    setPreviewState(null);
+    const nextUrls = getInitialViewerUrls(source);
+    setViewerUrls(nextUrls);
+    setActiveViewerIndex(0);
+    setLoadingViewerIndex(null);
+    setIsViewerReady(false);
+
+    if (getSourceSessionKey(prevSource) !== getSourceSessionKey(source)) {
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    }
+
+    if (!source) {
+      setActiveState({});
+      setManifest(null);
+      setActiveAnimationId(null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+    } else if (source.mode === "payload") {
+      setActiveState(source.transport.defaultState);
+      setManifest(null);
+      setActiveAnimationId(source.transport.animations[0]?.id ?? null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+    } else if (source.mode === "single") {
+      setActiveState({});
+      setManifest(null);
+      setActiveAnimationId(null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+    } else {
+      setActiveState(source.manifest.defaultState);
+      setManifest(source.manifest);
+      setActiveAnimationId(source.manifest.animations?.[0]?.id ?? null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+    }
+  }
 
   function setViewerUrl(index: 0 | 1, sourcePath: string) {
     const nextUrl = sourcePath ? withCacheBuster(modelViewerSourceToUrl(sourcePath)) : "";
@@ -143,24 +246,46 @@ export function ModelViewerDialog({
   }, []);
 
   useEffect(() => {
-    openRef.current = open;
-  }, [open]);
+    animationFrameIndexRef.current = animationFrameIndex;
+    viewerRefs.current[0]?.setAnimationFrame(animationFrameIndex);
+  }, [animationFrameIndex]);
 
   useEffect(() => {
-    if (open) {
-      return;
+    openRef.current = open;
+    if (!open) {
+      const currentUrl = viewerUrlsRef.current[activeViewerIndexRef.current];
+      const inactiveIndex: 0 | 1 = activeViewerIndexRef.current === 0 ? 1 : 0;
+      const inactiveUrl = viewerUrlsRef.current[inactiveIndex];
+      if (inactiveUrl && inactiveUrl !== currentUrl) {
+        cleanupModelViewerUrl(inactiveUrl);
+      }
+      viewerUrlsRef.current = [currentUrl, ""];
+      activeViewerIndexRef.current = 0;
+      loadingViewerIndexRef.current = null;
+      pendingCameraStateRef.current = null;
+      initialCameraStateRef.current = null;
     }
-
-    resetViewerSession({ resetOrientation: true });
-    setShowOverwritePreviewDialog(false);
-    setIsSavingPreview(false);
   }, [open]);
 
   useEffect(() => {
     sourceRef.current = source;
+    sourceSessionKeyRef.current = getSourceSessionKey(source);
     if (!source || source.mode !== "variant-set") {
       pendingVariantRequestRef.current = null;
     }
+
+    const nextUrls = getInitialViewerUrls(source);
+    const prevUrls = viewerUrlsRef.current;
+    for (const url of prevUrls) {
+      if (url && !nextUrls.includes(url)) {
+        cleanupModelViewerUrl(url);
+      }
+    }
+    viewerUrlsRef.current = nextUrls;
+    activeViewerIndexRef.current = 0;
+    loadingViewerIndexRef.current = null;
+    pendingCameraStateRef.current = null;
+    initialCameraStateRef.current = null;
   }, [source]);
 
   useEffect(() => {
@@ -199,59 +324,6 @@ export function ModelViewerDialog({
     };
   }, []);
 
-  useEffect(() => {
-    const nextSourceSessionKey = getSourceSessionKey(source);
-    const shouldResetOrientation = sourceSessionKeyRef.current !== nextSourceSessionKey;
-    sourceSessionKeyRef.current = nextSourceSessionKey;
-
-    setPreviewState(null);
-
-    if (!source) {
-      resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setActiveState({});
-      setManifest(null);
-      setActiveAnimationId(null);
-      setAnimationFrameIndex(0);
-      setAnimationPlaying(false);
-      setViewerUrl(0, "");
-      setViewerUrl(1, "");
-      return;
-    }
-
-    if (source.mode === "payload") {
-      resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setActiveState(source.transport.defaultState);
-      setManifest(null);
-      setActiveAnimationId(source.transport.animations[0]?.id ?? null);
-      setAnimationFrameIndex(0);
-      setAnimationPlaying(false);
-      setViewerUrl(0, "");
-      setViewerUrl(1, "");
-      return;
-    }
-
-    if (source.mode === "single") {
-      resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setActiveState({});
-      setManifest(null);
-      setActiveAnimationId(null);
-      setAnimationFrameIndex(0);
-      setAnimationPlaying(false);
-      setViewerUrl(0, source.glbPath);
-      setViewerUrl(1, "");
-      return;
-    }
-
-    resetViewerSession({ resetOrientation: shouldResetOrientation });
-    setActiveState(source.manifest.defaultState);
-    setManifest(source.manifest);
-    setActiveAnimationId(source.manifest.animations?.[0]?.id ?? null);
-    setAnimationFrameIndex(0);
-    setAnimationPlaying(false);
-    setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
-    setViewerUrl(1, "");
-  }, [source]);
-
   const payloadTransport = source?.mode === "payload" ? source.transport : null;
   const payloadAnimations = useMemo(
     () =>
@@ -269,17 +341,12 @@ export function ModelViewerDialog({
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
   const animationVariableIds = new Set(activeAnimation?.variableIds ?? []);
 
-  useEffect(() => {
-    if (!activeAnimation) {
-      setAnimationFrameIndex(0);
-      setAnimationPlaying(false);
-      return;
-    }
-
+  const [prevActiveAnimation, setPrevActiveAnimation] = useState(activeAnimation);
+  if (prevActiveAnimation !== activeAnimation) {
+    setPrevActiveAnimation(activeAnimation);
     setAnimationFrameIndex(0);
-    setAnimationPlaying(activeAnimation.frames.length > 1);
-    viewerRefs.current[0]?.setAnimationFrame(0);
-  }, [activeAnimation]);
+    setAnimationPlaying(Boolean(activeAnimation && activeAnimation.frames.length > 1));
+  }
 
   useEffect(() => {
     if (!activeAnimation || !animationPlaying || activeAnimation.frames.length <= 1) {
@@ -640,30 +707,6 @@ export function ModelViewerDialog({
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
   const canSaveCapturedPreview =
     Boolean(source?.modPath) && isViewerReady && !isViewerBusy && !isSavingPreview;
-
-  function resetViewerSession(options?: { resetOrientation?: boolean }) {
-    const currentIndex = activeViewerIndexRef.current;
-    const currentUrl = viewerUrlsRef.current[currentIndex];
-    const inactiveIndex: 0 | 1 = currentIndex === 0 ? 1 : 0;
-    const inactiveUrl = viewerUrlsRef.current[inactiveIndex];
-
-    if (inactiveUrl && inactiveUrl !== currentUrl) {
-      cleanupModelViewerUrl(inactiveUrl);
-    }
-
-    viewerUrlsRef.current = [currentUrl, ""];
-    setViewerUrls(viewerUrlsRef.current);
-    if (options?.resetOrientation !== false) {
-      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-    }
-    activeViewerIndexRef.current = 0;
-    loadingViewerIndexRef.current = null;
-    setActiveViewerIndex(0);
-    setLoadingViewerIndex(null);
-    pendingCameraStateRef.current = null;
-    initialCameraStateRef.current = null;
-    setIsViewerReady(false);
-  }
 
   const handleViewerLoad = useCallback((index: 0 | 1) => {
     void (async () => {

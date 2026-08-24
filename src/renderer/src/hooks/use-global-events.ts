@@ -1,6 +1,6 @@
 import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -20,15 +20,7 @@ export function useGlobalEvents(
     const setHasToken = useGlobalStore((state) => state.setHasToken);
     const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
     const setPendingSessionRestore = useGlobalStore((state) => state.setPendingSessionRestore);
-    const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
     const { i18n } = useTranslation();
-
-    const removeAllListeners = () => {
-        listeners.forEach((listener) => {
-            listener();
-        });
-        setListeners(new Map());
-    };
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: <>
     useEffect(() => {
@@ -37,25 +29,21 @@ export function useGlobalEvents(
                 description: args?.description,
             });
         });
-        setListeners(new Map(listeners.set("fn:toast", removeToastListener)));
 
         const removeNaviListener = window.api.on("fn:navi", (path) => {
             void navi({ to: path });
         });
-        setListeners(new Map(listeners.set("fn:navi", removeNaviListener)));
 
         const removePathSelectorListener = window.api.on("pathSelector:modeSelect", (data) => {
             if (onPathSelectorModeSelect) {
                 onPathSelectorModeSelect(data);
             }
         });
-        setListeners(new Map(listeners.set("pathSelector:modeSelect", removePathSelectorListener)));
 
         const removeAuthListener = window.api.on("auth:update", (session) => {
             setSession(session);
             setHasToken(!!session);
         });
-        setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
 
         const removeBackendStatusListener = window.api.on("backend:status", (status) => {
             const previousStatus = globalStore.getState().backendStatus;
@@ -69,7 +57,12 @@ export function useGlobalEvents(
                 setBackendStatus(status);
             }
             if (status !== "online") return;
-            if (previousStatus !== "offline" && previousStatus !== "maintenance" && !isColdStartRestore) return;
+            if (
+                previousStatus !== "offline" &&
+                previousStatus !== "maintenance" &&
+                !isColdStartRestore
+            )
+                return;
 
             void (async () => {
                 try {
@@ -89,15 +82,18 @@ export function useGlobalEvents(
                 }
             })();
         });
-        setListeners(new Map(listeners.set("backend:status", removeBackendStatusListener)));
 
         const removeLanguageListener = window.api.on("language:update", (language) => {
             void i18n.changeLanguage(language);
         });
-        setListeners(new Map(listeners.set("language:update", removeLanguageListener)));
 
         return () => {
-            removeAllListeners();
+            removeToastListener();
+            removeNaviListener();
+            removePathSelectorListener();
+            removeAuthListener();
+            removeBackendStatusListener();
+            removeLanguageListener();
         };
     }, [onPathSelectorModeSelect, i18n]);
 }
