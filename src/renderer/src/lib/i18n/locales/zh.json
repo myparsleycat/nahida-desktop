@@ -1035,7 +1035,7 @@
       "model_viewer": {
         "title": "模型查看器",
         "toggle_viewer": "切换查看器",
-        "ineffective_blocked_by": "当前组合下此值无效: {{variables}}",
+        "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",
         "ineffective_suggestion": "要使用此值，请更改以下变量:",
         "ineffective_apply": "应用此组合",
         "open_file": "打开文件",

@@ -1069,7 +1069,7 @@
       "model_viewer": {
         "title": "Model Viewer",
         "toggle_viewer": "Toggle Viewer",
-        "ineffective_blocked_by": "This value has no effect with the current combination: {{variables}}",
+        "ineffective_blocked_by": "This value cannot be used with the current combination: {{variables}}",
         "ineffective_suggestion": "To use this value, change the following:",
         "ineffective_apply": "Apply this combination",
         "open_file": "Open File",

@@ -1036,7 +1036,7 @@
       "model_viewer": {
         "title": "モデルビューアー",
         "toggle_viewer": "トグルビューアー",
-        "ineffective_blocked_by": "現在の組み合わせではこの値は効果がありません: {{variables}}",
+        "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",
         "ineffective_suggestion": "この値を使用するには以下の変数を変更してください:",
         "ineffective_apply": "この組み合わせを適用",
         "open_file": "ファイルを開く",
