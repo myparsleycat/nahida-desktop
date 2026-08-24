@@ -1,4 +1,4 @@
-import ky, { isNetworkError, isTimeoutError } from "ky";
+import ky, { isHTTPError, isNetworkError, isTimeoutError } from "ky";
 
 import type { NahidaDesktop } from "../index";
 
@@ -38,11 +38,7 @@ export class DesktopHttpService {
         if (isNHD && !isSessionRequest) {
             const status = this.desktop.service.backendConnectivity.getStatus();
             if (status === "offline" || status === "maintenance") {
-                throw createDriveApiError(
-                    new Error("backend unavailable"),
-                    "fetch",
-                    503,
-                );
+                throw createDriveApiError(new Error("backend unavailable"), "fetch", 503);
             }
         }
 
@@ -140,8 +136,17 @@ export class DesktopHttpService {
             }
             return resp;
         } catch (error) {
-            if (isNHD && isUnreachableError(error)) {
-                this.desktop.service.backendConnectivity.setOffline();
+            if (isNHD) {
+                if (isHTTPError(error) && error.response.status === 503) {
+                    void this.desktop.service.backendConnectivity.probe();
+                } else if (
+                    isHTTPError(error) &&
+                    isBackendUnavailableStatus(error.response.status)
+                ) {
+                    this.desktop.service.backendConnectivity.setOffline();
+                } else if (isUnreachableError(error)) {
+                    this.desktop.service.backendConnectivity.setOffline();
+                }
             }
             throw error;
         }

@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
     ky: vi.fn(),
+    isHTTPError: vi.fn((_error: unknown): _error is Error => false),
 }));
 
 vi.mock("ky", () => ({
     default: mocks.ky,
+    isHTTPError: mocks.isHTTPError,
     isNetworkError: () => false,
     isTimeoutError: () => false,
 }));
@@ -103,9 +105,9 @@ describe("DesktopHttpService", () => {
         };
         desktop.service.backendConnectivity.getStatus.mockReturnValue("offline");
 
-        await expect(
-            service.fetcher("https://api.nahida.live/api/drive"),
-        ).rejects.toThrow("DRIVE_BACKEND_UNAVAILABLE");
+        await expect(service.fetcher("https://api.nahida.live/api/drive")).rejects.toThrow(
+            "DRIVE_BACKEND_UNAVAILABLE",
+        );
         expect(getToken).not.toHaveBeenCalled();
         expect(mocks.ky).not.toHaveBeenCalled();
     });
@@ -120,9 +122,9 @@ describe("DesktopHttpService", () => {
         };
         desktop.service.backendConnectivity.getStatus.mockReturnValue("maintenance");
 
-        await expect(
-            service.fetcher("https://api.nahida.live/api/drive"),
-        ).rejects.toThrow("DRIVE_BACKEND_UNAVAILABLE");
+        await expect(service.fetcher("https://api.nahida.live/api/drive")).rejects.toThrow(
+            "DRIVE_BACKEND_UNAVAILABLE",
+        );
         expect(mocks.ky).not.toHaveBeenCalled();
     });
 
@@ -147,9 +149,16 @@ describe("DesktopHttpService", () => {
 
         await service.fetcher("https://api.nahida.live/api/drive");
 
-        const backendConnectivity = (service["desktop"] as unknown as {
-            service: { backendConnectivity: { probe: ReturnType<typeof vi.fn>; setOffline: ReturnType<typeof vi.fn> } };
-        }).service.backendConnectivity;
+        const backendConnectivity = (
+            service["desktop"] as unknown as {
+                service: {
+                    backendConnectivity: {
+                        probe: ReturnType<typeof vi.fn>;
+                        setOffline: ReturnType<typeof vi.fn>;
+                    };
+                };
+            }
+        ).service.backendConnectivity;
         expect(backendConnectivity.probe).toHaveBeenCalledOnce();
         expect(backendConnectivity.setOffline).not.toHaveBeenCalled();
     });
@@ -161,9 +170,66 @@ describe("DesktopHttpService", () => {
 
         await service.fetcher("https://api.nahida.live/api/drive");
 
-        const backendConnectivity = (service["desktop"] as unknown as {
-            service: { backendConnectivity: { probe: ReturnType<typeof vi.fn>; setOffline: ReturnType<typeof vi.fn> } };
-        }).service.backendConnectivity;
+        const backendConnectivity = (
+            service["desktop"] as unknown as {
+                service: {
+                    backendConnectivity: {
+                        probe: ReturnType<typeof vi.fn>;
+                        setOffline: ReturnType<typeof vi.fn>;
+                    };
+                };
+            }
+        ).service.backendConnectivity;
+        expect(backendConnectivity.setOffline).toHaveBeenCalledOnce();
+        expect(backendConnectivity.probe).not.toHaveBeenCalled();
+    });
+
+    it("probes when a rejected Ky 503 HTTPError is received from an NHD endpoint", async () => {
+        mocks.ky.mockReset();
+        const httpError = Object.assign(new Error("Request failed with status code 503"), {
+            name: "HTTPError",
+            response: { status: 503 },
+        });
+        mocks.isHTTPError.mockImplementation((e: unknown) => e === httpError);
+        mocks.ky.mockRejectedValue(httpError);
+        const { service } = createService();
+
+        await expect(service.fetcher("https://api.nahida.live/api/drive")).rejects.toThrow();
+        const backendConnectivity = (
+            service["desktop"] as unknown as {
+                service: {
+                    backendConnectivity: {
+                        probe: ReturnType<typeof vi.fn>;
+                        setOffline: ReturnType<typeof vi.fn>;
+                    };
+                };
+            }
+        ).service.backendConnectivity;
+        expect(backendConnectivity.probe).toHaveBeenCalledOnce();
+        expect(backendConnectivity.setOffline).not.toHaveBeenCalled();
+    });
+
+    it("calls setOffline when a rejected Ky 502 HTTPError is received from an NHD endpoint", async () => {
+        mocks.ky.mockReset();
+        const httpError = Object.assign(new Error("Request failed with status code 502"), {
+            name: "HTTPError",
+            response: { status: 502 },
+        });
+        mocks.isHTTPError.mockImplementation((e: unknown) => e === httpError);
+        mocks.ky.mockRejectedValue(httpError);
+        const { service } = createService();
+
+        await expect(service.fetcher("https://api.nahida.live/api/drive")).rejects.toThrow();
+        const backendConnectivity = (
+            service["desktop"] as unknown as {
+                service: {
+                    backendConnectivity: {
+                        probe: ReturnType<typeof vi.fn>;
+                        setOffline: ReturnType<typeof vi.fn>;
+                    };
+                };
+            }
+        ).service.backendConnectivity;
         expect(backendConnectivity.setOffline).toHaveBeenCalledOnce();
         expect(backendConnectivity.probe).not.toHaveBeenCalled();
     });
