@@ -69,7 +69,7 @@ export function useGlobalEvents(
                 setBackendStatus(status);
             }
             if (status !== "online") return;
-            if (previousStatus !== "offline" && !isColdStartRestore) return;
+            if (previousStatus !== "offline" && previousStatus !== "maintenance" && !isColdStartRestore) return;
 
             void (async () => {
                 try {

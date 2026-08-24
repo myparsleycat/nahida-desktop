@@ -1757,6 +1757,8 @@
     }
   },
   "titlebar": {
+    "server_inactive_badge": "서버 비활성화됨",
+    "server_inactive_tooltip": "서버가 비활성화되거나 점검 중이므로 nahida.live 기능을 이용할 수 없습니다.",
     "activity": {
       "more": "+{{count}}",
       "transfer": {
