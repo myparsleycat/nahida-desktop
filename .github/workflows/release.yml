@@ -30,7 +30,7 @@ jobs:
           }
 
       - name: Check out complete history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -44,7 +44,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -52,11 +52,14 @@ jobs:
             pnpm-lock.yaml
             frontend/pnpm-lock.yaml
 
-      - name: Install pinned build tools
+      - name: Install pinned Task
         shell: pwsh
-        run: |
-          go install github.com/go-task/task/v3/cmd/task@v3.53.1
-          choco install nsis --version=3.11 --yes --no-progress
+        run: go install github.com/go-task/task/v3/cmd/task@v3.53.1
+
+      - name: Install pinned NSIS
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        run: choco install nsis --version=3.11 --yes --no-progress
 
       - name: Install release dependencies
         shell: pwsh
