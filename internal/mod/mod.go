@@ -37,6 +37,7 @@ type Settings interface {
 	GetDisabledPrefixStyle(context.Context) (string, error)
 	GetArchiveExtractPathMode(context.Context) (string, error)
 	GetDeleteArchiveAfterExtract(context.Context) (bool, error)
+	GetMoveFolderInsteadOfCopy(context.Context) (bool, error)
 	GetCopyShaderFixesOnEnable(context.Context) (bool, error)
 }
 

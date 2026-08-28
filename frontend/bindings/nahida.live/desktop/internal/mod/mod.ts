@@ -25,8 +25,8 @@ export function ClassifyMergePacks(modPaths: string[] | null): $CancellablePromi
     return $Call.ByID(1496237314, modPaths);
 }
 
-export function CopyFolderToGroup(folderPath: string, groupPath: string, move: boolean): $CancellablePromise<string> {
-    return $Call.ByID(4185922125, folderPath, groupPath, move);
+export function CopyFolderToGroup(folderPath: string, groupPath: string): $CancellablePromise<string> {
+    return $Call.ByID(4185922125, folderPath, groupPath);
 }
 
 export function CreatePreset(game: string, name: string, description: string | null, resolveConflicts: boolean): $CancellablePromise<$models.Preset> {

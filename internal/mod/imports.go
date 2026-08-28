@@ -149,10 +149,17 @@ func (m *Mod) ExtractArchiveToGroup(
 func (m *Mod) CopyFolderToGroup(
 	ctx context.Context,
 	folderPath, groupPath string,
-	move bool,
 ) (string, error) {
 	if _, err := m.ownedPath(ctx, groupPath); err != nil {
 		return "", err
+	}
+	move := false
+	if m.settings != nil {
+		var err error
+		move, err = m.settings.GetMoveFolderInsteadOfCopy(ctx)
+		if err != nil {
+			return "", err
+		}
 	}
 	source, err := validDirectory(folderPath)
 	if err != nil {

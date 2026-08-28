@@ -231,7 +231,7 @@ export function useModDragDrop(
                         },
                     });
                 } else if (isDir || (allowImages && isImg)) {
-                    toast.promise(Mod.CopyFolderToGroup(filePath, targetPath, false), {
+                    toast.promise(Mod.CopyFolderToGroup(filePath, targetPath), {
                         loading: t("page.mod.drag_drop.copy.loading", {
                             fileName,
                         }),

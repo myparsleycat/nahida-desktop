@@ -17,6 +17,7 @@ import (
 type testSettings struct {
 	preview bool
 	style   string
+	move    bool
 }
 
 func (s testSettings) GetSearchModPreview(context.Context) (bool, error) { return s.preview, nil }
@@ -31,6 +32,10 @@ func (s testSettings) GetArchiveExtractPathMode(context.Context) (string, error)
 
 func (s testSettings) GetDeleteArchiveAfterExtract(context.Context) (bool, error) {
 	return false, nil
+}
+
+func (s testSettings) GetMoveFolderInsteadOfCopy(context.Context) (bool, error) {
+	return s.move, nil
 }
 
 func (s testSettings) GetCopyShaderFixesOnEnable(context.Context) (bool, error) {
@@ -611,7 +616,7 @@ func TestCopyFolderAndReadGameBananaMetadata(t *testing.T) {
 	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	target, err := service.CopyFolderToGroup(ctx, source, group, false)
+	target, err := service.CopyFolderToGroup(ctx, source, group)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -624,6 +629,42 @@ func TestCopyFolderAndReadGameBananaMetadata(t *testing.T) {
 	}
 	if _, err := os.Stat(source); err != nil {
 		t.Fatalf("copy removed source: %v", err)
+	}
+}
+
+func TestCopyFolderToGroupMovesSourceWhenConfigured(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{move: true})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Group")
+	source := filepath.Join(root, "Downloaded")
+	if err := os.MkdirAll(group, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "mod.ini"), []byte("[Constants]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := service.CopyFolderToGroup(ctx, source, group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("moved source still exists: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(target, "mod.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "[Constants]" {
+		t.Fatalf("moved content = %q", content)
 	}
 }
 
