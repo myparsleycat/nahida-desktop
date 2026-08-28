@@ -1,15 +1,15 @@
 {
-	"fixed": {
-		"file_version": "3.0.0"
-	},
-	"info": {
-		"0000": {
-			"ProductVersion": "3.0.0",
-			"CompanyName": "nahida.live",
-			"FileDescription": "Native desktop client for nahida.live",
-			"LegalCopyright": "© 2026, nahida.live",
-			"ProductName": "Nahida Desktop",
-			"Comments": "Nahida Desktop"
-		}
-	}
+  "fixed": {
+    "file_version": "3.0.0"
+  },
+  "info": {
+    "0000": {
+      "ProductVersion": "3.0.0",
+      "CompanyName": "nahida.live",
+      "FileDescription": "Nahida Desktop",
+      "LegalCopyright": "© 2026, nahida.live",
+      "ProductName": "Nahida Desktop",
+      "Comments": "Nahida Desktop"
+    }
+  }
 }
