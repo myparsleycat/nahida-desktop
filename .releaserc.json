@@ -22,16 +22,13 @@
       {
         "assets": [
           {
-            "path": "bin/nahida-desktop-windows-amd64.exe",
-            "label": "Nahida Desktop updater executable (Windows amd64)"
+            "path": "bin/nahida-desktop-windows-amd64.exe"
           },
           {
-            "path": "bin/nahida-desktop-windows-amd64-installer.exe",
-            "label": "Nahida Desktop installer (Windows amd64)"
+            "path": "bin/nahida-desktop-windows-amd64-installer.exe"
           },
           {
-            "path": "bin/SHA256SUMS",
-            "label": "SHA-256 checksums"
+            "path": "bin/SHA256SUMS"
           }
         ],
         "draftRelease": true,

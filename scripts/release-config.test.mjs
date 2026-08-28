@@ -18,14 +18,11 @@ test('publishes only the three documented draft assets', () => {
   );
   assert.ok(github);
   assert.equal(github[1].draftRelease, true);
-  assert.deepEqual(
-    github[1].assets.map(({ path }) => path),
-    [
-      'bin/nahida-desktop-windows-amd64.exe',
-      'bin/nahida-desktop-windows-amd64-installer.exe',
-      'bin/SHA256SUMS',
-    ],
-  );
+  assert.deepEqual(github[1].assets, [
+    { path: 'bin/nahida-desktop-windows-amd64.exe' },
+    { path: 'bin/nahida-desktop-windows-amd64-installer.exe' },
+    { path: 'bin/SHA256SUMS' },
+  ]);
 });
 
 test('does not use npm or git release plugins', () => {
