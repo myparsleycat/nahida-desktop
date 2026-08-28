@@ -33,7 +33,7 @@ export function TitlebarWindowControls() {
   }, []);
 
   return (
-    <div className="flex h-full shrink-0">
+    <div className="titlebar-window-controls flex h-full shrink-0">
       <button
         type="button"
         className={cn(

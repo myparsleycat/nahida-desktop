@@ -217,6 +217,12 @@ body {
     --wails-draggable: no-drag;
 }
 
+.titlebar-window-controls {
+    position: relative;
+    /* Keep native window controls above full-window modal backdrops. */
+    z-index: 2147483647;
+}
+
 .titlebar-window-control--minimise {
     --wails-non-client-region: minimize;
 }
