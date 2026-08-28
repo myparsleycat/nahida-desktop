@@ -138,8 +138,14 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 	if !modelViewerPathWithin(ceiling, target) {
 		return "", contractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
-	if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil && !modelViewerPathWithin(ceiling, resolved) {
-		return "", contractError(fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative))
+	if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil {
+		resolvedCeiling := ceiling
+		if realCeiling, ceilingErr := filepath.EvalSymlinks(ceiling); ceilingErr == nil {
+			resolvedCeiling = realCeiling
+		}
+		if !modelViewerPathWithin(resolvedCeiling, resolved) {
+			return "", contractError(fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative))
+		}
 	}
 	return filepath.Clean(target), nil
 }

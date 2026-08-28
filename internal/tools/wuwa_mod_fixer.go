@@ -651,18 +651,20 @@ func (t *Tools) wuwaRequireModPath(ctx context.Context, modPath string) error {
 	if err != nil {
 		return contractError("Path is outside the managed mod folder")
 	}
-	if _, statErr := os.Stat(modPath); statErr == nil {
+	_, statErr := os.Stat(modPath)
+	if statErr == nil {
 		resolvedTarget, err = filepath.EvalSymlinks(modPath)
 		if err != nil {
 			return contractError("Path is outside the managed mod folder")
 		}
 	}
 	for _, game := range games {
+		logicalRoot, resolveErr := filepath.Abs(game.ModFolderPath)
+		if statErr != nil && resolveErr == nil && sameOrChildPath(logicalRoot, resolvedTarget) {
+			return contractError("Destination path does not exist")
+		}
 		resolvedRoot, resolveErr := filepath.EvalSymlinks(game.ModFolderPath)
 		if resolveErr == nil && sameOrChildPath(resolvedRoot, resolvedTarget) {
-			if _, statErr := os.Stat(modPath); statErr != nil {
-				return contractError("Destination path does not exist")
-			}
 			return nil
 		}
 	}

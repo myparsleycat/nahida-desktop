@@ -44,6 +44,12 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 	if _, err = os.Stat(resolved); err != nil {
 		return TouchModAnalysis{}, contractError(fmt.Sprintf("Path does not exist: %s", resolved))
 	}
+	// Windows CI and some installations expose temporary or mod directories
+	// through junctions. Keep the analysis root and the resource paths in the
+	// same canonical namespace so relative fingerprints survive a folder rename.
+	if real, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {
+		resolved = real
+	}
 	iniPath, sections, sourcePaths, err := loadModINIBundleWithSources(resolved)
 	if err != nil {
 		return TouchModAnalysis{}, err
