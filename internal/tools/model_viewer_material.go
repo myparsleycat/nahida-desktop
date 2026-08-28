@@ -251,24 +251,24 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 	return encodeModelViewerPreparedTexture(decoded, path, resourceName, format, quality)
 }
 
-func modelViewerTextureFileHash(path string) (string, error) {
+func modelViewerTextureFileHash(path string) (string, int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
-		return "", fmt.Errorf("viewer texture file is too large or invalid: %s", path)
+		return "", 0, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer func() { _ = file.Close() }()
 	hash := sha256.New()
 	if _, err = io.Copy(hash, io.LimitReader(file, info.Size())); err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), info.Size(), nil
 }
 
 func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelViewerDecodedTexture, error) {

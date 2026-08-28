@@ -257,11 +257,10 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		resources []modelViewerResource
 	}
 	var iniGeometryScans []iniGeometryScan
-	var textureEncodeMs int64
 	var iniParseMs, iniValidateMs, iniReferencedMs, meshBuildMs, meshPayloadMs, postProcessMs, payloadWriteMs int64
 	meshTiming := &modelViewerMeshBuildTiming{}
 	var stageStartedAt time.Time
-	textureCount := 0
+	var textureWorks []modelViewerINITextureWork
 	multi := len(iniPaths) > 1
 	for iniIndex, iniPath := range iniPaths {
 		parsed, readErr := readModelViewerINI(iniPath)
@@ -305,24 +304,36 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		}
 		allShapeKeys = append(allShapeKeys, shapeKeys...)
 		meshBuildMs += time.Since(stageStartedAt).Milliseconds()
-		textures, encodeMs, encoded := prepareModelViewerDirectTextures(ctx, folder, settings, resources, textureBindings, meshes)
-		textureEncodeMs += encodeMs
-		textureCount += encoded
-		stageStartedAt = time.Now()
+		textureWorks = append(textureWorks, modelViewerINITextureWork{
+			meshes:   meshes,
+			bindings: textureBindings,
+			shapes:   shapeKeys,
+			jobs:     collectModelViewerTextureJobs(len(textureWorks), folder, resources, textureBindings, meshes),
+		})
+	}
+	textureJobs := make([]modelViewerTextureJob, 0)
+	for _, work := range textureWorks {
+		textureJobs = append(textureJobs, work.jobs...)
+	}
+	texturesByBatch, textureStats := runModelViewerTextureJobs(ctx, settings, len(textureWorks), textureJobs)
+	stageStartedAt = time.Now()
+	for batchIndex, work := range textureWorks {
+		textures := texturesByBatch[batchIndex]
 		for _, value := range textures {
 			if value.Key != "" {
 				texturePayloads[value.Key] = value
 			}
 		}
-		for _, mesh := range meshes {
-			item, payload := buildModelViewerDirectMeshPayload(mesh, textureBindings, textures, shapeKeys, bufferCache)
+		for _, mesh := range work.meshes {
+			item, payload := buildModelViewerDirectMeshPayload(mesh, work.bindings, textures, work.shapes, bufferCache)
 			transport.Meshes = append(transport.Meshes, item)
 			meshPayloads = append(meshPayloads, payload)
 		}
-		meshPayloadMs += time.Since(stageStartedAt).Milliseconds()
 	}
+	meshPayloadMs = time.Since(stageStartedAt).Milliseconds()
 	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Texture encoding completed in %dms (textures=%d)", textureEncodeMs, textureCount), "StaticGlb.loadForViewer")
+		t.log.Info(fmt.Sprintf("Texture encoding completed in %dms (textures=%d)", textureStats.TotalWallMs, textureStats.LogicalTextures), "StaticGlb.loadForViewer")
+		t.log.Info(fmt.Sprintf("Texture preparation detail: jobs=%d paths=%d contents=%d decodes=%d encodes=%d hashBytes=%d hash=%dms prepare=%dms", textureStats.Jobs, textureStats.UniquePaths, textureStats.UniqueContents, textureStats.Decodes, textureStats.Encodes, textureStats.HashBytes, textureStats.HashWallMs, textureStats.PrepareWallMs), "StaticGlb.loadForViewer")
 		t.log.Info(fmt.Sprintf("INI parse detail: referenced=%dms validate=%dms (total %dms)", iniReferencedMs, iniValidateMs, iniParseMs), "StaticGlb.loadForViewer")
 		t.log.Info(fmt.Sprintf("Mesh build detail: scan=%dms(%d recs) setup=%dms geometry=%dms(%d) overrides=%dms attach=%dms normalize=%dms legacy=%dms(groups=%dms condScan=%dms prepare=%dms extract=%dms)", meshTiming.ScanMs, meshTiming.Records, meshTiming.SetupMs, meshTiming.GeometryMs, meshTiming.Geometries, meshTiming.OverridesMs, meshTiming.AttachMs, meshTiming.NormalizeMs, meshTiming.LegacyMs, meshTiming.GroupsMs, meshTiming.LegacyScanMs, meshTiming.LegacyPrepareMs, meshTiming.LegacyExtractMs), "StaticGlb.loadForViewer")
 	}
@@ -1123,7 +1134,15 @@ func readModelViewerShapePositions(cache *modelViewerBufferCache, path string, s
 
 const modelViewerTextureConcurrency = 8
 
+type modelViewerINITextureWork struct {
+	meshes   []modelViewerDirectMesh
+	bindings []modelViewerTextureBinding
+	shapes   []modelViewerShapeKey
+	jobs     []modelViewerTextureJob
+}
+
 type modelViewerTextureJob struct {
+	batchIndex   int
 	path         string
 	resourceName string
 	keys         []string
@@ -1131,7 +1150,20 @@ type modelViewerTextureJob struct {
 	canonicalKey string
 }
 
-func prepareModelViewerDirectTextures(ctx context.Context, modDir string, settings modelViewerTextureSettings, resources []modelViewerResource, bindings []modelViewerTextureBinding, meshes []modelViewerDirectMesh) (map[string]modelViewerTexturePayload, int64, int) {
+type modelViewerTextureRunStats struct {
+	Jobs            int
+	UniquePaths     int
+	UniqueContents  int
+	LogicalTextures int
+	Decodes         int
+	Encodes         int
+	HashBytes       int64
+	HashWallMs      int64
+	PrepareWallMs   int64
+	TotalWallMs     int64
+}
+
+func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []modelViewerResource, bindings []modelViewerTextureBinding, meshes []modelViewerDirectMesh) []modelViewerTextureJob {
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
 		key := modelViewerNormalizeKey(resource.Name)
@@ -1179,6 +1211,7 @@ func prepareModelViewerDirectTextures(ctx context.Context, modDir string, settin
 			seen[fileKey] = true
 		}
 		jobs = append(jobs, modelViewerTextureJob{
+			batchIndex:   batchIndex,
 			path:         texturePath,
 			resourceName: name,
 			keys:         keys,
@@ -1198,6 +1231,7 @@ func prepareModelViewerDirectTextures(ctx context.Context, modDir string, settin
 			}
 			seen[key] = true
 			jobs = append(jobs, modelViewerTextureJob{
+				batchIndex:   batchIndex,
 				path:         texturePath,
 				resourceName: assignment.resource,
 				keys:         []string{key},
@@ -1206,156 +1240,181 @@ func prepareModelViewerDirectTextures(ctx context.Context, modDir string, settin
 			})
 		}
 	}
-	return runModelViewerTextureJobs(ctx, settings, jobs)
+	return jobs
 }
 
-type modelViewerTextureHashCall struct {
-	once sync.Once
-	hash string
-}
-
-type modelViewerTextureDecodeCall struct {
-	once    sync.Once
-	decoded *modelViewerDecodedTexture
-	err     error
-}
-
-type modelViewerTextureEncodeCall struct {
-	once    sync.Once
-	texture *modelViewerPreparedTexture
-	err     error
-}
-
-type modelViewerTextureContentCache struct {
-	mu      sync.Mutex
-	hashes  map[string]*modelViewerTextureHashCall
-	decoded map[string]*modelViewerTextureDecodeCall
-	encoded map[string]*modelViewerTextureEncodeCall
-}
-
-func newModelViewerTextureContentCache() *modelViewerTextureContentCache {
-	return &modelViewerTextureContentCache{
-		hashes:  make(map[string]*modelViewerTextureHashCall),
-		decoded: make(map[string]*modelViewerTextureDecodeCall),
-		encoded: make(map[string]*modelViewerTextureEncodeCall),
+func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, batchCount int, jobs []modelViewerTextureJob) ([]map[string]modelViewerTexturePayload, modelViewerTextureRunStats) {
+	outputs := make([]map[string]modelViewerTexturePayload, batchCount)
+	for index := range outputs {
+		outputs[index] = make(map[string]modelViewerTexturePayload)
 	}
-}
-
-func (c *modelViewerTextureContentCache) hash(path string) string {
-	c.mu.Lock()
-	call, ok := c.hashes[path]
-	if !ok {
-		call = &modelViewerTextureHashCall{}
-		c.hashes[path] = call
-	}
-	c.mu.Unlock()
-	call.once.Do(func() {
-		hash, err := modelViewerTextureFileHash(path)
-		if err != nil {
-			hash = "path:" + path
-		}
-		call.hash = hash
-	})
-	return call.hash
-}
-
-func (c *modelViewerTextureContentCache) decode(ctx context.Context, path, hash string) (*modelViewerDecodedTexture, error) {
-	c.mu.Lock()
-	call, ok := c.decoded[hash]
-	if !ok {
-		call = &modelViewerTextureDecodeCall{}
-		c.decoded[hash] = call
-	}
-	c.mu.Unlock()
-	call.once.Do(func() {
-		call.decoded, call.err = decodeModelViewerTextureSource(ctx, path)
-	})
-	return call.decoded, call.err
-}
-
-func (c *modelViewerTextureContentCache) encode(decoded *modelViewerDecodedTexture, job modelViewerTextureJob, hash, format string, quality int) (*modelViewerPreparedTexture, error) {
-	invert := modelViewerTextureShouldInvertAlpha(job.resourceName, decoded)
-	key := hash
-	if invert {
-		key += ":invert"
-	}
-	c.mu.Lock()
-	call, ok := c.encoded[key]
-	if !ok {
-		call = &modelViewerTextureEncodeCall{}
-		c.encoded[key] = call
-	}
-	c.mu.Unlock()
-	call.once.Do(func() {
-		call.texture, call.err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, format, quality)
-	})
-	return call.texture, call.err
-}
-
-func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, jobs []modelViewerTextureJob) (map[string]modelViewerTexturePayload, int64, int) {
-	output := make(map[string]modelViewerTexturePayload, len(jobs)*2)
+	stats := modelViewerTextureRunStats{Jobs: len(jobs)}
 	if len(jobs) == 0 {
-		return output, 0, 0
-	}
-	workers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(jobs))
-	if workers < 1 {
-		workers = 1
+		return outputs, stats
 	}
 	startedAt := time.Now()
+	type pathGroup struct {
+		key         string
+		path        string
+		jobs        []modelViewerTextureJob
+		contentKey  string
+		hashedBytes int64
+	}
+	pathIndexes := make(map[string]int, len(jobs))
+	pathGroups := make([]pathGroup, 0, len(jobs))
+	for _, job := range jobs {
+		pathKey := strings.ToLower(filepath.Clean(job.path))
+		index, ok := pathIndexes[pathKey]
+		if !ok {
+			index = len(pathGroups)
+			pathIndexes[pathKey] = index
+			pathGroups = append(pathGroups, pathGroup{key: pathKey, path: job.path})
+		}
+		pathGroups[index].jobs = append(pathGroups[index].jobs, job)
+	}
+	stats.UniquePaths = len(pathGroups)
+	hashStartedAt := time.Now()
+	hashWork := make(chan int)
+	hashWorkers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(pathGroups))
+	if hashWorkers < 1 {
+		hashWorkers = 1
+	}
+	var hashGroup sync.WaitGroup
+	for range hashWorkers {
+		hashGroup.Add(1)
+		go func() {
+			defer hashGroup.Done()
+			for index := range hashWork {
+				group := &pathGroups[index]
+				if ctx.Err() != nil {
+					group.contentKey = "path:" + group.key
+					continue
+				}
+				hash, size, err := modelViewerTextureFileHash(group.path)
+				if err != nil {
+					group.contentKey = "path:" + group.key
+					continue
+				}
+				group.contentKey = hash
+				group.hashedBytes = size
+			}
+		}()
+	}
+	for index := range pathGroups {
+		hashWork <- index
+	}
+	close(hashWork)
+	hashGroup.Wait()
+	stats.HashWallMs = time.Since(hashStartedAt).Milliseconds()
+	for _, group := range pathGroups {
+		stats.HashBytes += group.hashedBytes
+	}
 	type preparedJob struct {
 		job     modelViewerTextureJob
 		texture *modelViewerPreparedTexture
 	}
-	work := make(chan modelViewerTextureJob)
-	results := make(chan preparedJob, len(jobs))
-	cache := newModelViewerTextureContentCache()
-	var wg sync.WaitGroup
-	for range workers {
-		wg.Add(1)
+	type contentGroup struct {
+		path     string
+		jobs     []modelViewerTextureJob
+		prepared []preparedJob
+		decodes  int
+		encodes  int
+	}
+	contentIndexes := make(map[string]int, len(pathGroups))
+	contentGroups := make([]contentGroup, 0, len(pathGroups))
+	for _, path := range pathGroups {
+		index, ok := contentIndexes[path.contentKey]
+		if !ok {
+			index = len(contentGroups)
+			contentIndexes[path.contentKey] = index
+			contentGroups = append(contentGroups, contentGroup{path: path.path})
+		}
+		contentGroups[index].jobs = append(contentGroups[index].jobs, path.jobs...)
+	}
+	stats.UniqueContents = len(contentGroups)
+	format := normalizeModelViewerFormat(settings.TextureFormat)
+	quality := normalizeJPEGQuality(settings.JPEGQuality)
+	type encodeVariant struct {
+		invert  bool
+		format  string
+		quality int
+	}
+	prepareStartedAt := time.Now()
+	prepareWork := make(chan int)
+	prepareWorkers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(contentGroups))
+	if prepareWorkers < 1 {
+		prepareWorkers = 1
+	}
+	var prepareGroup sync.WaitGroup
+	for range prepareWorkers {
+		prepareGroup.Add(1)
 		go func() {
-			defer wg.Done()
-			for job := range work {
+			defer prepareGroup.Done()
+			for index := range prepareWork {
+				group := &contentGroups[index]
 				if ctx.Err() != nil {
 					continue
 				}
-				hash := cache.hash(job.path)
-				decoded, err := cache.decode(ctx, job.path, hash)
+				group.decodes++
+				decoded, err := decodeModelViewerTextureSource(ctx, group.path)
 				if err != nil {
 					continue
 				}
-				texture, err := cache.encode(decoded, job, hash, settings.TextureFormat, settings.JPEGQuality)
-				if err != nil {
-					continue
+				variants := make(map[encodeVariant]*modelViewerPreparedTexture, 2)
+				for _, job := range group.jobs {
+					variant := encodeVariant{
+						invert:  modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
+						format:  format,
+						quality: quality,
+					}
+					texture, exists := variants[variant]
+					if !exists {
+						group.encodes++
+						texture, err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, variant.format, variant.quality)
+						if err != nil {
+							texture = nil
+						}
+						variants[variant] = texture
+					}
+					if texture != nil {
+						group.prepared = append(group.prepared, preparedJob{job: job, texture: texture})
+					}
 				}
-				results <- preparedJob{job: job, texture: texture}
 			}
 		}()
 	}
-	for _, job := range jobs {
-		work <- job
+	for index := range contentGroups {
+		prepareWork <- index
 	}
-	close(work)
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-	for prepared := range results {
-		item := modelViewerTexturePayload{Key: prepared.job.canonicalKey, Role: prepared.job.role, Bytes: prepared.texture.bytes, MIMEType: prepared.texture.mimeType}
-		for _, key := range prepared.job.keys {
-			output[key] = item
+	close(prepareWork)
+	prepareGroup.Wait()
+	stats.PrepareWallMs = time.Since(prepareStartedAt).Milliseconds()
+	for _, group := range contentGroups {
+		stats.Decodes += group.decodes
+		stats.Encodes += group.encodes
+		for _, prepared := range group.prepared {
+			if prepared.job.batchIndex < 0 || prepared.job.batchIndex >= len(outputs) {
+				continue
+			}
+			item := modelViewerTexturePayload{Key: prepared.job.canonicalKey, Role: prepared.job.role, Bytes: prepared.texture.bytes, MIMEType: prepared.texture.mimeType}
+			for _, key := range prepared.job.keys {
+				outputs[prepared.job.batchIndex][key] = item
+			}
 		}
 	}
-	count := 0
-	seen := make(map[string]bool, len(output))
-	for _, item := range output {
-		key := item.Key
-		if key == "" || seen[key] {
-			continue
+	for _, output := range outputs {
+		seen := make(map[string]bool, len(output))
+		for _, item := range output {
+			key := item.Key
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			stats.LogicalTextures++
 		}
-		seen[key] = true
-		count++
 	}
-	return output, time.Since(startedAt).Milliseconds(), count
+	stats.TotalWallMs = time.Since(startedAt).Milliseconds()
+	return outputs, stats
 }
 
 func modelViewerAssignmentTextureKey(assignment modelViewerDirectTextureAssignment) string {

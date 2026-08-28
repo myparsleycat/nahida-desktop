@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,10 +104,14 @@ $` + variable + ` = 0, 1
 ib = ResourceBodyIB
 vb0 = ResourcePos
 vb1 = ResourceTc
+Resource\GIMI\Diffuse = ref ResourceDiffuse
 if $` + variable + ` == 1
 drawindexed = 3, 0, 0
 endif
-` + viewerBodyResources
+` + viewerBodyResources + `
+[ResourceDiffuse]
+filename = diffuse.png
+`
 	}
 	if err := os.WriteFile(filepath.Join(root, "A.ini"), []byte(ini("Mode")), 0o600); err != nil {
 		t.Fatal(err)
@@ -116,6 +121,8 @@ endif
 	}
 	writeViewerGeometry(t, root)
 	writeViewerGeometry(t, sub)
+	writeModelViewerTestPNG(t, filepath.Join(root, "diffuse.png"), color.NRGBA{R: 255, A: 255})
+	writeModelViewerTestPNG(t, filepath.Join(sub, "diffuse.png"), color.NRGBA{B: 255, A: 255})
 	fixture := loadViewerDir(t, root)
 	if len(fixture.result.Meshes) != 2 {
 		t.Fatalf("meshes = %#v", fixture.result.Meshes)
@@ -125,6 +132,9 @@ endif
 	}
 	if fixture.result.DefaultState["A::Mode"] != "0" || fixture.result.DefaultState["B::variant"] != "0" {
 		t.Fatalf("defaultState = %#v", fixture.result.DefaultState)
+	}
+	if len(fixture.result.Textures) != 2 || texKey(fixture.result.Meshes[0]) == texKey(fixture.result.Meshes[1]) {
+		t.Fatalf("textures = %#v meshes = %#v", fixture.result.Textures, fixture.result.Meshes)
 	}
 }
 

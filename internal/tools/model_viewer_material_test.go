@@ -165,53 +165,45 @@ func writeModelViewerTestPNG(t *testing.T, path string, pixel color.NRGBA) {
 	}
 }
 
-func TestModelViewerTextureContentCacheDeduplicatesIdenticalFiles(t *testing.T) {
+func TestRunModelViewerTextureJobsDeduplicatesIdenticalFilesAcrossBatches(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "body.png")
 	second := filepath.Join(dir, "body-copy.png")
-	other := filepath.Join(dir, "other.png")
 	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
 	if err := os.WriteFile(second, mustReadFile(t, first), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	writeModelViewerTestPNG(t, other, color.NRGBA{B: 255, A: 255})
-	cache := newModelViewerTextureContentCache()
-	if cache.hash(first) != cache.hash(second) {
-		t.Fatal("identical files produced different content hashes")
+	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
+		{batchIndex: 0, path: first, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+		{batchIndex: 1, path: second, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
+	})
+	if len(output) != 2 || !bytes.Equal(output[0]["body"].Bytes, output[1]["body-copy"].Bytes) || len(output[0]["body"].Bytes) == 0 {
+		t.Fatalf("deduped outputs = %#v", output)
 	}
-	if cache.hash(first) == cache.hash(other) {
-		t.Fatal("distinct files produced the same content hash")
+	if stats.Jobs != 2 || stats.UniquePaths != 2 || stats.UniqueContents != 1 || stats.Decodes != 1 || stats.Encodes != 1 || stats.LogicalTextures != 2 {
+		t.Fatalf("stats = %#v", stats)
 	}
-	decoded, err := cache.decode(context.Background(), first, cache.hash(first))
-	if err != nil {
-		t.Fatal(err)
-	}
-	reused, err := cache.decode(context.Background(), second, cache.hash(second))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded != reused {
-		t.Fatal("identical file contents were decoded more than once")
+	if stats.HashBytes != int64(len(mustReadFile(t, first))*2) {
+		t.Fatalf("hash bytes = %d", stats.HashBytes)
 	}
 }
 
-func TestRunModelViewerTextureJobsDeduplicatesIdenticalFiles(t *testing.T) {
+func TestRunModelViewerTextureJobsHashesSamePathOnce(t *testing.T) {
 	dir := t.TempDir()
-	first := filepath.Join(dir, "body.png")
-	second := filepath.Join(dir, "body-copy.png")
-	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
-	if err := os.WriteFile(second, mustReadFile(t, first), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	output, _, count := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, []modelViewerTextureJob{
-		{path: first, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
-		{path: second, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
+	path := filepath.Join(dir, "body.png")
+	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
+	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+		{path: path, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
 	})
-	if count != 2 {
-		t.Fatalf("count = %d, want 2", count)
+	if stats.UniquePaths != 1 || stats.UniqueContents != 1 || stats.Decodes != 1 || stats.Encodes != 1 || stats.LogicalTextures != 2 {
+		t.Fatalf("stats = %#v", stats)
 	}
-	if !bytes.Equal(output["body"].Bytes, output["body-copy"].Bytes) || len(output["body"].Bytes) == 0 {
+	if !bytes.Equal(output[0]["body"].Bytes, output[0]["body-copy"].Bytes) || len(output[0]["body"].Bytes) == 0 {
 		t.Fatalf("deduped payloads diverged: %#v", output)
+	}
+	if stats.HashBytes != int64(len(mustReadFile(t, path))) {
+		t.Fatalf("hash bytes = %d", stats.HashBytes)
 	}
 }
 
@@ -219,15 +211,50 @@ func TestRunModelViewerTextureJobsKeepsInvertAlphaVariant(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mask.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
-	output, _, count := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, []modelViewerTextureJob{
+	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
 		{path: path, resourceName: "BodyDiffuseInvertAlpha", keys: []string{"body-invert"}, role: "diffuse", canonicalKey: "body-invert"},
 	})
-	if count != 2 {
-		t.Fatalf("count = %d, want 2", count)
+	if stats.Decodes != 1 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
+		t.Fatalf("stats = %#v", stats)
 	}
-	if bytes.Equal(output["body"].Bytes, output["body-invert"].Bytes) || len(output["body"].Bytes) == 0 {
+	if bytes.Equal(output[0]["body"].Bytes, output[0]["body-invert"].Bytes) || len(output[0]["body"].Bytes) == 0 {
 		t.Fatalf("invert-alpha variant reused the uninverted payload: %#v", output)
+	}
+}
+
+func TestRunModelViewerTextureJobsKeepsDistinctContentsAndBatchScopes(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.png")
+	second := filepath.Join(dir, "second.png")
+	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
+	writeModelViewerTestPNG(t, second, color.NRGBA{B: 255, A: 255})
+	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
+		{batchIndex: 0, path: first, resourceName: "SharedResource", keys: []string{"shared"}, role: "diffuse", canonicalKey: "first"},
+		{batchIndex: 1, path: second, resourceName: "SharedResource", keys: []string{"shared"}, role: "diffuse", canonicalKey: "second"},
+	})
+	if stats.UniqueContents != 2 || stats.Decodes != 2 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
+		t.Fatalf("stats = %#v", stats)
+	}
+	if bytes.Equal(output[0]["shared"].Bytes, output[1]["shared"].Bytes) || output[0]["shared"].Key != "first" || output[1]["shared"].Key != "second" {
+		t.Fatalf("batch outputs = %#v", output)
+	}
+}
+
+func TestRunModelViewerTextureJobsIsolatesFailedContent(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.png")
+	writeModelViewerTestPNG(t, good, color.NRGBA{R: 255, A: 255})
+	missing := filepath.Join(dir, "missing.png")
+	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+		{path: missing, resourceName: "Missing", keys: []string{"missing"}, role: "diffuse", canonicalKey: "missing"},
+		{path: good, resourceName: "Good", keys: []string{"good"}, role: "diffuse", canonicalKey: "good"},
+	})
+	if _, ok := output[0]["missing"]; ok {
+		t.Fatalf("missing texture was prepared: %#v", output)
+	}
+	if len(output[0]["good"].Bytes) == 0 || stats.UniqueContents != 2 || stats.Decodes != 2 || stats.Encodes != 1 || stats.LogicalTextures != 1 {
+		t.Fatalf("output = %#v stats = %#v", output, stats)
 	}
 }
 
