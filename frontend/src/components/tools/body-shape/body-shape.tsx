@@ -79,6 +79,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ScrollArea } from "../../ui/scroll-area";
+import { toBodyShapeBytes } from "./body-shape-payload";
 
 const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
@@ -152,17 +153,6 @@ function toUint32(value: unknown): Uint32Array | undefined {
   }
   if (value instanceof ArrayBuffer) return new Uint32Array(value);
   if (Array.isArray(value)) return Uint32Array.from(value as number[]);
-  return undefined;
-}
-
-function toUint8(value: unknown): Uint8Array | undefined {
-  if (value == null) return undefined;
-  if (value instanceof Uint8Array) return value;
-  if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-  }
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
   return undefined;
 }
 
@@ -279,7 +269,7 @@ function buildLoadedMeshes(
       indices,
       vectorPath: mesh.vectorPath,
       vectorLayout: mesh.vectorLayout ?? null,
-      blendBytes: toUint8(mesh.blendBytes),
+      blendBytes: toBodyShapeBytes(mesh.blendBytes),
       blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
       bones: mesh.bones ?? [],
       weightCache: new Map(),
