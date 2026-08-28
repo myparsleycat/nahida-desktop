@@ -148,6 +148,98 @@ func TestModelViewerTextureConcurrencyRemainsEight(t *testing.T) {
 	}
 }
 
+func writeModelViewerTestPNG(t *testing.T, path string, pixel color.NRGBA) {
+	t.Helper()
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	input.SetNRGBA(0, 0, pixel)
+	input.SetNRGBA(1, 0, color.NRGBA{G: 255, A: 0})
+	if err = png.Encode(file, input); err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestModelViewerTextureContentCacheDeduplicatesIdenticalFiles(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "body.png")
+	second := filepath.Join(dir, "body-copy.png")
+	other := filepath.Join(dir, "other.png")
+	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
+	if err := os.WriteFile(second, mustReadFile(t, first), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeModelViewerTestPNG(t, other, color.NRGBA{B: 255, A: 255})
+	cache := newModelViewerTextureContentCache()
+	if cache.hash(first) != cache.hash(second) {
+		t.Fatal("identical files produced different content hashes")
+	}
+	if cache.hash(first) == cache.hash(other) {
+		t.Fatal("distinct files produced the same content hash")
+	}
+	decoded, err := cache.decode(context.Background(), first, cache.hash(first))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reused, err := cache.decode(context.Background(), second, cache.hash(second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded != reused {
+		t.Fatal("identical file contents were decoded more than once")
+	}
+}
+
+func TestRunModelViewerTextureJobsDeduplicatesIdenticalFiles(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "body.png")
+	second := filepath.Join(dir, "body-copy.png")
+	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
+	if err := os.WriteFile(second, mustReadFile(t, first), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output, _, count := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, []modelViewerTextureJob{
+		{path: first, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+		{path: second, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
+	})
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+	if !bytes.Equal(output["body"].Bytes, output["body-copy"].Bytes) || len(output["body"].Bytes) == 0 {
+		t.Fatalf("deduped payloads diverged: %#v", output)
+	}
+}
+
+func TestRunModelViewerTextureJobsKeepsInvertAlphaVariant(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mask.png")
+	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
+	output, _, count := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, []modelViewerTextureJob{
+		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+		{path: path, resourceName: "BodyDiffuseInvertAlpha", keys: []string{"body-invert"}, role: "diffuse", canonicalKey: "body-invert"},
+	})
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+	if bytes.Equal(output["body"].Bytes, output["body-invert"].Bytes) || len(output["body"].Bytes) == 0 {
+		t.Fatalf("invert-alpha variant reused the uninverted payload: %#v", output)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 func TestDecodeModelViewerDDSFileUsesEmbeddedPreviewMip(t *testing.T) {
 	raw := encodeModelViewerBC1DDS(t, 4096, 4096, 2, 1)
 	path := filepath.Join(t.TempDir(), "embedded_mip.dds")

@@ -4,9 +4,15 @@
 import * as Dialog from "./dialog.js";
 import * as FS from "./fs.js";
 import * as Shell from "./shell.js";
-export { Dialog, FS, Shell };
+export {
+    Dialog,
+    FS,
+    Shell
+};
 
-export { DirectoryConflictChoice } from "./models.js";
+export {
+    DirectoryConflictChoice
+} from "./models.js";
 
 export type {
     AppStatus,
@@ -20,5 +26,5 @@ export type {
     OpenDialogResult,
     PathMetadata,
     ProcessInfo,
-    SaveFileOptions,
+    SaveFileOptions
 } from "./models.js";

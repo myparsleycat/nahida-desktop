@@ -33,9 +33,7 @@ export function GetXXMIPath(): $CancellablePromise<string | null> {
     return $Call.ByID(94059527);
 }
 
-export function InstallDLLVersion(
-    input: $models.InstallDLLVersionInput,
-): $CancellablePromise<void> {
+export function InstallDLLVersion(input: $models.InstallDLLVersionInput): $CancellablePromise<void> {
     return $Call.ByID(2238582977, input);
 }
 

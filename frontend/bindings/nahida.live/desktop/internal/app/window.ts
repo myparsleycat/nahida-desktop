@@ -25,8 +25,6 @@ export function SyncRoute(route: string): $CancellablePromise<void> {
  * SyncTitleBarOverlay is retained for renderer API compatibility. The main
  * window is frameless, so Electron's title-bar overlay has no equivalent.
  */
-export function SyncTitleBarOverlay(
-    $0: $models.TitleBarOverlaySyncOptions,
-): $CancellablePromise<void> {
+export function SyncTitleBarOverlay($0: $models.TitleBarOverlaySyncOptions): $CancellablePromise<void> {
     return $Call.ByID(3837297467, $0);
 }

@@ -9,161 +9,161 @@ import * as transfer$0 from "../transfer/models.js";
  * Ancestor is one ancestor entry on a list-children result.
  */
 export interface Ancestor {
-    id: string;
-    parentId: string;
-    name: string;
-    depth: number;
+    "id": string;
+    "parentId": string;
+    "name": string;
+    "depth": number;
 }
 
 export interface BatchDeletionOutcome {
-    requestedIds: string[] | null;
-    acceptedIds: string[] | null;
-    jobs: DeletionAccepted[] | null;
-    errorMessage?: string;
+    "requestedIds": string[] | null;
+    "acceptedIds": string[] | null;
+    "jobs": DeletionAccepted[] | null;
+    "errorMessage"?: string;
 }
 
 /**
  * CopyFromURLParams is Electron DriveCopyFromUrlParams.
  */
 export interface CopyFromURLParams {
-    url: string;
-    destinationId: string;
-    password?: string;
-    collectionId?: string;
-    itemId?: string;
-    createCollectionFolders?: boolean | null;
-    operationId?: string;
-    selectedIds?: string[] | null;
+    "url": string;
+    "destinationId": string;
+    "password"?: string;
+    "collectionId"?: string;
+    "itemId"?: string;
+    "createCollectionFolders"?: boolean | null;
+    "operationId"?: string;
+    "selectedIds"?: string[] | null;
 }
 
 /**
  * CopyFromURLResult is Electron DriveCopyFromUrlResult.
  */
 export interface CopyFromURLResult {
-    source: string;
-    copied: number;
-    destinationId: string;
+    "source": string;
+    "copied": number;
+    "destinationId": string;
 }
 
 export interface CreatedUploadDirectory {
-    id: string;
-    path: string;
+    "id": string;
+    "path": string;
 }
 
 export interface DeletionAccepted {
-    kind: string;
-    deletionJobId: string;
-    status: string;
-    deletionJobToken?: string;
+    "kind": string;
+    "deletionJobId": string;
+    "status": string;
+    "deletionJobToken"?: string;
 }
 
 export interface DownloadItem {
-    id: string;
-    isDir: boolean;
-    name: string;
-    size?: number | null;
+    "id": string;
+    "isDir": boolean;
+    "name": string;
+    "size"?: number | null;
 }
 
 export interface DownloadLink {
-    linkId: string;
-    token: string;
+    "linkId": string;
+    "token": string;
 }
 
 export interface DownloadMetadata {
-    root: transfer$0.Root;
-    totalBytes: number;
-    files: transfer$0.DownloadFile[] | null;
-    dirs: transfer$0.Directory[] | null;
+    "root": transfer$0.Root;
+    "totalBytes": number;
+    "files": transfer$0.DownloadFile[] | null;
+    "dirs": transfer$0.Directory[] | null;
 }
 
 /**
  * DriveImportContent is Electron DriveImportContent.
  */
 export interface DriveImportContent {
-    id: string;
-    name: string;
-    isDir: boolean;
-    size: number | null;
-    mimeType: string;
-    parentId: string;
-    createdAt?: string;
-    updatedAt?: string;
+    "id": string;
+    "name": string;
+    "isDir": boolean;
+    "size": number | null;
+    "mimeType": string;
+    "parentId": string;
+    "createdAt"?: string;
+    "updatedAt"?: string;
 }
 
 export interface GetUploadConflictsParams {
-    destId: string;
-    paths: string[] | null;
+    "destId": string;
+    "paths": string[] | null;
 }
 
 /**
  * ListChildrenResult is Electron DriveListChildrenResult.
  */
 export interface ListChildrenResult {
-    content: DriveImportContent;
-    children: DriveImportContent[] | null;
-    ancestors: Ancestor[] | null;
+    "content": DriveImportContent;
+    "children": DriveImportContent[] | null;
+    "ancestors": Ancestor[] | null;
 }
 
 /**
  * ListLinkChildrenParams is Electron DriveListLinkChildrenParams.
  */
 export interface ListLinkChildrenParams {
-    linkId: string;
-    linkToken: string;
-    itemId: string;
+    "linkId": string;
+    "linkToken": string;
+    "itemId": string;
 }
 
 /**
  * ListModChildrenParams is Electron DriveListModChildrenParams.
  */
 export interface ListModChildrenParams {
-    itemId: string;
-    modToken?: string;
-    modSig?: string;
+    "itemId": string;
+    "modToken"?: string;
+    "modSig"?: string;
 }
 
 /**
  * ResolveImportSourceParams is Electron DriveResolveImportSourceParams.
  */
 export interface ResolveImportSourceParams {
-    url: string;
-    password?: string;
+    "url": string;
+    "password"?: string;
 }
 
 /**
  * SearchParams matches Electron drive.get.search.
  */
 export interface SearchParams {
-    q: string;
-    limit?: number;
-    cursor?: string;
+    "q": string;
+    "limit"?: number;
+    "cursor"?: string;
 }
 
 export interface StartDownloadParams {
-    items: DownloadItem[] | null;
-    targetPath?: string;
-    link?: DownloadLink | null;
-    data?: DownloadMetadata | null;
-    suggestedName?: string;
-    source?: string;
+    "items": DownloadItem[] | null;
+    "targetPath"?: string;
+    "link"?: DownloadLink | null;
+    "data"?: DownloadMetadata | null;
+    "suggestedName"?: string;
+    "source"?: string;
 }
 
 export interface StartDownloadResult {
-    pid: string;
-    status: string;
+    "pid": string;
+    "status": string;
 }
 
 export interface StartUploadParams {
-    destId: string;
-    paths: string[] | null;
-    conflictStrategy?: UploadConflictStrategy;
-    additionalExtensions?: string[] | null;
-    allowAllFiles?: boolean;
+    "destId": string;
+    "paths": string[] | null;
+    "conflictStrategy"?: UploadConflictStrategy;
+    "additionalExtensions"?: string[] | null;
+    "allowAllFiles"?: boolean;
 }
 
 export interface StartUploadResult {
-    pid: string;
-    status: string;
+    "pid": string;
+    "status": string;
 }
 
 export enum UploadConflictStrategy {
@@ -174,15 +174,15 @@ export enum UploadConflictStrategy {
 
     UploadConflictSuffix = "suffix",
     UploadConflictSkip = "skip",
-}
+};
 
 export interface UploadConflictsResult {
-    selectedPaths: string[] | null;
-    conflicts: string[] | null;
+    "selectedPaths": string[] | null;
+    "conflicts": string[] | null;
 }
 
 export interface UploadDirectory {
-    path: string;
-    name: string;
-    parentPath: string;
+    "path": string;
+    "name": string;
+    "parentPath": string;
 }

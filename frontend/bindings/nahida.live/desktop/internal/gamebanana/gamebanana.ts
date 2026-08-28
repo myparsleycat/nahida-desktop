@@ -13,15 +13,11 @@ export function EnsureSession(): $CancellablePromise<void> {
     return $Call.ByID(1682131378);
 }
 
-export function GetDownloadFilePayload(
-    input: $models.DownloadFileInput,
-): $CancellablePromise<$models.DownloadFilePayload> {
+export function GetDownloadFilePayload(input: $models.DownloadFileInput): $CancellablePromise<$models.DownloadFilePayload> {
     return $Call.ByID(2972513600, input);
 }
 
-export function GetGameOverview(
-    gameID: number,
-): $CancellablePromise<{ [_ in string]?: any } | null> {
+export function GetGameOverview(gameID: number): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(1830677357, gameID);
 }
 
@@ -33,9 +29,7 @@ export function GetGames(): $CancellablePromise<{ [_ in string]?: number } | nul
     return $Call.ByID(2572252359);
 }
 
-export function GetModCategoryOverview(
-    input: $models.ModCategoryOverviewInput,
-): $CancellablePromise<{ [_ in string]?: any } | null> {
+export function GetModCategoryOverview(input: $models.ModCategoryOverviewInput): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(1231115731, input);
 }
 
@@ -43,9 +37,7 @@ export function GetModIndex(input: $models.ModIndexInput): $CancellablePromise<a
     return $Call.ByID(1789862388, input);
 }
 
-export function GetModOverview(
-    input: $models.ModOverviewInput,
-): $CancellablePromise<{ [_ in string]?: any } | null> {
+export function GetModOverview(input: $models.ModOverviewInput): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(2622618171, input);
 }
 
@@ -61,8 +53,6 @@ export function SetManualRMCToken(input: string): $CancellablePromise<$models.Ma
     return $Call.ByID(3680048725, input);
 }
 
-export function ToggleModLike(
-    input: $models.ModOverviewInput,
-): $CancellablePromise<$models.ToggleLikeResult> {
+export function ToggleModLike(input: $models.ModOverviewInput): $CancellablePromise<$models.ToggleLikeResult> {
     return $Call.ByID(747868459, input);
 }

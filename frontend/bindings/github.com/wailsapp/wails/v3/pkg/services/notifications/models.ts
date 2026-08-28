@@ -5,13 +5,13 @@
  * NotificationAction represents an action button for a notification.
  */
 export interface NotificationAction {
-    id?: string;
-    title?: string;
+    "id"?: string;
+    "title"?: string;
 
     /**
      * (macOS-specific)
      */
-    destructive?: boolean;
+    "destructive"?: boolean;
 }
 
 /**
@@ -19,8 +19,8 @@ export interface NotificationAction {
  * Path is an absolute filesystem path (or "file://" URL on macOS).
  */
 export interface NotificationAttachment {
-    id?: string;
-    path: string;
+    "id"?: string;
+    "path": string;
 
     /**
      * Type is an optional placement/UTI hint.
@@ -28,38 +28,38 @@ export interface NotificationAttachment {
      *   On Windows: "hero" | "appLogoOverride" | "inline" (default "inline").
      *   On Linux: ignored (always image-path hint).
      */
-    type?: string;
+    "type"?: string;
 }
 
 /**
  * NotificationCategory groups actions for notifications.
  */
 export interface NotificationCategory {
-    id?: string;
-    actions?: NotificationAction[] | null;
-    hasReplyField?: boolean;
-    replyPlaceholder?: string;
-    replyButtonTitle?: string;
+    "id"?: string;
+    "actions"?: NotificationAction[] | null;
+    "hasReplyField"?: boolean;
+    "replyPlaceholder"?: string;
+    "replyButtonTitle"?: string;
 }
 
 /**
  * NotificationOptions contains configuration for a notification.
- *
+ * 
  * New optional fields (Sound, Attachments, ThreadID, InterruptionLevel,
  * Schedule) gracefully degrade when a platform cannot honour them; see the
  * package-level godoc for the per-platform support matrix.
  */
 export interface NotificationOptions {
-    id: string;
-    title: string;
+    "id": string;
+    "title": string;
 
     /**
      * (macOS and Linux only)
      */
-    subtitle?: string;
-    body?: string;
-    categoryId?: string;
-    data?: { [_ in string]?: any } | null;
+    "subtitle"?: string;
+    "body"?: string;
+    "categoryId"?: string;
+    "data"?: { [_ in string]?: any } | null;
 
     /**
      * Sound controls the sound played on delivery.
@@ -73,20 +73,20 @@ export interface NotificationOptions {
      * event names. On Linux it is forwarded as the freedesktop "sound-name"
      * hint (theme-dependent).
      */
-    sound?: NotificationSound | null;
+    "sound"?: NotificationSound | null;
 
     /**
      * Attachments are media files shown alongside the notification. macOS
      * supports multiple attachments of any media type; Windows and Linux
      * honour the first image-typed attachment (Linux limits to one per spec).
      */
-    attachments?: NotificationAttachment[] | null;
+    "attachments"?: NotificationAttachment[] | null;
 
     /**
      * ThreadID groups related notifications together in Notification Center
      * (macOS) / Action Center (Windows) / the notification daemon (Linux).
      */
-    threadId?: string;
+    "threadId"?: string;
 
     /**
      * InterruptionLevel controls notification priority. One of "passive",
@@ -94,14 +94,14 @@ export interface NotificationOptions {
      * macOS 12+ and the Critical Alert entitlement. Linux maps to the
      * freedesktop urgency hint; Windows maps to <toast scenario="...">.
      */
-    interruptionLevel?: string;
+    "interruptionLevel"?: string;
 
     /**
      * Schedule defers delivery. macOS uses a native trigger and persists
      * across app restarts. Windows and Linux fall back to an in-process
      * time.AfterFunc timer that does NOT survive an app exit.
      */
-    schedule?: NotificationSchedule | null;
+    "schedule"?: NotificationSchedule | null;
 }
 
 /**
@@ -109,14 +109,14 @@ export interface NotificationOptions {
  * must be set. At is interpreted as Unix seconds (UTC).
  */
 export interface NotificationSchedule {
-    delaySeconds?: number;
-    at?: number;
+    "delaySeconds"?: number;
+    "at"?: number;
 }
 
 /**
  * NotificationSound configures audio playback for a notification.
  */
 export interface NotificationSound {
-    silent?: boolean;
-    name?: string;
+    "silent"?: boolean;
+    "name"?: string;
 }

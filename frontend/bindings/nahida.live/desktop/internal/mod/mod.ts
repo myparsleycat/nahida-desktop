@@ -9,23 +9,8 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
-export function AddGame(
-    game: string,
-    modFolderPath: string,
-    importer: string | null,
-    linkedModFolderPath: string | null,
-    gameInstallPath: string | null,
-    gameExecutablePath: string | null,
-): $CancellablePromise<void> {
-    return $Call.ByID(
-        3525228919,
-        game,
-        modFolderPath,
-        importer,
-        linkedModFolderPath,
-        gameInstallPath,
-        gameExecutablePath,
-    );
+export function AddGame(game: string, modFolderPath: string, importer: string | null, linkedModFolderPath: string | null, gameInstallPath: string | null, gameExecutablePath: string | null): $CancellablePromise<void> {
+    return $Call.ByID(3525228919, game, modFolderPath, importer, linkedModFolderPath, gameInstallPath, gameExecutablePath);
 }
 
 export function ApplyPreset(presetID: string): $CancellablePromise<$models.ApplyPresetResult> {
@@ -36,26 +21,15 @@ export function CancelPathSelection(selectionID: string): $CancellablePromise<vo
     return $Call.ByID(499457967, selectionID);
 }
 
-export function ClassifyMergePacks(
-    modPaths: string[] | null,
-): $CancellablePromise<$models.ClassifyMergePacksResult> {
+export function ClassifyMergePacks(modPaths: string[] | null): $CancellablePromise<$models.ClassifyMergePacksResult> {
     return $Call.ByID(1496237314, modPaths);
 }
 
-export function CopyFolderToGroup(
-    folderPath: string,
-    groupPath: string,
-    move: boolean,
-): $CancellablePromise<string> {
+export function CopyFolderToGroup(folderPath: string, groupPath: string, move: boolean): $CancellablePromise<string> {
     return $Call.ByID(4185922125, folderPath, groupPath, move);
 }
 
-export function CreatePreset(
-    game: string,
-    name: string,
-    description: string | null,
-    resolveConflicts: boolean,
-): $CancellablePromise<$models.Preset> {
+export function CreatePreset(game: string, name: string, description: string | null, resolveConflicts: boolean): $CancellablePromise<$models.Preset> {
     return $Call.ByID(1246293305, game, name, description, resolveConflicts);
 }
 
@@ -71,9 +45,7 @@ export function DownloadFromURL(rawURL: string, groupPath: string): $Cancellable
     return $Call.ByID(2029509235, rawURL, groupPath);
 }
 
-export function DownloadGameBananaFile(
-    props: $models.GameBananaDownloadProps,
-): $CancellablePromise<string> {
+export function DownloadGameBananaFile(props: $models.GameBananaDownloadProps): $CancellablePromise<string> {
     return $Call.ByID(2641213091, props);
 }
 
@@ -85,18 +57,11 @@ export function ExclusiveToggle(modPath: string): $CancellablePromise<string> {
     return $Call.ByID(1184086638, modPath);
 }
 
-export function ExtractArchiveToGroup(
-    archivePath: string,
-    groupPath: string,
-    mode: string,
-): $CancellablePromise<string> {
+export function ExtractArchiveToGroup(archivePath: string, groupPath: string, mode: string): $CancellablePromise<string> {
     return $Call.ByID(4018183521, archivePath, groupPath, mode);
 }
 
-export function GetCharacters(
-    game: string,
-    searchModPreview: boolean | null,
-): $CancellablePromise<$models.FolderGroup[] | null> {
+export function GetCharacters(game: string, searchModPreview: boolean | null): $CancellablePromise<$models.FolderGroup[] | null> {
     return $Call.ByID(3693627186, game, searchModPreview);
 }
 
@@ -120,10 +85,7 @@ export function GetLastGame(): $CancellablePromise<string | null> {
     return $Call.ByID(579776092);
 }
 
-export function GetManualSubGroups(
-    folderPath: string,
-    searchModPreview: boolean | null,
-): $CancellablePromise<$models.FolderGroup[] | null> {
+export function GetManualSubGroups(folderPath: string, searchModPreview: boolean | null): $CancellablePromise<$models.FolderGroup[] | null> {
     return $Call.ByID(2824731838, folderPath, searchModPreview);
 }
 
@@ -135,9 +97,7 @@ export function GetModsLight(groupPath: string): $CancellablePromise<$models.Fol
     return $Call.ByID(4233817785, groupPath);
 }
 
-export function GetPresetCreateConflicts(
-    game: string,
-): $CancellablePromise<$models.PresetConflict[] | null> {
+export function GetPresetCreateConflicts(game: string): $CancellablePromise<$models.PresetConflict[] | null> {
     return $Call.ByID(3565121112, game);
 }
 
@@ -149,10 +109,7 @@ export function GetPreviousFocusedGame(): $CancellablePromise<string | null> {
     return $Call.ByID(3656597010);
 }
 
-export function GetSubGroups(
-    folderPath: string,
-    searchModPreview: boolean | null,
-): $CancellablePromise<$models.FolderGroup[] | null> {
+export function GetSubGroups(folderPath: string, searchModPreview: boolean | null): $CancellablePromise<$models.FolderGroup[] | null> {
     return $Call.ByID(2627066576, folderPath, searchModPreview);
 }
 
@@ -164,18 +121,11 @@ export function HuiDownload(title: string, fileURL: string): $CancellablePromise
     return $Call.ByID(662049684, title, fileURL);
 }
 
-export function MergeMods(
-    request: $models.MergeModsRequest,
-): $CancellablePromise<$models.MergeModsResult> {
+export function MergeMods(request: $models.MergeModsRequest): $CancellablePromise<$models.MergeModsResult> {
     return $Call.ByID(1224754907, request);
 }
 
-export function PastePreview(
-    modPath: string,
-    data: string,
-    pasteType: string,
-    existingPreviewPath: string | null,
-): $CancellablePromise<string> {
+export function PastePreview(modPath: string, data: string, pasteType: string, existingPreviewPath: string | null): $CancellablePromise<string> {
     return $Call.ByID(1823802171, modPath, data, pasteType, existingPreviewPath);
 }
 
@@ -199,23 +149,15 @@ export function ReorderGames(games: string[] | null): $CancellablePromise<void> 
     return $Call.ByID(447395892, games);
 }
 
-export function ResolveArchiveExtractPrompt(
-    requestID: string,
-    mode: string | null,
-): $CancellablePromise<void> {
+export function ResolveArchiveExtractPrompt(requestID: string, mode: string | null): $CancellablePromise<void> {
     return $Call.ByID(1874196859, requestID, mode);
 }
 
-export function ResolveDownloadTarget(
-    input: string,
-    gameFilter: string | null,
-): $CancellablePromise<$models.DownloadTarget | null> {
+export function ResolveDownloadTarget(input: string, gameFilter: string | null): $CancellablePromise<$models.DownloadTarget | null> {
     return $Call.ByID(1344476751, input, gameFilter);
 }
 
-export function ResolveNteInstallPath(
-    inputPath: string,
-): $CancellablePromise<$models.NtePathResolution | null> {
+export function ResolveNteInstallPath(inputPath: string): $CancellablePromise<$models.NtePathResolution | null> {
     return $Call.ByID(1583521617, inputPath);
 }
 
@@ -227,11 +169,7 @@ export function SelectFolderPath(selectionID: string): $CancellablePromise<void>
     return $Call.ByID(1057562085, selectionID);
 }
 
-export function SelectModManagerPath(
-    selectionID: string,
-    path: string,
-    fileName: string | null,
-): $CancellablePromise<void> {
+export function SelectModManagerPath(selectionID: string, path: string, fileName: string | null): $CancellablePromise<void> {
     return $Call.ByID(1980053986, selectionID, path, fileName);
 }
 
@@ -271,13 +209,7 @@ export function UpdatePresetName(presetID: string, newName: string): $Cancellabl
     return $Call.ByID(2641984507, presetID, newName);
 }
 
-export function UpdateToggleKey(
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-): $CancellablePromise<void> {
+export function UpdateToggleKey(modPath: string, iniFileName: string, sectionName: string, variable: string, value: string): $CancellablePromise<void> {
     return $Call.ByID(2401127578, modPath, iniFileName, sectionName, variable, value);
 }
 

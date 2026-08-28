@@ -1209,6 +1209,89 @@ func prepareModelViewerDirectTextures(ctx context.Context, modDir string, settin
 	return runModelViewerTextureJobs(ctx, settings, jobs)
 }
 
+type modelViewerTextureHashCall struct {
+	once sync.Once
+	hash string
+}
+
+type modelViewerTextureDecodeCall struct {
+	once    sync.Once
+	decoded *modelViewerDecodedTexture
+	err     error
+}
+
+type modelViewerTextureEncodeCall struct {
+	once    sync.Once
+	texture *modelViewerPreparedTexture
+	err     error
+}
+
+type modelViewerTextureContentCache struct {
+	mu      sync.Mutex
+	hashes  map[string]*modelViewerTextureHashCall
+	decoded map[string]*modelViewerTextureDecodeCall
+	encoded map[string]*modelViewerTextureEncodeCall
+}
+
+func newModelViewerTextureContentCache() *modelViewerTextureContentCache {
+	return &modelViewerTextureContentCache{
+		hashes:  make(map[string]*modelViewerTextureHashCall),
+		decoded: make(map[string]*modelViewerTextureDecodeCall),
+		encoded: make(map[string]*modelViewerTextureEncodeCall),
+	}
+}
+
+func (c *modelViewerTextureContentCache) hash(path string) string {
+	c.mu.Lock()
+	call, ok := c.hashes[path]
+	if !ok {
+		call = &modelViewerTextureHashCall{}
+		c.hashes[path] = call
+	}
+	c.mu.Unlock()
+	call.once.Do(func() {
+		hash, err := modelViewerTextureFileHash(path)
+		if err != nil {
+			hash = "path:" + path
+		}
+		call.hash = hash
+	})
+	return call.hash
+}
+
+func (c *modelViewerTextureContentCache) decode(ctx context.Context, path, hash string) (*modelViewerDecodedTexture, error) {
+	c.mu.Lock()
+	call, ok := c.decoded[hash]
+	if !ok {
+		call = &modelViewerTextureDecodeCall{}
+		c.decoded[hash] = call
+	}
+	c.mu.Unlock()
+	call.once.Do(func() {
+		call.decoded, call.err = decodeModelViewerTextureSource(ctx, path)
+	})
+	return call.decoded, call.err
+}
+
+func (c *modelViewerTextureContentCache) encode(decoded *modelViewerDecodedTexture, job modelViewerTextureJob, hash, format string, quality int) (*modelViewerPreparedTexture, error) {
+	invert := modelViewerTextureShouldInvertAlpha(job.resourceName, decoded)
+	key := hash
+	if invert {
+		key += ":invert"
+	}
+	c.mu.Lock()
+	call, ok := c.encoded[key]
+	if !ok {
+		call = &modelViewerTextureEncodeCall{}
+		c.encoded[key] = call
+	}
+	c.mu.Unlock()
+	call.once.Do(func() {
+		call.texture, call.err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, format, quality)
+	})
+	return call.texture, call.err
+}
+
 func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, jobs []modelViewerTextureJob) (map[string]modelViewerTexturePayload, int64, int) {
 	output := make(map[string]modelViewerTexturePayload, len(jobs)*2)
 	if len(jobs) == 0 {
@@ -1225,6 +1308,7 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 	}
 	work := make(chan modelViewerTextureJob)
 	results := make(chan preparedJob, len(jobs))
+	cache := newModelViewerTextureContentCache()
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Add(1)
@@ -1234,7 +1318,12 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 				if ctx.Err() != nil {
 					continue
 				}
-				texture, err := prepareModelViewerTexture(ctx, job.path, job.resourceName, settings.TextureFormat, settings.JPEGQuality)
+				hash := cache.hash(job.path)
+				decoded, err := cache.decode(ctx, job.path, hash)
+				if err != nil {
+					continue
+				}
+				texture, err := cache.encode(decoded, job, hash, settings.TextureFormat, settings.JPEGQuality)
 				if err != nil {
 					continue
 				}

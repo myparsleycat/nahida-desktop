@@ -18,9 +18,7 @@ export function CheckNotificationAuthorization(): $CancellablePromise<boolean> {
     return $Call.ByID(2216952893);
 }
 
-export function RegisterNotificationCategory(
-    category: $models.NotificationCategory,
-): $CancellablePromise<void> {
+export function RegisterNotificationCategory(category: $models.NotificationCategory): $CancellablePromise<void> {
     return $Call.ByID(2917562919, category);
 }
 
@@ -59,9 +57,7 @@ export function SendNotification(options: $models.NotificationOptions): $Cancell
     return $Call.ByID(3968228732, options);
 }
 
-export function SendNotificationWithActions(
-    options: $models.NotificationOptions,
-): $CancellablePromise<void> {
+export function SendNotificationWithActions(options: $models.NotificationOptions): $CancellablePromise<void> {
     return $Call.ByID(1886542847, options);
 }
 
@@ -71,8 +67,6 @@ export function SendNotificationWithActions(
  * D-Bus replaces_id parameter. On Windows it currently redelivers as a new
  * notification (true replace requires upstream wintoast support for tag/group).
  */
-export function UpdateNotification(
-    options: $models.NotificationOptions,
-): $CancellablePromise<void> {
+export function UpdateNotification(options: $models.NotificationOptions): $CancellablePromise<void> {
     return $Call.ByID(461019183, options);
 }

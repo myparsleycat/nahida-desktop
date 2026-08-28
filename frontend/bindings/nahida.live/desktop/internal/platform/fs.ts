@@ -13,19 +13,14 @@ export function AssertValidWindowsFilename(name: string): $CancellablePromise<vo
     return $Call.ByID(651699460, name);
 }
 
-export function FormatProcessList(
-    processes: $models.ProcessInfo[] | null,
-): $CancellablePromise<string> {
+export function FormatProcessList(processes: $models.ProcessInfo[] | null): $CancellablePromise<string> {
     return $Call.ByID(1906698512, processes);
 }
 
 /**
  * GetFileWriteAccess is the detailed writable path from Electron FS.
  */
-export function GetFileWriteAccess(
-    filePath: string,
-    parentPath: string,
-): $CancellablePromise<$models.FileWriteAccessResult> {
+export function GetFileWriteAccess(filePath: string, parentPath: string): $CancellablePromise<$models.FileWriteAccessResult> {
     return $Call.ByID(732555467, filePath, parentPath);
 }
 
@@ -33,10 +28,7 @@ export function GetPathMetadata(pathStr: string): $CancellablePromise<$models.Pa
     return $Call.ByID(3368348406, pathStr);
 }
 
-export function GetUniqueName(
-    name: string,
-    existingNames: string[] | null,
-): $CancellablePromise<string> {
+export function GetUniqueName(name: string, existingNames: string[] | null): $CancellablePromise<string> {
     return $Call.ByID(1284205592, name, existingNames);
 }
 
@@ -59,9 +51,6 @@ export function SanitizePath(input: string): $CancellablePromise<string> {
     return $Call.ByID(2515133264, input);
 }
 
-export function SanitizeWindowsFilename(
-    input: string,
-    sanitizeString: string,
-): $CancellablePromise<string> {
+export function SanitizeWindowsFilename(input: string, sanitizeString: string): $CancellablePromise<string> {
     return $Call.ByID(3363453569, input, sanitizeString);
 }

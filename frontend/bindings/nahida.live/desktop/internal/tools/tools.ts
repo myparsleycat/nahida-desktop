@@ -8,6 +8,7 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as db$0 from "../db/models.js";
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
@@ -16,9 +17,7 @@ export function BisectCancel(): $CancellablePromise<$models.BisectSnapshot> {
     return $Call.ByID(3782118482);
 }
 
-export function BisectFinalize(
-    keepDisabled: string[] | null,
-): $CancellablePromise<$models.BisectSnapshot> {
+export function BisectFinalize(keepDisabled: string[] | null): $CancellablePromise<$models.BisectSnapshot> {
     return $Call.ByID(789146642, keepDisabled);
 }
 
@@ -34,10 +33,7 @@ export function BisectRespond(fixed: boolean): $CancellablePromise<$models.Bisec
     return $Call.ByID(883061117, fixed);
 }
 
-export function BisectStart(
-    game: string,
-    excludePaths: string[] | null,
-): $CancellablePromise<$models.BisectSnapshot> {
+export function BisectStart(game: string, excludePaths: string[] | null): $CancellablePromise<$models.BisectSnapshot> {
     return $Call.ByID(2715752484, game, excludePaths);
 }
 
@@ -45,22 +41,15 @@ export function BisectUndoLastRound(): $CancellablePromise<$models.BisectSnapsho
     return $Call.ByID(29486810);
 }
 
-export function BisectValidateExcludePath(
-    game: string,
-    inputPath: string,
-): $CancellablePromise<string> {
+export function BisectValidateExcludePath(game: string, inputPath: string): $CancellablePromise<string> {
     return $Call.ByID(1760439743, game, inputPath);
 }
 
-export function BodyShapeExport(
-    input: $models.BodyShapeExportInput,
-): $CancellablePromise<$models.BodyShapeExportResult> {
+export function BodyShapeExport(input: $models.BodyShapeExportInput): $CancellablePromise<$models.BodyShapeExportResult> {
     return $Call.ByID(891411225, input);
 }
 
-export function BodyShapeLoadMod(
-    modPath: string,
-): $CancellablePromise<$models.BodyShapeLoadResult> {
+export function BodyShapeLoadMod(modPath: string): $CancellablePromise<$models.BodyShapeLoadResult> {
     return $Call.ByID(3073495713, modPath);
 }
 
@@ -84,33 +73,23 @@ export function DeleteScript(scriptID: string): $CancellablePromise<void> {
     return $Call.ByID(3991246962, scriptID);
 }
 
-export function FourThousandOneFixerBuildDll(
-    input: $models.Fixer4001BuildInput,
-): $CancellablePromise<$models.Fixer4001Result> {
+export function FourThousandOneFixerBuildDll(input: $models.Fixer4001BuildInput): $CancellablePromise<$models.Fixer4001Result> {
     return $Call.ByID(7776532, input);
 }
 
-export function FourThousandOneFixerCheckImporterWriteAccess(
-    input: $models.Fixer4001PathInput,
-): $CancellablePromise<$models.ImporterWriteAccess> {
+export function FourThousandOneFixerCheckImporterWriteAccess(input: $models.Fixer4001PathInput): $CancellablePromise<$models.ImporterWriteAccess> {
     return $Call.ByID(2166092143, input);
 }
 
-export function FourThousandOneFixerDiversifyDllPadding(
-    input: $models.Fixer4001ImporterInput,
-): $CancellablePromise<$models.Fixer4001Result> {
+export function FourThousandOneFixerDiversifyDllPadding(input: $models.Fixer4001ImporterInput): $CancellablePromise<$models.Fixer4001Result> {
     return $Call.ByID(477628836, input);
 }
 
-export function FourThousandOneFixerGetDiversificationState(
-    input: $models.Fixer4001PathInput,
-): $CancellablePromise<$models.DiversificationState> {
+export function FourThousandOneFixerGetDiversificationState(input: $models.Fixer4001PathInput): $CancellablePromise<$models.DiversificationState> {
     return $Call.ByID(1641578396, input);
 }
 
-export function FourThousandOneFixerGetProviderReleases(
-    provider: string,
-): $CancellablePromise<string[] | null> {
+export function FourThousandOneFixerGetProviderReleases(provider: string): $CancellablePromise<string[] | null> {
     return $Call.ByID(1762686795, provider);
 }
 
@@ -118,9 +97,7 @@ export function FourThousandOneFixerGetState(): $CancellablePromise<$models.Fixe
     return $Call.ByID(279214897);
 }
 
-export function FourThousandOneFixerRestoreDiversifiedDll(
-    input: $models.Fixer4001PathInput,
-): $CancellablePromise<$models.Fixer4001Result> {
+export function FourThousandOneFixerRestoreDiversifiedDll(input: $models.Fixer4001PathInput): $CancellablePromise<$models.Fixer4001Result> {
     return $Call.ByID(631357502, input);
 }
 
@@ -156,17 +133,11 @@ export function IsPythonAvailable(): $CancellablePromise<boolean> {
     return $Call.ByID(2556967675);
 }
 
-export function ListTextureFolder(
-    targetPath: string,
-    patch: $models.TextureResizeSettingsPatch | null,
-): $CancellablePromise<$models.TextureResizeListItem[] | null> {
+export function ListTextureFolder(targetPath: string, patch: $models.TextureResizeSettingsPatch | null): $CancellablePromise<$models.TextureResizeListItem[] | null> {
     return $Call.ByID(1244278657, targetPath, patch);
 }
 
-export function ListTextureMod(
-    modPath: string,
-    patch: $models.TextureResizeSettingsPatch | null,
-): $CancellablePromise<$models.TextureResizeListItem[] | null> {
+export function ListTextureMod(modPath: string, patch: $models.TextureResizeSettingsPatch | null): $CancellablePromise<$models.TextureResizeListItem[] | null> {
     return $Call.ByID(3694015823, modPath, patch);
 }
 
@@ -174,29 +145,19 @@ export function LoadModViewer(modPath: string): $CancellablePromise<$models.Mode
     return $Call.ByID(1697165908, modPath);
 }
 
-export function PersistModelViewerToggleState(
-    iniPath: string,
-    state: { [_ in string]?: any } | null,
-): $CancellablePromise<$models.PersistModelViewerResult> {
+export function PersistModelViewerToggleState(iniPath: string, state: { [_ in string]?: any } | null): $CancellablePromise<$models.PersistModelViewerResult> {
     return $Call.ByID(3706860710, iniPath, state);
 }
 
-export function ResizeTextureFile(
-    input: $models.TextureResizeFileRunInput,
-): $CancellablePromise<$models.TextureResizeResult> {
+export function ResizeTextureFile(input: $models.TextureResizeFileRunInput): $CancellablePromise<$models.TextureResizeResult> {
     return $Call.ByID(3438396943, input);
 }
 
-export function ResizeTextureFolder(
-    input: $models.TextureResizeRunInput,
-): $CancellablePromise<$models.TextureResizeResult> {
+export function ResizeTextureFolder(input: $models.TextureResizeRunInput): $CancellablePromise<$models.TextureResizeResult> {
     return $Call.ByID(79919977, input);
 }
 
-export function ResizeTextureMod(
-    modPath: string,
-    input: $models.TextureResizeModInput,
-): $CancellablePromise<$models.TextureResizeResult> {
+export function ResizeTextureMod(modPath: string, input: $models.TextureResizeModInput): $CancellablePromise<$models.TextureResizeResult> {
     return $Call.ByID(1979455463, modPath, input);
 }
 
@@ -212,9 +173,7 @@ export function SaveScript(inputPath: string): $CancellablePromise<void> {
     return $Call.ByID(3210775832, inputPath);
 }
 
-export function SaveTextureResizeSettings(
-    patch: $models.TextureResizeSettingsPatch,
-): $CancellablePromise<$models.TextureResizeSettings> {
+export function SaveTextureResizeSettings(patch: $models.TextureResizeSettingsPatch): $CancellablePromise<$models.TextureResizeSettings> {
     return $Call.ByID(531489863, patch);
 }
 
@@ -254,63 +213,43 @@ export function ToggleViewerRunBatchGenerate(): $CancellablePromise<void> {
     return $Call.ByID(68751508);
 }
 
-export function TouchProfileAnalyzeComponents(
-    input: $models.TouchProfileAnalyzeInput,
-): $CancellablePromise<$models.TouchDraft> {
+export function TouchProfileAnalyzeComponents(input: $models.TouchProfileAnalyzeInput): $CancellablePromise<$models.TouchDraft> {
     return $Call.ByID(3768512858, input);
 }
 
-export function TouchProfileApply(
-    input: $models.TouchProfileApplyInput,
-): $CancellablePromise<$models.TouchApplyResult> {
+export function TouchProfileApply(input: $models.TouchProfileApplyInput): $CancellablePromise<$models.TouchApplyResult> {
     return $Call.ByID(2522548966, input);
 }
 
-export function TouchProfileDiscardDraft(
-    sessionID: string,
-): $CancellablePromise<$models.TouchProfileOK> {
+export function TouchProfileDiscardDraft(sessionID: string): $CancellablePromise<$models.TouchProfileOK> {
     return $Call.ByID(978483691, sessionID);
 }
 
-export function TouchProfileGetMeshPreview(
-    input: $models.TouchProfilePreviewInput,
-): $CancellablePromise<$models.TouchMeshPreview> {
+export function TouchProfileGetMeshPreview(input: $models.TouchProfilePreviewInput): $CancellablePromise<$models.TouchMeshPreview> {
     return $Call.ByID(3797038149, input);
 }
 
-export function TouchProfileGetPreview(
-    input: $models.TouchProfilePreviewInput,
-): $CancellablePromise<$models.TouchProfilePreview> {
+export function TouchProfileGetPreview(input: $models.TouchProfilePreviewInput): $CancellablePromise<$models.TouchProfilePreview> {
     return $Call.ByID(3459824038, input);
 }
 
-export function TouchProfilePrepare(
-    input: $models.TouchProfileLoadInput,
-): $CancellablePromise<$models.TouchModInspection> {
+export function TouchProfilePrepare(input: $models.TouchProfileLoadInput): $CancellablePromise<$models.TouchModInspection> {
     return $Call.ByID(3680234253, input);
 }
 
-export function TouchProfileRegenerate(
-    input: $models.TouchProfileApplyInput,
-): $CancellablePromise<$models.TouchApplyResult> {
+export function TouchProfileRegenerate(input: $models.TouchProfileApplyInput): $CancellablePromise<$models.TouchApplyResult> {
     return $Call.ByID(1070203548, input);
 }
 
-export function TouchProfileRollback(
-    input: $models.TouchProfileRollbackInput,
-): $CancellablePromise<$models.TouchRollbackResult> {
+export function TouchProfileRollback(input: $models.TouchProfileRollbackInput): $CancellablePromise<$models.TouchRollbackResult> {
     return $Call.ByID(4123278206, input);
 }
 
-export function TouchProfileSaveDraft(
-    draft: $models.TouchDraft,
-): $CancellablePromise<$models.TouchDraft> {
+export function TouchProfileSaveDraft(draft: $models.TouchDraft): $CancellablePromise<$models.TouchDraft> {
     return $Call.ByID(369165078, draft);
 }
 
-export function TouchProfileUpdateZoneSettings(
-    input: $models.TouchProfileUpdateZoneSettingsInput,
-): $CancellablePromise<$models.TouchDraft> {
+export function TouchProfileUpdateZoneSettings(input: $models.TouchProfileUpdateZoneSettingsInput): $CancellablePromise<$models.TouchDraft> {
     return $Call.ByID(3239307272, input);
 }
 
@@ -318,9 +257,7 @@ export function WuwaFixerCleanBackups(modPath: string): $CancellablePromise<void
     return $Call.ByID(229947354, modPath);
 }
 
-export function WuwaFixerGetBackupSize(
-    modPath: string,
-): $CancellablePromise<$models.WuwaBackupSize> {
+export function WuwaFixerGetBackupSize(modPath: string): $CancellablePromise<$models.WuwaBackupSize> {
     return $Call.ByID(711291729, modPath);
 }
 
@@ -328,9 +265,7 @@ export function WuwaFixerGetRateStatus(): $CancellablePromise<$models.GitHubRate
     return $Call.ByID(1426455902);
 }
 
-export function WuwaFixerGetStatus(
-    importer: string | null,
-): $CancellablePromise<$models.WuwaFixerStatus> {
+export function WuwaFixerGetStatus(importer: string | null): $CancellablePromise<$models.WuwaFixerStatus> {
     return $Call.ByID(4119647800, importer);
 }
 
@@ -338,28 +273,18 @@ export function WuwaFixerInstallOrUpdate(): $CancellablePromise<$models.WuwaFixe
     return $Call.ByID(891250321);
 }
 
-export function WuwaFixerPrepareRun(
-    importer: string | null,
-): $CancellablePromise<$models.WuwaFixerPrepareResult> {
+export function WuwaFixerPrepareRun(importer: string | null): $CancellablePromise<$models.WuwaFixerPrepareResult> {
     return $Call.ByID(4091984094, importer);
 }
 
-export function WuwaFixerRollbackToGroup(
-    modPath: string,
-    groupKey: string,
-): $CancellablePromise<void> {
+export function WuwaFixerRollbackToGroup(modPath: string, groupKey: string): $CancellablePromise<void> {
     return $Call.ByID(2256339182, modPath, groupKey);
 }
 
-export function WuwaFixerRun(
-    modPath: string,
-    options: $models.WuwaFixerOptions,
-): $CancellablePromise<void> {
+export function WuwaFixerRun(modPath: string, options: $models.WuwaFixerOptions): $CancellablePromise<void> {
     return $Call.ByID(667324571, modPath, options);
 }
 
-export function WuwaFixerScanBackups(
-    modPath: string,
-): $CancellablePromise<$models.WuwaBackupGroup[] | null> {
+export function WuwaFixerScanBackups(modPath: string): $CancellablePromise<$models.WuwaBackupGroup[] | null> {
     return $Call.ByID(1250536594, modPath);
 }

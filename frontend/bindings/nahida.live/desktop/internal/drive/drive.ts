@@ -25,18 +25,14 @@ export function CancelCopyFromURL(operationID: string): $CancellablePromise<bool
 /**
  * CopyFromURL is Electron drive.fn.copyFromUrl.
  */
-export function CopyFromURL(
-    params: $models.CopyFromURLParams,
-): $CancellablePromise<$models.CopyFromURLResult> {
+export function CopyFromURL(params: $models.CopyFromURLParams): $CancellablePromise<$models.CopyFromURLResult> {
     return $Call.ByID(4154037052, params);
 }
 
 /**
  * CopyFromURLMany is Electron drive.fn.copyFromUrlMany.
  */
-export function CopyFromURLMany(
-    params: $models.CopyFromURLParams,
-): $CancellablePromise<$models.CopyFromURLResult> {
+export function CopyFromURLMany(params: $models.CopyFromURLParams): $CancellablePromise<$models.CopyFromURLResult> {
     return $Call.ByID(3822163315, params);
 }
 
@@ -51,17 +47,11 @@ export function CreateDir(parentID: string, name: string): $CancellablePromise<a
     return $Call.ByID(1608070133, parentID, name);
 }
 
-export function CreateDirs(
-    parentID: string,
-    directories: $models.UploadDirectory[] | null,
-): $CancellablePromise<$models.CreatedUploadDirectory[] | null> {
+export function CreateDirs(parentID: string, directories: $models.UploadDirectory[] | null): $CancellablePromise<$models.CreatedUploadDirectory[] | null> {
     return $Call.ByID(1760304114, parentID, directories);
 }
 
-export function DeleteItems(
-    ids: string[] | null,
-    action: string,
-): $CancellablePromise<$models.BatchDeletionOutcome> {
+export function DeleteItems(ids: string[] | null, action: string): $CancellablePromise<$models.BatchDeletionOutcome> {
     return $Call.ByID(34167167, ids, action);
 }
 
@@ -69,27 +59,21 @@ export function GetItem(itemID: string): $CancellablePromise<any> {
     return $Call.ByID(2048674277, itemID);
 }
 
-export function GetUploadConflicts(
-    params: $models.GetUploadConflictsParams,
-): $CancellablePromise<$models.UploadConflictsResult> {
+export function GetUploadConflicts(params: $models.GetUploadConflictsParams): $CancellablePromise<$models.UploadConflictsResult> {
     return $Call.ByID(3936507094, params);
 }
 
 /**
  * ListLinkChildren is Electron drive.fn.listLinkChildren.
  */
-export function ListLinkChildren(
-    params: $models.ListLinkChildrenParams,
-): $CancellablePromise<$models.ListChildrenResult> {
+export function ListLinkChildren(params: $models.ListLinkChildrenParams): $CancellablePromise<$models.ListChildrenResult> {
     return $Call.ByID(289936265, params);
 }
 
 /**
  * ListModChildren is Electron drive.fn.listModChildren.
  */
-export function ListModChildren(
-    params: $models.ListModChildrenParams,
-): $CancellablePromise<$models.ListChildrenResult> {
+export function ListModChildren(params: $models.ListModChildrenParams): $CancellablePromise<$models.ListChildrenResult> {
     return $Call.ByID(554389701, params);
 }
 
@@ -107,9 +91,7 @@ export function Rename(itemID: string, name: string): $CancellablePromise<any> {
 /**
  * ResolveImportSource is Electron drive.fn.resolveImportSource.
  */
-export function ResolveImportSource(
-    params: $models.ResolveImportSourceParams,
-): $CancellablePromise<any> {
+export function ResolveImportSource(params: $models.ResolveImportSourceParams): $CancellablePromise<any> {
     return $Call.ByID(158932530, params);
 }
 
@@ -117,14 +99,10 @@ export function Search(itemID: string, params: $models.SearchParams): $Cancellab
     return $Call.ByID(4013868034, itemID, params);
 }
 
-export function StartDownload(
-    params: $models.StartDownloadParams,
-): $CancellablePromise<$models.StartDownloadResult> {
+export function StartDownload(params: $models.StartDownloadParams): $CancellablePromise<$models.StartDownloadResult> {
     return $Call.ByID(1135026242, params);
 }
 
-export function StartUpload(
-    params: $models.StartUploadParams,
-): $CancellablePromise<$models.StartUploadResult> {
+export function StartUpload(params: $models.StartUploadParams): $CancellablePromise<$models.StartUploadResult> {
     return $Call.ByID(3162032775, params);
 }

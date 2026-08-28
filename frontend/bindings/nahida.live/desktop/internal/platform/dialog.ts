@@ -13,9 +13,7 @@ import * as $models from "./models.js";
  * ResolveDirectoryConflict displays Electron's overwrite/new-name/cancel
  * prompt for a directory download.
  */
-export function ResolveDirectoryConflict(
-    opts: $models.DirectoryConflictOptions,
-): $CancellablePromise<$models.DirectoryConflictChoice> {
+export function ResolveDirectoryConflict(opts: $models.DirectoryConflictOptions): $CancellablePromise<$models.DirectoryConflictChoice> {
     return $Call.ByID(192642464, opts);
 }
 
@@ -31,8 +29,6 @@ export function ShowModal(opts: $models.ModalOptions): $CancellablePromise<$mode
     return $Call.ByID(3599164605, opts);
 }
 
-export function ShowOpenDialog(
-    opts: $models.OpenDialogOptions,
-): $CancellablePromise<$models.OpenDialogResult> {
+export function ShowOpenDialog(opts: $models.OpenDialogOptions): $CancellablePromise<$models.OpenDialogResult> {
     return $Call.ByID(4196456780, opts);
 }

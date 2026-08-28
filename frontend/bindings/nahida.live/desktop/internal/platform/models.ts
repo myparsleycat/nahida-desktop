@@ -5,18 +5,18 @@
  * AppStatus is the Electron util:getAppStatus payload.
  */
 export interface AppStatus {
-    version: string;
-    isPackaged: boolean;
-    isDev: boolean;
-    platform: string;
+    "version": string;
+    "isPackaged": boolean;
+    "isDev": boolean;
+    "platform": string;
 }
 
 /**
  * DialogResult is the Electron save/select return value.
  */
 export interface DialogResult {
-    canceled: boolean;
-    filePath?: string;
+    "canceled": boolean;
+    "filePath"?: string;
 }
 
 /**
@@ -32,93 +32,93 @@ export enum DirectoryConflictChoice {
     DirectoryConflictOverwrite = "overwrite",
     DirectoryConflictRename = "rename",
     DirectoryConflictCancel = "cancel",
-}
+};
 
 /**
  * DirectoryConflictOptions describes Electron's three-button directory
  * download conflict prompt.
  */
 export interface DirectoryConflictOptions {
-    Name: string;
+    "Name": string;
 }
 
 /**
  * FileFilter matches Electron's dialog.FileFilter.
  */
 export interface FileFilter {
-    name: string;
-    extensions: string[] | null;
+    "name": string;
+    "extensions": string[] | null;
 }
 
 /**
  * FileWriteAccessResult is the detailed writable check from Electron FS.
  */
 export interface FileWriteAccessResult {
-    writable: boolean;
-    exists: boolean;
-    locked: boolean;
-    processes: ProcessInfo[] | null;
+    "writable": boolean;
+    "exists": boolean;
+    "locked": boolean;
+    "processes": ProcessInfo[] | null;
 }
 
 /**
  * ModalOptions is the Electron util:showModal argument.
  */
 export interface ModalOptions {
-    type: string;
-    title: string;
-    message: string;
+    "type": string;
+    "title": string;
+    "message": string;
 }
 
 /**
  * ModalResult is Electron's MessageBoxReturnValue.
  */
 export interface ModalResult {
-    response: number;
-    checkboxChecked: boolean;
+    "response": number;
+    "checkboxChecked": boolean;
 }
 
 /**
  * OpenDialogOptions is the Electron util:showOpenDialog argument.
  */
 export interface OpenDialogOptions {
-    title: string;
-    defaultPath: string;
-    filters: FileFilter[] | null;
-    properties: string[] | null;
+    "title": string;
+    "defaultPath": string;
+    "filters": FileFilter[] | null;
+    "properties": string[] | null;
 }
 
 /**
  * OpenDialogResult is the Electron showOpenDialog return value.
  */
 export interface OpenDialogResult {
-    canceled: boolean;
-    filePaths: string[] | null;
+    "canceled": boolean;
+    "filePaths": string[] | null;
 }
 
 /**
  * PathMetadata is the Electron util:fs:metadata payload.
  */
 export interface PathMetadata {
-    isDirectory: boolean;
-    isFile: boolean;
-    size: number;
-    mtime: string;
-    ctime: string;
-    birthtime: string;
+    "isDirectory": boolean;
+    "isFile": boolean;
+    "size": number;
+    "mtime": string;
+    "ctime": string;
+    "birthtime": string;
 }
 
 /**
  * ProcessInfo is the lock-holder shape from Electron native/fs.
  */
 export interface ProcessInfo {
-    name: string;
-    pid: number;
+    "name": string;
+    "pid": number;
 }
 
 /**
  * SaveFileOptions is the Electron saveFileDialog argument.
  */
 export interface SaveFileOptions {
-    suggestedName: string;
-    filters: FileFilter[] | null;
+    "suggestedName": string;
+    "filters": FileFilter[] | null;
 }

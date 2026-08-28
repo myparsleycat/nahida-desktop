@@ -3,13 +3,16 @@ package tools
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +40,15 @@ type modelViewerPreparedTexture struct {
 	alphaMode   string
 	alphaCutoff float64
 	score       int
+}
+
+type modelViewerDecodedTexture struct {
+	rgba         *image.NRGBA
+	low          int
+	lowRGB       float64
+	lowRatio     float64
+	highRatio    float64
+	partialRatio float64
 }
 
 func collectModelViewerTextureBindings(sections []modINISection, variables map[string]any) []modelViewerTextureBinding {
@@ -232,6 +244,34 @@ func appendUniqueModelViewer(values []string, value string) []string {
 }
 
 func prepareModelViewerTexture(ctx context.Context, path, resourceName, format string, quality int) (*modelViewerPreparedTexture, error) {
+	decoded, err := decodeModelViewerTextureSource(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return encodeModelViewerPreparedTexture(decoded, path, resourceName, format, quality)
+}
+
+func modelViewerTextureFileHash(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
+		return "", fmt.Errorf("viewer texture file is too large or invalid: %s", path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = file.Close() }()
+	hash := sha256.New()
+	if _, err = io.Copy(hash, io.LimitReader(file, info.Size())); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelViewerDecodedTexture, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -279,9 +319,46 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 		}
 	}
 	pixels := max(1, low+high+partial)
-	lowRatio, highRatio, partialRatio := float64(low)/float64(pixels), float64(high)/float64(pixels), float64(partial)/float64(pixels)
+	return &modelViewerDecodedTexture{
+		rgba:         rgba,
+		low:          low,
+		lowRGB:       lowRGB,
+		lowRatio:     float64(low) / float64(pixels),
+		highRatio:    float64(high) / float64(pixels),
+		partialRatio: float64(partial) / float64(pixels),
+	}, nil
+}
+
+func modelViewerTextureNameRequestsAlphaInvert(resourceName string) bool {
 	key := modelViewerNormalizeKey(resourceName)
-	if strings.Contains(key, "invertalpha") || strings.Contains(key, "alphainvert") || lowRatio >= .95 && highRatio <= .03 && low > 0 && lowRGB/float64(low) >= 8 {
+	return strings.Contains(key, "invertalpha") || strings.Contains(key, "alphainvert")
+}
+
+func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelViewerDecodedTexture) bool {
+	if decoded == nil {
+		return false
+	}
+	return modelViewerTextureNameRequestsAlphaInvert(resourceName) ||
+		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 && decoded.lowRGB/float64(decoded.low) >= 8
+}
+
+func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
+	if source == nil {
+		return nil
+	}
+	cloned := image.NewNRGBA(source.Rect)
+	copy(cloned.Pix, source.Pix)
+	return cloned
+}
+
+func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, resourceName, format string, quality int) (*modelViewerPreparedTexture, error) {
+	if decoded == nil || decoded.rgba == nil {
+		return nil, fmt.Errorf("viewer texture decode produced an invalid image")
+	}
+	rgba := decoded.rgba
+	lowRatio, highRatio, partialRatio := decoded.lowRatio, decoded.highRatio, decoded.partialRatio
+	if modelViewerTextureShouldInvertAlpha(resourceName, decoded) {
+		rgba = cloneModelViewerNRGBA(rgba)
 		for offset := 3; offset < len(rgba.Pix); offset += 4 {
 			rgba.Pix[offset] = 255 - rgba.Pix[offset]
 		}
@@ -299,10 +376,10 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 		background := image.NewRGBA(rgba.Bounds())
 		draw.Draw(background, background.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
 		draw.Draw(background, background.Bounds(), rgba, rgba.Bounds().Min, draw.Over)
-		if err = jpeg.Encode(&output, background, &jpeg.Options{Quality: normalizeJPEGQuality(quality)}); err != nil {
+		if err := jpeg.Encode(&output, background, &jpeg.Options{Quality: normalizeJPEGQuality(quality)}); err != nil {
 			return nil, err
 		}
-	} else if err = png.Encode(&output, rgba); err != nil {
+	} else if err := png.Encode(&output, rgba); err != nil {
 		return nil, err
 	}
 	prepared := &modelViewerPreparedTexture{bytes: output.Bytes(), mimeType: mimeType, name: filepath.Base(path), score: modelViewerTextureNamePriority(resourceName) + 20}

@@ -17,11 +17,6 @@ export function LocalFileURL(path: string, original: boolean): $CancellablePromi
     return $Call.ByID(3881729970, path, original);
 }
 
-export function WriteModelViewerMemoryBuffer(
-    sessionID: string,
-    bufferID: string,
-    data: string | null,
-    contentType: string,
-): $CancellablePromise<string> {
+export function WriteModelViewerMemoryBuffer(sessionID: string, bufferID: string, data: string | null, contentType: string): $CancellablePromise<string> {
     return $Call.ByID(2383294267, sessionID, bufferID, data, contentType);
 }

@@ -111,9 +111,7 @@ export function GetLogLevel(): $CancellablePromise<string> {
     return $Call.ByID(3695300174);
 }
 
-export function GetMany(
-    keys: string[] | null,
-): $CancellablePromise<{ [_ in string]?: any } | null> {
+export function GetMany(keys: string[] | null): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(4122638309, keys);
 }
 

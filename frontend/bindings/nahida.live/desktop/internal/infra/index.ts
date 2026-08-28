@@ -4,6 +4,13 @@
 import * as Log from "./log.js";
 import * as Protocol from "./protocol.js";
 import * as Updater from "./updater.js";
-export { Log, Protocol, Updater };
+export {
+    Log,
+    Protocol,
+    Updater
+};
 
-export type { UpdaterReleaseNotes, UpdaterStatus } from "./models.js";
+export type {
+    UpdaterReleaseNotes,
+    UpdaterStatus
+} from "./models.js";
