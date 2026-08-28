@@ -11,10 +11,9 @@ require (
 	github.com/klauspost/compress v1.19.2
 	github.com/larsartmann/go-filewatcher/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
-	github.com/myparsleycat/ddsutil v0.1.1
+	github.com/myparsleycat/ddsutil v0.2.0
 	github.com/rodrigocfd/windigo v0.2.6
 	github.com/wailsapp/wails/v3 v3.0.0-beta.15
-	github.com/woozymasta/bcn v0.7.0
 	golang.org/x/arch v0.30.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.39.0

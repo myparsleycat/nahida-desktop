@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/woozymasta/bcn"
+	"github.com/myparsleycat/ddsutil"
 )
 
 const (
@@ -242,18 +242,24 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
 		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	extension := filepath.Ext(path)
+	var rgba *image.NRGBA
+	if strings.EqualFold(extension, ".dds") {
+		rgba, err = decodeModelViewerDDSFile(path, info.Size())
+	} else {
+		var raw []byte
+		raw, err = os.ReadFile(path)
+		if err == nil {
+			var width, height int
+			width, height, err = modelViewerTextureDimensions(raw, extension)
+			if err == nil && int64(width)*int64(height) > maxModelViewerTextureInputPixels {
+				err = fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", width, height)
+			}
+		}
+		if err == nil {
+			rgba, err = decodeModelViewerImage(raw, extension)
+		}
 	}
-	width, height, dimensionErr := modelViewerTextureDimensions(raw, filepath.Ext(path))
-	if dimensionErr != nil {
-		return nil, dimensionErr
-	}
-	if int64(width)*int64(height) > maxModelViewerTextureInputPixels {
-		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", width, height)
-	}
-	rgba, err := decodeModelViewerImage(raw, filepath.Ext(path))
 	if err != nil {
 		return nil, err
 	}
@@ -318,14 +324,70 @@ func decodeModelViewerImage(raw []byte, extension string) (*image.NRGBA, error) 
 }
 
 func decodeModelViewerDDS(raw []byte) (*image.NRGBA, error) {
-	_, rgba, err := bcn.DecodeDDS(bytes.NewReader(raw))
+	reader, err := ddsutil.NewDdsReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, err
 	}
-	if rgba == nil {
-		return nil, fmt.Errorf("dds decode produced no image")
+	return decodeModelViewerDDSMip(reader, 0, 0, 0)
+}
+
+func decodeModelViewerDDSFile(path string, size int64) (*image.NRGBA, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
 	}
-	return rgba, nil
+	defer func() { _ = file.Close() }()
+	reader, err := ddsutil.NewDdsReader(file, size)
+	if err != nil {
+		return nil, err
+	}
+	metadata := reader.Metadata()
+	if int64(metadata.Width)*int64(metadata.Height) > maxModelViewerTextureInputPixels {
+		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", metadata.Width, metadata.Height)
+	}
+	if metadata.Depth != 1 {
+		return nil, fmt.Errorf("viewer texture must be two-dimensional: depth=%d", metadata.Depth)
+	}
+	mipmap, targetWidth, targetHeight := modelViewerPreviewMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
+	return decodeModelViewerDDSMip(reader, mipmap, uint32(targetWidth), uint32(targetHeight))
+}
+
+func modelViewerPreviewMipmap(width, height, mipmaps uint32) (uint32, int, int) {
+	targetWidth, targetHeight := viewerPreviewTextureSize(int(width), int(height))
+	mipmap := uint32(0)
+	for mipmap+1 < max(uint32(1), mipmaps) {
+		mipWidth := ddsutil.MipDimension(width, mipmap)
+		mipHeight := ddsutil.MipDimension(height, mipmap)
+		if int64(mipWidth)*int64(mipHeight) <= maxModelViewerTextureOutputPixels {
+			break
+		}
+		mipmap++
+	}
+	return mipmap, targetWidth, targetHeight
+}
+
+func decodeModelViewerDDSMip(reader *ddsutil.DdsReader, mipmap, targetWidth, targetHeight uint32) (*image.NRGBA, error) {
+	metadata := reader.Metadata()
+	width := ddsutil.MipDimension(metadata.Width, mipmap)
+	height := ddsutil.MipDimension(metadata.Height, mipmap)
+	var surface *ddsutil.SurfaceRgba8
+	var err error
+	if targetWidth > 0 && targetHeight > 0 && (width != targetWidth || height != targetHeight) {
+		surface, err = reader.DecodeMipRgba8To(0, mipmap, targetWidth, targetHeight)
+	} else {
+		surface, err = reader.DecodeMipRgba8(0, mipmap)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if surface == nil || surface.Width == 0 || surface.Height == 0 || len(surface.Data) != int(surface.Width)*int(surface.Height)*4 {
+		return nil, fmt.Errorf("dds decode produced an invalid image")
+	}
+	return &image.NRGBA{
+		Pix:    surface.Data,
+		Stride: int(surface.Width) * 4,
+		Rect:   image.Rect(0, 0, int(surface.Width), int(surface.Height)),
+	}, nil
 }
 
 func imageToNRGBA(src image.Image) *image.NRGBA {

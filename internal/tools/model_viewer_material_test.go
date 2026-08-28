@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"image"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/myparsleycat/ddsutil"
 )
 
 func TestModelViewerTextureBindingAndPreparation(t *testing.T) {
@@ -113,6 +116,118 @@ func TestViewerPreviewTextureSize(t *testing.T) {
 				test.width, test.height, gotW, gotH, test.wantW, test.wantH)
 		}
 	}
+}
+
+func TestModelViewerPreviewMipmap(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		width, height uint32
+		mipmaps       uint32
+		wantMip       uint32
+		wantW, wantH  int
+	}{
+		{8192, 8192, 14, 2, 2048, 2048},
+		{2048, 8192, 14, 1, 1024, 4096},
+		{8192, 8192, 1, 0, 2048, 2048},
+		{8192, 8192, 2, 1, 2048, 2048},
+		{4096, 4096, 2, 1, 2048, 2048},
+		{2048, 2048, 1, 0, 2048, 2048},
+	}
+	for _, test := range cases {
+		mip, width, height := modelViewerPreviewMipmap(test.width, test.height, test.mipmaps)
+		if mip != test.wantMip || width != test.wantW || height != test.wantH {
+			t.Fatalf("modelViewerPreviewMipmap(%d, %d, %d) = (%d, %d, %d), want (%d, %d, %d)",
+				test.width, test.height, test.mipmaps, mip, width, height, test.wantMip, test.wantW, test.wantH)
+		}
+	}
+}
+
+func TestModelViewerTextureConcurrencyRemainsEight(t *testing.T) {
+	if modelViewerTextureConcurrency != 8 {
+		t.Fatalf("modelViewerTextureConcurrency = %d, want 8", modelViewerTextureConcurrency)
+	}
+}
+
+func TestDecodeModelViewerDDSFileUsesEmbeddedPreviewMip(t *testing.T) {
+	raw := encodeModelViewerBC1DDS(t, 4096, 4096, 2, 1)
+	path := filepath.Join(t.TempDir(), "embedded_mip.dds")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeModelViewerDDSFile(path, int64(len(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Bounds().Dx() != 2048 || decoded.Bounds().Dy() != 2048 {
+		t.Fatalf("decoded bounds = %v", decoded.Bounds())
+	}
+	if decoded.Pix[0] < 248 || decoded.Pix[1] < 248 || decoded.Pix[2] < 248 || decoded.Pix[3] != 255 {
+		t.Fatalf("decoded first pixel = %#v; expected white data from mip 1", decoded.Pix[:4])
+	}
+}
+
+func TestDecodeModelViewerDDSFileStreamsLastAvailableMip(t *testing.T) {
+	raw := encodeModelViewerBC1DDS(t, 4096, 4096, 1, 0)
+	path := filepath.Join(t.TempDir(), "single_mip.dds")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeModelViewerDDSFile(path, int64(len(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Bounds().Dx() != 2048 || decoded.Bounds().Dy() != 2048 {
+		t.Fatalf("decoded bounds = %v", decoded.Bounds())
+	}
+	if decoded.Pix[0] < 248 || decoded.Pix[1] < 248 || decoded.Pix[2] < 248 || decoded.Pix[3] != 255 {
+		t.Fatalf("decoded first pixel = %#v", decoded.Pix[:4])
+	}
+}
+
+func TestDecodeModelViewerDDSFileDoesNotFallbackFromTruncatedSelectedMip(t *testing.T) {
+	raw := encodeModelViewerBC1DDS(t, 4096, 4096, 2, 1)
+	raw = raw[:len(raw)-1]
+	path := filepath.Join(t.TempDir(), "truncated_selected_mip.dds")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeModelViewerDDSFile(path, int64(len(raw))); err == nil {
+		t.Fatal("truncated selected mip unexpectedly decoded or fell back to mip 0")
+	}
+}
+
+func encodeModelViewerBC1DDS(t *testing.T, width, height, mipmaps, whiteFromMip uint32) []byte {
+	t.Helper()
+	dds, err := ddsutil.NewDXGI(ddsutil.NewDxgiParams{
+		Height:            height,
+		Width:             width,
+		Format:            ddsutil.DxgiFormatBC1_UNorm,
+		MipmapLevels:      &mipmaps,
+		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
+		AlphaMode:         ddsutil.AlphaModeStraight,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := make([]byte, 0)
+	for mipmap := range mipmaps {
+		mipWidth := ddsutil.MipDimension(width, mipmap)
+		mipHeight := ddsutil.MipDimension(height, mipmap)
+		length := int(((mipWidth + 3) / 4) * ((mipHeight + 3) / 4) * 8)
+		start := len(data)
+		data = append(data, make([]byte, length)...)
+		if mipmap >= whiteFromMip {
+			for offset := start; offset < len(data); offset += 8 {
+				data[offset], data[offset+1] = 0xff, 0xff
+			}
+		}
+	}
+	dds.Data = data
+	var output bytes.Buffer
+	if err = dds.Write(&output); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
 }
 
 func TestModelViewerTextureDownscalesToPreviewBudget(t *testing.T) {
