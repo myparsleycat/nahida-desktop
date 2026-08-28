@@ -1,0 +1,143 @@
+import { Button } from "@renderer/components/ui/button";
+import { DialogClose, DialogFooter } from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
+import { Kbd } from "@renderer/components/ui/kbd";
+import { formatKeyLabel, getBaseKey, getUsedModifiers } from "@shared/key-formatter";
+import { useEffect, useRef, useState } from "react";
+
+import { mapKeyboardEventToInternal } from "./utils";
+
+interface KeyRecorderProps {
+  defaultValue: string;
+  otherKeys: string[];
+  onSave: (value: string) => void;
+}
+
+export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProps) {
+  const [value, setValue] = useState(defaultValue);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const manualRef = useRef<HTMLDivElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const displayKeys = value
+    .split(" ")
+    .map((k) => formatKeyLabel(k))
+    .filter((k): k is string => k !== null);
+
+  useEffect(() => {
+    containerRef.current?.focus();
+    return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+    };
+  }, []);
+
+  const recordKey = (e: React.KeyboardEvent | KeyboardEvent) => {
+    const basicMapped = mapKeyboardEventToInternal(e);
+    if (!basicMapped) return;
+
+    const baseKey = getBaseKey(basicMapped);
+    if (!baseKey) {
+      setValue(basicMapped);
+      return;
+    }
+
+    const conflicts = getUsedModifiers(baseKey, otherKeys);
+    const finalMapped = mapKeyboardEventToInternal(e, conflicts);
+
+    if (finalMapped) {
+      setValue(finalMapped);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+      if (!e.repeat) {
+        enterTimerRef.current = setTimeout(() => {
+          saveButtonRef.current?.click();
+          enterTimerRef.current = null;
+        }, 500);
+      }
+      return;
+    }
+
+    if (enterTimerRef.current) {
+      clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
+
+    recordKey(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+        enterTimerRef.current = null;
+        recordKey(e);
+      }
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    if (
+      footerRef.current?.contains(e.relatedTarget as Node) ||
+      containerRef.current?.contains(e.relatedTarget as Node) ||
+      manualRef.current?.contains(e.relatedTarget as Node)
+    ) {
+      return;
+    }
+
+    containerRef.current?.focus();
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
+      <div
+        ref={containerRef}
+        className="flex min-h-[100px] cursor-pointer items-center justify-center rounded-md border border-dashed bg-muted/30 p-6 transition-all outline-none focus:border-solid focus:bg-foreground/10"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
+        onBlur={handleBlur}
+      >
+        {displayKeys.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {displayKeys.map((label, idx) => (
+              <Kbd key={idx.toString()} className="h-8 min-w-8 bg-background/50 px-2 text-sm">
+                {label}
+              </Kbd>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">Press any key combination...</span>
+        )}
+      </div>
+      <div className="space-y-1" ref={manualRef}>
+        <p className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">Manual Edit</p>
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="font-mono text-sm"
+          placeholder="e.g. ctrl alt no_shift vk_up"
+        />
+      </div>
+      <div ref={footerRef}>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <DialogClose render={<Button ref={saveButtonRef} onClick={() => onSave(value)} />}>
+            Save
+          </DialogClose>
+        </DialogFooter>
+      </div>
+    </div>
+  );
+}

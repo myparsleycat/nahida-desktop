@@ -1,8 +1,0 @@
-{
-  "name": "mod-tools",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "build": "pnpm --dir ../.. exec napi build --cwd native/mod-tools --platform --release"
-  }
-}

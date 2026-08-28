@@ -1,0 +1,1769 @@
+{
+  "g": {
+    "search": "検索",
+    "name": "名前",
+    "date": "日付",
+    "size": "サイズ",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "select": "選択",
+    "apply": "適用",
+    "delete": "削除",
+    "add": "追加",
+    "create": "作成",
+    "unknown": "不明",
+    "save": "保存",
+    "close": "閉じる",
+    "rename": "名前を変更",
+    "download": "ダウンロード",
+    "later": "後で",
+    "beta": "ベータ"
+  },
+  "page": {
+    "root": {
+      "error": {
+        "title": "問題が発生しました",
+        "description": "ページの読み込み中に予期しないエラーが発生しました。",
+        "details": "エラー詳細",
+        "back": "戻る",
+        "refresh": "更新"
+      }
+    },
+    "transfer": {
+      "title": "転送",
+      "stats_label": {
+        "upload": "アップロード",
+        "download": "ダウンロード",
+        "total_transferred": "総転送量",
+        "active_transfers": "進行中の転送"
+      },
+      "toolbar": {
+        "all": "すべて",
+        "upload": "アップロード",
+        "download": "ダウンロード",
+        "status_filter": {
+          "title": "状態フィルター",
+          "uploading": "アップロード中",
+          "downloading": "ダウンロード中",
+          "paused": "一時停止",
+          "completed": "完了",
+          "failed": "失敗",
+          "queued": "待機中"
+        }
+      },
+      "empty_state": {
+        "all_tabs": "転送履歴がありません",
+        "uploading": "アップロード中のファイルはありません",
+        "downloading": "ダウンロード中のファイルはありません",
+        "completed": "完了した転送はありません",
+        "failed": "失敗した転送はありません",
+        "paused": "一時停止中の転送はありません",
+        "search_results": "検索結果がありません"
+      },
+      "item": {
+        "uploading": "アップロード中",
+        "finalizing": "仕上げ中",
+        "downloading": "ダウンロード中",
+        "completed": "完了",
+        "failed": "失敗",
+        "paused": "一時停止",
+        "queued": "待機中",
+        "preparing": "準備中",
+        "planning": {
+          "permission_check": "権限を確認中",
+          "parent_lookup": "親フォルダーを検索中",
+          "file_validation": "ファイルを検証中",
+          "dedup_lookup": "重複を確認中",
+          "processing": "ファイルを処理中"
+        },
+        "error": {
+          "invalid_nte_mod_file": "有効なNTE Modファイルではありません。",
+          "nte_client_upgrade_required": "NTE Modをアップロードするにはデスクトップアプリを更新してください。",
+          "nte_bundle_incomplete": "NTE Modに必要なファイルがすべてアップロードされていません。",
+          "bundle_cleanup_failed": "NTE Modの一時アップロードファイルを削除できませんでした。",
+          "upload_file_too_large": "1つのファイルは1 GiBを超えることができません。",
+          "nte_bundle_too_large": "このNTE Modはファイル数が多すぎて1つのグループとしてアップロードできません。"
+        },
+        "time_remaining": "残り {{time}}",
+        "time_elapsed": "経過 {{time}}",
+        "failed_files": "{{count}}個 失敗",
+        "dropdown_menu": {
+          "cancel": "キャンセル",
+          "retry": "再試行",
+          "retry_failed_files": "失敗したファイルを再試行",
+          "remove_from_transfer": "転送から削除"
+        }
+      }
+    },
+    "drive": {
+      "title": "ドライブ",
+      "title_server_error": "ドライブ (サーバーエラー)",
+      "share_drive": "共有ドライブ",
+      "no_contents_section_message": {
+        "0": "このフォルダーにはファイルやフォルダーがありません",
+        "1": "ここにファイルやフォルダーをドラッグしてアップロード",
+        "2": "ファイルやフォルダをここにドラッグしてアップロード"
+      },
+      "toast": {
+        "no_uploadable_files": "アップロード可能なファイルがありません。"
+      },
+      "import": {
+        "title": "ドライブにインポート",
+        "description": "共有フォルダーまたはコレクション URL を入力し、ドライブ内のフォルダーを選択してください。",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "保存先フォルダー",
+        "choose_destination": "フォルダーを選択",
+        "destination_description": "インポート先にするドライブのルートまたはフォルダーを選択してください。",
+        "loading_folder": "フォルダーを読み込み中...",
+        "no_subfolders": "サブフォルダーなし",
+        "destination_load_failed": "保存先フォルダーを読み込めませんでした。",
+        "parent_folder": "上位フォルダー",
+        "select_folder": "このフォルダーを使用",
+        "destination_required": "保存先フォルダーを選択してください。",
+        "password_label": "パスワード",
+        "password_placeholder": "共有リンクのパスワードを入力",
+        "create_collection_folder": "コレクション名でフォルダーを作成",
+        "authenticate": "パスワード確認",
+        "retry": "再試行",
+        "action": "ドライブにインポート",
+        "url_required": "Nahida URL を入力してください。",
+        "login_required": "ドライブにインポートするにはログインしてください。",
+        "password_required": "このリンクにはパスワードが必要です。",
+        "invalid_password": "共有リンクのパスワードが正しくありません。",
+        "success": "{{count}} 件をドライブにインポートしました。",
+        "failed": "インポートに失敗しました",
+        "progress": {
+          "preparing": "インポートを準備中…",
+          "copying": "サーバーからドライブにインポート中…",
+          "downloading": "項目をダウンロード中…",
+          "uploading": "ドライブにアップロード中…",
+          "completed": "インポートが完了しました。",
+          "canceled": "インポートを停止しました。",
+          "cancel": "インポートを停止",
+          "error": "転送中にインポートに失敗しました。"
+        }
+      },
+      "head_buttons": {
+        "search_in_dir_placeholder": "このフォルダー内を検索...",
+        "search_in_subdirs_placeholder": "サブフォルダ内を検索...",
+        "search_include_subdirs": "サブフォルダを含める",
+        "search_no_results": "検索結果がありません",
+        "search_load_more": "もっと見る",
+        "search_unavailable": "検索を利用できません",
+        "import": "共有リンクをインポート",
+        "dropdown_menu": {
+          "download": "ダウンロード",
+          "make_new": {
+            "title": "新規作成",
+            "new_dir": "フォルダー作成",
+            "upload_dir": "フォルダーをアップロード",
+            "upload_file": "ファイルをアップロード"
+          }
+        }
+      },
+      "list_head": {
+        "name": "名前",
+        "date": "更新日時",
+        "size": "サイズ"
+      },
+      "context_menu": {
+        "open": "開く",
+        "download": "ダウンロード",
+        "rename": "名前を変更",
+        "trash": "ゴミ箱",
+        "trash_success": "{{count}}個のファイルとディレクトリをゴミ箱に移動しました",
+        "new_dir": "フォルダー作成",
+        "delete": "削除",
+        "copy": "コピー",
+        "cut": "切り取り",
+        "paste": "貼り付け"
+      },
+      "clipboard": {
+        "cut_single": "「{{name}}」を切り取り状態に設定しました",
+        "cut_multiple": "「{{name}}」ほか{{count}}件を切り取り状態に設定しました",
+        "copy_single": "「{{name}}」をコピー状態に設定しました",
+        "copy_multiple": "「{{name}}」ほか{{count}}件をコピー状態に設定しました",
+        "move_loading": "ファイルを移動しています...",
+        "move_success": "ファイルを移動しました",
+        "move_error": "ファイルの移動に失敗しました: {{message}}",
+        "copy_loading": "ファイルをコピーしています...",
+        "copy_success": "ファイルをコピーしました",
+        "copy_error": "ファイルのコピーに失敗しました: {{message}}"
+      },
+      "dialog": {
+        "common": {
+          "invalid_dir_name": "無効なディレクトリ名です。",
+          "invalid_file_name": "無効なファイル名です。"
+        },
+        "create_dir": {
+          "title": "フォルダー作成",
+          "name_input_placeholder": "フォルダー名",
+          "#": {
+            "0": "ディレクトリ名の形式が無効です",
+            "1": "ディレクトリを作成するパス情報の取得に失敗しました",
+            "2": "同じ名前のフォルダーが既に存在します。",
+            "toast-promise": {
+              "loading": "ディレクトリを作成しています...",
+              "success": "ディレクトリが作成されました"
+            }
+          }
+        },
+        "rename": {
+          "title": "名前を変更",
+          "name_input_placeholder": "新しい名前",
+          "extension": "拡張子",
+          "#": {
+            "0": "名前は空にできません",
+            "1": "ディレクトリ名の形式が無効です",
+            "toast-promise": {
+              "loading": "名前を変更しています...",
+              "success": "名前が変更されました。"
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "重複した名前の項目があります",
+          "description": "重複 {{count}} 件をどのように処理するか選択してください。",
+          "option_suffix": "名前変更: name (2) の形式で名前を変更してからアップロード",
+          "option_skip": "スキップ: 重複項目を除外してアップロード",
+          "preview_label": "重複項目:",
+          "preview_more": "他 {{count}} 件",
+          "action_skip": "スキップ",
+          "action_suffix": "名前変更"
+        },
+        "delete_items": {
+          "title": "項目を削除",
+          "description": "リクエストが受け付けられると一覧からすぐに消え、整理はバックグラウンドで続きます。この操作は元に戻せません。",
+          "action": "削除",
+          "#": {
+            "toast": {
+              "success": "{{count}}件の削除リクエストを受け付けました",
+              "partial": "{{accepted}}件の削除リクエストを受け付け、{{failed}}件は失敗しました",
+              "error": "削除リクエストに失敗しました"
+            }
+          }
+        }
+      }
+    },
+    "share_drive": {
+      "title": "共有ドライブ",
+      "title_server_error": "共有ドライブ (サーバーエラー)",
+      "no_accessible_drives": "アクセス可能な共有ドライブがありません。"
+    },
+    "mod": {
+      "title": "MODマネージャー",
+      "dad_section": {
+        "title": "{{name}}に追加",
+        "description": "圧縮ファイルは自動的に解凍されます"
+      },
+      "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
+      "all_enabled": "すべて有効化",
+      "all_disabled": "すべて無効化",
+      "merge": {
+        "enter": "MODを結合",
+        "exit": "結合をキャンセル",
+        "next": "次へ",
+        "selected_count": "{{count}}件選択中",
+        "dialog_title": "MODを結合",
+        "classifying": "選択したMODを確認しています…",
+        "classify_failed": "選択したMODを確認できませんでした。",
+        "no_usable_mods": "選択したMODの中に結合可能なMODがありません。",
+        "hash_mismatch": "これらのMODは共通のハッシュを持っていません。続行はできます。",
+        "classic_locked": "通常結合にできないMODが含まれています。",
+        "pack_name": "名前",
+        "placement": "保存先",
+        "placement_in_place": "現在の場所",
+        "placement_new_folder": "新しいフォルダー",
+        "include_vanilla": "バニラスロットを含める",
+        "forward_key": "次へキー",
+        "back_key": "戻るキー",
+        "press_key": "キーを押してください",
+        "engine": "結合方式",
+        "engine_classic": "通常",
+        "engine_namespace": "ネームスペース",
+        "namespace_only": "ネームスペースのみ",
+        "group_next": "次のMODとグループ化",
+        "ungroup": "グループ解除",
+        "confirm": "結合",
+        "success": "MODを結合しました。",
+        "failed": "結合に失敗しました。",
+        "family": {
+          "ordinary": "通常",
+          "in_mod_toggle": "MOD内トグル",
+          "classic_merge": "通常結合",
+          "namespace_merge": "ネームスペース結合",
+          "support": "サポート"
+        }
+      },
+      "content-header": {
+        "all_enabled": "すべてのMODが有効になりました",
+        "all_disabled": "すべてのMODが無効になりました",
+        "tools": "ツール",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "download_dialog": {
+          "title": "URLからダウンロード",
+          "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
+          "url_label": "ダウンロードURL",
+          "url_placeholder": "直接ダウンロードURLを入力してください",
+          "target_label": "保存先フォルダー",
+          "no_target": "左側でキャラクターフォルダーを選択してください",
+          "invalid_url": "有効なURLを入力してください。",
+          "file_only": "ファイルURLのみダウンロードできます。",
+          "started": "ダウンロードを開始しました。"
+        }
+      },
+      "character-sidebar": {
+        "add-to-character": "{{name}}に追加",
+        "open-in-explorer": "ファイルエクスプローラーで開く",
+        "create-folder": "新しいフォルダーを作成",
+        "delete-folder": "削除",
+        "sort": {
+          "label": "フォルダーを並べ替え",
+          "field": "並べ替え基準",
+          "name": "名前",
+          "mod-count": "MOD 数",
+          "enabled-mod-count": "有効な MOD 数",
+          "direction": "並べ替え方向",
+          "ascending": "昇順",
+          "descending": "降順"
+        },
+        "more-options": "その他",
+        "hide-empty-folders": "空のフォルダーを非表示",
+        "toggle-layout": "{{mode}}に切り替え",
+        "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",
+        "collapse-subgroups": "サブフォルダーを折りたたむ",
+        "expand-subgroups": "サブフォルダーを探索",
+        "unpersist-subgroups": "サブフォルダー指定を解除",
+        "persist-subgroups": "サブフォルダーとして指定",
+        "unmark-manual-subgroup": "手動サブグループ指定を解除",
+        "tools": "ツール",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer"
+      },
+      "drag_drop": {
+        "target_path_not_set": "対象パスが設定されていません。",
+        "group_path_not_set": "グループパスが設定されていません。",
+        "file_path_unavailable": "ファイルパスを確認できません。",
+        "unsupported_file_with_images": "{{fileName}} は対応していないファイル形式です。 (圧縮ファイル、フォルダー、画像ファイルのみ対応)",
+        "unsupported_file_archive_only": "{{fileName}} は対応していないファイル形式です。 (圧縮ファイルまたはフォルダーのみ対応)",
+        "already_exists_folder": "既に存在するフォルダーです: {{folderName}}",
+        "already_exists_item": "既に存在する項目です: {{folderName}}",
+        "processing_error": "ファイル処理中にエラーが発生しました。",
+        "extract": {
+          "loading": "{{fileName}} を解凍中...",
+          "success": "{{fileName}} の解凍が完了しました",
+          "error": "{{fileName}} の解凍に失敗しました"
+        },
+        "copy": {
+          "loading": "{{fileName}} を処理中...",
+          "success": "{{fileName}} を追加しました",
+          "error": "{{fileName}} の追加に失敗しました"
+        }
+      },
+      "play": {
+        "no_importer": "起動する前に、このゲームの Importer を設定してください。"
+      },
+      "dialog": {
+        "extract_archive_path": {
+          "title": "解凍パスを選択",
+          "description": "{{fileName}} に単一の最上位フォルダーがある場合、どの構成で解凍するか選択してください。",
+          "cancel": "キャンセル",
+          "flatten_single_root": "最上位フォルダーを除去",
+          "flatten_single_root_example": "例: mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "圧縮内のパスを維持",
+          "keep_archive_root_example": "例: mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
+        "add-game": {
+          "title": "ゲーム追加",
+          "name_input_placeholder": "ゲーム名 (例: 原神)",
+          "path_input_placeholder": "MODフォルダーのパス",
+          "nte_game_name": "異環",
+          "nte_install_path": "NTE インストールフォルダー",
+          "nte_not_found": "NTE ゲームが見つかりません。",
+          "nte_system_folder_warning_title": "システムフォルダーが選択されています",
+          "nte_system_folder_warning_description": "Windows の管理者権限確認が表示される場合があります。",
+          "nte_custom_mod_folder": "カスタム MOD フォルダー",
+          "nte_custom_mod_folder_description": "任意です。ゲームの Mods フォルダーがこのフォルダーにリンクされます。",
+          "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",
+          "open_xxmi_settings": "Importer 設定を開く",
+          "nte_bootstrap_progress": {
+            "checking": "NTE ブートストラップファイルを準備中...",
+            "fetching-release": "{{archiveName}} のリリースを確認中...",
+            "downloading": "{{archiveName}} をダウンロード中...",
+            "extracting": "{{archiveName}} を展開中...",
+            "installing": "ブートストラップファイルをインストール中...",
+            "completed": "NTE ブートストラップファイルの準備が完了しました。",
+            "failed": "NTE ブートストラップファイルの準備に失敗しました。",
+            "working": "処理中...",
+            "percent": "{{value}}%"
+          },
+          "#": {
+            "0": "ゲーム名を入力してください",
+            "1": "MODフォルダーのパスを選択してください"
+          }
+        },
+        "edit-game": {
+          "title": "ゲーム設定",
+          "path_label": "MODフォルダーのパス",
+          "importer_label": "Importer",
+          "no_importer": "なし"
+        },
+        "nte-launch": {
+          "title": "ランチャーパスを指定",
+          "path_label": "ランチャーのパス",
+          "path_required": "ランチャーのパスを選択してください。",
+          "launch": "保存してランチャーを起動"
+        },
+        "preset-management": {
+          "description": "このプリセットには {{length}} 個のMODが保存されています。",
+          "legacy-badge": "旧形式",
+          "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"
+        },
+        "delete-game": {
+          "title": "ゲーム削除",
+          "description": "本当に '{{name}}' を削除しますか？この操作は元に戻せず、該当ゲームのプリセットも一緒に削除されます。"
+        },
+        "delete-mod": {
+          "title": "このMODを削除しますか？",
+          "description": "削除されたMODはゴミ箱から復元できます。"
+        },
+        "rename-mod": {
+          "title": "MOD名を変更",
+          "description": "このMODに使われているフォルダー名を変更します。",
+          "name-placeholder": "MOD名",
+          "confirm": "名前を変更"
+        },
+        "find-conflict": {
+          "title": "競合モードを探す",
+          "description": "\"{{name}}\" のフォルダーを無効化対象から除外して二分探索を実行し、このモードと競合する他のモードを特定します。",
+          "mod-disabled-warning": "このモードは現在無効化されています。競合を再現するには先に有効化してください。",
+          "session-active": "二分探索はすでに実行中です。現在のセッションをキャンセルまたは完了してから再試行してください。"
+        },
+        "texture-resize": {
+          "title": "MOD テクスチャをリサイズ",
+          "description": "\"{{name}}\" 内の DDS ファイルを検索してその場でリサイズします。"
+        },
+        "create-folder": {
+          "title": "新しいフォルダーを作成",
+          "description": "{{name}} の下に新しいフォルダーを作成します。",
+          "name-placeholder": "フォルダー名",
+          "#": {
+            "success": "\"{{name}}\" フォルダーを作成しました",
+            "invalid-name": "フォルダー名が無効です",
+            "already-exists": "同じ名前のフォルダーが既に存在します",
+            "failed": "フォルダーの作成に失敗しました"
+          }
+        },
+        "delete-folder": {
+          "title": "フォルダーを削除しますか？",
+          "description": "「{{name}}」を削除しますか？削除したフォルダーはゴミ箱から復元できます。",
+          "#": {
+            "success": "フォルダーをゴミ箱に移動しました",
+            "failed": "フォルダーの削除に失敗しました"
+          }
+        },
+        "delete-preview": {
+          "title": "プレビューを削除しますか？",
+          "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはゴミ箱から復元できます。"
+        },
+        "overwrite-preview": {
+          "title": "既存のプレビューを上書きしますか？",
+          "description": "「{{name}}」にはすでにプレビューがあります。続行すると既存のプレビューが新しいファイルで上書きされます。",
+          "confirm": "上書き"
+        },
+        "add-preset": {
+          "name-placeholder": "プリセット名",
+          "description-placeholder": "説明（任意）",
+          "title": "新規プリセット作成",
+          "conflict": {
+            "title": "重複したMOD項目が見つかりました",
+            "description": "DISABLED 接頭辞は同じMODとして扱われるため、このままではプリセットを作成できません。続行すると、無効な重複フォルダーの名前を変更してからプリセットを作成します。",
+            "mod-key-label": "競合キー",
+            "enabled": "有効",
+            "disabled": "無効",
+            "action": "無効な重複フォルダーをリネームして続行"
+          },
+          "#": {
+            "0": "プリセット名を入力してください"
+          }
+        },
+        "wuwa-fix-runner": {
+          "install": {
+            "title": "Wuwa Mod Fixer をインストール",
+            "description": "Wuwa Mod Fixer がインストールされていません。今すぐ最新版をインストールしますか？",
+            "action": "インストール"
+          },
+          "update": {
+            "title": "Wuwa Mod Fixer を更新",
+            "description": "新しい Wuwa Mod Fixer が利用可能です。",
+            "installed": "インストール済みバージョン",
+            "latest": "最新バージョン",
+            "rate_limited_until": "GitHub API のレート制限は {{time}} まで有効です。",
+            "continue_without_update": "更新せずに続行",
+            "action": "更新"
+          },
+          "tabs": {
+            "fix": "MOD 修正",
+            "rollback": "ロールバック"
+          },
+          "options": {
+            "title": "Wuwa Mod Fixer",
+            "derived_hashes": {
+              "label": "Derived Hash を追加",
+              "description": "不足しているテクスチャ状態ハッシュ（例: LOD Bias High/Medium、カンタレラ wet、千咲 Enhanced E、エイメス Charged）を追加し、キャラクター MOD のテクスチャが正しく表示されるようにします。一部のキャラクターはまだ含まれていない場合があります。"
+            },
+            "stable_texture": {
+              "label": "Stable Texture を適用",
+              "description": "RabbitFX を使ってキャラクターに Stable Texture を適用します。現在はカンタレラ、千咲、カルテジア、シャコンヌ などに対応しており、最新の RabbitFX が必要です。"
+            },
+            "aemeath_mech": {
+              "label": "エイメスのメカ形態を修正",
+              "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用してはいけません。"
+            },
+            "rendering_33": {
+              "label": "Modのメッシュ穴/部位欠損修正",
+              "description": "ゲーム3.3バージョン以降、旧Mod内のColor1ゴミデータによって発生する身体部位の非表示や穴の問題を修正します。",
+              "warning": "身体部位の欠損やメッシュの穴がある MOD でのみ有効にしてください！"
+            },
+            "aero_fix": {
+              "label": "Aero 女性漂泊者の目 Fix",
+              "description": "共鳴エネルギーが最大のときに目が崩れる問題がある場合に使用します。",
+              "options": {
+                "none": "なし",
+                "texcoord_override": "TexCoord Override",
+                "texture_mirror_flip": "Texture Mirror Flip"
+              },
+              "warning": "この問題が実際にある MOD にだけ有効化してください。",
+              "tip": "問題が解決されない場合は、ロールバックしてから別の方法を試してください。"
+            },
+            "run": "実行"
+          },
+          "rollback": {
+            "refresh": "同期",
+            "scanning": "バックアップ履歴をスキャン中...",
+            "no_backups": "バックアップ（.BAK）が見つかりません",
+            "no_backups_short": "バックアップなし",
+            "file_count": "バックアップファイル {{n}} 件",
+            "latest_state": "最新の復元ポイント",
+            "restore": "ロールバック",
+            "confirm_restore": "ロールバック実行",
+            "warn_restore": "MOD ファイルをこの状態に戻しますか？",
+            "warn_clean_newer": "（新しいバックアップ {{n}} 件が削除されます）",
+            "backup_size_label": "バックアップ容量:",
+            "success": "ロールバックが完了しました。",
+            "advanced": "高度な設定",
+            "advanced_hint": "破壊的な操作",
+            "restore_all": "最古のバックアップへ復元",
+            "restore_all_desc": "すべてのファイルを最古の記録状態へ戻し、途中のバックアップをすべて削除します。",
+            "restore_all_action": "復元...",
+            "warn_delete_all": "バックアップ {{n}} 件がすべて削除されます",
+            "clean_backups": "すべてのバックアップを削除",
+            "clean_backups_desc": "対象フォルダ内のすべての .BAK ファイルを完全に削除します。この操作は元に戻せません。",
+            "clean_action": "削除...",
+            "warn_clean": "確認のため WIPE と入力:",
+            "clean_success": "バックアップをすべて削除しました！"
+          },
+          "log": {
+            "input_placeholder": "入力..."
+          }
+        }
+      },
+      "hooks": {
+        "use-mod-mutations": {
+          "add-game-mutation": {
+            "success": "ゲームを追加しました",
+            "duplicate-game-name": "そのゲーム名は既に存在します",
+            "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
+            "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
+            "failed": "ゲームの追加に失敗しました",
+            "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
+            "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
+            "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーはゲームの Mods フォルダーパス内、またはその逆の関係にはできません。"
+          },
+          "delete-game-mutation": {
+            "success": "ゲームを削除しました"
+          },
+          "update-game-mutation": {
+            "success": "ゲーム設定を保存しました"
+          },
+          "set-game-executable-path": {
+            "invalid-path": "選択したランチャーのパスが無効です。",
+            "failed": "ランチャーのパスを保存できませんでした。"
+          },
+          "start-nte-launcher": {
+            "not-set": "設定されたランチャーのパスがありません。",
+            "not-found": "保存されたランチャーのパスが存在しません。",
+            "failed": "ランチャーの起動に失敗しました。"
+          },
+          "toggle-mutation": {
+            "0": "{{name}} フォルダはすでに存在します",
+            "1": "{{processes}} がフォルダーを使用中のため変更できません",
+            "1-fallback": "フォルダがロックされており変更できません",
+            "2": "MODの状態変更に失敗しました"
+          },
+          "rename-mutation": {
+            "0": "{{name}} フォルダはすでに存在します",
+            "1": "{{processes}} がフォルダーを使用中のため名前を変更できません",
+            "1-fallback": "フォルダがロックされており名前を変更できません",
+            "2": "有効なMOD名を入力してください",
+            "3": "MOD名の変更に失敗しました"
+          },
+          "locked-description": "使用中のプロセス: {{processes}}",
+          "create-preset-mutation": {
+            "success": "プリセットを追加しました",
+            "duplicate-name": "そのプリセット名は既に存在します",
+            "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした"
+          },
+          "apply-preset-mutation": {
+            "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。",
+            "success": "プリセットを適用しました",
+            "missing": "プリセットを適用しましたが、{{count}} 個のMODが見つかりませんでした"
+          },
+          "delete-preset-mutation": {
+            "success": "プリセットを削除しました"
+          }
+        }
+      },
+      "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
+      "no-preview": "プレビューなし",
+      "context-menu": {
+        "paste-preview": "貼り付け",
+        "open-preview-lightbox": "拡大表示",
+        "open-preview-viewer": "プレビュービューアーで開く",
+        "delete-preview": "プレビューを削除",
+        "group-mod": "Mod",
+        "group-tools": "ツール",
+        "open-cmd": "CMDを開く",
+        "open-folder": "フォルダーを開く",
+        "open-gamebanana": "GameBananaで表示",
+        "mark-manual-subgroup": "サブグループとして指定",
+        "rename": "名前を変更",
+        "find-conflict": "競合モードを探す"
+      },
+      "toast": {
+        "trash-loading": "ゴミ箱に移動中...",
+        "trash-success": "削除完了",
+        "trash-error": "削除失敗",
+        "value-required": "値を入力してください。",
+        "rename-success": "MOD名を変更しました",
+        "manual-subgroup-success": "サブグループとして指定しました",
+        "manual-subgroup-remove-success": "サブグループ指定を解除しました",
+        "paste-preview": {
+          "copying": "プレビューをコピー中...",
+          "success": "プレビューを更新しました",
+          "copy-error": "プレビューのコピーに失敗しました",
+          "downloading": "プレビューをダウンロード中...",
+          "download-error": "プレビューのダウンロードに失敗しました",
+          "saving": "プレビューを保存中...",
+          "save-error": "プレビューの保存に失敗しました",
+          "no-image": "クリップボードに画像、画像URL、または画像ファイルがありません。",
+          "clipboard-error": "クリップボードの読み取りに失敗しました。"
+        },
+        "preview-drop": {
+          "saving": "プレビューを保存中...",
+          "success": "プレビューを更新しました",
+          "error": "プレビューの保存に失敗しました",
+          "unsupported": "サイドバーには画像または動画ファイルを1つだけプレビューとしてドロップできます。",
+          "path-error": "ファイルパスを取得できません。"
+        }
+      },
+      "log-dialog": {
+        "title": "ログ",
+        "running": "実行中...",
+        "python-required": "Python fix tool を実行するには Python のインストールが必要です。Python をインストールし、python コマンドを使用できるようにしてください。"
+      }
+    },
+    "gamebanana": {
+      "title": "GameBanana",
+      "back": "戻る",
+      "auth": {
+        "checking_title": "GameBanana のログイン状態を確認しています",
+        "checking_description": "保存されたログイン Cookie を検証し、必要なら再ログインします。",
+        "required_title": "GameBanana へのログインが必要です",
+        "required_description": "保存されたログイン情報の有効期限が切れているか、無効です。再度ログインしてください。",
+        "cancelled_title": "GameBanana ログインがキャンセルされました",
+        "cancelled_description": "GameBanana のデータを読み込むにはログインを完了してください。",
+        "unsupported_title": "GameBanana の自動ログインは利用できません",
+        "unsupported_description": "この環境では GameBanana のログインウィンドウを開けません。rmc Cookie を入力してください。",
+        "unreachable_title": "GameBanana に接続できません",
+        "unreachable_description": "GameBanana に到達できませんでした。接続を確認してから再試行してください。",
+        "retry": "再ログイン",
+        "manual_rmc": {
+          "button": "rmc を入力",
+          "title": "rmc トークンを手動設定",
+          "description": "ブラウザから取得した GameBanana の rmc Cookie 値を直接入力します。",
+          "empty": "rmc 値を入力してください。",
+          "GAMEBANANA_INVALID_RMC": "無効な rmc トークンです。",
+          "GAMEBANANA_SERVER_UNREACHABLE": "サーバーが応答していません。",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc トークンの保存に失敗しました。"
+        }
+      },
+      "supported_games": "対応ゲーム",
+      "supported_games_description": "ゲームを選ぶと概要とルートカテゴリを読み込みます。",
+      "selected": "選択中",
+      "root_categories": "ルートカテゴリ",
+      "game_menu": "ゲーム",
+      "loading": "読み込み中...",
+      "back_to_category": "カテゴリに戻る",
+      "category_panel_title": "カテゴリ",
+      "category_panel_description_root": "ゲームのルートカテゴリを探索します。",
+      "category_panel_description_nested": "現在のカテゴリのサブカテゴリを探索します。",
+      "category_panel_description_selected": "\"{{name}}\" のサブカテゴリを探索します。",
+      "no_categories": "表示できるカテゴリがありません。",
+      "search_categories": "カテゴリを検索...",
+      "no_category_results": "一致するカテゴリはありません。",
+      "stage": {
+        "game": "ゲーム",
+        "category": "カテゴリ",
+        "mod": "MOD"
+      },
+      "error_title": "GameBanana データの読み込みに失敗しました",
+      "error_description_unknown": "リクエストに失敗しました。GameBanana のログイン状態を確認するか、しばらくしてから再試行してください。",
+      "error_description_auth": "GameBanana の認証に失敗しました。再度ログインしてください。",
+      "error_description_http": "GameBanana から HTTP {{status}}{{statusText}} が返されました。",
+      "error_description_schema": "GameBanana から {{context}} について想定外のデータが返されました。",
+      "game_overview_description": "選択したゲームの概要と注目投稿を表示します。",
+      "open_profile": "Webで開く",
+      "open_mod_url": {
+        "button": "URL を開く",
+        "title": "Mod URLで開く",
+        "placeholder": "https://gamebanana.com/mods/...",
+        "invalid": "有効な GameBanana Mod URL を入力してください。",
+        "confirm": "開く"
+      },
+      "logout": "ログアウト",
+      "stats": {
+        "subscribers": "購読者",
+        "sections": "セクション",
+        "top_submissions": "注目投稿",
+        "likes": "いいね",
+        "posts": "コメント",
+        "views": "閲覧数",
+        "downloads": "ダウンロード"
+      },
+      "like": "いいね",
+      "liked": "いいね済み",
+      "unlike": "いいねを取り消す",
+      "like_unavailable": "この MOD ではいいねを利用できません。",
+      "like_failed": "いいねの更新に失敗しました。",
+      "download_failed": "GameBanana のダウンロードに失敗しました。",
+      "top_submissions": "注目投稿",
+      "latest_feed": "最新フィード",
+      "latest_feed_description": "選択したゲームの最近の投稿です。",
+      "category_loading": "カテゴリを読み込み中...",
+      "category_description": "サブカテゴリと MOD を探索します。",
+      "game_page": "ゲームページ",
+      "subcategories": "サブカテゴリ",
+      "mods": "MOD",
+      "mods_description": "選択したカテゴリの MOD 一覧をページ単位で表示します。",
+      "search_mods": "MOD を検索...",
+      "mod_sort": {
+        "label": "MOD の並べ替え",
+        "Generic_Newest": "新着順",
+        "Generic_MostLiked": "高評価順",
+        "Generic_MostDownloaded": "ダウンロード順",
+        "Generic_MostViewed": "閲覧数順"
+      },
+      "previous": "前へ",
+      "next": "次へ",
+      "retry_later": "後でもう一度お試しください",
+      "no_results": "一致する MOD はありません。",
+      "mod_details": "MOD 詳細",
+      "mod_details_description": "MOD を選ぶとファイル、統計、リンクを確認できます。",
+      "select_mod_prompt": "一覧から MOD を選択すると詳細が表示されます。",
+      "no_description": "説明はありません。",
+      "files": "ファイル",
+      "no_files": "ダウンロード可能なファイルはありません。",
+      "file_downloads": "{{count}} 回ダウンロード",
+      "narrow_window": {
+        "title": "ウィンドウが狭すぎます",
+        "description": "GameBanana コンテンツを表示するにはウィンドウを広げてください。"
+      }
+    },
+    "tools": {
+      "dashboard": {
+        "sidebar_title": "MOD ツール",
+        "tools_label": "ツール",
+        "toggle_sidebar": "サイドバーを切り替え",
+        "empty_title": "開発者ツール",
+        "empty_description": "サイドバーからツールを選ぶか、下の項目を押して開始してください。",
+        "external_page": "外部ページ",
+        "inline_tool": "内蔵ツール"
+      },
+      "4001_fixer": {
+        "title": "4001 Fixer",
+        "description": "GIMI の 4001 エラー向けに d3d11.dll の修正を適用します。",
+        "build_tab": "DLL ビルド",
+        "obfuscate_tab": "DLL パディング多様化",
+        "provider": "プロバイダー",
+        "version": "バージョン",
+        "version_hint": "ビルドに失敗する場合は、バージョンを下げてもう一度お試しください。",
+        "loading": "読み込み中...",
+        "load_failed": "バージョンの読み込みに失敗しました。",
+        "no_versions": "利用可能なバージョンがありません。",
+        "target_importer": "対象 GIMI Importer",
+        "no_importer": "利用可能な GIMI Importer がありません",
+        "select_importer_msg": "対象の GIMI Importer を選択してください。",
+        "building": "ビルド中",
+        "start_build": "ビルド開始",
+        "obfuscate_description": "選択した Importer の d3d11.dll をバックアップしてから、安全な PE パディングバイトを多様化します。",
+        "restore_description": "pe-padding-diversifier のバックアップがあるため、この Importer はすでにパディング多様化済みとして扱われます。再度適用する前にバックアップを復元してください。",
+        "obfuscating": "パディング多様化中",
+        "restoring": "復元中",
+        "start_obfuscate": "パディング多様化開始",
+        "start_restore": "バックアップを復元",
+        "backup_path": "バックアップ: {{path}}",
+        "system_folder_warning_title": "システムフォルダーが選択されています",
+        "system_folder_warning_description": "DLL の適用または復元時に、Windows の管理者権限確認が表示される場合があります。",
+        "progress": {
+          "XXMI_INIT": "初期化中...",
+          "XXMI_OBFUSCATE_INIT": "DLL パディング多様化を準備中...",
+          "XXMI_RESTORE_INIT": "DLL 復元を準備中...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Importer が見つかりません。",
+          "XXMI_FIND_VS": "Visual Studio ビルドツールを検索中...",
+          "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされていることを確認してください。",
+          "XXMI_BUILDING": "D3D11 DLL をビルド中...",
+          "XXMI_OBFUSCATING": "D3D11 DLL のパディングを多様化中...",
+          "XXMI_RESTORING": "バックアップから D3D11 DLL を復元中...",
+          "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認するか、管理者権限の要求を許可してください。",
+          "XXMI_ERR_DLL_IN_USE": "d3d11.dll を置き換えられません。先にゲームを終了してからもう一度お試しください。",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
+          "XXMI_ERR_ELEVATION_FAILED": "管理者権限が拒否されたか、昇格後の書き込みに失敗しました。UAC を許可してから再試行してください。",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
+          "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll のパディング多様化が完了しました。",
+          "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll はすでにパディング多様化済みです。",
+          "XXMI_OBFUSCATE_BACKUP_EXISTS": "pe-padding-diversifier のバックアップがすでにあります。再度適用する前に復元してください。",
+          "XXMI_RESTORE_SUCCESS": "d3d11.dll をバックアップから復元しました。",
+          "XXMI_ERR_BUILD_FAILED": "ビルド中に予期しないエラーが発生しました。",
+          "XXMI_ERR_OBFUSCATE_FAILED": "パディング多様化中に予期しないエラーが発生しました。",
+          "XXMI_ERR_OBFUSCATE_NO_CANDIDATES": "d3d11.dll 内に安全に多様化できるパディング候補が見つかりませんでした。",
+          "XXMI_ERR_RESTORE_BACKUP_NOT_FOUND": "復元する pe-padding-diversifier バックアップが見つかりません。",
+          "XXMI_ERR_RESTORE_FAILED": "バックアップ復元中に予期しないエラーが発生しました。",
+          "XXMI_DOWNLOAD_REPO": "XXMI ソースコードをダウンロード中...",
+          "XXMI_EXTRACT_REPO": "ソースコードのアーカイブを展開中...",
+          "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode を有効化中..."
+        }
+      },
+      "toggle_viewer_generator": {
+        "title": "Toggle Viewer ジェネレーター",
+        "not_configured": "XXMIパスが設定されていません。先にXXMIを設定してください。",
+        "auto_generate": "Toggle Viewer 自動生成",
+        "auto_generate_desc": "MODのiniトグルセクションからtoggle-viewerファイルを自動生成します。",
+        "hotkey": "Toggle Viewer ホットキー",
+        "batch_generate": "一括生成",
+        "batch_delete": "一括削除",
+        "stop": "停止",
+        "running": "実行中: {{mode}}",
+        "idle": "待機中",
+        "unknown": "不明",
+        "logs": "ログ",
+        "no_logs": "まだログはありません。",
+        "dialog": {
+          "trigger": "ホットキー:",
+          "title": "Toggle Viewer ホットキー",
+          "description": "設定するキーの組み合わせを押してください"
+        }
+      },
+      "texture_resizer": {
+        "title": "テクスチャ リサイザー",
+        "target_folder": "対象フォルダー",
+        "target_folder_placeholder": "DDS ファイルを再帰検索するフォルダー",
+        "browse": "参照",
+        "operation": "処理",
+        "operation_options": {
+          "resize": "リサイズのみ",
+          "resize_and_convert": "リサイズ + 形式変換",
+          "convert": "形式変換のみ",
+          "upscale": "アップスケールのみ",
+          "upscale_and_convert": "アップスケール + 形式変換"
+        },
+        "operation_descriptions": {
+          "resize": "テクスチャサイズのみ変更します。DDS 形式は維持されます。",
+          "resize_and_convert": "色空間を維持したまま、リサイズして別の DDS 形式へ再エンコードします。",
+          "convert": "元のサイズを維持し、DDS 出力形式のみ変更します。",
+          "upscale": "AI アップスケーラーでテクスチャを拡大します。DDS 形式は維持されます。",
+          "upscale_and_convert": "AI アップスケーラーで拡大したあと、別の DDS 形式へ再エンコードします。"
+        },
+        "upscale_model": "アップスケールモデル",
+        "upscale_engine_labels": {
+          "realesrgan": "Real-ESRGAN",
+          "realcugan": "Real-CUGAN"
+        },
+        "upscale_model_options": {
+          "realesr-animevideov3": "アニメ / ゲーム（既定）",
+          "realesrgan-x4plus-anime": "アニメ x4+",
+          "realesrgan-x4plus": "写真 x4+",
+          "realcugan-pro": "Pro",
+          "realcugan-se": "SE",
+          "realcugan-nose": "Nose"
+        },
+        "upscale_model_descriptions": {
+          "realesr-animevideov3": "ゲーム・アニメテクスチャ向けの標準モデルです。2x、3x、4x に対応します。",
+          "realesrgan-x4plus-anime": "高品質なアニメ向けモデルです。倍率は 4x 固定です。",
+          "realesrgan-x4plus": "写真・実写向けモデルです。倍率は 4x 固定です。",
+          "realcugan-pro": "アニメ向け高品質モデルです。2x、3x をサポートします。",
+          "realcugan-se": "バランスの良いアニメモデルです。2x、3x、4x をサポートします。",
+          "realcugan-nose": "最も軽量で高速なモデルです。倍率は 2x に固定されます。"
+        },
+        "upscale_scale": "倍率",
+        "upscale_scale_option": "{{scale}}倍",
+        "upscale_scale_description": "出力サイズは元サイズに選択した倍率を掛けた値です。一辺が 8192px を超える場合はスキップします。",
+        "upscale_normal_warning": "法線やラフネスなどの Linear テクスチャは、アップスケールでチャンネルが壊れることがあります。カラーテクスチャにだけ使ってください。",
+        "upscale_progress": {
+          "working": "アップスケールランタイムを準備中"
+        },
+        "mode": "リサイズ方法",
+        "mode_options": {
+          "percent": "割合",
+          "custom": "カスタム上限"
+        },
+        "mode_descriptions": {
+          "percent": "割合で縮小した後、各テクスチャを有効な DDS サイズへ自動調整します。",
+          "custom": "幅と高さを最大上限として使います。各テクスチャは元の比率を保持します。"
+        },
+        "percent": "割合",
+        "custom_width": "最大幅",
+        "custom_height": "最大高さ",
+        "custom_hint": "カスタム値は 1024px 単位に補正されます。実際の出力サイズは各テクスチャの比率を維持して決まります。",
+        "resize_step": "リサイズ段階",
+        "resize_step_description": "1024 の倍数で有効なサイズだけをスライダーで選択できます。",
+        "resize_step_unavailable": "このテクスチャには 1024 単位で縮小できる有効な段階がありません。",
+        "output_color_space": "出力色空間",
+        "output_color_space_description": "元の色空間を判別できませんでした。sRGB または Linear のいずれかを手動で選択してください。",
+        "output_format": "出力形式",
+        "output_format_description": "元の色空間と互換性のある形式のみ表示されます。",
+        "current_output_format": "選択中の出力形式",
+        "backup": "バックアップを作成",
+        "backup_description": "上書き前に各 DDS の横へ .bak を作成します。既存のバックアップは保持します。",
+        "load": "テクスチャ一覧を読み込む",
+        "refresh": "一覧を更新",
+        "texture_list_title": "テクスチャ一覧",
+        "texture_list_empty": "パスを選択してテクスチャ一覧を読み込んでください。",
+        "loading_textures": "テクスチャ一覧を読み込み中です。",
+        "preview_unavailable": "プレビューを作成できません",
+        "ready": "変換可能",
+        "not_resizable": "スキップ",
+        "process_single": "変換",
+        "select_all": "すべて選択",
+        "selected_count": "{{count}} 件選択",
+        "bulk_apply": "一括適用",
+        "bulk_apply_description": "選択したすべてのテクスチャに同じオプションを適用します。",
+        "process_selected": "選択項目を変換",
+        "batch_progress": "{{current}} / {{total}}",
+        "run": "テクスチャを変換",
+        "running": "変換中",
+        "result_title": "変換結果",
+        "list": {
+          "total": "合計",
+          "resizable": "変換可能",
+          "skipped": "スキップ"
+        },
+        "meta": {
+          "path": "フルパス",
+          "size": "ファイルサイズ",
+          "format": "DDS 形式",
+          "layers": "レイヤー数",
+          "source": "元サイズ",
+          "target": "予想出力"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "不明"
+        },
+        "dialog": {
+          "title": "テクスチャ変換オプション",
+          "description_fallback": "選択した DDS ファイル",
+          "description_multiple": "{{count}} 個の DDS ファイル"
+        },
+        "result": {
+          "processed": "処理",
+          "updated": "変更",
+          "skipped": "スキップ",
+          "failed": "失敗"
+        },
+        "toast": {
+          "save_settings_failed": "テクスチャ変換設定の保存に失敗しました",
+          "load_failed": "テクスチャ一覧の読み込みに失敗しました",
+          "completed": "テクスチャ変換が完了しました",
+          "completed_description": "{{updated}} 件変更、{{failed}} 件失敗、{{skipped}} 件スキップ",
+          "none_processed": "変換されたテクスチャはありません",
+          "single_completed": "テクスチャ変換が完了しました",
+          "single_completed_fallback": "選択したテクスチャの処理が完了しました",
+          "failed": "テクスチャ変換に失敗しました"
+        }
+      },
+      "model_viewer": {
+        "title": "モデルビューアー",
+        "toggle_viewer": "トグルビューアー",
+        "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",
+        "ineffective_suggestion": "この値を使用するには以下の変数を変更してください:",
+        "ineffective_apply": "この組み合わせを適用",
+        "open_file": "ファイルを開く",
+        "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
+        "generating_selected_state": "選択した状態を生成中",
+        "model_data_unavailable": "モデルデータを利用できません。",
+        "menu": {
+          "model": "モデル",
+          "texture": "テクスチャ",
+          "renderer": "レンダラー",
+          "rendering": "レンダリング",
+          "misc": "その他",
+          "toggle": "トグル",
+          "rotate": "回転",
+          "reset": "リセット",
+          "capture_set_preview": "キャプチャしてプレビューに設定",
+          "save_to_ini": "INI に保存"
+        },
+        "dialog": {
+          "overwrite_preview": {
+            "title": "プレビューを置き換え",
+            "description": "\"{{name}}\" には既にプレビューがあります。現在のビューアーのキャプチャで置き換えますか？",
+            "confirm": "プレビューを置き換え"
+          }
+        },
+        "toast": {
+          "save_to_ini_success": "現在のトグル状態を INI に保存しました",
+          "save_to_ini_no_changes": "保存できる persist 変数がありません",
+          "save_to_ini_error": "INI への保存に失敗しました",
+          "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
+          "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした"
+        },
+        "rotate_actions": {
+          "Left 90°": "左に 90°",
+          "Right 90°": "右に 90°",
+          "Up 90°": "上に 90°",
+          "Down 90°": "下に 90°",
+          "Flip 180°": "180° 反転"
+        }
+      },
+      "fix-tool-manager": {
+        "title": "Fix Tool Manager",
+        "presets": {},
+        "builder": {
+          "left": {
+            "title": "追加されたスクリプト",
+            "description": "ドラッグ&ドロップでスクリプトを追加するか、+ボタンを押して右側に移動できます",
+            "noScripts": {
+              "title": "利用可能なスクリプトがありません",
+              "description": "Pythonファイル(.py)または実行ファイル(.exe)をここにドラッグ&ドロップして追加できます"
+            },
+            "dropToAdd": "ドロップして追加"
+          },
+          "right": {
+            "title": "プリセット構成",
+            "description": "ドラッグしてスクリプトの順序を変更できます",
+            "presetName": "プリセット名",
+            "enterPresetName": "プリセット名を入力してください",
+            "noScripts": {
+              "title": "追加されたスクリプトがありません",
+              "description": "左側のリストから+ボタンを押してスクリプトを追加できます"
+            },
+            "#": {
+              "handleSavePreset": {
+                "success": "プリセットが保存されました",
+                "error": "プリセットの保存に失敗しました",
+                "alreadyExists": "既に存在するプリセット名です"
+              }
+            }
+          }
+        }
+      },
+      "mod_bisect": {
+        "title": "二分探索",
+        "description": "MODを半分ずつ無効化しながら、問題の原因となっているMODを素早く特定します。",
+        "start": "開始",
+        "cancel": "キャンセル",
+        "scanning": "MODフォルダをスキャンしています...",
+        "bisect_inconclusive": "原因を特定できませんでした。回答を確認してください。",
+        "no_inis_found": "有効なiniファイルが見つかりません。",
+        "all_excluded": "除外パスにより、探索対象の有効なiniファイルが残っていません。",
+        "cancelled": "二分探索がキャンセルされました。",
+        "reverting": "変更を元に戻しています...",
+        "no_games": "選択可能なゲームがありません",
+        "select_game": "ゲームを選択",
+        "nte_unsupported": "NTE未対応",
+        "nte_tooltip": "このゲームのImporterはまだサポートされていません。",
+        "round_title": "ラウンド{{round}} · バッチ{{batchSize}} · 残り{{remaining}}",
+        "round_description": "以下のMODが無効化されました。F10でリロードし、問題が解決したか確認してください。",
+        "disabled_count": "{{count}}件を無効化",
+        "undo": "前のラウンドを取り消す",
+        "still_broken": "まだ問題あり",
+        "problem_fixed": "問題なし",
+        "done_title": "二分探索完了",
+        "done_description": "{{path}}が原因の可能性があります。",
+        "keep_disabled": "このMODを無効のままにする",
+        "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
+        "re_enable_all": "すべてのMODを再度有効化",
+        "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
+        "preserve_d3dx": "d3dx_user.ini を保護",
+        "preserve_d3dx_description": "二分探索中に d3dx_user.ini を元の状態に保ち、トグル値のリセットを防ぎます",
+        "recover_disabled": "無効化MODを復元",
+        "recover_disabled_hint": "選択したゲームのMODフォルダに残った .mod-bisect-disabled ファイルを復元します。",
+        "recover_disabled_success": "無効化されたMODファイル {{count}} 件を復元しました。",
+        "recover_disabled_none": "残留した無効化ファイルは見つかりませんでした。",
+        "exclude_paths": "無効化から除外するパス",
+        "exclude_paths_description": "指定したパスとその配下のファイルは二分探索中も有効のままになります。",
+        "exclude_paths_placeholder": "MODフォルダからの相対パス",
+        "exclude_paths_add": "追加",
+        "exclude_paths_remove": "削除",
+        "exclude_count": "{{count}}件のパスを無効化から除外しています",
+        "exclude_empty": "パスを入力してください。",
+        "exclude_outside": "選択したImporterのMODフォルダ内のパスのみ指定できます。",
+        "exclude_root": "MODフォルダのルートは除外できません。",
+        "exclude_missing": "そのパスは存在しません。",
+        "exclude_invalid": "選択したゲームのMODフォルダ内の正しいパスを入力してください。",
+        "exclude_duplicate": "すでに指定されているパスです。",
+        "exclude_no_game": "先にゲームを選択してください。",
+        "status": {
+          "idle": "待機中",
+          "scanning": "スキャン中",
+          "round": "ラウンド進行中",
+          "done": "完了",
+          "reverting": "復元中",
+          "cancelled": "キャンセル済み"
+        }
+      },
+      "touch_profile": {
+        "title": "タッチプロファイル",
+        "mod_path": "Mod フォルダ",
+        "mod_path_placeholder": "Mod フォルダ_PH",
+        "use_vision": "Vision LLM を使用",
+        "vision_cache_clear_button": "キャッシュを消去",
+        "analyze": "Mod を解析",
+        "analyzing": "解析中",
+        "reanalyze": "再解析（次のターン）",
+        "reanalyzing": "再解析中...",
+        "turn_label": "解析ターン",
+        "turn_select": "ターン選択",
+        "turn_approved": "LLM 承認済み (LGTM)",
+        "turn_pending": "フィードバック推奨",
+        "max_turn_reached": "最大ターン数に達しました",
+        "discard": "下書きを破棄",
+        "create": "Touch Mod を作成",
+        "force_create": "強制作成",
+        "regenerate": "設定で再生成",
+        "open_folder": "フォルダを開く",
+        "rollback": "ロールバック",
+        "rolling_back": "ロールバック中",
+        "result": "作成された Touch Mod",
+        "source": "元の Mod",
+        "support_grade": "対応グレード",
+        "auto_apply": "自動適用可能",
+        "interactive": "インタラクティブ",
+        "confidence": "信頼度",
+        "link_settings": "設定をリンク",
+        "zones": "ゾーン",
+        "vision_source": "Vision",
+        "manual_source": "手動",
+        "yes": "はい",
+        "no": "いいえ",
+        "stage": {
+          "scan": "スキャン",
+          "preview": "プレビュー",
+          "vision": "Vision",
+          "assets": "アセット",
+          "ini": "INI",
+          "validate": "検証",
+          "complete": "完了"
+        },
+        "toast": {
+          "loaded": "Touch 下書きの準備完了",
+          "load_failed": "Mod の解析に失敗",
+          "created": "Touch Mod を作成しました",
+          "create_failed": "Touch Mod の作成に失敗",
+          "regenerated": "Touch Mod を再生成しました",
+          "regenerate_failed": "Touch Mod の再生成に失敗",
+          "rolled_back": "Touch Mod をロールバックしました",
+          "rollback_failed": "Touch Mod のロールバックに失敗",
+          "settings_save_failed": "タッチ設定の保存に失敗しました",
+          "reanalyzed": "LLM 再解析完了（ターン {{turn}}）",
+          "reanalyze_failed": "LLM 再解析失敗",
+          "turn_selected": "ターン {{turn}} を選択しました",
+          "turn_select_failed": "ターンの選択に失敗しました",
+          "vision_cache_cleared": "Vision キャッシュを消去しました",
+          "vision_cache_clear_failed": "Vision キャッシュの消去に失敗しました",
+          "no_components_selected": "分析するメッシュを1つ以上選択してください。"
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "すでに Touch Mod です",
+            "description": "生成済みの Touch Mod を再変換することはできません。元の non-touch Mod を選択するか、既存の変換をロールバックしてから再試行してください。"
+          },
+          "suspected_touch": {
+            "title": "Touch Mod の可能性があります",
+            "description": "既存の Touch ランタイムが検出されたため、安全に変換できません。元の non-touch Mod を選択してください。"
+          }
+        },
+        "skipped": "除外",
+        "preview_title": "タッチ影響範囲プレビュー",
+        "mesh_select_title": "タッチ解析するメッシュを選択",
+        "mesh_select_count": "選択 {{selected}}/{{total}}",
+        "mesh_select_all": "すべて選択",
+        "mesh_select_candidates": "候補のみ",
+        "mesh_select_none": "すべて解除",
+        "mesh_next": "次へ",
+        "mesh_back": "メッシュ選択に戻る",
+        "mesh_non_candidate": "候補外",
+        "llm_summary": "分析 LLM",
+        "component": "メッシュコンポーネント",
+        "component_placeholder": "コンポーネントを選択",
+        "zone": "影響ゾーン",
+        "zone_placeholder": "ゾーンを選択",
+        "all_zones": "すべてのゾーン",
+        "preview_loading": "3Dプレビューを準備中",
+        "preview_empty": "プレビュー可能なインタラクティブメッシュがありません。",
+        "preview_failed": "プレビューの読み込みに失敗しました",
+        "no_interactive_components": "インタラクティブなメッシュコンポーネントがありません。",
+        "mask_strength": "Touch maskの強度",
+        "mask_strength_reset": "Touch maskの強度をリセット",
+        "mask_curve": "影響分布",
+        "mask_curve_reset": "影響分布をリセット",
+        "mask_curve_hint": "値が低いほど弱い領域を均一化し、高いほど中心の強い領域に集中します。",
+        "mask_radius": "領域サイズ",
+        "mask_radius_shrink": "領域を縮小",
+        "mask_radius_grow": "領域を拡大",
+        "mask_core_attenuation": "コア縮小の動作",
+        "mask_core_attenuation_off": "コア維持（従来）",
+        "mask_core_attenuation_linear": "線形",
+        "mask_core_attenuation_sqrt": "平方根",
+        "mask_core_attenuation_pow": "緩やかな冪乗",
+        "mask_core_attenuation_hint": "領域を縮小するとき、選択した曲線に沿ってコアの強度も小さくなります。オフではコアは最大強度のまま、縁だけが削られます。",
+        "touch_strength": "タッチ強度",
+        "strength_light": "弱い",
+        "strength_normal": "標準",
+        "strength_strong": "強い",
+        "physics_preset": "ゾーン物理",
+        "physics_soft": "柔らかい",
+        "physics_normal": "標準",
+        "physics_firm": "硬い",
+        "physics_custom": "カスタム",
+        "advanced_title": "詳細設定",
+        "advanced_description": "選択したゾーンの物理反応を調整します。",
+        "advanced_radius": "半径",
+        "advanced_strength": "強度",
+        "advanced_damping": "減衰",
+        "advanced_spring": "復元力",
+        "advanced_max_offset": "最大変位",
+        "advanced_falloff": "減衰範囲",
+        "mode_vision": "Vision LLM",
+        "mode_bone": "ボーン/ウェイト",
+        "bone_select_title": "ボーンゾーン選択",
+        "bone_select_hint": "各メッシュのタッチゾーンとして使用するボーンとチャンネルを指定してください。",
+        "bone_label": "ボーン {{id}} ({{count}})",
+        "bones_count": "ボーン",
+        "add_bone_zone": "ボーンゾーン追加",
+        "remove_bone_zone": "ボーンゾーン削除",
+        "weight_threshold": "ウェイト閾値",
+        "weight_threshold_hint": "この範囲内のウェイトを持つ頂点がタッチゾーンに含まれます。",
+        "zone_label_placeholder": "ラベル（任意）",
+        "no_blend": "Blendなし",
+        "no_blend_hint": "このメッシュにはBlendバッファがないため、ボーン/ウェイト方式を使用できません。",
+        "bone_select_placeholder": "ボーンを選択してください...",
+        "channel_select_placeholder": "チャンネルを選択してください...",
+        "no_bones": "一致するボーンがありません",
+        "bone_label_short": "ボーン {{id}}"
+      },
+      "body_shape": {
+        "title": "体型変更",
+        "mod_path": "MODフォルダ",
+        "mod_path_placeholder": "mod.ini / Position.buf があるフォルダ",
+        "load": "メッシュを読み込む",
+        "loading": "読み込み中",
+        "mesh": "位置バッファ",
+        "selection_mask": "変形範囲",
+        "selection_mask_hint": "ブラシで表面を直接選択します。ボーンウェイトは初期選択としてのみ読み込みます。",
+        "selection_empty_hint": "ブラシを有効にして表面を塗るか、ボーンウェイトを読み込んでください。",
+        "selection_controls": "選択範囲の変形",
+        "smooth_selection": "境界を滑らかに",
+        "grow_selection": "選択拡張",
+        "shrink_selection": "選択縮小",
+        "undo_selection": "選択を元に戻す",
+        "redo_selection": "選択をやり直す",
+        "selection_tool": "選択ツール",
+        "tool_mode_brush": "ブラシ",
+        "tool_mode_component": "連結要素",
+        "brush_reach": "ブラシ到達",
+        "brush_reach_surface": "表面",
+        "brush_reach_through": "貫通",
+        "brush_reach_surface_hint": "メッシュ表面に沿って進み、手前向きの頂点を優先します。",
+        "brush_reach_through_hint": "3D半径内の全頂点を選択します。裏面も含みます。",
+        "import_bones_placeholder": "ボーンウェイトを読み込む…",
+        "select_regions": "身体部位",
+        "select_regions_placeholder": "部位を選択…",
+        "select_regions_hint": "上で部位を1つ以上選び、スライダーを調整してください。",
+        "select_bones": "ボーン（ウェイト）",
+        "select_bones_placeholder": "ボーンを選択…",
+        "select_bones_hint": "一覧を開き ↑↓ でプレビューし、Enter で選択してください。",
+        "pick_bones_hint": "↑↓ でウェイトプレビュー · Enter/クリックで確定",
+        "no_regions": "一致する部位がありません",
+        "no_bones": "一致するボーンがありません",
+        "no_blend_fallback": "Blendバッファがないため空間部位選択にフォールバックします。",
+        "bone_label": "ボーン {{id}} ({{count}})",
+        "bone_id": "ボーン {{id}}",
+        "unified_controls": "一括調整",
+        "unified_controls_title": "選択 {{count}} 本を一括",
+        "reset_selected": "選択をリセット",
+        "show_weights": "ウェイト色を表示",
+        "show_original": "元メッシュを表示",
+        "deform_operation": "変形方法",
+        "deform_scale": "軸スケール",
+        "deform_inflate": "表面の膨張・収縮",
+        "deform_translate": "移動",
+        "deform_taper": "テーパー",
+        "deform_amount": "変形量",
+        "axis_x": "軸スケール X",
+        "axis_y": "軸スケール Y",
+        "axis_z": "軸スケール Z",
+        "translate_x": "オフセット X",
+        "translate_y": "オフセット Y",
+        "translate_z": "オフセット Z",
+        "taper_factor": "テーパー係数",
+        "brush_menu": "ブラシ",
+        "brush_enable": "ウェイトペイント有効化",
+        "brush_mode": "モード",
+        "brush_mode_paint": "塗り (+)",
+        "brush_mode_erase": "消し (-)",
+        "brush_radius": "半径",
+        "brush_strength": "強度",
+        "brush_mirror_x": "X軸対称",
+        "brush_reset": "選択範囲をクリア",
+        "regions": {
+          "shoulders": "肩",
+          "chest": "胸",
+          "waist": "腰",
+          "hips": "骨盤",
+          "buttocks": "尻",
+          "thighs": "太もも",
+          "calves": "ふくらはぎ",
+          "arms": "腕",
+          "head": "頭"
+        },
+        "export": "体型変更",
+        "exporting": "適用中",
+        "empty": "MODフォルダを読み込んで体型を調整してください。",
+        "metrics": {
+          "vertices": "頂点数",
+          "moved": "移動した頂点",
+          "max_disp": "最大移動距離",
+          "bones": "ボーン数"
+        },
+        "toast": {
+          "loaded": "メッシュバッファを読み込みました",
+          "loaded_description": "位置バッファ {{count}} 件",
+          "load_failed": "MODメッシュの読み込みに失敗しました",
+          "exported": "体型変更MODを作成しました",
+          "exported_description": "{{bytes}} バイトを書き込みました",
+          "exported_with_log": "位置バッファを更新し 변경사항.txt を作成しました",
+          "exported_as_mod": "元MODを無効化し、新規作成しました: {{path}}",
+          "export_failed": "体型変更に失敗しました",
+          "viewer_fallback": "テクスチャプレビューを利用できないため簡易ビューアで表示します",
+          "viewer_error": "モデルビューアエラー"
+        }
+      }
+    },
+    "setting": {
+      "title": "設定",
+      "tabs": {
+        "general": "一般",
+        "mod": "MOD",
+        "account": "ID",
+        "advanced": "詳細",
+        "drive": "ドライブ",
+        "transfer": "Transfer",
+        "tools": "ツール"
+      },
+      "tools": {
+        "title": "ツール",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "更新通知",
+            "description": "Wuwa Mod Fixer の更新がある際に通知を表示します。通知をオフにしても、1時間ごとのバックグラウンド自動更新は継続されます。",
+            "save_failed": "設定の保存に失敗しました。"
+          }
+        },
+        "touch_profile": {
+          "title": "タッチプロファイル",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "タッチ領域の分析に使用するプロトコルとモデルを設定します。",
+            "protocol": {
+              "title": "プロトコル",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "例: https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "モデル"
+            },
+            "reasoning": {
+              "title": "推論レベル",
+              "auto": "自動",
+              "low": "低い",
+              "medium": "中",
+              "high": "高い"
+            },
+            "api_key": {
+              "title": "API キー",
+              "description": "キーは Windows ユーザーストアで暗号化して保存します。環境変数も使用できます。",
+              "configured": "保存済みのキーを変更するには入力してください",
+              "placeholder": "API キーを入力",
+              "save": "保存",
+              "clear": "削除",
+              "api_key_saved": "API キーを保存しました",
+              "api_key_cleared": "API キーを削除しました",
+              "api_key_save_failed": "API キーの保存に失敗しました",
+              "api_key_clear_failed": "API キーの削除に失敗しました",
+              "api_key_load_failed": "API キーの状態を読み込めませんでした"
+            }
+          }
+        }
+      },
+      "gen": {
+        "application": {
+          "title": "アプリケーション",
+          "runOnStartup": "ログイン時に実行",
+          "runOnStartupDescription": "システム起動時にアプリを自動的に実行します。",
+          "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
+          "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
+          "checkUpdate": "更新確認",
+          "runInBackground": "バックグラウンド実行",
+          "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
+          "runInBackgroundDisableConfirmTitle": "バックグラウンド実行を無効にしますか？",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist と Toggle Viewer は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じた時点でアプリが終了するため、アプリを再度開くまでこれらの機能は使えなくなります。それでもバックグラウンド実行をオフにしますか？",
+          "runInBackgroundDisableConfirmAction": "無効にする",
+          "autoUpdate": "自動更新",
+          "updateStatus": "更新状態",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "自動更新",
+              "description": "起動時と1時間ごとに更新を確認し、自動でダウンロードします。"
+            },
+            "notify": {
+              "title": "更新通知",
+              "description": "更新は自動で確認しますが、ダウンロードは自分で開始したときだけ実行します。"
+            },
+            "off": {
+              "title": "自動更新オフ",
+              "description": "更新の自動確認と自動ダウンロードをどちらも無効にします。"
+            }
+          }
+        },
+        "language": {
+          "title": "言語",
+          "select": "言語選択"
+        },
+        "theme": {
+          "title": "テーマ",
+          "select": "テーマ選択",
+          "light": "ライト",
+          "dark": "ダーク",
+          "system": "システムデフォルト"
+        },
+        "startPage": {
+          "title": "開始ページ",
+          "select": "開始ページ選択"
+        },
+        "logLevel": {
+          "title": "ログレベル",
+          "select": "レベルを選択"
+        },
+        "other": {
+          "title": "その他",
+          "moveTransferPageWhenStartTransfer": "転送開始時にページ移動",
+          "moveTransferPageWhenStartTransferDescription": "ファイル転送が始まると自動的に転送管理ページへ移動します。",
+          "powerSaveBlockInTransfer": "スリープモード防止",
+          "powerSaveBlockInTransferDescription": "転送または同期中はシステムが待機状態になるのを防ぎます。",
+          "imageCacheTitle": "画像キャッシュ",
+          "imageCacheDescription": "プレビュー画像キャッシュをクリアします",
+          "imageCacheClear": "キャッシュクリア"
+        }
+      },
+      "mod": {
+        "title": "MOD",
+        "mod_management": {
+          "title": "MOD管理",
+          "archiveExtractPathMode": "解凍パス方式",
+          "archiveExtractPathModeDescription": "圧縮ファイル内に単一の最上位フォルダーがある場合、どのパスで解凍するかを選択します。",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "最上位フォルダーを除去",
+            "keep_archive_root": "圧縮内のパスを維持",
+            "ask_every_time": "毎回確認"
+          },
+          "deleteArchiveAfterExtract": "解凍後に削除",
+          "deleteArchiveAfterExtractDescription": "圧縮ファイルをMODフォルダーに解凍した後、元の圧縮ファイルを削除します",
+          "moveFolderInsteadOfCopy": "コピーの代わりに移動",
+          "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)",
+          "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
+          "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
+          "disabledPrefixStyle": "無効化MOD接頭辞の形式",
+          "disabledPrefixStyleDescription": "MOD無効化時に使用する接頭辞を選択します。有効化時は両方の形式が常に認識されます。",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (スペース)",
+            "underscore": "DISABLED_ (アンダースコア)"
+          },
+          "searchModPreview": "サブフォルダからモッドプレビューを検索",
+          "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
+          "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",
+          "autoResolveDownloadTargetDescription": "ダウンロード名に似たMODフォルダーを自動的に選択します。",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "Nahida Live",
+            "hui": "Hui",
+            "drive": "ドライブ"
+          }
+        },
+        "layout": {
+          "title": "レイアウト",
+          "sidebar": {
+            "mode": "サイドバーレイアウト",
+            "modeDescription": "キャラクターサイドバーを行リストまたは正方形プレビューグリッドで表示します。",
+            "modes": {
+              "row": "行リスト",
+              "grid": "プレビューグリッド"
+            }
+          },
+          "grid": {
+            "mode": "MODグリッドレイアウト",
+            "modeDescription": "MODグリッドがカード幅と列数を決定する方法を選択します。",
+            "modes": {
+              "responsive": "レスポンシブ",
+              "fixed_card_width": "カード幅固定",
+              "fixed_column_count": "列数固定"
+            },
+            "responsiveBaseWidth": "レスポンシブ基準カード幅",
+            "responsiveBaseWidthDescription": "利用可能な幅に何列入るかを計算するために使用します。範囲: 240〜640。",
+            "fixedCardWidth": "固定カード幅",
+            "fixedCardWidthDescription": "カード幅を固定し、収まる列数だけを変更します。範囲: 240〜640。",
+            "fixedColumnCount": "固定列数",
+            "fixedColumnCountDescription": "可能な場合は常にこの列数を使用します。範囲: 1〜8。"
+          }
+        },
+        "performance": {
+          "title": "パフォーマンス",
+          "backdrop-blur": {
+            "title": "ブラー使用",
+            "description": "Mod を探索する際にパフォーマンス問題が発生する場合は、このオプションを無効にしてください。"
+          },
+          "virtualization": {
+            "title": "仮想化使用",
+            "description": "Modリストを仮想化してパフォーマンスを向上させます。",
+            "threshold": "基準MOD数",
+            "thresholdDescription": "設定した数以上のMODがある場合に仮想化を適用します"
+          }
+        }
+      },
+      "xxmi": {
+        "xxmiPath": "XXMIパス",
+        "autoScan": "自動検索",
+        "activeImporter": "有効なImporter",
+        "persistToggles": "トグルの永続保存",
+        "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
+        "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
+        "dllVersion": "XXMI DLLバージョン",
+        "dllVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
+        "dllVersionLoading": "バージョンを読み込み中...",
+        "dllVersionLoadFailed": "バージョンの読み込みに失敗しました。",
+        "dllVersionRetry": "再試行",
+        "dllVersionEmpty": "利用可能なバージョンがありません。",
+        "dllVersionCurrent": "現在: {{version}}",
+        "dllVersionUnknown": "不明",
+        "fn": {
+          "findXXMIPath": {
+            "xxmiNotFound": "XXMIが見つかりません",
+            "alert": {
+              "title": "注意",
+              "description": "自動検出されたXXMIランチャーのパスを確認してください。正常でない場合は、手動でパスを入力してください。"
+            }
+          },
+          "saveXXMIPath": {
+            "success": "XXMIパスが保存されました",
+            "configNotFound": "指定されたパスでXXMI Launcher Config.jsonファイルが見つかりません"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLLバージョン {{version}} を適用しました",
+            "failed": "選択したXXMI DLLバージョンの適用に失敗しました",
+            "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
+          }
+        }
+      },
+      "acc": {
+        "title": "アカウント",
+        "not_logged_in": {
+          "description": "ログインが必要です。",
+          "login": "ログイン"
+        },
+        "server_unreachable": "サーバーに接続できません。",
+        "my_account": "マイアカウント",
+        "logout": "ログアウト"
+      },
+      "adv": {
+        "title": "詳細設定",
+        "warning_title": "注意",
+        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。",
+        "search_placeholder": "設定キーを検索...",
+        "no_results": "一致する設定キーはありません。"
+      },
+      "transfer": {
+        "title": "転送",
+        "concurrency": {
+          "title": "同時転送"
+        },
+        "other": {
+          "title": "その他"
+        },
+        "downloadConcurrency": {
+          "title": "ダウンロード同時転送数",
+          "description": "ドライブ転送で同時にダウンロードするファイル数を設定します。範囲: 16〜64"
+        },
+        "uploadConcurrency": {
+          "title": "アップロード同時転送数",
+          "description": "ドライブ転送で同時にアップロードするファイル数を設定します。範囲: 4〜16"
+        },
+        "bandwidth": {
+          "title": "帯域幅"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "ダウンロード帯域幅制限 (MiB/s)",
+          "description": "すべてのダウンロードの合計速度を制限します。0は無制限です。範囲: 0〜1024"
+        }
+      },
+      "drive": {
+        "title": "ドライブ",
+        "sorting": {
+          "title": "並び替え"
+        },
+        "nameSortPolicy": {
+          "title": "名前の並び替えポリシー",
+          "description": "ドライブで名前順に並び替えるときの空白と数字の扱いを選択します。",
+          "select": "並び替えポリシーを選択",
+          "options": {
+            "natural_ignore_spacing": "自然順 + 空白を無視",
+            "natural": "標準の自然順"
+          }
+        },
+        "import": {
+          "title": "インポート"
+        },
+        "autoTryPasswords": {
+          "title": "パスワード自動試行",
+          "description": "パスワードが必要なリンクの解決時に、保存済みのパスワードを自動的に試します。"
+        },
+        "passwordList": {
+          "title": "パスワード一覧",
+          "description": "自動試行するパスワードの一覧です。最大 {{max}}件まで保存できます。",
+          "placeholder": "パスワードを入力",
+          "add": "追加"
+        }
+      }
+    },
+    "docs": {
+      "title": "使い方"
+    }
+  },
+  "components": {
+    "path-selector-dialog": {
+      "title": "パス選択",
+      "description": "{{name}} をダウンロードする方法を選択してください",
+      "multiple_description": "{{count}}個の項目をダウンロードする方法を選択してください",
+      "mod_manager": {
+        "title": "MODマネージャー",
+        "description": {
+          "0": "MODマネージャーから",
+          "1": "キャラクターフォルダーを選択します"
+        }
+      },
+      "explorer": {
+        "title": "パス選択",
+        "description": {
+          "0": "エクスプローラーから",
+          "1": "フォルダーを選択します"
+        }
+      }
+    },
+    "download-confirmation-overlay": {
+      "title": "ダウンロード確認",
+      "description": "ダウンロード先を選択してください",
+      "file_name": "ファイル名",
+      "file_name_placeholder": "ファイル名を入力してください",
+      "download_location": "ダウンロード先",
+      "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
+      "select_path_failed": "パスの選択に失敗しました。",
+      "return_to_gamebanana": "ダウンロード追加後、GameBanana に戻る"
+    }
+  },
+  "titlebar": {
+    "server_inactive_badge": "サーバー無効",
+    "server_inactive_tooltip": "サーバーが無効化またはメンテナンス中のため、nahida.liveの機能を利用できません。",
+    "controls": {
+      "minimise": "最小化",
+      "maximise": "最大化",
+      "restore": "元のサイズに戻す",
+      "close": "閉じる"
+    },
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "ダウンロード中",
+        "uploading": "アップロード中",
+        "transferring": "転送中",
+        "finalizing": "仕上げ中",
+        "paused": "一時停止"
+      },
+      "fixer4001": {
+        "building": "DLLをビルド中",
+        "diversifying": "DLLを難読化中",
+        "restoring": "DLLを復元中"
+      },
+      "modBisect": {
+        "running": "バイセクト中"
+      },
+      "textureResizer": {
+        "resizing": "テクスチャリサイズ中",
+        "upscaling": "テクスチャアップスケール中",
+        "converting": "テクスチャフォーマット変換中",
+        "resizing_and_converting": "テクスチャリサイズおよび変換中",
+        "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
+      }
+    }
+  },
+  "updater": {
+    "titlebar": {
+      "action": "クリックして再起動し、アップデート",
+      "downloadAction": "アップデートをダウンロード"
+    },
+    "actions": {
+      "download": "アップデートをダウンロード",
+      "install": "アップデートをインストール"
+    },
+    "status": {
+      "idle": "最新バージョンを使用しています。",
+      "checking": "アップデートを確認しています...",
+      "downloading": "アップデートをダウンロードしています...",
+      "downloadingProgress": "アップデートをダウンロードしています... ({{percent}}%)",
+      "failed": "アップデートに失敗しました: {{message}}",
+      "available": "新しいアップデートがあります。準備ができたらダウンロードできます。{{versionRangeText}}",
+      "downloaded": "アップデートをインストールする準備ができました。"
+    },
+    "toast": {
+      "available": {
+        "title": "新しいバージョンが利用可能です。",
+        "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。",
+        "action": "更新",
+        "releaseNotesTitle": "リリースノート",
+        "showOriginal": "原文を表示",
+        "showTranslation": "翻訳を表示"
+      },
+      "notAvailable": {
+        "title": "最新バージョンを使用しています。",
+        "description": "現在利用可能なアップデートはありません。"
+      }
+    }
+  }
+}

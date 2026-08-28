@@ -1,0 +1,70 @@
+version: '3'
+
+vars:
+  APP_NAME: "nahida-desktop"
+  BIN_DIR: "bin"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "pnpm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  # Target OS for build/package/run. Windows only. Defaults to the host OS,
+  # and is overridden by `go tool wails3 build GOOS=...` (or the GOOS env var) for
+  # cross-compilation. The tasks below dispatch to the matching platform
+  # Taskfile via this variable.
+  GOOS: '{{.GOOS | default OS}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application
+    preconditions:
+      - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
+        msg: "This app builds for Windows only (got GOOS={{.GOOS}})."
+    cmds:
+      - task: "{{.GOOS}}:build"
+
+  package:
+    summary: Packages a production build of the application
+    preconditions:
+      - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
+        msg: "This app packages for Windows only (got GOOS={{.GOOS}})."
+    cmds:
+      - task: "{{.GOOS}}:package"
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+          ARCH: '{{.ARCH | default "amd64"}}'
+
+  run:
+    summary: Runs the application
+    preconditions:
+      - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
+        msg: "This app runs on Windows only (got GOOS={{.GOOS}})."
+    cmds:
+      - task: "{{.GOOS}}:run"
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - go tool wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  lint:
+    summary: Runs golangci-lint
+    desc: |
+      Runs the project-pinned golangci-lint via `go tool`.
+      First run may download the binary.
+    cmds:
+      - go tool -modfile="./golangci-lint.mod" golangci-lint run ./...
+
+  lint:fix:
+    summary: Runs golangci-lint with autofix
+    cmds:
+      - go tool -modfile="./golangci-lint.mod" golangci-lint run --fix ./...
+
+  vuln:
+    summary: Runs govulncheck
+    desc: |
+      Runs the project-pinned govulncheck via `go tool`.
+      First run may download the binary and vulnerability database.
+    cmds:
+      - go tool -modfile="./govulncheck.mod" govulncheck ./...

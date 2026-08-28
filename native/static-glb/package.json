@@ -1,7 +1,0 @@
-{
-  "name": "static-glb",
-  "version": "1.0.0",
-  "scripts": {
-    "build": "pnpm --dir ../.. exec napi build --cwd native/static-glb --platform --release"
-  }
-}
