@@ -53,8 +53,9 @@ function RouteComponent() {
   const sortType = useViewStore((s) => s.sortType);
   const layout = useViewStore((s) => s.layout);
   const { data: nameSortPolicy = "natural_ignore_spacing" } = useDriveNameSortPolicy();
+  const queryKey = useMemo(() => ["drive", "share", effectiveId] as const, [effectiveId]);
 
-  useDriveUploadRefresh(effectiveId, ["drive", "share", effectiveId]);
+  useDriveUploadRefresh(effectiveId, queryKey);
 
   const {
     isSearching,
@@ -70,7 +71,7 @@ function RouteComponent() {
   } = useDriveDescendantSearch(effectiveId);
 
   const query = useQuery({
-    queryKey: ["drive", "share", effectiveId],
+    queryKey,
     enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,

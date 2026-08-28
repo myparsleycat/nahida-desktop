@@ -1,55 +1,48 @@
-import { subscribeDriveUploadCompleted } from "@renderer/hooks/use-drive-upload-refresh";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { getNewlyCompletedUploadDestinations } from "@renderer/hooks/use-drive-upload-refresh";
+import type { TransferWithoutData } from "@shared/types";
+import { describe, expect, it } from "vitest";
 
-const mocks = vi.hoisted(() => {
-    const eventHandlers = new Map<string, (event: { data: unknown }) => void>();
-    return { eventHandlers };
-});
-
-vi.mock("@wailsio/runtime", () => ({
-    Events: {
-        On: (name: string, handler: (event: { data: unknown }) => void) => {
-            mocks.eventHandlers.set(name, handler);
-            return () => mocks.eventHandlers.delete(name);
-        },
-    },
-}));
-
-function emitUploadCompleted(data: unknown) {
-    const handler = mocks.eventHandlers.get("drive:upload-completed");
-    if (!handler) {
-        throw new Error("drive:upload-completed listener is not registered");
-    }
-    handler({ data });
+function transfer(
+    pid: string,
+    status: TransferWithoutData["status"],
+    currentId?: string,
+    type: TransferWithoutData["type"] = "upload",
+): TransferWithoutData {
+    return { pid, status, currentId, type } as TransferWithoutData;
 }
 
-afterEach(() => {
-    mocks.eventHandlers.clear();
-});
+describe("drive upload refresh", () => {
+    it("returns destinations whose uploads have just completed", () => {
+        const destinations = getNewlyCompletedUploadDestinations(
+            [
+                transfer("drive-upload", "completed", "drive-folder"),
+                transfer("share-upload", "completed", "share-folder"),
+            ],
+            { "drive-upload": "progress", "share-upload": "progress" },
+        );
 
-describe("drive upload completion events", () => {
-    it("delivers a valid upload destination", () => {
-        const listener = vi.fn();
-        const unsubscribe = subscribeDriveUploadCompleted(listener);
-
-        emitUploadCompleted({ pid: "upload-1", currentId: "destination" });
-
-        expect(listener).toHaveBeenCalledOnce();
-        expect(listener).toHaveBeenCalledWith({ pid: "upload-1", currentId: "destination" });
-
-        unsubscribe();
-        expect(mocks.eventHandlers.has("drive:upload-completed")).toBe(false);
+        expect(destinations).toEqual(new Set(["drive-folder", "share-folder"]));
     });
 
-    it.each([null, [], {}, { pid: "upload-1" }, { currentId: "destination" }])(
-        "ignores an invalid payload: %j",
-        (payload) => {
-            const listener = vi.fn();
-            subscribeDriveUploadCompleted(listener);
+    it("does not refresh completed uploads more than once", () => {
+        const destinations = getNewlyCompletedUploadDestinations(
+            [transfer("upload-1", "completed", "destination")],
+            { "upload-1": "completed" },
+        );
 
-            emitUploadCompleted(payload);
+        expect(destinations).toEqual(new Set());
+    });
 
-            expect(listener).not.toHaveBeenCalled();
-        },
-    );
+    it("ignores incomplete transfers, downloads, and uploads without a destination", () => {
+        const destinations = getNewlyCompletedUploadDestinations(
+            [
+                transfer("pending", "progress", "drive-folder"),
+                transfer("download", "completed", "drive-folder", "download"),
+                transfer("missing-destination", "completed"),
+            ],
+            {},
+        );
+
+        expect(destinations).toEqual(new Set());
+    });
 });

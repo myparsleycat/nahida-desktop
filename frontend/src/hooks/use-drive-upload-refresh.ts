@@ -1,36 +1,48 @@
+import { useGlobalStore } from "@renderer/store/global";
+import type { TransferWithoutData } from "@shared/types";
 import type { QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { Events } from "@wailsio/runtime";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-type DriveUploadCompleted = {
-    pid: string;
-    currentId: string;
-};
+type TransferStatuses = Record<string, TransferWithoutData["status"]>;
 
-function isDriveUploadCompleted(value: unknown): value is DriveUploadCompleted {
-    if (typeof value !== "object" || value === null) return false;
+export function getNewlyCompletedUploadDestinations(
+    transfers: TransferWithoutData[],
+    previousStatuses: TransferStatuses,
+) {
+    const destinations = new Set<string>();
 
-    const event = value as Partial<DriveUploadCompleted>;
-    return typeof event.pid === "string" && typeof event.currentId === "string";
-}
-
-export function subscribeDriveUploadCompleted(listener: (event: DriveUploadCompleted) => void) {
-    return Events.On("drive:upload-completed", (event) => {
-        if (isDriveUploadCompleted(event.data)) {
-            listener(event.data);
+    for (const transfer of transfers) {
+        if (
+            transfer.type === "upload" &&
+            transfer.currentId &&
+            transfer.status === "completed" &&
+            previousStatuses[transfer.pid] !== "completed"
+        ) {
+            destinations.add(transfer.currentId);
         }
-    });
+    }
+
+    return destinations;
 }
 
 export function useDriveUploadRefresh(currentId: string, queryKey: QueryKey) {
     const queryClient = useQueryClient();
+    const transfers = useGlobalStore((state) => state.transfers);
+    const previousStatusesRef = useRef<TransferStatuses>({});
 
     useEffect(() => {
-        return subscribeDriveUploadCompleted((event) => {
-            if (event.currentId === currentId) {
-                void queryClient.invalidateQueries({ queryKey, exact: true });
-            }
-        });
-    }, [currentId, queryClient, queryKey]);
+        const destinations = getNewlyCompletedUploadDestinations(
+            transfers,
+            previousStatusesRef.current,
+        );
+
+        previousStatusesRef.current = Object.fromEntries(
+            transfers.map((transfer) => [transfer.pid, transfer.status]),
+        );
+
+        if (destinations.has(currentId)) {
+            void queryClient.invalidateQueries({ queryKey, exact: true });
+        }
+    }, [currentId, queryClient, queryKey, transfers]);
 }
