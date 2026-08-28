@@ -12,7 +12,7 @@ func TestValidateMergeRequestRejectsInvalidPayloads(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})
 	modsRoot := filepath.Join(root, "mods")
-	group := filepath.Join(modsRoot, "Klee")
+	group := filepath.Join(modsRoot, "CharA")
 	leafA := filepath.Join(group, "A")
 	leafB := filepath.Join(group, "B")
 	if err := os.MkdirAll(leafA, 0o755); err != nil {
@@ -90,7 +90,7 @@ func TestValidateMergeRequestRejectsPathsOutsideManagedRootOrGroup(t *testing.T)
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})
 	modsRoot := filepath.Join(root, "mods")
-	group := filepath.Join(modsRoot, "Klee")
+	group := filepath.Join(modsRoot, "CharA")
 	first := filepath.Join(group, "A")
 	second := filepath.Join(group, "B")
 	sibling := filepath.Join(modsRoot, "Other", "C")
@@ -132,7 +132,7 @@ func TestValidateMergeRequestFollowsGroupSymlinks(t *testing.T) {
 	service, root := newTestMod(t, testSettings{})
 	realRoot := filepath.Join(root, "real")
 	linkParent := filepath.Join(root, "links")
-	group := filepath.Join(realRoot, "Klee")
+	group := filepath.Join(realRoot, "CharA")
 	first := filepath.Join(group, "A")
 	second := filepath.Join(group, "B")
 	for _, path := range []string{first, second, linkParent} {
@@ -143,7 +143,7 @@ func TestValidateMergeRequestFollowsGroupSymlinks(t *testing.T) {
 	if err := service.AddGame(ctx, "Game", realRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	linkGroup := filepath.Join(linkParent, "LinkedKlee")
+	linkGroup := filepath.Join(linkParent, "LinkedCharA")
 	if err := os.Symlink(group, linkGroup); err != nil {
 		t.Skipf("directory symlink is unavailable: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestValidateMergeRequestFollowsGroupSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	outsideTarget := filepath.Join(root, "outside", "OutsideKlee")
+	outsideTarget := filepath.Join(root, "outside", "OutsideCharA")
 	if err := os.MkdirAll(filepath.Join(outsideTarget, "A"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestValidateMergeRequestTreatsDistinctSymlinkAliasesAsLexicallyUnique(t *te
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})
 	modsRoot := filepath.Join(root, "mods")
-	group := filepath.Join(modsRoot, "Klee")
+	group := filepath.Join(modsRoot, "CharA")
 	target := filepath.Join(group, "Target")
 	other := filepath.Join(group, "Other")
 	for _, path := range []string{target, other} {

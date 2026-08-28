@@ -726,7 +726,7 @@ if $top == 1
 drawindexed = $n, 3, 0
 endif
 [TextureOverrideBodyIB]
-hash = b03c7e30
+hash = beef0013
 handling = skip
 drawindexed = auto
 `+viewerBodyResources), 0o600); err != nil {

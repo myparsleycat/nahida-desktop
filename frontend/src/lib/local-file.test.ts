@@ -9,7 +9,7 @@ function protocolParams(src: string): URLSearchParams {
 
 describe("localFileSrc", () => {
     it("encodes a Windows path with spaces as a protocol query", () => {
-        const path = String.raw`E:\GIMI\Mods\Character\Aino\Aino Nude toggle\preview.png`;
+        const path = String.raw`E:\GIMI\Mods\Character\CharG\CharG Nude toggle\preview.png`;
         const src = localFileSrc(path);
         const params = protocolParams(src);
 
@@ -44,7 +44,7 @@ describe("localFileSrc", () => {
     });
 
     it("rewrites leftover Electron local:// and file:// URLs", () => {
-        const windowsPath = String.raw`E:\GIMI\Mods\Aino Nude toggle\preview.png`;
+        const windowsPath = String.raw`E:\GIMI\Mods\CharG Nude toggle\preview.png`;
         expect(protocolParams(localFileSrc(`local://${windowsPath}`)).get("path")).toBe(
             windowsPath,
         );

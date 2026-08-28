@@ -11,11 +11,11 @@ import (
 func TestPickWwmiDumpDiffusePrefersSRGBThenLarger(t *testing.T) {
 	t.Parallel()
 	got := pickWwmiDumpDiffuse([]wwmiDumpCandidate{
-		{File: "Textures/Components-3 t=79081b2b.dds", Area: 8192 * 8192, Bytes: 67_109_012, Order: 0},
-		{File: "Textures/Components-3 t=f58624fb.dds", SRGB: true, Area: 8192 * 8192, Bytes: 67_109_012, Order: 1},
-		{File: "Textures/Components-3 t=1944212c.jpg", SRGB: true, Bytes: 1_615_266, Order: 2},
+		{File: "Textures/Components-3 t=beef001a.dds", Area: 8192 * 8192, Bytes: 67_109_012, Order: 0},
+		{File: "Textures/Components-3 t=beef001b.dds", SRGB: true, Area: 8192 * 8192, Bytes: 67_109_012, Order: 1},
+		{File: "Textures/Components-3 t=beef0010.jpg", SRGB: true, Bytes: 1_615_266, Order: 2},
 	})
-	if got != "Textures/Components-3 t=f58624fb.dds" {
+	if got != "Textures/Components-3 t=beef001b.dds" {
 		t.Fatalf("pickWwmiDumpDiffuse = %q", got)
 	}
 }
@@ -23,10 +23,10 @@ func TestPickWwmiDumpDiffusePrefersSRGBThenLarger(t *testing.T) {
 func TestPickWwmiDumpDiffusePrefersExclusiveOverShared(t *testing.T) {
 	t.Parallel()
 	got := pickWwmiDumpDiffuse([]wwmiDumpCandidate{
-		{File: "Textures/Components-0-1-2-3-4-5 t=e9612536.dds", SRGB: true, Area: 2048 * 2048, Bytes: 4_194_452, Order: 0},
-		{File: "Textures/Components-3 t=7d8d1ae0.dds", Area: 512 * 512, Bytes: 262_292, Order: 1},
+		{File: "Textures/Components-0-1-2-3-4-5 t=beef0012.dds", SRGB: true, Area: 2048 * 2048, Bytes: 4_194_452, Order: 0},
+		{File: "Textures/Components-3 t=beef001c.dds", Area: 512 * 512, Bytes: 262_292, Order: 1},
 	})
-	if got != "Textures/Components-3 t=7d8d1ae0.dds" {
+	if got != "Textures/Components-3 t=beef001c.dds" {
 		t.Fatalf("pickWwmiDumpDiffuse = %q", got)
 	}
 }

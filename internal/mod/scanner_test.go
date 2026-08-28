@@ -23,7 +23,7 @@ func writeModFile(t *testing.T, root, relative, content string) string {
 func TestWalkModCollectsSizeMtimeIniAndPreviewInOnePass(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	group := filepath.Join(root, "Furina")
+	group := filepath.Join(root, "CharF")
 	modPath := filepath.Join(group, "Costume")
 	preview := writeModFile(t, modPath, "preview.png", "image")
 	writeModFile(t, modPath, "mod.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
@@ -120,7 +120,7 @@ func TestGetModsLightDefersIniParse(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{preview: true})
 	modsRoot := filepath.Join(root, "mods")
-	group := filepath.Join(modsRoot, "Furina")
+	group := filepath.Join(modsRoot, "CharF")
 	modPath := filepath.Join(group, "Costume")
 	preview := writeModFile(t, modPath, "preview.png", "image")
 	writeModFile(t, modPath, "mod.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
@@ -159,7 +159,7 @@ func TestGetModsReusesIniCacheUntilMtimeChanges(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{preview: true})
 	modsRoot := filepath.Join(root, "mods")
-	group := filepath.Join(modsRoot, "Furina")
+	group := filepath.Join(modsRoot, "CharF")
 	modPath := filepath.Join(group, "Costume")
 	iniPath := writeModFile(t, modPath, "mod.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
 	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {

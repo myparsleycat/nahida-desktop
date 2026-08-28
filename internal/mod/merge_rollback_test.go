@@ -8,19 +8,19 @@ import (
 )
 
 func TestUniqueMergeDisabledNamePrefersBackupAndNumbersCollisions(t *testing.T) {
-	used := map[string]struct{}{"disabled_backup_klee.ini": {}}
-	first, err := uniqueMergeDisabledName("Klee.ini", used)
+	used := map[string]struct{}{"disabled_backup_chara.ini": {}}
+	first, err := uniqueMergeDisabledName("CharA.ini", used)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first != "DISABLED_BACKUP_2_Klee.ini" {
+	if first != "DISABLED_BACKUP_2_CharA.ini" {
 		t.Fatalf("first = %q", first)
 	}
-	second, err := uniqueMergeDisabledName("Klee.ini", used)
+	second, err := uniqueMergeDisabledName("CharA.ini", used)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second != "DISABLED_BACKUP_3_Klee.ini" {
+	if second != "DISABLED_BACKUP_3_CharA.ini" {
 		t.Fatalf("second = %q", second)
 	}
 	pack, err := uniqueMergeDisabledName("Pack", used)
@@ -42,9 +42,9 @@ func TestUniqueMergeDisabledNamePrefersBackupAndNumbersCollisions(t *testing.T) 
 
 func TestEnsureMergeBackupIgnoresUnrelatedDisabledFile(t *testing.T) {
 	root := t.TempDir()
-	active := filepath.Join(root, "Klee.ini")
-	disabled := filepath.Join(root, "DISABLEDKlee.ini")
-	backup := filepath.Join(root, "DISABLED_BACKUP_Klee.ini")
+	active := filepath.Join(root, "CharA.ini")
+	disabled := filepath.Join(root, "DISABLEDCharA.ini")
+	backup := filepath.Join(root, "DISABLED_BACKUP_CharA.ini")
 	if err := os.WriteFile(active, []byte("original"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -91,18 +91,18 @@ func TestEnsureMergeBackupRejectsNonNumericBackupPrefix(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	active := filepath.Join(root, "Klee.ini")
+	active := filepath.Join(root, "CharA.ini")
 	if err := os.WriteFile(active, []byte("original"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "DISABLED_BACKUP_OLD_Klee.ini"), []byte("unrelated"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "DISABLED_BACKUP_OLD_CharA.ini"), []byte("unrelated"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	created := []mergeRollback{}
 	if err := ensureMergeBackup(active, &created); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "DISABLED_BACKUP_Klee.ini")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "DISABLED_BACKUP_CharA.ini")); err != nil {
 		t.Fatalf("exact backup was not created: %v", err)
 	}
 }

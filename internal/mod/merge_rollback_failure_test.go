@@ -96,8 +96,8 @@ func TestEnablePackFoldersStagesCollisionsAndRollbackRestoresNames(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	disabledINI := filepath.Join(disabled, "Klee.ini")
-	enabledINI := filepath.Join(enabled, "Klee.ini")
+	disabledINI := filepath.Join(disabled, "CharA.ini")
+	enabledINI := filepath.Join(enabled, "CharA.ini")
 	if err := os.WriteFile(disabledINI, []byte("disabled"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -115,8 +115,8 @@ func TestEnablePackFoldersStagesCollisionsAndRollbackRestoresNames(t *testing.T)
 	if packs[0].Path != enabled || packs[1].Path != filepath.Join(root, "PackA (2)") {
 		t.Fatalf("enabled paths = %q, %q", packs[0].Path, packs[1].Path)
 	}
-	if packs[0].PrimaryIniPath == nil || *packs[0].PrimaryIniPath != filepath.Join(enabled, "Klee.ini") ||
-		packs[1].PrimaryIniPath == nil || *packs[1].PrimaryIniPath != filepath.Join(root, "PackA (2)", "Klee.ini") {
+	if packs[0].PrimaryIniPath == nil || *packs[0].PrimaryIniPath != filepath.Join(enabled, "CharA.ini") ||
+		packs[1].PrimaryIniPath == nil || *packs[1].PrimaryIniPath != filepath.Join(root, "PackA (2)", "CharA.ini") {
 		t.Fatalf("remapped INIs = %v, %v", packs[0].PrimaryIniPath, packs[1].PrimaryIniPath)
 	}
 	if failures := rollbackMerge(created); len(failures) != 0 {
@@ -147,7 +147,7 @@ func TestMergeModsLogsOriginalErrorAndRollbackFailures(t *testing.T) {
 
 	realRemove := rollbackRemovePath
 	t.Cleanup(func() { rollbackRemovePath = realRemove })
-	failedPath := filepath.Join(root, "Klee")
+	failedPath := filepath.Join(root, "CharA")
 	rollbackRemovePath = func(path string) error {
 		if path == failedPath {
 			return errors.New("simulated output cleanup failure")

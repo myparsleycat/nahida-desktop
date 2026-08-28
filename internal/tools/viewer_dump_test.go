@@ -242,17 +242,17 @@ func TestInspectWwmiTextureHintSkipsOversizedDDSUsingHeaderArea(t *testing.T) {
 
 func TestLoadModViewerBindsWWMIComponentDumpTextures(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-2 t=0454fc47.png", encodeColorPNG(16, 16))
-	writeTextureFile(t, dir, "Textures/Components-3 t=1944212c.jpg", encodeTinyPNG())
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeColorPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef001d.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef0010.jpg", encodeTinyPNG())
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(32, 32))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent2]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
 drawindexed = 3, 0, 0
 [TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -267,19 +267,19 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture0]
-filename = Textures/Components-2 t=0454fc47.png
+filename = Textures/Components-2 t=beef001d.png
 [TextureOverrideTexture0]
-hash = fcc6992c
+hash = beef000f
 this = ResourceTexture0
 [ResourceTexture1]
-filename = Textures/Components-3 t=1944212c.jpg
+filename = Textures/Components-3 t=beef0010.jpg
 [TextureOverrideTexture1]
-hash = 1944212c
+hash = beef0010
 this = ResourceTexture1
 [ResourceTexture4]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 [TextureOverrideTexture4]
-hash = 22932116
+hash = beef0011
 this = ResourceTexture4
 `)
 	component2 := meshesNamed(result, "Component2")
@@ -293,7 +293,7 @@ this = ResourceTexture4
 		}
 	}
 	for _, mesh := range component3 {
-		if !strings.Contains(texKey(mesh), "f58624fb.png") || strings.Contains(texKey(mesh), "1944212c") {
+		if !strings.Contains(texKey(mesh), "beef001b.png") || strings.Contains(texKey(mesh), "beef0010") {
 			t.Fatalf("component3 texKey = %q", texKey(mesh))
 		}
 	}
@@ -302,9 +302,9 @@ this = ResourceTexture4
 func TestLoadModViewerDoesNotReplaceRabbitFXDiffuseWithWWMIDump(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "keep.png", encodeTinyPNG())
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeTinyPNG2x2())
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeTinyPNG2x2())
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -322,9 +322,9 @@ format = DXGI_FORMAT_R32_UINT
 [ResourceTextureKeep]
 filename = keep.png
 [ResourceTexture0]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 [TextureOverrideTexture0]
-hash = 22932116
+hash = beef0011
 this = ResourceTexture0
 `)
 	if len(result.Meshes) < 1 {
@@ -339,7 +339,7 @@ this = ResourceTexture0
 
 func TestLoadModViewerDoesNotBindWWMIDumpOntoNonComponentMesh(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideBody]
 ib = ResourceBodyIB
 vb0 = ResourcePos
@@ -355,9 +355,9 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture0]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 [TextureOverrideTexture0]
-hash = 22932116
+hash = beef0011
 this = ResourceTexture0
 `)
 	if len(result.Meshes) != 1 || texKey(result.Meshes[0]) != "" {
@@ -367,16 +367,16 @@ this = ResourceTexture0
 
 func TestLoadModViewerBindsWWMIPsT0ResourcesWithoutDiffuseName(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=348c9329.png", encodeColorPNG(32, 32))
-	writeTextureFile(t, dir, "Textures/Components-3 t=7d8d1ae0.png", encodeColorPNG(16, 16))
-	writeTextureFile(t, dir, "Textures/Components-3 t=7d8d1ae0A.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001e.png", encodeColorPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001c.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001cA.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[Constants]
 global persist $socks = 0
 [KeySocks]
 type = cycle
 $socks = 0, 1
 [TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -399,26 +399,26 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture32]
-filename = Textures/Components-3 t=348c9329.png
+filename = Textures/Components-3 t=beef001e.png
 [ResourceTexture35]
-filename = Textures/Components-3 t=7d8d1ae0.png
+filename = Textures/Components-3 t=beef001c.png
 [ResourceTexture35A]
-filename = Textures/Components-3 t=7d8d1ae0A.png
+filename = Textures/Components-3 t=beef001cA.png
 `)
 	if len(result.Meshes) < 1 {
 		t.Fatal(result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "7d8d1ae0") || strings.Contains(texKey(mesh), "348c9329") {
+		if !strings.Contains(texKey(mesh), "beef001c") || strings.Contains(texKey(mesh), "beef001e") {
 			t.Fatalf("texKey = %q variants=%#v", texKey(mesh), mesh.TextureVariants)
 		}
 	}
 	foundA, foundB := false, false
 	for _, variant := range result.Meshes[0].TextureVariants {
-		if strings.Contains(variant.TexKey, "7d8d1ae0A.png") {
+		if strings.Contains(variant.TexKey, "beef001cA.png") {
 			foundA = true
 		}
-		if strings.Contains(variant.TexKey, "7d8d1ae0.png") {
+		if strings.Contains(variant.TexKey, "beef001c.png") {
 			foundB = true
 		}
 	}
@@ -429,9 +429,9 @@ filename = Textures/Components-3 t=7d8d1ae0A.png
 
 func TestLoadModViewerBindsSharedWWMIComponentDumps(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-0-1-2-3-4-5 t=e9612536.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-0-1-2-3-4-5 t=beef0012.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent5]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -446,16 +446,16 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture11]
-filename = Textures/Components-0-1-2-3-4-5 t=e9612536.png
+filename = Textures/Components-0-1-2-3-4-5 t=beef0012.png
 [TextureOverrideTexture11]
-hash = e9612536
+hash = beef0012
 this = ResourceTexture11
 `)
 	if len(result.Meshes) < 1 {
 		t.Fatal(result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "e9612536.png") {
+		if !strings.Contains(texKey(mesh), "beef0012.png") {
 			t.Fatalf("texKey = %q", texKey(mesh))
 		}
 	}
@@ -463,10 +463,10 @@ this = ResourceTexture11
 
 func TestLoadModViewerDoesNotPickWWMIDumpAssignedToNonDiffusePsSlot(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-2 t=e02d9167.png", encodeColorPNG(32, 32))
-	writeTextureFile(t, dir, "Textures/Components-2 t=742c5c7b.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef001f.png", encodeColorPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef0020.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent2]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -482,15 +482,15 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture31]
-filename = Textures/Components-2 t=e02d9167.png
+filename = Textures/Components-2 t=beef001f.png
 [ResourceTextureOther]
-filename = Textures/Components-2 t=742c5c7b.png
+filename = Textures/Components-2 t=beef0020.png
 `)
 	if len(result.Meshes) < 1 {
 		t.Fatal(result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "742c5c7b.png") || strings.Contains(texKey(mesh), "e02d9167") {
+		if !strings.Contains(texKey(mesh), "beef0020.png") || strings.Contains(texKey(mesh), "beef001f") {
 			t.Fatalf("texKey = %q", texKey(mesh))
 		}
 	}
@@ -498,17 +498,17 @@ filename = Textures/Components-2 t=742c5c7b.png
 
 func TestLoadModViewerUnionsWWMINonDiffuseDumpExclusions(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=e02d9167.png", encodeColorPNG(32, 32))
-	writeTextureFile(t, dir, "Textures/Components-3 t=742c5c7b.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001f.png", encodeColorPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef0020.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
 ps-t1 = ResourceTexture31
 drawindexed = 3, 0, 0
 [TextureOverridecomponent3]
-hash = 8d8097bd
+hash = beef000e
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -523,15 +523,15 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture31]
-filename = Textures/Components-3 t=e02d9167.png
+filename = Textures/Components-3 t=beef001f.png
 [ResourceTextureOther]
-filename = Textures/Components-3 t=742c5c7b.png
+filename = Textures/Components-3 t=beef0020.png
 `)
 	if len(result.Meshes) < 2 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "742c5c7b.png") || strings.Contains(texKey(mesh), "e02d9167") {
+		if !strings.Contains(texKey(mesh), "beef0020.png") || strings.Contains(texKey(mesh), "beef001f") {
 			t.Fatalf("texKey = %q component=%q", texKey(mesh), mesh.Component)
 		}
 	}
@@ -539,10 +539,10 @@ filename = Textures/Components-3 t=742c5c7b.png
 
 func TestLoadModViewerSkipsDecodingOversizedPNGCandidates(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=7d8d1ae0.png", encodeOversizedPNG(8192, 8192))
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001c.png", encodeOversizedPNG(8192, 8192))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -558,15 +558,15 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture35]
-filename = Textures/Components-3 t=7d8d1ae0.png
+filename = Textures/Components-3 t=beef001c.png
 [ResourceTexture4]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 `)
 	if len(result.Meshes) < 1 {
 		t.Fatal(result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "7d8d1ae0.png") || strings.Contains(texKey(mesh), "f58624fb") {
+		if !strings.Contains(texKey(mesh), "beef001c.png") || strings.Contains(texKey(mesh), "beef001b") {
 			t.Fatalf("texKey = %q", texKey(mesh))
 		}
 	}
@@ -574,10 +574,10 @@ filename = Textures/Components-3 t=f58624fb.png
 
 func TestLoadModViewerSkipsDecodingOversizedDDSCandidates(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=7d8d1ae0.dds", makeDdsHeader(8192, 8192))
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001c.dds", makeDdsHeader(8192, 8192))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -593,15 +593,15 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture35]
-filename = Textures/Components-3 t=7d8d1ae0.dds
+filename = Textures/Components-3 t=beef001c.dds
 [ResourceTexture4]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 `)
 	if len(result.Meshes) != 1 || texKey(result.Meshes[0]) != "" {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
 	for key := range result.Textures {
-		if strings.Contains(key, "f58624fb") {
+		if strings.Contains(key, "beef001b") {
 			t.Fatalf("textures = %#v", result.Textures)
 		}
 	}
@@ -609,10 +609,10 @@ filename = Textures/Components-3 t=f58624fb.png
 
 func TestLoadModViewerReplacesUnnamedWWMIPsT0FlatColorMap(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Textures/Components-3 t=7d8d1ae0.png", encodeFlatPNG(16, 16))
-	writeTextureFile(t, dir, "Textures/Components-3 t=f58624fb.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001c.png", encodeFlatPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
 	result := loadViewerMod(t, dir, `[TextureOverrideComponent3]
-hash = 8d8097bc
+hash = beef000d
 ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceTexCoordBuffer
@@ -628,15 +628,15 @@ stride = 20
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 [ResourceTexture35]
-filename = Textures/Components-3 t=7d8d1ae0.png
+filename = Textures/Components-3 t=beef001c.png
 [ResourceTexture4]
-filename = Textures/Components-3 t=f58624fb.png
+filename = Textures/Components-3 t=beef001b.png
 `)
 	if len(result.Meshes) < 1 {
 		t.Fatal(result.Meshes)
 	}
 	for _, mesh := range result.Meshes {
-		if !strings.Contains(texKey(mesh), "f58624fb.png") || strings.Contains(texKey(mesh), "7d8d1ae0") {
+		if !strings.Contains(texKey(mesh), "beef001b.png") || strings.Contains(texKey(mesh), "beef001c") {
 			t.Fatalf("texKey = %q", texKey(mesh))
 		}
 	}
@@ -644,23 +644,23 @@ filename = Textures/Components-3 t=f58624fb.png
 
 func TestLoadModViewerBindsSRMIIBComponentDumpAtlas(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png", encodeTinyPNG())
-	writeTextureFile(t, dir, "Texture/3b4647d4_1_87adc723_Hash_LightMap.png", encodeTinyPNG())
-	result := loadViewerMod(t, dir, `[TextureOverride_VB_3b4647d4_Position]
-hash = 3b4647d4
+	writeTextureFile(t, dir, "Texture/beef0006_1_beef0007_Hash_DiffuseMap.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "Texture/beef0006_1_beef0008_Hash_LightMap.png", encodeTinyPNG())
+	result := loadViewerMod(t, dir, `[TextureOverride_VB_beef0006_Position]
+hash = beef0006
 vb0 = ResourcePos
-[TextureOverride_VB_3b4647d4_Texcoord]
-hash = 3b4647d4
+[TextureOverride_VB_beef0006_Texcoord]
+hash = beef0006
 vb1 = ResourceTc
-[TextureOverride_IB_3b4647d4_Component1]
-hash = 3b4647d4
+[TextureOverride_IB_beef0006_Component1]
+hash = beef0006
 match_first_index = 0
-ib = Resource_3b4647d4_Component1
+ib = Resource_beef0006_Component1
 drawindexed = 3, 0, 0
-[TextureOverride_IB_3b4647d4_Component2]
-hash = 3b4647d4
+[TextureOverride_IB_beef0006_Component2]
+hash = beef0006
 match_first_index = 14598
-ib = Resource_3b4647d4_Component2
+ib = Resource_beef0006_Component2
 drawindexed = 3, 0, 0
 [ResourcePos]
 filename = pos.buf
@@ -668,25 +668,25 @@ stride = 40
 [ResourceTc]
 filename = tc.buf
 stride = 20
-[Resource_3b4647d4_Component1]
+[Resource_beef0006_Component1]
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_3b4647d4_Component2]
+[Resource_beef0006_Component2]
 filename = bodyb.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_Texture_f9761bbf]
-filename = Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png
-[TextureOverride_f9761bbf]
-hash = f9761bbf
-this = Resource_Texture_f9761bbf
-[Resource_Texture_87adc723]
-filename = Texture/3b4647d4_1_87adc723_Hash_LightMap.png
-[TextureOverride_87adc723]
-hash = 87adc723
-this = Resource_Texture_87adc723
+[Resource_Texture_beef0007]
+filename = Texture/beef0006_1_beef0007_Hash_DiffuseMap.png
+[TextureOverride_beef0007]
+hash = beef0007
+this = Resource_Texture_beef0007
+[Resource_Texture_beef0008]
+filename = Texture/beef0006_1_beef0008_Hash_LightMap.png
+[TextureOverride_beef0008]
+hash = beef0008
+this = Resource_Texture_beef0008
 `)
-	component1 := meshesNamed(result, "_IB_3b4647d4_Component1")
-	component2 := meshesNamed(result, "_IB_3b4647d4_Component2")
+	component1 := meshesNamed(result, "_IB_beef0006_Component1")
+	component2 := meshesNamed(result, "_IB_beef0006_Component2")
 	if len(component1) < 1 || len(component2) < 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
@@ -704,25 +704,25 @@ this = Resource_Texture_87adc723
 
 func TestLoadModViewerDoesNotShareDistinctIBComponentDumpAtlases(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png", encodeTinyPNG())
-	writeTextureFile(t, dir, "Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png", encodeTinyPNG2x2())
-	result := loadViewerMod(t, dir, `[TextureOverride_VB_3b4647d4_Position]
-hash = 3b4647d4
+	writeTextureFile(t, dir, "Texture/beef0006_1_aaaaaaa1_Hash_DiffuseMap.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "Texture/beef0006_2_aaaaaaa2_Hash_DiffuseMap.png", encodeTinyPNG2x2())
+	result := loadViewerMod(t, dir, `[TextureOverride_VB_beef0006_Position]
+hash = beef0006
 vb0 = ResourcePos
-[TextureOverride_VB_3b4647d4_Texcoord]
-hash = 3b4647d4
+[TextureOverride_VB_beef0006_Texcoord]
+hash = beef0006
 vb1 = ResourceTc
-[TextureOverride_IB_3b4647d4_Component1]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component1
+[TextureOverride_IB_beef0006_Component1]
+hash = beef0006
+ib = Resource_beef0006_Component1
 drawindexed = 3, 0, 0
-[TextureOverride_IB_3b4647d4_Component2]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component2
+[TextureOverride_IB_beef0006_Component2]
+hash = beef0006
+ib = Resource_beef0006_Component2
 drawindexed = 3, 0, 0
-[TextureOverride_IB_3b4647d4_Component3]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component3
+[TextureOverride_IB_beef0006_Component3]
+hash = beef0006
+ib = Resource_beef0006_Component3
 drawindexed = 3, 0, 0
 [ResourcePos]
 filename = pos.buf
@@ -730,23 +730,23 @@ stride = 40
 [ResourceTc]
 filename = tc.buf
 stride = 20
-[Resource_3b4647d4_Component1]
+[Resource_beef0006_Component1]
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_3b4647d4_Component2]
+[Resource_beef0006_Component2]
 filename = bodyb.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_3b4647d4_Component3]
+[Resource_beef0006_Component3]
 filename = bodyc.ib
 format = DXGI_FORMAT_R32_UINT
 [Resource_Texture_aaaaaaa1]
-filename = Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png
+filename = Texture/beef0006_1_aaaaaaa1_Hash_DiffuseMap.png
 [Resource_Texture_aaaaaaa2]
-filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
+filename = Texture/beef0006_2_aaaaaaa2_Hash_DiffuseMap.png
 `)
-	component1 := meshesNamed(result, "_IB_3b4647d4_Component1")
-	component2 := meshesNamed(result, "_IB_3b4647d4_Component2")
-	component3 := meshesNamed(result, "_IB_3b4647d4_Component3")
+	component1 := meshesNamed(result, "_IB_beef0006_Component1")
+	component2 := meshesNamed(result, "_IB_beef0006_Component2")
+	component3 := meshesNamed(result, "_IB_beef0006_Component3")
 	if len(component1) < 1 || len(component2) < 1 || len(component3) < 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
@@ -769,26 +769,26 @@ filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
 
 func TestLoadModViewerKeepsPerComponentDumpAtlasesWhenHashLeftoverExists(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png", encodeTinyPNG())
-	writeTextureFile(t, dir, "Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png", encodeTinyPNG2x2())
+	writeTextureFile(t, dir, "Texture/beef0006_1_aaaaaaa1_Hash_DiffuseMap.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "Texture/beef0006_2_aaaaaaa2_Hash_DiffuseMap.png", encodeTinyPNG2x2())
 	writeTextureFile(t, dir, "other.png", encodeTinyPNG())
-	result := loadViewerMod(t, dir, `[TextureOverride_VB_3b4647d4_Position]
-hash = 3b4647d4
+	result := loadViewerMod(t, dir, `[TextureOverride_VB_beef0006_Position]
+hash = beef0006
 vb0 = ResourcePos
-[TextureOverride_VB_3b4647d4_Texcoord]
-hash = 3b4647d4
+[TextureOverride_VB_beef0006_Texcoord]
+hash = beef0006
 vb1 = ResourceTc
-[TextureOverride_IB_3b4647d4_Component1]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component1
+[TextureOverride_IB_beef0006_Component1]
+hash = beef0006
+ib = Resource_beef0006_Component1
 drawindexed = 3, 0, 0
-[TextureOverride_IB_3b4647d4_Component2]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component2
+[TextureOverride_IB_beef0006_Component2]
+hash = beef0006
+ib = Resource_beef0006_Component2
 drawindexed = 3, 0, 0
-[TextureOverride_IB_3b4647d4_Component3]
-hash = 3b4647d4
-ib = Resource_3b4647d4_Component3
+[TextureOverride_IB_beef0006_Component3]
+hash = beef0006
+ib = Resource_beef0006_Component3
 drawindexed = 3, 0, 0
 [ResourcePos]
 filename = pos.buf
@@ -796,28 +796,28 @@ stride = 40
 [ResourceTc]
 filename = tc.buf
 stride = 20
-[Resource_3b4647d4_Component1]
+[Resource_beef0006_Component1]
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_3b4647d4_Component2]
+[Resource_beef0006_Component2]
 filename = bodyb.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_3b4647d4_Component3]
+[Resource_beef0006_Component3]
 filename = bodyc.ib
 format = DXGI_FORMAT_R32_UINT
 [Resource_Texture_aaaaaaa1]
-filename = Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png
+filename = Texture/beef0006_1_aaaaaaa1_Hash_DiffuseMap.png
 [Resource_Texture_aaaaaaa2]
-filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
+filename = Texture/beef0006_2_aaaaaaa2_Hash_DiffuseMap.png
 [TextureOverride_deadbeef]
 hash = deadbeef
 this = ResourceOther
 [ResourceOther]
 filename = other.png
 `)
-	component1 := meshesNamed(result, "_IB_3b4647d4_Component1")
-	component2 := meshesNamed(result, "_IB_3b4647d4_Component2")
-	component3 := meshesNamed(result, "_IB_3b4647d4_Component3")
+	component1 := meshesNamed(result, "_IB_beef0006_Component1")
+	component2 := meshesNamed(result, "_IB_beef0006_Component2")
+	component3 := meshesNamed(result, "_IB_beef0006_Component3")
 	if len(component1) < 1 || len(component2) < 1 || len(component3) < 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
@@ -840,7 +840,7 @@ filename = other.png
 
 func TestLoadModViewerDoesNotBindIBComponentDumpOntoBodyA(t *testing.T) {
 	dir := t.TempDir()
-	writeTextureFile(t, dir, "Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "Texture/beef0006_1_beef0007_Hash_DiffuseMap.png", encodeTinyPNG())
 	result := loadViewerMod(t, dir, `[TextureOverrideBodyA]
 ib = ResourceBodyAIB
 vb0 = ResourcePos
@@ -855,8 +855,8 @@ stride = 20
 [ResourceBodyAIB]
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
-[Resource_Texture_f9761bbf]
-filename = Texture/3b4647d4_1_f9761bbf_Hash_DiffuseMap.png
+[Resource_Texture_beef0007]
+filename = Texture/beef0006_1_beef0007_Hash_DiffuseMap.png
 `)
 	if len(result.Meshes) != 1 || texKey(result.Meshes[0]) != "" {
 		t.Fatalf("meshes = %#v", result.Meshes)
@@ -904,13 +904,13 @@ ib = ResourceBodyIB
 if $cloth == 0
 drawindexed = 3, 0, 0
 endif
-[TextureOverride_7b3e8cd1]
-hash = 7b3e8cd1
+[TextureOverride_beef0009]
+hash = beef0009
 if $eyes == 0
 this = ResourceFaceTex
 endif
-[TextureOverride_7b6fe593]
-hash = 7b6fe593
+[TextureOverride_beef000a]
+hash = beef000a
 if $clothcolor == 0
 this = ResourceBodyTex
 endif
@@ -973,11 +973,11 @@ drawindexed = 3, 0, 0
 hash = bbbbbbbb
 ib = ResourceFireIB
 drawindexed = 3, 0, 0
-[TextureOverride_adac9211]
-hash = adac9211
+[TextureOverride_beef000b]
+hash = beef000b
 this = ResourceWeaponTex
-[TextureOverride_d2a654b2]
-hash = d2a654b2
+[TextureOverride_beef000c]
+hash = beef000c
 this = ResourceFireTex
 [ResourcePos]
 filename = pos.buf
@@ -1061,21 +1061,21 @@ vb0 = ResourcePos
 [TextureOverrideBodyTexcoord]
 vb1 = ResourceTc
 [TextureOverrideBodyA]
-hash = 6f8c993d
+hash = beef0014
 match_first_index = 0
 ib = ResourceBodyAIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyB]
-hash = 6f8c993d
+hash = beef0014
 match_first_index = 62376
 ib = ResourceBodyBIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyADiffuse]
-hash = e88da4d0
+hash = beef0015
 if $nine2 == 0
     if $zero2 == 0
 this = ResourceBodyADiffuse
@@ -1086,7 +1086,7 @@ else
 this = ResourceBodyUltADiffuse
 endif
 [TextureOverrideBodyALightMap]
-hash = 1248799e
+hash = beef0016
 this = ResourceBodyALightMap
 [ResourcePos]
 filename = pos.buf
@@ -1136,40 +1136,40 @@ func TestLoadModViewerUsesLastSameHashDiffuseAndLightMap(t *testing.T) {
 	writeTextureFile(t, dir, "bodya-light.png", encodeTinyPNG())
 	writeTextureFile(t, dir, "bodyc-light.png", encodeTinyPNG())
 	result := loadViewerMod(t, dir, `[TextureOverrideBodyA]
-hash = 3b4647d4
+hash = beef0006
 match_first_index = 0
 ib = ResourceBodyAIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyB]
-hash = 3b4647d4
+hash = beef0006
 match_first_index = 14598
 ib = ResourceBodyBIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyC]
-hash = 3b4647d4
+hash = beef0006
 match_first_index = 32934
 ib = ResourceBodyCIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyADiffuse]
-hash = f9761bbf
+hash = beef0007
 this = ResourceBodyADiffuse
 [TextureOverrideBodyBDiffuse]
-hash = f9761bbf
+hash = beef0007
 this = ResourceBodyBDiffuse
 [TextureOverrideBodyCDiffuse]
-hash = f9761bbf
+hash = beef0007
 this = ResourceBodyCDiffuse
 [TextureOverrideBodyALightMap]
-hash = 87adc723
+hash = beef0008
 this = ResourceBodyALightMap
 [TextureOverrideBodyCLightMap]
-hash = 87adc723
+hash = beef0008
 this = ResourceBodyCLightMap
 [ResourcePos]
 filename = pos.buf
@@ -1229,10 +1229,10 @@ vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 [TextureOverrideBodyADiffuse]
-hash = f9761bbf
+hash = beef0007
 this = ResourceBodyADiffuse
 [TextureOverrideBodyCDiffuse]
-hash = f0226f67
+hash = beef0017
 this = ResourceBodyCDiffuse
 [ResourcePos]
 filename = pos.buf
@@ -1281,12 +1281,12 @@ vb0 = ResourceHeadPosition
 [TextureOverrideHeadTexcoord]
 vb1 = ResourceHeadTexcoord
 [TextureOverrideHeadA]
-hash = 457d09a4
+hash = beef0018
 vb0 = ResourceHeadPosition
 vb1 = ResourceHeadTexcoord
 run = CommandListHeadA
 [TextureOverrideHeadADiffuse]
-hash = d5539abe
+hash = beef0019
 run = CommandListHeadADiffuse
 [CommandListHeadA]
 if $swapvar == 0

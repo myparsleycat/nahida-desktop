@@ -372,64 +372,64 @@ global persist $swapvar = 0
 [KeySwap]
 type = cycle
 $swapvar = 0,1
-[TextureOverrideAmberPosition]
-run = CommandListAmberPosition
-[TextureOverrideAmberBlend]
-run = CommandListAmberBlend
-[TextureOverrideAmberTexcoord]
-run = CommandListAmberTexcoord
-[TextureOverrideAmberIB]
-run = CommandListAmberIB
-[CommandListAmberPosition]
+[TextureOverrideCharBPosition]
+run = CommandListCharBPosition
+[TextureOverrideCharBBlend]
+run = CommandListCharBBlend
+[TextureOverrideCharBTexcoord]
+run = CommandListCharBTexcoord
+[TextureOverrideCharBIB]
+run = CommandListCharBIB
+[CommandListCharBPosition]
 if $swapvar == 0
-vb0 = ResourceAmberPosition.0
+vb0 = ResourceCharBPosition.0
 else if $swapvar == 1
-vb0 = ResourceAmberPosition.1
+vb0 = ResourceCharBPosition.1
 endif
-[CommandListAmberBlend]
+[CommandListCharBBlend]
 if $swapvar == 0
-vb1 = ResourceAmberBlend.0
+vb1 = ResourceCharBBlend.0
 else if $swapvar == 1
-vb1 = ResourceAmberBlend.1
+vb1 = ResourceCharBBlend.1
 endif
-[CommandListAmberTexcoord]
+[CommandListCharBTexcoord]
 if $swapvar == 0
-vb1 = ResourceAmberTexcoord.0
+vb1 = ResourceCharBTexcoord.0
 else if $swapvar == 1
-vb1 = ResourceAmberTexcoord.1
+vb1 = ResourceCharBTexcoord.1
 endif
-[CommandListAmberIB]
+[CommandListCharBIB]
 if $swapvar == 0
-ib = ResourceAmberHeadIB.0
+ib = ResourceCharBHeadIB.0
 drawindexed = auto
 else if $swapvar == 1
-ib = ResourceAmberHeadIB.1
+ib = ResourceCharBHeadIB.1
 drawindexed = auto
 endif
-[ResourceAmberPosition.0]
+[ResourceCharBPosition.0]
 stride = 40
-filename = .\1. ambermain\AmberPosition.buf
-[ResourceAmberBlend.0]
+filename = .\1. charbmain\CharBPosition.buf
+[ResourceCharBBlend.0]
 stride = 32
-filename = .\1. ambermain\AmberBlend.buf
-[ResourceAmberTexcoord.0]
+filename = .\1. charbmain\CharBBlend.buf
+[ResourceCharBTexcoord.0]
 stride = 20
-filename = .\1. ambermain\AmberTexcoord.buf
-[ResourceAmberHeadIB.0]
+filename = .\1. charbmain\CharBTexcoord.buf
+[ResourceCharBHeadIB.0]
 format = DXGI_FORMAT_R32_UINT
-filename = .\1. ambermain\AmberHead.ib
-[ResourceAmberPosition.1]
+filename = .\1. charbmain\CharBHead.ib
+[ResourceCharBPosition.1]
 stride = 40
-filename = .\2. amberbody\AmberPosition.buf
-[ResourceAmberBlend.1]
+filename = .\2. charbbody\CharBPosition.buf
+[ResourceCharBBlend.1]
 stride = 32
-filename = .\2. amberbody\AmberBlend.buf
-[ResourceAmberTexcoord.1]
+filename = .\2. charbbody\CharBBlend.buf
+[ResourceCharBTexcoord.1]
 stride = 20
-filename = .\2. amberbody\AmberTexcoord.buf
-[ResourceAmberHeadIB.1]
+filename = .\2. charbbody\CharBTexcoord.buf
+[ResourceCharBHeadIB.1]
 format = DXGI_FORMAT_R32_UINT
-filename = .\2. amberbody\AmberHead.ib`
+filename = .\2. charbbody\CharBHead.ib`
 	iniPath := filepath.Join(dir, "mod.ini")
 	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
 		t.Fatal(err)
@@ -448,10 +448,10 @@ filename = .\2. amberbody\AmberHead.ib`
 			binary.LittleEndian.PutUint32(texcoord[vertex*20+8:], math.Float32bits(uv[1]))
 		}
 		files := map[string][]byte{
-			"AmberPosition.buf": position,
-			"AmberBlend.buf":    make([]byte, 3*32),
-			"AmberTexcoord.buf": texcoord,
-			"AmberHead.ib":      modelViewerUint32Bytes([]uint32{0, 1, 2}),
+			"CharBPosition.buf": position,
+			"CharBBlend.buf":    make([]byte, 3*32),
+			"CharBTexcoord.buf": texcoord,
+			"CharBHead.ib":      modelViewerUint32Bytes([]uint32{0, 1, 2}),
 		}
 		for name, data := range files {
 			if err := os.WriteFile(filepath.Join(variantDir, name), data, 0o600); err != nil {
@@ -459,8 +459,8 @@ filename = .\2. amberbody\AmberHead.ib`
 			}
 		}
 	}
-	writeVariant("1. ambermain", 1)
-	writeVariant("2. amberbody", 100)
+	writeVariant("1. charbmain", 1)
+	writeVariant("2. charbbody", 100)
 	sections := parseModINI(iniText)
 	meshes, _, _, _, err := buildModelViewerDirectMeshes(iniPath, "", sections)
 	if err != nil {

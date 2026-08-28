@@ -634,9 +634,9 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 	firstRoot := filepath.Join(root, "first")
 	secondRoot := filepath.Join(root, "second")
 	for _, path := range []string{
-		filepath.Join(firstRoot, "Arlecchino"),
-		filepath.Join(firstRoot, "Furina"),
-		filepath.Join(secondRoot, "Furina"),
+		filepath.Join(firstRoot, "Veltrionna"),
+		filepath.Join(firstRoot, "CharF"),
+		filepath.Join(secondRoot, "CharF"),
 	} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			t.Fatal(err)
@@ -648,14 +648,14 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 	if err := service.AddGame(ctx, "Other", secondRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	match, err := service.ResolveDownloadTarget(ctx, "arlecchno mod", nil)
+	match, err := service.ResolveDownloadTarget(ctx, "veltronna mod", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if match == nil || match.Game != "Genshin" || match.Group.Name != "Arlecchino" || match.Score < 0.85 {
+	if match == nil || match.Game != "Genshin" || match.Group.Name != "Veltrionna" || match.Score < 0.85 {
 		t.Fatalf("match = %#v", match)
 	}
-	ambiguous, err := service.ResolveDownloadTarget(ctx, "Furina", nil)
+	ambiguous, err := service.ResolveDownloadTarget(ctx, "CharF", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,7 +663,7 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 		t.Fatalf("ambiguous match = %#v", ambiguous)
 	}
 	filter := "Genshin"
-	filtered, err := service.ResolveDownloadTarget(ctx, "Furina", &filter)
+	filtered, err := service.ResolveDownloadTarget(ctx, "CharF", &filter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,8 +704,8 @@ func TestResolveNteInstallPathAndNteListing(t *testing.T) {
 		t.Fatalf("resolution = %#v", resolution)
 	}
 	modsRoot := resolution.ModFolderPath
-	direct := filepath.Join(modsRoot, "Character", "Furina", "Direct")
-	wrapped := filepath.Join(modsRoot, "Character", "Furina", "Pack", "Variant")
+	direct := filepath.Join(modsRoot, "Character", "CharF", "Direct")
+	wrapped := filepath.Join(modsRoot, "Character", "CharF", "Pack", "Variant")
 	for _, path := range []string{direct, wrapped} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			t.Fatal(err)
@@ -729,10 +729,10 @@ func TestResolveNteInstallPathAndNteListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(subgroups) != 1 || subgroups[0].Name != "Furina" || subgroups[0].ModCount != 2 {
+	if len(subgroups) != 1 || subgroups[0].Name != "CharF" || subgroups[0].ModCount != 2 {
 		t.Fatalf("NTE subgroups = %#v", subgroups)
 	}
-	mods, err := service.GetMods(ctx, filepath.Join(modsRoot, "Character", "Furina"))
+	mods, err := service.GetMods(ctx, filepath.Join(modsRoot, "Character", "CharF"))
 	if err != nil {
 		t.Fatal(err)
 	}

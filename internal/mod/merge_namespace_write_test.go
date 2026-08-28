@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const namespaceChildINI = `[TextureOverrideKleePosition]
+const namespaceChildINI = `[TextureOverrideCharAPosition]
 hash = abcdef01
 vb0 = ResourcePosition
 `
@@ -37,9 +37,9 @@ func mustWriteNamespaceMerge(t *testing.T, options namespaceMergeOptions) string
 
 func TestWriteNamespaceMergeWrapsHashedSectionsAndWritesMasterStub(t *testing.T) {
 	root := t.TempDir()
-	childPath := writeNamespaceChild(t, root, "Klee.ini", namespaceChildINI)
+	childPath := writeNamespaceChild(t, root, "CharA.ini", namespaceChildINI)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources:    []namespaceMergeSource{{iniPath: childPath, index: 0}},
 		forwardKey: "]", backKey: "[",
 	})
@@ -51,29 +51,29 @@ func TestWriteNamespaceMergeWrapsHashedSectionsAndWritesMasterStub(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`namespace = Klee\\Master\n; Constants ---------------------------`).Match(master) {
+	if !regexp.MustCompile(`namespace = CharA\\Master\n; Constants ---------------------------`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
-	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideKleePosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
 		t.Fatalf("master overlay = %s", master)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(child) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(child) {
 		t.Fatalf("child = %s", child)
 	}
-	if _, err := os.Stat(filepath.Join(root, "DISABLED_BACKUP_Klee.ini")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "DISABLED_BACKUP_CharA.ini")); err != nil {
 		t.Fatalf("backup missing: %v", err)
 	}
 }
 
 func TestWriteNamespaceMergeDoesNotTreatUnrelatedDisabledIniAsBackup(t *testing.T) {
 	root := t.TempDir()
-	childPath := writeNamespaceChild(t, root, "Klee.ini", namespaceChildINI)
-	disabled := filepath.Join(root, "DISABLEDKlee.ini")
+	childPath := writeNamespaceChild(t, root, "CharA.ini", namespaceChildINI)
+	disabled := filepath.Join(root, "DISABLEDCharA.ini")
 	if err := os.WriteFile(disabled, []byte("user-disabled"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources:    []namespaceMergeSource{{iniPath: childPath, index: 0}},
 		forwardKey: "]", backKey: "[",
 	})
@@ -84,7 +84,7 @@ func TestWriteNamespaceMergeDoesNotTreatUnrelatedDisabledIniAsBackup(t *testing.
 	if string(got) != "user-disabled" {
 		t.Fatalf("disabled overwritten: %s", got)
 	}
-	backup, err := os.ReadFile(filepath.Join(root, "DISABLED_BACKUP_Klee.ini"))
+	backup, err := os.ReadFile(filepath.Join(root, "DISABLED_BACKUP_CharA.ini"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,12 +108,12 @@ func TestUnwrapNamespaceRemovesExistingWrapBeforeRemastering(t *testing.T) {
 }
 
 func TestUnwrapNamespaceTwoBranchIfElseIfEndifChain(t *testing.T) {
-	twoBranchINI := `[TextureOverrideKleePosition]
+	twoBranchINI := `[TextureOverrideCharAPosition]
 hash = abcdef01
 match_priority = 0
-if $\Klee\Master\swapvar == 0
+if $\CharA\Master\swapvar == 0
 	vb0 = ResourcePosition0
-else if $\Klee\Master\swapvar == 1
+else if $\CharA\Master\swapvar == 1
 	vb0 = ResourcePosition1
 endif
 ps-t0 = ResourceTexture
@@ -122,7 +122,7 @@ ps-t0 = ResourceTexture
 	if err != nil {
 		t.Fatal(err)
 	}
-	if regexp.MustCompile(`\$\\Klee\\Master\\swapvar`).MatchString(unwrapped) {
+	if regexp.MustCompile(`\$\\CharA\\Master\\swapvar`).MatchString(unwrapped) {
 		t.Fatalf("swapvar leftover: %s", unwrapped)
 	}
 	if regexp.MustCompile(`(?i)else if`).MatchString(unwrapped) {
@@ -140,7 +140,7 @@ ps-t0 = ResourceTexture
 
 func TestWrapThenUnwrapKeepsEFMIMatchIndexCountAndDropsMatchPriority(t *testing.T) {
 	input := `[TextureOverride_Component0]
-hash = 79a0cd6f
+hash = beef0003
 match_priority = 0
 match_index_count = 48909
 $object_detected = 1
@@ -150,7 +150,7 @@ if $mod_enabled && DRAW_TYPE == 4
     run = CommandList_Draw_Component0
 endif
 `
-	wrapped := wrapNamespaceHashes(input, "Liino", 1)
+	wrapped := wrapNamespaceHashes(input, "CharD", 1)
 	unwrapped, err := unwrapNamespace(wrapped)
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ endif
 	if strings.Contains(unwrapped, "match_priority") {
 		t.Fatalf("match_priority leftover: %s", unwrapped)
 	}
-	if regexp.MustCompile(`\$\\Liino\\Master\\swapvar`).MatchString(unwrapped) {
+	if regexp.MustCompile(`\$\\CharD\\Master\\swapvar`).MatchString(unwrapped) {
 		t.Fatalf("swapvar leftover: %s", unwrapped)
 	}
 	if !strings.Contains(unwrapped, "match_index_count = 48909") || !strings.Contains(unwrapped, "$object_detected = 1") {
@@ -168,13 +168,13 @@ endif
 
 func TestWriteNamespaceMergeCopiesMatchIndexCountOntoMasterActiveOverlay(t *testing.T) {
 	root := t.TempDir()
-	childPath := writeNamespaceChild(t, root, "Liino.ini", `[TextureOverride_Component0]
-hash = 79a0cd6f
+	childPath := writeNamespaceChild(t, root, "CharD.ini", `[TextureOverride_Component0]
+hash = beef0003
 match_index_count = 48909
 $object_detected = 1
 `)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Liino",
+		masterDir: root, name: "CharD",
 		sources:    []namespaceMergeSource{{iniPath: childPath, index: 0}},
 		forwardKey: "]", backKey: "[",
 	})
@@ -182,24 +182,24 @@ $object_detected = 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`\[TextureOverrideLiinoComponent0\]\nhash = 79a0cd6f\nmatch_index_count = 48909\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`\[TextureOverrideCharDComponent0\]\nhash = beef0003\nmatch_index_count = 48909\n\$active = 1`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
-	if regexp.MustCompile(`\[TextureOverrideLiinoComponent0\]\nhash = 79a0cd6f\n\$active = 1`).Match(master) {
+	if regexp.MustCompile(`\[TextureOverrideCharDComponent0\]\nhash = beef0003\n\$active = 1`).Match(master) {
 		t.Fatalf("match_index_count omitted: %s", master)
 	}
 }
 
 func TestWriteNamespaceMergeDoesNotInventSwapvarFromMultipleVB0(t *testing.T) {
 	root := t.TempDir()
-	multiVb0INI := `[TextureOverrideKleePosition]
+	multiVb0INI := `[TextureOverrideCharAPosition]
 hash = abcdef01
 vb0 = ResourcePosition0
 vb0 = ResourcePosition1
 `
-	childPath := writeNamespaceChild(t, root, "Klee.ini", multiVb0INI)
+	childPath := writeNamespaceChild(t, root, "CharA.ini", multiVb0INI)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources:    []namespaceMergeSource{{iniPath: childPath, index: 0}},
 		forwardKey: "]", backKey: "[",
 	})
@@ -217,10 +217,10 @@ vb0 = ResourcePosition1
 	if regexp.MustCompile(`\$swapvar = 0,1`).Match(master) {
 		t.Fatalf("invented extra swap index: %s", master)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\nendif`).Match(child) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\nendif`).Match(child) {
 		t.Fatalf("child = %s", child)
 	}
-	if regexp.MustCompile(`else if \$\\Klee\\Master\\swapvar==1`).Match(child) {
+	if regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar==1`).Match(child) {
 		t.Fatalf("extra branch: %s", child)
 	}
 }
@@ -242,7 +242,7 @@ func TestWriteNamespaceMergeRemastersTwoNamespacedChildren(t *testing.T) {
 		forwardKey: "]", backKey: "[",
 	})
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: alphaPath, index: 0},
 			{iniPath: betaPath, index: 1},
@@ -261,44 +261,44 @@ func TestWriteNamespaceMergeRemastersTwoNamespacedChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`namespace = Klee\\Master\n; Constants ---------------------------`).Match(master) {
+	if !regexp.MustCompile(`namespace = CharA\\Master\n; Constants ---------------------------`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
 	if !regexp.MustCompile(`\$swapvar = 0,1\n`).Match(master) {
 		t.Fatalf("master cycle = %s", master)
 	}
-	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideKleePosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
 		t.Fatalf("master overlay = %s", master)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(alpha) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(alpha) {
 		t.Fatalf("alpha = %s", alpha)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 1\nif \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif`).Match(beta) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 1\nif \$\\CharA\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif`).Match(beta) {
 		t.Fatalf("beta = %s", beta)
 	}
 	if regexp.MustCompile(`\$\\Alpha\\Master\\swapvar`).Match(alpha) || regexp.MustCompile(`\$\\Beta\\Master\\swapvar`).Match(beta) {
 		t.Fatalf("old namespace leftover")
 	}
-	if regexp.MustCompile(`else if \$\\Klee\\Master\\swapvar`).Match(alpha) || regexp.MustCompile(`else if \$\\Klee\\Master\\swapvar`).Match(beta) {
+	if regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(alpha) || regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(beta) {
 		t.Fatalf("else-if leftover")
 	}
 }
 
 func TestExtractMergedModPathsHandlesLineJSONAndLegacyLists(t *testing.T) {
 	multiLine := strings.Join([]string{
-		`; Merged Mod: C:\Mods\Klee, (Red Dress)\Klee.ini`,
-		`; Merged Mod: C:\Mods\Klee, (Blue Dress)\Klee.ini`,
-		`namespace = Klee\Master`,
+		`; Merged Mod: C:\Mods\CharA, (Red Dress)\CharA.ini`,
+		`; Merged Mod: C:\Mods\CharA, (Blue Dress)\CharA.ini`,
+		`namespace = CharA\Master`,
 	}, "\n")
 	if got := extractMergedModPaths(multiLine); !mergeStringSlicesEqual(got, []string{
-		`C:\Mods\Klee, (Red Dress)\Klee.ini`,
-		`C:\Mods\Klee, (Blue Dress)\Klee.ini`,
+		`C:\Mods\CharA, (Red Dress)\CharA.ini`,
+		`C:\Mods\CharA, (Blue Dress)\CharA.ini`,
 	}) {
 		t.Fatalf("multiLine = %#v", got)
 	}
-	jsonArray := `; Merged Mod: ["C:\\Mods\\Klee, (Red)\\Klee.ini", "D:\\Other.ini"]`
+	jsonArray := `; Merged Mod: ["C:\\Mods\\CharA, (Red)\\CharA.ini", "D:\\Other.ini"]`
 	if got := extractMergedModPaths(jsonArray); !mergeStringSlicesEqual(got, []string{
-		`C:\Mods\Klee, (Red)\Klee.ini`,
+		`C:\Mods\CharA, (Red)\CharA.ini`,
 		`D:\Other.ini`,
 	}) {
 		t.Fatalf("jsonArray = %#v", got)
@@ -307,9 +307,9 @@ func TestExtractMergedModPathsHandlesLineJSONAndLegacyLists(t *testing.T) {
 	if got := extractMergedModPaths(mixedJSONArray); !mergeStringSlicesEqual(got, []string{"A.ini", "B.ini"}) {
 		t.Fatalf("mixedJSONArray = %#v", got)
 	}
-	singleCommaPath := `; Merged Mod: C:\Mods\Klee, (Red Dress)\Klee.ini`
+	singleCommaPath := `; Merged Mod: C:\Mods\CharA, (Red Dress)\CharA.ini`
 	if got := extractMergedModPaths(singleCommaPath); !mergeStringSlicesEqual(got, []string{
-		`C:\Mods\Klee, (Red Dress)\Klee.ini`,
+		`C:\Mods\CharA, (Red Dress)\CharA.ini`,
 	}) {
 		t.Fatalf("singleCommaPath = %#v", got)
 	}
@@ -317,10 +317,10 @@ func TestExtractMergedModPathsHandlesLineJSONAndLegacyLists(t *testing.T) {
 	if got := extractMergedModPaths(legacyList); !mergeStringSlicesEqual(got, []string{"a.ini", "b.ini", "c.ini"}) {
 		t.Fatalf("legacyList = %#v", got)
 	}
-	commaInDirLegacyList := `; Merged Mods: C:\Mods\Klee, (Red Dress)\Klee.ini, D:\Mods\Klee, (Blue Dress)\Klee.ini`
+	commaInDirLegacyList := `; Merged Mods: C:\Mods\CharA, (Red Dress)\CharA.ini, D:\Mods\CharA, (Blue Dress)\CharA.ini`
 	if got := extractMergedModPaths(commaInDirLegacyList); !mergeStringSlicesEqual(got, []string{
-		`C:\Mods\Klee, (Red Dress)\Klee.ini`,
-		`D:\Mods\Klee, (Blue Dress)\Klee.ini`,
+		`C:\Mods\CharA, (Red Dress)\CharA.ini`,
+		`D:\Mods\CharA, (Blue Dress)\CharA.ini`,
 	}) {
 		t.Fatalf("commaInDirLegacyList = %#v", got)
 	}
@@ -328,14 +328,14 @@ func TestExtractMergedModPathsHandlesLineJSONAndLegacyLists(t *testing.T) {
 
 func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testing.T) {
 	root := t.TempDir()
-	folder1 := filepath.Join(root, "Klee, (Red Dress)")
-	folder2 := filepath.Join(root, "Klee, (Blue Dress)")
-	folder3 := filepath.Join(root, "Klee, (Green Dress)")
-	child1 := writeNamespaceChild(t, folder1, "Klee.ini", namespaceChildINI)
-	child2 := writeNamespaceChild(t, folder2, "Klee.ini", namespaceChildINI)
-	child3 := writeNamespaceChild(t, folder3, "Klee.ini", namespaceChildINI)
+	folder1 := filepath.Join(root, "CharA, (Red Dress)")
+	folder2 := filepath.Join(root, "CharA, (Blue Dress)")
+	folder3 := filepath.Join(root, "CharA, (Green Dress)")
+	child1 := writeNamespaceChild(t, folder1, "CharA.ini", namespaceChildINI)
+	child2 := writeNamespaceChild(t, folder2, "CharA.ini", namespaceChildINI)
+	child3 := writeNamespaceChild(t, folder3, "CharA.ini", namespaceChildINI)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: child1, index: 0},
 			{iniPath: child2, index: 1},
@@ -377,7 +377,7 @@ func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testin
 		t.Fatalf("discovered = %#v", discovered)
 	}
 	updatedMasterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: child1, index: 0},
 			{iniPath: child2, index: 1},
@@ -396,10 +396,10 @@ func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testin
 }
 
 func TestUnwrapNamespaceParenthesizedSimpleMasterCondition(t *testing.T) {
-	wrapped := `[TextureOverrideKleePosition]
+	wrapped := `[TextureOverrideCharAPosition]
 hash = abcdef01
 match_priority = 0
-if ($\Klee\Master\swapvar == 0)
+if ($\CharA\Master\swapvar == 0)
 	vb0 = ResourcePosition
 endif
 `
@@ -407,7 +407,7 @@ endif
 	if err != nil {
 		t.Fatal(err)
 	}
-	if regexp.MustCompile(`\$\\Klee\\Master\\swapvar`).MatchString(unwrapped) {
+	if regexp.MustCompile(`\$\\CharA\\Master\\swapvar`).MatchString(unwrapped) {
 		t.Fatalf("swapvar leftover: %s", unwrapped)
 	}
 	if !strings.Contains(unwrapped, "vb0 = ResourcePosition") {
@@ -416,9 +416,9 @@ endif
 }
 
 func TestUnwrapNamespaceRejectsCompoundLeftoverMasterConditions(t *testing.T) {
-	compound := `[TextureOverrideKleePosition]
+	compound := `[TextureOverrideCharAPosition]
 hash = abcdef01
-if ($\Klee\Master\swapvar == 0 && $foo == 1)
+if ($\CharA\Master\swapvar == 0 && $foo == 1)
 	vb0 = ResourcePosition
 endif
 `
@@ -426,9 +426,9 @@ endif
 		t.Fatalf("unwrap err = %v", err)
 	}
 	root := t.TempDir()
-	childPath := writeNamespaceChild(t, root, "Klee.ini", compound)
+	childPath := writeNamespaceChild(t, root, "CharA.ini", compound)
 	if _, err := writeNamespaceMerge(namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources:    []namespaceMergeSource{{iniPath: childPath, index: 0}},
 		forwardKey: "]", backKey: "[",
 	}); err == nil || !strings.Contains(err.Error(), "NAMESPACE_UNWRAP_INCOMPLETE") {
@@ -437,9 +437,9 @@ endif
 }
 
 func TestUnwrapNamespaceDropsTopLevelMasterElse(t *testing.T) {
-	withElse := `[TextureOverrideKleePosition]
+	withElse := `[TextureOverrideCharAPosition]
 hash = abcdef01
-if $\Klee\Master\swapvar == 0
+if $\CharA\Master\swapvar == 0
 	vb0 = ResourcePosition0
 else
 	vb0 = ResourcePosition1
@@ -449,7 +449,7 @@ endif
 	if err != nil {
 		t.Fatal(err)
 	}
-	if regexp.MustCompile(`\$\\Klee\\Master\\swapvar`).MatchString(unwrapped) {
+	if regexp.MustCompile(`\$\\CharA\\Master\\swapvar`).MatchString(unwrapped) {
 		t.Fatalf("swapvar leftover: %s", unwrapped)
 	}
 	if regexp.MustCompile(`(?m)^else$`).MatchString(unwrapped) {
@@ -462,10 +462,10 @@ endif
 
 func TestCollectNamespaceChildrenScansWhenListedPathsAreMissing(t *testing.T) {
 	root := t.TempDir()
-	childPath := writeNamespaceChild(t, root, "Klee.ini", namespaceChildINI+
-		"if $\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif\n")
-	masterPath := filepath.Join(root, "MasterKlee.ini")
-	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+filepath.Join(root, "missing", "gone.ini")+"\nnamespace = Klee\\Master\n"), 0o644); err != nil {
+	childPath := writeNamespaceChild(t, root, "CharA.ini", namespaceChildINI+
+		"if $\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif\n")
+	masterPath := filepath.Join(root, "MasterCharA.ini")
+	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+filepath.Join(root, "missing", "gone.ini")+"\nnamespace = CharA\\Master\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	discovered, err := collectNamespaceChildren(masterPath)
@@ -481,9 +481,9 @@ func TestCollectNamespaceChildrenUnionsListedAndScanned(t *testing.T) {
 	root := t.TempDir()
 	listedChild := writeNamespaceChild(t, root, "Listed.ini", namespaceChildINI)
 	scannedChild := writeNamespaceChild(t, root, "Scanned.ini", namespaceChildINI+
-		"if $\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif\n")
-	masterPath := filepath.Join(root, "MasterKlee.ini")
-	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+listedChild+"\n; Merged Mod: "+filepath.Join(root, "missing.ini")+"\nnamespace = Klee\\Master\n"), 0o644); err != nil {
+		"if $\\CharA\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif\n")
+	masterPath := filepath.Join(root, "MasterCharA.ini")
+	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+listedChild+"\n; Merged Mod: "+filepath.Join(root, "missing.ini")+"\nnamespace = CharA\\Master\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	discovered, err := collectNamespaceChildren(masterPath)
@@ -497,7 +497,7 @@ func TestCollectNamespaceChildrenUnionsListedAndScanned(t *testing.T) {
 
 func TestUnwrapNamespacePreservesNestedIfElifElseEndif(t *testing.T) {
 	complexINI := `[TextureOverrideBlackSwanHairBlend]
-hash = e2770c9a
+hash = beef0005
 match_priority = 0
 if $\BlackswanMerge\Master\swapvarZ==0
 	handling = skip
@@ -541,9 +541,9 @@ func TestWriteNamespaceMergeIgnoresHelperFilesWhenPickingRepresentative(t *testi
 hash = helper01
 run = CommandList\global\ORFix
 `)
-	childPath := writeNamespaceChild(t, root, "Klee.ini", namespaceChildINI)
+	childPath := writeNamespaceChild(t, root, "CharA.ini", namespaceChildINI)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: orfixPath, index: 0},
 			{iniPath: childPath, index: 0},
@@ -554,7 +554,7 @@ run = CommandList\global\ORFix
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideKleePosition]") || !strings.Contains(string(master), "hash = abcdef01") {
+	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") || !strings.Contains(string(master), "hash = abcdef01") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = helper01") {
@@ -568,16 +568,16 @@ func TestWriteNamespaceMergeSelectsWWMIMarkBoneDataCBOverHelper(t *testing.T) {
 hash = helper01
 run = CommandList\global\ORFix
 `)
-	roverPath := writeNamespaceChild(t, root, "Rover.ini", `; WWMI
-[TextureOverrideRoverMarkBoneDataCB]
+	charhPath := writeNamespaceChild(t, root, "CharH.ini", `; WWMI
+[TextureOverrideCharHMarkBoneDataCB]
 hash = 98765432
-vb0 = ResourceRoverPosition
+vb0 = ResourceCharHPosition
 `)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Rover",
+		masterDir: root, name: "CharH",
 		sources: []namespaceMergeSource{
 			{iniPath: orfixPath, index: 0},
-			{iniPath: roverPath, index: 0},
+			{iniPath: charhPath, index: 0},
 		},
 		forwardKey: "]", backKey: "[",
 	})
@@ -585,7 +585,7 @@ vb0 = ResourceRoverPosition
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideRoverMarkBoneDataCB]") || !strings.Contains(string(master), "hash = 98765432") {
+	if !strings.Contains(string(master), "[TextureOverrideCharHMarkBoneDataCB]") || !strings.Contains(string(master), "hash = 98765432") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = helper01") {
@@ -595,9 +595,9 @@ vb0 = ResourceRoverPosition
 
 func TestExtractPositionSectionHashReadsHashAfterFilenameOnlyResource(t *testing.T) {
 	text := `[ResourcePosition]
-filename = KleePosition.buf
+filename = CharAPosition.buf
 
-[TextureOverrideKleePosition]
+[TextureOverrideCharAPosition]
 hash = abcdef01
 vb0 = ResourcePosition
 `
@@ -608,19 +608,19 @@ vb0 = ResourcePosition
 
 func TestWriteNamespaceMergeKeepsPositionHashWhenHairblendSourcePresent(t *testing.T) {
 	root := t.TempDir()
-	bodyPath := writeNamespaceChild(t, root, "Klee.ini", `[ResourcePosition]
-filename = KleePosition.buf
+	bodyPath := writeNamespaceChild(t, root, "CharA.ini", `[ResourcePosition]
+filename = CharAPosition.buf
 
-[TextureOverrideKleePosition]
+[TextureOverrideCharAPosition]
 hash = abcdef01
 vb0 = ResourcePosition
 `)
-	hairPath := writeNamespaceChild(t, root, "KleeHair.ini", `[TextureOverrideKleeHairBlend]
+	hairPath := writeNamespaceChild(t, root, "CharAHair.ini", `[TextureOverrideCharAHairBlend]
 hash = hairblend01
 vb2 = ResourceHairBlend
 `)
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: root, name: "Klee",
+		masterDir: root, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: bodyPath, index: 0},
 			{iniPath: hairPath, index: 0},
@@ -631,7 +631,7 @@ vb2 = ResourceHairBlend
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideKleePosition]") || !strings.Contains(string(master), "hash = abcdef01") {
+	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") || !strings.Contains(string(master), "hash = abcdef01") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = hairblend01") {

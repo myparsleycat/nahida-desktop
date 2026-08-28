@@ -14,11 +14,11 @@ func ordinaryMergeINI(hash string) string {
 	if hash == "" {
 		hash = "abcdef01"
 	}
-	return "[TextureOverrideKleePosition]\nhash = " + hash + "\nvb0 = ResourcePosition\n\n[ResourcePosition]\nfilename = KleePosition.buf\n"
+	return "[TextureOverrideCharAPosition]\nhash = " + hash + "\nvb0 = ResourcePosition\n\n[ResourcePosition]\nfilename = CharAPosition.buf\n"
 }
 
 func withDrawTypeMergeINI(hash string) string {
-	return "[TextureOverrideKleePosition]\nhash = " + hash + "\nif DRAW_TYPE == 1\n\tvb0 = ResourcePosition\nendif\n\n[ResourcePosition]\nfilename = KleePosition.buf\n"
+	return "[TextureOverrideCharAPosition]\nhash = " + hash + "\nif DRAW_TYPE == 1\n\tvb0 = ResourcePosition\nendif\n\n[ResourcePosition]\nfilename = CharAPosition.buf\n"
 }
 
 func setupMergeGame(t *testing.T, root string) *Mod {
@@ -48,14 +48,14 @@ func TestWriteNamespaceMergeNamespacesOrdinaryPackOntoExistingMaster(t *testing.
 	host := filepath.Join(root, "Host")
 	extra := filepath.Join(root, "Extra")
 	child := writeMergePackINI(t, host, "child.ini", ordinaryMergeINI(""))
-	extraIni := writeMergePackINI(t, extra, "Klee.ini", ordinaryMergeINI(""))
+	extraIni := writeMergePackINI(t, extra, "CharA.ini", ordinaryMergeINI(""))
 	masterPath := mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: host, name: "Klee",
+		masterDir: host, name: "CharA",
 		sources:    []namespaceMergeSource{{iniPath: child, index: 0}},
 		forwardKey: "]", backKey: "[",
 	})
 	mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: host, name: "Klee",
+		masterDir: host, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: child, index: 0},
 			{iniPath: extraIni, index: 1},
@@ -71,7 +71,7 @@ func TestWriteNamespaceMergeNamespacesOrdinaryPackOntoExistingMaster(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(extraText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(extraText) {
 		t.Fatalf("extra = %s", extraText)
 	}
 	if !regexp.MustCompile(`\$swapvar = 0,1`).Match(master) {
@@ -107,10 +107,10 @@ func TestMergeModsRemastersTwoNamespacePacksIntoOneSwapSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0`).Match(aText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0`).Match(aText) {
 		t.Fatalf("a.ini = %s", aText)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(bText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(bText) {
 		t.Fatalf("b.ini = %s", bText)
 	}
 	if regexp.MustCompile(`\$\\Alpha\\Master\\swapvar`).Match(aText) {
@@ -133,7 +133,7 @@ func TestWriteNamespaceMergeNamespacesClassicMergedINI(t *testing.T) {
 	}
 	merged := filepath.Join(classicDir, "merged.ini")
 	mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: ordinaryDir, name: "Klee",
+		masterDir: ordinaryDir, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: merged, index: 0},
 			{iniPath: ordinaryIni, index: 1},
@@ -148,10 +148,10 @@ func TestWriteNamespaceMergeNamespacesClassicMergedINI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0`).Match(mergedText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0`).Match(mergedText) {
 		t.Fatalf("merged = %s", mergedText)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(ordinaryText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(ordinaryText) {
 		t.Fatalf("ordinary = %s", ordinaryText)
 	}
 }
@@ -162,9 +162,9 @@ func namespaceMergeRequest(group string, includeVanilla bool, children ...string
 		leaves[i] = MergePlanNode{Kind: "leaf", Path: path}
 	}
 	return MergeModsRequest{
-		GroupPath: group, Placement: "in_place", PackName: "Klee",
+		GroupPath: group, Placement: "in_place", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[", IncludeVanilla: includeVanilla,
 			Children: leaves,
 		},
@@ -191,8 +191,8 @@ func TestMergeModsDisablesLeftoverMastersWhenRemastering(t *testing.T) {
 	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, aDir, bDir)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(aDir, "MasterKlee.ini")); err != nil {
-		t.Fatalf("MasterKlee missing: %v", err)
+	if _, err := os.Stat(filepath.Join(aDir, "MasterCharA.ini")); err != nil {
+		t.Fatalf("MasterCharA missing: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(aDir, "MasterAlpha.ini")); !os.IsNotExist(err) {
 		t.Fatalf("MasterAlpha should be gone: %v", err)
@@ -205,10 +205,10 @@ func TestMergeModsDisablesLeftoverMastersWhenRemastering(t *testing.T) {
 	}
 	aText, _ := os.ReadFile(aIni)
 	bText, _ := os.ReadFile(bIni)
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0`).Match(aText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0`).Match(aText) {
 		t.Fatalf("a.ini = %s", aText)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(bText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(bText) {
 		t.Fatalf("b.ini = %s", bText)
 	}
 }
@@ -239,7 +239,7 @@ func TestMergeModsFlattensTwoMultiChildNamespacePacks(t *testing.T) {
 	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, alphaDir, betaDir)); err != nil {
 		t.Fatal(err)
 	}
-	master, err := os.ReadFile(filepath.Join(alphaDir, "MasterKlee.ini"))
+	master, err := os.ReadFile(filepath.Join(alphaDir, "MasterCharA.ini"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestMergeModsFlattensTwoMultiChildNamespacePacks(t *testing.T) {
 	if !regexp.MustCompile(`\$swapvar = 0,1,2,3\n`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
-	if !regexp.MustCompile(`\[TextureOverrideKleePosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
 		t.Fatalf("overlay = %s", master)
 	}
 	for _, want := range []string{"A.ini", "B.ini", "C.ini", "D.ini"} {
@@ -275,7 +275,7 @@ func TestMergeModsFlattensTwoMultiChildNamespacePacks(t *testing.T) {
 		}
 		want := regexp.MustCompile(
 			`hash = ` + tc.hash + `\nmatch_priority = ` + strconv.Itoa(tc.index) +
-				`\nif \$\\Klee\\Master\\swapvar==` + strconv.Itoa(tc.index) +
+				`\nif \$\\CharA\\Master\\swapvar==` + strconv.Itoa(tc.index) +
 				`\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\n\tendif\nendif`,
 		)
 		if !want.Match(text) {
@@ -297,7 +297,7 @@ func TestMergeModsInsertsMultiChildPackOntoExistingMaster(t *testing.T) {
 	extraC := writeMergePackINI(t, extraDir, "C.ini", ordinaryMergeINI("abcdef03"))
 	extraD := writeMergePackINI(t, extraDir, "D.ini", ordinaryMergeINI("abcdef04"))
 	mustWriteNamespaceMerge(t, namespaceMergeOptions{
-		masterDir: hostDir, name: "Klee",
+		masterDir: hostDir, name: "CharA",
 		sources: []namespaceMergeSource{
 			{iniPath: hostA, index: 0}, {iniPath: hostB, index: 1},
 		},
@@ -317,7 +317,7 @@ func TestMergeModsInsertsMultiChildPackOntoExistingMaster(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(extraDir, "MasterBeta.ini")); !os.IsNotExist(err) {
 		t.Fatal("MasterBeta remains")
 	}
-	master, _ := os.ReadFile(filepath.Join(hostDir, "MasterKlee.ini"))
+	master, _ := os.ReadFile(filepath.Join(hostDir, "MasterCharA.ini"))
 	if !regexp.MustCompile(`\$swapvar = 0,1,2,3\n`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
@@ -331,7 +331,7 @@ func TestMergeModsInsertsMultiChildPackOntoExistingMaster(t *testing.T) {
 	} {
 		text, _ := os.ReadFile(tc.path)
 		pattern := regexp.MustCompile(`hash = ` + tc.hash + `\nmatch_priority = ` + strconv.Itoa(tc.index) +
-			`\nif \$\\Klee\\Master\\swapvar==` + strconv.Itoa(tc.index))
+			`\nif \$\\CharA\\Master\\swapvar==` + strconv.Itoa(tc.index))
 		if !pattern.Match(text) {
 			t.Fatalf("%s = %s", tc.path, text)
 		}
@@ -342,9 +342,9 @@ func TestMergeModsSharesOneSwapvarIndexAcrossINIsFromSamePack(t *testing.T) {
 	root := t.TempDir()
 	packA := filepath.Join(root, "PackA")
 	packB := filepath.Join(root, "PackB")
-	mainIni := writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
+	mainIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
 	helperIni := writeMergePackINI(t, packA, "ORFix.ini", ordinaryMergeINI("abcdef02"))
-	extraIni := writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
+	extraIni := writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, packA, packB)); err != nil {
 		t.Fatal(err)
@@ -352,16 +352,16 @@ func TestMergeModsSharesOneSwapvarIndexAcrossINIsFromSamePack(t *testing.T) {
 	mainText, _ := os.ReadFile(mainIni)
 	helperText, _ := os.ReadFile(helperIni)
 	extraText, _ := os.ReadFile(extraIni)
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0`).Match(mainText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0`).Match(mainText) {
 		t.Fatalf("main = %s", mainText)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==0`).Match(helperText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0`).Match(helperText) {
 		t.Fatalf("helper = %s", helperText)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(extraText) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(extraText) {
 		t.Fatalf("extra = %s", extraText)
 	}
-	master, _ := os.ReadFile(filepath.Join(packA, "MasterKlee.ini"))
+	master, _ := os.ReadFile(filepath.Join(packA, "MasterCharA.ini"))
 	if !regexp.MustCompile(`\$swapvar = 0,1\n`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
@@ -371,14 +371,14 @@ func TestMergeModsKeepsOneSwapvarIndexPerCopiedPackInNewFolder(t *testing.T) {
 	root := t.TempDir()
 	packA := filepath.Join(root, "PackA")
 	packB := filepath.Join(root, "PackB")
-	writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
 	writeMergePackINI(t, packA, "ORFix.ini", ordinaryMergeINI("abcdef02"))
-	writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	result, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "new_folder", PackName: "Klee",
+		GroupPath: root, Placement: "new_folder", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[", IncludeVanilla: true,
 			Children: []MergePlanNode{
 				{Kind: "leaf", Path: packA}, {Kind: "leaf", Path: packB},
@@ -390,19 +390,19 @@ func TestMergeModsKeepsOneSwapvarIndexPerCopiedPackInNewFolder(t *testing.T) {
 	}
 	copiedA := filepath.Join(result.OutputPath, "PackA")
 	copiedB := filepath.Join(result.OutputPath, "PackB")
-	kleeA, _ := os.ReadFile(filepath.Join(copiedA, "Klee.ini"))
+	charaA, _ := os.ReadFile(filepath.Join(copiedA, "CharA.ini"))
 	orfixA, _ := os.ReadFile(filepath.Join(copiedA, "ORFix.ini"))
-	kleeB, _ := os.ReadFile(filepath.Join(copiedB, "Klee.ini"))
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(kleeA) {
-		t.Fatalf("copied A Klee = %s", kleeA)
+	charaB, _ := os.ReadFile(filepath.Join(copiedB, "CharA.ini"))
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(charaA) {
+		t.Fatalf("copied A CharA = %s", charaA)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==1`).Match(orfixA) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==1`).Match(orfixA) {
 		t.Fatalf("copied A ORFix = %s", orfixA)
 	}
-	if !regexp.MustCompile(`if \$\\Klee\\Master\\swapvar==2`).Match(kleeB) {
-		t.Fatalf("copied B = %s", kleeB)
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==2`).Match(charaB) {
+		t.Fatalf("copied B = %s", charaB)
 	}
-	master, _ := os.ReadFile(filepath.Join(result.OutputPath, "MasterKlee.ini"))
+	master, _ := os.ReadFile(filepath.Join(result.OutputPath, "MasterCharA.ini"))
 	if !regexp.MustCompile(`\$swapvar = 0,1,2\n`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
@@ -410,15 +410,15 @@ func TestMergeModsKeepsOneSwapvarIndexPerCopiedPackInNewFolder(t *testing.T) {
 
 func TestMergeModsDropsDisabledPrefixWhenCopyingIntoNewFolder(t *testing.T) {
 	root := t.TempDir()
-	disabled := filepath.Join(root, "DISABLED Aino Nude toggle - 복사본")
+	disabled := filepath.Join(root, "DISABLED CharG Nude toggle - 복사본")
 	extra := filepath.Join(root, "Extra")
-	writeMergePackINI(t, disabled, "Aino.ini", ordinaryMergeINI(""))
-	writeMergePackINI(t, extra, "Aino.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, disabled, "CharG.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, extra, "CharG.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	result, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "new_folder", PackName: "AinoNudetoggle",
+		GroupPath: root, Placement: "new_folder", PackName: "CharGNudetoggle",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "AinoNudetoggle",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharGNudetoggle",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{Kind: "leaf", Path: disabled}, {Kind: "leaf", Path: extra},
@@ -428,10 +428,10 @@ func TestMergeModsDropsDisabledPrefixWhenCopyingIntoNewFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(result.OutputPath, "Aino Nude toggle - 복사본")); err != nil {
+	if _, err := os.Stat(filepath.Join(result.OutputPath, "CharG Nude toggle - 복사본")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(result.OutputPath, "DISABLED Aino Nude toggle - 복사본")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(result.OutputPath, "DISABLED CharG Nude toggle - 복사본")); !os.IsNotExist(err) {
 		t.Fatal("disabled prefix copied")
 	}
 	if _, err := os.Stat(disabled); err != nil {
@@ -443,13 +443,13 @@ func TestMergeModsDoesNotReDisableAlreadyDisabledPacks(t *testing.T) {
 	root := t.TempDir()
 	disabled := filepath.Join(root, "disableddisabled PackA")
 	extra := filepath.Join(root, "Extra")
-	writeMergePackINI(t, disabled, "Aino.ini", ordinaryMergeINI(""))
-	writeMergePackINI(t, extra, "Aino.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, disabled, "CharG.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, extra, "CharG.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	result, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "new_folder", PackName: "AinoNudetoggle",
+		GroupPath: root, Placement: "new_folder", PackName: "CharGNudetoggle",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "AinoNudetoggle",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharGNudetoggle",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{Kind: "leaf", Path: disabled}, {Kind: "leaf", Path: extra},
@@ -472,14 +472,14 @@ func TestMergeModsDisablesOriginalUnderFreeNameWhenDisabledExists(t *testing.T) 
 	packA := filepath.Join(root, "PackA")
 	packB := filepath.Join(root, "PackB")
 	existingDisabled := filepath.Join(root, "DISABLED PackA")
-	writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
-	writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
 	writeMergePackINI(t, existingDisabled, "keep.ini", "user-disabled")
 	service := setupMergeGame(t, root)
 	if _, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "new_folder", PackName: "Klee",
+		GroupPath: root, Placement: "new_folder", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{Kind: "leaf", Path: packA}, {Kind: "leaf", Path: packB},
@@ -509,8 +509,8 @@ func TestMergeModsRestoresWrappedChildrenWhenNestedMergeFails(t *testing.T) {
 	packB := filepath.Join(root, "PackB")
 	empty1 := filepath.Join(root, "Empty1")
 	empty2 := filepath.Join(root, "Empty2")
-	aIni := writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
-	bIni := writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
+	aIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
+	bIni := writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
 	if err := os.MkdirAll(empty1, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -519,9 +519,9 @@ func TestMergeModsRestoresWrappedChildrenWhenNestedMergeFails(t *testing.T) {
 	}
 	service := setupMergeGame(t, root)
 	_, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "in_place", PackName: "Klee",
+		GroupPath: root, Placement: "in_place", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{
@@ -549,7 +549,7 @@ func TestMergeModsRestoresWrappedChildrenWhenNestedMergeFails(t *testing.T) {
 	if string(aText) != ordinaryMergeINI("") || string(bText) != ordinaryMergeINI("") {
 		t.Fatalf("children not restored: %s / %s", aText, bText)
 	}
-	if _, err := os.Stat(filepath.Join(packA, "DISABLED_BACKUP_Klee.ini")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(packA, "DISABLED_BACKUP_CharA.ini")); !os.IsNotExist(err) {
 		t.Fatal("backup remains")
 	}
 	if _, err := os.Stat(filepath.Join(packA, "MasterInner.ini")); !os.IsNotExist(err) {
@@ -563,8 +563,8 @@ func TestMergeModsRestoresLeftoverMasterWhenDisabledBackupExists(t *testing.T) {
 	packB := filepath.Join(root, "PackB")
 	empty1 := filepath.Join(root, "Empty1")
 	empty2 := filepath.Join(root, "Empty2")
-	aIni := writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
-	bIni := writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
+	aIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
+	bIni := writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
 	mustWriteNamespaceMerge(t, namespaceMergeOptions{
 		masterDir: packA, name: "Alpha",
 		sources:    []namespaceMergeSource{{iniPath: aIni, index: 0}},
@@ -592,9 +592,9 @@ func TestMergeModsRestoresLeftoverMasterWhenDisabledBackupExists(t *testing.T) {
 	}
 	service := setupMergeGame(t, root)
 	_, err = service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "in_place", PackName: "Klee",
+		GroupPath: root, Placement: "in_place", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{
@@ -633,15 +633,15 @@ func TestMergeModsReenablesClassicSourcesWhenLaterNestedMergeFails(t *testing.T)
 	packB := filepath.Join(root, "PackB")
 	wwmi := filepath.Join(root, "WWMI")
 	extra := filepath.Join(root, "Extra")
-	aIni := writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI(""))
-	bIni := writeMergePackINI(t, packB, "Klee.ini", ordinaryMergeINI(""))
-	writeMergePackINI(t, wwmi, "mod.ini", "; WWMI ALPHA-2 INI\n[Constants]\nglobal $object_guid = 170961\n[TextureOverrideComponent0]\nhash = 7748c1d8\n")
-	writeMergePackINI(t, extra, "Klee.ini", ordinaryMergeINI(""))
+	aIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
+	bIni := writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
+	writeMergePackINI(t, wwmi, "mod.ini", "; WWMI ALPHA-2 INI\n[Constants]\nglobal $object_guid = 100001\n[TextureOverrideComponent0]\nhash = beef0001\n")
+	writeMergePackINI(t, extra, "CharA.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	_, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "in_place", PackName: "Klee",
+		GroupPath: root, Placement: "in_place", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{
@@ -681,8 +681,8 @@ func TestMergeModsStagesPacksThroughTemporaryPathsWhenInPlaceDestinationsCollide
 	root := t.TempDir()
 	disabledPackA := filepath.Join(root, "DISABLED PackA")
 	packA := filepath.Join(root, "PackA")
-	writeMergePackINI(t, disabledPackA, "Klee.ini", ordinaryMergeINI("abcdef01"))
-	writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI("abcdef02"))
+	writeMergePackINI(t, disabledPackA, "CharA.ini", ordinaryMergeINI("abcdef01"))
+	writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI("abcdef02"))
 	service := setupMergeGame(t, root)
 	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, disabledPackA, packA)); err != nil {
 		t.Fatal(err)
@@ -698,12 +698,12 @@ func TestMergeModsStagesPacksThroughTemporaryPathsWhenInPlaceDestinationsCollide
 	if _, err := os.Stat(finalPackA2); err != nil {
 		t.Fatal(err)
 	}
-	aText, _ := os.ReadFile(filepath.Join(finalPackA, "Klee.ini"))
-	bText, _ := os.ReadFile(filepath.Join(finalPackA2, "Klee.ini"))
-	if !regexp.MustCompile(`(?s)hash = abcdef01.*if \$\\Klee\\Master\\swapvar==0`).Match(aText) {
+	aText, _ := os.ReadFile(filepath.Join(finalPackA, "CharA.ini"))
+	bText, _ := os.ReadFile(filepath.Join(finalPackA2, "CharA.ini"))
+	if !regexp.MustCompile(`(?s)hash = abcdef01.*if \$\\CharA\\Master\\swapvar==0`).Match(aText) {
 		t.Fatalf("PackA = %s", aText)
 	}
-	if !regexp.MustCompile(`(?s)hash = abcdef02.*if \$\\Klee\\Master\\swapvar==1`).Match(bText) {
+	if !regexp.MustCompile(`(?s)hash = abcdef02.*if \$\\CharA\\Master\\swapvar==1`).Match(bText) {
 		t.Fatalf("PackA (2) = %s", bText)
 	}
 }
@@ -714,8 +714,8 @@ func TestMergeModsRestoresStagedPacksWhenInPlaceCollisionMergeFails(t *testing.T
 	packA := filepath.Join(root, "PackA")
 	empty1 := filepath.Join(root, "Empty1")
 	empty2 := filepath.Join(root, "Empty2")
-	disabledIni := writeMergePackINI(t, disabledPackA, "Klee.ini", ordinaryMergeINI("abcdef01"))
-	packAIni := writeMergePackINI(t, packA, "Klee.ini", ordinaryMergeINI("abcdef02"))
+	disabledIni := writeMergePackINI(t, disabledPackA, "CharA.ini", ordinaryMergeINI("abcdef01"))
+	packAIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI("abcdef02"))
 	if err := os.MkdirAll(empty1, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -724,9 +724,9 @@ func TestMergeModsRestoresStagedPacksWhenInPlaceCollisionMergeFails(t *testing.T
 	}
 	service := setupMergeGame(t, root)
 	_, err := service.MergeMods(context.Background(), MergeModsRequest{
-		GroupPath: root, Placement: "in_place", PackName: "Klee",
+		GroupPath: root, Placement: "in_place", PackName: "CharA",
 		Root: MergePlanNode{
-			Kind: "group", ID: "root", Engine: "namespace", Name: "Klee",
+			Kind: "group", ID: "root", Engine: "namespace", Name: "CharA",
 			ForwardKey: "]", BackKey: "[",
 			Children: []MergePlanNode{
 				{
