@@ -85,6 +85,19 @@ func TestModelViewerDNFRemovesContradictoryGroup(t *testing.T) {
 	}
 }
 
+func TestModelViewerDNFCoversAssignmentCondition(t *testing.T) {
+	draw := ModelViewerDNF{{{Var: "color", Value: "1"}, {Var: "hair", Value: "0"}}}
+	if !modelViewerDNFCovers(draw, ModelViewerDNF{{{Var: "color", Value: "1"}}}) {
+		t.Fatal("draw condition should cover the color assignment")
+	}
+	if modelViewerDNFCovers(draw, ModelViewerDNF{{{Var: "color", Value: "2"}}}) {
+		t.Fatal("draw condition must not cover a different color")
+	}
+	if modelViewerDNFCovers(modelViewerDNFTrue(), ModelViewerDNF{{{Var: "color", Value: "1"}}}) {
+		t.Fatal("an unconstrained draw does not imply a conditional assignment")
+	}
+}
+
 func TestNormalizeModelViewerDNFWithTrackedRemovesRuntimeGuards(t *testing.T) {
 	dnf := ModelViewerDNF{{
 		{Var: "mod_enabled", Value: "0", Negate: true},

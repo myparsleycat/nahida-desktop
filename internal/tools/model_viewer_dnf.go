@@ -444,3 +444,30 @@ func modelViewerDNFSatisfied(dnf ModelViewerDNF, state map[string]string) bool {
 	}
 	return false
 }
+
+// modelViewerDNFCovers reports whether every state selected by draw is also
+// selected by at least one variant group. It mirrors Electron's dnfCovers and
+// is used when attaching condition-scoped resource histories to draw snapshots.
+func modelViewerDNFCovers(draw, variant ModelViewerDNF) bool {
+	if modelViewerDNFIsTrue(variant) {
+		return true
+	}
+	if modelViewerDNFIsTrue(draw) || len(draw) == 0 || len(variant) == 0 {
+		return false
+	}
+	for _, variantGroup := range variant {
+		for _, drawGroup := range draw {
+			covered := true
+			for _, clause := range variantGroup {
+				if !containsModelViewerDNFClause(drawGroup, clause) {
+					covered = false
+					break
+				}
+			}
+			if covered {
+				return true
+			}
+		}
+	}
+	return false
+}

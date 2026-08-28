@@ -4,15 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
 
-const (
-	maxModelViewerDirectRunExpansions = 4096
-	maxModelViewerScanPaths           = 4096
-)
+const maxModelViewerDirectRunExpansions = 4096
 
 var (
 	sectionHashUnderscoreRE = regexp.MustCompile(`(?i)_([0-9a-f]{8})_`)
@@ -21,37 +17,17 @@ var (
 
 type modelViewerDirectBufferState struct{ ib, vb0, vb1, vb2 string }
 
-type modelViewerDirectTextureSlot struct {
-	resource string
-	authored bool
-}
-
 type modelViewerDirectDrawRecord struct {
 	sectionName     string
 	state           modelViewerDirectBufferState
-	textures        map[string]modelViewerDirectTextureSlot
+	textureHistory  []modelViewerDirectTextureAssignment
 	authoredDiffuse bool
 	nonDiffuse      []string
 	thisFiles       []string
+	conditions      ModelViewerDNF
 	draw            modelViewerDrawInstruction
 	auto            bool
 	copies          int
-}
-
-type modelViewerDirectScanPath struct {
-	state           modelViewerDirectBufferState
-	textures        map[string]modelViewerDirectTextureSlot
-	authoredDiffuse bool
-	nonDiffuse      []string
-	thisFiles       []string
-	conditions      []modelViewerConditionClause
-}
-
-type modelViewerDirectScanContext struct {
-	lookup     map[string]modINISection
-	variables  map[string]any
-	expansions int
-	pathLimit  bool
 }
 
 type modelViewerDirectConditionalBranch struct {
@@ -60,207 +36,7 @@ type modelViewerDirectConditionalBranch struct {
 }
 
 func collectModelViewerDirectDrawRecords(sections []modINISection, variables map[string]any) ([]modelViewerDirectDrawRecord, error) {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
-	ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-	var output []modelViewerDirectDrawRecord
-	for _, section := range sections {
-		if !strings.EqualFold(section.Header, "TextureOverride") {
-			continue
-		}
-		paths := []modelViewerDirectScanPath{{textures: make(map[string]modelViewerDirectTextureSlot)}}
-		paths, records := scanModelViewerDirectLines(section.Lines, section.Name, paths, ctx, make(map[string]bool))
-		if ctx.pathLimit {
-			return nil, contractError(fmt.Sprintf("Mod has too many conditional scan paths (limit %d).", maxModelViewerScanPaths))
-		}
-		if len(records) == 0 && !sectionHandlingSkip(section) {
-			for _, path := range paths {
-				if path.state.ib == "" {
-					continue
-				}
-				records = append(records, modelViewerDirectDrawRecord{sectionName: section.Name, state: path.state, textures: cloneModelViewerDirectTextures(path.textures), authoredDiffuse: path.authoredDiffuse, nonDiffuse: append([]string(nil), path.nonDiffuse...), thisFiles: append([]string(nil), path.thisFiles...), draw: modelViewerDrawInstruction{IBResourceName: path.state.ib, Conditions: append([]modelViewerConditionClause(nil), path.conditions...)}, auto: true})
-			}
-		}
-		output = append(output, records...)
-		if len(output) > maxModelViewerDraws {
-			return nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", len(output), maxModelViewerDraws))
-		}
-	}
-	return dedupeModelViewerDirectDrawRecords(output), nil
-}
-
-func scanModelViewerDirectLines(lines []string, rootSection string, paths []modelViewerDirectScanPath, ctx *modelViewerDirectScanContext, activeRuns map[string]bool) ([]modelViewerDirectScanPath, []modelViewerDirectDrawRecord) {
-	if ctx.pathLimit {
-		return nil, nil
-	}
-	var records []modelViewerDirectDrawRecord
-	for index := 0; index < len(lines); index++ {
-		line := strings.TrimSpace(lines[index])
-		lower := strings.ToLower(line)
-		if strings.HasPrefix(lower, "if ") {
-			branches, end, ok := splitModelViewerDirectConditional(lines, index)
-			if !ok {
-				continue
-			}
-			type branchScan struct {
-				input, output []modelViewerDirectScanPath
-			}
-			var scanned []branchScan
-			remaining := cloneModelViewerDirectPaths(paths)
-			hadElse := false
-			takenConstantTrue := false
-			for _, branch := range branches {
-				if branch.expression == nil {
-					hadElse = true
-					input := cloneModelViewerDirectPaths(remaining)
-					branchPaths, branchRecords := scanModelViewerDirectLines(branch.lines, rootSection, remaining, ctx, activeRuns)
-					scanned = append(scanned, branchScan{input: input, output: branchPaths})
-					records = append(records, branchRecords...)
-					remaining = nil
-					break
-				}
-				if takenConstantTrue {
-					continue
-				}
-				if known, enabled := modelViewerDirectConstantCondition(*branch.expression, ctx.variables); known {
-					if enabled {
-						input := cloneModelViewerDirectPaths(remaining)
-						branchPaths, branchRecords := scanModelViewerDirectLines(branch.lines, rootSection, remaining, ctx, activeRuns)
-						scanned = append(scanned, branchScan{input: input, output: branchPaths})
-						records = append(records, branchRecords...)
-						// Keep the else draw as DNF_FALSE, matching Electron load.test.ts
-						// "does not treat excluded else branch draws as visible".
-						remaining = appendModelViewerDirectCondition(remaining, modelViewerConditionClause{Expression: "0", Expected: true})
-						takenConstantTrue = true
-						continue
-					}
-					continue
-				}
-				truePaths := appendModelViewerDirectCondition(remaining, modelViewerConditionClause{Expression: *branch.expression, Expected: true})
-				input := cloneModelViewerDirectPaths(truePaths)
-				branchPaths, branchRecords := scanModelViewerDirectLines(branch.lines, rootSection, truePaths, ctx, activeRuns)
-				scanned = append(scanned, branchScan{input: input, output: branchPaths})
-				records = append(records, branchRecords...)
-				remaining = appendModelViewerDirectCondition(remaining, modelViewerConditionClause{Expression: *branch.expression, Expected: false})
-			}
-			// Independent draw/variable guards must not fork continuing buffer state.
-			// Electron keeps a condition stack; only buffer/texture writes need path copies.
-			mutated := false
-			for _, branch := range scanned {
-				if modelViewerDirectPathsMutated(branch.input, branch.output) {
-					mutated = true
-					break
-				}
-			}
-			if mutated {
-				var next []modelViewerDirectScanPath
-				for _, branch := range scanned {
-					next = appendModelViewerDirectPathsBounded(next, branch.output, ctx)
-				}
-				if !hadElse && !takenConstantTrue {
-					next = appendModelViewerDirectPathsBounded(next, remaining, ctx)
-				}
-				paths = next
-			}
-			if ctx.pathLimit {
-				return paths, records
-			}
-			index = end
-			continue
-		}
-
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-		switch strings.ToLower(key) {
-		case "run":
-			name := modelViewerNormalizeKey(value)
-			section, exists := ctx.lookup[name]
-			if !exists || activeRuns[name] || ctx.expansions >= maxModelViewerDirectRunExpansions {
-				continue
-			}
-			ctx.expansions++
-			nextRuns := cloneModelViewerVisited(activeRuns)
-			nextRuns[name] = true
-			var nestedRecords []modelViewerDirectDrawRecord
-			paths, nestedRecords = scanModelViewerDirectLines(section.Lines, rootSection, paths, ctx, nextRuns)
-			records = append(records, nestedRecords...)
-		case "ib", "vb0", "vb1", "vb2":
-			resource := modelViewerTrimResourcePrefix(value)
-			for pathIndex := range paths {
-				switch strings.ToLower(key) {
-				case "ib":
-					paths[pathIndex].state.ib = resource
-				case "vb0":
-					paths[pathIndex].state.vb0 = resource
-				case "vb1":
-					paths[pathIndex].state.vb1 = resource
-				case "vb2":
-					paths[pathIndex].state.vb2 = resource
-				}
-			}
-		case "drawindexed":
-			if strings.EqualFold(value, "auto") {
-				for _, path := range paths {
-					records = append(records, modelViewerDirectDrawRecord{sectionName: rootSection, state: path.state, textures: cloneModelViewerDirectTextures(path.textures), authoredDiffuse: path.authoredDiffuse, nonDiffuse: append([]string(nil), path.nonDiffuse...), thisFiles: append([]string(nil), path.thisFiles...), draw: modelViewerDrawInstruction{IBResourceName: path.state.ib, Conditions: append([]modelViewerConditionClause(nil), path.conditions...)}, auto: true})
-				}
-				continue
-			}
-			parts := strings.Split(value, ",")
-			if len(parts) != 3 {
-				continue
-			}
-			count, countOK := resolveModelViewerDrawNumber(parts[0], ctx.variables)
-			start, startOK := resolveModelViewerDrawNumber(parts[1], ctx.variables)
-			base, baseOK := resolveModelViewerDrawNumber(parts[2], ctx.variables)
-			if !countOK || !startOK || !baseOK || count < 0 || start < 0 || base < 0 {
-				continue
-			}
-			for _, path := range paths {
-				records = append(records, modelViewerDirectDrawRecord{sectionName: rootSection, state: path.state, textures: cloneModelViewerDirectTextures(path.textures), authoredDiffuse: path.authoredDiffuse, nonDiffuse: append([]string(nil), path.nonDiffuse...), thisFiles: append([]string(nil), path.thisFiles...), draw: modelViewerDrawInstruction{IBResourceName: path.state.ib, IndexCount: count, StartIndex: start, BaseVertex: base, Conditions: append([]modelViewerConditionClause(nil), path.conditions...)}})
-			}
-		default:
-			if resource := modelViewerTrimTextureValue(value); modelViewerNormalizeKey(key) == "this" && resource != "" {
-				for pathIndex := range paths {
-					paths[pathIndex].thisFiles = appendUniqueModelViewer(paths[pathIndex].thisFiles, resource)
-				}
-			}
-			if resource := modelViewerTrimTextureValue(value); isNonDiffusePsSlot(key, resource) {
-				for pathIndex := range paths {
-					paths[pathIndex].nonDiffuse = appendUniqueModelViewer(paths[pathIndex].nonDiffuse, resource)
-				}
-			}
-			if channel, resource, authored, texture := modelViewerTextureAssignment(key, value, rootSection); texture {
-				for pathIndex := range paths {
-					if paths[pathIndex].textures == nil {
-						paths[pathIndex].textures = make(map[string]modelViewerDirectTextureSlot)
-					}
-					paths[pathIndex].textures[channel] = modelViewerDirectTextureSlot{resource: resource, authored: authored}
-					if channel == "diffuse" && authored {
-						paths[pathIndex].authoredDiffuse = true
-					}
-				}
-			}
-		}
-	}
-	return paths, records
-}
-
-func appendModelViewerDirectPathsBounded(target, paths []modelViewerDirectScanPath, ctx *modelViewerDirectScanContext) []modelViewerDirectScanPath {
-	remaining := maxModelViewerScanPaths - len(target)
-	if remaining <= 0 {
-		ctx.pathLimit = true
-		return target
-	}
-	if len(paths) > remaining {
-		ctx.pathLimit = true
-		paths = paths[:remaining]
-	}
-	return append(target, paths...)
+	return collectModelViewerSymbolicDrawRecords(sections, variables)
 }
 
 func splitModelViewerDirectConditional(lines []string, start int) ([]modelViewerDirectConditionalBranch, int, bool) {
@@ -296,77 +72,6 @@ func splitModelViewerDirectConditional(lines []string, start int) ([]modelViewer
 		}
 	}
 	return nil, start, false
-}
-
-func modelViewerDirectConstantCondition(expression string, variables map[string]any) (bool, bool) {
-	expression = strings.TrimSpace(expression)
-	if expression == "" || strings.Contains(expression, "$") {
-		return false, false
-	}
-	value, err := strconv.ParseFloat(expression, 64)
-	if err != nil {
-		return false, false
-	}
-	return true, value != 0
-}
-
-func cloneModelViewerDirectPaths(paths []modelViewerDirectScanPath) []modelViewerDirectScanPath {
-	output := make([]modelViewerDirectScanPath, len(paths))
-	for index, path := range paths {
-		output[index] = modelViewerDirectScanPath{state: path.state, textures: cloneModelViewerDirectTextures(path.textures), authoredDiffuse: path.authoredDiffuse, nonDiffuse: append([]string(nil), path.nonDiffuse...), thisFiles: append([]string(nil), path.thisFiles...), conditions: append([]modelViewerConditionClause(nil), path.conditions...)}
-	}
-	return output
-}
-
-func modelViewerDirectPathsMutated(input, output []modelViewerDirectScanPath) bool {
-	if len(input) != len(output) {
-		return true
-	}
-	for index := range input {
-		if !modelViewerDirectPathStateEqual(input[index], output[index]) {
-			return true
-		}
-	}
-	return false
-}
-
-func modelViewerDirectPathStateEqual(left, right modelViewerDirectScanPath) bool {
-	if left.state != right.state || left.authoredDiffuse != right.authoredDiffuse {
-		return false
-	}
-	if !sameModelViewerStrings(left.nonDiffuse, right.nonDiffuse) || !sameModelViewerStrings(left.thisFiles, right.thisFiles) {
-		return false
-	}
-	if len(left.textures) != len(right.textures) {
-		return false
-	}
-	for key, value := range left.textures {
-		other, ok := right.textures[key]
-		if !ok || other != value {
-			return false
-		}
-	}
-	return true
-}
-
-func sameModelViewerStrings(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
-}
-
-func cloneModelViewerDirectTextures(input map[string]modelViewerDirectTextureSlot) map[string]modelViewerDirectTextureSlot {
-	output := make(map[string]modelViewerDirectTextureSlot, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
-	return output
 }
 
 func modelViewerTrimTextureValue(value string) string {
@@ -449,19 +154,11 @@ func modelViewerTextureAssignment(key, value, sectionName string) (string, strin
 	return channel, resource, authored, true
 }
 
-func appendModelViewerDirectCondition(paths []modelViewerDirectScanPath, condition modelViewerConditionClause) []modelViewerDirectScanPath {
-	output := cloneModelViewerDirectPaths(paths)
-	for index := range output {
-		output[index].conditions = append(output[index].conditions, condition)
-	}
-	return output
-}
-
 func dedupeModelViewerDirectDrawRecords(records []modelViewerDirectDrawRecord) []modelViewerDirectDrawRecord {
 	seen := make(map[string]int)
 	output := make([]modelViewerDirectDrawRecord, 0, len(records))
 	for _, record := range records {
-		key := fmt.Sprintf("%s|%#v|%#v|%t", record.sectionName, record.state, record.draw, record.auto)
+		key := fmt.Sprintf("%s|%#v|%#v|%#v|%#v|%t", record.sectionName, record.state, record.draw, record.conditions, record.textureHistory, record.auto)
 		if index, exists := seen[key]; exists {
 			output[index].copies++
 			continue
@@ -474,29 +171,26 @@ func dedupeModelViewerDirectDrawRecords(records []modelViewerDirectDrawRecord) [
 }
 
 func collectModelViewerDirectResourceConditions(sections []modINISection, variables map[string]any) map[string]ModelViewerDNF {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
-	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	output := make(map[string]ModelViewerDNF)
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CommandList") {
 			continue
 		}
-		ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-		paths, _ := scanModelViewerDirectLines(section.Lines, section.Name, []modelViewerDirectScanPath{{}}, ctx, make(map[string]bool))
-		for _, path := range paths {
-			conditions := modelViewerConditionsToDNF(path.conditions, conditionVariables)
-			for _, resource := range []string{path.state.ib, path.state.vb0, path.state.vb1, path.state.vb2} {
+		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
+		if err != nil {
+			continue
+		}
+		for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
+			for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers[slot]) {
+				resource := assignment.resource
 				key := modelViewerNormalizeKey(resource)
 				if key == "" {
 					continue
 				}
 				if existing, exists := output[key]; exists {
-					output[key] = modelViewerDNFOr(existing, conditions)
+					output[key] = modelViewerDNFOr(existing, assignment.conditions)
 				} else {
-					output[key] = cloneModelViewerDNF(conditions)
+					output[key] = cloneModelViewerDNF(assignment.conditions)
 				}
 			}
 		}
@@ -584,7 +278,10 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 	var output []modelViewerDirectMesh
 	geometryIndexes := make(map[string]int)
 	for _, record := range records {
-		conditions := modelViewerConditionsToDNF(record.draw.Conditions, conditionVariables)
+		conditions := cloneModelViewerDNF(record.conditions)
+		if conditions == nil {
+			conditions = modelViewerConditionsToDNF(record.draw.Conditions, conditionVariables)
+		}
 		state := record.state
 		if state.ib == "" {
 			state.ib = globalBuffers.ib
@@ -637,7 +334,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, conditions)
 			mesh.textureAuthored = mesh.textureAuthored || record.authoredDiffuse
 			mesh.nonDiffuseTextureFiles = unionSlashPaths(mesh.nonDiffuseTextureFiles, resourceFilenames(resourceMap, record.nonDiffuse))
-			appendModelViewerDirectTextureAssignments(mesh, record.textures, conditions, resourceMap)
+			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
 			continue
 		}
 		ibPath := filepath.Join(modDir, filepath.FromSlash(ib.Filename))
@@ -704,7 +401,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 			indexCount = len(active) * recordDrawCopies(record)
 		}
 		mesh := modelViewerDirectMesh{id: id, component: component, sectionName: record.sectionName, ibName: state.ib, positionFile: position.Filename, geometry: geometry, conditions: conditions, positionAssignments: []modelViewerDirectPositionAssignment{{conditions: cloneModelViewerDNF(conditions), file: position.Filename, positions: geometry.Position}}, textureAuthored: record.authoredDiffuse, nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse), indexCount: indexCount}
-		appendModelViewerDirectTextureAssignments(&mesh, record.textures, conditions, resourceMap)
+		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		geometryIndexes[geometryKey] = len(output)
 		output = append(output, mesh)
 	}
@@ -740,43 +437,41 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 }
 
 func collectModelViewerGlobalBuffers(sections []modINISection, variables map[string]any, resources []modelViewerResource, resourceMap map[string]modelViewerResource) modelViewerDirectBufferState {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
-
 	var global modelViewerDirectBufferState
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CommandList") {
 			continue
 		}
-		ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-		paths, _ := scanModelViewerDirectLines(section.Lines, section.Name, []modelViewerDirectScanPath{{}}, ctx, make(map[string]bool))
-		for _, path := range paths {
-			// Conditional CommandLists describe variants rather than process-wide
-			// defaults. Their buffers remain attached through the normal scanner.
-			if len(path.conditions) != 0 {
-				continue
+		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
+		if err != nil {
+			continue
+		}
+		unconditional := func(slot string) string {
+			for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers[slot]) {
+				if modelViewerDNFIsTrue(assignment.conditions) {
+					return assignment.resource
+				}
 			}
-			if global.ib == "" && path.state.ib != "" {
-				global.ib = path.state.ib
+			return ""
+		}
+		if global.ib == "" {
+			global.ib = unconditional("ib")
+		}
+		if global.vb0 == "" {
+			global.vb0 = unconditional("vb0")
+		}
+		if global.vb1 == "" {
+			texcoord := unconditional("vb2")
+			if resourceMap[modelViewerNormalizeKey(texcoord)].Stride == 32 {
+				texcoord = ""
 			}
-			if global.vb0 == "" && path.state.vb0 != "" {
-				global.vb0 = path.state.vb0
-			}
-			if global.vb1 == "" {
-				texcoord := path.state.vb2
+			if texcoord == "" {
+				texcoord = unconditional("vb1")
 				if resourceMap[modelViewerNormalizeKey(texcoord)].Stride == 32 {
 					texcoord = ""
 				}
-				if texcoord == "" {
-					texcoord = path.state.vb1
-					if resourceMap[modelViewerNormalizeKey(texcoord)].Stride == 32 {
-						texcoord = ""
-					}
-				}
-				global.vb1 = texcoord
 			}
+			global.vb1 = texcoord
 		}
 	}
 
@@ -797,28 +492,19 @@ type modelViewerDirectPositionResourceAssignment struct {
 }
 
 func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, sections []modINISection, resources []modelViewerResource, modDir string, variables map[string]any, cache *modelViewerBufferCache) error {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
 	var assignments []modelViewerDirectPositionResourceAssignment
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") || !strings.HasSuffix(strings.ToLower(section.Name), "position") {
 			continue
 		}
 		target := section.Name[:len(section.Name)-len("position")]
-		ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-		paths, _ := scanModelViewerDirectLines(section.Lines, section.Name, []modelViewerDirectScanPath{{textures: make(map[string]modelViewerDirectTextureSlot)}}, ctx, make(map[string]bool))
-		if ctx.pathLimit {
-			return contractError(fmt.Sprintf("Mod has too many conditional scan paths (limit %d).", maxModelViewerScanPaths))
+		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
+		if err != nil {
+			return err
 		}
-		for _, path := range paths {
-			if path.state.vb0 == "" {
-				continue
-			}
-			conditions := modelViewerConditionsToDNF(path.conditions, variables)
-			if len(conditions) > 0 {
-				assignments = append(assignments, modelViewerDirectPositionResourceAssignment{target: target, resource: path.state.vb0, conditions: conditions})
+		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]) {
+			if len(assignment.conditions) > 0 {
+				assignments = append(assignments, modelViewerDirectPositionResourceAssignment{target: target, resource: assignment.resource, conditions: cloneModelViewerDNF(assignment.conditions)})
 			}
 		}
 	}
@@ -855,38 +541,36 @@ func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, se
 	return nil
 }
 
-func appendModelViewerDirectTextureAssignments(mesh *modelViewerDirectMesh, textures map[string]modelViewerDirectTextureSlot, conditions ModelViewerDNF, resourceMap map[string]modelViewerResource) {
+func appendModelViewerDirectTextureHistory(mesh *modelViewerDirectMesh, assignments []modelViewerDirectTextureAssignment, resourceMap map[string]modelViewerResource) {
 	if mesh == nil {
 		return
 	}
-	for role, slot := range textures {
-		file := ""
-		if resource, ok := resourceMap[modelViewerNormalizeKey(slot.resource)]; ok {
-			file = resource.Filename
+	for _, assignment := range assignments {
+		if resource, ok := resourceMap[modelViewerNormalizeKey(assignment.resource)]; ok {
+			assignment.file = resource.Filename
 		}
-		assignment := modelViewerDirectTextureAssignment{role: role, resource: slot.resource, file: file, authored: slot.authored, conditions: cloneModelViewerDNF(conditions)}
-		if role == "diffuse" {
-			if slot.authored {
-				mesh.textureAuthored = true
-			}
-			if mesh.textureDefaultFile == "" && file != "" {
-				mesh.textureDefaultFile = file
+		if assignment.role == "diffuse" {
+			mesh.textureAuthored = mesh.textureAuthored || assignment.authored
+			if mesh.textureDefaultFile == "" && assignment.file != "" {
+				mesh.textureDefaultFile = assignment.file
 			}
 		}
 		merged := false
 		for index := range mesh.textureAssignments {
 			existing := &mesh.textureAssignments[index]
-			if existing.role == assignment.role && modelViewerNormalizeKey(existing.resource) == modelViewerNormalizeKey(assignment.resource) {
-				existing.conditions = modelViewerDNFOr(existing.conditions, assignment.conditions)
-				existing.authored = existing.authored || assignment.authored
-				if existing.file == "" {
-					existing.file = assignment.file
-				}
-				merged = true
-				break
+			if existing.role != assignment.role || modelViewerNormalizeKey(existing.resource) != modelViewerNormalizeKey(assignment.resource) {
+				continue
 			}
+			existing.conditions = modelViewerDNFOr(existing.conditions, assignment.conditions)
+			existing.authored = existing.authored || assignment.authored
+			if existing.file == "" {
+				existing.file = assignment.file
+			}
+			merged = true
+			break
 		}
 		if !merged {
+			assignment.conditions = cloneModelViewerDNF(assignment.conditions)
 			mesh.textureAssignments = append(mesh.textureAssignments, assignment)
 		}
 	}

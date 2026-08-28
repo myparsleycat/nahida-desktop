@@ -851,33 +851,14 @@ endif
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
-	if len(result.Meshes) != 2 {
+	if len(result.Meshes) != 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
-	var included, excluded *ModelViewerMeshTransport
-	for index := range result.Meshes {
-		mesh := &result.Meshes[index]
-		if modelViewerDNFIsTrue(mesh.Conditions) {
-			included = mesh
-		}
-		if len(mesh.Conditions) == 0 {
-			excluded = mesh
-		}
-	}
-	if included == nil || excluded == nil {
-		t.Fatalf("included=%v excluded=%v meshes=%#v", included, excluded, result.Meshes)
+	if !modelViewerDNFIsTrue(result.Meshes[0].Conditions) {
+		t.Fatalf("conditions = %#v", result.Meshes[0].Conditions)
 	}
 	evaluated := evaluateViewerTransport(result, map[string]any{})
-	var includedVisible, excludedVisible bool
-	for _, mesh := range evaluated.Meshes {
-		if mesh.ID == included.ID {
-			includedVisible = mesh.Visible
-		}
-		if mesh.ID == excluded.ID {
-			excludedVisible = mesh.Visible
-		}
-	}
-	if !includedVisible || excludedVisible {
+	if len(evaluated.Meshes) != 1 || !evaluated.Meshes[0].Visible {
 		t.Fatalf("evaluated = %#v", evaluated.Meshes)
 	}
 }

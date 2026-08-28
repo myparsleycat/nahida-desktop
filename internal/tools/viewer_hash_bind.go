@@ -83,11 +83,6 @@ func attachFamilyAndStemTextures(meshes []modelViewerDirectMesh, sections []modI
 }
 
 func collectFamilyRoleSections(sections []modINISection, resources map[string]modelViewerResource, variables map[string]any) []familyRoleSection {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
-	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	var output []familyRoleSection
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") {
@@ -98,24 +93,23 @@ func collectFamilyRoleSections(sections []modINISection, resources map[string]mo
 			continue
 		}
 		role := familyRoleFromSuffix(match[1])
-		ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-		paths, _ := scanModelViewerDirectLines(section.Lines, section.Name, []modelViewerDirectScanPath{{}}, ctx, make(map[string]bool))
+		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
+		if err != nil {
+			continue
+		}
 		var files []hashImageFile
 		seen := map[string]bool{}
-		for _, path := range paths {
-			conditions := modelViewerConditionsToDNF(path.conditions, conditionVariables)
-			for _, name := range path.thisFiles {
-				resource, ok := resources[modelViewerNormalizeKey(name)]
-				if !ok || resource.Filename == "" {
-					continue
-				}
-				key := slashPath(resource.Filename) + "|" + dnfKey(conditions)
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-				files = append(files, hashImageFile{file: resource.Filename, cond: conditions})
+		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
+			resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
+			if !ok || resource.Filename == "" {
+				continue
 			}
+			key := slashPath(resource.Filename) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			files = append(files, hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)})
 		}
 		if len(files) == 0 {
 			continue
@@ -515,37 +509,28 @@ func bindHashImageTextures(meshes []modelViewerDirectMesh, sections []modINISect
 }
 
 func collectHashImageSlots(sections []modINISection, resources map[string]modelViewerResource, variables map[string]any, modDir string) []hashImageSlot {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
-	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	var slots []hashImageSlot
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") || hashTextureSuffixRE.MatchString(section.Name) || sectionHasIBOrDraw(section) {
 			continue
 		}
-		ctx := &modelViewerDirectScanContext{lookup: lookup, variables: variables}
-		paths, records := scanModelViewerDirectLines(section.Lines, section.Name, []modelViewerDirectScanPath{{}}, ctx, make(map[string]bool))
-		if len(records) > 0 {
+		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
+		if err != nil || len(state.draws) > 0 {
 			continue
 		}
 		var files []hashImageFile
 		seen := map[string]bool{}
-		for _, path := range paths {
-			conditions := modelViewerConditionsToDNF(path.conditions, conditionVariables)
-			for _, name := range path.thisFiles {
-				resource, ok := resources[modelViewerNormalizeKey(name)]
-				if !ok || !hashImageExtRE.MatchString(resource.Filename) {
-					continue
-				}
-				key := slashPath(resource.Filename) + "|" + dnfKey(conditions)
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-				files = append(files, hashImageFile{file: resource.Filename, cond: conditions})
+		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
+			resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
+			if !ok || !hashImageExtRE.MatchString(resource.Filename) {
+				continue
 			}
+			key := slashPath(resource.Filename) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			files = append(files, hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)})
 		}
 		if len(files) == 0 {
 			continue
@@ -714,10 +699,6 @@ func dnfVarNames(dnf ModelViewerDNF) []string {
 		}
 	}
 	return names
-}
-
-func dnfKey(dnf ModelViewerDNF) string {
-	return strings.Join(dnfVarNames(dnf), ",")
 }
 
 func overlapScore(groupVars, slotVars map[string]bool) int {

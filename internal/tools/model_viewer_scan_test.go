@@ -43,11 +43,11 @@ drawindexed = 3, 0, 0`)
 	states := map[string]bool{}
 	for _, record := range records {
 		states[record.state.ib+":"+record.state.vb0] = true
-		if len(record.draw.Conditions) != 1 || record.draw.Conditions[0].Expression != "$swap == 0" {
-			t.Fatalf("conditions = %#v", record.draw.Conditions)
+		if len(record.conditions) != 1 || len(record.conditions[0]) != 1 || record.conditions[0][0].Var != "swap" {
+			t.Fatalf("conditions = %#v", record.conditions)
 		}
 	}
-	if !states["BodyIB:Pos"] || !states["AltIB:AltPos"] || records[0].draw.Conditions[0].Expected == records[1].draw.Conditions[0].Expected {
+	if !states["BodyIB:Pos"] || !states["AltIB:AltPos"] || records[0].conditions[0][0].Negate == records[1].conditions[0][0].Negate {
 		t.Fatalf("states=%v records=%#v", states, records)
 	}
 }
@@ -95,7 +95,7 @@ format = DXGI_FORMAT_R32_UINT`)
 	ibs := map[string]bool{}
 	for _, record := range records {
 		ibs[record.state.ib] = true
-		if record.state.ib == "DeadIB" || len(record.draw.Conditions) == 0 {
+		if record.state.ib == "DeadIB" || modelViewerDNFIsTrue(record.conditions) {
 			t.Fatalf("dead or unconstrained record = %#v", record)
 		}
 	}
@@ -147,7 +147,7 @@ vb1 = ResourceTc
 		if record.state.ib != "IB" {
 			t.Fatalf("record = %#v", record)
 		}
-		if len(record.draw.Conditions) == 0 {
+		if modelViewerDNFIsTrue(record.conditions) {
 			unconditional++
 			if record.draw.IndexCount != 6 {
 				t.Fatalf("unconditional record = %#v", record)
@@ -203,8 +203,46 @@ run = CommandListTedom
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 26 {
+	if len(records) != 13 {
 		t.Fatalf("records = %d", len(records))
+	}
+}
+
+func TestModelViewerScannerDoesNotExpandLuciaTextureConditionsIntoDraws(t *testing.T) {
+	var ini strings.Builder
+	ini.WriteString(`[Constants]
+global persist $swapvarColor = 0
+[KeyColor]
+type = cycle
+$swapvarColor = 0,1,2,3
+[CommandListRunSlotFix]
+`)
+	for _, slot := range []string{"ps-t9", "ps-t3"} {
+		for color, resource := range []string{"Base", "Red", "Black", "Gold"} {
+			fmt.Fprintf(&ini, "if $swapvarColor == %d\n%s = Resource%s\nendif\n", color, slot, resource)
+		}
+	}
+	for _, group := range []struct {
+		name  string
+		draws int
+	}{{"HairA", 4}, {"HairB", 3}, {"BodyA", 40}, {"BodyB", 14}} {
+		fmt.Fprintf(&ini, "[TextureOverride%s]\nib = Resource%sIB\nrun = CommandListRunSlotFix\nrun = CommandList%s\n", group.name, group.name, group.name)
+		fmt.Fprintf(&ini, "[CommandList%s]\n", group.name)
+		for index := range group.draws {
+			fmt.Fprintf(&ini, "drawindexed = 3, %d, 0\n", index*3)
+		}
+	}
+	records, err := collectModelViewerDirectDrawRecords(parseModINI(ini.String()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 61 {
+		t.Fatalf("records = %d, want 61", len(records))
+	}
+	for _, record := range records {
+		if len(record.nonDiffuse) != 4 {
+			t.Fatalf("non-diffuse resources = %#v", record.nonDiffuse)
+		}
 	}
 }
 

@@ -77,7 +77,7 @@ func TestModelViewerSafetyRejectsExcessiveDrawCount(t *testing.T) {
 	}
 }
 
-func TestModelViewerSafetyRejectsConditionalPathExplosion(t *testing.T) {
+func TestModelViewerSafetyDoesNotCountConditionalBufferVariantsAsAuthoredDraws(t *testing.T) {
 	var ini strings.Builder
 	ini.WriteString("[TextureOverrideBody]\nib = ResourceIB\n")
 	for index := range 13 {
@@ -85,8 +85,11 @@ func TestModelViewerSafetyRejectsConditionalPathExplosion(t *testing.T) {
 		ini.WriteString("vb0 = ResourceA\nelse\nvb0 = ResourceB\nendif\n")
 	}
 	ini.WriteString("drawindexed = 3, 0, 0\n")
-	_, err := collectModelViewerDirectDrawRecords(parseModINI(ini.String()), nil)
-	if err == nil || !strings.Contains(err.Error(), fmt.Sprint(maxModelViewerScanPaths)) {
-		t.Fatalf("err = %v", err)
+	records, err := collectModelViewerDirectDrawRecords(parseModINI(ini.String()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected conditional buffer variants")
 	}
 }
