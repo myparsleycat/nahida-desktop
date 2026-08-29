@@ -1,0 +1,128 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application for Windows
+    cmds:
+      - task: build:native
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+          ARCH: '{{.ARCH | default "amd64"}}'
+          DEV: '{{.DEV}}'
+          EXTRA_TAGS: '{{.EXTRA_TAGS}}'
+          OBFUSCATED: '{{.OBFUSCATED}}'
+          GARBLE_ARGS: '{{.GARBLE_ARGS}}'
+
+  build:native:
+    summary: Builds the application using native Go compilation
+    internal: true
+    deps:
+      - task: common:go:mod:tidy
+      - task: common:build:frontend
+        vars:
+          BUILD_FLAGS:
+            ref: .BUILD_FLAGS
+          OBFUSCATED:
+            ref: .OBFUSCATED
+          DEV:
+            ref: .DEV
+      - task: common:generate:icons
+    preconditions:
+      - sh: '{{if eq .OBFUSCATED "true"}}command -v garble >/dev/null 2>&1{{else}}true{{end}}'
+        msg: "garble is required for obfuscated builds"
+    cmds:
+      - task: generate:syso
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+          ARCH: '{{.ARCH | default "amd64"}}'
+      - '{{if eq .OBFUSCATED "true"}}garble {{.GARBLE_ARGS}} build{{else}}go build{{end}} {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"'
+      - cmd: powershell -NoProfile -Command "Remove-Item -LiteralPath './wails_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+    vars:
+      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production,devtools{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .APP_VERSION}} -X nahida.live/desktop/internal/platform.AppVersion={{.APP_VERSION}}{{end}}"{{end}}'
+    env:
+      GOOS: windows
+      CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
+      GOARCH: '{{.ARCH | default "amd64"}}'
+
+  package:
+    summary: Creates the Windows amd64 release assets
+    preconditions:
+      - sh: 'test -n "{{.APP_VERSION}}"'
+        msg: "APP_VERSION is required (for example: task package APP_VERSION=3.0.0-beta.1)"
+      - sh: 'test "{{.ARCH | default "amd64"}}" = "amd64"'
+        msg: "Only Windows amd64 release packages are supported."
+    cmds:
+      - task: prepare:release
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+      - task: create:nsis:installer
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+          ARCH: amd64
+      - powershell -NoProfile -File scripts/verify-release-binary.ps1 "{{.BIN_DIR}}/{{.APP_NAME}}.exe" "{{.APP_VERSION}}"
+      - task: publish:updater
+        vars:
+          ARCH: amd64
+
+  prepare:release:
+    summary: Validates APP_VERSION and writes generated Windows version metadata
+    internal: true
+    cmds:
+      - node scripts/write-release-metadata.mjs "{{.APP_VERSION}}" "{{.BIN_DIR}}"
+
+  publish:updater:
+    summary: Writes the updater executable and SHA256SUMS using the release asset contract
+    cmds:
+      - cmd: powershell -NoProfile -File build/windows/publish-updater.ps1 "{{.BIN_DIR}}" "{{.APP_NAME}}" "{{.ARCH | default "amd64"}}"
+        platforms: [windows]
+
+  generate:syso:
+    summary: Generates the Windows version resource
+    dir: build
+    cmds:
+      - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info {{if .APP_VERSION}}../bin/windows-info.json{{else}}windows/info.json{{end}} -out ../wails_windows_{{.ARCH | default "amd64"}}.syso
+
+  latest-installer:
+    summary: Builds the GitHub latest-installer bootstrapper
+    preconditions:
+      - sh: 'test "{{.ARCH | default "amd64"}}" = "amd64"'
+        msg: "Only Windows amd64 latest-installer builds are supported."
+    cmds:
+      - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info tools/latest-installer/info.json -out tools/latest-installer/latest_installer_windows_{{.ARCH | default "amd64"}}.syso
+      - go build -trimpath -ldflags="-H windowsgui -s -w" -o "{{.BIN_DIR}}/Nahida Desktop Latest Installer.exe" ./tools/latest-installer
+      - cmd: powershell -NoProfile -Command "Remove-Item -LiteralPath './tools/latest-installer/latest_installer_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+    env:
+      GOOS: windows
+      CGO_ENABLED: "0"
+      GOARCH: '{{.ARCH | default "amd64"}}'
+
+  create:nsis:installer:
+    summary: Creates the unsigned per-user NSIS installer
+    dir: build/windows/nsis
+    deps:
+      - task: build
+        vars:
+          APP_VERSION: '{{.APP_VERSION}}'
+          ARCH: '{{.ARCH | default "amd64"}}'
+    preconditions:
+      - sh: 'test "{{.ARCH | default "amd64"}}" = "amd64"'
+        msg: "Only Windows amd64 installers are supported."
+    cmds:
+      - go tool wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
+      - |
+        {{if eq OS "windows"}}
+        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        {{else}}
+        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        {{end}}
+    vars:
+      MAKENSIS: '{{.MAKENSIS | default (ternary "C:/Program Files (x86)/NSIS/makensis.exe" "makensis" (eq OS "windows"))}}'
+
+  run:
+    cmds:
+      - '{{.BIN_DIR}}/{{.APP_NAME}}.exe'

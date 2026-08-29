@@ -1,23 +1,14 @@
+local.db*
+.task
+bin
 node_modules
-dist
-out
-.DS_Store
-.eslintcache
-*.log*
-*.db*
-native/extractor/*.exe
-native/mod-manager/build
-native/mod-manager/target
-native/mod-manager/*.node
-native/extractor/target
-native/extractor/*.node
-
-*.gen.ts
-plans
-release_note.md
-
-# Local PDCA working documents
-docs/01-plan/
-docs/02-design/
-docs/03-analysis/
-docs/04-report/
+.gocache
+.gomodcache
+frontend/dist
+frontend/bindings/
+frontend/node_modules
+frontend/src/routeTree.gen.ts
+frontend/src/shared/types.gen.ts
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+# Cargo build artifacts (per-machine)
+native/*/target/

@@ -1,0 +1,38 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - intrange
+    - misspell
+    - nilerr
+    - unconvert
+  exclusions:
+    generated: lax
+    paths:
+      - ^build/
+      - ^frontend/
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - nahida.live/desktop
+  exclusions:
+    generated: lax
+    paths:
+      - ^build/
+      - ^frontend/
+      - builtin$
+      - examples$

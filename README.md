@@ -3,13 +3,11 @@
 
   <h1>Nahida Desktop</h1>
 
-  <p>Desktop client for <a href="https://nahida.live">nahida.live</a></p>
-
   <p>
     <img alt="Version" src="https://img.shields.io/github/v/release/myparsleycat/nahida-desktop?style=flat-square" />
     <img alt="License" src="https://img.shields.io/badge/license-%20%20GNU%20GPLv3%20-green?style=flat-square" />
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-lightgrey?style=flat-square" />
-    <img alt="Electron" src="https://img.shields.io/badge/electron-43-47848F?style=flat-square&logo=electron" />
+    <img alt="Electron" src="https://img.shields.io/badge/wails-3-DF0000?style=flat-square&logo=wails" />
   </p>
 </div>
 

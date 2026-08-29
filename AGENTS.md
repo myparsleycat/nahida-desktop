@@ -1,259 +1,211 @@
+# AGENTS.md
+
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+- Prefer automation: execute requested actions without confirmation unless blocked by missing information, safety, or irreversibility.
+
+## Project
+
+- This is a Windows-only desktop application built with Go, Wails v3 beta, React, and TypeScript.
+- Keep the existing UI, UX, state management, and business logic unless the requested change requires otherwise.
+- Do not restore Linux, Android, iOS, or macOS build targets.
+- Make small, reviewable changes and keep the build and types valid after each unit.
+
+## Layout
+
+- Application and Wails service wiring live in `internal/app/runtime.go`.
+- Backend features live in focused packages under `internal/` such as `auth`, `drive`, `gamebanana`, `mod`, `platform`, `setting`, `tools`, `transfer`, and `xxmi`.
+- Keep new behavior in the package that owns the feature. Do not create speculative layers or vague `util`, `common`, or `base` packages.
+- Wails-generated TypeScript bindings live in `frontend/bindings`.
+- Renderer-side Wails adapters live in `frontend/src/wails` when a small frontend abstraction over bindings or runtime events is needed.
+- The frontend is a React and TypeScript application. Do not restyle or redesign it unless asked.
+
+## Wails
+
+- Implement against the current Wails v3 API. Do not use Wails v2 APIs.
+- If documentation and the installed Wails v3 source/API disagree, follow the installed source/API.
+- Wails is a fork of `wailsapp/wails`, not vendored in this repository.
+- Fork repository: `https://github.com/myparsleycat/wails`, branch `v3-nahida`.
+- Resolve the Wails source from the version selected by `go.mod` and the current Go environment. If a separate local checkout is needed, discover it from the workspace instead of assuming a machine-specific absolute path.
+- Pin the fork in `go.mod` with `replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 <tag>`. Do not copy the fork into `third_party`.
+
+## Commands
+
+- Development: `task dev`
+- Windows build: `task build`
+- Windows package: `task package APP_VERSION=<version>`
+- Go tests: `task test` (runs `go test ./...`)
+- Go lint: `task lint`
+- Go lint with fixes: `task lint:fix`
+- Vulnerability scan: `task vuln`
+- Run frontend commands from the `frontend/` directory.
+- Frontend build: `pnpm build`
+- Frontend tests: `pnpm test`
+- Frontend lint and type-aware checks: `pnpm lint -- <paths...>`
+- Frontend lint with fixes: `pnpm lint:fix -- <paths...>`
+- Frontend format: `pnpm fmt -- <paths...>`
+- Frontend format check: `pnpm fmt:check`
+- Release-script tests from the repository root: `pnpm test`
+
+Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks so the pinned tool versions are used.
 
 ## Code Generation
 
-Three auto-generated files are gitignored (`*.gen.ts`). On a fresh clone, run `pnpm build` to generate them:
+### Wails bindings
 
-| File                                | Generator                  | Trigger                               |
-| ----------------------------------- | -------------------------- | ------------------------------------- |
-| `src/shared/types.gen.ts`           | `plugins/ipc-generator.ts` | Vite buildStart / handler file change |
-| `src/shared/ipc-keys.gen.ts`        | `plugins/ipc-generator.ts` | same                                  |
-| `src/renderer/src/routeTree.gen.ts` | `@tanstack/router-plugin`  | Vite build                            |
+- `frontend/bindings` is generated from registered Go services and is checked into git.
+- When an exported service method, parameter, return type, or bound model changes, regenerate bindings with `task common:generate:bindings` or run `task build`, which includes binding generation.
+- Import backend APIs through the `@bindings` alias. Do not hand-write copies of generated service or model definitions.
+- Never edit files in `frontend/bindings` manually.
 
-## IPC Pattern
+### Frontend generated files
 
-- Handlers: use `rh("channel:name", handlerFn)` from `src/main/ipc/helper.ts` (typed wrapper around `ipcMain.handle`)
-- Preload exposes `window.api.invoke(channel, ...args)` (typed handler calls), `window.api.send(channel, ...args)`, and `window.api.on(channel, listener)` (typed events)
-- Channel whitelisting is enforced at runtime via the generated `IPC_HANDLER_CHANNELS` / `IPC_SEND_CHANNELS` / `IPC_EVENT_CHANNELS` constant arrays
-- To add a new IPC channel: add a handler file in `src/main/ipc/handlers/` using `rh()`, then run `pnpm build` to regenerate types
-
-## Error Logging
-
-- For IPC-backed user actions, log the original error in the main process before rethrowing when the renderer will show a generic fallback message.
-- Include enough structured context to diagnose the failure without reproduction: channel/action name, user-facing entity name, relevant domain identifiers, current operation/stage, input paths, resolved paths, external URLs or executable paths when relevant, and rollback/cleanup state.
-- For multi-step operations, track and log the current operation/stage and any registered rollback or cleanup state.
-- Preserve the original error message/code so renderer error handling can still match known sentinel and domain-specific error codes.
-
-## Style Guide
-
-### General Principles
-
-- Keep things in one function unless composable or reusable
-- Do not extract single-use helpers preemptively. Inline the logic at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear independent name that improves the caller.
-- Avoid `try`/`catch` where possible
-- Avoid using the `any` type
-- Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
-- Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
-- Prioritize using `es-toolkit` where applicable when working with TypeScript.
-
-Reduce total variable count by inlining when a value is only used once.
-
-```ts
-// Good
-const journal = JSON.parse(await fse.readFile(path.join(dir, "journal.json"), "utf8"));
-
-// Bad
-const journalPath = path.join(dir, "journal.json");
-const journal = JSON.parse(await fse.readFile(journalPath, "utf8"));
-```
-
-### Destructuring
-
-Avoid unnecessary destructuring. Use dot notation to preserve context.
-
-```ts
-// Good
-obj.a;
-obj.b;
-
-// Bad
-const { a, b } = obj;
-```
-
-### Variables
-
-Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.
-
-```ts
-// Good
-const foo = condition ? 1 : 2;
-
-// Bad
-let foo;
-if (condition) foo = 1;
-else foo = 2;
-```
-
-### Control Flow
-
-Avoid `else` statements. Prefer early returns.
-
-```ts
-// Good
-function foo() {
-  if (condition) return 1;
-  return 2;
-}
-
-// Bad
-function foo() {
-  if (condition) return 1;
-  else return 2;
-}
-```
-
-### Complex Logic
-
-When a function has several validation branches or supporting details, make the main function read as the happy path and move supporting details into small helpers below it.
-
-```ts
-// Good
-export function loadThing(input: unknown) {
-  const config = requireConfig(input)
-  const metadata = readMetadata(input)
-  return createThing({ config, metadata })
-}
-
-function requireConfig(input: unknown) {
-  ...
-}
-```
-
-- Keep helpers close to the code they support, below the main export when that improves readability.
-- Do not over-abstract simple expressions into many single-use helpers; extract only when it names a real concept like `requireConfig` or `readMetadata`.
-- Do not return `Effect` from helpers unless they actually perform effectful work. Synchronous parsing, validation, and option building should stay synchronous.
-- Prefer Effect schema helpers such as `Schema.UnknownFromJsonString` and `Schema.decodeUnknownOption` over manual `JSON.parse` wrapped in `Effect.try` when parsing untrusted JSON strings.
-- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
-
-## Performance
-
-### High-Frequency Visual Feedback
-
-When only a visual attribute (e.g. vertex colors, heatmap) changes frequently but the underlying data (positions, geometry) stays the same, do not use React state to trigger re-renders. Use refs and imperative method calls instead.
-
-React's declarative model has high overhead for high-frequency updates: state change → memo re-execution → JSX diff → child component reconciliation → Canvas/Three.js commit. On large meshes (100k+ vertices) this can cost 200ms+ per update even when the actual computation is only 5ms.
-
-```tsx
-// Good — ref + imperative call, no React re-render
-const previewKeyRef = useRef<string | null>(null);
-
-const handleItemHighlighted = (item) => {
-  previewKeyRef.current = item?.key ?? null;
-  viewportRef.current?.updateColors(buildHighlightRegions(mesh, previewKeyRef.current));
-};
-
-// Imperative handle on the child component
-useImperativeHandle(
-  ref,
-  () => ({
-    updateColors: (regions) => {
-      const displayWeights = composeDisplayWeights(vertexCount, regions, { ignoreAmount: true });
-      writeWeightColors(displayWeights, colorsRef.current);
-      colorAttribute.needsUpdate = true;
-    },
-  }),
-  [],
-);
-```
-
-```tsx
-// Bad — state change triggers full React re-render pipeline
-const [previewKey, setPreviewKey] = useState<string | null>(null);
-const [colorVersion, setColorVersion] = useState(0);
-
-const handleItemHighlighted = (item) => {
-  setPreviewKey(item?.key ?? null);
-  setColorVersion((v) => v + 1); // triggers 4 memos + JSX re-render + Canvas commit
-};
-```
-
-Guidelines:
-
-- Use refs (`useRef`) for values that only affect imperative visual output, not React-rendered UI
-- Expose imperative methods via `useImperativeHandle` on child components (e.g. `updateColors`, `updatePositions`)
-- Keep React state for values that affect JSX structure or text content
-- When positions change but only rarely, a `positionsChanged` boolean can skip expensive `computeVertexNormals` / `computeBoundingSphere` calls when positions are unchanged
-
-## Type Checking
-
-- Do not run tsc directly; instead, execute pnpm lint -- file/to/path file/to/path2.
+- `frontend/src/routeTree.gen.ts` is generated by the TanStack Router Vite plugin and is gitignored.
+- A frontend build regenerates the route tree. Do not edit it manually.
 
 ## Verification
 
-- This is a desktop (Electron) app with no browser verification tooling available. Do NOT run `pnpm dev` to verify changes.
-- To regenerate `*.gen.ts` files after adding or modifying IPC handlers, run `pnpm build`.
-- To verify that the project compiles and types are correct, run `pnpm build`.
-- `pnpm build` is sufficient for both type regeneration and build verification. There is no need to start the dev server.
+- Do not use `task dev` or a standalone Vite dev server as a substitute for verification.
+- For Go-only changes, run focused package tests first (`go test <pkgs>`), then `task test` and `task lint` when the change is ready.
+- For frontend-only changes, run `pnpm fmt -- <paths...>`, `pnpm lint -- <paths...>`, the relevant Vitest tests, and `pnpm build` from `frontend/`.
+- For changes to Wails services, bindings, application wiring, build configuration, or cross-layer behavior, run `task build` after the relevant tests and linters.
+- For `.ts`, `.tsx`, `.js`, and `.jsx` files, use the existing `pnpm lint` and `pnpm fmt` scripts from `frontend/`; do not invoke `tsc`, Oxlint, or Oxfmt directly.
+- Run `task vuln` when dependencies, networking, archive handling, process execution, or other security-sensitive code changes.
+- Verification should be proportional to the change, but a successful production build is the final compile/type/binding check for cross-layer changes.
 
-## Formatting
+## Error Logging
 
-- After modifying files, run pnpm fmt -- file/to/path file/to/path2 to apply formatting.
+- For Wails-backed user actions, log the original backend error before returning it when the renderer will show only a generic fallback message.
+- Include enough structured context to diagnose the failure without reproduction: service/action name, user-facing entity name, relevant domain identifiers, current operation or stage, input and resolved paths, external URLs or executable paths when relevant, and rollback or cleanup state.
+- For multi-step operations, track and log the current stage and any registered rollback or cleanup state.
+- Preserve established sentinel messages or domain error codes when the frontend depends on them.
+- Never log secrets, session cookies, authorization headers, tokens, or unredacted sensitive user data.
+
+## Go Tools
+
+- Pin generators with `go get -tool` and run them via `go tool`.
+- Do not add a `tools.go` pin file.
+- Keep `golangci-lint` in `golangci-lint.mod`, not `go.mod`.
+- Keep `govulncheck` in `govulncheck.mod`, not `go.mod`.
+
+### Updating lint and vulnerability tools
+
+- Update the project-pinned `golangci-lint` with:
+
+  ```text
+  go get -tool -modfile="./golangci-lint.mod" github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+  ```
+
+- Update the project-pinned `govulncheck` with:
+
+  ```text
+  go get -tool -modfile="./govulncheck.mod" golang.org/x/vuln/cmd/govulncheck@latest
+  ```
+
+## Go Libraries
+
+- Prefer the Go standard library when it provides an equally clear solution.
+- Use `github.com/samber/lo` for common collection transformations when it reduces boilerplate and makes intent clearer.
+- Prefer `lo` for operations such as `Map`, `Filter`, `FilterMap`, `GroupBy`, `KeyBy`, `UniqBy`, `Find`, `Chunk`, and similar collection helpers.
+- Before adding a generic project-local helper, check the standard library and `lo` first.
+- Do not force `lo` into complex control flow. Prefer a normal `for` loop for branching, early exits, multiple state updates, or performance-sensitive code.
+- Avoid deeply nested `lo` pipelines and unnecessary intermediate allocations. Combine operations with helpers such as `FilterMap` when appropriate.
+- Do not use `lo/mutable` or `lo/parallel` by default. Use them only when mutation or concurrency is intentional and justified.
+
+## Go Project Conventions
+
+- Use snake_case Go filenames and lowercase, one-word package directories. Avoid vague package names such as `base`, `util`, `common`, `lib`, and `misc`.
+- Use a consistent one- or two-letter receiver derived from the type.
+- Keep the exported surface minimal, especially for methods that become Wails bindings.
+
+## TypeScript and React Style
+
+### General principles
+
+- Keep things in one function unless a helper is composable, reusable, isolates a complex boundary, or clearly improves the caller.
+- Avoid extracting trivial single-use helpers preemptively.
+- Avoid `try`/`catch` where promise composition or boundary-level error handling is clearer.
+- Avoid `any`; begin external or untrusted values as `unknown` and narrow them.
+- Rely on type inference when possible. Add explicit types for exported boundaries or when they materially improve clarity.
+- Prefer functional array methods such as `flatMap`, `filter`, and `map` for straightforward transformations. Use type guards when filtering so downstream inference is preserved.
+- Prefer `es-toolkit` for common TypeScript collection or object operations when it is clearer than a local implementation.
+- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
+
+### Variables and property access
+
+- Prefer `const` over `let`. Use a ternary, derived value, or early return instead of reassignment when that is clearer.
+- Inline a value used once when naming it adds no context, but retain variables that document domain meaning, aid debugging, or prevent repeated expensive work.
+- Avoid unnecessary destructuring when dot notation better preserves the object's context.
+
+```ts
+// Good
+const journal = JSON.parse(await readFile(join(dir, "journal.json"), "utf8"));
+obj.a;
+obj.b;
+const mode = enabled ? "active" : "idle";
+
+// Avoid when the intermediate names add no meaning
+const journalPath = join(dir, "journal.json");
+const { a, b } = obj;
+let mode;
+mode = enabled ? "active" : "idle";
+```
+
+### Control flow and complex logic
+
+- Prefer early returns over `else` after a terminating branch.
+- When a function has several validation branches or supporting details, keep the main function readable as the happy path and place meaningful helpers nearby, usually below the main export.
+- Do not turn simple expressions into a forest of single-use helpers.
+
+```ts
+export function loadThing(input: unknown) {
+    const config = requireConfig(input);
+    const metadata = readMetadata(input);
+    return createThing({ config, metadata });
+}
+```
+
+## Performance
+
+### High-frequency visual feedback
+
+When only an imperative visual attribute such as vertex colors or a heatmap changes frequently while the underlying data and JSX structure stay the same, use refs and imperative methods rather than React state that rerenders the component tree.
+
+- Use `useRef` for values that affect only imperative visual output, not rendered UI.
+- Expose focused methods such as `updateColors` or `updatePositions` with `useImperativeHandle` when a child owns the rendering resource.
+- Keep React state for values that affect JSX structure, text, accessibility state, or declarative component behavior.
+- Do not recompute normals, bounds, geometry, or other large derived data when only colors or another isolated attribute changed.
+- Measure before introducing a specialized imperative path, and keep it localized to the high-frequency boundary.
+
+## Formatting and linting changed frontend files
+
+- Before committing changes to `.ts`, `.tsx`, `.js`, or `.jsx` files, run both commands from `frontend/` against every changed file: first `pnpm fmt -- <paths...>`, then `pnpm lint -- <same-paths...>`.
+- Pass the changed file paths explicitly. Do not rely on the GitHub Actions auto-format workflow as a substitute for local formatting and linting.
+- Do not format or lint unrelated files.
 
 ## Git Revert
 
-When reverting multiple commits, revert them one at a time starting from the most recent (newest first) to avoid conflicts. Use `--no-commit` for all but the last, then commit once.
+When reverting multiple commits, revert them one at a time from newest to oldest to reduce conflicts. Use `--no-commit` for all but the final revert, then create one commit.
 
 ## Commit
 
-Commit messages must follow the Conventional Commits format.
+Commit messages must follow Conventional Commits:
 
-```txt
+```text
 <type>[optional scope]: <description>
 ```
 
-Do not use a `body` or `footer`.
+- Do not use a body or footer.
+- Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, and `revert`.
+- Add a scope when it clarifies the affected area.
+- Keep the description brief, concrete, and imperative.
 
-### Type
+Examples:
 
-The allowed `type` values are:
-
-```txt
-feat
-fix
-docs
-style
-refactor
-perf
-test
-build
-ci
-chore
-revert
-```
-
-The main `type` values are defined as follows:
-
-| Type       | Description                                 |
-| ---------- | ------------------------------------------- |
-| `feat`     | Adds a user-facing feature                  |
-| `fix`      | Fixes a user-facing bug                     |
-| `docs`     | Documentation-only changes                  |
-| `refactor` | Code restructuring without behavior changes |
-| `test`     | Adds or updates tests                       |
-| `chore`    | Other maintenance tasks                     |
-
-### Scope
-
-Add a `scope` when it helps clarify the affected area of the change.
-
-```txt
-feat(auth): add login form
-fix(api): handle empty response
-docs(readme): update setup guide
-```
-
-### Description
-
-The `description` should briefly and clearly describe the change.
-
-```txt
-feat: add user profile page
-fix(auth): prevent expired token login
-refactor(store): split user state module
-test(login): add invalid password case
-chore: update dependencies
-```
-
-### Examples
-
-```txt
-feat: add dark mode
+```text
 feat(auth): add OAuth login
-fix: handle null user
-fix(modal): prevent close button overlap
-docs: update README
-refactor(api): simplify user service
-test: add user service tests
-chore: update eslint config
+fix(mod): preserve rollback error
+docs: update build instructions
+refactor(store): simplify user state
+test(transfer): cover cancellation cleanup
+chore: update dependencies
 ```

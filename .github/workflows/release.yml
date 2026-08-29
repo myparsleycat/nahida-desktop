@@ -1,82 +1,94 @@
-name: Release
+name: Release desktop
 
 on:
-    workflow_dispatch:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Calculate the next release without creating a tag or draft
+        type: boolean
+        required: true
+        default: true
 
 concurrency:
-    group: release
-    cancel-in-progress: false
+  group: nahida-desktop-release
+  cancel-in-progress: false
 
 permissions:
-    actions: write
-    contents: write
-    issues: write
-    pull-requests: write
+  contents: write
 
 jobs:
-    check-release:
-        runs-on: windows-latest
-        defaults:
-            run:
-                working-directory: desktop
-        outputs:
-            should_release: ${{ steps.check.outputs.should_release }}
-            next_version: ${{ steps.check.outputs.next_version }}
-            release_type: ${{ steps.check.outputs.release_type }}
-        steps:
-            - name: Checkout desktop
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  path: desktop
+  release:
+    name: Validate and release
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Require the main or v3 branch
+        shell: pwsh
+        run: |
+          if ('${{ github.ref }}' -notin @('refs/heads/main', 'refs/heads/v3')) {
+            throw "Desktop releases may only run from main or v3; got '${{ github.ref }}'."
+          }
 
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 11
+      - name: Check out complete history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: pnpm
-                  cache-dependency-path: desktop/pnpm-lock.yaml
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
 
-            - name: Check if release is needed
-              id: check
-              run: node scripts/check-release.mjs
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
 
-    release:
-        needs: check-release
-        if: needs.check-release.outputs.should_release == 'true'
-        runs-on: windows-latest
-        defaults:
-            run:
-                working-directory: desktop
+      - name: Install pinned Task
+        shell: pwsh
+        run: go install github.com/go-task/task/v3/cmd/task@v3.53.1
+
+      - name: Install pinned NSIS
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        run: choco install nsis --version=3.11 --yes --no-progress
+
+      - name: Install release dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Validate desktop
+        uses: ./.github/actions/validate-desktop
+
+      - name: Calculate next release
+        if: inputs.dry_run
+        shell: pwsh
         env:
-            CSC_IDENTITY_AUTO_DISCOVERY: "false"
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            VCPKG_ROOT: C:\vcpkg
-        steps:
-            - name: Checkout desktop
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  path: desktop
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release --dry-run
 
-            - name: Checkout backend
-              uses: actions/checkout@v4
-              with:
-                  repository: myparsleycat/nahida-backend
-                  path: backend
-                  token: ${{ secrets.NAHIDA_BACKEND_TOKEN }}
-                  persist-credentials: false
+      - name: Create release tag and draft
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release
 
-            - name: Validate
-              uses: ./desktop/.github/actions/validate-desktop
-
-            - name: Release
-              run: pnpm exec semantic-release
+      - name: Verify packaged release binary
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath bin/release-version.nsh | Select-String 'NAHIDA_SEMVER').Line.Split('"')[1]
+          ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $version

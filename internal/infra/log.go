@@ -1,0 +1,401 @@
+package infra
+
+import (
+	"compress/gzip"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+const (
+	defaultLogLevel        = "error"
+	desktopLogName         = "desktop.log"
+	defaultLogMaxSize      = 10 * 1024 * 1024
+	defaultLogRotateEvery  = 7 * 24 * time.Hour
+	defaultLogRotatedFiles = 3
+)
+
+var levelPriority = map[string]int{
+	"trace": 10,
+	"debug": 20,
+	"info":  30,
+	"warn":  40,
+	"error": 50,
+	"fatal": 60,
+}
+
+// Log is the Wails-facing logger. It is a small stdlib port of the Electron
+// logger's level filter and JSON line shape, not a pino clone.
+type Log struct {
+	mu          sync.Mutex
+	level       string
+	dest        string
+	file        *os.File
+	writer      io.Writer
+	noFile      bool
+	fileErr     bool
+	dev         bool
+	maxSize     int64
+	rotateEvery time.Duration
+	rotateAt    time.Time
+	maxFiles    int
+	now         func() time.Time
+}
+
+// LogOptions configure an injectable dest and writer. An empty Dest means
+// no desktop.log is created. Dev matches Electron is.dev: every level is
+// written to the console writer and the file sink is skipped.
+type LogOptions struct {
+	Dest        string
+	Writer      io.Writer
+	DisableFile bool
+	Dev         bool
+	MaxSize     int64
+	RotateEvery time.Duration
+	MaxFiles    int
+	Now         func() time.Time
+}
+
+func NewLog() *Log {
+	return NewLogWithOptions(LogOptions{})
+}
+
+func NewLogWithOptions(opts LogOptions) *Log {
+	l := &Log{level: defaultLogLevel}
+	l.applyOptions(opts)
+	return l
+}
+
+// Configure updates dest/writer without resetting the current level.
+//
+//wails:ignore
+func (l *Log) Configure(opts LogOptions) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_ = l.closeFileLocked()
+	l.fileErr = false
+	l.applyOptions(opts)
+}
+
+func (l *Log) applyOptions(opts LogOptions) {
+	l.dest = opts.Dest
+	l.noFile = opts.DisableFile
+	l.dev = opts.Dev
+	l.maxSize = opts.MaxSize
+	if l.maxSize <= 0 {
+		l.maxSize = defaultLogMaxSize
+	}
+	l.rotateEvery = opts.RotateEvery
+	if l.rotateEvery <= 0 {
+		l.rotateEvery = defaultLogRotateEvery
+	}
+	l.rotateAt = time.Time{}
+	l.maxFiles = opts.MaxFiles
+	if l.maxFiles <= 0 {
+		l.maxFiles = defaultLogRotatedFiles
+	}
+	l.now = opts.Now
+	if l.now == nil {
+		l.now = time.Now
+	}
+	if opts.Writer != nil {
+		l.writer = opts.Writer
+	}
+	if l.writer == nil {
+		l.writer = os.Stderr
+	}
+}
+
+//wails:ignore
+func (l *Log) Close() error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.closeFileLocked()
+}
+
+func (l *Log) closeFileLocked() error {
+	if l.file == nil {
+		return nil
+	}
+	err := l.file.Close()
+	l.file = nil
+	return err
+}
+
+// SetLevel updates the current level. Empty and unknown values become "error"
+// so a corrupted setting cannot silence every log entry.
+//
+//wails:ignore
+func (l *Log) SetLevel(level string) {
+	if l == nil {
+		return
+	}
+	if _, ok := levelPriority[level]; !ok {
+		level = defaultLogLevel
+	}
+	l.mu.Lock()
+	l.level = level
+	l.mu.Unlock()
+}
+
+// Level returns the current filter level.
+//
+//wails:ignore
+func (l *Log) Level() string {
+	if l == nil {
+		return defaultLogLevel
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.level
+}
+
+func (l *Log) Log(level string, msg any, where string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.dev {
+		if l.writer != nil {
+			_, _ = l.writer.Write(encodeDevConsoleLine(msg, where))
+		}
+		return
+	}
+	if !shouldWrite(level, l.level) {
+		return
+	}
+	line, err := encodeLogLine(level, msg, where)
+	if err != nil {
+		return
+	}
+	if l.dest != "" && !l.noFile && !l.fileErr {
+		if l.file == nil {
+			if err := l.openDestLocked(); err != nil {
+				l.fileErr = true
+			}
+		}
+		if l.file != nil {
+			if err := l.rotateIfNeededLocked(int64(len(line))); err != nil {
+				_ = l.closeFileLocked()
+				l.fileErr = true
+			} else if l.file != nil {
+				_, _ = l.file.Write(line)
+				return
+			}
+		}
+	}
+	if l.writer != nil {
+		_, _ = l.writer.Write(line)
+	}
+}
+
+func (l *Log) rotateIfNeededLocked(incoming int64) error {
+	if l.file == nil || l.dest == "" {
+		return nil
+	}
+	info, err := l.file.Stat()
+	if err != nil {
+		return err
+	}
+	tooLarge := info.Size() > 0 && info.Size()+incoming > l.maxSize
+	tooOld := info.Size() > 0 && !l.now().Before(l.rotateAt)
+	if !tooLarge && !tooOld {
+		return nil
+	}
+	if err := l.closeFileLocked(); err != nil {
+		return err
+	}
+	if err := rotateCompressedLog(l.dest, l.maxFiles); err != nil {
+		return err
+	}
+	return l.openDestLocked()
+}
+
+func rotateCompressedLog(path string, maxFiles int) error {
+	if maxFiles <= 0 {
+		return os.Remove(path)
+	}
+	oldest := rotatedLogPath(path, maxFiles)
+	if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for index := maxFiles - 1; index >= 1; index-- {
+		src := rotatedLogPath(path, index)
+		dst := rotatedLogPath(path, index+1)
+		if err := os.Rename(src, dst); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	archive := rotatedLogPath(path, 1)
+	temp := archive + ".tmp"
+	if err := compressLogFile(path, temp); err != nil {
+		_ = os.Remove(temp)
+		return err
+	}
+	if err := os.Remove(archive); err != nil && !os.IsNotExist(err) {
+		_ = os.Remove(temp)
+		return err
+	}
+	if err := os.Rename(temp, archive); err != nil {
+		_ = os.Remove(temp)
+		return err
+	}
+	return os.Remove(path)
+}
+
+func rotatedLogPath(path string, index int) string {
+	return fmt.Sprintf("%s.%d.gz", path, index)
+}
+
+func compressLogFile(src, dst string) (resultErr error) {
+	input, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, input.Close()) }()
+	output, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, output.Close()) }()
+	compressed := gzip.NewWriter(output)
+	if _, err := io.Copy(compressed, input); err != nil {
+		_ = compressed.Close()
+		return err
+	}
+	return compressed.Close()
+}
+
+func (l *Log) openDestLocked() error {
+	if err := os.MkdirAll(filepath.Dir(l.dest), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(l.dest, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	l.file = f
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		l.file = nil
+		return err
+	}
+	base := l.now()
+	if info.Size() > 0 {
+		base = info.ModTime()
+	}
+	l.rotateAt = base.Add(l.rotateEvery)
+	return nil
+}
+
+//wails:ignore
+func (l *Log) Info(msg any, where string) { l.Log("info", msg, where) }
+
+//wails:ignore
+func (l *Log) Debug(msg any, where string) { l.Log("debug", msg, where) }
+
+//wails:ignore
+func (l *Log) Warn(msg any, where string) { l.Log("warn", msg, where) }
+
+//wails:ignore
+func (l *Log) Error(msg any, where string) { l.Log("error", msg, where) }
+
+//wails:ignore
+func (l *Log) Trace(msg any, where string) { l.Log("trace", msg, where) }
+
+//wails:ignore
+func (l *Log) Fatal(msg any, where string) { l.Log("fatal", msg, where) }
+
+// DesktopLogPath is the packaged file sink under a Logs directory.
+func DesktopLogPath(logsDir string) string {
+	return filepath.Join(logsDir, desktopLogName)
+}
+
+func shouldWrite(msgLevel, current string) bool {
+	mp, ok1 := levelPriority[msgLevel]
+	cp, ok2 := levelPriority[current]
+	if !ok1 || !ok2 {
+		return false
+	}
+	return mp >= cp
+}
+
+type logErr struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Stack   string `json:"stack,omitempty"`
+}
+
+type logLine struct {
+	Level string  `json:"level"`
+	Time  int64   `json:"time"`
+	Msg   string  `json:"msg"`
+	Err   *logErr `json:"err,omitempty"`
+}
+
+func encodeDevConsoleLine(msg any, where string) []byte {
+	content := formatLogMsg(msg)
+	if where != "" {
+		if content == "" {
+			return []byte("[" + where + "]\n")
+		}
+		return []byte("[" + where + "] " + content + "\n")
+	}
+	return []byte(content + "\n")
+}
+
+func encodeLogLine(level string, msg any, where string) ([]byte, error) {
+	content := formatLogMsg(msg)
+	if where != "" {
+		content = "[" + where + "] " + content
+	}
+	rec := logLine{
+		Level: level,
+		Time:  time.Now().UnixMilli(),
+		Msg:   content,
+	}
+	if err, ok := msg.(error); ok {
+		rec.Err = &logErr{
+			Type:    fmt.Sprintf("%T", err),
+			Message: err.Error(),
+		}
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return nil, err
+	}
+	return append(raw, '\n'), nil
+}
+
+func formatLogMsg(msg any) string {
+	if msg == nil {
+		return ""
+	}
+	switch v := msg.(type) {
+	case string:
+		return v
+	case error:
+		return v.Error()
+	case fmt.Stringer:
+		return v.String()
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprint(v)
+		}
+		return string(raw)
+	}
+}

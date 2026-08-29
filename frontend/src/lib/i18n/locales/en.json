@@ -1,0 +1,1806 @@
+{
+  "g": {
+    "search": "Search",
+    "name": "Name",
+    "date": "Date",
+    "size": "Size",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "select": "Select",
+    "apply": "Apply",
+    "delete": "Delete",
+    "add": "Add",
+    "create": "Create",
+    "unknown": "Unknown",
+    "save": "Save",
+    "close": "Close",
+    "rename": "Rename",
+    "download": "Download",
+    "later": "Later",
+    "beta": "Beta"
+  },
+  "page": {
+    "root": {
+      "error": {
+        "title": "Something went wrong",
+        "description": "An unexpected error occurred while loading this page.",
+        "details": "Error details",
+        "back": "Go back",
+        "refresh": "Refresh"
+      }
+    },
+    "transfer": {
+      "title": "Transfer",
+      "stats_label": {
+        "upload": "Upload",
+        "download": "Download",
+        "total_transferred": "Total Transferred",
+        "active_transfers": "Active Transfers"
+      },
+      "toolbar": {
+        "all": "All",
+        "upload": "Upload",
+        "download": "Download",
+        "status_filter": {
+          "title": "Status Filter",
+          "uploading": "Uploading",
+          "downloading": "Downloading",
+          "paused": "Paused",
+          "completed": "Completed",
+          "failed": "Failed",
+          "queued": "Queued"
+        }
+      },
+      "empty_state": {
+        "all_tabs": "No transfer history",
+        "uploading": "No files uploading",
+        "downloading": "No files downloading",
+        "completed": "No completed transfers",
+        "failed": "No failed transfers",
+        "paused": "No paused transfers",
+        "search_results": "No search results found"
+      },
+      "item": {
+        "uploading": "Uploading",
+        "finalizing": "Finalizing",
+        "downloading": "Downloading",
+        "completed": "Completed",
+        "failed": "Failed",
+        "paused": "Paused",
+        "queued": "Queued",
+        "preparing": "Preparing",
+        "planning": {
+          "permission_check": "Checking permissions",
+          "parent_lookup": "Looking up parent folders",
+          "file_validation": "Validating files",
+          "dedup_lookup": "Checking duplicates",
+          "processing": "Processing files"
+        },
+        "error": {
+          "invalid_nte_mod_file": "This is not a valid NTE mod file.",
+          "nte_client_upgrade_required": "Update the desktop app to upload NTE mods.",
+          "nte_bundle_incomplete": "Not all required NTE mod files were uploaded.",
+          "bundle_cleanup_failed": "Failed to clean up temporary NTE mod uploads.",
+          "upload_file_too_large": "A single file cannot exceed 1 GiB.",
+          "nte_bundle_too_large": "This NTE mod has too many files to upload as one group."
+        },
+        "time_remaining": "{{time}} remaining",
+        "time_elapsed": "{{time}} elapsed",
+        "failed_files": "{{count}} failed",
+        "dropdown_menu": {
+          "cancel": "Cancel",
+          "retry": "Retry",
+          "retry_failed_files": "Retry failed files",
+          "remove_from_transfer": "Remove from transfer"
+        }
+      },
+      "transfer": {
+        "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
+        "other": {
+          "title": "Other"
+        },
+        "downloadConcurrency": {
+          "title": "Download concurrency",
+          "description": "Set the number of files to download simultaneously in drive transfers. Range: 16-64"
+        },
+        "uploadConcurrency": {
+          "title": "Upload concurrency",
+          "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
+        }
+      }
+    },
+    "drive": {
+      "title": "Drive",
+      "title_server_error": "Drive (server error)",
+      "share_drive": "Shared Drive",
+      "no_contents_section_message": {
+        "0": "No files or folders in this folder",
+        "1": "Drag and drop files or folders here to upload"
+      },
+      "dad_section": {
+        "title": "Upload to {{name}}",
+        "description": "Files and folders will be uploaded to this folder"
+      },
+      "toast": {
+        "no_uploadable_files": "No uploadable files found."
+      },
+      "import": {
+        "title": "Import to drive",
+        "description": "Enter a shared folder or collection URL, then choose a folder in your drive.",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "Destination folder",
+        "choose_destination": "Choose folder",
+        "destination_description": "Choose the drive root or a folder where imported items should be placed.",
+        "loading_folder": "Loading folder...",
+        "no_subfolders": "No subfolders",
+        "destination_load_failed": "Failed to load the destination folder.",
+        "parent_folder": "Parent",
+        "select_folder": "Use this folder",
+        "destination_required": "Choose a destination folder.",
+        "password_label": "Password",
+        "password_placeholder": "Enter the shared link password",
+        "create_collection_folder": "Create a folder for each collection",
+        "authenticate": "Verify password",
+        "retry": "Retry",
+        "action": "Import to drive",
+        "url_required": "Enter a Nahida URL.",
+        "login_required": "Sign in to import items to your drive.",
+        "password_required": "This link requires a password.",
+        "invalid_password": "The shared link password is incorrect.",
+        "success": "Imported {{count}} item(s) to your drive.",
+        "failed": "Import failed",
+        "progress": {
+          "preparing": "Preparing the import...",
+          "copying": "Importing to your drive on the server...",
+          "downloading": "Downloading item...",
+          "uploading": "Uploading to your drive...",
+          "completed": "Import completed.",
+          "canceled": "Import stopped.",
+          "cancel": "Stop import",
+          "error": "Import failed during transfer."
+        }
+      },
+      "head_buttons": {
+        "search_in_dir_placeholder": "Search in this folder...",
+        "search_in_subdirs_placeholder": "Search in subfolders...",
+        "search_include_subdirs": "Include subfolders",
+        "search_no_results": "No search results",
+        "search_load_more": "Load more",
+        "search_unavailable": "Search is unavailable",
+        "import": "Import a shared link",
+        "dropdown_menu": {
+          "download": "Download",
+          "make_new": {
+            "title": "New",
+            "new_dir": "Create folder",
+            "upload_dir": "Upload folder",
+            "upload_file": "Upload file"
+          }
+        }
+      },
+      "list_head": {
+        "name": "Name",
+        "date": "Date modified",
+        "size": "Size"
+      },
+      "context_menu": {
+        "open": "Open",
+        "download": "Download",
+        "rename": "Rename",
+        "delete": "Delete",
+        "trash": "Trash",
+        "trash_success": "{{count}} files and directories moved to trash",
+        "new_dir": "Create folder",
+        "copy": "Copy",
+        "cut": "Cut",
+        "paste": "Paste"
+      },
+      "clipboard": {
+        "cut_single": "\"{{name}}\" is ready to be cut",
+        "cut_multiple": "\"{{name}}\" and {{count}} more are ready to be cut",
+        "copy_single": "\"{{name}}\" is ready to be copied",
+        "copy_multiple": "\"{{name}}\" and {{count}} more are ready to be copied",
+        "move_loading": "Moving files...",
+        "move_success": "Files moved successfully",
+        "move_error": "Failed to move files: {{message}}",
+        "copy_loading": "Copying files...",
+        "copy_success": "Files copied successfully",
+        "copy_error": "Failed to copy files: {{message}}"
+      },
+      "dialog": {
+        "common": {
+          "invalid_dir_name": "Invalid directory name.",
+          "invalid_file_name": "Invalid file name."
+        },
+        "create_dir": {
+          "title": "Create folder",
+          "name_input_placeholder": "Folder name",
+          "#": {
+            "0": "Invalid directory name format",
+            "1": "Failed to get path info for directory creation",
+            "2": "A folder with the same name already exists.",
+            "toast-promise": {
+              "loading": "Creating directory...",
+              "success": "Directory created"
+            }
+          }
+        },
+        "rename": {
+          "title": "Rename",
+          "name_input_placeholder": "New name",
+          "extension": "Extension",
+          "#": {
+            "0": "Name cannot be empty",
+            "1": "Invalid directory name format",
+            "toast-promise": {
+              "loading": "Renaming...",
+              "success": "Renamed successfully."
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "There are duplicate name items",
+          "description": "Please choose how to handle {{count}} duplicates.",
+          "option_suffix": "Rename: rename in the format name (2) before uploading",
+          "option_skip": "Skip: upload after excluding duplicate items",
+          "preview_label": "Duplicate items:",
+          "preview_more": "{{count}} more",
+          "action_skip": "Skip",
+          "action_suffix": "Rename"
+        },
+        "delete_items": {
+          "title": "Delete Items",
+          "description": "Items will disappear from the list immediately, and cleanup continues in the background. This action cannot be undone.",
+          "action": "Delete",
+          "#": {
+            "toast": {
+              "success": "Deletion requested for {{count}} items",
+              "partial": "Deletion requested for {{accepted}} items; {{failed}} failed",
+              "error": "Deletion request failed"
+            }
+          }
+        }
+      }
+    },
+    "share_drive": {
+      "title": "Share Drive",
+      "title_server_error": "Share Drive (server error)",
+      "no_accessible_drives": "No accessible shared drives."
+    },
+    "mod": {
+      "title": "Mod Manager",
+      "dad_section": {
+        "title": "Add to {{name}}",
+        "description": "Compressed files will be automatically extracted"
+      },
+      "download_completed": "Downloaded \"{{name}}\".",
+      "all_enabled": "Enable all",
+      "all_disabled": "Disable all",
+      "merge": {
+        "enter": "Merge mods",
+        "exit": "Cancel merge",
+        "next": "Next",
+        "selected_count": "{{count}} selected",
+        "dialog_title": "Merge mods",
+        "classifying": "Inspecting selected mods…",
+        "classify_failed": "Could not inspect the selected mods.",
+        "no_usable_mods": "None of the selected mods can be merged.",
+        "hash_mismatch": "These mods do not share a hash. You can still continue.",
+        "classic_locked": "A selected mod cannot use classic merge.",
+        "pack_name": "Name",
+        "placement": "Save to",
+        "placement_in_place": "Current folder",
+        "placement_new_folder": "New folder",
+        "include_vanilla": "Include vanilla slot",
+        "forward_key": "Next key",
+        "back_key": "Previous key",
+        "press_key": "Press a key",
+        "engine": "Merge type",
+        "engine_classic": "Classic",
+        "engine_namespace": "Namespace",
+        "namespace_only": "Namespace only",
+        "group_next": "Group with next",
+        "ungroup": "Ungroup",
+        "confirm": "Merge",
+        "success": "Mods merged.",
+        "failed": "Merge failed.",
+        "family": {
+          "ordinary": "Ordinary",
+          "in_mod_toggle": "In-mod toggle",
+          "classic_merge": "Classic merge",
+          "namespace_merge": "Namespace merge",
+          "support": "Support"
+        }
+      },
+      "content-header": {
+        "all_enabled": "All mods enabled",
+        "all_disabled": "All mods disabled",
+        "tools": "Tools",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "download_dialog": {
+          "title": "Download from URL",
+          "description": "Download the archive to the selected character folder and extract it automatically.",
+          "url_label": "Download URL",
+          "url_placeholder": "Enter a direct download URL",
+          "target_label": "Target folder",
+          "no_target": "Select a character folder on the left",
+          "invalid_url": "Enter a valid URL.",
+          "file_only": "Only direct file downloads are supported.",
+          "started": "Download started."
+        }
+      },
+      "character-sidebar": {
+        "add-to-character": "Add to {{name}}",
+        "open-in-explorer": "Open in File Explorer",
+        "create-folder": "Create New Folder",
+        "delete-folder": "Delete Folder",
+        "sort": {
+          "label": "Sort folders",
+          "field": "Sort by",
+          "name": "Name",
+          "mod-count": "Mod count",
+          "enabled-mod-count": "Active mod count",
+          "direction": "Direction",
+          "ascending": "Ascending",
+          "descending": "Descending"
+        },
+        "more-options": "More options",
+        "hide-empty-folders": "Hide empty folders",
+        "toggle-layout": "Switch to {{mode}}",
+        "active-mod-count": "{{enabled}} active / {{total}} total",
+        "collapse-subgroups": "Collapse subgroups",
+        "expand-subgroups": "Expand subgroups",
+        "unpersist-subgroups": "Unpersist subgroups",
+        "persist-subgroups": "Persist subgroups",
+        "unmark-manual-subgroup": "Unmark manual subgroup",
+        "tools": "Tools",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer"
+      },
+      "drag_drop": {
+        "target_path_not_set": "Target path is not set.",
+        "group_path_not_set": "Group path is not set.",
+        "file_path_unavailable": "Unable to resolve the file path.",
+        "unsupported_file_with_images": "{{fileName}} is not a supported file type. (Only archives, folders, and image files are allowed.)",
+        "unsupported_file_archive_only": "{{fileName}} is not a supported file type. (Only archives or folders are allowed.)",
+        "already_exists_folder": "Folder already exists: {{folderName}}",
+        "already_exists_item": "Item already exists: {{folderName}}",
+        "processing_error": "An error occurred while processing the file.",
+        "extract": {
+          "loading": "Extracting {{fileName}}...",
+          "success": "Extracted {{fileName}}.",
+          "error": "Failed to extract {{fileName}}."
+        },
+        "copy": {
+          "loading": "Processing {{fileName}}...",
+          "success": "Added {{fileName}}.",
+          "error": "Failed to add {{fileName}}."
+        }
+      },
+      "play": {
+        "no_importer": "Set an importer for this game before launching."
+      },
+      "dialog": {
+        "extract_archive_path": {
+          "title": "Choose extraction path",
+          "description": "Choose the extracted folder structure when {{fileName}} contains a single top-level folder.",
+          "cancel": "Cancel",
+          "flatten_single_root": "Remove top-level folder",
+          "flatten_single_root_example": "Example: mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "Keep archive paths",
+          "keep_archive_root_example": "Example: mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
+        "add-game": {
+          "title": "Add Game",
+          "name_input_placeholder": "Game Name (e.g. Genshin)",
+          "path_input_placeholder": "Mod folder path",
+          "nte_game_name": "NTE",
+          "nte_install_path": "NTE install folder",
+          "nte_not_found": "NTE game not found.",
+          "nte_system_folder_warning_title": "System folder selected",
+          "nte_system_folder_warning_description": "Windows may ask for administrator permission.",
+          "nte_custom_mod_folder": "Custom mod folder",
+          "nte_custom_mod_folder_description": "Optional. The game Mods folder will be linked to this folder.",
+          "xxmi_path_required": "Set the XXMI path first to load importers.",
+          "open_xxmi_settings": "Open Importer settings",
+          "nte_bootstrap_progress": {
+            "checking": "Preparing NTE bootstrap files...",
+            "fetching-release": "Checking {{archiveName}} release...",
+            "downloading": "Downloading {{archiveName}}...",
+            "extracting": "Extracting {{archiveName}}...",
+            "installing": "Installing bootstrap files...",
+            "completed": "NTE bootstrap files are ready.",
+            "failed": "Failed to prepare NTE bootstrap files.",
+            "working": "Working...",
+            "percent": "{{value}}%"
+          },
+          "#": {
+            "0": "Please enter a game name",
+            "1": "Please select a mod folder path"
+          }
+        },
+        "edit-game": {
+          "title": "Edit Game",
+          "path_label": "Mod folder path",
+          "importer_label": "Importer",
+          "no_importer": "None",
+          "order_label": "Display order",
+          "order_value": "{{current}} of {{total}}",
+          "order_description": "Use the arrow buttons to change this game's position in the dropdown."
+        },
+        "nte-launch": {
+          "title": "Set launcher path",
+          "path_label": "Launcher path",
+          "path_required": "Please select a launcher path.",
+          "launch": "Save and launch launcher"
+        },
+        "preset-management": {
+          "legacy-badge": "Legacy",
+          "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
+        },
+        "delete-game": {
+          "title": "Delete Game",
+          "description": "Are you sure you want to delete '{{name}}'? This action cannot be undone, and the game's presets will also be deleted."
+        },
+        "delete-mod": {
+          "title": "Are you sure you want to delete this mod?",
+          "description": "Deleted mods can be restored from the recycle bin."
+        },
+        "rename-mod": {
+          "title": "Rename Mod",
+          "description": "Change the folder name used for this mod.",
+          "name-placeholder": "Mod name",
+          "confirm": "Rename"
+        },
+        "find-conflict": {
+          "title": "Find Conflict Mods",
+          "description": "Runs a bisect with \"{{name}}\" kept enabled to find which other mod conflicts with it.",
+          "mod-disabled-warning": "This mod is currently disabled. Enable it first to reproduce the conflict.",
+          "session-active": "A bisect session is already in progress. Cancel or finish it before starting a new one."
+        },
+        "texture-resize": {
+          "title": "Resize mod textures",
+          "description": "Scan \"{{name}}\" for DDS files and resize them in place."
+        },
+        "create-folder": {
+          "title": "Create New Folder",
+          "description": "Create a new folder under {{name}}.",
+          "name-placeholder": "Folder name",
+          "#": {
+            "success": "\"{{name}}\" folder created",
+            "invalid-name": "The folder name is invalid",
+            "already-exists": "A folder with that name already exists",
+            "failed": "Failed to create folder"
+          }
+        },
+        "delete-folder": {
+          "title": "Delete Folder",
+          "description": "Are you sure you want to delete \"{{name}}\"? The folder can be restored from the recycle bin.",
+          "#": {
+            "success": "Folder moved to trash",
+            "failed": "Failed to delete folder"
+          }
+        },
+        "delete-preview": {
+          "title": "Delete Preview",
+          "description": "Are you sure you want to delete the preview for \"{{name}}\"? It can be restored from the recycle bin."
+        },
+        "overwrite-preview": {
+          "title": "Overwrite Existing Preview?",
+          "description": "\"{{name}}\" already has a preview. Continue to replace it with the new file.",
+          "confirm": "Overwrite"
+        },
+        "add-preset": {
+          "title": "Create New Preset",
+          "name-placeholder": "Preset name",
+          "description-placeholder": "Description (optional)",
+          "conflict": {
+            "title": "Duplicate mod entries found",
+            "description": "These folders are treated as the same mod because the DISABLED prefix is ignored. Continue to rename the disabled duplicates and create the preset.",
+            "mod-key-label": "Conflict key",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "action": "Rename disabled duplicates and continue"
+          },
+          "#": {
+            "0": "Please enter a preset name"
+          }
+        },
+        "wuwa-fix-runner": {
+          "install": {
+            "title": "Install Wuwa Mod Fixer",
+            "description": "Wuwa Mod Fixer is not installed. Install the latest version now?",
+            "action": "Install"
+          },
+          "update": {
+            "title": "Update Wuwa Mod Fixer",
+            "description": "A newer Wuwa Mod Fixer is available.",
+            "installed": "Installed",
+            "latest": "Latest",
+            "rate_limited_until": "GitHub API rate limit is active until {{time}}.",
+            "continue_without_update": "Continue Without Update",
+            "action": "Update"
+          },
+          "tabs": {
+            "fix": "Fix Mod",
+            "rollback": "Rollback"
+          },
+          "options": {
+            "title": "Wuwa Mod Fixer",
+            "derived_hashes": {
+              "label": "Add Derived Hashes",
+              "description": "Add missing texture state hashes (e.g. LOD Bias High/Medium, Cantarella wet, Chisa Enhanced E, Aemeath Charged) so character mod textures display correctly (some characters are not included)."
+            },
+            "stable_texture": {
+              "label": "Apply Stable Texture",
+              "description": "Use RabbitFX to set stable textures for characters (currently Cantarella, Chisa, Cartethyia, Ciaccona...). Requires the latest RabbitFX."
+            },
+            "aemeath_mech": {
+              "label": "Fix Aemeath Mech Form",
+              "description": "Do not enable this option for Aemeath mech mods that are already normal. Do not apply the fix twice."
+            },
+            "rendering_33": {
+              "label": "Fix Mesh Holes / Missing Parts",
+              "description": "Fix missing body parts or mesh holes caused by old WWMI export data after version 3.3+.",
+              "warning": "Only enable if the mod has missing body parts or mesh holes!"
+            },
+            "aero_fix": {
+              "label": "Aero FemaleRover Eye Fix",
+              "description": "Use this when the eyes glitch while resonance energy is full.",
+              "options": {
+                "none": "None",
+                "texcoord_override": "TexCoord Override",
+                "texture_mirror_flip": "Texture Mirror Flip"
+              },
+              "warning": "Enable this only if your mod actually has this issue.",
+              "tip": "If the problem isn't resolved, rollback then try a different method."
+            },
+            "run": "Run"
+          },
+          "rollback": {
+            "refresh": "Sync",
+            "scanning": "Scanning backup histories...",
+            "no_backups": "No backups found (.BAK)",
+            "no_backups_short": "No backups",
+            "file_count": "{{n}} files backed up",
+            "latest_state": "Latest Restore Point",
+            "restore": "Rollback",
+            "confirm_restore": "Execute Rollback",
+            "warn_restore": "Revert mod files to this state?",
+            "warn_clean_newer": "(Wipes {{n}} newer backups ahead)",
+            "backup_size_label": "Backup Size:",
+            "success": "Rollback completed.",
+            "advanced": "Advanced",
+            "advanced_hint": "Destructive operations",
+            "restore_all": "Restore to Oldest Backup",
+            "restore_all_desc": "Reverts all files to the oldest recorded state and removes all intermediate backups.",
+            "restore_all_action": "Restore...",
+            "warn_delete_all": "All {{n}} backups will be removed",
+            "clean_backups": "Delete All Backup Files",
+            "clean_backups_desc": "Permanently removes all .BAK files from the target folder. This cannot be undone.",
+            "clean_action": "Delete...",
+            "warn_clean": "Type WIPE to confirm:",
+            "clean_success": "Backups wiped successfully!"
+          },
+          "log": {
+            "input_placeholder": "Input..."
+          }
+        }
+      },
+      "hooks": {
+        "use-mod-mutations": {
+          "add-game-mutation": {
+            "success": "Game added",
+            "duplicate-game-name": "A game with that name already exists",
+            "duplicate-mod-folder-path": "That mod folder path is already in use",
+            "invalid-params": "Game name and mod folder path are required",
+            "failed": "Failed to add game",
+            "nte_mods_link_conflict": "Both the game Mods folder and the custom mod folder contain files. Clear one before linking.",
+            "nte_mods_link_path_occupied": "The game Mods folder path is occupied and cannot be linked.",
+            "nte_custom_mod_folder_inside_link_path": "The custom mod folder cannot be inside the game Mods folder path, or vice versa."
+          },
+          "delete-game-mutation": {
+            "success": "Game deleted"
+          },
+          "update-game-mutation": {
+            "success": "Game settings saved"
+          },
+          "reorder-games-mutation": {
+            "success": "Game order saved",
+            "failed": "Failed to save game order"
+          },
+          "set-game-executable-path": {
+            "invalid-path": "The selected launcher path is invalid.",
+            "failed": "Failed to save the launcher path."
+          },
+          "start-nte-launcher": {
+            "not-set": "No launcher path is set for this game.",
+            "not-found": "The saved launcher path no longer exists.",
+            "failed": "Failed to launch the launcher."
+          },
+          "toggle-mutation": {
+            "0": "The {{name}} folder already exists",
+            "1": "{{processes}} is using the folder, so it cannot be modified",
+            "1-fallback": "The folder is locked and cannot be modified",
+            "2": "Failed to change mod status"
+          },
+          "rename-mutation": {
+            "0": "The {{name}} folder already exists",
+            "1": "The folder {{processes}} is using the folder, so it cannot be renamed",
+            "1-fallback": "The folder is locked and cannot be renamed",
+            "2": "Please enter a valid mod name",
+            "3": "Failed to rename mod"
+          },
+          "locked-description": "Used by: {{processes}}",
+          "create-preset-mutation": {
+            "success": "Preset created",
+            "duplicate-name": "A preset with that name already exists",
+            "conflict-resolve-failed": "Some duplicate mod folders could not be resolved automatically"
+          },
+          "apply-preset-mutation": {
+            "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",
+            "success": "Preset applied",
+            "missing": "Preset applied, but {{count}} mods were missing"
+          },
+          "delete-preset-mutation": {
+            "success": "Preset deleted"
+          }
+        }
+      },
+      "empty_selection": "Please select a group or character folder from the sidebar.",
+      "no-preview": "No Preview",
+      "context-menu": {
+        "paste-preview": "Paste",
+        "open-preview-lightbox": "View large",
+        "open-preview-viewer": "Open in viewer",
+        "delete-preview": "Delete preview",
+        "group-mod": "Mod",
+        "group-tools": "Tools",
+        "open-cmd": "Open CMD",
+        "open-folder": "Open folder",
+        "open-gamebanana": "View on GameBanana",
+        "mark-manual-subgroup": "Mark as subgroup",
+        "rename": "Rename",
+        "find-conflict": "Find Conflict Mods"
+      },
+      "toast": {
+        "trash-loading": "Moving to recycle bin...",
+        "trash-success": "Deleted successfully",
+        "trash-error": "Failed to delete",
+        "value-required": "Please enter a value.",
+        "rename-success": "Mod renamed successfully",
+        "manual-subgroup-success": "Marked as subgroup",
+        "manual-subgroup-remove-success": "Subgroup mark removed",
+        "paste-preview": {
+          "copying": "Copying preview...",
+          "success": "Preview updated",
+          "copy-error": "Failed to copy preview",
+          "downloading": "Downloading preview...",
+          "download-error": "Failed to download preview",
+          "saving": "Saving preview...",
+          "save-error": "Failed to save preview",
+          "no-image": "No image, image URL, or image file found in the clipboard.",
+          "clipboard-error": "Failed to read the clipboard."
+        },
+        "preview-drop": {
+          "saving": "Saving preview...",
+          "success": "Preview updated",
+          "error": "Failed to save preview",
+          "unsupported": "Only one image or video file can be dropped onto the sidebar as a preview.",
+          "path-error": "Failed to resolve the file path."
+        }
+      },
+      "log-dialog": {
+        "title": "Log",
+        "running": "Running...",
+        "python-required": "Python is required to run Python fix tools. Install Python and make sure the python command is available."
+      }
+    },
+    "gamebanana": {
+      "title": "GameBanana",
+      "back": "Back",
+      "auth": {
+        "checking_title": "Checking your GameBanana login",
+        "checking_description": "Verifying the saved login cookie and reopening login if needed.",
+        "required_title": "GameBanana login is required",
+        "required_description": "Your saved login has expired or is no longer valid. Sign in again to continue.",
+        "cancelled_title": "GameBanana login was cancelled",
+        "cancelled_description": "Complete login to load GameBanana data.",
+        "unsupported_title": "Automatic GameBanana login is unavailable",
+        "unsupported_description": "This platform cannot open the GameBanana login window. Enter an rmc cookie to continue.",
+        "unreachable_title": "GameBanana is unreachable",
+        "unreachable_description": "Could not reach GameBanana. Check your connection and try again.",
+        "retry": "Sign In Again",
+        "manual_rmc": {
+          "button": "Enter rmc",
+          "title": "Set rmc Token",
+          "description": "Enter the GameBanana rmc cookie value from your browser.",
+          "empty": "Enter an rmc value.",
+          "GAMEBANANA_INVALID_RMC": "The rmc token is invalid.",
+          "GAMEBANANA_SERVER_UNREACHABLE": "The server is not responding.",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "Failed to save the rmc token."
+        }
+      },
+      "supported_games": "Supported Games",
+      "supported_games_description": "Select a game to load its overview and mod categories.",
+      "selected": "Selected",
+      "root_categories": "Root Categories",
+      "game_menu": "Game",
+      "loading": "Loading...",
+      "back_to_category": "Back to category",
+      "category_panel_title": "Categories",
+      "category_panel_description_root": "Browse the game's root categories.",
+      "category_panel_description_nested": "Browse subcategories in the current category.",
+      "category_panel_description_selected": "Browse subcategories in \"{{name}}\".",
+      "no_categories": "There are no categories to display.",
+      "search_categories": "Search categories...",
+      "no_category_results": "No matching categories found.",
+      "stage": {
+        "game": "Game",
+        "category": "Category",
+        "mod": "Mod"
+      },
+      "error_title": "Failed to load GameBanana data",
+      "error_description_unknown": "The request failed. Check your GameBanana login or try again later.",
+      "error_description_auth": "Authentication with GameBanana failed. Sign in again.",
+      "error_description_http": "GameBanana returned HTTP {{status}}{{statusText}}.",
+      "error_description_schema": "GameBanana returned unexpected data for {{context}}.",
+      "game_overview_description": "Overview and highlighted submissions for the selected game.",
+      "open_profile": "Open in Browser",
+      "open_mod_url": {
+        "button": "Open URL",
+        "title": "Open by Mod URL",
+        "placeholder": "https://gamebanana.com/mods/...",
+        "invalid": "Enter a valid GameBanana mod URL.",
+        "confirm": "Open"
+      },
+      "logout": "Logout",
+      "stats": {
+        "subscribers": "Subscribers",
+        "sections": "Sections",
+        "top_submissions": "Top Submissions",
+        "likes": "Likes",
+        "posts": "Posts",
+        "views": "Views",
+        "downloads": "Downloads"
+      },
+      "like": "Like",
+      "liked": "Liked",
+      "unlike": "Unlike",
+      "like_unavailable": "Like is unavailable for this mod.",
+      "like_failed": "Failed to update the like.",
+      "download_failed": "GameBanana download failed.",
+      "top_submissions": "Top Submissions",
+      "latest_feed": "Latest Feed",
+      "latest_feed_description": "Recent submissions for the selected game.",
+      "category_loading": "Loading category...",
+      "category_description": "Explore subcategories and mods from this category.",
+      "game_page": "Game Page",
+      "subcategories": "Subcategories",
+      "mods": "Mods",
+      "mods_description": "Browse paged mod listings for the selected category.",
+      "search_mods": "Search mods...",
+      "mod_sort": {
+        "label": "Sort mods",
+        "Generic_Newest": "Newest",
+        "Generic_MostLiked": "Most liked",
+        "Generic_MostDownloaded": "Most downloaded",
+        "Generic_MostViewed": "Most viewed"
+      },
+      "previous": "Previous",
+      "next": "Next",
+      "retry_later": "Retry later",
+      "no_results": "No matching mods found.",
+      "mod_details": "Mod Details",
+      "mod_details_description": "Select a mod to inspect files, stats, and links.",
+      "preview": "Preview",
+      "preview_description": "Browse the mod's preview images.",
+      "no_preview_image": "No preview image.",
+      "comments": "Comments",
+      "comments_description": "Browse GameBanana comments by popular or newest.",
+      "comment_sort": {
+        "popular": "Popular",
+        "newest": "Newest"
+      },
+      "comment_replies": "{{count}} replies",
+      "comment_stamps": "{{count}} stamps",
+      "load_more_comments": "Load More Comments",
+      "no_comments": "There are no comments to display.",
+      "select_mod_prompt": "Select a mod from the list to view its details.",
+      "no_description": "No description available.",
+      "files": "Files",
+      "no_files": "No downloadable files listed.",
+      "file_downloads": "{{count}} downloads",
+      "narrow_window": {
+        "title": "Window is too narrow",
+        "description": "Please widen the window to browse GameBanana content."
+      }
+    },
+    "tools": {
+      "dashboard": {
+        "sidebar_title": "Mod Tools",
+        "tools_label": "Tools",
+        "toggle_sidebar": "Toggle sidebar",
+        "empty_title": "Developer Tools",
+        "empty_description": "Select a tool from the sidebar or pick one below to get started.",
+        "external_page": "External page",
+        "inline_tool": "Inline tool"
+      },
+      "4001_fixer": {
+        "title": "4001 Fixer",
+        "description": "Applies GIMI d3d11.dll fixes for the 4001 error.",
+        "build_tab": "Build DLL",
+        "obfuscate_tab": "Diversify DLL Padding",
+        "provider": "Provider",
+        "version": "Version",
+        "version_hint": "If the build fails, try again with an earlier version.",
+        "loading": "Loading...",
+        "load_failed": "Failed to load versions.",
+        "no_versions": "No versions available.",
+        "target_importer": "Target GIMI Importer",
+        "no_importer": "No available GIMI Importer",
+        "select_importer_msg": "Please select a target GIMI Importer.",
+        "building": "Building",
+        "start_build": "Start Build",
+        "obfuscate_description": "Creates a backup of the selected importer's d3d11.dll, then diversifies safe PE padding bytes.",
+        "restore_description": "A pe-padding-diversifier backup exists, so this importer is treated as already diversified. Restore the backup before diversifying again.",
+        "obfuscating": "Diversifying",
+        "restoring": "Restoring",
+        "start_obfuscate": "Diversify Padding",
+        "start_restore": "Restore Backup",
+        "backup_path": "Backup: {{path}}",
+        "system_folder_warning_title": "System folder selected",
+        "system_folder_warning_description": "Windows may ask for administrator permission when applying or restoring the DLL.",
+        "progress": {
+          "XXMI_INIT": "Initializing...",
+          "XXMI_OBFUSCATE_INIT": "Preparing DLL padding diversification...",
+          "XXMI_RESTORE_INIT": "Preparing DLL restore...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Could not find the importer.",
+          "XXMI_FIND_VS": "Locating Visual Studio build tools...",
+          "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Please make sure the C++ build tools are installed.",
+          "XXMI_BUILDING": "Building D3D11 DLL...",
+          "XXMI_OBFUSCATING": "Diversifying D3D11 DLL padding...",
+          "XXMI_RESTORING": "Restoring D3D11 DLL from backup...",
+          "XXMI_ERR_DLL_NOT_FOUND": "Could not find the built d3d11.dll file.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "Cannot write d3d11.dll to the target Importer. Check the folder permissions or approve the administrator prompt.",
+          "XXMI_ERR_DLL_IN_USE": "Cannot replace d3d11.dll. Close the game first, then try again.",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "Could not close XXMI Launcher. Close it and try again.",
+          "XXMI_ERR_ELEVATION_FAILED": "Administrator permission was denied or the elevated write failed. Approve the UAC prompt and try again.",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
+          "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll padding was diversified successfully.",
+          "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll padding is already diversified.",
+          "XXMI_OBFUSCATE_BACKUP_EXISTS": "A pe-padding-diversifier backup already exists. Restore it before diversifying again.",
+          "XXMI_RESTORE_SUCCESS": "d3d11.dll was restored from backup.",
+          "XXMI_ERR_BUILD_FAILED": "An unexpected error occurred during the build.",
+          "XXMI_ERR_OBFUSCATE_FAILED": "An unexpected error occurred during padding diversification.",
+          "XXMI_ERR_OBFUSCATE_NO_CANDIDATES": "No safe padding diversification candidates were found in d3d11.dll.",
+          "XXMI_ERR_RESTORE_BACKUP_NOT_FOUND": "Could not find a pe-padding-diversifier backup to restore.",
+          "XXMI_ERR_RESTORE_FAILED": "An unexpected error occurred while restoring the backup.",
+          "XXMI_DOWNLOAD_REPO": "Downloading XXMI source code...",
+          "XXMI_EXTRACT_REPO": "Extracting source code archive...",
+          "XXMI_ENABLE_UNSAFE_MODE": "Enabling Unsafe Mode..."
+        }
+      },
+      "toggle_viewer_generator": {
+        "title": "Toggle Viewer Generator",
+        "not_configured": "XXMI path is not configured. Configure XXMI first.",
+        "auto_generate": "Toggle Viewer Auto Generate",
+        "auto_generate_desc": "Auto-generate toggle-viewer files from mod ini toggle sections.",
+        "hotkey": "Toggle Viewer Key",
+        "batch_generate": "Batch Generate",
+        "batch_delete": "Batch Delete",
+        "stop": "Stop",
+        "running": "Running: {{mode}}",
+        "idle": "Idle",
+        "unknown": "unknown",
+        "logs": "Logs",
+        "no_logs": "No logs yet.",
+        "dialog": {
+          "trigger": "Hotkey:",
+          "title": "Toggle Viewer Hotkey",
+          "description": "Press the key combination to set"
+        }
+      },
+      "texture_resizer": {
+        "title": "Texture Resizer",
+        "target_folder": "Target folder",
+        "target_folder_placeholder": "Folder to scan recursively for DDS files",
+        "browse": "Browse",
+        "operation": "Operation",
+        "operation_options": {
+          "resize": "Resize only",
+          "resize_and_convert": "Resize and convert",
+          "convert": "Convert format only",
+          "upscale": "Upscale only",
+          "upscale_and_convert": "Upscale and convert"
+        },
+        "operation_descriptions": {
+          "resize": "Only change the texture size. The DDS format stays the same.",
+          "resize_and_convert": "Resize the texture and re-encode it to a different DDS format while preserving color space.",
+          "convert": "Keep the original texture size and only change the DDS output format.",
+          "upscale": "Enlarge the texture with an AI upscaler. The DDS format stays the same.",
+          "upscale_and_convert": "Enlarge the texture with an AI upscaler and re-encode it to a different DDS format."
+        },
+        "upscale_model": "Upscale model",
+        "upscale_engine_labels": {
+          "realesrgan": "Real-ESRGAN",
+          "realcugan": "Real-CUGAN"
+        },
+        "upscale_model_options": {
+          "realesr-animevideov3": "Anime / game (default)",
+          "realesrgan-x4plus-anime": "Anime x4+",
+          "realesrgan-x4plus": "Photo x4+",
+          "realcugan-pro": "Pro",
+          "realcugan-se": "SE",
+          "realcugan-nose": "Nose"
+        },
+        "upscale_model_descriptions": {
+          "realesr-animevideov3": "Best default for game and anime textures. Supports 2x, 3x, and 4x.",
+          "realesrgan-x4plus-anime": "Higher-quality anime model. Fixed 4x scale.",
+          "realesrgan-x4plus": "Photo / realistic model. Fixed 4x scale.",
+          "realcugan-pro": "High-quality anime model. Supports 2x and 3x.",
+          "realcugan-se": "Balanced anime model. Supports 2x, 3x, and 4x.",
+          "realcugan-nose": "Lightest and fastest model. Fixed 2x scale."
+        },
+        "upscale_scale": "Scale",
+        "upscale_scale_option": "{{scale}}x",
+        "upscale_scale_description": "Output size is original size multiplied by the selected scale. Results above 8192px are skipped.",
+        "upscale_normal_warning": "Linear textures such as normal or roughness maps can be damaged by upscaling. Use this only for color textures.",
+        "upscale_progress": {
+          "working": "Preparing upscale runtime"
+        },
+        "mode": "Resize mode",
+        "mode_options": {
+          "percent": "Percent",
+          "custom": "Custom bounds"
+        },
+        "mode_descriptions": {
+          "percent": "Scale textures down by percentage, then snap each file to the nearest valid DDS size.",
+          "custom": "Use width and height as maximum bounds. Each texture keeps its original aspect ratio."
+        },
+        "percent": "Percent",
+        "custom_width": "Max width",
+        "custom_height": "Max height",
+        "custom_hint": "Custom bounds are snapped to 1024px steps. Actual output is chosen per texture while preserving its source ratio.",
+        "resize_step": "Resize step",
+        "resize_step_description": "Only valid 1024-multiple sizes are selectable on the slider.",
+        "resize_step_unavailable": "This texture has no valid 1024-step downscale candidate.",
+        "output_format": "Output format",
+        "output_format_description": "Only formats compatible with the source color space are shown.",
+        "current_output_format": "Selected output format",
+        "backup": "Create backup",
+        "backup_description": "Create a sibling .bak file before overwriting each DDS. Existing backups are kept.",
+        "load": "Load texture list",
+        "refresh": "Refresh list",
+        "texture_list_title": "Texture list",
+        "texture_list_empty": "Select a path and load the texture list.",
+        "loading_textures": "Loading textures.",
+        "preview_unavailable": "Preview unavailable",
+        "ready": "Ready",
+        "not_resizable": "Skipped",
+        "process_single": "Process",
+        "select_all": "Select all",
+        "selected_count": "{{count}} selected",
+        "bulk_apply": "Apply to all",
+        "bulk_apply_description": "Use the same options for every selected texture.",
+        "process_selected": "Process selected",
+        "batch_progress": "{{current}} / {{total}}",
+        "run": "Process textures",
+        "running": "Processing",
+        "result_title": "Processing result",
+        "list": {
+          "total": "Total",
+          "resizable": "Resizable",
+          "skipped": "Skipped"
+        },
+        "meta": {
+          "path": "Full path",
+          "size": "File size",
+          "format": "DDS format",
+          "layers": "Layer count",
+          "source": "Source size",
+          "target": "Target size"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "Unknown"
+        },
+        "dialog": {
+          "title": "Texture processing options",
+          "description_fallback": "Selected DDS file",
+          "description_multiple": "{{count}} DDS files"
+        },
+        "result": {
+          "processed": "Processed",
+          "updated": "Updated",
+          "skipped": "Skipped",
+          "failed": "Failed"
+        },
+        "toast": {
+          "save_settings_failed": "Failed to save texture processing settings",
+          "load_failed": "Failed to load the texture list",
+          "completed": "Texture processing completed",
+          "completed_description": "{{updated}} updated, {{failed}} failed, {{skipped}} skipped",
+          "none_processed": "No textures were processed",
+          "single_completed": "Texture processing completed",
+          "single_completed_fallback": "Finished processing the selected texture",
+          "failed": "Texture processing failed"
+        }
+      },
+      "model_viewer": {
+        "title": "Model Viewer",
+        "toggle_viewer": "Toggle Viewer",
+        "ineffective_blocked_by": "This value cannot be used with the current combination: {{variables}}",
+        "ineffective_suggestion": "To use this value, change the following:",
+        "ineffective_apply": "Apply this combination",
+        "open_file": "Open File",
+        "convert_first": "Convert a mod to GLB first, then open it here.",
+        "generating_selected_state": "Generating selected state",
+        "model_data_unavailable": "Model data is not available.",
+        "menu": {
+          "model": "Model",
+          "texture": "Texture",
+          "renderer": "Renderer",
+          "rendering": "Rendering",
+          "misc": "Misc",
+          "rotate": "Rotate",
+          "reset": "Reset",
+          "toggle": "Toggle",
+          "capture_set_preview": "Capture and set preview",
+          "save_to_ini": "Save to INI"
+        },
+        "dialog": {
+          "overwrite_preview": {
+            "title": "Replace preview",
+            "description": "\"{{name}}\" already has a preview. Continue to replace it with the current viewer capture?",
+            "confirm": "Replace preview"
+          }
+        },
+        "toast": {
+          "save_to_ini_success": "Saved current toggle values to INI",
+          "save_to_ini_no_changes": "No matching persist variables were found to save",
+          "save_to_ini_error": "Failed to save toggle values to INI",
+          "capture_preview_success": "Saved the current viewer capture as preview.png",
+          "capture_preview_error": "Failed to save the current viewer capture as preview.png"
+        },
+        "rotate_actions": {
+          "Left 90°": "Left 90°",
+          "Right 90°": "Right 90°",
+          "Up 90°": "Up 90°",
+          "Down 90°": "Down 90°",
+          "Flip 180°": "Flip 180°"
+        }
+      },
+      "fix-tool-manager": {
+        "title": "Fix Tool Manager",
+        "presets": {},
+        "builder": {
+          "left": {
+            "title": "Added Scripts",
+            "description": "Drag and drop to add scripts or click the + button to move to the right",
+            "noScripts": {
+              "title": "No available scripts",
+              "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
+            },
+            "dropToAdd": "Drop to add"
+          },
+          "right": {
+            "title": "Preset Configuration",
+            "description": "Drag to change script order",
+            "presetName": "Preset Name",
+            "enterPresetName": "Please enter preset name",
+            "noScripts": {
+              "title": "No scripts added",
+              "description": "Click the + button from the left list to add scripts"
+            },
+            "#": {
+              "handleSavePreset": {
+                "success": "Preset saved successfully",
+                "error": "Failed to save preset",
+                "alreadyExists": "Preset name already exists"
+              }
+            }
+          }
+        }
+      },
+      "mod_bisect": {
+        "title": "Mod Bisect",
+        "description": "Quickly find the problematic mod by disabling them in batches.",
+        "start": "Start",
+        "cancel": "Cancel",
+        "scanning": "Scanning the mod folder...",
+        "bisect_inconclusive": "Could not determine the cause. Please verify your responses.",
+        "no_inis_found": "No enabled ini files were found.",
+        "all_excluded": "All enabled ini files were excluded from bisect.",
+        "cancelled": "Bisect has been cancelled.",
+        "reverting": "Reverting changes...",
+        "no_games": "No games available",
+        "select_game": "Select a game",
+        "nte_unsupported": "NTE unsupported",
+        "nte_tooltip": "The Importer for this game is not yet supported.",
+        "round_title": "Round {{round}} · batch {{batchSize}} · {{remaining}} remaining",
+        "round_description": "The mods below have been disabled. Press F10 to reload and check if the issue is resolved.",
+        "disabled_count": "{{count}} disabled",
+        "undo": "Undo last round",
+        "still_broken": "Still broken",
+        "problem_fixed": "Problem fixed",
+        "done_title": "Bisect complete",
+        "done_description": "{{path}} is suspected of causing the issue.",
+        "keep_disabled": "Keep this mod disabled",
+        "keep_disabled_hint": "\"{{from}}\" will be renamed to \"{{to}}\" to keep it disabled.",
+        "re_enable_all": "Re-enable all mods",
+        "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
+        "preserve_d3dx": "Preserve d3dx_user.ini",
+        "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
+        "recover_disabled": "Recover disabled mods",
+        "recover_disabled_hint": "Restore .mod-bisect-disabled files left in the selected game's mod folder.",
+        "recover_disabled_success": "Recovered {{count}} disabled mod file(s).",
+        "recover_disabled_none": "No leftover disabled files found.",
+        "exclude_paths": "Paths to keep enabled",
+        "exclude_paths_description": "The specified paths and their descendants stay enabled during bisect.",
+        "exclude_paths_placeholder": "Relative path from the mod folder",
+        "exclude_paths_add": "Add",
+        "exclude_paths_remove": "Remove",
+        "exclude_count": "{{count}} path(s) excluded from disabling",
+        "exclude_empty": "Please enter a path.",
+        "exclude_outside": "The path must be inside the selected importer's mod folder.",
+        "exclude_root": "The mod folder root cannot be excluded.",
+        "exclude_missing": "That path does not exist.",
+        "exclude_invalid": "Enter a valid path inside the selected game's mod folder.",
+        "exclude_duplicate": "That path is already specified.",
+        "exclude_no_game": "Please select a game first.",
+        "status": {
+          "idle": "Idle",
+          "scanning": "Scanning",
+          "round": "Round in progress",
+          "done": "Done",
+          "reverting": "Reverting",
+          "cancelled": "Cancelled"
+        }
+      },
+      "touch_profile": {
+        "title": "Touch Profile",
+        "mod_path": "Mod folder",
+        "mod_path_placeholder": "Mod folder_PH",
+        "use_vision": "Use Vision LLM",
+        "vision_cache_clear_button": "Clear cache",
+        "analyze": "Analyze mod",
+        "analyzing": "Analyzing",
+        "reanalyze": "Re-analyze (Next turn)",
+        "reanalyzing": "Re-analyzing...",
+        "turn_label": "Analysis Turn",
+        "turn_select": "Select Turn",
+        "turn_approved": "LLM Approved (LGTM)",
+        "turn_pending": "Feedback Recommended",
+        "max_turn_reached": "Max turn limit reached",
+        "discard": "Discard draft",
+        "create": "Create Touch mod",
+        "force_create": "Force create",
+        "regenerate": "Regenerate with options",
+        "open_folder": "Open folder",
+        "rollback": "Rollback",
+        "rolling_back": "Rolling back",
+        "result": "Created Touch mod",
+        "source": "Source mod",
+        "support_grade": "Support grade",
+        "auto_apply": "Auto-apply ready",
+        "interactive": "Interactive",
+        "confidence": "Confidence",
+        "link_settings": "Link settings",
+        "zones": "Zones",
+        "vision_source": "Vision",
+        "manual_source": "Manual",
+        "yes": "Yes",
+        "no": "No",
+        "stage": {
+          "scan": "Scan",
+          "preview": "Preview",
+          "vision": "Vision",
+          "assets": "Assets",
+          "ini": "INI",
+          "validate": "Validate",
+          "complete": "Complete"
+        },
+        "toast": {
+          "loaded": "Touch draft ready",
+          "load_failed": "Failed to analyze mod",
+          "created": "Touch mod created",
+          "create_failed": "Failed to create Touch mod",
+          "regenerated": "Touch mod regenerated",
+          "regenerate_failed": "Failed to regenerate Touch mod",
+          "rolled_back": "Touch mod rolled back",
+          "rollback_failed": "Failed to roll back Touch mod",
+          "settings_save_failed": "Failed to save touch settings",
+          "reanalyzed": "LLM re-analysis complete (Turn {{turn}})",
+          "reanalyze_failed": "LLM re-analysis failed",
+          "turn_selected": "Turn {{turn}} selected",
+          "turn_select_failed": "Failed to select turn",
+          "vision_cache_cleared": "Vision cache cleared",
+          "vision_cache_clear_failed": "Failed to clear Vision cache",
+          "no_components_selected": "Select at least one mesh to analyze."
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "This is already a Touch mod",
+            "description": "A generated Touch mod cannot be converted again. Select the original non-touch mod or roll back the existing conversion before trying again."
+          },
+          "suspected_touch": {
+            "title": "This appears to be a Touch mod",
+            "description": "An existing Touch runtime was detected, so this mod cannot be safely converted. Select the original non-touch mod."
+          }
+        },
+        "skipped": "Skipped",
+        "preview_title": "Touch Influence Preview",
+        "mesh_select_title": "Select Meshes for Touch Analysis",
+        "mesh_select_count": "Selected {{selected}}/{{total}}",
+        "mesh_select_all": "Select all",
+        "mesh_select_candidates": "Candidates only",
+        "mesh_select_none": "Clear all",
+        "mesh_next": "Next",
+        "mesh_back": "Back to mesh selection",
+        "mesh_non_candidate": "Not a candidate",
+        "llm_summary": "Analysis LLM",
+        "component": "Mesh component",
+        "component_placeholder": "Select a component",
+        "zone": "Influence zone",
+        "zone_placeholder": "Select a zone",
+        "all_zones": "All zones",
+        "preview_loading": "Preparing 3D preview",
+        "preview_empty": "No interactive mesh is available for preview.",
+        "preview_failed": "Failed to load preview",
+        "no_interactive_components": "No interactive mesh components were found.",
+        "mask_strength": "Touch mask strength",
+        "mask_strength_reset": "Reset Touch mask strength",
+        "mask_curve": "Influence distribution",
+        "mask_curve_reset": "Reset influence distribution",
+        "mask_curve_hint": "Lower values flatten weaker areas; higher values concentrate influence toward the center.",
+        "mask_radius": "Area size",
+        "mask_radius_shrink": "Shrink area",
+        "mask_radius_grow": "Expand area",
+        "mask_core_attenuation": "Core shrink behavior",
+        "mask_core_attenuation_off": "Keep core (legacy)",
+        "mask_core_attenuation_linear": "Linear",
+        "mask_core_attenuation_sqrt": "Square root",
+        "mask_core_attenuation_pow": "Shallow power",
+        "mask_core_attenuation_hint": "When shrinking the area, scales the core intensity along the chosen curve. Off keeps the core at full strength, only trimming the edges.",
+        "touch_strength": "Touch strength",
+        "strength_light": "Light",
+        "strength_normal": "Normal",
+        "strength_strong": "Strong",
+        "physics_preset": "Area physics",
+        "physics_soft": "Soft",
+        "physics_normal": "Normal",
+        "physics_firm": "Firm",
+        "physics_custom": "Custom",
+        "advanced_title": "Advanced settings",
+        "advanced_description": "Adjust the physical response of the selected area.",
+        "advanced_radius": "Radius",
+        "advanced_strength": "Strength",
+        "advanced_damping": "Damping",
+        "advanced_spring": "Spring",
+        "advanced_max_offset": "Maximum displacement",
+        "advanced_falloff": "Falloff",
+        "mode_vision": "Vision LLM",
+        "mode_bone": "Bone/Weight",
+        "bone_select_title": "Bone zone selection",
+        "bone_select_hint": "Specify which bones and channels to use as touch zones for each mesh.",
+        "bone_label": "Bone {{id}} ({{count}})",
+        "bones_count": "bones",
+        "add_bone_zone": "Add bone zone",
+        "remove_bone_zone": "Remove bone zone",
+        "weight_threshold": "Weight threshold",
+        "weight_threshold_hint": "Vertices with weight within this range are included in the touch zone.",
+        "zone_label_placeholder": "Label (optional)",
+        "no_blend": "No Blend",
+        "no_blend_hint": "This mesh has no Blend buffer; bone/weight mode is unavailable.",
+        "bone_select_placeholder": "Select bones...",
+        "channel_select_placeholder": "Select channel...",
+        "no_bones": "No matching bones",
+        "bone_label_short": "Bone {{id}}"
+      },
+      "body_shape": {
+        "title": "Body Shape",
+        "mod_path": "Mod folder",
+        "mod_path_placeholder": "Folder containing mod.ini / Position.buf",
+        "load": "Load mesh",
+        "loading": "Loading",
+        "mesh": "Position buffer",
+        "selection_mask": "Deformation selection",
+        "selection_mask_hint": "Paint the surface directly. Bone weights are only imported as an initial selection.",
+        "selection_empty_hint": "Enable the brush and paint the model surface, or import bone weights.",
+        "selection_controls": "Selection deformation",
+        "smooth_selection": "Smooth Boundary",
+        "grow_selection": "Expand Selection",
+        "shrink_selection": "Shrink Selection",
+        "undo_selection": "Undo Selection",
+        "redo_selection": "Redo Selection",
+        "selection_tool": "Selection Tool",
+        "tool_mode_brush": "Brush",
+        "tool_mode_component": "Connected Component",
+        "brush_reach": "Brush reach",
+        "brush_reach_surface": "Surface",
+        "brush_reach_through": "Through",
+        "brush_reach_surface_hint": "Follows the mesh surface and prefers front-facing vertices.",
+        "brush_reach_through_hint": "Selects all vertices inside a 3D radius, including opposite sides.",
+        "import_bones_placeholder": "Import bone weights…",
+        "select_regions": "Body regions",
+        "select_regions_placeholder": "Select regions…",
+        "select_regions_hint": "Select one or more regions above, then adjust their sliders.",
+        "select_bones": "Bones (weights)",
+        "select_bones_placeholder": "Select bones…",
+        "select_bones_hint": "Open the list, preview bones with ↑↓, then press Enter to select.",
+        "pick_bones_hint": "↑↓ highlights preview weights · Enter/click to commit",
+        "no_regions": "No matching regions",
+        "no_bones": "No matching bones",
+        "no_blend_fallback": "No Blend buffer found; falling back to spatial regions.",
+        "bone_label": "Bone {{id}} ({{count}})",
+        "bone_id": "Bone {{id}}",
+        "unified_controls": "Unified controls",
+        "unified_controls_title": "{{count}} selected · unified",
+        "reset_selected": "Reset selected",
+        "show_weights": "Show weight colors",
+        "show_original": "Show original mesh",
+        "deform_operation": "Deformation",
+        "deform_scale": "Axis Scale",
+        "deform_inflate": "Surface Inflate/Deflate",
+        "deform_translate": "Translate",
+        "deform_taper": "Taper",
+        "deform_amount": "Deform amount",
+        "axis_x": "Axis scale X",
+        "axis_y": "Axis scale Y",
+        "axis_z": "Axis scale Z",
+        "translate_x": "Offset X",
+        "translate_y": "Offset Y",
+        "translate_z": "Offset Z",
+        "taper_factor": "Taper factor",
+        "brush_menu": "Brush",
+        "brush_enable": "Enable Weight Paint",
+        "brush_mode": "Mode",
+        "brush_mode_paint": "Paint (+)",
+        "brush_mode_erase": "Erase (-)",
+        "brush_radius": "Radius",
+        "brush_strength": "Strength",
+        "brush_mirror_x": "Mirror X Axis",
+        "brush_reset": "Clear Selection",
+        "regions": {
+          "shoulders": "Shoulders",
+          "chest": "Chest",
+          "waist": "Waist",
+          "hips": "Hips",
+          "buttocks": "Buttocks",
+          "thighs": "Thighs",
+          "calves": "Calves",
+          "arms": "Arms",
+          "head": "Head"
+        },
+        "export": "Apply body shape",
+        "exporting": "Applying",
+        "empty": "Load a mod folder to adjust body shape.",
+        "metrics": {
+          "vertices": "Vertices",
+          "moved": "Moved vertices",
+          "max_disp": "Max displacement",
+          "bones": "Bones"
+        },
+        "toast": {
+          "loaded": "Mesh buffers loaded",
+          "loaded_description": "{{count}} position buffer(s)",
+          "load_failed": "Failed to load mod mesh",
+          "exported": "Body-shaped mod created",
+          "exported_description": "Wrote {{bytes}} bytes",
+          "exported_with_log": "Position buffer updated and 변경사항.txt written",
+          "exported_as_mod": "Disabled the original mod and created: {{path}}",
+          "export_failed": "Failed to apply body shape",
+          "viewer_fallback": "Textured preview unavailable; using simple viewer",
+          "viewer_error": "Model viewer error"
+        }
+      }
+    },
+    "setting": {
+      "title": "Settings",
+      "tabs": {
+        "general": "General",
+        "transfer": "Transfer",
+        "mod": "Mod",
+        "account": "Account",
+        "advanced": "Advanced",
+        "drive": "Drive",
+        "tools": "Tools"
+      },
+      "tools": {
+        "title": "Tools",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "Update Notifications",
+            "description": "Show a notification when a Wuwa Mod Fixer update is available. Background auto-update runs every hour regardless of this setting.",
+            "save_failed": "Failed to save the setting."
+          }
+        },
+        "touch_profile": {
+          "title": "Touch Profile",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "Choose the protocol and model used to analyze touch regions.",
+            "protocol": {
+              "title": "Protocol",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "Example: https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "Model"
+            },
+            "reasoning": {
+              "title": "Reasoning level",
+              "auto": "Automatic",
+              "low": "Low",
+              "medium": "Medium",
+              "high": "High"
+            },
+            "api_key": {
+              "title": "API key",
+              "description": "The key is encrypted with the Windows user store. Environment variables are also supported.",
+              "configured": "Enter a new key to replace the saved key",
+              "placeholder": "Enter API key",
+              "save": "Save",
+              "clear": "Clear",
+              "api_key_saved": "API key saved",
+              "api_key_cleared": "API key cleared",
+              "api_key_save_failed": "Failed to save API key",
+              "api_key_clear_failed": "Failed to clear API key",
+              "api_key_load_failed": "Failed to load API key status"
+            }
+          }
+        }
+      },
+      "gen": {
+        "application": {
+          "title": "Application",
+          "runOnStartup": "Run on startup",
+          "runOnStartupDescription": "Automatically launch the app when the system starts.",
+          "titlebarActivityBadgeClickNavigate": "Click titlebar activity badges to open",
+          "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
+          "checkUpdate": "Check for updates",
+          "runInBackground": "Run in background",
+          "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
+          "runInBackgroundDisableConfirmTitle": "Disable background run?",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist and Toggle Viewer work more reliably when background run is enabled. If you turn this off, closing all windows will quit the app, and you will not be able to use those features until the app is open again. Do you still want to turn off background run?",
+          "runInBackgroundDisableConfirmAction": "Turn off anyway",
+          "autoUpdate": "Auto update",
+          "updateStatus": "Update status",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "Automatic update",
+              "description": "Check for updates on startup and every hour, then download them automatically."
+            },
+            "notify": {
+              "title": "Update notifications",
+              "description": "Check for updates automatically, but only download them when you choose to."
+            },
+            "off": {
+              "title": "Disabled",
+              "description": "Do not check for or download updates automatically."
+            }
+          }
+        },
+        "language": {
+          "title": "Language",
+          "select": "Select language"
+        },
+        "theme": {
+          "title": "Theme",
+          "select": "Select theme",
+          "light": "Light",
+          "dark": "Dark",
+          "system": "System default"
+        },
+        "startPage": {
+          "title": "Start Page",
+          "select": "Select start page"
+        },
+        "logLevel": {
+          "title": "Log Level",
+          "select": "Select Level"
+        },
+        "other": {
+          "title": "Other",
+          "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
+          "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
+          "powerSaveBlockInTransfer": "Prevent sleep mode",
+          "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress.",
+          "imageCacheTitle": "Image Cache",
+          "imageCacheDescription": "Clears the preview image cache",
+          "imageCacheClear": "Clear Cache"
+        }
+      },
+      "mod": {
+        "title": "Mod",
+        "mod_management": {
+          "title": "Mod Management",
+          "archiveExtractPathMode": "Archive extraction path",
+          "archiveExtractPathModeDescription": "Choose how archives with a single top-level folder should be extracted.",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "Remove top-level folder",
+            "keep_archive_root": "Keep archive paths",
+            "ask_every_time": "Ask every time"
+          },
+          "deleteArchiveAfterExtract": "Delete archive after extraction",
+          "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
+          "moveFolderInsteadOfCopy": "Move folder instead of copy",
+          "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
+          "copyShaderFixesOnEnable": "Copy ShaderFixes on enable",
+          "copyShaderFixesOnEnableDescription": "Copy ShaderFixes files from the mod into the active Importer's ShaderFixes folder when enabling a mod.",
+          "disabledPrefixStyle": "Disabled mod prefix style",
+          "disabledPrefixStyleDescription": "Choose the prefix used when disabling mods. Both formats are always recognized when enabling.",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (space)",
+            "underscore": "DISABLED_ (underscore)"
+          },
+          "searchModPreview": "Search Preview in Subfolders",
+          "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
+          "autoResolveDownloadTarget": "Automatically select download target folder",
+          "autoResolveDownloadTargetDescription": "Automatically select a mod folder with a name similar to the download.",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "Nahida Live",
+            "hui": "Hui",
+            "drive": "Drive"
+          }
+        },
+        "layout": {
+          "title": "Layout",
+          "sidebar": {
+            "mode": "Sidebar layout",
+            "modeDescription": "Display the character sidebar as either a row list or a square preview grid.",
+            "modes": {
+              "row": "Row list",
+              "grid": "Preview grid"
+            }
+          },
+          "grid": {
+            "mode": "Mod grid layout",
+            "modeDescription": "Choose how the mod grid decides card widths and column counts.",
+            "modes": {
+              "responsive": "Responsive",
+              "fixed_card_width": "Fixed card width",
+              "fixed_column_count": "Fixed column count"
+            },
+            "responsiveBaseWidth": "Responsive base card width",
+            "responsiveBaseWidthDescription": "Used to calculate how many columns fit in the available width. Range: 240 to 640.",
+            "fixedCardWidth": "Fixed card width",
+            "fixedCardWidthDescription": "Keeps card width fixed and only changes how many columns fit. Range: 240 to 640.",
+            "fixedColumnCount": "Fixed column count",
+            "fixedColumnCountDescription": "Always use this many columns when possible. Range: 1 to 8."
+          }
+        },
+        "performance": {
+          "title": "Performance",
+          "backdrop-blur": {
+            "title": "Use Blur",
+            "description": "Disable this option if performance issues occur while exploring mods"
+          },
+          "virtualization": {
+            "title": "Use Virtualization",
+            "description": "Virtualizes the mod list to improve performance",
+            "threshold": "Threshold Mod Count",
+            "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
+          }
+        }
+      },
+      "transfer": {
+        "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
+        "downloadConcurrency": {
+          "title": "Download concurrency",
+          "description": "Controls how many files can be downloaded at the same time in drive transfers. Range: 16 to 64."
+        },
+        "uploadConcurrency": {
+          "title": "Upload concurrency",
+          "description": "Controls how many files can be uploaded at the same time in drive transfers. Range: 4 to 16."
+        },
+        "bandwidth": {
+          "title": "Bandwidth"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "Download bandwidth limit (MiB/s)",
+          "description": "Limits total download speed across all transfers. 0 means unlimited. Range: 0 to 1024."
+        },
+        "other": {
+          "title": "Other"
+        }
+      },
+      "drive": {
+        "title": "Drive",
+        "sorting": {
+          "title": "Sorting"
+        },
+        "nameSortPolicy": {
+          "title": "Name sort policy",
+          "description": "Choose how spaces and numbers are handled when sorting drive items by name.",
+          "select": "Select sort policy",
+          "options": {
+            "natural_ignore_spacing": "Natural sort + ignore spaces",
+            "natural": "Default natural sort"
+          }
+        },
+        "import": {
+          "title": "Import"
+        },
+        "autoTryPasswords": {
+          "title": "Auto-try passwords",
+          "description": "Automatically try the saved password list when resolving a link that requires a password."
+        },
+        "passwordList": {
+          "title": "Password list",
+          "description": "Passwords to try automatically. Up to {{max}} can be stored.",
+          "placeholder": "Enter password",
+          "add": "Add"
+        }
+      },
+      "xxmi": {
+        "xxmiPath": "XXMI Path",
+        "autoScan": "Auto Scan",
+        "activeImporter": "Active Importer",
+        "persistToggles": "Persist Toggles",
+        "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
+        "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "dllVersion": "XXMI DLL Version",
+        "dllVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
+        "dllVersionLoading": "Loading versions...",
+        "dllVersionLoadFailed": "Failed to load versions.",
+        "dllVersionRetry": "Retry",
+        "dllVersionEmpty": "No versions available.",
+        "dllVersionCurrent": "Current: {{version}}",
+        "dllVersionUnknown": "Unknown",
+        "fn": {
+          "findXXMIPath": {
+            "xxmiNotFound": "XXMI not found",
+            "alert": {
+              "title": "Warning",
+              "description": "Please verify the auto-detected XXMI launcher path. If it seems incorrect, please enter the path manually."
+            }
+          },
+          "saveXXMIPath": {
+            "success": "XXMI path has been saved",
+            "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLL version {{version}} has been applied",
+            "failed": "Failed to apply the selected XXMI DLL version",
+            "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
+          }
+        }
+      },
+      "acc": {
+        "title": "Account",
+        "not_logged_in": {
+          "description": "Login required.",
+          "login": "Login"
+        },
+        "server_unreachable": "Unable to connect to the server.",
+        "my_account": "My Account",
+        "logout": "Logout"
+      },
+      "adv": {
+        "title": "Advanced",
+        "warning_title": "Caution",
+        "warning_description": "Changing settings here may affect app behavior.",
+        "search_placeholder": "Search setting keys...",
+        "no_results": "No matching setting keys found."
+      }
+    },
+    "docs": {
+      "title": "Documentation"
+    }
+  },
+  "components": {
+    "path-selector-dialog": {
+      "title": "Select Path",
+      "description": "Choose how to download {{name}}",
+      "multiple_description": "Choose how to download {{count}} items",
+      "mod_manager": {
+        "title": "Mod Manager",
+        "description": {
+          "0": "From Mod Manager",
+          "1": "Select character folder"
+        }
+      },
+      "explorer": {
+        "title": "Select Path",
+        "description": {
+          "0": "From File Explorer",
+          "1": "Select folder"
+        }
+      }
+    },
+    "download-confirmation-overlay": {
+      "title": "Confirm Download",
+      "description": "Select download location",
+      "file_name": "File Name",
+      "file_name_placeholder": "Enter file name",
+      "download_location": "Download Location",
+      "need_select_character_folder": "Select a character folder on the left",
+      "select_path_failed": "Failed to select path.",
+      "return_to_gamebanana": "Return to GameBanana after adding the download"
+    }
+  },
+  "titlebar": {
+    "server_inactive_badge": "Server inactive",
+    "server_inactive_tooltip": "The server is inactive or under maintenance, so nahida.live features are unavailable.",
+    "controls": {
+      "minimise": "Minimise",
+      "maximise": "Maximise",
+      "restore": "Restore",
+      "close": "Close"
+    },
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "Downloading",
+        "uploading": "Uploading",
+        "transferring": "Transferring",
+        "finalizing": "Finalizing",
+        "paused": "Paused"
+      },
+      "fixer4001": {
+        "building": "Building DLL",
+        "diversifying": "Obfuscating DLL",
+        "restoring": "Restoring DLL"
+      },
+      "modBisect": {
+        "running": "Running bisect"
+      },
+      "textureResizer": {
+        "resizing": "Resizing texture",
+        "upscaling": "Upscaling texture",
+        "converting": "Converting texture format",
+        "resizing_and_converting": "Resizing & converting texture",
+        "upscaling_and_converting": "Upscaling & converting texture"
+      }
+    }
+  },
+  "updater": {
+    "titlebar": {
+      "action": "Review update",
+      "downloadAction": "Download update"
+    },
+    "actions": {
+      "download": "Download update",
+      "install": "Install update"
+    },
+    "status": {
+      "idle": "You're using the latest version.",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading the update...",
+      "downloadingProgress": "Downloading the update... ({{percent}}%)",
+      "failed": "Update failed: {{message}}",
+      "available": "An update is available. Download it when you're ready.{{versionRangeText}}",
+      "downloaded": "The update is ready to install."
+    },
+    "toast": {
+      "available": {
+        "title": "A new version is available.",
+        "description": "A new version of Nahida Desktop is available. Restart to update.",
+        "action": "Update",
+        "releaseNotesTitle": "Release notes",
+        "showOriginal": "Show original",
+        "showTranslation": "Show translation"
+      },
+      "notAvailable": {
+        "title": "You're up to date.",
+        "description": "There are no updates available right now."
+      }
+    }
+  }
+}

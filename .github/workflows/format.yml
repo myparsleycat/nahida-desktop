@@ -1,0 +1,77 @@
+name: Format frontend
+
+on:
+  pull_request:
+    branches:
+      - main
+      - v3
+    paths:
+      - "frontend/**"
+      - ".github/workflows/format.yml"
+  push:
+    branches:
+      - main
+      - v3
+    paths:
+      - "frontend/**"
+      - ".github/workflows/format.yml"
+
+concurrency:
+  group: format-frontend-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    name: Format frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out writable branch
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Check out fork pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Format frontend
+        run: pnpm --dir frontend fmt
+
+      - name: Commit formatting changes
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          if git diff --quiet -- frontend; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- frontend
+          git commit -m "style(frontend): apply automatic formatting"
+          git push origin "HEAD:$TARGET_BRANCH"
+
+      - name: Require formatted fork changes
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: git diff --exit-code -- frontend
