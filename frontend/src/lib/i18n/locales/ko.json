@@ -420,6 +420,11 @@
           "path_required": "런처 경로를 선택해 주세요.",
           "launch": "저장 후 런처 실행"
         },
+        "gimi-dcr": {
+          "title": "캐릭터 동적 해상도가 켜져 있습니다",
+          "description": "원신에서 모드가 정상적으로 적용되려면 캐릭터 동적 해상도가 꺼져 있어야 합니다. 끄고 게임을 실행할까요?",
+          "confirm": "끄고 실행"
+        },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
           "legacy-badge": "레거시",

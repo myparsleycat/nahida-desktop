@@ -418,6 +418,11 @@
           "path_required": "ランチャーのパスを選択してください。",
           "launch": "保存してランチャーを起動"
         },
+        "gimi-dcr": {
+          "title": "キャラクター動的解像度がオンです",
+          "description": "原神でMODを正常に適用するには、キャラクター動的解像度をオフにする必要があります。オフにしてゲームを起動しますか？",
+          "confirm": "オフにして起動"
+        },
         "preset-management": {
           "description": "このプリセットには {{length}} 個のMODが保存されています。",
           "legacy-badge": "旧形式",

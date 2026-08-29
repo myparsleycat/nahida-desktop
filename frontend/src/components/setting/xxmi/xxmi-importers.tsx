@@ -1,7 +1,8 @@
-import { XXMI } from "@bindings/xxmi";
 import { GameIcon } from "@renderer/components/game-icon";
+import { useGimiDCRLaunch } from "@renderer/hooks/use-gimi-dcr-launch";
 import { cn } from "@renderer/lib/utils";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
+import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import { toast } from "sonner";
 export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   const { t } = useTranslation();
   const [processingKey, setProcessingKey] = useState<string | null>(null);
+  const { startImporter, gimiDCRDialog } = useGimiDCRLaunch();
 
   if (!xxmiData?.xxmiConfig) {
     return null;
@@ -20,9 +22,9 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
 
     setProcessingKey(key);
     try {
-      await XXMI.StartGame(key);
+      await startImporter(key);
     } catch (error) {
-      toast.error((error as Error).toString());
+      toast.error(toErrorMessage(error));
     } finally {
       setProcessingKey(null);
     }
@@ -63,6 +65,7 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
           );
         })}
       </div>
+      {gimiDCRDialog}
     </div>
   );
 }

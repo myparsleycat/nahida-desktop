@@ -15,6 +15,9 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 	if importer == "" {
 		return errors.New("importer is required")
 	}
+	if err := x.rejectEnabledGimiDCR(ctx, importer); err != nil {
+		return err
+	}
 	x.mu.Lock()
 	if x.busy {
 		x.mu.Unlock()
