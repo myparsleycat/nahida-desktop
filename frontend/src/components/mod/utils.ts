@@ -92,11 +92,13 @@ export function mapKeyboardEventToInternal(
     } else if (code === "Minus") {
         mappedKey = "-";
     } else if (code === "Equal") {
-        mappedKey = "="; // + is Shift+=
+        mappedKey = "=";
     }
 
-    if (mappedKey === "=") {
-        mappedKey = "+";
+    if (mappedKey === "-") {
+        mappedKey = "_";
+    } else if (mappedKey === "+") {
+        mappedKey = "=";
     }
 
     const ctrl = e.ctrlKey ? "ctrl" : strictMods?.ctrl ? "no_ctrl" : "";
