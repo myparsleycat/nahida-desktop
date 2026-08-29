@@ -48,6 +48,12 @@ tasks:
     cmds:
       - go tool wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
+  test:
+    summary: Runs Go tests
+    desc: Runs `go test ./...` for all packages in the module.
+    cmds:
+      - go test ./...
+
   lint:
     summary: Runs golangci-lint
     desc: |
