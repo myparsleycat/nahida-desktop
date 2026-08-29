@@ -361,6 +361,249 @@ func TestUpdateTracksUnknownSizeProgress(t *testing.T) {
 	}
 }
 
+type recordedTransferEmission struct {
+	at        time.Time
+	transfers []Snapshot
+}
+
+func newRecordingTransfer(t *testing.T, interval time.Duration) (*Transfer, <-chan recordedTransferEmission) {
+	t.Helper()
+	emissions := make(chan recordedTransferEmission, 64)
+	var service *Transfer
+	service = NewWithOptions(Options{
+		SyncWindowProgress: func(*WindowProgress) {
+			emissions <- recordedTransferEmission{at: time.Now(), transfers: service.List()}
+		},
+	})
+	service.emitEvery = interval
+	t.Cleanup(func() {
+		service.mu.Lock()
+		service.emitStopped = true
+		service.cancelProgressEmitLocked()
+		service.mu.Unlock()
+		service.emit()
+	})
+	return service, emissions
+}
+
+func awaitTransferEmission(t *testing.T, emissions <-chan recordedTransferEmission) recordedTransferEmission {
+	t.Helper()
+	select {
+	case emission := <-emissions:
+		return emission
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for transfer emission")
+		return recordedTransferEmission{}
+	}
+}
+
+func assertNoTransferEmission(t *testing.T, emissions <-chan recordedTransferEmission, wait time.Duration) {
+	t.Helper()
+	select {
+	case emission := <-emissions:
+		t.Fatalf("unexpected transfer emission: %#v", emission.transfers)
+	case <-time.After(wait):
+	}
+}
+
+func emittedTransfer(t *testing.T, emission recordedTransferEmission, pid string) Snapshot {
+	t.Helper()
+	for _, item := range emission.transfers {
+		if item.PID == pid {
+			return item
+		}
+	}
+	t.Fatalf("transfer %q missing from emission: %#v", pid, emission.transfers)
+	return Snapshot{}
+}
+
+func TestProgressEmitDeliversLatestTrailingSnapshot(t *testing.T) {
+	const interval = 80 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "trailing", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	transferred := int64(10)
+	if err := service.Update("trailing", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	if got := emittedTransfer(t, awaitTransferEmission(t, emissions), "trailing"); got.TransferredSize != 10 {
+		t.Fatalf("leading transfer = %#v", got)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	transferred = 20
+	if err := service.Update("trailing", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	transferred = 30
+	if err := service.Update("trailing", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	assertNoTransferEmission(t, emissions, 10*time.Millisecond)
+
+	got := emittedTransfer(t, awaitTransferEmission(t, emissions), "trailing")
+	if got.TransferredSize != 30 || got.Progress != 30 || got.Speed <= 0 || got.ETA <= 0 {
+		t.Fatalf("trailing transfer = %#v", got)
+	}
+	assertNoTransferEmission(t, emissions, interval+20*time.Millisecond)
+}
+
+func TestProgressEmitCoalescesTransfersIntoOneSnapshot(t *testing.T) {
+	const interval = 60 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "first", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+	createTestTransfer(t, service, "second", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	firstBytes := int64(10)
+	if err := service.Update("first", Updates{TransferredSize: &firstBytes}); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions)
+	firstBytes = 25
+	if err := service.Update("first", Updates{TransferredSize: &firstBytes}); err != nil {
+		t.Fatal(err)
+	}
+	secondBytes := int64(40)
+	if err := service.Update("second", Updates{TransferredSize: &secondBytes}); err != nil {
+		t.Fatal(err)
+	}
+	assertNoTransferEmission(t, emissions, 10*time.Millisecond)
+
+	emission := awaitTransferEmission(t, emissions)
+	if got := emittedTransfer(t, emission, "first"); got.TransferredSize != 25 {
+		t.Fatalf("first transfer = %#v", got)
+	}
+	if got := emittedTransfer(t, emission, "second"); got.TransferredSize != 40 {
+		t.Fatalf("second transfer = %#v", got)
+	}
+	assertNoTransferEmission(t, emissions, interval+20*time.Millisecond)
+}
+
+func TestProgressEmitMaintainsCadenceUnderContinuousUpdates(t *testing.T) {
+	const interval = 40 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "continuous", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	lastBytes := int64(1)
+	if err := service.Update("continuous", Updates{TransferredSize: &lastBytes}); err != nil {
+		t.Fatal(err)
+	}
+	first := awaitTransferEmission(t, emissions)
+	recorded := []recordedTransferEmission{first}
+	deadline := time.Now().Add(110 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		lastBytes++
+		if err := service.Update("continuous", Updates{TransferredSize: &lastBytes}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(2 * interval)
+	for {
+		select {
+		case emission := <-emissions:
+			recorded = append(recorded, emission)
+		default:
+			goto drained
+		}
+	}
+
+drained:
+	if len(recorded) < 3 {
+		t.Fatalf("continuous emissions = %d, want at least 3", len(recorded))
+	}
+	for index := 1; index < len(recorded); index++ {
+		if elapsed := recorded[index].at.Sub(recorded[index-1].at); elapsed < interval-5*time.Millisecond {
+			t.Fatalf("emission interval = %s, want at least %s", elapsed, interval-5*time.Millisecond)
+		}
+	}
+	if got := emittedTransfer(t, recorded[len(recorded)-1], "continuous"); got.TransferredSize != lastBytes {
+		t.Fatalf("last continuous transfer = %#v, want bytes %d", got, lastBytes)
+	}
+}
+
+func TestImmediateStatusCancelsPendingProgressEmit(t *testing.T) {
+	const interval = 60 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "paused", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	transferred := int64(10)
+	if err := service.Update("paused", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions)
+	transferred = 20
+	if err := service.Update("paused", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	paused := StatusPaused
+	if err := service.Update("paused", Updates{Status: &paused}); err != nil {
+		t.Fatal(err)
+	}
+	got := emittedTransfer(t, awaitTransferEmission(t, emissions), "paused")
+	if got.Status != StatusPaused || got.TransferredSize != 20 {
+		t.Fatalf("paused transfer = %#v", got)
+	}
+	assertNoTransferEmission(t, emissions, 2*interval)
+}
+
+func TestRemovalDoesNotLeavePendingProgressEmit(t *testing.T) {
+	const interval = 60 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "removed", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	transferred := int64(10)
+	if err := service.Update("removed", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions)
+	transferred = 20
+	if err := service.Update("removed", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	completed := StatusCompleted
+	hundred := 100.0
+	if err := service.Update("removed", Updates{Status: &completed, Progress: &hundred}); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions)
+	if err := service.Cancel("removed"); err != nil {
+		t.Fatal(err)
+	}
+	if emission := awaitTransferEmission(t, emissions); len(emission.transfers) != 0 {
+		t.Fatalf("removed emission = %#v", emission.transfers)
+	}
+	assertNoTransferEmission(t, emissions, 2*interval)
+}
+
+func TestShutdownCancelsPendingProgressEmit(t *testing.T) {
+	const interval = 60 * time.Millisecond
+	service, emissions := newRecordingTransfer(t, interval)
+	createTestTransfer(t, service, "shutdown", StatusProgress, true)
+	awaitTransferEmission(t, emissions)
+
+	transferred := int64(10)
+	if err := service.Update("shutdown", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions)
+	transferred = 20
+	if err := service.Update("shutdown", Updates{TransferredSize: &transferred}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ServiceShutdown(); err != nil {
+		t.Fatal(err)
+	}
+	awaitTransferEmission(t, emissions) // taskbar reset from ServiceShutdown
+	assertNoTransferEmission(t, emissions, 2*interval)
+}
+
 func TestPowerSaveBlockTracksActiveTransfers(t *testing.T) {
 	var mu sync.Mutex
 	var calls []bool

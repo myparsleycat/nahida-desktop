@@ -187,6 +187,11 @@ type speedSample struct {
 	size int64
 }
 
+type orderedSnapshot struct {
+	snapshot Snapshot
+	order    uint64
+}
+
 type entry struct {
 	record       Record
 	runner       Runner
@@ -194,13 +199,13 @@ type entry struct {
 	cancel       context.CancelFunc
 	completedIDs map[string]struct{}
 	samples      []speedSample
-	lastEmit     time.Time
 	createdOrder uint64
 	queueOrder   uint64
 }
 
 type Transfer struct {
 	mu                 sync.RWMutex
+	emitMu             sync.Mutex
 	powerMu            sync.Mutex
 	entries            map[string]*entry
 	queueGroupSequence uint64
@@ -213,6 +218,11 @@ type Transfer struct {
 	syncWindowProgress func(*WindowProgress)
 	powerBlocked       bool
 	now                func() time.Time
+	emitEvery          time.Duration
+	lastProgressEmit   time.Time
+	progressEmitTimer  *time.Timer
+	progressEmitGen    uint64
+	emitStopped        bool
 	app                *application.App
 	lifecycleCtx       context.Context
 	lifecycleCancel    context.CancelFunc
@@ -239,6 +249,7 @@ func NewWithOptions(opts Options) *Transfer {
 		preventSuspension:  opts.PreventSuspension,
 		syncWindowProgress: opts.SyncWindowProgress,
 		now:                now,
+		emitEvery:          emitInterval,
 		wake:               make(chan struct{}, 1),
 		downloadBandwidth:  NewBandwidthLimiter(),
 		slowChunks:         NewSlowChunkMonitor(),
@@ -255,6 +266,9 @@ func (t *Transfer) ServiceStartup(ctx context.Context, _ application.ServiceOpti
 		t.mu.Unlock()
 		return nil
 	}
+	t.cancelProgressEmitLocked()
+	t.lastProgressEmit = time.Time{}
+	t.emitStopped = false
 	t.app = application.Get()
 	t.lifecycleCtx, t.lifecycleCancel = context.WithCancel(ctx)
 	workerCtx := t.lifecycleCtx
@@ -281,6 +295,8 @@ func (t *Transfer) ServiceStartup(ctx context.Context, _ application.ServiceOpti
 
 func (t *Transfer) ServiceShutdown() error {
 	t.mu.Lock()
+	t.emitStopped = true
+	t.cancelProgressEmitLocked()
 	cancelLifecycle := t.lifecycleCancel
 	t.lifecycleCancel = nil
 	for _, item := range t.entries {
@@ -302,30 +318,32 @@ func (t *Transfer) ServiceShutdown() error {
 	if t.slowChunks != nil {
 		t.slowChunks.Close()
 	}
+	t.emitMu.Lock()
 	if t.syncWindowProgress != nil {
 		t.syncWindowProgress(nil)
 	}
+	t.emitMu.Unlock()
 	return t.setPowerBlocked(false)
 }
 
 // List returns newest-first renderer-safe snapshots.
 func (t *Transfer) List() []Snapshot {
 	t.mu.RLock()
-	items := make([]struct {
-		snapshot Snapshot
-		order    uint64
-	}, 0, len(t.entries))
-	for _, item := range t.entries {
-		items = append(items, struct {
-			snapshot Snapshot
-			order    uint64
-		}{snapshot: item.record.Snapshot, order: item.createdOrder})
-	}
+	items := t.snapshotEntriesLocked()
 	t.mu.RUnlock()
-	slices.SortFunc(items, func(a, b struct {
-		snapshot Snapshot
-		order    uint64
-	}) int {
+	return orderSnapshots(items)
+}
+
+func (t *Transfer) snapshotEntriesLocked() []orderedSnapshot {
+	items := make([]orderedSnapshot, 0, len(t.entries))
+	for _, item := range t.entries {
+		items = append(items, orderedSnapshot{snapshot: item.record.Snapshot, order: item.createdOrder})
+	}
+	return items
+}
+
+func orderSnapshots(items []orderedSnapshot) []Snapshot {
+	slices.SortFunc(items, func(a, b orderedSnapshot) int {
 		switch {
 		case a.order > b.order:
 			return -1
@@ -351,16 +369,22 @@ func (t *Transfer) Cancel(pid string) error {
 	}
 	if isTerminal(item.record.Status) {
 		delete(t.entries, pid)
+		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
-		t.emit()
+		if shouldEmit {
+			t.emit()
+		}
 		return t.RefreshPowerSaveBlock(context.Background())
 	}
 	if item.cancel != nil {
 		item.cancel()
 	}
 	item.record.Status = StatusCanceled
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	t.signalQueue()
 	return t.RefreshPowerSaveBlock(context.Background())
 }
@@ -380,8 +404,11 @@ func (t *Transfer) Pause(pid string) error {
 	if item.cancel != nil {
 		item.cancel()
 	}
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	return t.RefreshPowerSaveBlock(context.Background())
 }
 
@@ -447,8 +474,9 @@ func (t *Transfer) Clear() error {
 			changed = true
 		}
 	}
+	shouldEmit := changed && t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	if changed {
+	if shouldEmit {
 		t.emit()
 	}
 	return t.RefreshPowerSaveBlock(context.Background())
@@ -534,8 +562,11 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 		createdOrder: t.creationSequence,
 		queueOrder:   t.queueSequence,
 	}
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	if initialStatus == StatusPending && !params.ManualStart {
 		t.signalQueue()
 	}
@@ -663,8 +694,11 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	}
 	item.cancel = nil
 	if item.record.Status == StatusPaused || item.record.Status == StatusCanceled {
+		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
-		t.emit()
+		if shouldEmit {
+			t.emit()
+		}
 		_ = t.RefreshPowerSaveBlock(context.Background())
 		return
 	}
@@ -672,8 +706,11 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 		item.record.Status = StatusError
 		item.record.Error = runErr.Error()
 	}
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	_ = t.RefreshPowerSaveBlock(context.Background())
 }
 
@@ -718,10 +755,7 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 			item.record.Progress = 100
 		}
 	}
-	shouldEmit := item.lastEmit.IsZero() || now.Sub(item.lastEmit) >= emitInterval || updates.Status != nil
-	if shouldEmit {
-		item.lastEmit = now
-	}
+	shouldEmit := t.scheduleEmitLocked(updates.Status != nil, now)
 	t.mu.Unlock()
 	if shouldEmit {
 		t.emit()
@@ -759,8 +793,11 @@ func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string) 
 	if name != "" {
 		item.record.Name = name
 	}
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	return nil
 }
 
@@ -823,8 +860,11 @@ func (t *Transfer) MarkFileFailed(pid, message string) error {
 	if message != "" && item.record.Error == "" {
 		item.record.Error = message
 	}
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	return nil
 }
 
@@ -992,8 +1032,11 @@ func (t *Transfer) ManualStart(pid string) error {
 	item.record.FailedFiles = 0
 	item.record.Error = ""
 	item.record.ErrorCode = ""
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	t.signalQueue()
 	return nil
 }
@@ -1030,8 +1073,11 @@ func (t *Transfer) ResetTransfer(pid string) error {
 	item.record.ErrorCode = ""
 	item.samples = nil
 	item.completedIDs = make(map[string]struct{})
+	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
-	t.emit()
+	if shouldEmit {
+		t.emit()
+	}
 	return nil
 }
 
@@ -1043,17 +1089,93 @@ func (t *Transfer) signalQueue() {
 }
 
 func (t *Transfer) emit() {
+	t.emitMu.Lock()
+	defer t.emitMu.Unlock()
+
 	t.mu.RLock()
+	if t.emitStopped {
+		t.mu.RUnlock()
+		return
+	}
 	app := t.app
 	syncWindowProgress := t.syncWindowProgress
+	items := t.snapshotEntriesLocked()
 	t.mu.RUnlock()
-	items := t.List()
+	t.dispatchSnapshots(app, syncWindowProgress, items)
+}
+
+func (t *Transfer) dispatchSnapshots(
+	app *application.App,
+	syncWindowProgress func(*WindowProgress),
+	items []orderedSnapshot,
+) {
+	snapshots := orderSnapshots(items)
 	if syncWindowProgress != nil {
-		syncWindowProgress(CalculateWindowProgress(items))
+		syncWindowProgress(CalculateWindowProgress(snapshots))
 	}
 	if app != nil {
-		app.Event.Emit(updateEventName, items)
+		app.Event.Emit(updateEventName, snapshots)
 	}
+}
+
+// scheduleEmitLocked plans a renderer update while t.mu is held. Immediate
+// state changes cancel a pending progress update, while ordinary progress uses
+// a leading-and-trailing throttle so the latest snapshot is never stranded.
+func (t *Transfer) scheduleEmitLocked(immediate bool, now time.Time) bool {
+	if t.emitStopped {
+		return false
+	}
+	if immediate {
+		t.cancelProgressEmitLocked()
+		return true
+	}
+
+	interval := t.emitEvery
+	if interval <= 0 {
+		interval = emitInterval
+	}
+	elapsed := now.Sub(t.lastProgressEmit)
+	if t.lastProgressEmit.IsZero() || elapsed < 0 || elapsed >= interval {
+		t.cancelProgressEmitLocked()
+		t.lastProgressEmit = now
+		return true
+	}
+	if t.progressEmitTimer != nil {
+		return false
+	}
+
+	t.progressEmitGen++
+	generation := t.progressEmitGen
+	t.progressEmitTimer = time.AfterFunc(interval-elapsed, func() {
+		t.flushProgressEmit(generation)
+	})
+	return false
+}
+
+func (t *Transfer) cancelProgressEmitLocked() {
+	t.progressEmitGen++
+	if t.progressEmitTimer != nil {
+		t.progressEmitTimer.Stop()
+		t.progressEmitTimer = nil
+	}
+}
+
+func (t *Transfer) flushProgressEmit(generation uint64) {
+	t.emitMu.Lock()
+	defer t.emitMu.Unlock()
+
+	t.mu.Lock()
+	if t.emitStopped || generation != t.progressEmitGen || t.progressEmitTimer == nil {
+		t.mu.Unlock()
+		return
+	}
+	t.progressEmitTimer = nil
+	t.lastProgressEmit = t.now()
+	app := t.app
+	syncWindowProgress := t.syncWindowProgress
+	items := t.snapshotEntriesLocked()
+	t.mu.Unlock()
+	t.dispatchSnapshots(app, syncWindowProgress, items)
 }
 
 func (t *Transfer) logError(err error, where string) {
