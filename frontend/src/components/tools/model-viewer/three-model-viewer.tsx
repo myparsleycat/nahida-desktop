@@ -53,6 +53,7 @@ import type {
 import { parseOrientation } from "./model-viewer-contract";
 import { applyPayloadEval, buildPayloadModel } from "./model-viewer-payload";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
 type BodyShapeBaseline = {
   positions: Float32Array;
@@ -370,6 +371,9 @@ function ThreeModelScene({
             disposeObjectTree(nextRoot);
             return;
           }
+          if (needsUprightCorrection(nextRoot)) {
+            nextRoot.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
+          }
           materialRef.current = collectStandardMaterials(nextRoot);
           activeObjectRef.current = nextRoot;
           // oxlint-disable-next-line react/set-state-in-effect
@@ -405,6 +409,9 @@ function ThreeModelScene({
         }
 
         const nextRoot = gltf.scene;
+        if (needsUprightCorrection(nextRoot)) {
+          nextRoot.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
+        }
         materialRef.current = collectStandardMaterials(nextRoot);
         activeObjectRef.current = nextRoot;
         // oxlint-disable-next-line react/set-state-in-effect
