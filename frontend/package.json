@@ -33,7 +33,7 @@
     "es-hangul": "^2.4.0",
     "es-toolkit": "^1.51.0",
     "filesize": "^11.0.22",
-    "framer-motion": "^12.23.24",
+    "framer-motion": "^13.1.1",
     "i18next": "^26.4.0",
     "lucide-react": "^1.33.0",
     "motion": "^13.1.1",
