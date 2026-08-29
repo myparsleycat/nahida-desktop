@@ -22,6 +22,7 @@ import {
   ChevronDownIcon,
   ExternalLinkIcon,
   LinkIcon,
+  LoaderIcon,
   LogOutIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -202,7 +203,7 @@ export function GameBananaToolbar({
           <TooltipTrigger
             render={<Button variant="outline" onClick={onLogout} disabled={isLoggingOut} />}
           >
-            <LogOutIcon />
+            {isLoggingOut ? <LoaderIcon className="animate-spin" /> : <LogOutIcon />}
             <span className="sr-only">{t("page.gamebanana.logout")}</span>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("page.gamebanana.logout")}</TooltipContent>
