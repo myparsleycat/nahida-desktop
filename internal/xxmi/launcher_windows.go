@@ -3,14 +3,10 @@
 package xxmi
 
 import (
-	"bytes"
 	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -198,23 +194,24 @@ func enumVisibleProcessWindow(hwnd, lparam uintptr) uintptr {
 }
 
 func findProcessPID(ctx context.Context, imageName string) (int, error) {
-	output, err := exec.CommandContext(ctx, "tasklist", "/FI", "IMAGENAME eq "+imageName, "/FO", "CSV", "/NH").Output()
-	var exitErr *exec.ExitError
-	if err != nil && !errors.As(err, &exitErr) {
+	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	rows, err := csv.NewReader(bytes.NewReader(output)).ReadAll()
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return 0, err
 	}
-	for _, row := range rows {
-		if len(row) < 2 || !strings.EqualFold(strings.TrimSpace(row[0]), imageName) {
-			continue
-		}
-		pid, parseErr := strconv.Atoi(strings.ReplaceAll(strings.TrimSpace(row[1]), ",", ""))
-		if parseErr == nil {
-			return pid, nil
+	defer func() { _ = windows.CloseHandle(snapshot) }()
+
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
+		if strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), imageName) {
+			return int(entry.ProcessID), nil
 		}
 	}
-	return 0, nil
+	if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+		return 0, nil
+	}
+	return 0, err
 }
