@@ -35,6 +35,16 @@ tasks:
           APP_VERSION: '{{.APP_VERSION}}'
           ARCH: '{{.ARCH | default "amd64"}}'
 
+  latest-installer:
+    summary: Builds the GitHub latest-installer bootstrapper
+    preconditions:
+      - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
+        msg: "This app builds for Windows only (got GOOS={{.GOOS}})."
+    cmds:
+      - task: "{{.GOOS}}:latest-installer"
+        vars:
+          ARCH: '{{.ARCH | default "amd64"}}'
+
   run:
     summary: Runs the application
     preconditions:

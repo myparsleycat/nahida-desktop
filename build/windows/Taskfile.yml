@@ -86,6 +86,21 @@ tasks:
     cmds:
       - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info {{if .APP_VERSION}}../bin/windows-info.json{{else}}windows/info.json{{end}} -out ../wails_windows_{{.ARCH | default "amd64"}}.syso
 
+  latest-installer:
+    summary: Builds the GitHub latest-installer bootstrapper
+    preconditions:
+      - sh: 'test "{{.ARCH | default "amd64"}}" = "amd64"'
+        msg: "Only Windows amd64 latest-installer builds are supported."
+    cmds:
+      - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info tools/latest-installer/info.json -out tools/latest-installer/latest_installer_windows_{{.ARCH | default "amd64"}}.syso
+      - go build -trimpath -ldflags="-H windowsgui -s -w" -o "{{.BIN_DIR}}/Nahida Desktop Latest Installer.exe" ./tools/latest-installer
+      - cmd: powershell -NoProfile -Command "Remove-Item -LiteralPath './tools/latest-installer/latest_installer_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+    env:
+      GOOS: windows
+      CGO_ENABLED: "0"
+      GOARCH: '{{.ARCH | default "amd64"}}'
+
   create:nsis:installer:
     summary: Creates the unsigned per-user NSIS installer
     dir: build/windows/nsis
