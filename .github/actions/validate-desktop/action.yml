@@ -10,6 +10,10 @@ runs:
         go mod tidy
         git diff --exit-code -- go.mod go.sum
 
+    - name: Generate Wails bindings
+      shell: pwsh
+      run: task common:generate:bindings
+
     - name: Build frontend for Go embedding
       shell: pwsh
       working-directory: frontend
@@ -26,13 +30,6 @@ runs:
     - name: Test release version mapping
       shell: pwsh
       run: pnpm test
-
-    - name: Regenerate and verify Wails bindings
-      shell: pwsh
-      run: |
-        task common:generate:bindings
-        pnpm --dir frontend exec oxfmt bindings
-        git diff --exit-code -- frontend/bindings go.mod go.sum
 
     - name: Check frontend formatting
       shell: pwsh

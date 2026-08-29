@@ -5,6 +5,7 @@ node_modules
 .gocache
 .gomodcache
 frontend/dist
+frontend/bindings/
 frontend/node_modules
 frontend/src/routeTree.gen.ts
 frontend/src/shared/types.gen.ts
