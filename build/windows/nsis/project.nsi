@@ -36,6 +36,10 @@ Unicode true
 !include "wails_tools.nsh"
 !include "..\..\..\bin\release-version.nsh"
 
+# Keep this in sync with application.SingleInstanceOptions.UniqueID. Wails
+# creates this mutex before starting backend services.
+!define APP_SINGLE_INSTANCE_MUTEX "wails-app-com.nahida.desktop-sim"
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${NAHIDA_NUMERIC_VERSION}"
 VIFileVersion    "${NAHIDA_NUMERIC_VERSION}"
@@ -85,6 +89,23 @@ Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
+Function un.onInit
+    checkAppRunning:
+        System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "${APP_SINGLE_INSTANCE_MUTEX}") p.R0'
+        IntPtrCmp $R0 0 appStopped
+
+        System::Call 'kernel32::CloseHandle(p $R0)'
+        IfSilent appRunningSilent
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${INFO_PRODUCTNAME} is still running.$\r$\n$\r$\nQuit it from the system tray, then click Retry." /SD IDCANCEL IDRETRY checkAppRunning
+        Abort
+
+    appRunningSilent:
+        SetErrorLevel 2
+        Abort
+
+    appStopped:
+FunctionEnd
+
 Section
     !insertmacro wails.setShellContext
 
@@ -106,9 +127,15 @@ SectionEnd
 Section "uninstall" 
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    # The uninstaller runs from a temporary copy. Ensure its working directory
+    # is also outside $INSTDIR before removing installed files.
+    SetOutPath "$TEMP"
+    ClearErrors
+    Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    IfErrors uninstallFailed
 
-    RMDir /r $INSTDIR
+    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    ClearErrors # WebView2 data cleanup is best effort and must not leak an error flag.
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
@@ -117,4 +144,16 @@ Section "uninstall"
     !insertmacro wails.unassociateCustomProtocols
 
     !insertmacro wails.deleteUninstaller
+    RMDir "$INSTDIR"
+    Goto uninstallDone
+
+    uninstallFailed:
+        SetErrorLevel 1
+        IfSilent uninstallAbort
+        MessageBox MB_OK|MB_ICONSTOP "${INFO_PRODUCTNAME} could not be completely removed.$\r$\n$\r$\nClose any program using files in $INSTDIR, then run the uninstaller again." /SD IDOK
+
+    uninstallAbort:
+        Abort "Uninstallation stopped because ${PRODUCT_EXECUTABLE} could not be removed."
+
+    uninstallDone:
 SectionEnd
