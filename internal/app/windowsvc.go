@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
 
@@ -92,7 +93,7 @@ func (w *Window) Create() application.Window {
 	if w.window != nil {
 		window := w.window
 		w.mu.Unlock()
-		window.Show().Focus()
+		w.bringToForeground(window)
 		return window
 	}
 	app, settings := w.app, w.settings
@@ -319,7 +320,7 @@ func (w *Window) FocusAndNavigate(route string) {
 	if window == nil {
 		return
 	}
-	window.Show().Focus()
+	w.bringToForeground(window)
 	if route != "" && ready {
 		window.EmitEvent("fn:navi", route)
 		w.mu.Lock()
@@ -505,11 +506,7 @@ func (w *Window) NotifyUpdateReady() {
 }
 
 func (w *Window) syncTaskbarProgress(window application.Window) {
-	host, ok := window.(*application.WebviewWindow)
-	if !ok || host == nil {
-		return
-	}
-	hwnd := uintptr(host.NativeWindow())
+	hwnd := webviewHWND(window)
 	if hwnd == 0 {
 		return
 	}
@@ -522,11 +519,7 @@ func (w *Window) syncTaskbarProgress(window application.Window) {
 }
 
 func (w *Window) clearTaskbarProgress(window application.Window) {
-	host, ok := window.(*application.WebviewWindow)
-	if !ok || host == nil {
-		return
-	}
-	hwnd := uintptr(host.NativeWindow())
+	hwnd := webviewHWND(window)
 	if hwnd == 0 {
 		return
 	}
@@ -563,6 +556,27 @@ func equalProgress(a, b *float64) bool {
 		return a == nil && b == nil
 	}
 	return *a == *b
+}
+
+func (w *Window) bringToForeground(window application.Window) {
+	if window == nil {
+		return
+	}
+	application.InvokeSync(func() {
+		window.Show()
+		if hwnd := webviewHWND(window); hwnd != 0 {
+			platform.ForceForegroundWindow(hwnd)
+		}
+		window.Focus()
+	})
+}
+
+func webviewHWND(window application.Window) uintptr {
+	host, ok := window.(*application.WebviewWindow)
+	if !ok || host == nil {
+		return 0
+	}
+	return uintptr(host.NativeWindow())
 }
 
 func (w *Window) native() *application.WebviewWindow {
