@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 func testClient(t *testing.T, opts ClientOptions) *Client {
@@ -225,6 +228,215 @@ func TestStreamDoesNotPrebufferBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeBody(t, response)
+}
+
+func TestFetchNormalizesNHDAPIResponseCBORToJSON(t *testing.T) {
+	t.Parallel()
+
+	body, err := cbor.Marshal(map[string]any{
+		"results": []any{map[string]any{"intentId": "intent", "status": "completed"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := textResp(request, http.StatusOK, string(body))
+			response.Header.Set("Content-Type", "application/cbor; charset=binary")
+			response.ContentLength = int64(len(body))
+			return response, nil
+		}),
+	})
+	response, err := client.Fetch(context.Background(), "https://api.nahida.live/akasha/v2/uploads:pack", FetchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeBody(t, response)
+	if got := response.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	var payload struct {
+		Results []struct {
+			IntentID string `json:"intentId"`
+			Status   string `json:"status"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Results) != 1 || payload.Results[0].IntentID != "intent" || payload.Results[0].Status != "completed" {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestFetchLeavesNonNHDAPIResponseCBORUnchanged(t *testing.T) {
+	t.Parallel()
+
+	body, err := cbor.Marshal(map[string]any{"value": "raw-cbor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := textResp(request, http.StatusOK, string(body))
+			response.Header.Set("Content-Type", "application/cbor")
+			return response, nil
+		}),
+	})
+	response, err := client.Fetch(context.Background(), "https://example.com/data.cbor", FetchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeBody(t, response)
+	if got := response.Header.Get("Content-Type"); got != "application/cbor" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	got, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("body changed: %x != %x", got, body)
+	}
+}
+
+func TestStreamNormalizesNHDAPIResponseCBORToJSON(t *testing.T) {
+	t.Parallel()
+
+	body, err := cbor.Marshal(map[string]any{"status": "completed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			_, _ = io.Copy(io.Discard, request.Body)
+			response := textResp(request, http.StatusOK, string(body))
+			response.Header.Set("Content-Type", "application/cbor")
+			return response, nil
+		}),
+	})
+	response, err := client.Stream(
+		context.Background(),
+		"https://api.nahida.live/akasha/v2/uploads:pack",
+		http.MethodPost,
+		nil,
+		strings.NewReader("payload"),
+		int64(len("payload")),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeBody(t, response)
+	if got := response.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["status"] != "completed" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestFetchRejectsInvalidNHDAPICBOR(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := textResp(request, http.StatusOK, "\xff\xff")
+			response.Header.Set("Content-Type", "application/cbor")
+			return response, nil
+		}),
+	})
+	response, err := client.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+	closeBody(t, response)
+	if err == nil || !strings.Contains(err.Error(), "decode CBOR response") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestFetchRetriesInvalidNHDAPICBORAsJSON(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	client := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(body) != `{"value":"same-body"}` {
+				t.Fatalf("body = %q", body)
+			}
+			if request.Header.Get("Authorization") != "Bearer stored-token" {
+				t.Fatalf("Authorization = %q", request.Header.Get("Authorization"))
+			}
+			if requests.Add(1) == 1 {
+				response := textResp(request, http.StatusOK, "\xff\xff")
+				response.Header.Set("Content-Type", "application/cbor")
+				return response, nil
+			}
+			if request.URL.Query().Get("res") != "json" {
+				t.Fatalf("fallback URL = %q", request.URL)
+			}
+			response := textResp(request, http.StatusOK, `{"value":"json-fallback"}`)
+			response.Header.Set("Content-Type", "application/json")
+			return response, nil
+		}),
+	})
+	header := make(http.Header)
+	header.Set("Content-Type", "application/json")
+	response, err := client.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{
+		Method: http.MethodPost,
+		Header: header,
+		Body:   strings.NewReader(`{"value":"same-body"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeBody(t, response)
+	if requests.Load() != 2 {
+		t.Fatalf("requests = %d", requests.Load())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["value"] != "json-fallback" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestFetchSkips401RefreshForCBORPasswordRequired(t *testing.T) {
+	t.Parallel()
+
+	body, err := cbor.Marshal(map[string]any{"code": "password_required"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed := 0
+	client := testClient(t, ClientOptions{
+		RefreshSession: func() error {
+			refreshed++
+			return nil
+		},
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := textResp(request, http.StatusUnauthorized, string(body))
+			response.Header.Set("Content-Type", "application/cbor")
+			return response, nil
+		}),
+	})
+	response, err := client.Fetch(context.Background(), "https://api.nahida.live/akasha/link/id", FetchOptions{
+		DisableHTTPErrors: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeBody(t, response)
+	if refreshed != 0 {
+		t.Fatalf("refresh called %d times", refreshed)
+	}
 }
 
 func TestGetHeadersOmitsBearerOnNonNHD(t *testing.T) {
@@ -627,6 +839,27 @@ func TestProbeSetsMaintenanceFromBody(t *testing.T) {
 	})
 
 	if got := c.Probe(context.Background()); got != BackendMaintenance {
+		t.Fatalf("Probe = %q", got)
+	}
+}
+
+func TestProbeSetsMaintenanceFromCBORBody(t *testing.T) {
+	t.Parallel()
+
+	body, err := cbor.Marshal(map[string]any{"status": "maintenance"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := testClient(t, ClientOptions{
+		BackendURL: "https://api.nahida.live",
+		Status:     BackendUnknown,
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := textResp(request, http.StatusOK, string(body))
+			response.Header.Set("Content-Type", "application/cbor")
+			return response, nil
+		}),
+	})
+	if got := client.Probe(context.Background()); got != BackendMaintenance {
 		t.Fatalf("Probe = %q", got)
 	}
 }

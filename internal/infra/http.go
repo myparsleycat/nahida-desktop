@@ -402,6 +402,37 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*
 		return nil, errors.New("http: empty response")
 	}
 	resp = rewriteCloudflareTimeout(resp)
+	if nhd {
+		if err := normalizeAPIResponse(resp); err != nil {
+			c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, err)
+			fallbackURL, retryAsJSON := apiJSONFallbackURL(rawURL)
+			if !retryAsJSON {
+				return nil, err
+			}
+			var fallbackBody io.Reader
+			if bodyBytes != nil {
+				fallbackBody = bytes.NewReader(bodyBytes)
+			}
+			request, requestErr := http.NewRequestWithContext(ctx, method, fallbackURL, fallbackBody)
+			if requestErr != nil {
+				return nil, requestErr
+			}
+			request.Header = header.Clone()
+			resp, requestErr = c.http.Do(request)
+			if requestErr != nil {
+				if isUnreachable(requestErr) {
+					c.SetOffline()
+				}
+				return nil, requestErr
+			}
+			rawURL = fallbackURL
+			resp = rewriteCloudflareTimeout(resp)
+			if normalizeErr := normalizeAPIResponse(resp); normalizeErr != nil {
+				c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, normalizeErr)
+				return nil, normalizeErr
+			}
+		}
+	}
 	c.afterUnauthorized(rawURL, nhd, session, resp)
 
 	if !opts.DisableHTTPErrors && resp.StatusCode >= 400 {
@@ -457,6 +488,12 @@ func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.
 		return nil, err
 	}
 	response = rewriteCloudflareTimeout(response)
+	if nhd {
+		if err := normalizeAPIResponse(response); err != nil {
+			c.logAPIResponseDecodeFailure(rawURL, response.StatusCode, err)
+			return nil, err
+		}
+	}
 	c.afterUnauthorized(rawURL, nhd, session, response)
 	if nhd {
 		c.noteBackendFromResponse(response)
@@ -489,6 +526,11 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 		return c.GetStatus()
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if err := normalizeAPIResponse(resp); err != nil {
+		c.logAPIResponseDecodeFailure(endpoint, resp.StatusCode, err)
+		c.SetOffline()
+		return c.GetStatus()
+	}
 
 	var payload struct {
 		Status string `json:"status"`
@@ -606,6 +648,28 @@ func (c *Client) triggerProbe() {
 	}
 }
 
+func (c *Client) logAPIResponseDecodeFailure(rawURL string, status int, err error) {
+	if c == nil || err == nil {
+		return
+	}
+	c.mu.Lock()
+	log := c.log
+	c.mu.Unlock()
+	if log == nil {
+		return
+	}
+	path := ""
+	if parsed, parseErr := url.Parse(rawURL); parseErr == nil {
+		path = parsed.Path
+	}
+	log.Error(map[string]any{
+		"path":   path,
+		"status": status,
+		"stage":  "decode-response",
+		"error":  err.Error(),
+	}, "Http:APIResponseDecodeFailed")
+}
+
 func isNHD(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -622,6 +686,20 @@ func isSessionRequest(rawURL string) bool {
 		return false
 	}
 	return u.Path == sessionPath
+}
+
+func apiJSONFallbackURL(rawURL string) (string, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", false
+	}
+	query := u.Query()
+	if strings.EqualFold(query.Get("res"), "json") {
+		return "", false
+	}
+	query.Set("res", "json")
+	u.RawQuery = query.Encode()
+	return u.String(), true
 }
 
 func hasAuthorization(h http.Header) bool {
