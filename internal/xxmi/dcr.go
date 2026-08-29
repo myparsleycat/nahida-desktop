@@ -96,6 +96,9 @@ func (x *XXMI) rejectEnabledGimiDCR(ctx context.Context, importer string) error 
 		return err
 	}
 	if data.dcrEnabled() {
+		if x.log != nil {
+			x.log.Info(fmt.Sprintf("Rejected StartGame at DCR check for importer %s", importer), xxmiCheckDCRWhere)
+		}
 		return errGimiDCREnabled
 	}
 	return nil
