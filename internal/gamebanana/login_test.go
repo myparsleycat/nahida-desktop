@@ -467,6 +467,33 @@ func TestLogoutClearsWebViewCookieEvenIfSiteLogoutFails(t *testing.T) {
 	}
 }
 
+func TestLogoutProcessesWebViewSessionBeforeBackendLogout(t *testing.T) {
+	var stages []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "logout") {
+			stages = append(stages, "backend")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		_, _ = io.WriteString(w, validMemberJSON)
+	}))
+	t.Cleanup(server.Close)
+	service, _ := gameBananaTestService(t, server)
+	service.clearLoginCookies = func(context.Context) error {
+		stages = append(stages, "webview")
+		return nil
+	}
+	if err := service.saveCookie(context.Background(), "rmc=saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Logout(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(stages) != 2 || stages[0] != "webview" || stages[1] != "backend" {
+		t.Fatalf("stages = %v", stages)
+	}
+}
+
 func TestValidateCandidateDoesNotPersistOrClearStoredCookie(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.Header().Add("Set-Cookie", "session=temporary; Path=/; HttpOnly")

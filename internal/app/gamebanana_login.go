@@ -16,9 +16,15 @@ import (
 const (
 	gameBananaLoginName      = "gamebanana-login"
 	gameBananaLoginURL       = "https://gamebanana.com/members/account/login"
-	gameBananaCookieURI      = "https://gamebanana.com/"
+	gameBananaLogoutName     = "gamebanana-logout"
+	gameBananaLogoutURL      = "https://gamebanana.com/members/account/logout"
+	gameBananaCookieURI      = gameBananaLoginURL
 	gameBananaCookiePollWait = 350 * time.Millisecond
+	gameBananaReadyWait      = 100 * time.Millisecond
+	gameBananaLogoutWait     = 15 * time.Second
 )
+
+var gameBananaAuthCookieNames = []string{"rmc", "sess"}
 
 type loginWindow interface {
 	Show() application.Window
@@ -38,10 +44,12 @@ type gameBananaLogin struct {
 	parent *Window
 	log    *infra.Log
 
-	factory  loginWindowFactory
-	pollWait time.Duration
-	window   loginWindow
-	cancel   context.CancelFunc
+	factory       loginWindowFactory
+	logoutFactory loginWindowFactory
+	pollWait      time.Duration
+	profile       loginWindow
+	window        loginWindow
+	cancel        context.CancelFunc
 
 	pollInFlight   bool
 	opening        bool
@@ -49,17 +57,23 @@ type gameBananaLogin struct {
 	settled        bool
 	programmatic   bool
 	closed         bool
+	ready          bool
 	result         string
 	err            error
 	done           chan struct{}
 	unsub          func()
+	readyUnsub     func()
 }
 
 func newGameBananaLogin() *gameBananaLogin {
 	return &gameBananaLogin{}
 }
 
-func (l *gameBananaLogin) Configure(app *application.App, parent *Window, log *infra.Log) {
+func (l *gameBananaLogin) Configure(
+	app *application.App,
+	parent *Window,
+	log *infra.Log,
+) {
 	if l == nil {
 		return
 	}
@@ -69,6 +83,9 @@ func (l *gameBananaLogin) Configure(app *application.App, parent *Window, log *i
 	l.log = log
 	if l.factory == nil {
 		l.factory = l.createNativeWindow
+	}
+	if l.logoutFactory == nil {
+		l.logoutFactory = l.createNativeLogoutWindow
 	}
 	l.mu.Unlock()
 }
@@ -84,10 +101,14 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 	for {
 		l.mu.Lock()
 		if l.window != nil && !l.closed {
-			l.window.Show()
-			l.window.Focus()
+			window := l.window
+			ready := l.ready
 			done := l.done
 			l.mu.Unlock()
+			if ready {
+				window.Show()
+				window.Focus()
+			}
 			if done == nil {
 				return "", gamebanana.ErrAuthFailed
 			}
@@ -119,12 +140,19 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.opening = true
 		l.mu.Unlock()
 
-		// Wipe leftover site cookies before the login page loads, otherwise
-		// GameBanana can treat the window as already authenticated.
-		if err := l.ClearCookies(ctx); err != nil {
+		// GameBanana's logout response must be processed by WebView2 itself. A Go
+		// HTTP request can invalidate the backend token, but it cannot apply the
+		// browser session transition to the shared WebView profile.
+		if err := l.resetWebSession(ctx); err != nil {
 			l.mu.Lock()
 			l.opening = false
 			l.mu.Unlock()
+			if l.log != nil {
+				l.log.Warn(map[string]any{
+					"stage": "logout-shared-webview-profile",
+					"error": err.Error(),
+				}, "GameBananaLogin.Open")
+			}
 			return "", classifyLoginWindowError(err)
 		}
 
@@ -151,6 +179,7 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.settled = false
 		l.programmatic = false
 		l.closed = false
+		l.ready = false
 		l.pollInFlight = false
 		l.lastCandidates = nil
 		l.result = ""
@@ -159,11 +188,10 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.unsub = window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 			l.handleWindowClosing()
 		})
+		l.readyUnsub = window.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+			l.handleNavigationCompleted(sessionCtx, validate)
+		})
 		l.mu.Unlock()
-
-		window.Show()
-		window.Focus()
-		go l.poll(sessionCtx, validate)
 
 		select {
 		case <-done:
@@ -177,6 +205,34 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 	}
 }
 
+func (l *gameBananaLogin) handleNavigationCompleted(
+	ctx context.Context,
+	validate gamebanana.CookieValidator,
+) {
+	timer := time.NewTimer(gameBananaReadyWait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+	l.mu.Lock()
+	if l.settled || l.closed || l.ready {
+		l.mu.Unlock()
+		return
+	}
+	l.ready = true
+	window := l.window
+	if l.readyUnsub != nil {
+		l.readyUnsub()
+		l.readyUnsub = nil
+	}
+	l.mu.Unlock()
+	if window != nil {
+		go l.poll(ctx, validate)
+	}
+}
+
 func (l *gameBananaLogin) ClearCookies(ctx context.Context) error {
 	if l == nil {
 		return nil
@@ -184,21 +240,86 @@ func (l *gameBananaLogin) ClearCookies(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	l.Close()
+	return l.resetWebSession(ctx)
+}
+
+func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 	l.mu.Lock()
-	window := l.window
+	factory := l.logoutFactory
+	profile := l.profile
 	parent := l.parent
 	l.mu.Unlock()
-	// Empty names deletes every cookie matching the URI, including PHP session
-	// cookies that would otherwise keep the login page already authenticated.
-	if window != nil {
-		return ignoreUnsupportedCookies(window.DeleteCookies(ctx, gameBananaCookieURI))
-	}
-	if parent != nil {
-		if host := parent.native(); host != nil {
-			return ignoreUnsupportedCookies(host.DeleteCookies(ctx, gameBananaCookieURI))
+	if factory == nil {
+		if profile != nil {
+			return clearGameBananaCookies(ctx, profile)
 		}
+		if parent != nil {
+			if host := parent.native(); host != nil {
+				return clearGameBananaCookies(ctx, &nativeLoginWindow{window: host})
+			}
+		}
+		return nil
 	}
-	return nil
+
+	window, err := factory()
+	if err != nil {
+		return err
+	}
+	if window == nil {
+		return gamebanana.ErrAutoLoginUnsupported
+	}
+	defer window.Close()
+
+	completed := make(chan struct{})
+	var once sync.Once
+	unsub := window.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+		once.Do(func() { close(completed) })
+	})
+	defer unsub()
+
+	waitCtx, cancel := context.WithTimeout(ctx, gameBananaLogoutWait)
+	defer cancel()
+	select {
+	case <-waitCtx.Done():
+		return waitCtx.Err()
+	case <-completed:
+	}
+
+	timer := time.NewTimer(gameBananaReadyWait)
+	defer timer.Stop()
+	select {
+	case <-waitCtx.Done():
+		return waitCtx.Err()
+	case <-timer.C:
+	}
+	return clearGameBananaCookies(waitCtx, window)
+}
+
+func clearGameBananaCookies(ctx context.Context, window loginWindow) error {
+	cookies, err := window.GetCookies(ctx, gameBananaCookieURI)
+	if err != nil {
+		return ignoreUnsupportedCookies(err)
+	}
+	// WebView2 rejects the documented empty-name wildcard with E_INVALIDARG,
+	// so always delete GameBanana's known auth cookies by name and include any
+	// additional cookies visible to the login page.
+	names := append([]string(nil), gameBananaAuthCookieNames...)
+	seen := make(map[string]struct{}, len(cookies)+len(names))
+	for _, name := range names {
+		seen[name] = struct{}{}
+	}
+	for _, cookie := range cookies {
+		if cookie.Name == "" {
+			continue
+		}
+		if _, ok := seen[cookie.Name]; ok {
+			continue
+		}
+		seen[cookie.Name] = struct{}{}
+		names = append(names, cookie.Name)
+	}
+	return ignoreUnsupportedCookies(window.DeleteCookies(ctx, gameBananaCookieURI, names...))
 }
 
 func ignoreUnsupportedCookies(err error) error {
@@ -234,6 +355,10 @@ func (l *gameBananaLogin) handleWindowClosing() {
 	if l.unsub != nil {
 		l.unsub()
 		l.unsub = nil
+	}
+	if l.readyUnsub != nil {
+		l.readyUnsub()
+		l.readyUnsub = nil
 	}
 	if l.cancel != nil {
 		l.cancel()
@@ -272,6 +397,19 @@ func (l *gameBananaLogin) settle(cookie string, err error) {
 	l.err = err
 	l.programmatic = true
 	window := l.window
+	l.window = nil
+	l.closed = true
+	if l.unsub != nil {
+		l.unsub()
+		l.unsub = nil
+	}
+	if l.readyUnsub != nil {
+		l.readyUnsub()
+		l.readyUnsub = nil
+	}
+	if l.cancel != nil {
+		l.cancel()
+	}
 	l.finishLocked()
 	l.mu.Unlock()
 	if window != nil {
@@ -455,6 +593,33 @@ func (l *gameBananaLogin) createNativeWindow() (loginWindow, error) {
 		if host := parent.native(); host != nil {
 			host.AttachModal(created)
 		}
+	}
+	return &nativeLoginWindow{window: created}, nil
+}
+
+func (l *gameBananaLogin) createNativeLogoutWindow() (loginWindow, error) {
+	l.mu.Lock()
+	app := l.app
+	l.mu.Unlock()
+	if app == nil || app.Window == nil {
+		return nil, gamebanana.ErrAutoLoginUnsupported
+	}
+	created := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:                       gameBananaLogoutName,
+		Title:                      "GameBanana 로그아웃",
+		Width:                      1,
+		Height:                     1,
+		Hidden:                     true,
+		URL:                        gameBananaLogoutURL,
+		DisableWailsRuntime:        true,
+		DevToolsEnabled:            false,
+		DefaultContextMenuDisabled: true,
+		MinimiseButtonState:        application.ButtonDisabled,
+		MaximiseButtonState:        application.ButtonDisabled,
+		Windows:                    application.WindowsWindow{DisableMenu: true},
+	})
+	if created == nil {
+		return nil, gamebanana.ErrAutoLoginUnsupported
 	}
 	return &nativeLoginWindow{window: created}, nil
 }

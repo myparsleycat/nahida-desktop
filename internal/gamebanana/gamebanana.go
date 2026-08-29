@@ -207,29 +207,38 @@ func (g *GameBanana) Logout(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if cookie != "" {
-		response, requestErr := g.request(ctx, http.MethodGet, g.siteURL+"/members/account/logout", nil, requestPolicy{
-			Cookie:                  cookie,
-			PersistResponseCookies:  false,
-			ClearStoredCookieOnAuth: false,
-			SkipAuthRetry:           true,
-		})
-		if response != nil {
-			_ = response.Body.Close()
+	var clearErr error
+	if g.clearLoginCookies != nil {
+		clearErr = g.clearLoginCookies(ctx)
+		if clearErr != nil && g.log != nil {
+			g.log.Warn(map[string]any{
+				"stage": "webview-logout",
+				"error": sanitizeLogMessage(clearErr.Error()),
+			}, "GameBananaService.logout")
 		}
-		if requestErr != nil && g.log != nil {
-			g.log.Warn(sanitizeLogMessage(requestErr.Error()), "GameBananaService.logout")
+	}
+	if cookie != "" {
+		if logoutErr := g.logoutWebSession(ctx, cookie); logoutErr != nil && g.log != nil {
+			g.log.Warn(sanitizeLogMessage(logoutErr.Error()), "GameBananaService.logout")
 		}
 	}
 	if err := g.removeCookie(ctx); err != nil {
 		return err
 	}
-	if g.clearLoginCookies != nil {
-		if clearErr := g.clearLoginCookies(ctx); clearErr != nil {
-			return clearErr
-		}
+	return clearErr
+}
+
+func (g *GameBanana) logoutWebSession(ctx context.Context, cookie string) error {
+	response, err := g.request(ctx, http.MethodGet, g.siteURL+"/members/account/logout", nil, requestPolicy{
+		Cookie:                  cookie,
+		PersistResponseCookies:  false,
+		ClearStoredCookieOnAuth: false,
+		SkipAuthRetry:           true,
+	})
+	if response != nil {
+		_ = response.Body.Close()
 	}
-	return nil
+	return err
 }
 
 func (g *GameBanana) GetGameOverview(ctx context.Context, gameID int) (map[string]any, error) {
