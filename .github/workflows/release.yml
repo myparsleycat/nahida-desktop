@@ -30,7 +30,7 @@ jobs:
           }
 
       - name: Check out complete history
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
