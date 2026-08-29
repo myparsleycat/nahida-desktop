@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,6 +79,11 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]applica
 func (w *fakeLoginWindow) DeleteCookies(_ context.Context, _ string, names ...string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if len(names) == 0 {
+		w.deleted = append(w.deleted, "*")
+		w.cookies = nil
+		return nil
+	}
 	w.deleted = append(w.deleted, names...)
 	kept := w.cookies[:0]
 	remove := map[string]struct{}{}
@@ -106,6 +112,7 @@ func (w *fakeLoginWindow) emit(eventType events.WindowEventType) {
 		listener(&application.WindowEvent{})
 	}
 }
+
 func (w *fakeLoginWindow) setCookies(cookies ...application.WebviewCookie) {
 	w.mu.Lock()
 	w.cookies = append([]application.WebviewCookie(nil), cookies...)
@@ -376,7 +383,10 @@ func TestGameBananaLoginErrorsDoNotIncludeCookieValues(t *testing.T) {
 }
 
 func TestGameBananaLoginClearCookiesUsesExistingWindow(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "old"})
+	win := newFakeLoginWindow(
+		application.WebviewCookie{Name: "rmc", Value: "old"},
+		application.WebviewCookie{Name: "PHPSESSID", Value: "session"},
+	)
 	login := newGameBananaLogin()
 	var created atomic.Int32
 	login.factory = func() (loginWindow, error) {
@@ -397,9 +407,13 @@ func TestGameBananaLoginClearCookiesUsesExistingWindow(t *testing.T) {
 	}
 	win.mu.Lock()
 	deleted := append([]string(nil), win.deleted...)
+	remaining := append([]application.WebviewCookie(nil), win.cookies...)
 	win.mu.Unlock()
-	if len(deleted) == 0 || deleted[0] != "rmc" {
+	if !slices.Contains(deleted, "*") {
 		t.Fatalf("deleted = %v", deleted)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("remaining = %v", remaining)
 	}
 	if created.Load() != 1 {
 		t.Fatalf("created = %d", created.Load())

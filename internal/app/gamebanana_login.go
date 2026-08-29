@@ -119,6 +119,15 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.opening = true
 		l.mu.Unlock()
 
+		// Wipe leftover site cookies before the login page loads, otherwise
+		// GameBanana can treat the window as already authenticated.
+		if err := l.ClearCookies(ctx); err != nil {
+			l.mu.Lock()
+			l.opening = false
+			l.mu.Unlock()
+			return "", classifyLoginWindowError(err)
+		}
+
 		window, err := factory()
 		if err != nil {
 			l.mu.Lock()
@@ -179,12 +188,14 @@ func (l *gameBananaLogin) ClearCookies(ctx context.Context) error {
 	window := l.window
 	parent := l.parent
 	l.mu.Unlock()
+	// Empty names deletes every cookie matching the URI, including PHP session
+	// cookies that would otherwise keep the login page already authenticated.
 	if window != nil {
-		return ignoreUnsupportedCookies(window.DeleteCookies(ctx, gameBananaCookieURI, "rmc"))
+		return ignoreUnsupportedCookies(window.DeleteCookies(ctx, gameBananaCookieURI))
 	}
 	if parent != nil {
 		if host := parent.native(); host != nil {
-			return ignoreUnsupportedCookies(host.DeleteCookies(ctx, gameBananaCookieURI, "rmc"))
+			return ignoreUnsupportedCookies(host.DeleteCookies(ctx, gameBananaCookieURI))
 		}
 	}
 	return nil

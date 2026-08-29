@@ -17,7 +17,7 @@ type CookieValidator func(context.Context, string) (bool, error)
 // The validator must succeed before the window is closed.
 type OpenLoginFunc func(context.Context, CookieValidator) (string, error)
 
-// ClearLoginCookiesFunc removes GameBanana rmc cookies from the WebView profile.
+// ClearLoginCookiesFunc removes GameBanana cookies from the WebView profile.
 type ClearLoginCookiesFunc func(context.Context) error
 
 type loginCall struct {
