@@ -31,11 +31,6 @@ runs:
       shell: pwsh
       run: pnpm test
 
-    - name: Check frontend formatting
-      shell: pwsh
-      working-directory: frontend
-      run: pnpm fmt:check
-
     - name: Lint and type-check frontend
       shell: pwsh
       working-directory: frontend

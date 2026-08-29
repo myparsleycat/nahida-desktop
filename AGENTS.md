@@ -176,10 +176,11 @@ When only an imperative visual attribute such as vertex colors or a heatmap chan
 - Do not recompute normals, bounds, geometry, or other large derived data when only colors or another isolated attribute changed.
 - Measure before introducing a specialized imperative path, and keep it localized to the high-frequency boundary.
 
-## Formatting
+## Formatting and linting changed frontend files
 
-- Format changed `.ts`, `.tsx`, `.js`, and `.jsx` files from `frontend/` with `pnpm fmt -- <paths...>`, then check them with `pnpm lint -- <paths...>`.
-- Do not reformat unrelated files.
+- Before committing changes to `.ts`, `.tsx`, `.js`, or `.jsx` files, run both commands from `frontend/` against every changed file: first `pnpm fmt -- <paths...>`, then `pnpm lint -- <same-paths...>`.
+- Pass the changed file paths explicitly. Do not rely on the GitHub Actions auto-format workflow as a substitute for local formatting and linting.
+- Do not format or lint unrelated files.
 
 ## Git Revert
 
