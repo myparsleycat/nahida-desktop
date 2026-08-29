@@ -226,22 +226,26 @@ function RouteComponent() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.runOnStartup")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.runOnStartupDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={settings.runOnStartup}
-              onCheckedChange={(val) => update("runOnStartup", val)}
-            />
-          </div>
+          {appStatus?.supportsAutostart && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium">
+                    {t("page.setting.gen.application.runOnStartup")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {t("page.setting.gen.application.runOnStartupDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.runOnStartup}
+                  onCheckedChange={(val) => update("runOnStartup", val)}
+                />
+              </div>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           <div className="flex items-center justify-between space-x-3">
             <div className="flex-1 space-y-0.5">

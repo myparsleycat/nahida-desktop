@@ -33,6 +33,7 @@ export interface AppStatus {
     version: string;
     isPackaged: boolean;
     isDev: boolean;
+    supportsAutostart: boolean;
     platform: string;
 }
 

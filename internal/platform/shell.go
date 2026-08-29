@@ -15,10 +15,11 @@ var AppVersion = "3.0.0"
 
 // AppStatus is the Electron util:getAppStatus payload.
 type AppStatus struct {
-	Version    string `json:"version"`
-	IsPackaged bool   `json:"isPackaged"`
-	IsDev      bool   `json:"isDev"`
-	Platform   string `json:"platform"`
+	Version           string `json:"version"`
+	IsPackaged        bool   `json:"isPackaged"`
+	IsDev             bool   `json:"isDev"`
+	SupportsAutostart bool   `json:"supportsAutostart"`
+	Platform          string `json:"platform"`
 }
 
 type Shell struct {
@@ -40,10 +41,11 @@ func NewShell() *Shell {
 func (s *Shell) GetAppStatus() AppStatus {
 	packaged := Packaged()
 	return AppStatus{
-		Version:    s.version,
-		IsPackaged: packaged,
-		IsDev:      !packaged,
-		Platform:   nodePlatform(),
+		Version:           s.version,
+		IsPackaged:        packaged,
+		IsDev:             !packaged,
+		SupportsAutostart: SupportsAutostart(),
+		Platform:          nodePlatform(),
 	}
 }
 

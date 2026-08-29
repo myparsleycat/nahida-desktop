@@ -10,3 +10,10 @@ describe("general settings language flow", () => {
         expect(source).not.toContain("i18n.changeLanguage");
     });
 });
+
+describe("general settings run on startup", () => {
+    it("exposes the control only for the NSIS install", () => {
+        expect(source).toContain("{appStatus?.supportsAutostart && (");
+        expect(source).toContain('t("page.setting.gen.application.runOnStartup")');
+    });
+});

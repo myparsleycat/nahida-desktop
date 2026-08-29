@@ -19,6 +19,9 @@ func TestGetAppStatus(t *testing.T) {
 	if got.IsPackaged || !got.IsDev {
 		t.Fatalf("dev status = %+v", got)
 	}
+	if got.SupportsAutostart {
+		t.Fatalf("unpackaged status must not support autostart: %+v", got)
+	}
 	wantPlatform := "win32"
 	if got.Platform != wantPlatform {
 		t.Fatalf("platform = %q, want %q", got.Platform, wantPlatform)
@@ -28,6 +31,9 @@ func TestGetAppStatus(t *testing.T) {
 	got = s.GetAppStatus()
 	if !got.IsPackaged || got.IsDev {
 		t.Fatalf("packaged status = %+v", got)
+	}
+	if got.SupportsAutostart != SupportsAutostart() {
+		t.Fatalf("autostart support = %v, want %v", got.SupportsAutostart, SupportsAutostart())
 	}
 }
 

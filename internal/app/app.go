@@ -62,20 +62,15 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		rt.log.Error(err.Error(), "App:registerURLProtocol")
 	}
 	autostartSync := func(enabled bool) error {
-		if !platform.Packaged() {
-			return nil
-		}
 		return syncAutostart(app.Autostart, enabled)
 	}
 	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent))
-	if platform.Packaged() {
-		enabled, err := rt.setting.GetRunOnStartup(context.Background())
-		if err == nil {
-			err = autostartSync(enabled)
-		}
-		if err != nil && rt.log != nil {
-			rt.log.Error(err.Error(), "App:syncAutostart")
-		}
+	enabled, err := rt.setting.GetRunOnStartup(context.Background())
+	if err == nil {
+		err = autostartSync(enabled)
+	}
+	if err != nil && rt.log != nil {
+		rt.log.Error(err.Error(), "App:syncAutostart")
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)
