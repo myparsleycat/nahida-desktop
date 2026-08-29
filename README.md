@@ -13,7 +13,12 @@
 
 ---
 
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop?ref=badge_large)
+
 ## Overview
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop?ref=badge_shield)
+
 
 Nahida Desktop is a desktop application that provides a unified interface for managing 3dmigoto mods, transferring files with Nahida Drive, and accessing various other features
 
