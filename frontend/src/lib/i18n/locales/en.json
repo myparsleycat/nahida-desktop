@@ -437,6 +437,11 @@
           "path_required": "Please select a launcher path.",
           "launch": "Save and launch launcher"
         },
+        "gimi-dcr": {
+          "title": "Dynamic Character Resolution is on",
+          "description": "Mods in Genshin Impact will not apply correctly unless Dynamic Character Resolution is off. Turn it off and start the game?",
+          "confirm": "Turn off and start"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."

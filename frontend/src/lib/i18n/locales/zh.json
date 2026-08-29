@@ -417,6 +417,11 @@
           "path_required": "请选择启动器路径。",
           "launch": "保存并启动启动器"
         },
+        "gimi-dcr": {
+          "title": "动态角色分辨率已开启",
+          "description": "要在原神中正常应用模组，需要关闭动态角色分辨率。要关闭并启动游戏吗？",
+          "confirm": "关闭并启动"
+        },
         "preset-management": {
           "description": "此预设包含 {{length}} 个模组。",
           "legacy-badge": "旧版",
