@@ -270,7 +270,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 	}
 	globalBuffers := collectModelViewerGlobalBuffers(sections, variables, resources, resourceMap)
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
-	hashPositions, hashTexcoords := collectHashVertexBuffers(sections, resourceMap)
+	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
 	if timing != nil {
 		timing.SetupMs += time.Since(stageStartedAt).Milliseconds()
@@ -321,9 +321,6 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 			continue
 		}
 		texcoordName := state.vb1
-		if resource, ok := resourceMap[modelViewerNormalizeKey(state.vb2)]; ok && resource.Stride != 32 {
-			texcoordName = state.vb2
-		}
 		texcoord, tcOK := resourceMap[modelViewerNormalizeKey(texcoordName)]
 		if !tcOK || texcoord.Filename == "" {
 			continue
@@ -461,17 +458,7 @@ func collectModelViewerGlobalBuffers(sections []modINISection, variables map[str
 			global.vb0 = unconditional("vb0")
 		}
 		if global.vb1 == "" {
-			texcoord := unconditional("vb2")
-			if resourceMap[modelViewerNormalizeKey(texcoord)].Stride == 32 {
-				texcoord = ""
-			}
-			if texcoord == "" {
-				texcoord = unconditional("vb1")
-				if resourceMap[modelViewerNormalizeKey(texcoord)].Stride == 32 {
-					texcoord = ""
-				}
-			}
-			global.vb1 = texcoord
+			global.vb1 = unconditional("vb1")
 		}
 	}
 
@@ -586,7 +573,7 @@ func resourceFilenames(resourceMap map[string]modelViewerResource, names []strin
 	return files
 }
 
-func collectHashVertexBuffers(sections []modINISection, resourceMap map[string]modelViewerResource) (map[string]string, map[string]string) {
+func collectHashVertexBuffers(sections []modINISection) (map[string]string, map[string]string) {
 	positions := map[string]string{}
 	texcoords := map[string]string{}
 	for _, section := range sections {
@@ -599,19 +586,14 @@ func collectHashVertexBuffers(sections []modINISection, resourceMap map[string]m
 		}
 		vb0 := modelViewerTrimTextureValue(modelViewerSectionValue(section, "vb0"))
 		vb1 := modelViewerTrimTextureValue(modelViewerSectionValue(section, "vb1"))
-		vb2 := modelViewerTrimTextureValue(modelViewerSectionValue(section, "vb2"))
 		if vb0 != "" {
 			if _, exists := positions[hash]; !exists {
 				positions[hash] = vb0
 			}
 		}
-		texcoord := vb1
-		if resource, ok := resourceMap[modelViewerNormalizeKey(vb2)]; ok && resource.Stride != 32 && vb2 != "" {
-			texcoord = vb2
-		}
-		if texcoord != "" {
+		if vb1 != "" {
 			if _, exists := texcoords[hash]; !exists {
-				texcoords[hash] = texcoord
+				texcoords[hash] = vb1
 			}
 		}
 	}
@@ -637,6 +619,12 @@ func extractSectionHash(name string) string {
 
 func sectionHandlingSkip(section modINISection) bool {
 	return strings.EqualFold(strings.TrimSpace(modelViewerSectionValue(section, "handling")), "skip")
+}
+
+var modelViewerLODOverrideRE = regexp.MustCompile(`(?i)_LOD\d*$`)
+
+func isModelViewerPreviewSkippedOverride(name string) bool {
+	return modelViewerLODOverrideRE.MatchString(name)
 }
 
 var (

@@ -62,7 +62,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			continue
 		}
 		wanted := []string{"ib", "this", "Resource\\ZZMI\\Diffuse"}
-		for index := range 11 {
+		for index := range 32 {
 			wanted = append(wanted, fmt.Sprintf("ps-t%d", index))
 		}
 		assignments := resolveModelViewerAssignments(section, wanted, lookup, variables, make(map[string]bool))

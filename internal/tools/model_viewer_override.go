@@ -17,6 +17,7 @@ type modelViewerDrawInstruction struct {
 	IndexCount     int
 	StartIndex     int
 	BaseVertex     int
+	Auto           bool
 	Conditions     []modelViewerConditionClause
 }
 
@@ -64,7 +65,7 @@ func collectModelViewerDrawBindings(sections []modINISection, variables map[stri
 	}
 	var bindings []modelViewerDrawBinding
 	for _, section := range sections {
-		if !strings.EqualFold(section.Header, "TextureOverride") {
+		if !strings.EqualFold(section.Header, "TextureOverride") || isModelViewerPreviewSkippedOverride(section.Name) {
 			continue
 		}
 		draws, _ := collectModelViewerDrawContext(section, variables, sectionLookup, nil, "", make(map[string]bool))
@@ -156,17 +157,14 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 				currentIB = modelViewerTrimResourcePrefix(value)
 				continue
 			}
-			if strings.EqualFold(key, "drawindexed") {
-				parts := strings.Split(value, ",")
-				if len(parts) != 3 {
+			if strings.EqualFold(key, "drawindexed") || strings.EqualFold(key, "drawindexedinstanced") {
+				draw, ok := parseModelViewerDrawIndexed(key, value, variables)
+				if !ok || draw.Auto {
 					continue
 				}
-				count, countOK := resolveModelViewerDrawNumber(parts[0], variables)
-				start, startOK := resolveModelViewerDrawNumber(parts[1], variables)
-				base, baseOK := resolveModelViewerDrawNumber(parts[2], variables)
-				if countOK && startOK && baseOK {
-					instructions = append(instructions, modelViewerDrawInstruction{IBResourceName: currentIB, IndexCount: count, StartIndex: start, BaseVertex: base, Conditions: activeConditions()})
-				}
+				draw.IBResourceName = currentIB
+				draw.Conditions = activeConditions()
+				instructions = append(instructions, draw)
 			}
 		}
 	}

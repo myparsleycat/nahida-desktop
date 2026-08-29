@@ -23,6 +23,42 @@ type modelViewerExpressionParser struct {
 
 var modelViewerDrawVariableRE = regexp.MustCompile(`^\$(\w+)$`)
 
+// parseModelViewerDrawIndexed maps 3DMigoto draw opcodes onto the viewer's
+// IndexCount/StartIndex/BaseVertex triple. drawindexedinstanced keeps the D3D
+// argument order (IndexCount, InstanceCount, StartIndex, BaseVertex, StartInstance)
+// and drops the instance arguments, which are not used for static preview.
+func parseModelViewerDrawIndexed(key, value string, variables map[string]any) (modelViewerDrawInstruction, bool) {
+	if strings.EqualFold(strings.TrimSpace(value), "auto") {
+		return modelViewerDrawInstruction{Auto: true}, true
+	}
+	parts := strings.Split(value, ",")
+	for index := range parts {
+		parts[index] = strings.TrimSpace(parts[index])
+	}
+	var countToken, startToken, baseToken string
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "drawindexed":
+		if len(parts) != 3 {
+			return modelViewerDrawInstruction{}, false
+		}
+		countToken, startToken, baseToken = parts[0], parts[1], parts[2]
+	case "drawindexedinstanced":
+		if len(parts) != 5 {
+			return modelViewerDrawInstruction{}, false
+		}
+		countToken, startToken, baseToken = parts[0], parts[2], parts[3]
+	default:
+		return modelViewerDrawInstruction{}, false
+	}
+	count, countOK := resolveModelViewerDrawNumber(countToken, variables)
+	start, startOK := resolveModelViewerDrawNumber(startToken, variables)
+	base, baseOK := resolveModelViewerDrawNumber(baseToken, variables)
+	if !countOK || !startOK || !baseOK {
+		return modelViewerDrawInstruction{}, false
+	}
+	return modelViewerDrawInstruction{IndexCount: count, StartIndex: start, BaseVertex: base}, true
+}
+
 // resolveModelViewerDrawNumber intentionally accepts only the forms supported
 // by Electron's resolveDrawNumber: an integer literal or one bare variable
 // whose default is numeric. General expression evaluation is not used here.

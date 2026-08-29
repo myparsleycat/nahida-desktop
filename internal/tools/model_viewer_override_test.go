@@ -25,6 +25,21 @@ endif`)
 	}
 }
 
+func TestModelViewerDrawBindingsParseInstancedDraws(t *testing.T) {
+	sections := parseModINI(`[TextureOverrideBody]
+ib = ResourceBodyIB
+drawindexedinstanced = 3, INSTANCE_COUNT, 3, 2, FIRST_INSTANCE`)
+	variables := collectModelViewerDefaultVariables(sections)
+	bindings := collectModelViewerDrawBindings(sections, variables)
+	indices, err := buildModelViewerIndicesForState(bindings, "BodyIB", []uint32{0, 1, 2, 0, 1, 2}, variables, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(indices) != 3 || indices[0] != 2 || indices[2] != 4 {
+		t.Fatalf("indices = %v", indices)
+	}
+}
+
 func TestCollectModelViewerDefaultVariablesMatchesElectronDeclarations(t *testing.T) {
 	sections := parseModINI(`[Constants]
 $top = 1

@@ -65,6 +65,9 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 		if !strings.EqualFold(section.Header, "TextureOverride") {
 			continue
 		}
+		if isModelViewerPreviewSkippedOverride(section.Name) {
+			continue
+		}
 		ctx.sectionName = section.Name
 		state := &modelViewerSymbolicSectionState{
 			buffers:  make(map[string][]modelViewerSymbolicAssignment),
@@ -156,28 +159,17 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 			if resource != "" {
 				state.buffers[strings.ToLower(key)] = append(state.buffers[strings.ToLower(key)], modelViewerSymbolicAssignment{resource: resource, conditions: cloneModelViewerDNF(conditions), sequence: sequence})
 			}
-		case "drawindexed":
-			state.explicitDraw = true
-			var draw modelViewerDrawInstruction
-			auto := strings.EqualFold(value, "auto")
-			if !auto {
-				parts := strings.Split(value, ",")
-				if len(parts) != 3 {
-					continue
-				}
-				count, countOK := resolveModelViewerDrawNumber(parts[0], c.variables)
-				start, startOK := resolveModelViewerDrawNumber(parts[1], c.variables)
-				base, baseOK := resolveModelViewerDrawNumber(parts[2], c.variables)
-				if !countOK || !startOK || !baseOK || count < 0 || start < 0 || base < 0 {
-					continue
-				}
-				draw.IndexCount, draw.StartIndex, draw.BaseVertex = count, start, base
+		case "drawindexed", "drawindexedinstanced":
+			draw, ok := parseModelViewerDrawIndexed(key, value, c.variables)
+			if !ok {
+				continue
 			}
+			state.explicitDraw = true
 			c.draws++
 			if c.draws > maxModelViewerDraws {
 				return contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", c.draws, maxModelViewerDraws))
 			}
-			state.draws = append(state.draws, c.snapshotRecords(state, draw, auto, conditions)...)
+			state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
 		default:
 			resource := modelViewerTrimTextureValue(value)
 			if resource == "" {
