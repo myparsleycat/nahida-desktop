@@ -1,9 +1,15 @@
 import { Drive } from "@bindings/drive";
 import { dialogStore, useDragStore } from "@renderer/store/drive";
+import { useState } from "react";
 
 export function useDrag() {
-    const setUploadDragging = useDragStore((s) => s.setUploadDragging);
     const setCurrentDragOver = useDragStore((s) => s.setCurrentDragOver);
+    const [uploadDragging, setUploadDragging] = useState(false);
+
+    const clearDragging = () => {
+        setUploadDragging(false);
+        setCurrentDragOver(null);
+    };
 
     const onDragEnter = (e: React.DragEvent) => {
         if (e.dataTransfer?.types.includes("Files")) {
@@ -12,11 +18,17 @@ export function useDrag() {
     };
 
     const onDragLeave = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
-            setUploadDragging(false);
+        if (!e.dataTransfer?.types.includes("Files")) {
+            return;
         }
 
-        setCurrentDragOver(null);
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX;
+        const y = e.clientY;
+
+        if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
+            clearDragging();
+        }
     };
 
     const onDragOver = (e: React.DragEvent) => {
@@ -27,8 +39,7 @@ export function useDrag() {
 
     const onDrop = (e: React.DragEvent) => {
         if (!e.dataTransfer?.types.includes("Files")) return;
-        setUploadDragging(false);
-        setCurrentDragOver(null);
+        clearDragging();
     };
 
     const uploadPaths = async (paths: string[], itemId: string) => {
@@ -62,6 +73,8 @@ export function useDrag() {
         onDragLeave,
         onDragOver,
         onDrop,
+        uploadDragging,
+        clearDragging,
         uploadPaths,
     };
 }

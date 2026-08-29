@@ -16,6 +16,7 @@ import {
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
 import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
+import { DriveUploadDropOverlay } from "@renderer/components/drive/drive-upload-drop-overlay";
 import { AliceLoader } from "@renderer/components/loaders";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -47,7 +48,15 @@ function RouteComponent() {
   const location = useLocation();
   const effectiveId = id === "root" ? "share" : id;
 
-  const { onDragEnter, onDragLeave, onDragOver, onDrop, uploadPaths } = useDrag();
+  const {
+    onDragEnter,
+    onDragLeave,
+    onDragOver,
+    onDrop,
+    uploadDragging,
+    clearDragging,
+    uploadPaths,
+  } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
   const includeSubdirs = useViewStore((s) => s.includeSubdirs);
   const sortType = useViewStore((s) => s.sortType);
@@ -154,6 +163,7 @@ function RouteComponent() {
 
   useWindowFileDrop(({ paths, target }) => {
     if (target.id === FileDropTargetID.driveContent) {
+      clearDragging();
       void handleDroppedPaths(paths);
     }
   });
@@ -189,7 +199,7 @@ function RouteComponent() {
           <div
             id={FileDropTargetID.driveContent}
             data-file-drop-target
-            className="flex flex-1 flex-col overflow-auto"
+            className="relative flex flex-1 flex-col overflow-auto"
             onDragEnter={onDragEnter}
             onDragLeave={onDragLeave}
             onDragOver={onDragOver}
@@ -276,6 +286,10 @@ function RouteComponent() {
                 ) : null}
               </HandlerProvider>
             </ContextMenuProvider>
+            <DriveUploadDropOverlay
+              visible={uploadDragging}
+              folderName={query.data.content?.name ?? t("page.share_drive.title")}
+            />
           </div>
         </div>
 

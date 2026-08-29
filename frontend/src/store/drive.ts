@@ -60,15 +60,11 @@ export function useViewStore<T>(selector: (state: ViewState) => T): T {
 }
 
 interface DragStore {
-    uploadDragging: boolean;
-    setUploadDragging: (dragging: boolean) => void;
     currentDragOver: Content | null;
     setCurrentDragOver: (content: Content | null) => void;
 }
 
 export const dragStore = createStore<DragStore>((set) => ({
-    uploadDragging: false,
-    setUploadDragging: (uploadDragging) => set({ uploadDragging }),
     currentDragOver: null,
     setCurrentDragOver: (currentDragOver) => set({ currentDragOver }),
 }));

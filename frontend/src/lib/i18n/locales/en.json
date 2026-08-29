@@ -120,6 +120,10 @@
         "0": "No files or folders in this folder",
         "1": "Drag and drop files or folders here to upload"
       },
+      "dad_section": {
+        "title": "Upload to {{name}}",
+        "description": "Files and folders will be uploaded to this folder"
+      },
       "toast": {
         "no_uploadable_files": "No uploadable files found."
       },
