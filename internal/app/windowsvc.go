@@ -126,9 +126,11 @@ func (w *Window) Create() application.Window {
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
 		Windows: application.WindowsWindow{
-			DisableMenu:                true,
-			NonClientRegionSupport:     true,
-			WebView2CompositionHosting: true,
+			DisableMenu:            true,
+			NonClientRegionSupport: true,
+			// Composition hosting can miss file drops that occur before WebView2 dispatches dragover.
+			// Keep HWND hosting so rapid file drops remain reliable.
+			WebView2CompositionHosting: false,
 		},
 	}
 	if route != "" {
