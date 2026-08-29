@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/nahida.png" alt="Nahida Desktop" width="96" />
+  <img src="build/appicon.png" alt="Nahida Desktop" width="96" />
 
   <h1>Nahida Desktop</h1>
 
@@ -13,12 +13,7 @@
 
 ---
 
-
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop?ref=badge_large)
-
 ## Overview
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop?ref=badge_shield)
-
 
 Nahida Desktop is a desktop application that provides a unified interface for managing 3dmigoto mods, transferring files with Nahida Drive, and accessing various other features
 
@@ -74,3 +69,5 @@ Windows Defender and some antivirus programs may occasionally block the installe
 ## License
 
 Distributed under the [GNU GPLv3](LICENSE).
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmyparsleycat%2Fnahida-desktop?ref=badge_large)
