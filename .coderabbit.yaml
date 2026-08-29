@@ -24,69 +24,114 @@ reviews:
     description:
       mode: warning
     docstrings:
-      mode: off
+      mode: "off"
 
   path_filters:
     - "!**/node_modules/**"
     - "!**/dist/**"
     - "!**/out/**"
-    - "!**/build/**"
-    - "!**/target/**"
+    - "!**/coverage/**"
     - "!**/.pnpm-store/**"
     - "!**/.tanstack/**"
+    - "!**/.task/**"
+    - "!**/.gocache/**"
+    - "!**/.gomodcache/**"
+    - "!bin/**"
+    - "!frontend/bindings/**"
+    - "!frontend/src/routeTree.gen.ts"
+    - "!frontend/src/shared/types.gen.ts"
     - "!**/*.gen.ts"
     - "!**/*.lock"
     - "!**/pnpm-lock.yaml"
     - "!**/*.db*"
-    - "!**/*.{png,gif,ttf,zst,exe,node}"
+    - "!**/*.{png,gif,ico,ttf,woff2,zst,zip,7z,exe,dll,node}"
 
   path_instructions:
     - path: "**/*"
       instructions: |
         Prioritize actionable issues with a concrete impact on correctness, security, data integrity, reliability, performance, or maintainability.
         Do not comment on formatting, naming preferences, subjective style, minor simplifications, harmless redundancy, or other nitpicks.
-        Avoid feedback already enforced by oxfmt or oxlint. Only raise a maintainability concern when it creates meaningful risk or makes the changed code substantially harder to understand or modify.
+        Avoid feedback already enforced by gofmt, golangci-lint, oxfmt, or oxlint. Only raise a maintainability concern when it creates meaningful risk or makes the changed code substantially harder to understand or modify.
+        This is a Windows-only Wails v3 desktop application with a Go backend and a React/TypeScript frontend. Do not suggest Electron APIs or restoring Linux, macOS, Android, or iOS support.
+        Preserve the existing UI, UX, state management, and package ownership unless a change explicitly requires otherwise.
 
-    - path: "src/main/**/*.{ts,tsx}"
+    - path: "internal/**/*.go"
       instructions: |
-        Electron main-process review priorities:
-        - Check IPC handlers for authorization, input validation, path traversal, command injection, and unsafe renderer-controlled arguments.
-        - New IPC handlers must use rh() from src/main/ipc/helper.ts so generated channel typing and runtime whitelisting remain intact.
-        - For IPC-backed user actions, require the original error to be logged with actionable structured context before a generic error reaches the renderer.
-        - Check cleanup, rollback, process lifecycle, filesystem atomicity, and Windows-specific path behavior.
+        Go backend review priorities:
+        - Check context propagation and cancellation, goroutine ownership, synchronization, resource closure, partial-failure cleanup, rollback, and error propagation.
+        - Treat all paths, URLs, archive entries, process arguments, network responses, persisted values, and Wails-bound method inputs as untrusted. Check path traversal, archive extraction, command injection, SSRF, unsafe redirects, and filesystem atomicity where relevant.
+        - For Wails-backed user actions whose renderer fallback hides the original failure, require the backend error to be logged first with service/action, operation stage, domain identifiers, relevant resolved paths or URLs, and cleanup or rollback state.
         - Flag secrets, tokens, or sensitive user data written to logs.
+        - Check SQL and filesystem consistency, HTTP response-body ownership, bounded concurrency, integer and buffer bounds, and Windows-specific path behavior.
+        - Prefer the standard library when equally clear and github.com/samber/lo for straightforward collection transformations; do not force functional helpers into branching or performance-sensitive control flow.
+        - Keep exported APIs minimal because exported service methods and models may become frontend bindings.
 
-    - path: "src/preload/**/*.{ts,tsx}"
+    - path: "internal/app/**/*.go"
       instructions: |
-        Review the Electron security boundary carefully. Expose only narrow, typed APIs through contextBridge, preserve context isolation, and do not expose raw ipcRenderer or unrestricted channels to renderer code.
+        Review Wails v3 application wiring and lifecycle carefully:
+        - Use the current Wails v3 API and the fork/version pinned by go.mod; do not recommend Wails v2 APIs.
+        - Check service construction and registration, startup ordering, dependency wiring, window lifecycle, event emission, shutdown ordering, and cleanup after partially completed startup.
+        - A change to an exported bound service method, parameter, return type, or model must remain compatible with generated frontend bindings and all @bindings callers. Bindings are generated; never suggest editing frontend/bindings manually.
+        - Verify Go event names and payloads agree with frontend listeners, and that events are not emitted through an unavailable application/window lifecycle state.
+        - Check multi-window behavior, protocol/local HTTP boundaries, WebView cookie handling, deep links, and Windows startup/background behavior for authorization and lifecycle mistakes.
 
-    - path: "src/renderer/**/*.{ts,tsx}"
+    - path: "internal/platform/**/*.go"
+      instructions: |
+        Review Windows integration for correct build constraints, UTF-16/path handling, handle and COM/resource lifetimes, thread-affinity requirements, process quoting, registry/autostart behavior, and native error propagation.
+        Do not request non-Windows implementations or generic cross-platform abstractions for Windows-only behavior.
+
+    - path: "frontend/src/**/*.{ts,tsx}"
       instructions: |
         React and renderer review priorities:
         - Check hook dependencies, stale closures, cleanup of listeners and timers, accessibility, loading/error/empty states, and user-visible text localization.
         - Keep React state for values that affect rendered UI. For high-frequency visual-only updates, prefer refs and imperative methods to avoid expensive component and Three.js rerenders.
-        - Flag unsafe HTML, untrusted external URLs, and assumptions that renderer input is trusted.
+        - Flag unsafe HTML, untrusted external URLs, unsafe local-file handling, and assumptions that renderer input or backend output is trusted.
+        - Backend calls must use generated imports through the @bindings alias. Do not suggest hand-written copies of generated services or models.
+        - For @wailsio/runtime events, check exact event names and payload shapes, deterministic subscription cleanup, duplicate listeners, and behavior across remounts or window reloads.
+        - Preserve TanStack Router, Zustand, React Query, and existing Wails adapter boundaries unless the change requires an architectural change.
+
+    - path: "frontend/src/wails/**/*.{ts,tsx}"
+      instructions: |
+        Treat this directory as the renderer-side Wails boundary. Keep adapters narrow and typed, preserve unavailable-runtime behavior used by tests or browser contexts, and check event/listener teardown, file-drop validation, window identity, and backend error propagation.
+        Do not introduce Electron contextBridge, ipcRenderer, preload, or channel abstractions.
+
+    - path: "frontend/src/port/**/*.{ts,tsx}"
+      instructions: |
+        Review bootstrap and port abstractions for correct Wails availability detection, initialization order, listener cleanup, and behavior when native capabilities are unavailable. Keep backend-specific details behind the existing boundary.
 
     - path: "**/*.{ts,tsx,mjs,js}"
       instructions: |
         Focus on bugs and material risks involving type safety, resource cleanup, concurrency, cancellation, error propagation, and boundary validation.
         Do not report style-only deviations such as destructuring choices, loop versus array-method preferences, variable inlining, helper extraction, or equivalent utility choices unless they cause a concrete defect or significant maintenance risk.
 
-    - path: "src/main/ipc/handlers/**/*.ts"
+    - path: "**/*_test.go"
       instructions: |
-        Verify that handlers use rh(), validate all renderer-controlled inputs, preserve domain-specific error messages/codes, and log the original failure with channel, operation stage, identifiers, relevant paths or URLs, and cleanup state.
-
-    - path: "native/**/*.{rs,go}"
-      instructions: |
-        Review memory and thread safety, FFI boundaries, integer and buffer bounds, filesystem/process operations, error propagation, cleanup, and Windows API assumptions. Treat all paths and data originating outside the native module as untrusted.
+        Check observable behavior, failure paths, cancellation, cleanup, concurrency, Windows path edge cases, and regressions in Wails service contracts. Tests must be deterministic and must not leak goroutines, handles, listeners, temporary files, or global state.
 
     - path: "**/*.{test,spec}.{ts,tsx}"
       instructions: |
-        Check that tests cover observable behavior, failure paths, boundary cases, cleanup, and regressions. Avoid assertions coupled to implementation details or timing-sensitive tests without deterministic synchronization.
+        Check that tests cover observable behavior, Wails-unavailable fallbacks, event unsubscribe behavior, failure paths, boundary cases, cleanup, and regressions. Avoid assertions coupled to implementation details or timing-sensitive tests without deterministic synchronization.
+
+    - path: "go.mod"
+      instructions: |
+        Preserve the Wails v3 fork mapping from github.com/wailsapp/wails/v3 to github.com/myparsleycat/wails/v3 and keep generators pinned with Go's tool directive. Check dependency changes for version compatibility, necessity, licensing/security risk, and corresponding go.sum updates.
+
+    - path: "Taskfile.yml"
+      instructions: |
+        Keep task build, package, run, and dev on Wails v3 and Windows only. Verify task test, lint, and vuln continue to use the project-pinned commands and that cross-layer changes retain a production task build verification path.
+
+    - path: "build/**/*"
+      instructions: |
+        This directory contains checked-in Wails build and Windows packaging source, not disposable build output. Review Taskfile dependencies, binding generation, embedded frontend assets, version propagation, NSIS behavior, signing/publishing inputs, quoting, and Windows paths.
+        Keep generated bindings produced by the Wails v3 generator, keep packaging Windows-only, and do not add macOS, Linux, Android, or iOS targets.
+
+    - path: ".github/**/*.{yml,yaml}"
+      instructions: |
+        Check that CI uses the repository's Taskfile and pnpm scripts, pins or safely scopes third-party actions, caches the correct Go and pnpm inputs, and verifies Go, frontend, generated-binding, release-script, and Windows build behavior appropriate to the changed files.
 
     - path: "**/*.{yml,yaml,json,jsonc,toml}"
       instructions: |
-        Check schema validity, duplicated or conflicting settings, secret leakage, unsafe permissions, and consistency with package scripts and repository paths.
+        Check schema validity, duplicated or conflicting settings, secret leakage, unsafe permissions, Windows-only assumptions, and consistency with Taskfile tasks, package scripts, Wails build configuration, and repository paths.
 
     - path: "docs/**/*.md"
       instructions: |
