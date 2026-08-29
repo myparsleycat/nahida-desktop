@@ -1,10 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
 
-import {
-    MODEL_VIEWER_UPRIGHT_ROTATION,
-    needsUprightCorrection,
-} from "./model-viewer-upright";
+import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
 function boxMesh(size: [number, number, number]): Mesh {
     const geometry = new BufferGeometry();
