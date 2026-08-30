@@ -178,9 +178,9 @@ func validSavedBounds(bounds *setting.Bounds, screens []*application.Screen) boo
 	if bounds == nil || bounds.Width < 800 || bounds.Height < 600 {
 		return false
 	}
-	point := application.Point{X: bounds.X, Y: bounds.Y}
+	rect := application.Rect{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height}
 	for _, screen := range screens {
-		if screen != nil && screen.WorkArea.Contains(point) {
+		if screen != nil && !screen.WorkArea.Intersect(rect).IsEmpty() {
 			return true
 		}
 	}

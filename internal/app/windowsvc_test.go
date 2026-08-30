@@ -33,19 +33,21 @@ func TestWaitReadyDistinguishesWarmAndColdWindow(t *testing.T) {
 	}
 }
 
-func TestValidSavedBoundsRequiresTopLeftInsideWorkArea(t *testing.T) {
-	screens := []*application.Screen{
-		{WorkArea: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}},
-		{WorkArea: application.Rect{X: -1280, Y: -200, Width: 1280, Height: 1024}},
-	}
+func TestValidSavedBoundsRequiresIntersectionWithWorkArea(t *testing.T) {
+	primary := &application.Screen{WorkArea: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}}
+	secondary := &application.Screen{WorkArea: application.Rect{X: -1280, Y: -200, Width: 1280, Height: 1024}}
+	screens := []*application.Screen{primary, secondary}
 	tests := []struct {
-		name   string
-		bounds *setting.Bounds
-		valid  bool
+		name    string
+		bounds  *setting.Bounds
+		screens []*application.Screen
+		valid   bool
 	}{
 		{name: "primary", bounds: &setting.Bounds{X: 100, Y: 100, Width: 1200, Height: 800}, valid: true},
 		{name: "negative secondary", bounds: &setting.Bounds{X: -1280, Y: -200, Width: 1200, Height: 800}, valid: true},
 		{name: "secondary inside corner", bounds: &setting.Bounds{X: -1, Y: 823, Width: 1200, Height: 800}, valid: true},
+		{name: "left overhang", bounds: &setting.Bounds{X: -100, Y: 100, Width: 1200, Height: 800}, screens: []*application.Screen{primary}, valid: true},
+		{name: "top overhang", bounds: &setting.Bounds{X: 100, Y: -50, Width: 1200, Height: 800}, screens: []*application.Screen{primary}, valid: true},
 		{name: "right edge excluded", bounds: &setting.Bounds{X: 1920, Y: 0, Width: 1200, Height: 800}},
 		{name: "bottom edge excluded", bounds: &setting.Bounds{X: 0, Y: 1040, Width: 1200, Height: 800}},
 		{name: "off screen", bounds: &setting.Bounds{X: 5000, Y: 5000, Width: 1200, Height: 800}},
@@ -55,7 +57,10 @@ func TestValidSavedBoundsRequiresTopLeftInsideWorkArea(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := validSavedBounds(test.bounds, screens); got != test.valid {
+			if test.screens == nil {
+				test.screens = screens
+			}
+			if got := validSavedBounds(test.bounds, test.screens); got != test.valid {
 				t.Fatalf("validSavedBounds() = %v, want %v", got, test.valid)
 			}
 		})
