@@ -2,6 +2,7 @@ package tools
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -391,6 +392,12 @@ func (e *persistEngine) flushReady(targetINIPath string, generation int) {
 	}
 	updated, err := applyPersistUpdates(targetINIPath, updates)
 	if err != nil {
+		// A mod can be renamed or removed during the learner's quiet window.
+		// The queued update belongs to the old path and must not interfere with
+		// the mod-manager operation or be reported as an actionable failure.
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
 		e.logError("Error updating mod ini " + targetINIPath + ": " + err.Error())
 		return
 	}

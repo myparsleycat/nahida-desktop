@@ -276,6 +276,22 @@ type persistHarness struct {
 	errors        []string
 }
 
+func TestTogglePersistDropsQueuedUpdateAfterModIsRemoved(t *testing.T) {
+	harness := createPersistHarness(t, [][2]string{{"Toggle", "0"}})
+	if err := harness.start(); err != nil {
+		t.Fatal(err)
+	}
+	harness.trigger([][2]string{{"Toggle", "1"}})
+	if err := os.RemoveAll(filepath.Dir(harness.targetINIPath)); err != nil {
+		t.Fatal(err)
+	}
+
+	harness.engine.Advance(3_000)
+	if len(harness.errors) != 0 {
+		t.Fatalf("stale queued update logged errors: %v", harness.errors)
+	}
+}
+
 func createPersistHarness(t *testing.T, initial [][2]string) *persistHarness {
 	t.Helper()
 	importerFolder := t.TempDir()

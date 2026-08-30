@@ -1,7 +1,8 @@
+//go:build windows
+
 package watcher
 
 import (
-	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -10,8 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
-	filewatcher "github.com/larsartmann/go-filewatcher/v2"
+	"golang.org/x/sys/windows"
 )
 
 // Op identifies a filesystem operation. Multiple operations may be combined
@@ -34,11 +36,11 @@ type Event struct {
 	Hash string
 }
 
-// Filter decides whether an event should be delivered. Directory creation is
-// processed for recursive registration before this filter runs.
+// Filter decides whether an event should be delivered after depth and
+// operation filtering.
 type Filter func(Event) bool
 
-// ErrorHandler receives runtime watcher and recursive-registration errors.
+// ErrorHandler receives runtime ReadDirectoryChangesW errors.
 type ErrorHandler func(error)
 
 // TreeConfig configures directory watching. Depth 0 watches only each root,
@@ -62,22 +64,31 @@ type FileConfig struct {
 
 // Watcher owns one independent backend watcher and its debounce state.
 type Watcher struct {
-	backend  *filewatcher.Watcher
-	cancel   context.CancelFunc
+	events   chan Event
+	stop     chan struct{}
 	done     chan struct{}
+	ioDone   chan struct{}
 	dispatch *dispatcher
-	roots    []root
+	roots    []*root
+	port     windows.Handle
 	depth    int
 	ops      Op
 	filter   Filter
 	onError  ErrorHandler
+	overflow string
 
 	once     sync.Once
 	closeErr error
 }
 
 type root struct {
-	path string
+	path       string
+	handle     windows.Handle
+	recursive  bool
+	buffer     []byte
+	mu         sync.Mutex
+	overlapped windows.Overlapped
+	pending    bool
 }
 
 // WatchTree watches all roots with a shared invalidation debounce. Each call
@@ -88,7 +99,7 @@ func WatchTree(roots []string, conf TreeConfig, handler func(Event)) (*Watcher, 
 		return nil, fmt.Errorf("watcher depth must be -1 or greater: %d", conf.Depth)
 	}
 
-	return start(roots, conf.Depth, defaultOps(conf.Ops), conf.Debounce, conf.Filter, conf.OnError, handler)
+	return start(roots, conf.Depth, defaultOps(conf.Ops), conf.Debounce, conf.Filter, conf.OnError, "", handler)
 }
 
 // WatchFile watches one exact file by watching its parent directory. When
@@ -129,6 +140,7 @@ func WatchFile(path string, conf FileConfig, handler func(Event)) (*Watcher, err
 		conf.SettleDelay,
 		filter,
 		conf.OnError,
+		target,
 		deliver,
 	)
 }
@@ -140,6 +152,7 @@ func start(
 	debounce time.Duration,
 	filter Filter,
 	onError ErrorHandler,
+	overflow string,
 	handler func(Event),
 ) (*Watcher, error) {
 	if len(paths) == 0 {
@@ -152,8 +165,7 @@ func start(
 		return nil, fmt.Errorf("watcher debounce must not be negative: %s", debounce)
 	}
 
-	roots := make([]root, 0, len(paths))
-	backendPaths := make([]string, 0, len(paths))
+	resolved := make([]string, 0, len(paths))
 	for _, path := range paths {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -167,107 +179,295 @@ func start(
 		if !info.IsDir() {
 			return nil, fmt.Errorf("watcher root is not a directory: %q", abs)
 		}
-		roots = append(roots, root{path: abs})
-		backendPaths = append(backendPaths, abs)
+		resolved = append(resolved, abs)
 	}
 
-	backend, err := filewatcher.New(
-		backendPaths,
-		filewatcher.WithRecursive(false),
-		filewatcher.WithGitignore(false),
-		filewatcher.WithSkipDotDirs(false),
-		filewatcher.WithBuffer(256),
-		filewatcher.WithErrorHandler(func(_ filewatcher.ErrorContext, err error) {
-			if onError != nil {
-				onError(err)
-			}
-		}),
-	)
+	roots := make([]*root, 0, len(resolved))
+	for _, path := range resolved {
+		watched, err := openRoot(path, depth != 0)
+		if err != nil {
+			return nil, errors.Join(err, closeRoots(roots))
+		}
+		roots = append(roots, watched)
+	}
+	port, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0)
 	if err != nil {
-		return nil, fmt.Errorf("create watcher: %w", err)
+		return nil, errors.Join(fmt.Errorf("create watcher completion port: %w", err), closeRoots(roots))
 	}
-
-	for _, item := range roots {
-		if err := addTree(backend, item.path, depth, false); err != nil {
-			_ = backend.Close()
-			return nil, err
+	for index, item := range roots {
+		if _, err := windows.CreateIoCompletionPort(item.handle, port, uintptr(index+1), 0); err != nil {
+			return nil, errors.Join(
+				fmt.Errorf("associate watcher root %q with completion port: %w", item.path, err),
+				windows.CloseHandle(port),
+				closeRoots(roots),
+			)
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	events, err := backend.Watch(ctx)
-	if err != nil {
-		cancel()
-		_ = backend.Close()
-		return nil, fmt.Errorf("start watcher: %w", err)
-	}
-
 	w := &Watcher{
-		backend:  backend,
-		cancel:   cancel,
+		events:   make(chan Event, 256),
+		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
+		ioDone:   make(chan struct{}),
 		dispatch: newDispatcher(debounce, handler),
 		roots:    roots,
+		port:     port,
 		depth:    depth,
 		ops:      ops,
 		filter:   filter,
 		onError:  onError,
+		overflow: overflow,
 	}
-	go w.run(events)
+	go w.run()
+	go w.readCompletions()
+	for _, item := range w.roots {
+		if err := w.beginRead(item); err != nil {
+			return nil, errors.Join(err, w.Close())
+		}
+	}
 
 	return w, nil
 }
 
-func (w *Watcher) run(events <-chan filewatcher.Event) {
+func (w *Watcher) run() {
 	defer close(w.done)
-	for event := range events {
-		ev, ok := convertEvent(event)
-		if !ok {
-			continue
+	for {
+		select {
+		case <-w.stop:
+			return
+		case ev := <-w.events:
+			if !w.includes(ev.Path) || w.ops&ev.Op == 0 || w.filter != nil && !w.filter(ev) {
+				continue
+			}
+			w.dispatch.Dispatch(ev)
 		}
-		if ev.Op == Create {
-			w.addCreatedDirectory(ev.Path)
-		}
-		if w.ops&ev.Op == 0 || w.filter != nil && !w.filter(ev) {
-			continue
-		}
-		w.dispatch.Dispatch(ev)
 	}
 }
 
-func (w *Watcher) addCreatedDirectory(path string) {
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
-		return
+func openRoot(path string, recursive bool) (*root, error) {
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, fmt.Errorf("encode watcher root %q: %w", path, err)
 	}
+	handle, err := windows.CreateFile(
+		pathPtr,
+		windows.FILE_LIST_DIRECTORY,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OVERLAPPED,
+		0,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("open watcher root %q: %w", path, err)
+	}
+	return &root{
+		path: path, handle: handle, recursive: recursive, buffer: make([]byte, 64*1024),
+	}, nil
+}
 
-	remaining, ok := w.remainingDepth(path)
-	if !ok {
+func closeRoots(roots []*root) error {
+	var result error
+	for _, item := range roots {
+		result = errors.Join(result, windows.CloseHandle(item.handle))
+	}
+	return result
+}
+
+func (w *Watcher) readCompletions() {
+	defer close(w.ioDone)
+	for {
+		var (
+			length     uint32
+			key        uintptr
+			overlapped *windows.Overlapped
+		)
+		err := windows.GetQueuedCompletionStatus(w.port, &length, &key, &overlapped, windows.INFINITE)
+		if key == 0 && overlapped == nil {
+			if w.stopping() && !w.hasPendingReads() {
+				return
+			}
+			if err != nil {
+				w.reportError(fmt.Errorf("wait for watcher completion: %w", err))
+			}
+			continue
+		}
+		if key == 0 || key > uintptr(len(w.roots)) {
+			w.reportError(fmt.Errorf("watcher completion returned invalid root key: %d", key))
+			continue
+		}
+		item := w.roots[key-1]
+		item.finishRead(overlapped)
+		if w.stopping() {
+			if !w.hasPendingReads() {
+				return
+			}
+			continue
+		}
+		if isOverflow(err) {
+			w.emitOverflow(item.path)
+		} else if err != nil {
+			w.reportReadError(item.path, err)
+			continue
+		} else if length == 0 {
+			w.emitOverflow(item.path)
+		} else {
+			w.decode(item.path, item.buffer[:length])
+		}
+		if err := w.beginRead(item); err != nil {
+			w.reportError(err)
+		}
+	}
+}
+
+func (w *Watcher) beginRead(item *root) error {
+	const changes = windows.FILE_NOTIFY_CHANGE_FILE_NAME |
+		windows.FILE_NOTIFY_CHANGE_DIR_NAME |
+		windows.FILE_NOTIFY_CHANGE_ATTRIBUTES |
+		windows.FILE_NOTIFY_CHANGE_SIZE |
+		windows.FILE_NOTIFY_CHANGE_LAST_WRITE |
+		windows.FILE_NOTIFY_CHANGE_CREATION
+	item.mu.Lock()
+	defer item.mu.Unlock()
+	if w.stopping() {
+		return nil
+	}
+	item.overlapped = windows.Overlapped{}
+	item.pending = true
+	err := windows.ReadDirectoryChanges(
+		item.handle,
+		unsafe.SliceData(item.buffer),
+		uint32(len(item.buffer)),
+		item.recursive,
+		changes,
+		nil,
+		&item.overlapped,
+		0,
+	)
+	if err != nil {
+		item.pending = false
+		return wrapReadError(item.path, err)
+	}
+	return nil
+}
+
+func (r *root) finishRead(overlapped *windows.Overlapped) {
+	r.mu.Lock()
+	if &r.overlapped == overlapped {
+		r.pending = false
+	}
+	r.mu.Unlock()
+}
+
+func (w *Watcher) hasPendingReads() bool {
+	for _, item := range w.roots {
+		item.mu.Lock()
+		pending := item.pending
+		item.mu.Unlock()
+		if pending {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Watcher) decode(rootPath string, buffer []byte) {
+	const nameOffset = uint32(unsafe.Offsetof(windows.FileNotifyInformation{}.FileName))
+	for offset := uint32(0); offset < uint32(len(buffer)); {
+		if offset+nameOffset > uint32(len(buffer)) {
+			return
+		}
+		info := (*windows.FileNotifyInformation)(unsafe.Pointer(&buffer[offset]))
+		if info.FileNameLength%2 != 0 || offset+nameOffset+info.FileNameLength > uint32(len(buffer)) {
+			return
+		}
+		nameLength := int(info.FileNameLength / 2)
+		name := windows.UTF16ToString(unsafe.Slice(&info.FileName, nameLength))
+		if op, ok := actionOp(info.Action); ok {
+			w.emit(Event{Path: filepath.Join(rootPath, name), Op: op})
+		}
+		if info.NextEntryOffset == 0 {
+			return
+		}
+		next := offset + info.NextEntryOffset
+		if next <= offset || next >= uint32(len(buffer)) {
+			return
+		}
+		offset = next
+	}
+}
+
+func isOverflow(err error) bool {
+	return errors.Is(err, windows.ERROR_NOTIFY_ENUM_DIR) || errors.Is(err, windows.ERROR_MORE_DATA)
+}
+
+func (w *Watcher) emitOverflow(rootPath string) {
+	if w.overflow != "" {
+		w.emit(Event{Path: w.overflow, Op: Write})
 		return
 	}
-	if err := addTree(w.backend, path, remaining, true); err != nil && w.onError != nil {
+	w.emit(Event{Path: rootPath, Op: Write})
+}
+
+func actionOp(action uint32) (Op, bool) {
+	switch action {
+	case windows.FILE_ACTION_ADDED:
+		return Create, true
+	case windows.FILE_ACTION_REMOVED:
+		return Remove, true
+	case windows.FILE_ACTION_MODIFIED:
+		return Write, true
+	case windows.FILE_ACTION_RENAMED_OLD_NAME, windows.FILE_ACTION_RENAMED_NEW_NAME:
+		return Rename, true
+	default:
+		return 0, false
+	}
+}
+
+func (w *Watcher) emit(event Event) {
+	select {
+	case <-w.stop:
+	case w.events <- event:
+	}
+}
+
+func (w *Watcher) stopping() bool {
+	select {
+	case <-w.stop:
+		return true
+	default:
+		return false
+	}
+}
+
+func (w *Watcher) reportReadError(path string, err error) {
+	if w.stopping() && (errors.Is(err, windows.ERROR_OPERATION_ABORTED) || errors.Is(err, windows.ERROR_INVALID_HANDLE)) {
+		return
+	}
+	w.reportError(wrapReadError(path, err))
+}
+
+func wrapReadError(path string, err error) error {
+	return fmt.Errorf("watch directory tree %q: %w", path, err)
+}
+
+func (w *Watcher) reportError(err error) {
+	if !w.stopping() && w.onError != nil {
 		w.onError(err)
 	}
 }
 
-func (w *Watcher) remainingDepth(path string) (int, bool) {
-	best := -2
+func (w *Watcher) includes(path string) bool {
+	if w.depth == -1 {
+		return true
+	}
 	for _, item := range w.roots {
 		level, ok := childDepth(item.path, path)
-		if !ok || level == 0 {
-			continue
-		}
-		if w.depth == -1 {
-			return -1, true
-		}
-		if level <= w.depth {
-			remaining := w.depth - level
-			if remaining > best {
-				best = remaining
-			}
+		if ok && level <= w.depth+1 {
+			return true
 		}
 	}
-	return best, best >= 0
+	return false
 }
 
 // Close stops the backend, discards pending debounce callbacks, and waits for
@@ -277,38 +477,31 @@ func (w *Watcher) Close() error {
 		return nil
 	}
 	w.once.Do(func() {
-		w.cancel()
-		w.closeErr = w.backend.Close()
+		close(w.stop)
+		for _, item := range w.roots {
+			item.mu.Lock()
+			var overlapped *windows.Overlapped
+			if item.pending {
+				overlapped = &item.overlapped
+			}
+			if err := windows.CancelIoEx(item.handle, overlapped); err != nil {
+				if errors.Is(err, windows.ERROR_NOT_FOUND) {
+					item.pending = false
+				} else {
+					w.closeErr = errors.Join(w.closeErr, fmt.Errorf("cancel watcher root %q: %w", item.path, err))
+				}
+			}
+			item.mu.Unlock()
+		}
+		if err := windows.PostQueuedCompletionStatus(w.port, 0, 0, nil); err != nil {
+			w.closeErr = errors.Join(w.closeErr, fmt.Errorf("wake watcher completion port: %w", err))
+		}
+		<-w.ioDone
+		w.closeErr = errors.Join(w.closeErr, closeRoots(w.roots), windows.CloseHandle(w.port))
 		<-w.done
 		w.dispatch.Close()
 	})
 	return w.closeErr
-}
-
-func addTree(backend *filewatcher.Watcher, rootPath string, depth int, includeRoot bool) error {
-	return filepath.WalkDir(rootPath, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return fmt.Errorf("walk watcher directory %q: %w", path, walkErr)
-		}
-		if !entry.IsDir() {
-			return nil
-		}
-
-		level, ok := childDepth(rootPath, path)
-		if !ok {
-			return nil
-		}
-		if depth >= 0 && level > depth {
-			return filepath.SkipDir
-		}
-		if level == 0 && !includeRoot {
-			return nil
-		}
-		if err := backend.Add(path); err != nil {
-			return fmt.Errorf("add watcher directory %q: %w", path, err)
-		}
-		return nil
-	})
 }
 
 func childDepth(parent, child string) (int, bool) {
@@ -324,23 +517,6 @@ func childDepth(parent, child string) (int, bool) {
 		return 0, false
 	}
 	return len(strings.Split(relative, string(os.PathSeparator))), true
-}
-
-func convertEvent(event filewatcher.Event) (Event, bool) {
-	var op Op
-	switch event.Op {
-	case filewatcher.Create:
-		op = Create
-	case filewatcher.Write:
-		op = Write
-	case filewatcher.Remove:
-		op = Remove
-	case filewatcher.Rename:
-		op = Rename
-	default:
-		return Event{}, false
-	}
-	return Event{Path: filepath.Clean(event.Path), Op: op, Hash: event.Hash}, true
 }
 
 func defaultOps(ops Op) Op {

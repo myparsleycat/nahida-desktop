@@ -191,7 +191,7 @@ func (t *Tools) ToggleViewerApplyHotkeyToArtifacts(ctx context.Context, hotkey s
 		if next == string(current) {
 			continue
 		}
-		if writeErr := writeBodyFileAtomic(expectedINI, []byte(next), 0o600); writeErr != nil {
+		if writeErr := os.WriteFile(expectedINI, []byte(next), 0o600); writeErr != nil {
 			t.toggleLogError(fmt.Sprintf("Failed to apply hotkey to %s: %s", expectedINI, writeErr))
 			continue
 		}
@@ -555,7 +555,11 @@ func writeToggleIfChanged(path, content string) error {
 	if current, err := os.ReadFile(path); err == nil && string(current) == content {
 		return nil
 	}
-	return writeBodyFileAtomic(path, []byte(content), 0o600)
+	// Match the Electron implementation: write generated artifacts through the
+	// existing file instead of replacing its directory entry. XXMI can keep INI
+	// files open without delete sharing, which makes MoveFileEx fail even though
+	// a normal write is permitted.
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 func toggleManagedArtifactPaths(targetINIPath string) []string {
