@@ -12,6 +12,12 @@ import (
 
 type touchSettingsFingerprint struct{ Radius, Strength, Falloff, MaxOffset, Damping, Spring float64 }
 
+var (
+	touchEmptyAssignmentRE = regexp.MustCompile(`(?m)^[\t ]*(?:global[\t ]+|post[\t ]+)?=[\t ]*`)
+	touchMalformedHeaderRE = regexp.MustCompile(`(?mi)^[\t ]*(?:constants|present|key|textureoverride|commandlist|customshader|resource)[^\[\r\n]*\][\t ]*$`)
+	touchStateMarkerRE     = regexp.MustCompile(`(?i)Nahida Touch Profile state\s*\(\s*([^\s)]+)\s*\)`)
+)
+
 func validateTouchOutput(outputRoot, iniPath string, components []TouchComponentAnalysis, drafts []TouchComponentDraft, assets []TouchGeneratedAssets) (TouchValidationResult, error) {
 	result := TouchValidationResult{OK: true, Issues: []TouchValidationIssue{}}
 	add := func(level, code, message string, componentID *string) {
@@ -25,6 +31,9 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 		return result, err
 	}
 	iniText := string(iniRaw)
+	for _, message := range touchINIStructureErrors(iniText) {
+		add("error", "invalid_ini_syntax", message, nil)
+	}
 	for _, shader := range touchShaderFiles {
 		if info, statErr := os.Stat(filepath.Join(outputRoot, "Resources", "IM", shader)); statErr != nil || !info.Mode().IsRegular() {
 			add("error", "missing_shader", "Missing runtime shader: "+shader, nil)
@@ -135,6 +144,27 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 		}
 	}
 	return result, nil
+}
+
+func touchINIStructureErrors(text string) []string {
+	issues := []string{}
+	if line := touchEmptyAssignmentRE.FindString(text); line != "" {
+		issues = append(issues, "Generated INI contains an assignment without a variable name: "+strings.TrimSpace(line))
+	}
+	if line := touchMalformedHeaderRE.FindString(text); line != "" {
+		issues = append(issues, "Generated INI contains a malformed section header: "+strings.TrimSpace(line))
+	}
+	for _, marker := range touchStateMarkerRE.FindAllStringSubmatch(text, -1) {
+		prefix := marker[1]
+		for _, initializer := range touchStateInitializers {
+			name, _, _ := strings.Cut(initializer, " =")
+			if !strings.Contains(text, "global $"+prefix+"_"+name+" =") {
+				issues = append(issues, "Generated INI is missing touch state variable: $"+prefix+"_"+name)
+				break
+			}
+		}
+	}
+	return issues
 }
 
 func sameTouchFingerprint(left, right touchSettingsFingerprint) bool {

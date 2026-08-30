@@ -1,12 +1,5 @@
-import type {
-    TouchMeshPreview as TouchMeshPreviewPayload,
-    TouchProfilePreview as TouchProfilePreviewPayload,
-} from "@bindings/tools";
-import {
-    toBodyShapeBytes,
-    toFloat32Array,
-    toUint32Array,
-} from "@renderer/components/tools/body-shape/body-shape-payload";
+import type { TouchMeshDescriptor, TouchProfilePreviewDescriptor } from "@bindings/tools";
+import { fetchBinaryBytes, fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import type {
     TouchProfileMeshPreview,
     TouchProfilePreview,
@@ -14,31 +7,53 @@ import type {
 } from "@shared/touch-profile-preview";
 import type { TouchZoneSettings } from "@shared/touch-profile-settings";
 
-export function toTouchProfileMeshPreview(
-    payload: TouchMeshPreviewPayload,
-): TouchProfileMeshPreview {
+export async function loadTouchProfileMesh(
+    payload: TouchMeshDescriptor,
+    signal?: AbortSignal,
+): Promise<TouchProfileMeshPreview> {
+    const [positions, indices, blendBytes] = await Promise.all([
+        fetchFloat32(payload.positionsUrl, payload.positionsCount, signal),
+        payload.indicesUrl
+            ? fetchUint32(payload.indicesUrl, payload.indexCount, signal)
+            : Promise.resolve(new Uint32Array()),
+        payload.blendUrl
+            ? fetchBinaryBytes(payload.blendUrl, payload.blendBytes, signal)
+            : Promise.resolve(undefined),
+    ]);
     return {
-        ...payload,
-        positions: toFloat32Array(payload.positions ?? []),
-        indices: toUint32Array(payload.indices) ?? new Uint32Array(),
+        sessionId: payload.sessionId,
+        componentId: payload.componentId,
+        vertexCount: payload.vertexCount,
+        positions,
+        indices,
         bones: payload.bones ?? [],
         blendStride: payload.blendStride ?? undefined,
-        blendBytes: toBodyShapeBytes(payload.blendBytes),
+        blendBytes,
     };
 }
 
-export function toTouchProfilePreview(payload: TouchProfilePreviewPayload): TouchProfilePreview {
+export async function loadTouchProfilePreview(
+    payload: TouchProfilePreviewDescriptor,
+    mesh: TouchProfileMeshPreview,
+    signal?: AbortSignal,
+): Promise<TouchProfilePreview> {
+    if (mesh.sessionId !== payload.sessionId || mesh.componentId !== payload.componentId) {
+        throw new Error("Touch preview descriptor does not match the loaded topology");
+    }
+    const weights = await fetchFloat32(payload.weightsUrl, payload.weightsCount, signal);
     return {
-        ...payload,
-        positions: toFloat32Array(payload.positions ?? []),
-        indices: toUint32Array(payload.indices) ?? new Uint32Array(),
+        sessionId: payload.sessionId,
+        componentId: payload.componentId,
+        vertexCount: payload.vertexCount,
+        positions: mesh.positions,
+        indices: mesh.indices,
         zones: (payload.zones ?? []).map((zone) => ({
             ...zone,
             center: toVector3(zone.center),
             radius: toVector3(zone.radius),
             source: zone.source as TouchProfileZoneSource,
             settings: zone.settings as TouchZoneSettings,
-            weights: toFloat32Array(zone.weights ?? []),
+            weights: weights.subarray(zone.weightOffset, zone.weightOffset + payload.vertexCount),
         })),
     };
 }

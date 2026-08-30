@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -117,6 +120,56 @@ func TestLoadBodyShapeModMatchesBuffersAndBones(t *testing.T) {
 	}
 }
 
+func TestBodyShapeSessionDescriptorUsesBinaryMeshTransport(t *testing.T) {
+	root := t.TempDir()
+	meshes := filepath.Join(root, "Meshes")
+	if err := os.Mkdir(meshes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	positions := []float32{0, 0, 0, 1, 0, 0, 0, 1, 0}
+	writeTestPositions(t, filepath.Join(meshes, "Position.buf"), positions, 12)
+	indices := make([]byte, 12)
+	for index, value := range []uint32{0, 1, 2} {
+		binary.LittleEndian.PutUint32(indices[index*4:], value)
+	}
+	if err := os.WriteFile(filepath.Join(meshes, "Index.buf"), indices, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ini := "[ResourcePositionBuffer]\nstride = 12\nfilename = Meshes/Position.buf\n\n" +
+		"[ResourceIndexBuffer]\nformat = DXGI_FORMAT_R32_UINT\nfilename = Meshes/Index.buf\n"
+	if err := os.WriteFile(filepath.Join(root, "mod.ini"), []byte(ini), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	descriptor, err := service.BodyShapeLoadMod(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(descriptor.Meshes) != 1 || descriptor.Meshes[0].VertexCount != 3 {
+		t.Fatalf("descriptor = %#v", descriptor)
+	}
+	mesh, err := service.BodyShapeGetMesh(context.Background(), BodyShapeMeshInput{SessionID: descriptor.SessionID, MeshID: descriptor.Meshes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	positionResponse := httptest.NewRecorder()
+	service.protocol.ServeHTTP(positionResponse, httptest.NewRequest(http.MethodGet, mesh.PositionsURL, nil))
+	if positionResponse.Code != http.StatusOK || !strings.EqualFold(positionResponse.Header().Get("Content-Type"), "application/octet-stream") {
+		t.Fatalf("position response = %d %v", positionResponse.Code, positionResponse.Header())
+	}
+	if got, decodeErr := decodeFloat32Bytes(positionResponse.Body.Bytes()); decodeErr != nil || len(got) != len(positions) {
+		t.Fatalf("positions = %#v, %v", got, decodeErr)
+	}
+	if _, err = service.BodyShapeCloseSession(context.Background(), descriptor.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	afterClose := httptest.NewRecorder()
+	service.protocol.ServeHTTP(afterClose, httptest.NewRequest(http.MethodGet, mesh.PositionsURL, nil))
+	if afterClose.Code != http.StatusNotFound {
+		t.Fatalf("after close = %d", afterClose.Code)
+	}
+}
+
 func TestLoadBodyShapeModMatchesNativeEFMIComponents(t *testing.T) {
 	root := t.TempDir()
 	meshes := filepath.Join(root, "Meshes")
@@ -206,6 +259,50 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	originalPositions, _ := extractBodyPositions(disabledOriginal, 12)
 	if math.Float32bits(originalPositions[3]) != math.Float32bits(1) {
 		t.Fatalf("source was modified: %#v", originalPositions)
+	}
+}
+
+func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
+	ctx := context.Background()
+	sourceRoot := filepath.Join(t.TempDir(), "Character Mod")
+	meshes := filepath.Join(sourceRoot, "Meshes")
+	if err := os.MkdirAll(meshes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := []float32{0, 0, 0, 1, 0, 0}
+	writeTestPositions(t, filepath.Join(meshes, "Position.buf"), original, 12)
+	ini := "[ResourcePositionBuffer]\nstride = 12\nfilename = Meshes/Position.buf\n"
+	if err := os.WriteFile(filepath.Join(sourceRoot, "mod.ini"), []byte(ini), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{Mod: &bodyShapeTestDisabler{}})
+	loaded, err := service.BodyShapeLoadMod(ctx, sourceRoot)
+	if err != nil || len(loaded.Meshes) != 1 {
+		t.Fatalf("load = %#v, %v", loaded, err)
+	}
+	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshID: loaded.Meshes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := []float32{0, 0, 0, 2, 0, 0}
+	request := httptest.NewRequest(http.MethodPut, upload.PositionsUploadURL, strings.NewReader(string(float32Bytes(changed))))
+	request.Header.Set("Content-Type", "application/octet-stream")
+	recorder := httptest.NewRecorder()
+	service.protocol.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("upload = %d %s", recorder.Code, recorder.Body.String())
+	}
+	result, err := service.BodyShapeCommitExport(ctx, BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID})
+	if err != nil || result.ModRoot == nil {
+		t.Fatalf("commit = %#v, %v", result, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(*result.ModRoot, "Meshes", "Position.buf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	positions, err := extractBodyPositions(raw, 12)
+	if err != nil || !reflect.DeepEqual(positions, changed) {
+		t.Fatalf("positions = %#v, %v", positions, err)
 	}
 }
 

@@ -4,7 +4,7 @@ import { parseOrientation } from "@renderer/components/tools/model-viewer/model-
 import type { BrushMode } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
 import {
   applyMultiRegionDeform,
-  composeDisplayWeights,
+  composeDisplayWeightsInto,
   writeWeightColors,
   type ActiveRegionDeform,
 } from "@shared/body-shape";
@@ -104,6 +104,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
     return (
       <div className="h-full min-h-80 w-full rounded-md border border-border bg-background">
         <Canvas
+          frameloop="demand"
           camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}
           dpr={Math.min(window.devicePixelRatio, 2)}
           gl={{ antialias: true, alpha: true }}
@@ -125,12 +126,29 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
               }}
             />
           </group>
-          <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.12} />
+          <DemandOrbitControls controlsRef={controlsRef} />
         </Canvas>
       </div>
     );
   },
 );
+
+function DemandOrbitControls({
+  controlsRef,
+}: {
+  controlsRef: MutableRefObject<OrbitControlsImpl | null>;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enableDamping
+      dampingFactor={0.12}
+      onChange={() => invalidate()}
+    />
+  );
+}
 
 function BodyShapeMesh({
   originalPositions,
@@ -161,7 +179,7 @@ function BodyShapeMesh({
   const brushRingRef = useRef<LineLoop>(null);
   const framedKeyRef = useRef<string | Float32Array | null>(null);
   const isPaintingRef = useRef(false);
-  const { camera, raycaster, gl } = useThree();
+  const { camera, raycaster, gl, invalidate } = useThree();
   const prevPositionsRef = useRef<{
     regions: readonly ActiveRegionDeform[];
     showOriginal: boolean;
@@ -176,10 +194,10 @@ function BodyShapeMesh({
     [originalPositions],
   );
   const colorsRef = useRef(initialColors);
+  const displayWeightsRef = useRef(new Float32Array(initialColors.length / 3));
   useLayoutEffect(() => {
-    if (colorsRef.current.length === initialColors.length) {
-      colorsRef.current = initialColors;
-    }
+    colorsRef.current = initialColors;
+    displayWeightsRef.current = new Float32Array(initialColors.length / 3);
   }, [initialColors]);
 
   useEffect(() => {
@@ -191,14 +209,15 @@ function BodyShapeMesh({
 
   const writeColors = (regions: ActiveRegionDeform[]) => {
     const vertexCount = Math.floor(originalPositions.length / 3);
-    const displayWeights = composeDisplayWeights(vertexCount, showOriginal ? [] : regions, {
+    composeDisplayWeightsInto(displayWeightsRef.current, vertexCount, showOriginal ? [] : regions, {
       ignoreAmount: true,
     });
-    writeWeightColors(displayWeights, colorsRef.current);
+    writeWeightColors(displayWeightsRef.current, colorsRef.current);
     const colorAttr = meshRef.current?.geometry.getAttribute("color") as
       | BufferAttribute
       | undefined;
     if (colorAttr) colorAttr.needsUpdate = true;
+    invalidate();
   };
 
   useEffect(() => {
@@ -231,11 +250,6 @@ function BodyShapeMesh({
     prevPositionsRef.current = { regions, showOriginal };
 
     const vertexCount = Math.floor(originalPositions.length / 3);
-    if (colorsRef.current.length !== vertexCount * 3) {
-      colorsRef.current = initialColors;
-      geometry.setAttribute("color", new BufferAttribute(colorsRef.current, 3));
-    }
-
     if (isPositionsChanged) {
       if (showOriginal || regions.length === 0) {
         previewPositions.set(originalPositions);
@@ -251,12 +265,13 @@ function BodyShapeMesh({
       positionAttr.needsUpdate = true;
     }
 
-    const displayWeights = composeDisplayWeights(
+    composeDisplayWeightsInto(
+      displayWeightsRef.current,
       vertexCount,
       showOriginal ? [] : heatmapRegionsRef.current,
       { ignoreAmount: true },
     );
-    writeWeightColors(displayWeights, colorsRef.current);
+    writeWeightColors(displayWeightsRef.current, colorsRef.current);
     const colorAttr = geometry.getAttribute("color") as BufferAttribute;
     colorAttr.needsUpdate = true;
 
@@ -264,6 +279,7 @@ function BodyShapeMesh({
       geometry.computeVertexNormals();
       geometry.computeBoundingSphere();
     }
+    invalidate();
   }, [
     geometry,
     initialColors,
@@ -273,6 +289,7 @@ function BodyShapeMesh({
     showOriginal,
     weightVersion,
     positionsChanged,
+    invalidate,
   ]);
 
   const material = useMemo(() => {
@@ -310,14 +327,10 @@ function BodyShapeMesh({
     });
   }, [brushMode]);
 
-  useEffect(() => {
-    return () => {
-      geometry.dispose();
-      material.dispose();
-      brushRingGeometry.dispose();
-      brushRingMaterial.dispose();
-    };
-  }, [geometry, material, brushRingGeometry, brushRingMaterial]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
+  useEffect(() => () => brushRingGeometry.dispose(), [brushRingGeometry]);
+  useEffect(() => () => brushRingMaterial.dispose(), [brushRingMaterial]);
 
   const frameCamera = () => {
     if (!geometry.boundingSphere) return;
@@ -331,6 +344,7 @@ function BodyShapeMesh({
       controls.target.copy(center);
       controls.update();
     }
+    invalidate();
   };
 
   useEffect(() => {
@@ -342,7 +356,7 @@ function BodyShapeMesh({
     if (framedKeyRef.current === nextFrameKey) return;
     framedKeyRef.current = nextFrameKey;
     frameCamera();
-  }, [camera, frameKey, geometry, originalPositions]);
+  }, [camera, frameKey, geometry, originalPositions, invalidate]);
 
   /* Brush Raycasting & Pointer Handlers */
   useEffect(() => {
@@ -383,6 +397,7 @@ function BodyShapeMesh({
             brushRingRef.current.quaternion.copy(q);
             brushRingRef.current.position.addScaledVector(hit.face.normal, 0.001);
           }
+          invalidate();
         }
 
         if (isPaintingRef.current) {
@@ -394,6 +409,7 @@ function BodyShapeMesh({
         }
       } else {
         if (brushRingRef.current) brushRingRef.current.visible = false;
+        invalidate();
       }
     };
 
@@ -437,16 +453,26 @@ function BodyShapeMesh({
       canvasElement.removeEventListener("wheel", handleWheel);
       if (controlsRef.current) controlsRef.current.enabled = true;
     };
-  }, [brushEnabled, brushRadius, camera, gl, raycaster, controlsRef, onBrushRadiusChange]);
+  }, [
+    brushEnabled,
+    brushRadius,
+    camera,
+    gl,
+    raycaster,
+    controlsRef,
+    onBrushRadiusChange,
+    invalidate,
+  ]);
 
   return (
     <>
-      <mesh ref={meshRef} geometry={geometry} material={material} />
+      <mesh ref={meshRef} geometry={geometry} material={material} dispose={null} />
       <lineLoop
         ref={brushRingRef}
         geometry={brushRingGeometry}
         material={brushRingMaterial}
         visible={false}
+        dispose={null}
       />
     </>
   );

@@ -223,11 +223,11 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	}
 	const assetPath = ""
 	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85}
-	sessionID := t.protocol.CreateModelViewerMemorySession()
+	sessionID := t.protocol.CreateMemorySession()
 	keep := false
 	defer func() {
 		if !keep {
-			t.protocol.CleanupModelViewerMemorySession(sessionID)
+			t.protocol.CleanupMemorySession(sessionID)
 		}
 	}()
 	transport = ModelViewerTransport{
@@ -461,7 +461,7 @@ func (t *Tools) CleanupModelViewer(_ context.Context, memorySessionID string) (b
 	}
 	t.modelViewerMu.Unlock()
 	if exists && t.protocol != nil {
-		t.protocol.CleanupModelViewerMemorySession(memorySessionID)
+		t.protocol.CleanupMemorySession(memorySessionID)
 	}
 	return exists, nil
 }
@@ -479,7 +479,7 @@ func (t *Tools) shutdownModelViewer() error {
 	t.modelViewerMu.Unlock()
 	if t.protocol != nil {
 		for _, id := range ids {
-			t.protocol.CleanupModelViewerMemorySession(id)
+			t.protocol.CleanupMemorySession(id)
 		}
 	}
 	return nil
@@ -1009,7 +1009,7 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 	sort.Strings(textureKeys)
 	for _, key := range textureKeys {
 		texture := textures[key]
-		url, err := t.protocol.WriteModelViewerMemoryBuffer(sessionID, "tex:"+key, texture.Bytes, texture.MIMEType)
+		url, err := t.protocol.StoreMemoryBuffer(sessionID, "tex:"+key, texture.Bytes, texture.MIMEType)
 		if err != nil {
 			return err
 		}
@@ -1020,7 +1020,7 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 	}
 	writeMesh := func(mesh *ModelViewerMeshTransport, payload modelViewerMeshPayload) error {
 		write := func(suffix string, data []byte) (string, error) {
-			return t.protocol.WriteModelViewerMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
+			return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
 		}
 		var err error
 		mesh.PositionsURL, err = write(".pos", modelViewerFloat32Bytes(payload.Positions))

@@ -16,6 +16,32 @@ type touchInteractiveEntry struct {
 }
 type touchZoneOverrides struct{ Radius, Strength, Falloff, MaxOffset, Damping, Spring [touchZoneChannels]float64 }
 
+var touchStateInitializers = []string{
+	"active = 0",
+	"initialized = 0",
+	"detect_allowed = 0",
+	"mode = 0",
+	"lmb_down = 0",
+	"rmb_down = 0",
+	"x_down = 0",
+	"modifier_down = 0",
+	"lmb_prev = 0",
+	"rmb_prev = 0",
+	"combo_active = 0",
+	"mouse_down = 0",
+	"poke_sign = 0",
+	"poke_mult = 1.0",
+	"charge_sign = 0",
+	"lmb_press_time = 0",
+	"rmb_press_time = 0",
+	"cursor_x = 0",
+	"cursor_y = 0",
+	"screen_w = 1",
+	"screen_h = 1",
+	"delta_time = 0.0166667",
+	"prev_time = 0",
+}
+
 func supportsTouchFrameNumberGuard(version string) bool {
 	parts, ok := touchVersionParts(version)
 	if !ok {
@@ -117,6 +143,11 @@ func compileTouchINI(sourcePath, targetPath string, analysis TouchModAnalysis, d
 }
 
 func rebaseTouchAsset(asset TouchGeneratedAssets, iniDir string) TouchGeneratedAssets {
+	// Slice fields share their backing arrays across a struct value copy. Clone
+	// them before rebasing so compileTouchINI cannot corrupt the output-root
+	// relative paths retained by the validator and caller.
+	asset.MaskPaths = append([]string(nil), asset.MaskPaths...)
+	asset.ObjectMapPaths = append([]TouchGeneratedObjectMap(nil), asset.ObjectMapPaths...)
 	relative, _ := filepath.Rel(iniDir, filepath.Dir(asset.ParamsAbsolutePath))
 	asset.RelativeDir = filepath.ToSlash(relative)
 	for i, path := range asset.MaskPaths {
@@ -138,7 +169,7 @@ func ensureTouchConstants(text, varPrefix string, components []TouchComponentAna
 		return text
 	}
 	lines := []string{"", "; Nahida Touch Profile state (" + varPrefix + ")"}
-	for _, suffix := range []string{"active = 0", "initialized = 0", "detect_allowed = 0", "mode = 0", "lmb_down = 0", "rmb_down = 0", "x_down = 0", "modifier_down = 0", "lmb_prev = 0", "rmb_prev = 0", "combo_active = 0", "mouse_down = 0", "poke_sign = 0", "poke_mult = 1.0", "charge_sign = 0", "lmb_press_time = 0", "rmb_press_time = 0", "cursor_x = 0", "cursor_y = 0", "screen_w = 1", "screen_h = 1", "delta_time = 0.0166667", "prev_time = 0"} {
+	for _, suffix := range touchStateInitializers {
 		lines = append(lines, "global $"+varPrefix+"_"+suffix)
 	}
 	for _, component := range components {
@@ -147,8 +178,11 @@ func ensureTouchConstants(text, varPrefix string, components []TouchComponentAna
 	lines = append(lines, "")
 	block := strings.Join(lines, "\n")
 	re := regexp.MustCompile(`(?i)(\[Constants\][^\n]*\n)`)
-	if re.MatchString(text) {
-		return re.ReplaceAllString(text, "${1}"+block)
+	if loc := re.FindStringIndex(text); loc != nil {
+		// Do not use regexp replacement strings for generated INI. Go expands
+		// $name in replacements as a capture reference, which would erase the
+		// literal $variable names in this block.
+		return text[:loc[1]] + block + text[loc[1]:]
 	}
 	return "[Constants]\n" + block + "\n" + text
 }
@@ -184,23 +218,20 @@ ${{V}}_modifier_down = 1
 ${{V}}_mode = 1
 post ${{V}}_modifier_down = 0
 post ${{V}}_mode = 0
-`, varPrefix, st, "", "")
+	`, varPrefix, st, "", "")
 	re := regexp.MustCompile(`(?i)(\[Present\])`)
-	if re.MatchString(text) {
-		return re.ReplaceAllString(text, block+"\n${1}")
+	if loc := re.FindStringIndex(text); loc != nil {
+		return text[:loc[0]] + block + "\n" + text[loc[0]:]
 	}
 	return strings.TrimRight(text, " \t\r\n") + "\n" + block + "\n"
 }
 
 func ensureTouchPresent(text, varPrefix string) string {
 	st := touchSectionToken(varPrefix)
-	re := regexp.MustCompile(`(?is)\[Present\]([\s\S]*?)(?:\n\[|$)`)
-	loc := re.FindStringSubmatchIndex(text)
-	if loc == nil {
+	full, body, ok := matchTouchINISection(text, "[Present]")
+	if !ok {
 		return strings.TrimRight(text, " \t\r\n") + "\n\n[Present]\nrun = CommandList" + st + "Present\npost $" + varPrefix + "_active = 0\n"
 	}
-	full := text[loc[0]:loc[1]]
-	body := text[loc[2]:loc[3]]
 	if !strings.Contains(body, "CommandList"+st+"Present") {
 		body = "\nrun = CommandList" + st + "Present" + body
 	}
@@ -221,8 +252,8 @@ func patchTouchBlendSections(text, varPrefix string, components []TouchComponent
 			continue
 		}
 		active := regexp.MustCompile(`(?i)(\$active\s*=\s*1[^\n]*\n)`)
-		if active.MatchString(body) {
-			body = active.ReplaceAllString(body, "${1}\t$"+varPrefix+"_active = 1\n")
+		if loc := active.FindStringIndex(body); loc != nil {
+			body = body[:loc[1]] + "\t$" + varPrefix + "_active = 1\n" + body[loc[1]:]
 		} else {
 			body += "\t$active = 1\n\t$" + varPrefix + "_active = 1\n"
 		}

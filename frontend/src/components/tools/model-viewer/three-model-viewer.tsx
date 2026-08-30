@@ -1,6 +1,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
+import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import { evaluateViewerState } from "@shared/mod-viewer/eval";
 import {
   type ElementRef,
@@ -834,17 +835,10 @@ async function loadFloatBuffer(
     return existing;
   }
 
-  const request = fetch(modelViewerSourceToUrl(sourcePath))
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`Failed to load shape key buffer: ${sourcePath}`);
-      }
-      return new Float32Array(await response.arrayBuffer());
-    })
-    .catch((error) => {
-      cache.delete(sourcePath);
-      throw error;
-    });
+  const request = fetchFloat32(modelViewerSourceToUrl(sourcePath)).catch((error) => {
+    cache.delete(sourcePath);
+    throw error;
+  });
   cache.set(sourcePath, request);
   return request;
 }
@@ -858,17 +852,10 @@ async function loadUint32Buffer(
     return existing;
   }
 
-  const request = fetch(modelViewerSourceToUrl(sourcePath))
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`Failed to load animation index buffer: ${sourcePath}`);
-      }
-      return new Uint32Array(await response.arrayBuffer());
-    })
-    .catch((error) => {
-      cache.delete(sourcePath);
-      throw error;
-    });
+  const request = fetchUint32(modelViewerSourceToUrl(sourcePath)).catch((error) => {
+    cache.delete(sourcePath);
+    throw error;
+  });
   cache.set(sourcePath, request);
   return request;
 }

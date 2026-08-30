@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/infra"
 )
 
 const touchProgressEventName = "tools:touchProfileProgress"
@@ -37,6 +38,20 @@ type TouchProfileUpdateZoneSettingsInput struct {
 	ZoneID      string            `json:"zoneId"`
 	Settings    TouchZoneSettings `json:"settings"`
 }
+type TouchProfileZoneSettingsChange struct {
+	ComponentID string            `json:"componentId"`
+	ZoneID      string            `json:"zoneId"`
+	Settings    TouchZoneSettings `json:"settings"`
+}
+type TouchProfileUpdateZoneSettingsBatchInput struct {
+	SessionID string                           `json:"sessionId"`
+	Changes   []TouchProfileZoneSettingsChange `json:"changes"`
+}
+type TouchProfileUpdateResult struct {
+	OK             bool   `json:"ok"`
+	DraftRevision  uint64 `json:"draftRevision"`
+	PreviewChanged bool   `json:"previewChanged"`
+}
 type TouchProfileApplyInput struct {
 	SessionID string `json:"sessionId"`
 	Force     bool   `json:"force,omitempty"`
@@ -56,14 +71,23 @@ type touchAppliedProfile struct {
 	Reenable               bool
 }
 type touchSession struct {
-	mu        sync.Mutex
-	Analysis  TouchModAnalysis
-	Dir       string
-	Mesh      map[string]touchMeshBuffers
-	Preview   map[string]TouchProfilePreview
-	Draft     *TouchDraft
-	Applied   *touchAppliedProfile
-	Operation string
+	mu              sync.Mutex
+	Analysis        TouchModAnalysis
+	Dir             string
+	Mesh            map[string]touchMeshBuffers
+	ProtocolID      string
+	Topology        map[string]TouchMeshDescriptor
+	Preview         map[string]touchCachedPreview
+	DraftRevision   uint64
+	PreviewRevision uint64
+	Draft           *TouchDraft
+	Applied         *touchAppliedProfile
+	Operation       string
+}
+
+type touchCachedPreview struct {
+	descriptor TouchProfilePreviewDescriptor
+	bufferID   string
 }
 
 func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadInput) (result TouchModInspection, err error) {
@@ -102,7 +126,11 @@ func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadI
 		t.logError(err, "TouchProfile:prepareMod:"+input.ModPath)
 		return result, err
 	}
-	session := &touchSession{Analysis: analysis, Dir: sessionDir, Mesh: map[string]touchMeshBuffers{}, Preview: map[string]TouchProfilePreview{}}
+	if err = ctx.Err(); err != nil {
+		return result, err
+	}
+	protocolID := t.protocol.CreateMemorySession()
+	session := &touchSession{Analysis: analysis, Dir: sessionDir, ProtocolID: protocolID, Mesh: map[string]touchMeshBuffers{}, Topology: map[string]TouchMeshDescriptor{}, Preview: map[string]touchCachedPreview{}}
 	t.touchMu.Lock()
 	t.touchSessions[id] = session
 	t.touchMu.Unlock()
@@ -113,29 +141,53 @@ func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadI
 	return result, nil
 }
 
-func (t *Tools) TouchProfileGetMeshPreview(ctx context.Context, input TouchProfilePreviewInput) (TouchMeshPreview, error) {
+func (t *Tools) TouchProfileGetMeshDescriptor(ctx context.Context, input TouchProfilePreviewInput) (TouchMeshDescriptor, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
-		return TouchMeshPreview{}, err
+		return TouchMeshDescriptor{}, err
 	}
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
-		return TouchMeshPreview{}, err
+		return TouchMeshDescriptor{}, err
+	}
+	if descriptor, ok := session.Topology[input.ComponentID]; ok {
+		return descriptor, nil
 	}
 	mesh, ok := session.Mesh[input.ComponentID]
 	if !ok {
 		component := findTouchComponent(session.Analysis.Components, input.ComponentID)
 		if component == nil {
-			return TouchMeshPreview{}, contractError(fmt.Sprintf("Touch component not found: %s", input.ComponentID))
+			return TouchMeshDescriptor{}, contractError(fmt.Sprintf("Touch component not found: %s", input.ComponentID))
 		}
 		mesh, err = loadTouchMeshBuffers(*component)
 		if err != nil {
-			return TouchMeshPreview{}, err
+			return TouchMeshDescriptor{}, err
 		}
 		session.Mesh[input.ComponentID] = mesh
 	}
-	return TouchMeshPreview{SessionID: input.SessionID, ComponentID: input.ComponentID, VertexCount: len(mesh.Positions) / 3, Positions: mesh.Positions, Indices: mesh.Indices, Bones: mesh.Bones, BlendStride: mesh.BlendStride, BlendBytes: mesh.BlendBytes}, nil
+	revision := session.Analysis.MeshHash + ":" + input.ComponentID
+	positionsURL, err := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":positions", float32Bytes(mesh.Positions), "application/octet-stream")
+	if err != nil {
+		return TouchMeshDescriptor{}, err
+	}
+	descriptor := TouchMeshDescriptor{SessionID: input.SessionID, ComponentID: input.ComponentID, TopologyRevision: revision, VertexCount: len(mesh.Positions) / 3, PositionsURL: positionsURL, PositionsCount: len(mesh.Positions), IndexCount: len(mesh.Indices), Bones: mesh.Bones, BlendStride: mesh.BlendStride, BlendBytes: len(mesh.BlendBytes)}
+	if len(mesh.Indices) > 0 {
+		value, storeErr := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":indices", uint32Bytes(mesh.Indices), "application/octet-stream")
+		if storeErr != nil {
+			return TouchMeshDescriptor{}, storeErr
+		}
+		descriptor.IndicesURL = &value
+	}
+	if len(mesh.BlendBytes) > 0 {
+		value, storeErr := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":blend", mesh.BlendBytes, "application/octet-stream")
+		if storeErr != nil {
+			return TouchMeshDescriptor{}, storeErr
+		}
+		descriptor.BlendURL = &value
+	}
+	session.Topology[input.ComponentID] = descriptor
+	return descriptor, nil
 }
 
 func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchProfileAnalyzeInput) (result TouchDraft, err error) {
@@ -183,6 +235,7 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 			t.touchMu.Lock()
 			delete(t.touchSessions, input.SessionID)
 			t.touchMu.Unlock()
+			t.protocol.CleanupMemorySession(session.ProtocolID)
 			_ = os.RemoveAll(session.Dir)
 		}
 	}()
@@ -239,7 +292,7 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 	}
 	session.Draft = &result
 	session.Mesh = meshCache
-	session.Preview = map[string]TouchProfilePreview{}
+	clearTouchPreviewBuffers(t.protocol, session)
 	message := "Draft ready (manual review recommended)"
 	if result.CanAutoApply {
 		message = "Draft ready for apply"
@@ -248,6 +301,7 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 	return result, nil
 }
 
+//wails:ignore
 func (t *Tools) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (TouchDraft, error) {
 	session, err := t.requireTouchSession(draft.SessionID)
 	if err != nil {
@@ -270,10 +324,12 @@ func (t *Tools) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (To
 		return TouchDraft{}, err
 	}
 	session.Draft = &next
-	session.Preview = map[string]TouchProfilePreview{}
+	clearTouchPreviewBuffers(t.protocol, session)
+	session.DraftRevision++
 	return next, nil
 }
 
+//wails:ignore
 func (t *Tools) TouchProfileUpdateZoneSettings(ctx context.Context, input TouchProfileUpdateZoneSettingsInput) (TouchDraft, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
@@ -320,50 +376,129 @@ func (t *Tools) TouchProfileUpdateZoneSettings(ctx context.Context, input TouchP
 		return TouchDraft{}, err
 	}
 	session.Draft = &next
-	session.Preview = map[string]TouchProfilePreview{}
+	clearTouchPreviewBuffers(t.protocol, session)
+	session.DraftRevision++
 	return next, nil
 }
 
-func (t *Tools) TouchProfileGetPreview(ctx context.Context, input TouchProfilePreviewInput) (TouchProfilePreview, error) {
+func (t *Tools) TouchProfileUpdateZoneSettingsBatch(ctx context.Context, input TouchProfileUpdateZoneSettingsBatchInput) (TouchProfileUpdateResult, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
-		return TouchProfilePreview{}, err
+		return TouchProfileUpdateResult{}, err
 	}
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
-		return TouchProfilePreview{}, err
+		return TouchProfileUpdateResult{}, err
 	}
-	if preview, ok := session.Preview[input.ComponentID]; ok {
-		return preview, nil
+	if session.Operation != "" {
+		return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch profile is busy with %s", session.Operation))
 	}
 	if session.Draft == nil {
-		return TouchProfilePreview{}, contractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
+		return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
+	}
+	normalized := make([]TouchProfileZoneSettingsChange, len(input.Changes))
+	for index, change := range input.Changes {
+		settings, normalizeErr := normalizeTouchZoneSettings(change.Settings)
+		if normalizeErr != nil {
+			return TouchProfileUpdateResult{}, normalizeErr
+		}
+		normalized[index] = change
+		normalized[index].Settings = settings
+	}
+	next := *session.Draft
+	next.Components = append([]TouchComponentDraft(nil), session.Draft.Components...)
+	for index := range next.Components {
+		next.Components[index].Zones = append([]TouchZoneSpec(nil), next.Components[index].Zones...)
+	}
+	previewChanged := false
+	for _, change := range normalized {
+		found := false
+		for componentIndex := range next.Components {
+			if next.Components[componentIndex].ComponentID != change.ComponentID {
+				continue
+			}
+			for zoneIndex := range next.Components[componentIndex].Zones {
+				zone := &next.Components[componentIndex].Zones[zoneIndex]
+				if zone.ID != change.ZoneID {
+					continue
+				}
+				previewChanged = previewChanged || touchMaskSettingsChanged(zone.Settings, change.Settings)
+				zone.Settings = change.Settings
+				found = true
+			}
+		}
+		if !found {
+			return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch zone not found: %s:%s", change.ComponentID, change.ZoneID))
+		}
+	}
+	if err = writeTouchDraft(session.Dir, next); err != nil {
+		return TouchProfileUpdateResult{}, err
+	}
+	session.Draft = &next
+	session.DraftRevision++
+	if previewChanged {
+		clearTouchPreviewBuffers(t.protocol, session)
+	}
+	return TouchProfileUpdateResult{OK: true, DraftRevision: session.DraftRevision, PreviewChanged: previewChanged}, nil
+}
+
+func (t *Tools) TouchProfileGetPreviewDescriptor(ctx context.Context, input TouchProfilePreviewInput) (TouchProfilePreviewDescriptor, error) {
+	session, err := t.requireTouchSession(input.SessionID)
+	if err != nil {
+		return TouchProfilePreviewDescriptor{}, err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if err = ctx.Err(); err != nil {
+		return TouchProfilePreviewDescriptor{}, err
+	}
+	if preview, ok := session.Preview[input.ComponentID]; ok {
+		return preview.descriptor, nil
+	}
+	if session.Draft == nil {
+		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
 	}
 	component := findTouchComponent(session.Analysis.Components, input.ComponentID)
 	if component == nil {
-		return TouchProfilePreview{}, contractError(fmt.Sprintf("Touch component not found: %s", input.ComponentID))
+		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch component not found: %s", input.ComponentID))
 	}
 	draft := findTouchDraft(session.Draft.Components, input.ComponentID)
 	if draft == nil {
-		return TouchProfilePreview{}, contractError(fmt.Sprintf("Touch component draft not found: %s", input.ComponentID))
+		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch component draft not found: %s", input.ComponentID))
 	}
 	mesh, ok := session.Mesh[input.ComponentID]
 	if !ok {
 		mesh, err = loadTouchMeshBuffers(*component)
 		if err != nil {
-			return TouchProfilePreview{}, err
+			return TouchProfilePreviewDescriptor{}, err
 		}
 		session.Mesh[input.ComponentID] = mesh
 	}
 	t.emitTouchProgress(input.SessionID, "preview", .4, "Building mask for "+component.Name, component.ID)
-	masks := buildTouchVertexMasks(component.VertexCount, mesh.Positions, mesh.Indices, *component, draft.Zones)
-	preview := TouchProfilePreview{SessionID: input.SessionID, ComponentID: component.ID, VertexCount: component.VertexCount, Positions: mesh.Positions, Indices: mesh.Indices, Zones: []TouchPreviewZone{}}
-	for _, zone := range draft.Zones {
-		preview.Zones = append(preview.Zones, TouchPreviewZone{TouchZoneSpec: zone, Weights: extractTouchMaskChannel(masks, component.VertexCount, zone.Channel)})
+	masks, err := buildTouchVertexMasksContext(ctx, component.VertexCount, mesh.Positions, mesh.Indices, *component, draft.Zones)
+	if err != nil {
+		return TouchProfilePreviewDescriptor{}, err
 	}
-	session.Preview[input.ComponentID] = preview
-	return preview, nil
+	weights := make([]float32, 0, component.VertexCount*len(draft.Zones))
+	zones := make([]TouchPreviewZoneDescriptor, 0, len(draft.Zones))
+	for _, zone := range draft.Zones {
+		offset := len(weights)
+		weights = append(weights, extractTouchMaskChannel(masks, component.VertexCount, zone.Channel)...)
+		zones = append(zones, TouchPreviewZoneDescriptor{TouchZoneSpec: zone, WeightOffset: offset})
+	}
+	session.PreviewRevision++
+	bufferID := fmt.Sprintf("preview:%s:%d", component.ID, session.PreviewRevision)
+	weightsURL, err := t.protocol.StoreMemoryBuffer(session.ProtocolID, bufferID, float32Bytes(weights), "application/octet-stream")
+	if err != nil {
+		return TouchProfilePreviewDescriptor{}, err
+	}
+	descriptor := TouchProfilePreviewDescriptor{SessionID: input.SessionID, ComponentID: component.ID, PreviewRevision: session.PreviewRevision, VertexCount: component.VertexCount, WeightsURL: weightsURL, WeightsCount: len(weights), Zones: zones}
+	if previous, ok := session.Preview[input.ComponentID]; ok {
+		t.protocol.RemoveMemoryBuffer(session.ProtocolID, previous.bufferID)
+	}
+	session.Preview[input.ComponentID] = touchCachedPreview{descriptor: descriptor, bufferID: bufferID}
+	return descriptor, nil
 }
 
 func (t *Tools) TouchProfileDiscardDraft(_ context.Context, sessionID string) (TouchProfileOK, error) {
@@ -372,9 +507,14 @@ func (t *Tools) TouchProfileDiscardDraft(_ context.Context, sessionID string) (T
 	delete(t.touchSessions, sessionID)
 	t.touchMu.Unlock()
 	if session != nil {
+		t.protocol.CleanupMemorySession(session.ProtocolID)
 		_ = os.RemoveAll(session.Dir)
 	}
 	return TouchProfileOK{OK: true}, nil
+}
+
+func (t *Tools) TouchProfileCloseSession(ctx context.Context, sessionID string) (TouchProfileOK, error) {
+	return t.TouchProfileDiscardDraft(ctx, sessionID)
 }
 
 func (t *Tools) TouchProfileApply(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
@@ -666,6 +806,9 @@ func (t *Tools) shutdownTouchProfiles() error {
 	var err error
 	for _, session := range sessions {
 		session.mu.Lock()
+		if t.protocol != nil {
+			t.protocol.CleanupMemorySession(session.ProtocolID)
+		}
 		if session.Operation != "" {
 			err = errors.Join(err, fmt.Errorf("touch profile is busy with %s", session.Operation))
 		} else {
@@ -674,6 +817,22 @@ func (t *Tools) shutdownTouchProfiles() error {
 		session.mu.Unlock()
 	}
 	return err
+}
+
+func clearTouchPreviewBuffers(protocol *infra.Protocol, session *touchSession) {
+	if protocol != nil {
+		for _, preview := range session.Preview {
+			protocol.RemoveMemoryBuffer(session.ProtocolID, preview.bufferID)
+		}
+	}
+	session.Preview = make(map[string]touchCachedPreview)
+}
+
+func touchMaskSettingsChanged(previous, next TouchZoneSettings) bool {
+	return previous.MaskStrength != next.MaskStrength ||
+		previous.MaskCurve != next.MaskCurve ||
+		previous.MaskRadiusScale != next.MaskRadiusScale ||
+		previous.MaskCoreAttenuation != next.MaskCoreAttenuation
 }
 
 func findTouchComponent(components []TouchComponentAnalysis, id string) *TouchComponentAnalysis {

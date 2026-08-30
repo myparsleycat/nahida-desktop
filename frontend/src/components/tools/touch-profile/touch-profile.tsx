@@ -44,6 +44,7 @@ import { Switch } from "@renderer/components/ui/switch";
 // import type { TouchProfileProgressEvent } from "@shared/types";
 import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
 import { cn } from "@renderer/lib/utils";
+import { isAbortError } from "@renderer/wails/binary-memory";
 import {
   computeBoundingCenter,
   computeRegionPivot,
@@ -81,7 +82,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { toTouchProfileMeshPreview, toTouchProfilePreview } from "./touch-profile-payload";
+import { loadTouchProfileMesh, loadTouchProfilePreview } from "./touch-profile-payload";
+import { createTouchSettingsBatch } from "./touch-profile-settings-batch";
 
 const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
@@ -92,6 +94,7 @@ const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0, max: 1, step: 0.005 } as const;
 const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
 const DEFAULT_BONE_WEIGHT_THRESHOLD_MAX = 1;
 const TOUCH_ZONE_CHANNEL_COUNT = 12;
+const TOUCH_SETTINGS_DEBOUNCE_MS = 120;
 const CHANNEL_LABELS = [
   "L Breast",
   "R Breast",
@@ -143,6 +146,19 @@ type TouchApplyResultState = {
 };
 
 type TouchProfileInputError = "already_touch" | "suspected_touch";
+
+function cacheTouchTopology(
+  cache: Map<string, TouchProfileMeshPreview>,
+  componentId: string,
+  mesh: TouchProfileMeshPreview,
+) {
+  cache.delete(componentId);
+  cache.set(componentId, mesh);
+  while (cache.size > 2) {
+    const oldest = cache.keys().next().value;
+    if (oldest) cache.delete(oldest);
+  }
+}
 
 export default function TouchProfileTool({
   fixedTargetPath,
@@ -197,8 +213,34 @@ export default function TouchProfileTool({
   const [previewReloadVersion, setPreviewReloadVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [pendingSettingsSaves, setPendingSettingsSaves] = useState(0);
-  const settingsSaveQueueRef = useRef(Promise.resolve());
-  const previewRefreshRequestRef = useRef(0);
+  const topologyCacheRef = useRef(new Map<string, TouchProfileMeshPreview>());
+  const previewActivityRef = useRef<{
+    descriptor?: { cancel(): void };
+    meshDescriptor?: { cancel(): void };
+    controller?: AbortController;
+  }>({});
+  const settingsSessionId = draft?.sessionId ?? inspection?.sessionId;
+  const settingsBatch = useMemo(
+    () =>
+      createTouchSettingsBatch({
+        debounceMs: TOUCH_SETTINGS_DEBOUNCE_MS,
+        save: async (changes) => {
+          if (!settingsSessionId) throw new Error("Touch profile session is closed");
+          return Tools.TouchProfileUpdateZoneSettingsBatch({
+            sessionId: settingsSessionId,
+            changes,
+          });
+        },
+        onPendingChange: (pending) => setPendingSettingsSaves(pending ? 1 : 0),
+        onPreviewRequired: () => setPreviewReloadVersion((version) => version + 1),
+        onError: (error) => {
+          toast.error(t("page.tools.touch_profile.toast.settings_save_failed"), {
+            description: toErrorMessage(error),
+          });
+        },
+      }),
+    [settingsSessionId, t],
+  );
 
   // vision-llm disabled — reanalyzeTurn (vision-only) isolated
   // const reanalyzeTurn = async (componentId: string) => {
@@ -293,12 +335,18 @@ export default function TouchProfileTool({
     setLinkedComponents({});
     setBoneZoneAssignments({});
     try {
+      const previousSession = draftSessionRef.current;
+      draftSessionRef.current = null;
+      if (previousSession) await Tools.TouchProfileCloseSession(previousSession);
+      topologyCacheRef.current.clear();
+      settingsBatch.clear();
       const next = await resolveIfCurrent(requestId, loadGenerationRef, () =>
         Tools.TouchProfilePrepare({
           modPath: targetPath,
         }),
       );
       if (next === undefined) return;
+      draftSessionRef.current = next.sessionId;
       setInspection(next as never);
       setSelectedMeshIds(
         new Set(
@@ -329,16 +377,22 @@ export default function TouchProfileTool({
   };
 
   useEffect(() => {
-    draftSessionRef.current = draft?.sessionId ?? null;
-  }, [draft?.sessionId]);
+    draftSessionRef.current = draft?.sessionId ?? inspection?.sessionId ?? null;
+  }, [draft?.sessionId, inspection?.sessionId]);
 
   useEffect(() => {
     return () => {
       const sessionId = draftSessionRef.current;
       if (!sessionId) return;
-      void Tools.TouchProfileDiscardDraft(sessionId);
+      previewActivityRef.current.descriptor?.cancel();
+      previewActivityRef.current.meshDescriptor?.cancel();
+      previewActivityRef.current.controller?.abort();
+      topologyCacheRef.current.clear();
+      void Tools.TouchProfileCloseSession(sessionId);
     };
   }, []);
+
+  useEffect(() => () => settingsBatch.dispose(), [settingsBatch]);
 
   useEffect(() => {
     if (!fixedTargetPath) return;
@@ -348,66 +402,97 @@ export default function TouchProfileTool({
   }, [fixedTargetPath]);
 
   useEffect(() => {
-    let cancelled = false;
     if (!draft?.sessionId || !activeComponentId) {
       return;
     }
+
+    previewActivityRef.current.descriptor?.cancel();
+    previewActivityRef.current.meshDescriptor?.cancel();
+    previewActivityRef.current.controller?.abort();
+    const controller = new AbortController();
+    const cachedMesh = topologyCacheRef.current.get(activeComponentId);
+    const meshDescriptor = cachedMesh
+      ? undefined
+      : Tools.TouchProfileGetMeshDescriptor({
+          sessionId: draft.sessionId,
+          componentId: activeComponentId,
+        });
+    const descriptor = Tools.TouchProfileGetPreviewDescriptor({
+      sessionId: draft.sessionId,
+      componentId: activeComponentId,
+    });
+    previewActivityRef.current = { descriptor, meshDescriptor, controller };
 
     const fetchPreview = async () => {
       setPreviewError(null);
       setPreviewLoading(true);
       try {
-        const next = await Tools.TouchProfileGetPreview({
-          sessionId: draft.sessionId,
-          componentId: activeComponentId,
-        });
-        if (cancelled) return;
-        const typedPreview = toTouchProfilePreview(next);
+        const mesh =
+          cachedMesh ?? (await loadTouchProfileMesh(await meshDescriptor!, controller.signal));
+        if (!cachedMesh) {
+          cacheTouchTopology(topologyCacheRef.current, activeComponentId, mesh);
+        }
+        const typedPreview = await loadTouchProfilePreview(
+          await descriptor,
+          mesh,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
         setPreview(typedPreview);
         setLastValidPreview(typedPreview);
       } catch (error) {
-        if (cancelled) return;
+        if (controller.signal.aborted || isAbortError(error)) return;
         setPreviewError(toErrorMessage(error));
       } finally {
-        if (!cancelled) setPreviewLoading(false);
+        if (!controller.signal.aborted) setPreviewLoading(false);
       }
     };
 
     void fetchPreview();
 
     return () => {
-      cancelled = true;
+      void descriptor.cancel();
+      void meshDescriptor?.cancel();
+      controller.abort();
     };
   }, [draft?.sessionId, activeComponentId, previewReloadVersion]);
 
   useEffect(() => {
-    let cancelled = false;
     if (phase !== "select" || !inspection?.sessionId || !selectedMeshComponentId) {
       return;
     }
+
+    previewActivityRef.current.descriptor?.cancel();
+    previewActivityRef.current.meshDescriptor?.cancel();
+    previewActivityRef.current.controller?.abort();
+    const controller = new AbortController();
+    const meshDescriptor = Tools.TouchProfileGetMeshDescriptor({
+      sessionId: inspection.sessionId,
+      componentId: selectedMeshComponentId,
+    });
+    previewActivityRef.current = { meshDescriptor, controller };
 
     const fetchMeshPreview = async () => {
       setMeshPreviewError(null);
       setMeshPreviewLoading(true);
       try {
-        const next = await Tools.TouchProfileGetMeshPreview({
-          sessionId: inspection.sessionId,
-          componentId: selectedMeshComponentId,
-        });
-        if (cancelled) return;
-        setMeshPreview(toTouchProfileMeshPreview(next));
+        const next = await loadTouchProfileMesh(await meshDescriptor, controller.signal);
+        if (controller.signal.aborted) return;
+        cacheTouchTopology(topologyCacheRef.current, selectedMeshComponentId, next);
+        setMeshPreview(next);
       } catch (error) {
-        if (cancelled) return;
+        if (controller.signal.aborted || isAbortError(error)) return;
         setMeshPreviewError(toErrorMessage(error));
       } finally {
-        if (!cancelled) setMeshPreviewLoading(false);
+        if (!controller.signal.aborted) setMeshPreviewLoading(false);
       }
     };
 
     void fetchMeshPreview();
 
     return () => {
-      cancelled = true;
+      void meshDescriptor.cancel();
+      controller.abort();
     };
   }, [phase, inspection?.sessionId, selectedMeshComponentId]);
 
@@ -619,38 +704,16 @@ export default function TouchProfileTool({
         ),
       };
     });
-    setPendingSettingsSaves((count) => count + zoneIds.length);
-    const previewRefreshRequest = options?.refreshPreview
-      ? ++previewRefreshRequestRef.current
-      : undefined;
-    settingsSaveQueueRef.current = zoneIds.reduce(
-      (queue, nextZoneId, index) =>
-        queue
-          .catch(() => {})
-          .then(async () => {
-            await Tools.TouchProfileUpdateZoneSettings({
-              sessionId: draft.sessionId,
-              componentId,
-              zoneId: nextZoneId,
-              settings,
-            });
-            if (
-              index === zoneIds.length - 1 &&
-              options?.refreshPreview &&
-              previewRefreshRequest === previewRefreshRequestRef.current
-            ) {
-              setPreviewReloadVersion((version) => version + 1);
-            }
-          })
-          .catch((error) => {
-            toast.error(t("page.tools.touch_profile.toast.settings_save_failed"), {
-              description: toErrorMessage(error),
-            });
-          })
-          .finally(() => {
-            setPendingSettingsSaves((count) => Math.max(0, count - 1));
-          }),
-      settingsSaveQueueRef.current,
+    previewActivityRef.current.descriptor?.cancel();
+    previewActivityRef.current.meshDescriptor?.cancel();
+    previewActivityRef.current.controller?.abort();
+    settingsBatch.enqueue(
+      zoneIds.map((nextZoneId) => ({
+        componentId,
+        zoneId: nextZoneId,
+        settings,
+      })),
+      Boolean(options?.refreshPreview),
     );
   };
 
@@ -763,10 +826,11 @@ export default function TouchProfileTool({
 
   const discardDraft = async () => {
     if (!draft && !inspection) return;
-    if (draft) {
-      await Tools.TouchProfileDiscardDraft(draft.sessionId);
-    }
+    const sessionId = draft?.sessionId ?? inspection?.sessionId;
+    if (sessionId) await Tools.TouchProfileCloseSession(sessionId);
     draftSessionRef.current = null;
+    topologyCacheRef.current.clear();
+    settingsBatch.clear();
     setDraft(null);
     setInspection(null);
     setPhase("select");

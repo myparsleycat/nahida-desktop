@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
@@ -56,6 +57,78 @@ type BodyShapeLoadResult struct {
 	Meshes  []BodyShapeMeshCandidate `json:"meshes"`
 }
 
+type BodyShapeMeshSummary struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	VertexCount    int    `json:"vertexCount"`
+	IndexCount     int    `json:"indexCount"`
+	PositionStride int    `json:"positionStride"`
+}
+
+type BodyShapeSessionDescriptor struct {
+	SessionID string                 `json:"sessionId"`
+	ModRoot   string                 `json:"modRoot"`
+	INIPath   string                 `json:"iniPath"`
+	Meshes    []BodyShapeMeshSummary `json:"meshes"`
+}
+
+type BodyShapeMeshInput struct {
+	SessionID string `json:"sessionId"`
+	MeshID    string `json:"meshId"`
+}
+
+type BodyShapeMeshDescriptor struct {
+	SessionID      string          `json:"sessionId"`
+	MeshID         string          `json:"meshId"`
+	PositionsURL   string          `json:"positionsUrl"`
+	PositionsCount int             `json:"positionsCount"`
+	IndicesURL     *string         `json:"indicesUrl,omitempty"`
+	IndexCount     int             `json:"indexCount"`
+	BlendURL       *string         `json:"blendUrl,omitempty"`
+	BlendBytes     int             `json:"blendBytes"`
+	PositionStride int             `json:"positionStride"`
+	VectorLayout   *string         `json:"vectorLayout"`
+	BlendStride    *int            `json:"blendStride,omitempty"`
+	Bones          []BlendBoneInfo `json:"bones"`
+}
+
+type BodyShapeBeginExportInput struct {
+	SessionID      string `json:"sessionId"`
+	MeshID         string `json:"meshId"`
+	IncludeWeights bool   `json:"includeWeights"`
+}
+
+type BodyShapeExportUpload struct {
+	ExportID           string  `json:"exportId"`
+	PositionsUploadURL string  `json:"positionsUploadUrl"`
+	WeightsUploadURL   *string `json:"weightsUploadUrl,omitempty"`
+}
+
+type BodyShapeOK struct {
+	OK bool `json:"ok"`
+}
+
+type BodyShapeCommitExportInput struct {
+	SessionID      string                  `json:"sessionId"`
+	ExportID       string                  `json:"exportId"`
+	Amount         *float64                `json:"amount,omitempty"`
+	AxisScale      []float64               `json:"axisScale,omitempty"`
+	WriteChangeLog *bool                   `json:"writeChangeLog,omitempty"`
+	ChangeSummary  *BodyShapeChangeSummary `json:"changeSummary,omitempty"`
+}
+
+type bodyShapeExportSlot struct {
+	meshID         string
+	includeWeights bool
+}
+
+type bodyShapeSession struct {
+	mu          sync.Mutex
+	loaded      BodyShapeLoadResult
+	descriptors map[string]BodyShapeMeshDescriptor
+	exports     map[string]bodyShapeExportSlot
+}
+
 type BodyShapeChangeSummary struct {
 	Amount          float64   `json:"amount"`
 	AxisScale       []float64 `json:"axisScale"`
@@ -87,17 +160,34 @@ type BodyShapeExportResult struct {
 	SourceModPath *string `json:"sourceModPath,omitempty"`
 }
 
-func (t *Tools) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShapeLoadResult, error) {
+func (t *Tools) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShapeSessionDescriptor, error) {
 	if err := ctx.Err(); err != nil {
-		return BodyShapeLoadResult{}, err
+		return BodyShapeSessionDescriptor{}, err
 	}
-	return loadBodyShapeMod(modPath, func(message string) {
+	loaded, err := loadBodyShapeMod(modPath, func(message string) {
 		if t.log != nil {
 			t.log.Warn(message, "BodyShapeEditor")
 		}
 	})
+	if err != nil {
+		return BodyShapeSessionDescriptor{}, err
+	}
+	if t.protocol == nil {
+		return BodyShapeSessionDescriptor{}, errors.New("tools service has no protocol service")
+	}
+	sessionID := t.protocol.CreateMemorySession()
+	session := &bodyShapeSession{loaded: loaded, descriptors: make(map[string]BodyShapeMeshDescriptor), exports: make(map[string]bodyShapeExportSlot)}
+	t.bodyShapeMu.Lock()
+	t.bodyShapeSessions[sessionID] = session
+	t.bodyShapeMu.Unlock()
+	descriptor := BodyShapeSessionDescriptor{SessionID: sessionID, ModRoot: loaded.ModRoot, INIPath: loaded.INIPath, Meshes: make([]BodyShapeMeshSummary, 0, len(loaded.Meshes))}
+	for _, mesh := range loaded.Meshes {
+		descriptor.Meshes = append(descriptor.Meshes, BodyShapeMeshSummary{ID: mesh.ID, Name: mesh.Name, VertexCount: mesh.VertexCount, IndexCount: len(mesh.Indices), PositionStride: mesh.PositionStride})
+	}
+	return descriptor, nil
 }
 
+//wails:ignore
 func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput) (result BodyShapeExportResult, err error) {
 	sourceRoot, err := filepath.Abs(input.ModRoot)
 	if err != nil {
@@ -169,6 +259,193 @@ func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput)
 	}
 	result.ModRoot, result.SourceModPath = &targetRoot, &sourceModPath
 	return result, nil
+}
+
+func (t *Tools) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput) (BodyShapeMeshDescriptor, error) {
+	if err := ctx.Err(); err != nil {
+		return BodyShapeMeshDescriptor{}, err
+	}
+	session, err := t.requireBodyShapeSession(input.SessionID)
+	if err != nil {
+		return BodyShapeMeshDescriptor{}, err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if descriptor, ok := session.descriptors[input.MeshID]; ok {
+		return descriptor, nil
+	}
+	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
+	if mesh == nil {
+		return BodyShapeMeshDescriptor{}, contractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+	}
+	positionsURL, err := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":positions", float32Bytes(mesh.Positions), "application/octet-stream")
+	if err != nil {
+		return BodyShapeMeshDescriptor{}, err
+	}
+	descriptor := BodyShapeMeshDescriptor{SessionID: input.SessionID, MeshID: mesh.ID, PositionsURL: positionsURL, PositionsCount: len(mesh.Positions), IndexCount: len(mesh.Indices), BlendBytes: len(mesh.BlendBytes), PositionStride: mesh.PositionStride, VectorLayout: mesh.VectorLayout, BlendStride: mesh.BlendStride, Bones: mesh.Bones}
+	if len(mesh.Indices) > 0 {
+		value, storeErr := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":indices", uint32Bytes(mesh.Indices), "application/octet-stream")
+		if storeErr != nil {
+			return BodyShapeMeshDescriptor{}, storeErr
+		}
+		descriptor.IndicesURL = &value
+	}
+	if len(mesh.BlendBytes) > 0 {
+		value, storeErr := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":blend", mesh.BlendBytes, "application/octet-stream")
+		if storeErr != nil {
+			return BodyShapeMeshDescriptor{}, storeErr
+		}
+		descriptor.BlendURL = &value
+	}
+	session.descriptors[input.MeshID] = descriptor
+	return descriptor, nil
+}
+
+func (t *Tools) BodyShapeBeginExport(ctx context.Context, input BodyShapeBeginExportInput) (BodyShapeExportUpload, error) {
+	if err := ctx.Err(); err != nil {
+		return BodyShapeExportUpload{}, err
+	}
+	session, err := t.requireBodyShapeSession(input.SessionID)
+	if err != nil {
+		return BodyShapeExportUpload{}, err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
+	if mesh == nil {
+		return BodyShapeExportUpload{}, contractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+	}
+	exportID, err := newToolsID()
+	if err != nil {
+		return BodyShapeExportUpload{}, err
+	}
+	positionsID := "export:" + exportID + ":positions"
+	positionsURL, err := t.protocol.CreateMemoryUpload(input.SessionID, positionsID, int64(len(mesh.Positions))*4)
+	if err != nil {
+		return BodyShapeExportUpload{}, err
+	}
+	result := BodyShapeExportUpload{ExportID: exportID, PositionsUploadURL: positionsURL}
+	if input.IncludeWeights {
+		weightsID := "export:" + exportID + ":weights"
+		weightsURL, uploadErr := t.protocol.CreateMemoryUpload(input.SessionID, weightsID, int64(mesh.VertexCount)*4)
+		if uploadErr != nil {
+			t.protocol.RemoveMemoryBuffer(input.SessionID, positionsID)
+			return BodyShapeExportUpload{}, uploadErr
+		}
+		result.WeightsUploadURL = &weightsURL
+	}
+	session.exports[exportID] = bodyShapeExportSlot{meshID: mesh.ID, includeWeights: input.IncludeWeights}
+	return result, nil
+}
+
+func (t *Tools) BodyShapeCommitExport(ctx context.Context, input BodyShapeCommitExportInput) (BodyShapeExportResult, error) {
+	session, err := t.requireBodyShapeSession(input.SessionID)
+	if err != nil {
+		return BodyShapeExportResult{}, err
+	}
+	session.mu.Lock()
+	slot, exists := session.exports[input.ExportID]
+	if exists {
+		delete(session.exports, input.ExportID)
+	}
+	mesh := findBodyShapeMesh(session.loaded.Meshes, slot.meshID)
+	session.mu.Unlock()
+	if !exists || mesh == nil {
+		return BodyShapeExportResult{}, contractError("Body shape export slot not found")
+	}
+	positionsID := "export:" + input.ExportID + ":positions"
+	weightsID := "export:" + input.ExportID + ":weights"
+	defer t.protocol.RemoveMemoryBuffer(input.SessionID, positionsID)
+	defer t.protocol.RemoveMemoryBuffer(input.SessionID, weightsID)
+	positionsRaw, err := t.protocol.TakeMemoryUpload(input.SessionID, positionsID)
+	if err != nil {
+		return BodyShapeExportResult{}, err
+	}
+	positions, err := decodeFloat32Bytes(positionsRaw)
+	if err != nil {
+		return BodyShapeExportResult{}, err
+	}
+	var weights []float32
+	if slot.includeWeights {
+		weightsRaw, takeErr := t.protocol.TakeMemoryUpload(input.SessionID, weightsID)
+		if takeErr != nil {
+			return BodyShapeExportResult{}, takeErr
+		}
+		weights, err = decodeFloat32Bytes(weightsRaw)
+		if err != nil {
+			return BodyShapeExportResult{}, err
+		}
+	}
+	return t.BodyShapeExport(ctx, BodyShapeExportInput{ModRoot: session.loaded.ModRoot, PositionPath: mesh.PositionPath, PositionStride: mesh.PositionStride, Positions: positions, VectorPath: mesh.VectorPath, VectorLayout: mesh.VectorLayout, Weights: weights, Amount: input.Amount, AxisScale: input.AxisScale, WriteChangeLog: input.WriteChangeLog, ChangeSummary: input.ChangeSummary})
+}
+
+func (t *Tools) BodyShapeCloseSession(_ context.Context, sessionID string) (BodyShapeOK, error) {
+	t.bodyShapeMu.Lock()
+	delete(t.bodyShapeSessions, sessionID)
+	t.bodyShapeMu.Unlock()
+	if t.protocol != nil {
+		t.protocol.CleanupMemorySession(sessionID)
+	}
+	return BodyShapeOK{OK: true}, nil
+}
+
+func (t *Tools) requireBodyShapeSession(id string) (*bodyShapeSession, error) {
+	t.bodyShapeMu.Lock()
+	session := t.bodyShapeSessions[id]
+	t.bodyShapeMu.Unlock()
+	if session == nil {
+		return nil, contractError(fmt.Sprintf("Body shape session not found: %s", id))
+	}
+	return session, nil
+}
+
+func findBodyShapeMesh(meshes []BodyShapeMeshCandidate, id string) *BodyShapeMeshCandidate {
+	for index := range meshes {
+		if meshes[index].ID == id {
+			return &meshes[index]
+		}
+	}
+	return nil
+}
+
+func float32Bytes(values []float32) []byte {
+	data := make([]byte, len(values)*4)
+	for index, value := range values {
+		binary.LittleEndian.PutUint32(data[index*4:], math.Float32bits(value))
+	}
+	return data
+}
+
+func uint32Bytes(values []uint32) []byte {
+	data := make([]byte, len(values)*4)
+	for index, value := range values {
+		binary.LittleEndian.PutUint32(data[index*4:], value)
+	}
+	return data
+}
+
+func decodeFloat32Bytes(data []byte) ([]float32, error) {
+	if len(data)%4 != 0 {
+		return nil, errors.New("float32 buffer is not 4-byte aligned")
+	}
+	values := make([]float32, len(data)/4)
+	for index := range values {
+		values[index] = math.Float32frombits(binary.LittleEndian.Uint32(data[index*4:]))
+	}
+	return values, nil
+}
+
+func (t *Tools) shutdownBodyShape() error {
+	t.bodyShapeMu.Lock()
+	sessions := t.bodyShapeSessions
+	t.bodyShapeSessions = make(map[string]*bodyShapeSession)
+	t.bodyShapeMu.Unlock()
+	if t.protocol != nil {
+		for id := range sessions {
+			t.protocol.CleanupMemorySession(id)
+		}
+	}
+	return nil
 }
 
 type unmanagedModDisabler interface {

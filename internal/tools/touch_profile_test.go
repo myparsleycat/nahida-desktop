@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -45,12 +47,36 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	if !draft.CanAutoApply || len(draft.Components[0].Zones) != 1 {
 		t.Fatalf("unexpected draft: %#v", draft)
 	}
-	preview, err := service.TouchProfileGetPreview(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	topology, err := service.TouchProfileGetMeshDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview.Zones) != 1 || len(preview.Zones[0].Weights) != 4 {
+	preview, err := service.TouchProfileGetPreviewDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Zones) != 1 || preview.WeightsCount != 4 {
 		t.Fatalf("unexpected preview: %#v", preview)
+	}
+	weightsResponse := httptest.NewRecorder()
+	service.protocol.ServeHTTP(weightsResponse, httptest.NewRequest(http.MethodGet, preview.WeightsURL, nil))
+	weights, decodeErr := decodeFloat32Bytes(weightsResponse.Body.Bytes())
+	if weightsResponse.Code != http.StatusOK || decodeErr != nil || len(weights) != 4 || preview.Zones[0].WeightOffset != 0 {
+		t.Fatalf("packed weights = %d %#v %v", weightsResponse.Code, weights, decodeErr)
+	}
+	settings := draft.Components[0].Zones[0].Settings
+	settings.MaskStrength = .8
+	updated, err := service.TouchProfileUpdateZoneSettingsBatch(ctx, TouchProfileUpdateZoneSettingsBatchInput{SessionID: inspection.SessionID, Changes: []TouchProfileZoneSettingsChange{{ComponentID: inspection.Components[0].ID, ZoneID: draft.Components[0].Zones[0].ID, Settings: settings}}})
+	if err != nil || !updated.OK || !updated.PreviewChanged {
+		t.Fatalf("batch update = %#v, %v", updated, err)
+	}
+	topologyAfter, err := service.TouchProfileGetMeshDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	if err != nil || topologyAfter.PositionsURL != topology.PositionsURL {
+		t.Fatalf("topology changed = %#v, %v", topologyAfter, err)
+	}
+	previewAfter, err := service.TouchProfileGetPreviewDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	if err != nil || previewAfter.PreviewRevision <= preview.PreviewRevision {
+		t.Fatalf("preview revision = %#v, %v", previewAfter, err)
 	}
 	applied, err := service.TouchProfileApply(ctx, TouchProfileApplyInput{SessionID: inspection.SessionID})
 	if err != nil {
@@ -63,10 +89,13 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, snippet := range []string{"Nahida Touch Profile runtime", "rzm_jiggle_interaction.hlsl", "dispatch = (4 + 255) // 256, 1, 1"} {
+	for _, snippet := range []string{"Nahida Touch Profile runtime", "global $nhd_touch_hero_active = 0", "$nhd_touch_hero_lmb_down = 1", "$nhd_touch_hero_active = 1", "[ResourceBodyPosition]", "rzm_jiggle_interaction.hlsl", "dispatch = (4 + 255) // 256, 1, 1"} {
 		if !strings.Contains(string(ini), snippet) {
 			t.Fatalf("generated INI missing %q", snippet)
 		}
+	}
+	if issues := touchINIStructureErrors(string(ini)); len(issues) != 0 {
+		t.Fatalf("generated INI structure errors: %v", issues)
 	}
 	if _, err = service.TouchProfileRegenerate(ctx, TouchProfileApplyInput{SessionID: inspection.SessionID}); err != nil {
 		t.Fatal(err)
@@ -147,6 +176,35 @@ func TestTouchFolderBaseNameAppendsSuffixAndStripsDisabled(t *testing.T) {
 	}
 }
 
+func TestRebaseTouchAssetDoesNotMutateValidatorPaths(t *testing.T) {
+	t.Parallel()
+	outputRoot := t.TempDir()
+	assetDir := filepath.Join(outputRoot, "Resources", "IM")
+	asset := TouchGeneratedAssets{
+		RelativeDir: "Resources/IM",
+		MaskPaths:   []string{"Resources/IM/ModBodyJiggleMasks0.buf"},
+		ObjectMapPaths: []TouchGeneratedObjectMap{{
+			RelativePath: "Resources/IM/ModBodyObjectMap.buf",
+			AbsolutePath: filepath.Join(assetDir, "ModBodyObjectMap.buf"),
+		}},
+		ParamsRelativePath:  "Resources/IM/ModBodyJiggleParams.buf",
+		ParamsAbsolutePath:  filepath.Join(assetDir, "ModBodyJiggleParams.buf"),
+		PreviewRelativePath: "Resources/IM/ModBodyTouchMaskPreview.png",
+		PreviewAbsolutePath: filepath.Join(assetDir, "ModBodyTouchMaskPreview.png"),
+	}
+
+	rebased := rebaseTouchAsset(asset, filepath.Join(outputRoot, "Config"))
+	if rebased.MaskPaths[0] != "../Resources/IM/ModBodyJiggleMasks0.buf" {
+		t.Fatalf("rebased mask = %q", rebased.MaskPaths[0])
+	}
+	if asset.MaskPaths[0] != "Resources/IM/ModBodyJiggleMasks0.buf" {
+		t.Fatalf("validator mask path was mutated: %q", asset.MaskPaths[0])
+	}
+	if asset.ObjectMapPaths[0].RelativePath != "Resources/IM/ModBodyObjectMap.buf" {
+		t.Fatalf("validator object-map path was mutated: %q", asset.ObjectMapPaths[0].RelativePath)
+	}
+}
+
 func TestTouchProfileSaveDraftPreservesClientDraft(t *testing.T) {
 	dir := t.TempDir()
 	service := New()
@@ -154,7 +212,7 @@ func TestTouchProfileSaveDraftPreservesClientDraft(t *testing.T) {
 	service.touchSessions["session"] = &touchSession{
 		Dir:       dir,
 		Draft:     &previous,
-		Preview:   map[string]TouchProfilePreview{"old": {ComponentID: "old"}},
+		Preview:   map[string]touchCachedPreview{"old": {descriptor: TouchProfilePreviewDescriptor{ComponentID: "old"}}},
 		Operation: "apply",
 	}
 	draft := TouchDraft{
@@ -295,6 +353,74 @@ func TestBuildTouchIBInjectionUsesFrameNumberWhenRequested(t *testing.T) {
 	}
 	if !strings.Contains(buildTouchIBInjection(component, "nhd", "Touch", true), "if FRAME_NUMBER !=") {
 		t.Fatal("expected FRAME_NUMBER guard")
+	}
+}
+
+func TestTouchINIInsertionPreservesLiteralVariablesAndNextSection(t *testing.T) {
+	t.Parallel()
+	const prefix = "nhd_touch_mod"
+	source := `[Constants]
+global $active = 0
+
+[Present]
+post $active = 0
+run = CommandListCreditInfo
+
+[CustomShaderTransparency]
+blend = ADD BLEND_FACTOR INV_BLEND_FACTOR
+handling = skip
+
+[TextureOverrideAliceBodyBlend]
+$active = 1
+
+[TextureOverrideAliceBodyA]
+ib = ResourceAliceBodyAIB
+`
+
+	text := ensureTouchConstants(source, prefix, []TouchComponentAnalysis{{ID: "AliceBodyPosition"}})
+	text = ensureTouchKeys(text, prefix)
+	text = ensureTouchPresent(text, prefix)
+	blend := "AliceBodyBlend"
+	text = patchTouchBlendSections(text, prefix, []TouchComponentAnalysis{{BlendSectionName: &blend}})
+
+	for _, snippet := range []string{
+		"global $nhd_touch_mod_active = 0",
+		"global $nhd_touch_mod_last_dispatch_AliceBodyPosition = -1",
+		"$nhd_touch_mod_lmb_down = 1",
+		"post $nhd_touch_mod_lmb_down = 0",
+		"post $nhd_touch_mod_active = 0",
+		"[CustomShaderTransparency]\nblend = ADD BLEND_FACTOR INV_BLEND_FACTOR",
+		"$active = 1\n\t$nhd_touch_mod_active = 1",
+	} {
+		if !strings.Contains(text, snippet) {
+			t.Fatalf("compiled INI missing %q:\n%s", snippet, text)
+		}
+	}
+	if issues := touchINIStructureErrors(text); len(issues) != 0 {
+		t.Fatalf("compiled INI structure errors: %v\n%s", issues, text)
+	}
+}
+
+func TestTouchINIStructureErrorsRejectsWailsPortCorruption(t *testing.T) {
+	t.Parallel()
+	broken := `[Constants]
+; Nahida Touch Profile state (nhd_touch_mod)
+global  = 0
+
+[Present]
+ = 1
+post  = 0
+CustomShaderTransparency]
+`
+	issues := touchINIStructureErrors(broken)
+	if len(issues) < 3 {
+		t.Fatalf("issues = %v, want empty assignment, malformed header, and missing state variable", issues)
+	}
+	joined := strings.Join(issues, "\n")
+	for _, snippet := range []string{"without a variable name", "malformed section header", "$nhd_touch_mod_active"} {
+		if !strings.Contains(joined, snippet) {
+			t.Fatalf("issues missing %q: %v", snippet, issues)
+		}
 	}
 }
 

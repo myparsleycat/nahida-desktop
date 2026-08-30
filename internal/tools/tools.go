@@ -105,6 +105,9 @@ type Tools struct {
 	touchMu       sync.Mutex
 	touchSessions map[string]*touchSession
 
+	bodyShapeMu       sync.Mutex
+	bodyShapeSessions map[string]*bodyShapeSession
+
 	modelViewerMu       sync.Mutex
 	modelViewerSessions map[string]*modelViewerSession
 	persist             *persistEngine
@@ -122,6 +125,9 @@ func NewWithOptions(opts Options) *Tools {
 	if opts.FS == nil {
 		opts.FS = platform.NewFS()
 	}
+	if opts.Protocol == nil {
+		opts.Protocol = infra.NewProtocol()
+	}
 	t := &Tools{
 		log: opts.Log, emit: opts.EventEmit, notify: opts.Notify, settings: opts.Settings, xxmi: opts.XXMI,
 		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, mod: opts.Mod,
@@ -129,6 +135,7 @@ func NewWithOptions(opts Options) *Tools {
 		textureState:  TextureResizeProgressEvent{Status: "idle"},
 		textureJobs:   make(map[uint64]TextureResizeProgressEvent), releaseCache: make(map[string]releaseCacheEntry), releaseCalls: make(map[string]*releaseFetchCall),
 		touchSessions:       make(map[string]*touchSession),
+		bodyShapeSessions:   make(map[string]*bodyShapeSession),
 		modelViewerSessions: make(map[string]*modelViewerSession),
 		persist:             newPersistEngine(),
 	}
@@ -223,5 +230,5 @@ func (t *Tools) ServiceShutdown() error {
 			err = errors.New("timed out waiting for tools process to stop")
 		}
 	}
-	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownToggleViewer(), t.shutdownTouchProfiles(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownToggleViewer(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
 }

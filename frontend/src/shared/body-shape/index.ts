@@ -46,6 +46,7 @@ export {
     applyMultiRegionDeform,
     BODY_REGION_IDS,
     composeDisplayWeights,
+    composeDisplayWeightsInto,
     composeEffectiveScales,
     computeMeshBounds,
     computeRegionPivot,

@@ -358,6 +358,19 @@ export function composeDisplayWeights(
     },
 ): Float32Array {
     const out = new Float32Array(vertexCount);
+    composeDisplayWeightsInto(out, vertexCount, regions, options);
+    return out;
+}
+
+export function composeDisplayWeightsInto(
+    out: Float32Array,
+    vertexCount: number,
+    regions: readonly ActiveRegionDeform[],
+    options?: {
+        /** When true, show raw masks even if amount is 0 (bone picking). */ ignoreAmount?: boolean;
+    },
+): void {
+    out.fill(0, 0, Math.min(out.length, vertexCount));
     const ignoreAmount = options?.ignoreAmount === true;
     for (const region of regions) {
         if (!ignoreAmount && region.amount === 0) continue;
@@ -367,7 +380,6 @@ export function composeDisplayWeights(
             if (w > out[i]) out[i] = w;
         }
     }
-    return out;
 }
 
 /** Pivot for a region = weighted centroid of its mask on original positions. */

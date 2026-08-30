@@ -24,15 +24,29 @@ type memoryProtocolEntry struct {
 	contentType string
 }
 
+type memoryUploadEntry struct {
+	expected  int64
+	data      []byte
+	uploading bool
+	ready     bool
+}
+
+type memoryProtocolSession struct {
+	buffers map[string]memoryProtocolEntry
+	uploads map[string]*memoryUploadEntry
+}
+
+const maxMemoryUploadBytes int64 = 512 << 20
+
 type Protocol struct {
 	mu       sync.RWMutex
-	sessions map[string]map[string]memoryProtocolEntry
+	sessions map[string]*memoryProtocolSession
 	http     *Client
 	log      *Log
 }
 
 func NewProtocol() *Protocol {
-	return &Protocol{sessions: make(map[string]map[string]memoryProtocolEntry)}
+	return &Protocol{sessions: make(map[string]*memoryProtocolSession)}
 }
 
 //wails:ignore
@@ -53,21 +67,23 @@ func (p *Protocol) LocalFileURL(path string, original bool) string {
 	return "/protocol/local?" + query.Encode()
 }
 
-func (p *Protocol) CreateModelViewerMemorySession() string {
+//wails:ignore
+func (p *Protocol) CreateMemorySession() string {
 	if p == nil {
 		return ""
 	}
 	id := uuid.NewString()
 	p.mu.Lock()
 	if p.sessions == nil {
-		p.sessions = make(map[string]map[string]memoryProtocolEntry)
+		p.sessions = make(map[string]*memoryProtocolSession)
 	}
-	p.sessions[id] = make(map[string]memoryProtocolEntry)
+	p.sessions[id] = &memoryProtocolSession{buffers: make(map[string]memoryProtocolEntry), uploads: make(map[string]*memoryUploadEntry)}
 	p.mu.Unlock()
 	return id
 }
 
-func (p *Protocol) WriteModelViewerMemoryBuffer(sessionID, bufferID string, data []byte, contentType string) (string, error) {
+//wails:ignore
+func (p *Protocol) StoreMemoryBuffer(sessionID, bufferID string, data []byte, contentType string) (string, error) {
 	if p == nil {
 		return "", errors.New("protocol service is nil")
 	}
@@ -78,20 +94,83 @@ func (p *Protocol) WriteModelViewerMemoryBuffer(sessionID, bufferID string, data
 	session, exists := p.sessions[sessionID]
 	if !exists {
 		p.mu.Unlock()
-		return "", fmt.Errorf("missing model viewer memory session: %s", sessionID)
+		return "", fmt.Errorf("missing memory session: %s", sessionID)
 	}
-	session[bufferID] = memoryProtocolEntry{data: bytes.Clone(data), contentType: normalizeContentType(contentType)}
+	session.buffers[bufferID] = memoryProtocolEntry{data: data, contentType: normalizeContentType(contentType)}
 	p.mu.Unlock()
-	return "/protocol/model-viewer-memory/" + url.PathEscape(sessionID) + "/" + url.PathEscape(bufferID), nil
+	return memoryProtocolURL(sessionID, bufferID), nil
 }
 
-func (p *Protocol) CleanupModelViewerMemorySession(sessionID string) {
+//wails:ignore
+func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
+	if p == nil || sessionID == "" || bufferID == "" {
+		return
+	}
+	p.mu.Lock()
+	if session := p.sessions[sessionID]; session != nil {
+		delete(session.buffers, bufferID)
+		delete(session.uploads, bufferID)
+	}
+	p.mu.Unlock()
+}
+
+//wails:ignore
+func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes int64) (string, error) {
+	if p == nil {
+		return "", errors.New("protocol service is nil")
+	}
+	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(uploadID) == "" {
+		return "", errors.New("memory session and upload ids are required")
+	}
+	if expectedBytes < 0 || expectedBytes > maxMemoryUploadBytes {
+		return "", fmt.Errorf("memory upload size must be between 0 and %d bytes", maxMemoryUploadBytes)
+	}
+	p.mu.Lock()
+	session := p.sessions[sessionID]
+	if session == nil {
+		p.mu.Unlock()
+		return "", fmt.Errorf("missing memory session: %s", sessionID)
+	}
+	if _, exists := session.uploads[uploadID]; exists {
+		p.mu.Unlock()
+		return "", fmt.Errorf("memory upload already exists: %s", uploadID)
+	}
+	session.uploads[uploadID] = &memoryUploadEntry{expected: expectedBytes}
+	p.mu.Unlock()
+	return memoryProtocolURL(sessionID, uploadID), nil
+}
+
+//wails:ignore
+func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) {
+	if p == nil {
+		return nil, errors.New("protocol service is nil")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session := p.sessions[sessionID]
+	if session == nil {
+		return nil, fmt.Errorf("missing memory session: %s", sessionID)
+	}
+	upload := session.uploads[uploadID]
+	if upload == nil || !upload.ready {
+		return nil, fmt.Errorf("memory upload is not ready: %s", uploadID)
+	}
+	delete(session.uploads, uploadID)
+	return upload.data, nil
+}
+
+//wails:ignore
+func (p *Protocol) CleanupMemorySession(sessionID string) {
 	if p == nil || sessionID == "" {
 		return
 	}
 	p.mu.Lock()
 	delete(p.sessions, sessionID)
 	p.mu.Unlock()
+}
+
+func memoryProtocolURL(sessionID, entryID string) string {
+	return "/protocol/memory/" + url.PathEscape(sessionID) + "/" + url.PathEscape(entryID)
 }
 
 func (p *Protocol) ServeHTTP(w http.ResponseWriter, request *http.Request) {
@@ -104,8 +183,8 @@ func (p *Protocol) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	switch {
 	case path == "local":
 		p.serveLocalFile(w, request, request.URL.Query().Get("path"))
-	case strings.HasPrefix(path, "model-viewer-memory/"):
-		p.serveMemory(w, request, strings.TrimPrefix(path, "model-viewer-memory/"))
+	case strings.HasPrefix(path, "memory/"):
+		p.serveMemory(w, request, strings.TrimPrefix(path, "memory/"))
 	case path == "nahida/image-local", path == "nahida/video-local":
 		p.serveLocalFile(w, request, request.URL.Query().Get("path"))
 	case path == "nahida/image-web":
@@ -154,8 +233,22 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 		http.Error(w, "invalid memory buffer path", http.StatusBadRequest)
 		return
 	}
+	if request.Method == http.MethodPut {
+		p.serveMemoryUpload(w, request, sessionID, bufferID)
+		return
+	}
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD, PUT")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	p.mu.RLock()
-	entry, exists := p.sessions[sessionID][bufferID]
+	session := p.sessions[sessionID]
+	var entry memoryProtocolEntry
+	var exists bool
+	if session != nil {
+		entry, exists = session.buffers[bufferID]
+	}
 	p.mu.RUnlock()
 	if !exists {
 		http.NotFound(w, request)
@@ -169,6 +262,61 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, request, bufferID, time.Time{}, bytes.NewReader(entry.data))
+}
+
+func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Request, sessionID, uploadID string) {
+	if normalizeContentType(request.Header.Get("Content-Type")) != "application/octet-stream" {
+		http.Error(w, "content type must be application/octet-stream", http.StatusUnsupportedMediaType)
+		return
+	}
+	p.mu.Lock()
+	session := p.sessions[sessionID]
+	if session == nil {
+		p.mu.Unlock()
+		http.NotFound(w, request)
+		return
+	}
+	upload := session.uploads[uploadID]
+	if upload == nil {
+		p.mu.Unlock()
+		http.NotFound(w, request)
+		return
+	}
+	if upload.uploading || upload.ready {
+		p.mu.Unlock()
+		http.Error(w, "memory upload already used", http.StatusConflict)
+		return
+	}
+	if request.ContentLength != upload.expected {
+		delete(session.uploads, uploadID)
+		p.mu.Unlock()
+		http.Error(w, "content length does not match upload slot", http.StatusBadRequest)
+		return
+	}
+	upload.uploading = true
+	expected := upload.expected
+	p.mu.Unlock()
+
+	data, err := io.ReadAll(io.LimitReader(request.Body, expected+1))
+	if err != nil || int64(len(data)) != expected {
+		p.mu.Lock()
+		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
+			delete(current.uploads, uploadID)
+		}
+		p.mu.Unlock()
+		http.Error(w, "upload body length does not match upload slot", http.StatusBadRequest)
+		return
+	}
+	p.mu.Lock()
+	current := p.sessions[sessionID]
+	if current == nil || current.uploads[uploadID] != upload {
+		p.mu.Unlock()
+		http.NotFound(w, request)
+		return
+	}
+	upload.data, upload.uploading, upload.ready = data, false, true
+	p.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {

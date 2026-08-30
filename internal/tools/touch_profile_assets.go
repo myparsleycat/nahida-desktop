@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/binary"
 	"image"
 	"image/color"
@@ -40,6 +41,11 @@ type touchSeedGrid struct {
 }
 
 func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint32, component TouchComponentAnalysis, zones []TouchZoneSpec) []float32 {
+	masks, _ := buildTouchVertexMasksContext(context.Background(), vertexCount, positions, indices, component, zones)
+	return masks
+}
+
+func buildTouchVertexMasksContext(ctx context.Context, vertexCount int, positions []float32, indices []uint32, component TouchComponentAnalysis, zones []TouchZoneSpec) ([]float32, error) {
 	masks := make([]float32, vertexCount*touchZoneChannels)
 	allowed := touchAllowedVertices(component, indices, vertexCount)
 	minX, maxX := math.Inf(1), math.Inf(-1)
@@ -56,6 +62,9 @@ func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint3
 	midX, spanX := (minX+maxX)*.5, math.Max(maxX-minX, .001)
 	clipStart, clipEnd := spanX*.03, spanX*.08
 	for _, zone := range zones {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if zone.Channel < 0 || zone.Channel >= touchZoneChannels {
 			continue
 		}
@@ -83,6 +92,11 @@ func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint3
 			grid = buildTouchSeedGrid(positions, seeds, seedInfluence)
 		}
 		for vertex := range vertexCount {
+			if vertex&1023 == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			if !allowed[vertex] {
 				continue
 			}
@@ -126,7 +140,9 @@ func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint3
 			masks[offset] = max(masks[offset], float32(weight*strength))
 		}
 	}
-	smoothTouchMasks(masks, vertexCount, indices)
+	if err := smoothTouchMasksContext(ctx, masks, vertexCount, indices); err != nil {
+		return nil, err
+	}
 	for i, value := range masks {
 		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) || value < 0 {
 			masks[i] = 0
@@ -134,7 +150,7 @@ func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint3
 			masks[i] = 1
 		}
 	}
-	return masks
+	return masks, nil
 }
 
 func buildTouchSeedGrid(positions []float32, seeds []int, size float64) *touchSeedGrid {
@@ -193,9 +209,14 @@ func touchAllowedVertices(component TouchComponentAnalysis, indices []uint32, co
 	return allowed
 }
 
-func smoothTouchMasks(masks []float32, vertexCount int, indices []uint32) {
+func smoothTouchMasksContext(ctx context.Context, masks []float32, vertexCount int, indices []uint32) error {
 	adj := make([][]int, vertexCount)
 	for i := 0; i+2 < len(indices); i += 3 {
+		if i&4095 == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		a, b, c := int(indices[i]), int(indices[i+1]), int(indices[i+2])
 		if a < vertexCount && b < vertexCount {
 			adj[a] = append(adj[a], b)
@@ -212,6 +233,11 @@ func smoothTouchMasks(masks []float32, vertexCount int, indices []uint32) {
 	}
 	next := append([]float32(nil), masks...)
 	for vertex, neighbors := range adj {
+		if vertex&1023 == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		if len(neighbors) == 0 {
 			continue
 		}
@@ -224,6 +250,7 @@ func smoothTouchMasks(masks []float32, vertexCount int, indices []uint32) {
 		}
 	}
 	copy(masks, next)
+	return nil
 }
 
 func extractTouchMaskChannel(masks []float32, vertexCount, channel int) []float32 {

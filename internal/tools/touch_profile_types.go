@@ -181,29 +181,34 @@ type TouchProgressEvent struct {
 	ComponentID *string `json:"componentId,omitempty"`
 }
 
-type TouchMeshPreview struct {
-	SessionID   string          `json:"sessionId"`
-	ComponentID string          `json:"componentId"`
-	VertexCount int             `json:"vertexCount"`
-	Positions   []float32       `json:"positions"`
-	Indices     []uint32        `json:"indices"`
-	Bones       []BlendBoneInfo `json:"bones"`
-	BlendStride *int            `json:"blendStride,omitempty"`
-	BlendBytes  []byte          `json:"blendBytes,omitempty"`
+type TouchMeshDescriptor struct {
+	SessionID        string          `json:"sessionId"`
+	ComponentID      string          `json:"componentId"`
+	TopologyRevision string          `json:"topologyRevision"`
+	VertexCount      int             `json:"vertexCount"`
+	PositionsURL     string          `json:"positionsUrl"`
+	PositionsCount   int             `json:"positionsCount"`
+	IndicesURL       *string         `json:"indicesUrl,omitempty"`
+	IndexCount       int             `json:"indexCount"`
+	Bones            []BlendBoneInfo `json:"bones"`
+	BlendStride      *int            `json:"blendStride,omitempty"`
+	BlendURL         *string         `json:"blendUrl,omitempty"`
+	BlendBytes       int             `json:"blendBytes"`
 }
 
-type TouchPreviewZone struct {
+type TouchPreviewZoneDescriptor struct {
 	TouchZoneSpec
-	Weights []float32 `json:"weights"`
+	WeightOffset int `json:"weightOffset"`
 }
 
-type TouchProfilePreview struct {
-	SessionID   string             `json:"sessionId"`
-	ComponentID string             `json:"componentId"`
-	VertexCount int                `json:"vertexCount"`
-	Positions   []float32          `json:"positions"`
-	Indices     []uint32           `json:"indices"`
-	Zones       []TouchPreviewZone `json:"zones"`
+type TouchProfilePreviewDescriptor struct {
+	SessionID       string                       `json:"sessionId"`
+	ComponentID     string                       `json:"componentId"`
+	PreviewRevision uint64                       `json:"previewRevision"`
+	VertexCount     int                          `json:"vertexCount"`
+	WeightsURL      string                       `json:"weightsUrl"`
+	WeightsCount    int                          `json:"weightsCount"`
+	Zones           []TouchPreviewZoneDescriptor `json:"zones"`
 }
 
 type TouchValidationIssue struct {
