@@ -175,6 +175,8 @@ export default function TouchProfileTool({
   const viewportRef = useRef<BodyShapeViewportHandle | null>(null);
   const draftSessionRef = useRef<string | null>(null);
   const bonePreviewRef = useRef<string | null>(null);
+  const boneHoverRef = useRef<number | null>(null);
+  const channelSelectBoneRef = useRef<number | null>(null);
   const loadGenerationRef = useRef(0);
 
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
@@ -578,6 +580,8 @@ export default function TouchProfileTool({
     setSelectedZoneId(ALL_ZONES);
     setBoneZoneAssignments({});
     bonePreviewRef.current = null;
+    boneHoverRef.current = null;
+    channelSelectBoneRef.current = null;
     viewportRef.current?.updateColors([]);
   };
 
@@ -611,6 +615,10 @@ export default function TouchProfileTool({
       },
     ];
     viewportRef.current?.updateColors(regions);
+  };
+
+  const syncAssignmentBonePreview = () => {
+    handleBoneHighlight(channelSelectBoneRef.current ?? boneHoverRef.current);
   };
 
   // vision-llm disabled — clearVisionCache isolated
@@ -1304,6 +1312,16 @@ export default function TouchProfileTool({
                                           <div
                                             key={`${assignment.boneId}-${ai}`}
                                             className="flex items-center gap-2 rounded-md border border-border/40 px-2 py-1.5"
+                                            onMouseEnter={() => {
+                                              boneHoverRef.current = assignment.boneId;
+                                              syncAssignmentBonePreview();
+                                            }}
+                                            onMouseLeave={() => {
+                                              if (boneHoverRef.current === assignment.boneId) {
+                                                boneHoverRef.current = null;
+                                              }
+                                              syncAssignmentBonePreview();
+                                            }}
                                           >
                                             <span className="min-w-0 flex-1 truncate text-xs font-medium">
                                               {t("page.tools.touch_profile.bone_label", {
@@ -1338,6 +1356,12 @@ export default function TouchProfileTool({
                                                   ),
                                                 }));
                                               }}
+                                              onOpenChange={(open) => {
+                                                channelSelectBoneRef.current = open
+                                                  ? assignment.boneId
+                                                  : null;
+                                                syncAssignmentBonePreview();
+                                              }}
                                             >
                                               <SelectTrigger className="h-7 w-28 text-xs">
                                                 <SelectValue
@@ -1347,29 +1371,31 @@ export default function TouchProfileTool({
                                                 />
                                               </SelectTrigger>
                                               <SelectContent>
-                                                {Array.from(
-                                                  { length: TOUCH_ZONE_CHANNEL_COUNT },
-                                                  (_, ch) => {
-                                                    const otherBone = assignments.find(
-                                                      (a, idx) => idx !== ai && a.channel === ch,
-                                                    );
-                                                    return (
-                                                      <SelectItem
-                                                        key={ch}
-                                                        value={String(ch)}
-                                                        className="text-xs"
-                                                      >
-                                                        {CHANNEL_LABELS[ch]}
-                                                        {otherBone
-                                                          ? ` (${t(
-                                                              "page.tools.touch_profile.bone_label_short",
-                                                              { id: otherBone.boneId },
-                                                            )})`
-                                                          : ""}
-                                                      </SelectItem>
-                                                    );
-                                                  },
-                                                )}
+                                                <SelectGroup>
+                                                  {Array.from(
+                                                    { length: TOUCH_ZONE_CHANNEL_COUNT },
+                                                    (_, ch) => {
+                                                      const otherBone = assignments.find(
+                                                        (a, idx) => idx !== ai && a.channel === ch,
+                                                      );
+                                                      return (
+                                                        <SelectItem
+                                                          key={ch}
+                                                          value={String(ch)}
+                                                          className="text-xs"
+                                                        >
+                                                          {CHANNEL_LABELS[ch]}
+                                                          {otherBone
+                                                            ? ` (${t(
+                                                                "page.tools.touch_profile.bone_label_short",
+                                                                { id: otherBone.boneId },
+                                                              )})`
+                                                            : ""}
+                                                        </SelectItem>
+                                                      );
+                                                    },
+                                                  )}
+                                                </SelectGroup>
                                               </SelectContent>
                                             </Select>
                                             <Input
