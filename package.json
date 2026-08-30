@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "docs:build": "vitepress build docs",
+    "docs:dev": "vitepress dev docs",
+    "docs:preview": "vitepress preview docs",
+    "docs:deploy": "pnpm run docs:build && pnpm exec wrangler pages deploy docs/.vitepress/dist --project-name nahida-desktop-docs --branch main",
     "release": "semantic-release",
     "release:dry-run": "semantic-release --dry-run",
     "release:prepare": "node scripts/release-prepare.mjs",
