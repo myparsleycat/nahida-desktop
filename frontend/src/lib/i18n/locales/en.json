@@ -1727,7 +1727,8 @@
           "0": "From File Explorer",
           "1": "Select folder"
         }
-      }
+      },
+      "select_path_failed": "Failed to select path."
     },
     "download-confirmation-overlay": {
       "title": "Confirm Download",

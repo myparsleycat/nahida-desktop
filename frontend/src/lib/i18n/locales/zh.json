@@ -1693,7 +1693,8 @@
           "0": "从文件资源管理器",
           "1": "选择文件夹"
         }
-      }
+      },
+      "select_path_failed": "选择路径失败。"
     },
     "download-confirmation-overlay": {
       "title": "确认下载",

@@ -8,12 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 interface PathSelectorDialogProps {
   open: boolean;
@@ -67,8 +69,16 @@ export function PathSelectorDialog({
   };
 
   const handleFolderSelect = async () => {
-    await Mod.SelectFolderPath(selectionId);
-    closeWithoutCancel();
+    try {
+      const selected = await Mod.SelectFolderPath(selectionId);
+      if (selected) {
+        closeWithoutCancel();
+      }
+    } catch (error) {
+      Logger.error(error, "PathSelectorDialog:handleFolderSelect");
+      toast.error(t("components.path-selector-dialog.select_path_failed"));
+      closeWithoutCancel();
+    }
   };
 
   const handleModManagerSelect = () => {
@@ -125,7 +135,7 @@ export function PathSelectorDialog({
           <Button
             variant="outline"
             className="flex h-auto flex-col items-center gap-2 p-3 whitespace-normal"
-            onClick={handleFolderSelect}
+            onClickPromise={handleFolderSelect}
           >
             <FolderOpen className="size-8" />
             <div className="flex flex-col items-center text-center">

@@ -1,9 +1,13 @@
 package platform
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestSaveFileCanceledAndPath(t *testing.T) {
@@ -101,5 +105,68 @@ func TestFileFilterPattern(t *testing.T) {
 
 	if got := fileFilterPattern([]string{"txt", ".png", "*.jpg", ""}); got != "*.txt;*.png;*.jpg" {
 		t.Fatalf("pattern = %q", got)
+	}
+}
+
+func TestDialogCancellationSentinel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("save file", func(t *testing.T) {
+		d := NewDialog()
+		d.saveFile = func(SaveFileOptions) (string, error) {
+			return "", fmt.Errorf("native dialog: %w", application.ErrDialogCancelled)
+		}
+		got, err := d.SaveFile(SaveFileOptions{})
+		if err != nil || !got.Canceled || got.FilePath != "" {
+			t.Fatalf("SaveFile() = %+v, %v", got, err)
+		}
+	})
+
+	t.Run("directory", func(t *testing.T) {
+		d := NewDialog()
+		d.selectDirectory = func() (string, error) {
+			return "", application.ErrDialogCancelled
+		}
+		got, err := d.SelectDirectory()
+		if err != nil || !got.Canceled || got.FilePath != "" {
+			t.Fatalf("SelectDirectory() = %+v, %v", got, err)
+		}
+	})
+
+	for _, properties := range [][]string{{"openFile"}, {"openFile", "multiSelections"}} {
+		name := "single open"
+		if len(properties) > 1 {
+			name = "multiple open"
+		}
+		t.Run(name, func(t *testing.T) {
+			d := NewDialog()
+			d.openDialog = func(OpenDialogOptions) ([]string, error) {
+				return nil, application.ErrDialogCancelled
+			}
+			got, err := d.ShowOpenDialog(OpenDialogOptions{Properties: properties})
+			if err != nil || !got.Canceled || got.FilePaths == nil || len(got.FilePaths) != 0 {
+				t.Fatalf("ShowOpenDialog() = %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestDialogPreservesNonCancellationErrors(t *testing.T) {
+	t.Parallel()
+
+	dialogErr := errors.New("native dialog failed")
+	d := NewDialog()
+	d.saveFile = func(SaveFileOptions) (string, error) { return "", dialogErr }
+	d.selectDirectory = func() (string, error) { return "", dialogErr }
+	d.openDialog = func(OpenDialogOptions) ([]string, error) { return nil, dialogErr }
+
+	if _, err := d.SaveFile(SaveFileOptions{}); !errors.Is(err, dialogErr) {
+		t.Fatalf("SaveFile error = %v, want %v", err, dialogErr)
+	}
+	if _, err := d.SelectDirectory(); !errors.Is(err, dialogErr) {
+		t.Fatalf("SelectDirectory error = %v, want %v", err, dialogErr)
+	}
+	if _, err := d.ShowOpenDialog(OpenDialogOptions{}); !errors.Is(err, dialogErr) {
+		t.Fatalf("ShowOpenDialog error = %v, want %v", err, dialogErr)
 	}
 }

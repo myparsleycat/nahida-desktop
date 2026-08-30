@@ -1713,7 +1713,8 @@
           "0": "파일 탐색기에서",
           "1": "폴더를 선택합니다"
         }
-      }
+      },
+      "select_path_failed": "경로 선택에 실패했습니다."
     },
     "download-confirmation-overlay": {
       "title": "다운로드 확인",

@@ -1694,7 +1694,8 @@
           "0": "エクスプローラーから",
           "1": "フォルダーを選択します"
         }
-      }
+      },
+      "select_path_failed": "パスの選択に失敗しました。"
     },
     "download-confirmation-overlay": {
       "title": "ダウンロード確認",

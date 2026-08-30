@@ -93,6 +93,9 @@ func NewDialog() *Dialog {
 
 func (d *Dialog) SaveFile(opts SaveFileOptions) (DialogResult, error) {
 	path, err := d.saveFile(opts)
+	if errors.Is(err, application.ErrDialogCancelled) {
+		return DialogResult{Canceled: true}, nil
+	}
 	if err != nil {
 		return DialogResult{}, err
 	}
@@ -104,6 +107,9 @@ func (d *Dialog) SaveFile(opts SaveFileOptions) (DialogResult, error) {
 
 func (d *Dialog) SelectDirectory() (DialogResult, error) {
 	path, err := d.selectDirectory()
+	if errors.Is(err, application.ErrDialogCancelled) {
+		return DialogResult{Canceled: true}, nil
+	}
 	if err != nil {
 		return DialogResult{}, err
 	}
@@ -115,6 +121,9 @@ func (d *Dialog) SelectDirectory() (DialogResult, error) {
 
 func (d *Dialog) ShowOpenDialog(opts OpenDialogOptions) (OpenDialogResult, error) {
 	paths, err := d.openDialog(opts)
+	if errors.Is(err, application.ErrDialogCancelled) {
+		return OpenDialogResult{Canceled: true, FilePaths: []string{}}, nil
+	}
 	if err != nil {
 		return OpenDialogResult{}, err
 	}

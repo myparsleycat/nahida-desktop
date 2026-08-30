@@ -33,6 +33,22 @@ type pathSelectionOutcome struct {
 	err    error
 }
 
+type folderPathSelectionError struct {
+	stage string
+	path  string
+	err   error
+}
+
+func (e *folderPathSelectionError) Error() string { return e.err.Error() }
+func (e *folderPathSelectionError) Unwrap() error { return e.err }
+
+type folderPathSelectionErrorLog struct {
+	SelectionID string `json:"selectionId"`
+	Stage       string `json:"stage"`
+	Path        string `json:"path,omitempty"`
+	Error       string `json:"error"`
+}
+
 type pathSelectionDialog interface {
 	SaveFile(platform.SaveFileOptions) (platform.DialogResult, error)
 	SelectDirectory() (platform.DialogResult, error)
@@ -134,11 +150,20 @@ func (p *pathSelector) getSelectedPathWithModeModal(
 	}
 }
 
-func (m *Mod) SelectFolderPath(ctx context.Context, selectionID string) error {
-	if m == nil || m.paths == nil {
-		return errors.New("pending selection not found")
+func (m *Mod) SelectFolderPath(ctx context.Context, selectionID string) (bool, error) {
+	if m == nil {
+		return false, newFolderPathSelectionError("lookup", "", errors.New("pending selection not found"))
 	}
-	return m.paths.selectFolderPath(ctx, selectionID)
+	if m.paths == nil {
+		err := newFolderPathSelectionError("lookup", "", errors.New("pending selection not found"))
+		m.logFolderPathSelectionError(selectionID, err)
+		return false, err
+	}
+	selected, err := m.paths.selectFolderPath(ctx, selectionID)
+	if err != nil {
+		m.logFolderPathSelectionError(selectionID, err)
+	}
+	return selected, err
 }
 
 func (m *Mod) SelectModManagerPath(_ context.Context, selectionID, path string, fileName *string) error {
@@ -156,54 +181,90 @@ func (m *Mod) CancelPathSelection(selectionID string) error {
 	return nil
 }
 
-func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string) error {
+func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string) (bool, error) {
 	p.mu.Lock()
 	pending := p.pending[selectionID]
 	p.mu.Unlock()
 	if pending == nil {
-		return errors.New("pending selection not found")
+		return false, newFolderPathSelectionError("lookup", "", errors.New("pending selection not found"))
+	}
+	selectionStage := "select_directory"
+	if pending.selectFile {
+		selectionStage = "select_file"
 	}
 	if p.dialog == nil {
 		err := errors.New("main window not found")
 		p.settle(selectionID, PathSelectorResult{}, err)
-		return err
+		return false, newFolderPathSelectionError(selectionStage, "", err)
 	}
 	if pending.selectFile {
 		result, err := p.dialog.SaveFile(platform.SaveFileOptions{SuggestedName: pending.suggestedName})
 		if err != nil {
 			p.settle(selectionID, PathSelectorResult{}, err)
-			return err
+			return false, newFolderPathSelectionError(selectionStage, "", err)
 		}
 		if result.Canceled {
-			p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: nil}, nil)
-			return nil
+			if !p.hasPending(selectionID) {
+				return false, newFolderPathSelectionError("resume_after_cancel", "", errors.New("pending selection not found"))
+			}
+			return false, nil
 		}
 		dir := filepath.Dir(result.FilePath)
 		name := filepath.Base(result.FilePath)
 		if p.fs != nil && !p.fs.IsPathWritable(dir) {
 			err = errors.New("path is not writable")
 			p.settle(selectionID, PathSelectorResult{}, err)
-			return err
+			return false, newFolderPathSelectionError("validate_file_path", result.FilePath, err)
 		}
-		p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &dir, FileName: &name}, nil)
-		return nil
+		if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &dir, FileName: &name}, nil) {
+			return false, newFolderPathSelectionError("settle_file_path", result.FilePath, errors.New("pending selection not found"))
+		}
+		return true, nil
 	}
 	result, err := p.dialog.SelectDirectory()
 	if err != nil {
 		p.settle(selectionID, PathSelectorResult{}, err)
-		return err
+		return false, newFolderPathSelectionError(selectionStage, "", err)
 	}
 	if result.Canceled {
-		p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: nil}, nil)
-		return nil
+		if !p.hasPending(selectionID) {
+			return false, newFolderPathSelectionError("resume_after_cancel", "", errors.New("pending selection not found"))
+		}
+		return false, nil
 	}
 	if p.fs != nil && !p.fs.IsPathWritable(result.FilePath) {
 		err = errors.New("path is not writable")
 		p.settle(selectionID, PathSelectorResult{}, err)
-		return err
+		return false, newFolderPathSelectionError("validate_directory_path", result.FilePath, err)
 	}
-	p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &result.FilePath}, nil)
-	return nil
+	if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &result.FilePath}, nil) {
+		return false, newFolderPathSelectionError("settle_directory_path", result.FilePath, errors.New("pending selection not found"))
+	}
+	return true, nil
+}
+
+func (m *Mod) logFolderPathSelectionError(selectionID string, err error) {
+	if m == nil || m.log == nil || err == nil {
+		return
+	}
+	entry := folderPathSelectionErrorLog{SelectionID: selectionID, Stage: "unknown", Error: err.Error()}
+	var selectionErr *folderPathSelectionError
+	if errors.As(err, &selectionErr) {
+		entry.Stage = selectionErr.stage
+		entry.Path = selectionErr.path
+		entry.Error = selectionErr.err.Error()
+	}
+	m.log.Error(entry, "Mod:SelectFolderPath")
+}
+
+func newFolderPathSelectionError(stage, path string, err error) error {
+	return &folderPathSelectionError{stage: stage, path: path, err: err}
+}
+
+func (p *pathSelector) hasPending(selectionID string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.pending[selectionID] != nil
 }
 
 func (p *pathSelector) selectModManagerPath(selectionID, path string, fileName *string) error {
