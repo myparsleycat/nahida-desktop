@@ -14,8 +14,7 @@ import (
 var (
 	archiveExtRE   = regexp.MustCompile(`(?i)\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|txz)$`)
 	filenameStarRE = regexp.MustCompile(`(?i)filename\*\s*=\s*(?:UTF-8''|')?([^;]+)`)
-	// RE2 has no backreferences; keep the Electron filename= matcher without \1.
-	filenameRE = regexp.MustCompile(`(?i)filename\s*=\s*"?([^";]+)"?`)
+	filenameRE     = regexp.MustCompile(`(?i)filename\s*=\s*`)
 )
 
 func parseContentLength(contentLength string) *int64 {
@@ -37,8 +36,21 @@ func parseDownloadFileName(rawURL string, sanitize func(string) string, contentD
 			return sanitize(decoded)
 		}
 	}
-	if match := filenameRE.FindStringSubmatch(contentDisposition); len(match) > 1 {
-		return sanitize(strings.TrimSpace(match[1]))
+	for _, location := range filenameRE.FindAllStringIndex(contentDisposition, -1) {
+		value := contentDisposition[location[1]:]
+		if strings.HasPrefix(value, `"`) {
+			value = value[1:]
+			end := strings.IndexAny(value, `";`)
+			if end < 0 || value[end] != '"' {
+				continue
+			}
+			value = value[:end]
+		} else if end := strings.IndexAny(value, `";`); end >= 0 {
+			value = value[:end]
+		}
+		if value = strings.TrimSpace(value); value != "" {
+			return sanitize(value)
+		}
 	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil {

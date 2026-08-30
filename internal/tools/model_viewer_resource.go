@@ -33,9 +33,10 @@ type modelViewerTypedResource struct {
 }
 
 var (
-	modelViewerMihoyoTypedRE = regexp.MustCompile(`(?i)^(.*?)(Position|Blend|Texcoord)(\.\d+)?$`)
-	modelViewerMihoyoBaseRE  = regexp.MustCompile(`(?i)^(.*?)PositionBase(\.\d+)?$`)
-	modelViewerWwmiTypedRE   = regexp.MustCompile(`(?i)^(.*?)(Position|Vector|Blend|Color|TexCoord)Buffer(\.\d+)?$`)
+	modelViewerMihoyoTypedRE    = regexp.MustCompile(`(?i)^(.*?)(Position|Blend|Texcoord)(\.\d+)?$`)
+	modelViewerMihoyoBaseRE     = regexp.MustCompile(`(?i)^(.*?)PositionBase(\.\d+)?$`)
+	modelViewerWwmiTypedRE      = regexp.MustCompile(`(?i)^(.*?)(Position|Vector|Blend|Color|TexCoord)Buffer(\.\d+)?$`)
+	modelViewerPositionSuffixRE = regexp.MustCompile(`^[\w.-]+$`)
 )
 
 func collectModelViewerResources(sections []modINISection) []modelViewerResource {
@@ -177,7 +178,7 @@ func isModelViewerShapePositionVariant(name string) bool {
 		return false
 	}
 	suffix := lower[position+len("position"):]
-	return suffix != "" && suffix != "base" && !strings.HasPrefix(suffix, "base.")
+	return suffix != "" && suffix != "base" && !strings.HasPrefix(suffix, "base.") && modelViewerPositionSuffixRE.MatchString(suffix)
 }
 
 func collectModelViewerWwmiGroups(modDir string, resources []modelViewerResource, cache *modelViewerBufferCache, warn func(string)) ([]modelViewerBufferGroup, error) {

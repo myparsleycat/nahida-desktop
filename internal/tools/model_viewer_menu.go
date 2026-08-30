@@ -223,21 +223,22 @@ func parseModelViewerMenuBranch(lines []string) (string, []any, []ModelViewerMen
 		if assignment == nil {
 			continue
 		}
-		lhs, rhs := modelViewerNormalizeKey(assignment[1]), strings.TrimSpace(assignment[2])
+		lhsRaw := assignment[1]
+		lhs, rhs := modelViewerNormalizeKey(lhsRaw), strings.TrimSpace(assignment[2])
 		var guard *modelViewerMenuGuard
 		if len(stack) > 0 {
 			guard = stack[len(stack)-1].guard
 		}
-		if match := modelViewerMenuFlipRE.FindStringSubmatch(rhs); match != nil && modelViewerNormalizeKey(match[1]) == lhs {
+		if match := modelViewerMenuFlipRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) {
 			variable, values = lhs, modelViewerMenuCycleValues(0, 1)
 			continue
 		}
-		if match := modelViewerMenuIncrModRE.FindStringSubmatch(rhs); match != nil && modelViewerNormalizeKey(match[1]) == lhs {
+		if match := modelViewerMenuIncrModRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) {
 			count, _ := strconv.Atoi(match[2])
 			variable, values = lhs, modelViewerMenuCycleValues(0, count-1)
 			continue
 		}
-		if match := modelViewerMenuIncrRE.FindStringSubmatch(rhs); match != nil && modelViewerNormalizeKey(match[1]) == lhs {
+		if match := modelViewerMenuIncrRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) {
 			variable, values = lhs, modelViewerMenuCycleValues(0, 1)
 			if guard != nil && guard.variable == lhs && (guard.op == "<" || guard.op == "<=") {
 				wrap = &struct {
@@ -247,7 +248,7 @@ func parseModelViewerMenuBranch(lines []string) (string, []any, []ModelViewerMen
 			}
 			continue
 		}
-		if match := modelViewerMenuModRE.FindStringSubmatch(rhs); match != nil && modelViewerNormalizeKey(match[1]) == lhs && variable == lhs {
+		if match := modelViewerMenuModRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) && variable == lhs {
 			count, _ := strconv.Atoi(match[2])
 			values = modelViewerMenuCycleValues(0, count-1)
 			continue

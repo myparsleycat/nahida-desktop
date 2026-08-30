@@ -3,11 +3,8 @@ package drive
 import (
 	"encoding/base64"
 	"net/url"
-	"regexp"
 	"strings"
 )
-
-var whitespace = regexp.MustCompile(`\s+`)
 
 // DriveSource is a parsed Nahida shared-link or collection URL.
 type DriveSource struct {
@@ -85,7 +82,7 @@ func resolveSourceURL(value any, depth int) string {
 	if !ok {
 		return ""
 	}
-	normalized := strings.TrimSpace(s)
+	normalized := trimECMAScriptWhitespace(s)
 	if len(normalized) >= 4 && strings.EqualFold(normalized[:4], "http") {
 		return normalized
 	}
@@ -106,7 +103,7 @@ func resolveSourceURL(value any, depth int) string {
 }
 
 func parseNahidaSourceURL(value string) (DriveSource, bool) {
-	u, err := url.Parse(strings.TrimSpace(value))
+	u, err := url.Parse(trimECMAScriptWhitespace(value))
 	if err != nil {
 		return DriveSource{}, false
 	}
@@ -154,7 +151,12 @@ func matchSourcePath(path, prefix string) string {
 }
 
 func decodeBase64(value string) string {
-	normalized := whitespace.ReplaceAllString(strings.TrimSpace(value), "")
+	normalized := strings.Map(func(char rune) rune {
+		if isECMAScriptWhitespace(char) {
+			return -1
+		}
+		return char
+	}, value)
 	normalized = strings.ReplaceAll(normalized, "-", "+")
 	normalized = strings.ReplaceAll(normalized, "_", "/")
 	if normalized == "" || len(normalized)%4 == 1 || !isStdBase64(normalized) {
@@ -168,7 +170,19 @@ func decodeBase64(value string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(raw))
+	return trimECMAScriptWhitespace(string(raw))
+}
+
+func trimECMAScriptWhitespace(value string) string {
+	return strings.TrimFunc(value, isECMAScriptWhitespace)
+}
+
+func isECMAScriptWhitespace(char rune) bool {
+	return char >= '\u0009' && char <= '\u000D' ||
+		char == '\u0020' || char == '\u00A0' || char == '\u1680' ||
+		char >= '\u2000' && char <= '\u200A' ||
+		char == '\u2028' || char == '\u2029' || char == '\u202F' ||
+		char == '\u205F' || char == '\u3000' || char == '\uFEFF'
 }
 
 func isStdBase64(s string) bool {

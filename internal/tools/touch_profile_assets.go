@@ -361,7 +361,10 @@ func writeTouchFloat32File(path string, values []float32) error {
 }
 
 func touchAssetPrefix(component TouchComponentAnalysis, namespace string) string {
-	kind := regexp.MustCompile(`(?i)position`).ReplaceAllString(component.Name, "")
+	kind := component.Name
+	if location := regexp.MustCompile(`(?i)position`).FindStringIndex(kind); location != nil {
+		kind = kind[:location[0]] + kind[location[1]:]
+	}
 	kind = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(kind, "")
 	if component.Kind == "body" {
 		kind = "Body"

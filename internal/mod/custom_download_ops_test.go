@@ -118,6 +118,9 @@ func TestParseDownloadFileName(t *testing.T) {
 	}{
 		{name: "quoted filename", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename="mod.zip"`, want: "mod.zip"},
 		{name: "unquoted filename", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename=mod.zip`, want: "mod.zip"},
+		{name: "unclosed quoted filename", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename="mod.zip`, want: "fallback.bin"},
+		{name: "semicolon in quoted filename", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename="bad;name"; filename=good.zip`, want: "good.zip"},
+		{name: "first filename wins", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename=first.zip; filename="second.zip"`, want: "first.zip"},
 		{name: "filename star", rawURL: "https://example.test/fallback.bin", disposition: `attachment; filename*=UTF-8''%E6%A8%A1.zip`, want: "模.zip"},
 		{name: "url fallback", rawURL: "https://example.test/path/mod.zip", want: "mod.zip"},
 	}

@@ -158,7 +158,7 @@ func lookupFamilyRoleSection(byName map[string]*familyRoleSection, sectionName, 
 	if section := byName[strings.ToLower(sectionName+suffix)]; section != nil {
 		return section
 	}
-	if sectionName == "" || !isASCIILetter(sectionName[len(sectionName)-1]) {
+	if sectionName == "" || !isASCIIUpper(sectionName[len(sectionName)-1]) {
 		return nil
 	}
 	family := sectionName[:len(sectionName)-1]
@@ -180,7 +180,7 @@ func lookupRoleResource(ibRes, role string, resources []modelViewerResource) str
 		stem = stem[:len(stem)-2]
 	}
 	family := stem
-	if stem != "" && isASCIILetter(stem[len(stem)-1]) {
+	if stem != "" && isASCIIUpper(stem[len(stem)-1]) {
 		family = stem[:len(stem)-1]
 	}
 	candidates := []string{stem + role}
@@ -290,8 +290,8 @@ func familyRoleFromSuffix(suffix string) string {
 	}
 }
 
-func isASCIILetter(value byte) bool {
-	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
+func isASCIIUpper(value byte) bool {
+	return value >= 'A' && value <= 'Z'
 }
 
 func isAllDigits(value string) bool {

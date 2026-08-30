@@ -112,6 +112,28 @@ func TestParseDriveSourceUrlIgnoresWhitespaceAroundUnpaddedBase64(t *testing.T) 
 	}
 }
 
+func TestParseDriveSourceUrlMatchesECMAScriptUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	want := DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}
+	value := "https://nahida.live/akasha/link/qjsEdvLpcAxr"
+	encoded := urlSafeBase64(value)
+	middle := len(encoded) / 2
+	for name, input := range map[string]string{
+		"direct BOM trim":      "\uFEFF" + value + "\uFEFF",
+		"embedded nonbreaking": encoded[:middle] + "\u00A0" + encoded[middle:],
+		"embedded ideographic": encoded[:middle] + "\u3000" + encoded[middle:],
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseDriveSourceUrl(input)
+			if err != nil || got != want {
+				t.Fatalf("got %+v, %v; want %+v", got, err, want)
+			}
+		})
+	}
+}
+
 func TestParseDriveSourceUrlDecodingDepth(t *testing.T) {
 	t.Parallel()
 

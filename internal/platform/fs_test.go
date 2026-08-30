@@ -54,6 +54,24 @@ func TestSanitizeWindowsFilename(t *testing.T) {
 	if got := fs.SanitizeWindowsFilename("a<b", "_"); got != "a_b" {
 		t.Fatalf("custom sanitize = %q", got)
 	}
+	if got := fs.SanitizeWindowsFilename("a<b>c", "$name"); got != "a$nameb$namec" {
+		t.Fatalf("dollar sanitize = %q", got)
+	}
+	if got := fs.SanitizeWindowsFilename("a<b", "$1"); got != "a$1b" {
+		t.Fatalf("capture-like sanitize = %q", got)
+	}
+	if got := fs.SanitizeWindowsFilename("a<b", "$&"); got != "a<b" {
+		t.Fatalf("matched-text sanitize = %q", got)
+	}
+	if got := fs.SanitizeWindowsFilename("a<b", "$$"); got != "a$b" {
+		t.Fatalf("escaped-dollar sanitize = %q", got)
+	}
+	if got := fs.SanitizeWindowsFilename("a<b", "$`"); got != "aab" {
+		t.Fatalf("prefix sanitize = %q", got)
+	}
+	if got := fs.SanitizeWindowsFilename("a<b", "$'"); got != "abb" {
+		t.Fatalf("suffix sanitize = %q", got)
+	}
 	if got := fs.SanitizeWindowsFilename("name...", ""); got != "name" {
 		t.Fatalf("trailing dots = %q", got)
 	}

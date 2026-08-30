@@ -111,13 +111,53 @@ func (f *FS) SanitizeWindowsFilename(input, sanitizeString string) string {
 	if sanitizeString == "" {
 		sanitizeString = " "
 	}
-	sanitized := windowsInvalidChars.ReplaceAllString(input, sanitizeString)
+	sanitized := replaceWindowsInvalidChars(input, sanitizeString)
 	sanitized = strings.TrimSpace(sanitized)
 	sanitized = trailingDots.ReplaceAllString(sanitized, "")
 	if sanitized == "" {
 		return "Untitled"
 	}
 	return sanitized
+}
+
+// replaceWindowsInvalidChars preserves String.replace replacement tokens from
+// the Electron implementation; Go regexp replacement strings use a different
+// $name/$1 grammar even when the expression has no capture groups.
+func replaceWindowsInvalidChars(input, replacement string) string {
+	matches := windowsInvalidChars.FindAllStringIndex(input, -1)
+	if len(matches) == 0 {
+		return input
+	}
+	var result strings.Builder
+	last := 0
+	for _, match := range matches {
+		result.WriteString(input[last:match[0]])
+		for index := 0; index < len(replacement); index++ {
+			if replacement[index] != '$' || index+1 >= len(replacement) {
+				result.WriteByte(replacement[index])
+				continue
+			}
+			switch replacement[index+1] {
+			case '$':
+				result.WriteByte('$')
+				index++
+			case '&':
+				result.WriteString(input[match[0]:match[1]])
+				index++
+			case '`':
+				result.WriteString(input[:match[0]])
+				index++
+			case '\'':
+				result.WriteString(input[match[1]:])
+				index++
+			default:
+				result.WriteByte('$')
+			}
+		}
+		last = match[1]
+	}
+	result.WriteString(input[last:])
+	return result.String()
 }
 
 func (f *FS) SanitizePath(input string) string {
