@@ -3,7 +3,7 @@
 This tool converts mods into static GLB files. You can open the converted GLB in Blender or an online GLB viewer to inspect the model. The model viewer is built on top of the static GLB converter.
 
 ::: info
-The static GLB converter and model viewer currently support only `Genshin Impact`, `Honkai: Star Rail`, `Zenless Zone Zero`, and `Wuthering Waves`.  
+The static GLB converter currently supports `Genshin Impact`, `Honkai: Star Rail`, `Zenless Zone Zero`, and `Wuthering Waves`; the model viewer also supports `Arknights: Endfield`.
 Some mods, especially many animation mods, may not convert correctly.
 :::
 

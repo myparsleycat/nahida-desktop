@@ -16,6 +16,7 @@ The viewer currently supports mods for the following games:
 - `Honkai: Star Rail`
 - `Zenless Zone Zero`
 - `Wuthering Waves`
+- `Arknights: Endfield`
 
 ## Open Model Viewer
 
