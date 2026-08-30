@@ -2,6 +2,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { parseOrientation } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import type { BrushMode } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
+import { createThreeRenderer } from "@renderer/components/tools/three-renderer";
 import {
   applyMultiRegionDeform,
   composeDisplayWeightsInto,
@@ -76,6 +77,8 @@ export type BodyShapeViewportProps = {
 
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
+const bodyShapeRenderer = createThreeRenderer({ alpha: true, antialias: true });
+
 export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeViewportProps>(
   function BodyShapeViewport(props, ref) {
     const controlsRef = useRef<OrbitControlsImpl | null>(null);
@@ -107,7 +110,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
           frameloop="demand"
           camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}
           dpr={Math.min(window.devicePixelRatio, 2)}
-          gl={{ antialias: true, alpha: true }}
+          gl={bodyShapeRenderer}
         >
           <color attach="background" args={["#12141a"]} />
           <ambientLight intensity={0.55} />
