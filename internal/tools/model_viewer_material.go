@@ -13,6 +13,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,13 @@ type modelViewerDecodedTexture struct {
 	highRatio    float64
 	partialRatio float64
 }
+
+type modelViewerTextureTransform string
+
+const (
+	modelViewerTextureTransformPassthrough         modelViewerTextureTransform = ""
+	modelViewerTextureTransformNormalXYReconstruct modelViewerTextureTransform = "normal_xy_reconstruct"
+)
 
 func collectModelViewerTextureBindings(sections []modINISection, variables map[string]any) []modelViewerTextureBinding {
 	lookup := make(map[string]modINISection)
@@ -248,7 +256,14 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 	if err != nil {
 		return nil, err
 	}
-	return encodeModelViewerPreparedTexture(decoded, path, resourceName, format, quality)
+	return encodeModelViewerPreparedTexture(decoded, path, resourceName, modelViewerTextureTransformPassthrough, format, quality)
+}
+
+func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
+	if materialProfile == "zzmi" && role == "normal_map" {
+		return modelViewerTextureTransformNormalXYReconstruct
+	}
+	return modelViewerTextureTransformPassthrough
 }
 
 func modelViewerTextureFileHash(path string) (string, int64, error) {
@@ -351,14 +366,32 @@ func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
 	return cloned
 }
 
-func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, resourceName, format string, quality int) (*modelViewerPreparedTexture, error) {
+func reconstructModelViewerNormalZ(rgba *image.NRGBA) {
+	if rgba == nil {
+		return
+	}
+	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
+		x := float64(rgba.Pix[offset])/127.5 - 1
+		y := float64(rgba.Pix[offset+1])/127.5 - 1
+		z := math.Sqrt(math.Max(0, 1-x*x-y*y))
+		rgba.Pix[offset+2] = uint8(math.Round((z*0.5 + 0.5) * 255))
+	}
+}
+
+func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, resourceName string, transform modelViewerTextureTransform, format string, quality int) (*modelViewerPreparedTexture, error) {
 	if decoded == nil || decoded.rgba == nil {
 		return nil, fmt.Errorf("viewer texture decode produced an invalid image")
 	}
 	rgba := decoded.rgba
 	lowRatio, highRatio, partialRatio := decoded.lowRatio, decoded.highRatio, decoded.partialRatio
-	if modelViewerTextureShouldInvertAlpha(resourceName, decoded) {
+	invertAlpha := modelViewerTextureShouldInvertAlpha(resourceName, decoded)
+	if transform != modelViewerTextureTransformPassthrough || invertAlpha {
 		rgba = cloneModelViewerNRGBA(rgba)
+	}
+	if transform == modelViewerTextureTransformNormalXYReconstruct {
+		reconstructModelViewerNormalZ(rgba)
+	}
+	if invertAlpha {
 		for offset := 3; offset < len(rgba.Pix); offset += 4 {
 			rgba.Pix[offset] = 255 - rgba.Pix[offset]
 		}

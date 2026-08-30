@@ -166,8 +166,9 @@ type modelViewerSession struct {
 }
 
 type modelViewerTextureSettings struct {
-	TextureFormat string
-	JPEGQuality   int
+	TextureFormat   string
+	JPEGQuality     int
+	MaterialProfile string
 }
 
 type modelViewerTexturePayload struct {
@@ -328,6 +329,7 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	for _, work := range textureWorks {
 		textureJobs = append(textureJobs, work.jobs...)
 	}
+	settings.MaterialProfile = transport.MaterialProfile
 	texturesByBatch, textureStats := runModelViewerTextureJobs(ctx, settings, len(textureWorks), textureJobs)
 	stageStartedAt = time.Now()
 	for batchIndex, work := range textureWorks {
@@ -1378,9 +1380,10 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 	format := normalizeModelViewerFormat(settings.TextureFormat)
 	quality := normalizeJPEGQuality(settings.JPEGQuality)
 	type encodeVariant struct {
-		invert  bool
-		format  string
-		quality int
+		invert    bool
+		transform modelViewerTextureTransform
+		format    string
+		quality   int
 	}
 	prepareStartedAt := time.Now()
 	prepareWork := make(chan int)
@@ -1406,14 +1409,15 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 				variants := make(map[encodeVariant]*modelViewerPreparedTexture, 2)
 				for _, job := range group.jobs {
 					variant := encodeVariant{
-						invert:  modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
-						format:  format,
-						quality: quality,
+						invert:    modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
+						transform: modelViewerTextureTransformFor(settings.MaterialProfile, job.role),
+						format:    format,
+						quality:   quality,
 					}
 					texture, exists := variants[variant]
 					if !exists {
 						group.encodes++
-						texture, err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, variant.format, variant.quality)
+						texture, err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, variant.transform, variant.format, variant.quality)
 						if err != nil {
 							texture = nil
 						}
