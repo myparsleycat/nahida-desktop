@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "Nahida Desktop"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "3.1.0"
+    !define INFO_PRODUCTVERSION "3.2.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "© 2026, nahida.live"
