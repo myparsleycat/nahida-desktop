@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -397,7 +398,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		if record.auto {
 			indexCount = len(active) * recordDrawCopies(record)
 		}
-		mesh := modelViewerDirectMesh{id: id, component: component, sectionName: record.sectionName, ibName: state.ib, positionFile: position.Filename, geometry: geometry, conditions: conditions, positionAssignments: []modelViewerDirectPositionAssignment{{conditions: cloneModelViewerDNF(conditions), file: position.Filename, positions: geometry.Position}}, textureAuthored: record.authoredDiffuse, nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse), indexCount: indexCount}
+		mesh := modelViewerDirectMesh{id: id, component: component, sectionName: record.sectionName, ibName: state.ib, positionFile: position.Filename, geometry: geometry, conditions: conditions, textureAuthored: record.authoredDiffuse, nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse), indexCount: indexCount}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		geometryIndexes[geometryKey] = len(output)
 		output = append(output, mesh)
@@ -478,7 +479,7 @@ type modelViewerDirectPositionResourceAssignment struct {
 	conditions       ModelViewerDNF
 }
 
-func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, sections []modINISection, resources []modelViewerResource, modDir string, variables map[string]any, cache *modelViewerBufferCache) error {
+func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, sections []modINISection, resources []modelViewerResource, modDir string, variables map[string]any, _ *modelViewerBufferCache) error {
 	var assignments []modelViewerDirectPositionResourceAssignment
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") || !strings.HasSuffix(strings.ToLower(section.Name), "position") {
@@ -505,27 +506,57 @@ func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, se
 	for meshIndex := range meshes {
 		mesh := &meshes[meshIndex]
 		var variants []modelViewerDirectPositionAssignment
-		files := make(map[string]bool)
+		files := make(map[string]int)
 		for _, assignment := range assignments {
-			if !modelViewerKeyMatches(assignment.target, mesh.component, false) {
+			if !modelViewerKeyMatches(assignment.target, mesh.component, false) || !modelViewerDNFIntersects(mesh.conditions, assignment.conditions) {
 				continue
 			}
 			resource, ok := resourceMap[modelViewerNormalizeKey(assignment.resource)]
 			if !ok || resource.Filename == "" {
 				continue
 			}
-			positions, err := readModelViewerShapePositions(cache, filepath.Join(modDir, filepath.FromSlash(resource.Filename)), resource.Stride, mesh.geometry.SourceIndices, mesh.geometry.VertexCount)
-			if err != nil || len(positions) != len(mesh.geometry.Position) {
+			sourcePath, err := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
+			if err != nil {
 				continue
 			}
-			variants = append(variants, modelViewerDirectPositionAssignment{conditions: assignment.conditions, file: resource.Filename, positions: positions})
-			files[modelViewerNormalizeKey(filepath.ToSlash(resource.Filename))] = true
+			info, err := os.Stat(sourcePath)
+			if err != nil || !info.Mode().IsRegular() {
+				continue
+			}
+			stride := resource.Stride
+			if stride <= 0 {
+				stride = 40
+			}
+			key := modelViewerNormalizeKey(filepath.ToSlash(sourcePath))
+			if existingIndex, exists := files[key]; exists {
+				variants[existingIndex].conditions = modelViewerDNFMergeExact(variants[existingIndex].conditions, assignment.conditions)
+				continue
+			}
+			files[key] = len(variants)
+			variants = append(variants, modelViewerDirectPositionAssignment{conditions: cloneModelViewerDNF(assignment.conditions), sourcePath: sourcePath, stride: stride, sourceBytes: info.Size()})
 		}
-		if len(files) > 1 {
-			mesh.positionAssignments = variants
+		if len(variants) == 1 {
+			basePath, err := resolveModelViewerResourcePath(modDir, modDir, mesh.positionFile)
+			if err == nil && samePathFold(basePath, variants[0].sourcePath) {
+				continue
+			}
 		}
+		mesh.positionAssignments = variants
 	}
 	return nil
+}
+
+func modelViewerDNFMergeExact(left, right ModelViewerDNF) ModelViewerDNF {
+	if modelViewerDNFIsTrue(left) || modelViewerDNFIsTrue(right) {
+		return modelViewerDNFTrue()
+	}
+	output := cloneModelViewerDNF(left)
+	for _, group := range right {
+		if !containsModelViewerDNFGroup(output, group) {
+			output = append(output, append([]ModelViewerDNFClause(nil), group...))
+		}
+	}
+	return output
 }
 
 func appendModelViewerDirectTextureHistory(mesh *modelViewerDirectMesh, assignments []modelViewerDirectTextureAssignment, resourceMap map[string]modelViewerResource) {

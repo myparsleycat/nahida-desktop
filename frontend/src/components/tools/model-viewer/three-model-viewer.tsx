@@ -52,7 +52,14 @@ import type {
 } from "./model-viewer-contract";
 
 import { parseOrientation } from "./model-viewer-contract";
-import { applyPayloadEval, buildPayloadModel } from "./model-viewer-payload";
+import {
+  buildPayloadModel,
+  clearPayloadModelData,
+  commitPayloadEval,
+  type PreparedPayloadEval,
+  preparePayloadEval,
+} from "./model-viewer-payload";
+import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
@@ -237,6 +244,13 @@ function ThreeModelScene({
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
   const applyPayloadVisualsRef = useRef(() => {});
+  const positionLoaderRef = useRef<ModelViewerPositionLoader | null>(null);
+  const payloadEvalAbortRef = useRef<AbortController | null>(null);
+  const payloadEvalGenerationRef = useRef(0);
+  const animationFrameIndexRef = useRef<number | null>(null);
+  const preparedAnimationRingRef = useRef<
+    Array<{ signature: string; prepared: PreparedPayloadEval }>
+  >([]);
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
@@ -335,8 +349,54 @@ function ThreeModelScene({
       const evalResult = Object.keys(animationValues).length
         ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
         : toggleEval;
-      applyPayloadEval(root, evalResult);
-      invalidate();
+      const loader = positionLoaderRef.current;
+      if (!loader) {
+        return;
+      }
+      payloadEvalAbortRef.current?.abort();
+      const controller = new AbortController();
+      payloadEvalAbortRef.current = controller;
+      const generation = ++payloadEvalGenerationRef.current;
+      const signature = payloadEvalSignature(evalResult);
+      const cachedIndex = preparedAnimationRingRef.current.findIndex(
+        (entry) => entry.signature === signature,
+      );
+      const cached =
+        cachedIndex < 0 ? undefined : preparedAnimationRingRef.current.splice(cachedIndex, 1)[0];
+      const commitLatest = (prepared: PreparedPayloadEval) => {
+        if (
+          controller.signal.aborted ||
+          generation !== payloadEvalGenerationRef.current ||
+          root !== modelRootRef.current
+        ) {
+          return;
+        }
+        commitPayloadEval(root, prepared);
+        invalidate();
+        // Defined below to keep the state-transition path together; refs make this
+        // independent of render-time initialization order.
+        // oxlint-disable-next-line react/immutability
+        prefetchAnimationPositions({
+          controller,
+          generation,
+          loader,
+          root,
+          toggleEval,
+          transport,
+        });
+      };
+      if (cached) {
+        commitLatest(cached.prepared);
+        return;
+      }
+      void preparePayloadEval(root, evalResult, loader, controller.signal)
+        .then(commitLatest)
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return;
+          }
+          onErrorRef.current?.(error);
+        });
     };
   }, [invalidate]);
 
@@ -345,6 +405,11 @@ function ThreeModelScene({
     pendingLoadIdRef.current = loadId;
 
     let disposed = false;
+    payloadEvalAbortRef.current?.abort();
+    payloadEvalAbortRef.current = null;
+    preparedAnimationRingRef.current = [];
+    positionLoaderRef.current?.dispose();
+    positionLoaderRef.current = null;
 
     if (activeObjectRef.current) {
       disposeObjectTree(activeObjectRef.current);
@@ -362,10 +427,13 @@ function ThreeModelScene({
     }
 
     if (payloadTransport) {
+      const positionLoader = new ModelViewerPositionLoader();
+      positionLoaderRef.current = positionLoader;
       void buildPayloadModel(
         payloadTransport,
         payloadEvalRef.current ?? { state: {}, meshes: [] },
         true,
+        positionLoader,
       )
         .then((nextRoot) => {
           if (disposed || pendingLoadIdRef.current !== loadId) {
@@ -390,6 +458,10 @@ function ThreeModelScene({
         });
       return () => {
         disposed = true;
+        if (positionLoaderRef.current === positionLoader) {
+          positionLoaderRef.current = null;
+          positionLoader.dispose();
+        }
       };
     }
 
@@ -524,9 +596,12 @@ function ThreeModelScene({
         const clip = animationClipRef.current;
         if (!clip?.frames.length) {
           animationValuesRef.current = {};
+          animationFrameIndexRef.current = null;
         } else {
-          const frame = clip.frames[Math.min(Math.max(index, 0), clip.frames.length - 1)];
+          const frameIndex = Math.min(Math.max(index, 0), clip.frames.length - 1);
+          const frame = clip.frames[frameIndex];
           animationValuesRef.current = frame?.values ?? {};
+          animationFrameIndexRef.current = frameIndex;
         }
         applyPayloadVisualsRef.current();
       },
@@ -621,6 +696,14 @@ function ThreeModelScene({
 
   useEffect(() => {
     return () => {
+      payloadEvalAbortRef.current?.abort();
+      payloadEvalAbortRef.current = null;
+      positionLoaderRef.current?.dispose();
+      positionLoaderRef.current = null;
+      preparedAnimationRingRef.current = [];
+      floatBufferCacheRef.current.clear();
+      uint32BufferCacheRef.current.clear();
+      gl.renderLists.dispose();
       if (activeObjectRef.current) {
         disposeObjectTree(activeObjectRef.current);
         activeObjectRef.current = null;
@@ -631,7 +714,69 @@ function ThreeModelScene({
       lastAppliedShapeKeysRef.current = undefined;
       lastAppliedAnimationSignatureRef.current = null;
     };
-  }, []);
+  }, [gl]);
+
+  function prefetchAnimationPositions({
+    controller,
+    generation,
+    loader,
+    root,
+    toggleEval,
+    transport,
+  }: {
+    controller: AbortController;
+    generation: number;
+    loader: ModelViewerPositionLoader;
+    root: Object3D;
+    toggleEval: NonNullable<typeof payloadEval>;
+    transport: NonNullable<typeof payloadTransport>;
+  }) {
+    const clip = animationClipRef.current;
+    const currentIndex = animationFrameIndexRef.current;
+    if (!clip?.frames.length || currentIndex === null) {
+      preparedAnimationRingRef.current = [];
+      return;
+    }
+    const upcoming = [1, 2].flatMap((offset) => {
+      const candidate = currentIndex + offset;
+      const index =
+        candidate < clip.frames.length
+          ? candidate
+          : clip.loop
+            ? candidate % clip.frames.length
+            : -1;
+      const frame = index < 0 ? undefined : clip.frames[index];
+      if (!frame) {
+        return [];
+      }
+      const evaluated = evaluateViewerState(transport, {
+        ...toggleEval.state,
+        ...frame.values,
+      });
+      return [{ evaluated, signature: payloadEvalSignature(evaluated) }];
+    });
+    for (const { evaluated, signature } of upcoming) {
+      void preparePayloadEval(root, evaluated, loader, controller.signal, true)
+        .then((prepared) => {
+          if (
+            controller.signal.aborted ||
+            generation !== payloadEvalGenerationRef.current ||
+            root !== modelRootRef.current
+          ) {
+            return;
+          }
+          preparedAnimationRingRef.current = [
+            ...preparedAnimationRingRef.current.filter((entry) => entry.signature !== signature),
+            { signature, prepared },
+          ].slice(-2);
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            onErrorRef.current?.(error);
+          }
+        });
+    }
+  }
 
   useEffect(() => {
     if (!modelRoot) {
@@ -1618,6 +1763,21 @@ function waitForNextFrame(): Promise<void> {
   });
 }
 
+function payloadEvalSignature(evalResult: NonNullable<ModelViewerSurfaceProps["payloadEval"]>) {
+  return JSON.stringify(
+    evalResult.meshes.map((mesh) => ({
+      id: mesh.id,
+      visible: mesh.visible,
+      texKey: mesh.texKey,
+      normalMapKey: mesh.normalMapKey,
+      lightMapKey: mesh.lightMapKey,
+      materialMapKey: mesh.materialMapKey,
+      shapeWeights: mesh.shapeWeights,
+      positionVariantIndex: mesh.positionVariantIndex,
+    })),
+  );
+}
+
 function getPerspectiveCameraDistance(
   camera: Camera,
   controls: OrbitControlsImpl | null,
@@ -1644,6 +1804,7 @@ function disposeObjectTree(root: Object3D) {
       material.dispose();
     }
   });
+  clearPayloadModelData(root);
 }
 
 function disposeMaterialTextures(material: MeshStandardMaterial) {

@@ -324,6 +324,29 @@ func newModelViewerBufferCache() *modelViewerBufferCache {
 	return &modelViewerBufferCache{files: make(map[string][]byte), indices: make(map[string][]uint32), geometries: make(map[string]*modelViewerGeometry), pairs: make(map[string]modelViewerPairedBuffers), fmts: make(map[string]modelViewerFmtCacheEntry), interleaved: make(map[string]modelViewerInterleavedBuffers)}
 }
 
+func (c *modelViewerBufferCache) releaseGeometryScratch() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	clear(c.indices)
+	clear(c.geometries)
+	clear(c.pairs)
+	clear(c.fmts)
+	clear(c.interleaved)
+	c.mu.Unlock()
+}
+
+func (c *modelViewerBufferCache) releaseAll() {
+	if c == nil {
+		return
+	}
+	c.releaseGeometryScratch()
+	c.mu.Lock()
+	clear(c.files)
+	c.mu.Unlock()
+}
+
 // fmtLayout caches a resolved vertex layout per lookup key so IBs referenced
 // by several ini files parse their .fmt once per viewer load.
 func (c *modelViewerBufferCache) fmtLayout(key string, build func() (modelViewerFmtLayout, error)) (modelViewerFmtLayout, error) {
