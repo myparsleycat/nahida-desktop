@@ -81,6 +81,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { toTouchProfileMeshPreview, toTouchProfilePreview } from "./touch-profile-payload";
+
 const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
 const DEFAULT_MASK_CURVE = 1;
@@ -360,8 +362,9 @@ export default function TouchProfileTool({
           componentId: activeComponentId,
         });
         if (cancelled) return;
-        setPreview(next as never);
-        setLastValidPreview(next as never);
+        const typedPreview = toTouchProfilePreview(next);
+        setPreview(typedPreview);
+        setLastValidPreview(typedPreview);
       } catch (error) {
         if (cancelled) return;
         setPreviewError(toErrorMessage(error));
@@ -392,7 +395,7 @@ export default function TouchProfileTool({
           componentId: selectedMeshComponentId,
         });
         if (cancelled) return;
-        setMeshPreview(next as never);
+        setMeshPreview(toTouchProfileMeshPreview(next));
       } catch (error) {
         if (cancelled) return;
         setMeshPreviewError(toErrorMessage(error));

@@ -79,7 +79,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ScrollArea } from "../../ui/scroll-area";
-import { toBodyShapeBytes } from "./body-shape-payload";
+import { toBodyShapeBytes, toFloat32Array, toUint32Array } from "./body-shape-payload";
 
 const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
@@ -134,27 +134,6 @@ type SelectionHistoryEntry = {
   before: Float32Array;
   after: Float32Array;
 };
-
-function toFloat32(value: unknown): Float32Array {
-  if (value instanceof Float32Array) return value;
-  if (ArrayBuffer.isView(value)) {
-    return new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4);
-  }
-  if (value instanceof ArrayBuffer) return new Float32Array(value);
-  if (Array.isArray(value)) return Float32Array.from(value as number[]);
-  throw new Error("Invalid positions payload from main process");
-}
-
-function toUint32(value: unknown): Uint32Array | undefined {
-  if (value == null) return undefined;
-  if (value instanceof Uint32Array) return value;
-  if (ArrayBuffer.isView(value)) {
-    return new Uint32Array(value.buffer, value.byteOffset, value.byteLength / 4);
-  }
-  if (value instanceof ArrayBuffer) return new Uint32Array(value);
-  if (Array.isArray(value)) return Uint32Array.from(value as number[]);
-  return undefined;
-}
 
 function nearestVertexToPoint(
   positions: Float32Array,
@@ -250,8 +229,8 @@ function buildLoadedMeshes(
   }>,
 ): LoadedMesh[] {
   return rawMeshes.map((mesh) => {
-    const originalPositions = toFloat32(mesh.positions);
-    const indices = toUint32(mesh.indices);
+    const originalPositions = toFloat32Array(mesh.positions);
+    const indices = toUint32Array(mesh.indices);
     const adjacency = indices ? buildVertexAdjacency(mesh.vertexCount, indices) : undefined;
     const componentIds = adjacency
       ? buildConnectedComponents(mesh.vertexCount, adjacency)

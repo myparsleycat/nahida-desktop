@@ -10,6 +10,27 @@ export function toBodyShapeBytes(value: unknown): Uint8Array | undefined {
     return undefined;
 }
 
+export function toFloat32Array(value: unknown): Float32Array {
+    if (value instanceof Float32Array) return value;
+    if (ArrayBuffer.isView(value)) {
+        return new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4);
+    }
+    if (value instanceof ArrayBuffer) return new Float32Array(value);
+    if (Array.isArray(value)) return Float32Array.from(value as number[]);
+    throw new Error("Invalid float array payload from backend");
+}
+
+export function toUint32Array(value: unknown): Uint32Array | undefined {
+    if (value == null) return undefined;
+    if (value instanceof Uint32Array) return value;
+    if (ArrayBuffer.isView(value)) {
+        return new Uint32Array(value.buffer, value.byteOffset, value.byteLength / 4);
+    }
+    if (value instanceof ArrayBuffer) return new Uint32Array(value);
+    if (Array.isArray(value)) return Uint32Array.from(value as number[]);
+    return undefined;
+}
+
 function decodeBase64Bytes(value: string): Uint8Array | undefined {
     try {
         const decoded = atob(value);
