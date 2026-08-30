@@ -73,7 +73,7 @@ describe("ModelViewerPositionLoader", () => {
         const worker = new FakeWorker();
         const loader = new ModelViewerPositionLoader(worker);
         const pending = loader.load(descriptor, undefined, 2);
-        worker.onerror?.(new ErrorEvent("error", { message: "worker initialization failed" }));
+        worker.onerror?.({ message: "worker initialization failed" } as ErrorEvent);
 
         await expect(pending).rejects.toThrow("worker initialization failed");
         await expect(loader.load(descriptor, undefined, 2)).rejects.toThrow(
