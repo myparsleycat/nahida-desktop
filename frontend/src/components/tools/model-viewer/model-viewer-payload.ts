@@ -19,6 +19,8 @@ import {
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
+import type { PositionVariantLoader } from "./model-viewer-position-loader";
+
 type PayloadMeshUserData = {
     meshId: string;
     basePositions: Float32Array;
@@ -28,8 +30,9 @@ type PayloadMeshUserData = {
         mode?: "midpoint_pair";
         lowPositions?: Float32Array;
     }>;
-    positionVariants: Float32Array[];
-    normalCache: Map<number, Float32Array>;
+    positionVariants: ViewerMeshTransport["positionVariants"];
+    sourceIndicesUrl?: string;
+    normalCache: Array<{ key: number; normal: Float32Array }>;
     materialProfile?: ModViewerTransport["materialProfile"];
     lastPositionVariantIndex?: number | null;
     lastMaps?: {
@@ -42,10 +45,16 @@ type PayloadMeshUserData = {
 
 const textureLoader = new TextureLoader();
 
+export type PreparedPayloadEval = {
+    evalResult: EvaluatedViewerState;
+    positions: Map<string, { variantIndex: number; positions: Float32Array }>;
+};
+
 export async function buildPayloadModel(
     transport: ModViewerTransport,
     evalResult: EvaluatedViewerState,
     doubleSided: boolean,
+    positionLoader: PositionVariantLoader,
 ): Promise<Group> {
     const textureCache = new Map<string, Promise<Texture | null>>();
     const textures = new Map<string, Texture>();
@@ -63,47 +72,97 @@ export async function buildPayloadModel(
     const group = new Group();
     group.userData.payloadTextures = textures;
     const evalById = new Map(evalResult.meshes.map((mesh) => [mesh.id, mesh]));
-    for (const mesh of transport.meshes) {
-        const geometry = await buildGeometry(mesh);
-        const material = new MeshStandardMaterial({
-            color: 0xffffff,
-            metalness: 0.05,
-            roughness: 0.65,
-            side: doubleSided ? DoubleSide : undefined,
-        });
-        const object = new Mesh(geometry, material);
-        object.name = mesh.id;
-        const evaluated = evalById.get(mesh.id);
-        object.visible = evaluated?.visible ?? true;
-        object.userData = {
-            meshId: mesh.id,
-            basePositions: new Float32Array(geometry.attributes.position.array as Float32Array),
-            shapeTargets: await Promise.all(
-                mesh.shapeTargets.map(async (target) => ({
-                    var: target.var,
-                    positions: await fetchFloat32(target.positionsUrl),
-                    mode: target.mode,
-                    lowPositions: target.lowPositionsUrl
-                        ? await fetchFloat32(target.lowPositionsUrl)
-                        : undefined,
-                })),
-            ),
-            positionVariants: await Promise.all(
-                mesh.positionVariants.map((variant) => fetchFloat32(variant.positionsUrl)),
-            ),
-            normalCache: new Map(),
-            materialProfile: transport.materialProfile,
-            lastPositionVariantIndex: null,
-        } satisfies PayloadMeshUserData;
-        applyEvaluatedMesh(object, evaluated, textures);
-        group.add(object);
+    try {
+        for (const mesh of transport.meshes) {
+            const geometry = await buildGeometry(mesh);
+            const material = new MeshStandardMaterial({
+                color: 0xffffff,
+                metalness: 0.05,
+                roughness: 0.65,
+                side: doubleSided ? DoubleSide : undefined,
+            });
+            const object = new Mesh(geometry, material);
+            object.name = mesh.id;
+            const evaluated = evalById.get(mesh.id);
+            object.visible = evaluated?.visible ?? true;
+            group.add(object);
+            object.userData = {
+                meshId: mesh.id,
+                basePositions: new Float32Array(geometry.attributes.position.array as Float32Array),
+                shapeTargets: await Promise.all(
+                    mesh.shapeTargets.map(async (target) => ({
+                        var: target.var,
+                        positions: await fetchFloat32(target.positionsUrl),
+                        mode: target.mode,
+                        lowPositions: target.lowPositionsUrl
+                            ? await fetchFloat32(target.lowPositionsUrl)
+                            : undefined,
+                    })),
+                ),
+                positionVariants: [...mesh.positionVariants],
+                sourceIndicesUrl: mesh.sourceIndicesUrl,
+                normalCache: [],
+                materialProfile: transport.materialProfile,
+            } satisfies PayloadMeshUserData;
+        }
+        commitPayloadEval(group, await preparePayloadEval(group, evalResult, positionLoader));
+        return group;
+    } catch (error) {
+        disposeIncompletePayloadModel(group);
+        throw error;
     }
-    return group;
 }
 
 export function applyPayloadEval(root: Object3D, evalResult: EvaluatedViewerState): void {
+    commitPayloadEval(root, { evalResult, positions: new Map() });
+}
+
+export async function preparePayloadEval(
+    root: Object3D,
+    evalResult: EvaluatedViewerState,
+    positionLoader: PositionVariantLoader,
+    signal?: AbortSignal,
+    forcePositions = false,
+): Promise<PreparedPayloadEval> {
+    const evaluatedById = new Map(evalResult.meshes.map((mesh) => [mesh.id, mesh]));
+    const requests: Array<Promise<[string, { variantIndex: number; positions: Float32Array }]>> =
+        [];
+    root.traverse((object) => {
+        if (!(object instanceof Mesh)) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        const evaluated = evaluatedById.get(userData.meshId);
+        const variantIndex = evaluated?.positionVariantIndex;
+        if (
+            !evaluated?.visible ||
+            variantIndex === null ||
+            variantIndex === undefined ||
+            (!forcePositions && userData.lastPositionVariantIndex === variantIndex)
+        ) {
+            return;
+        }
+        const descriptor = userData.positionVariants[variantIndex];
+        if (!descriptor) {
+            return;
+        }
+        requests.push(
+            positionLoader
+                .load(
+                    descriptor,
+                    userData.sourceIndicesUrl,
+                    userData.basePositions.length / 3,
+                    signal,
+                )
+                .then((positions) => [userData.meshId, { variantIndex, positions }]),
+        );
+    });
+    return { evalResult, positions: new Map(await Promise.all(requests)) };
+}
+
+export function commitPayloadEval(root: Object3D, prepared: PreparedPayloadEval): void {
     const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
-    const evalById = new Map(evalResult.meshes.map((mesh) => [mesh.id, mesh]));
+    const evalById = new Map(prepared.evalResult.meshes.map((mesh) => [mesh.id, mesh]));
     root.traverse((object) => {
         if (!(object instanceof Mesh)) {
             return;
@@ -112,14 +171,56 @@ export function applyPayloadEval(root: Object3D, evalResult: EvaluatedViewerStat
         if (!meshId) {
             return;
         }
-        applyEvaluatedMesh(object, evalById.get(meshId), textures);
+        applyEvaluatedMesh(object, evalById.get(meshId), textures, prepared.positions.get(meshId));
     });
+}
+
+export function clearPayloadModelData(root: Object3D): void {
+    const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
+    for (const texture of textures?.values() ?? []) {
+        texture.dispose();
+    }
+    textures?.clear();
+    delete root.userData.payloadTextures;
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.basePositions = new Float32Array();
+        userData.shapeTargets.length = 0;
+        userData.positionVariants.length = 0;
+        userData.normalCache.length = 0;
+        userData.lastMaps = undefined;
+        userData.lastPositionVariantIndex = undefined;
+    });
+}
+
+function disposeIncompletePayloadModel(root: Object3D): void {
+    root.traverse((object) => {
+        if (!(object instanceof Mesh)) {
+            return;
+        }
+        object.geometry.dispose();
+        for (const material of Array.isArray(object.material)
+            ? object.material
+            : [object.material]) {
+            for (const value of Object.values(material)) {
+                if (value instanceof Texture) {
+                    value.dispose();
+                }
+            }
+            material.dispose();
+        }
+    });
+    clearPayloadModelData(root);
 }
 
 function applyEvaluatedMesh(
     object: Mesh,
     evaluated: EvaluatedViewerState["meshes"][number] | undefined,
     textures?: Map<string, Texture>,
+    preparedPosition?: { variantIndex: number; positions: Float32Array },
 ): void {
     if (!evaluated) {
         return;
@@ -129,7 +230,7 @@ function applyEvaluatedMesh(
         return;
     }
     const userData = object.userData as PayloadMeshUserData;
-    applyPositionVariant(object, userData, evaluated.positionVariantIndex);
+    applyPositionVariant(object, userData, evaluated.positionVariantIndex, preparedPosition);
     const material = object.material;
     if (material instanceof MeshStandardMaterial && textures) {
         applyEvaluatedMaps(material, object, userData, evaluated, textures);
@@ -221,6 +322,7 @@ function applyPositionVariant(
     object: Mesh,
     userData: PayloadMeshUserData,
     variantIndex: number | null,
+    prepared?: { variantIndex: number; positions: Float32Array },
 ): void {
     if (userData.lastPositionVariantIndex === variantIndex) {
         return;
@@ -228,14 +330,19 @@ function applyPositionVariant(
     const next =
         variantIndex === null
             ? userData.basePositions
-            : (userData.positionVariants[variantIndex] ?? userData.basePositions);
+            : prepared?.variantIndex === variantIndex
+              ? prepared.positions
+              : undefined;
+    if (!next || next.length !== userData.basePositions.length) {
+        return;
+    }
     const position = object.geometry.attributes.position;
-    position.array.set(next.length === position.array.length ? next : userData.basePositions);
+    position.array.set(next);
     position.needsUpdate = true;
     userData.lastPositionVariantIndex = variantIndex;
 
     const cacheKey = variantIndex ?? -1;
-    const cached = userData.normalCache.get(cacheKey);
+    const cached = userData.normalCache.find((entry) => entry.key === cacheKey)?.normal;
     const normal = object.geometry.attributes.normal;
     if (cached && normal) {
         normal.array.set(cached);
@@ -245,7 +352,10 @@ function applyPositionVariant(
     // Animation frames reuse these meshes; cache normals instead of recomputing every tick.
     object.geometry.computeVertexNormals();
     if (normal) {
-        userData.normalCache.set(cacheKey, new Float32Array(normal.array as Float32Array));
+        userData.normalCache = [
+            { key: cacheKey, normal: new Float32Array(normal.array as Float32Array) },
+            ...userData.normalCache.filter((entry) => entry.key !== cacheKey),
+        ].slice(0, 2);
     }
 }
 

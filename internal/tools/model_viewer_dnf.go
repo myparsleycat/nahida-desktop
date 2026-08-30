@@ -46,6 +46,24 @@ func modelViewerDNFAnd(left, right ModelViewerDNF) ModelViewerDNF {
 	return output
 }
 
+// modelViewerDNFIntersects reports whether the two expressions select at
+// least one common state. Unlike modelViewerDNFAnd it never materializes the
+// Cartesian product, so it remains exact when either expression has more than
+// maxModelViewerDNFGroups alternatives.
+func modelViewerDNFIntersects(left, right ModelViewerDNF) bool {
+	if len(left) == 0 || len(right) == 0 {
+		return false
+	}
+	for _, leftGroup := range left {
+		for _, rightGroup := range right {
+			if _, possible := simplifyModelViewerDNFGroup(append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...)); possible {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func modelViewerDNFOr(left, right ModelViewerDNF) ModelViewerDNF {
 	if modelViewerDNFIsTrue(left) || modelViewerDNFIsTrue(right) {
 		return modelViewerDNFTrue()

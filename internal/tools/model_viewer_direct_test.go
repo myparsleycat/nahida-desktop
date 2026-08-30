@@ -3,11 +3,14 @@ package tools
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
@@ -146,10 +149,89 @@ format = DXGI_FORMAT_R32_UINT`
 	if len(result.Animations) != 1 || len(result.Meshes) != 1 || len(result.Meshes[0].PositionVariants) != 2 {
 		t.Fatalf("result = %#v", result)
 	}
-	first := readModelViewerProtocolBytes(t, protocol, result.Meshes[0].PositionVariants[0].PositionsURL)
-	second := readModelViewerProtocolBytes(t, protocol, result.Meshes[0].PositionVariants[1].PositionsURL)
+	firstVariant, secondVariant := result.Meshes[0].PositionVariants[0], result.Meshes[0].PositionVariants[1]
+	if firstVariant.Stride != 40 || secondVariant.Stride != 40 || firstVariant.SourceBytes != 120 || secondVariant.SourceBytes != 120 {
+		t.Fatalf("position descriptors = %#v", result.Meshes[0].PositionVariants)
+	}
+	if !strings.HasPrefix(firstVariant.SourceURL, "/protocol/local?") || !strings.HasPrefix(secondVariant.SourceURL, "/protocol/local?") {
+		t.Fatalf("position sources must use local file protocol: %#v", result.Meshes[0].PositionVariants)
+	}
+	if result.Meshes[0].SourceIndicesURL != "" {
+		t.Fatalf("identity source indices URL = %q", result.Meshes[0].SourceIndicesURL)
+	}
+	first := readModelViewerProtocolBytes(t, protocol, firstVariant.SourceURL)
+	second := readModelViewerProtocolBytes(t, protocol, secondVariant.SourceURL)
 	if len(first) < 4 || len(second) < 4 || math.Float32frombits(binary.LittleEndian.Uint32(first)) != 0 || math.Float32frombits(binary.LittleEndian.Uint32(second)) != 10 {
 		t.Fatalf("position variants do not contain the expected frames")
+	}
+}
+
+func TestModelViewerPositionOverridesPruneMutuallyExclusiveMeshes(t *testing.T) {
+	dir := t.TempDir()
+	var ini strings.Builder
+	ini.WriteString("[TextureOverrideBodyPosition]\n")
+	for index := range 20 {
+		if index == 0 {
+			fmt.Fprintf(&ini, "if $swapvar == %d\n", index)
+		} else {
+			fmt.Fprintf(&ini, "elif $swapvar == %d\n", index)
+		}
+		fmt.Fprintf(&ini, "vb0 = ResourcePos%d\n", index)
+	}
+	ini.WriteString("endif\n")
+	for index := range 20 {
+		fmt.Fprintf(&ini, "[ResourcePos%d]\nfilename = pos%d.buf\nstride = 40\n", index, index)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("pos%d.buf", index)), make([]byte, 40), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(ini.String())
+	variables := map[string]any{"swapvar": float64(0)}
+	meshes := make([]modelViewerDirectMesh, 20)
+	for index := range meshes {
+		meshes[index] = modelViewerDirectMesh{
+			component:    "Body",
+			positionFile: fmt.Sprintf("pos%d.buf", index),
+			conditions:   ModelViewerDNF{{{Var: "swapvar", Value: modelViewerString(index)}}},
+			geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
+		}
+	}
+	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+		t.Fatal(err)
+	}
+	for index, mesh := range meshes {
+		if len(mesh.positionAssignments) != 0 {
+			t.Fatalf("mesh %d retained incompatible position assignments: %#v", index, mesh.positionAssignments)
+		}
+	}
+}
+
+func TestReadModelViewerShapePositionsMatchesIdentityAndCompactSources(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "positions.buf")
+	raw := make([]byte, 4*40)
+	for index := range 4 {
+		for component := range 3 {
+			binary.LittleEndian.PutUint32(raw[index*40+component*4:], math.Float32bits(float32(index*10+component)))
+		}
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cache := newModelViewerBufferCache()
+	identity, err := readModelViewerShapePositions(cache, path, 40, nil, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compact, err := readModelViewerShapePositions(cache, path, 40, []uint32{3, 1}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(identity, []float32{0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 31, 32}) {
+		t.Fatalf("identity positions = %v", identity)
+	}
+	if !slices.Equal(compact, []float32{30, 31, 32, 10, 11, 12}) {
+		t.Fatalf("compact positions = %v", compact)
 	}
 }
 
@@ -171,19 +253,112 @@ stride = 40`)
 	variables := map[string]any{"frame": float64(0), "__domain:frame": []any{float64(0), float64(1)}}
 	positions := make([]float32, 9)
 	meshes := []modelViewerDirectMesh{{
-		component: "Body",
+		component:    "Body",
+		positionFile: "pos.buf",
+		conditions:   modelViewerDNFTrue(),
 		geometry: &modelViewerGeometry{
 			Position:      positions,
 			VertexCount:   3,
 			SourceIndices: []uint32{0, 1, 2},
 		},
-		positionAssignments: []modelViewerDirectPositionAssignment{{conditions: modelViewerDNFTrue(), file: "pos.buf", positions: positions}},
 	}}
 	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
 		t.Fatal(err)
 	}
-	if len(meshes[0].positionAssignments) != 1 {
+	if len(meshes[0].positionAssignments) != 0 {
 		t.Fatalf("position assignments = %#v", meshes[0].positionAssignments)
+	}
+}
+
+func TestModelViewerPositionOverridesKeepDistinctPaths(t *testing.T) {
+	dir := t.TempDir()
+	dashedDir := filepath.Join(dir, "a-b")
+	plainDir := filepath.Join(dir, "ab")
+	if err := os.MkdirAll(dashedDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(plainDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dashedPath := filepath.Join(dashedDir, "pos.buf")
+	plainPath := filepath.Join(plainDir, "pos.buf")
+	if err := os.WriteFile(dashedPath, make([]byte, 40), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plainPath, make([]byte, 80), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(`[TextureOverrideBodyPosition]
+if $frame == 0
+vb0 = ResourceDashed
+elif $frame == 1
+vb0 = ResourcePlain
+endif
+[ResourceDashed]
+filename = a-b/pos.buf
+stride = 40
+[ResourcePlain]
+filename = ab/pos.buf
+stride = 40`)
+	variables := map[string]any{"frame": float64(0), "__domain:frame": []any{float64(0), float64(1)}}
+	meshes := []modelViewerDirectMesh{{
+		component:    "Body",
+		positionFile: "base.buf",
+		conditions:   modelViewerDNFTrue(),
+		geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
+	}}
+	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes[0].positionAssignments) != 2 {
+		t.Fatalf("position assignments = %#v", meshes[0].positionAssignments)
+	}
+	sources := make(map[string]int64, len(meshes[0].positionAssignments))
+	for _, assignment := range meshes[0].positionAssignments {
+		sources[filepath.Clean(assignment.sourcePath)] = assignment.sourceBytes
+	}
+	if sources[filepath.Clean(dashedPath)] != 40 || sources[filepath.Clean(plainPath)] != 80 {
+		t.Fatalf("position sources = %#v", sources)
+	}
+}
+
+func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(t *testing.T) {
+	protocol := infra.NewProtocol()
+	service := NewWithOptions(Options{Protocol: protocol})
+	sessionID := protocol.CreateMemorySession()
+	transport := ModelViewerTransport{Meshes: []ModelViewerMeshTransport{{ID: "identity"}, {ID: "compact"}}, Textures: map[string]ModelViewerTextureTransport{}}
+	payloads := []modelViewerMeshPayload{
+		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{0, 1, 2}},
+		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{7, 3, 11}},
+	}
+	if err := writeModelViewerPayload(service, sessionID, &transport, payloads, nil); err != nil {
+		t.Fatal(err)
+	}
+	if transport.Meshes[0].SourceIndicesURL != "" {
+		t.Fatalf("identity mapping URL = %q", transport.Meshes[0].SourceIndicesURL)
+	}
+	got := readModelViewerProtocolBytes(t, protocol, transport.Meshes[1].SourceIndicesURL)
+	if want := modelViewerUint32Bytes([]uint32{7, 3, 11}); string(got) != string(want) {
+		t.Fatalf("source indices = %v, want %v", got, want)
+	}
+}
+
+func TestCleanupModelViewerReleasesMemoryOnlyAfterLastSession(t *testing.T) {
+	protocol := infra.NewProtocol()
+	service := NewWithOptions(Options{Protocol: protocol})
+	first, second := protocol.CreateMemorySession(), protocol.CreateMemorySession()
+	service.modelViewerSessions[first] = &modelViewerSession{}
+	service.modelViewerSessions[second] = &modelViewerSession{}
+	previous := modelViewerFreeOSMemory
+	called := 0
+	modelViewerFreeOSMemory = func() { called++ }
+	t.Cleanup(func() { modelViewerFreeOSMemory = previous })
+
+	if removed, err := service.CleanupModelViewer(context.Background(), first); err != nil || !removed || called != 0 {
+		t.Fatalf("first cleanup = removed %v, err %v, releases %d", removed, err, called)
+	}
+	if removed, err := service.CleanupModelViewer(context.Background(), second); err != nil || !removed || called != 1 {
+		t.Fatalf("last cleanup = removed %v, err %v, releases %d", removed, err, called)
 	}
 }
 

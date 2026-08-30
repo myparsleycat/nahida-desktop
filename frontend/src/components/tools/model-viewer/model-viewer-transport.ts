@@ -83,6 +83,7 @@ export function normalizeModelViewerTransport(
             tangentsUrl: mesh.tangentsUrl,
             uvsUrl: mesh.uvsUrl,
             indicesUrl: mesh.indicesUrl,
+            sourceIndicesUrl: mesh.sourceIndicesUrl,
             conditions: normalizeDNF(mesh.conditions),
             texKey: mesh.texKey,
             textureVariants: (mesh.textureVariants ?? []).map((variant) => ({
@@ -112,7 +113,9 @@ export function normalizeModelViewerTransport(
             })),
             positionVariants: (mesh.positionVariants ?? []).map((variant) => ({
                 conditions: normalizeDNF(variant.conditions),
-                positionsUrl: variant.positionsUrl,
+                sourceUrl: variant.sourceUrl,
+                stride: variant.stride,
+                sourceBytes: variant.sourceBytes,
             })),
         })),
         textures,

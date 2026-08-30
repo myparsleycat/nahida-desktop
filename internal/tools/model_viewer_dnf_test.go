@@ -85,6 +85,19 @@ func TestModelViewerDNFRemovesContradictoryGroup(t *testing.T) {
 	}
 }
 
+func TestModelViewerDNFIntersectsBeyondMaterializationLimit(t *testing.T) {
+	left := make(ModelViewerDNF, maxModelViewerDNFGroups+1)
+	for index := range left {
+		left[index] = []ModelViewerDNFClause{{Var: "frame", Value: modelViewerString(index)}}
+	}
+	if modelViewerDNFIntersects(left, ModelViewerDNF{{{Var: "frame", Value: "999"}}}) {
+		t.Fatal("disjoint expressions must not intersect")
+	}
+	if !modelViewerDNFIntersects(left, ModelViewerDNF{{{Var: "frame", Value: modelViewerString(maxModelViewerDNFGroups)}}}) {
+		t.Fatal("matching expression should intersect")
+	}
+}
+
 func TestModelViewerDNFCoversAssignmentCondition(t *testing.T) {
 	draw := ModelViewerDNF{{{Var: "color", Value: "1"}, {Var: "hair", Value: "0"}}}
 	if !modelViewerDNFCovers(draw, ModelViewerDNF{{{Var: "color", Value: "1"}}}) {

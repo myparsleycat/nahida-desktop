@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,8 +37,10 @@ type ModelViewerShapeTarget struct {
 }
 
 type ModelViewerPositionVariant struct {
-	Conditions   ModelViewerDNF `json:"conditions"`
-	PositionsURL string         `json:"positionsUrl"`
+	Conditions  ModelViewerDNF `json:"conditions"`
+	SourceURL   string         `json:"sourceUrl"`
+	Stride      int            `json:"stride"`
+	SourceBytes int64          `json:"sourceBytes"`
 }
 
 type ModelViewerMeshTransport struct {
@@ -48,6 +51,7 @@ type ModelViewerMeshTransport struct {
 	TangentsURL         string                       `json:"tangentsUrl,omitempty"`
 	UVsURL              string                       `json:"uvsUrl,omitempty"`
 	IndicesURL          string                       `json:"indicesUrl"`
+	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
 	Conditions          ModelViewerDNF               `json:"conditions"`
 	TexKey              *string                      `json:"texKey"`
 	TextureVariants     []ModelViewerTextureVariant  `json:"textureVariants"`
@@ -151,9 +155,10 @@ type modelViewerDirectTextureAssignment struct {
 }
 
 type modelViewerDirectPositionAssignment struct {
-	conditions ModelViewerDNF
-	file       string
-	positions  []float32
+	conditions  ModelViewerDNF
+	sourcePath  string
+	stride      int
+	sourceBytes int64
 }
 
 type modelViewerSession struct {
@@ -173,15 +178,18 @@ type modelViewerTexturePayload struct {
 }
 
 type modelViewerMeshPayload struct {
-	Positions            []float32
-	Normals              []float32
-	Tangents             []float32
-	UVs                  []float32
-	Indices              []uint32
-	ShapePositions       [][]float32
-	ShapeLowPositions    [][]float32
-	PositionVariantBytes [][]float32
+	Positions         []float32
+	Normals           []float32
+	Tangents          []float32
+	UVs               []float32
+	Indices           []uint32
+	ShapePositions    [][]float32
+	ShapeLowPositions [][]float32
+	SourceIndices     []uint32
+	PositionSources   []modelViewerDirectPositionAssignment
 }
+
+var modelViewerFreeOSMemory = debug.FreeOSMemory
 
 func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport ModelViewerTransport, err error) {
 	startedAt := time.Now()
@@ -311,6 +319,11 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 			jobs:     collectModelViewerTextureJobs(len(textureWorks), folder, resources, textureBindings, meshes),
 		})
 	}
+	// Mesh payloads own the extracted attributes from this point onward. Drop
+	// interleaved vertex buffers and geometry caches before texture encoding so
+	// the two peak-memory phases do not overlap.
+	bufferCache.releaseGeometryScratch()
+	runtime.GC()
 	textureJobs := make([]modelViewerTextureJob, 0)
 	for _, work := range textureWorks {
 		textureJobs = append(textureJobs, work.jobs...)
@@ -330,6 +343,8 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 			meshPayloads = append(meshPayloads, payload)
 		}
 	}
+	bufferCache.releaseAll()
+	runtime.GC()
 	meshPayloadMs = time.Since(stageStartedAt).Milliseconds()
 	if t.log != nil {
 		t.log.Info(fmt.Sprintf("Texture encoding completed in %dms (textures=%d)", textureStats.TotalWallMs, textureStats.LogicalTextures), "StaticGlb.loadForViewer")
@@ -459,9 +474,17 @@ func (t *Tools) CleanupModelViewer(_ context.Context, memorySessionID string) (b
 	if exists {
 		delete(t.modelViewerSessions, memorySessionID)
 	}
+	lastSession := exists && len(t.modelViewerSessions) == 0
 	t.modelViewerMu.Unlock()
 	if exists && t.protocol != nil {
 		t.protocol.CleanupMemorySession(memorySessionID)
+	}
+	if lastSession {
+		startedAt := time.Now()
+		modelViewerFreeOSMemory()
+		if t.log != nil {
+			t.log.Info(fmt.Sprintf("Released model viewer memory in %dms (session=%s)", time.Since(startedAt).Milliseconds(), memorySessionID), "StaticGlb.cleanupViewer")
+		}
 	}
 	return exists, nil
 }
@@ -678,7 +701,11 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 			component = task.entry.ib.Name
 		}
 		id := modelViewerNormalizeKey(filepath.Base(iniPath)) + ":" + modelViewerNormalizeKey(component) + ":" + strconv.Itoa(task.drawIndex)
-		return modelViewerDirectMesh{id: id, component: component, sectionName: task.draw.section, ibName: task.entry.ib.Name, positionFile: task.entry.group.VBFilename, geometry: geometry, conditions: conditions}, true
+		positionFile := task.entry.group.VBFilename
+		if len(task.entry.group.SourceFiles) > 0 {
+			positionFile = task.entry.group.SourceFiles[0]
+		}
+		return modelViewerDirectMesh{id: id, component: component, sectionName: task.draw.section, ibName: task.entry.ib.Name, positionFile: positionFile, geometry: geometry, conditions: conditions}, true
 	}
 	if workers := min(len(tasks), runtime.GOMAXPROCS(0)); workers > 1 {
 		work := make(chan int)
@@ -839,19 +866,20 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []modelViewerTextureBinding, availableTextures map[string]modelViewerTexturePayload, shapeKeys []modelViewerShapeKey, cache *modelViewerBufferCache) (ModelViewerMeshTransport, modelViewerMeshPayload) {
 	item := ModelViewerMeshTransport{ID: mesh.id, Component: mesh.component, Conditions: mesh.conditions, TextureVariants: []ModelViewerTextureVariant{}, NormalMapVariants: []ModelViewerTextureVariant{}, LightMapVariants: []ModelViewerTextureVariant{}, MaterialMapVariants: []ModelViewerTextureVariant{}, ShapeTargets: []ModelViewerShapeTarget{}, PositionVariants: []ModelViewerPositionVariant{}}
 	payload := modelViewerMeshPayload{
-		Positions: mesh.geometry.Position,
-		Normals:   mesh.geometry.Normal,
-		Tangents:  mesh.geometry.Tangent,
-		UVs:       mesh.geometry.Texcoord0,
-		Indices:   mesh.geometry.Indices,
+		Positions:     mesh.geometry.Position,
+		Normals:       mesh.geometry.Normal,
+		Tangents:      mesh.geometry.Tangent,
+		UVs:           mesh.geometry.Texcoord0,
+		Indices:       mesh.geometry.Indices,
+		SourceIndices: mesh.geometry.SourceIndices,
 	}
-	if len(mesh.positionAssignments) >= 2 {
+	if len(mesh.positionAssignments) > 0 {
 		for _, assignment := range mesh.positionAssignments {
-			if len(assignment.positions) != len(mesh.geometry.Position) || len(assignment.conditions) == 0 {
+			if assignment.sourcePath == "" || assignment.stride <= 0 || assignment.sourceBytes <= 0 || len(assignment.conditions) == 0 {
 				continue
 			}
-			item.PositionVariants = append(item.PositionVariants, ModelViewerPositionVariant{Conditions: assignment.conditions})
-			payload.PositionVariantBytes = append(payload.PositionVariantBytes, assignment.positions)
+			item.PositionVariants = append(item.PositionVariants, ModelViewerPositionVariant{Conditions: assignment.conditions, Stride: assignment.stride, SourceBytes: assignment.sourceBytes})
+			payload.PositionSources = append(payload.PositionSources, assignment)
 		}
 	}
 	authoredRoles := make(map[string]bool)
@@ -1031,6 +1059,12 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 		if err != nil {
 			return err
 		}
+		if !modelViewerSourceIndicesAreIdentity(payload.SourceIndices) {
+			mesh.SourceIndicesURL, err = write(".source-idx", modelViewerUint32Bytes(payload.SourceIndices))
+			if err != nil {
+				return err
+			}
+		}
 		if payload.Normals != nil {
 			mesh.NormalsURL, err = write(".normal", modelViewerFloat32Bytes(payload.Normals))
 			if err != nil {
@@ -1063,14 +1097,11 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 				return err
 			}
 		}
-		if len(payload.PositionVariantBytes) != len(mesh.PositionVariants) {
+		if len(payload.PositionSources) != len(mesh.PositionVariants) {
 			return fmt.Errorf("model viewer position variant payload count mismatch for %s", mesh.ID)
 		}
 		for variantIndex := range mesh.PositionVariants {
-			mesh.PositionVariants[variantIndex].PositionsURL, err = write(fmt.Sprintf(".posvar.%d", variantIndex), modelViewerFloat32Bytes(payload.PositionVariantBytes[variantIndex]))
-			if err != nil {
-				return err
-			}
+			mesh.PositionVariants[variantIndex].SourceURL = t.protocol.LocalFileURL(payload.PositionSources[variantIndex].sourcePath, true)
 		}
 		return nil
 	}
@@ -1103,6 +1134,18 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 		}
 	}
 	return nil
+}
+
+func modelViewerSourceIndicesAreIdentity(indices []uint32) bool {
+	if len(indices) == 0 {
+		return true
+	}
+	for index, source := range indices {
+		if source != uint32(index) {
+			return false
+		}
+	}
+	return true
 }
 
 func readModelViewerShapePositions(cache *modelViewerBufferCache, path string, stride int, sources []uint32, vertexCount int) ([]float32, error) {

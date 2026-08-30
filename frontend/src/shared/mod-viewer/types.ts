@@ -177,13 +177,16 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
     tangentsUrl?: string;
     uvsUrl?: string;
     indicesUrl: string;
+    sourceIndicesUrl?: string;
     shapeTargets: Array<{
         var: string;
         positionsUrl: string;
         mode?: "midpoint_pair";
         lowPositionsUrl?: string;
     }>;
-    positionVariants: Array<PositionVariant & { positionsUrl: string }>;
+    positionVariants: Array<
+        PositionVariant & { sourceUrl: string; stride: number; sourceBytes: number }
+    >;
 };
 
 export type ModViewerTransport = {
