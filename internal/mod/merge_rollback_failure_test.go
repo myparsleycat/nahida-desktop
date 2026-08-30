@@ -168,16 +168,12 @@ func TestMergeModsLogsOriginalErrorAndRollbackFailures(t *testing.T) {
 		t.Fatalf("second source was not restored: %v", statErr)
 	}
 
-	var record struct {
-		Msg string `json:"msg"`
-	}
-	if err := json.Unmarshal(bytes.TrimSpace(logOutput.Bytes()), &record); err != nil {
-		t.Fatalf("log record = %q: %v", logOutput.String(), err)
-	}
-	_, rawPayload, ok := strings.Cut(record.Msg, "] ")
+	line := string(bytes.TrimSpace(logOutput.Bytes()))
+	_, rest, ok := strings.Cut(line, "] ")
 	if !ok {
-		t.Fatalf("log message has no context prefix: %s", record.Msg)
+		t.Fatalf("log message has no context prefix: %s", line)
 	}
+	rawPayload := rest
 	var payload mergeFailureLog
 	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		t.Fatalf("merge payload = %q: %v", rawPayload, err)
@@ -185,8 +181,12 @@ func TestMergeModsLogsOriginalErrorAndRollbackFailures(t *testing.T) {
 	if payload.Operation != "mod:mergeMods" || payload.Stage != "execute" || payload.Error != "NAMESPACE_MERGE_NEEDS_CHILD" {
 		t.Fatalf("merge payload = %#v", payload)
 	}
+	wantAction := failedPath
+	if home, homeErr := os.UserHomeDir(); homeErr == nil && home != "" {
+		wantAction = strings.ReplaceAll(failedPath, home, "%USERPROFILE%")
+	}
 	if len(payload.RollbackFailures) != 1 ||
-		payload.RollbackFailures[0].Action != failedPath ||
+		payload.RollbackFailures[0].Action != wantAction ||
 		payload.RollbackFailures[0].Error != "simulated output cleanup failure" {
 		t.Fatalf("rollback failure payload = %#v", payload.RollbackFailures)
 	}

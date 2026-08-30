@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,6 +20,12 @@ const (
 	defaultLogMaxSize      = 10 * 1024 * 1024
 	defaultLogRotateEvery  = 7 * 24 * time.Hour
 	defaultLogRotatedFiles = 3
+	userProfileToken       = "%USERPROFILE%"
+)
+
+var (
+	homeNeedlesOnce sync.Once
+	homeNeedles     []string
 )
 
 var levelPriority = map[string]int{
@@ -30,7 +38,7 @@ var levelPriority = map[string]int{
 }
 
 // Log is the Wails-facing logger. It is a small stdlib port of the Electron
-// logger's level filter and JSON line shape, not a pino clone.
+// logger's level filter, writing one plain-text line per record.
 type Log struct {
 	mu          sync.Mutex
 	level       string
@@ -176,10 +184,7 @@ func (l *Log) Log(level string, msg any, where string) {
 	if !shouldWrite(level, l.level) {
 		return
 	}
-	line, err := encodeLogLine(level, msg, where)
-	if err != nil {
-		return
-	}
+	line := encodeLogLine(l.now(), level, msg, where)
 	if l.dest != "" && !l.noFile && !l.fileErr {
 		if l.file == nil {
 			if err := l.openDestLocked(); err != nil {
@@ -333,51 +338,37 @@ func shouldWrite(msgLevel, current string) bool {
 	return mp >= cp
 }
 
-type logErr struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	Stack   string `json:"stack,omitempty"`
-}
-
-type logLine struct {
-	Level string  `json:"level"`
-	Time  int64   `json:"time"`
-	Msg   string  `json:"msg"`
-	Err   *logErr `json:"err,omitempty"`
-}
+const logTimeLayout = "2006-01-02 15:04:05.000"
 
 func encodeDevConsoleLine(msg any, where string) []byte {
-	content := formatLogMsg(msg)
-	if where != "" {
-		if content == "" {
-			return []byte("[" + where + "]\n")
-		}
-		return []byte("[" + where + "] " + content + "\n")
-	}
-	return []byte(content + "\n")
+	return []byte(formatLogContent(msg, where) + "\n")
 }
 
-func encodeLogLine(level string, msg any, where string) ([]byte, error) {
-	content := formatLogMsg(msg)
-	if where != "" {
-		content = "[" + where + "] " + content
+func encodeLogLine(now time.Time, level string, msg any, where string) []byte {
+	content := flattenLogLine(formatLogContent(msg, where))
+	stamp := now.Format(logTimeLayout)
+	level = strings.ToUpper(level)
+	if content == "" {
+		return []byte(stamp + " " + level + "\n")
 	}
-	rec := logLine{
-		Level: level,
-		Time:  time.Now().UnixMilli(),
-		Msg:   content,
+	return []byte(stamp + " " + level + " " + content + "\n")
+}
+
+func formatLogContent(msg any, where string) string {
+	content := redactUserPaths(formatLogMsg(msg), currentHomeNeedles())
+	if where == "" {
+		return content
 	}
-	if err, ok := msg.(error); ok {
-		rec.Err = &logErr{
-			Type:    fmt.Sprintf("%T", err),
-			Message: err.Error(),
-		}
+	if content == "" {
+		return "[" + where + "]"
 	}
-	raw, err := json.Marshal(rec)
-	if err != nil {
-		return nil, err
-	}
-	return append(raw, '\n'), nil
+	return "[" + where + "] " + content
+}
+
+func flattenLogLine(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "\r", " ")
 }
 
 func formatLogMsg(msg any) string {
@@ -398,4 +389,117 @@ func formatLogMsg(msg any) string {
 		}
 		return string(raw)
 	}
+}
+
+func currentHomeNeedles() []string {
+	homeNeedlesOnce.Do(func() {
+		homes := make([]string, 0, 3)
+		if home, err := os.UserHomeDir(); err == nil {
+			homes = append(homes, home)
+		}
+		if profile := os.Getenv("USERPROFILE"); profile != "" {
+			homes = append(homes, profile)
+		}
+		drive := os.Getenv("HOMEDRIVE")
+		path := os.Getenv("HOMEPATH")
+		if drive != "" && path != "" {
+			homes = append(homes, drive+path)
+		}
+		homeNeedles = prepareHomeNeedles(homes)
+	})
+	return homeNeedles
+}
+
+func prepareHomeNeedles(homes []string) []string {
+	seen := make(map[string]struct{}, len(homes)*3)
+	out := make([]string, 0, len(homes)*3)
+	for _, home := range homes {
+		base := normalizeHomePrefix(home)
+		if base == "" {
+			continue
+		}
+		for _, needle := range []string{
+			base,
+			strings.ReplaceAll(base, `\`, `/`),
+			strings.ReplaceAll(base, `\`, `\\`),
+		} {
+			if _, ok := seen[needle]; ok {
+				continue
+			}
+			seen[needle] = struct{}{}
+			out = append(out, needle)
+		}
+	}
+	slices.SortFunc(out, func(a, b string) int {
+		return len(b) - len(a)
+	})
+	return out
+}
+
+func normalizeHomePrefix(home string) string {
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return ""
+	}
+	home = filepath.Clean(home)
+	home = strings.ReplaceAll(home, "/", "\\")
+	home = strings.TrimRight(home, "\\")
+	if home == "" || home == "." {
+		return ""
+	}
+	home = strings.ToLower(home)
+	if len(home) < 3 {
+		return ""
+	}
+	return home
+}
+
+func redactUserPaths(s string, needles []string) string {
+	if s == "" || len(needles) == 0 {
+		return s
+	}
+	var b strings.Builder
+	start := 0
+	changed := false
+	for i := 0; i < len(s); {
+		n := 0
+		for _, needle := range needles {
+			n = matchNeedleAt(s, i, needle)
+			if n > 0 {
+				break
+			}
+		}
+		if n > 0 {
+			if !changed {
+				b.Grow(len(s))
+				changed = true
+			}
+			b.WriteString(s[start:i])
+			b.WriteString(userProfileToken)
+			i += n
+			start = i
+			continue
+		}
+		i++
+	}
+	if !changed {
+		return s
+	}
+	b.WriteString(s[start:])
+	return b.String()
+}
+
+func matchNeedleAt(s string, i int, needle string) int {
+	n := len(needle)
+	if n == 0 || i+n > len(s) {
+		return 0
+	}
+	if !strings.EqualFold(s[i:i+n], needle) {
+		return 0
+	}
+	rest := s[i+n:]
+	if rest == "" || rest[0] == '\\' || rest[0] == '/' {
+		return n
+	}
+	return 0
 }

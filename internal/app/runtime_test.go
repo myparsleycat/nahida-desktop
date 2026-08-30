@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -160,17 +159,12 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read dest: %v", err)
 	}
-	var rec map[string]any
-	line := bytes.TrimSpace(data)
-	if err := json.Unmarshal(line, &rec); err != nil {
-		t.Fatalf("json: %v (%q)", err, line)
+	line := string(bytes.TrimSpace(data))
+	if strings.Contains(line, `"level"`) || strings.HasPrefix(line, "{") {
+		t.Fatalf("wrote JSON: %q", line)
 	}
-	msg, _ := rec["msg"].(string)
-	if !strings.Contains(msg, "visible") || !strings.Contains(msg, "[Boot]") {
-		t.Fatalf("warn msg = %q", msg)
-	}
-	if rec["level"] != "warn" {
-		t.Fatalf("level = %#v", rec["level"])
+	if !strings.Contains(line, " WARN ") || !strings.Contains(line, "[Boot] visible") {
+		t.Fatalf("warn line = %q", line)
 	}
 }
 

@@ -3,7 +3,7 @@ package infra
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestLogFiltersByLevelAndWritesJSON(t *testing.T) {
+func TestLogFiltersByLevelAndWritesPlainText(t *testing.T) {
 	t.Parallel()
 
 	dest := filepath.Join(t.TempDir(), "desktop.log")
@@ -37,19 +37,19 @@ func TestLogFiltersByLevelAndWritesJSON(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("got %d lines, want 1: %q", len(lines), data)
 	}
-	var rec map[string]any
-	if err := json.Unmarshal(lines[0], &rec); err != nil {
-		t.Fatalf("json: %v (%s)", err, lines[0])
+	line := string(lines[0])
+	if strings.Contains(line, `"level"`) || strings.HasPrefix(strings.TrimSpace(line), "{") {
+		t.Fatalf("wrote JSON: %q", line)
 	}
-	msg, _ := rec["msg"].(string)
-	if !strings.Contains(msg, "boom") || !strings.Contains(msg, "[Boot]") {
-		t.Fatalf("msg = %q", msg)
+	if !strings.Contains(line, " ERROR ") || !strings.Contains(line, "[Boot] boom") {
+		t.Fatalf("line = %q", line)
 	}
-	if rec["level"] != "error" {
-		t.Fatalf("level = %#v", rec["level"])
+	stamp := line
+	if i := strings.Index(line, " ERROR "); i >= 0 {
+		stamp = line[:i]
 	}
-	if timestamp, ok := rec["time"].(float64); !ok || timestamp <= 0 {
-		t.Fatalf("time = %#v, want epoch milliseconds", rec["time"])
+	if _, parseErr := time.Parse(logTimeLayout, stamp); parseErr != nil {
+		t.Fatalf("timestamp: %v (%q)", parseErr, line)
 	}
 
 	l.SetLevel("debug")
@@ -62,13 +62,9 @@ func TestLogFiltersByLevelAndWritesJSON(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines after Debug, want 2: %q", len(lines), data)
 	}
-	var debugRec map[string]any
-	if err := json.Unmarshal(lines[1], &debugRec); err != nil {
-		t.Fatalf("debug json: %v", err)
-	}
-	debugMsg, _ := debugRec["msg"].(string)
-	if !strings.Contains(debugMsg, "hello") {
-		t.Fatalf("debug msg = %q", debugMsg)
+	debugLine := string(lines[1])
+	if !strings.Contains(debugLine, " DEBUG ") || !strings.Contains(debugLine, "[Boot] hello") {
+		t.Fatalf("debug line = %q", debugLine)
 	}
 }
 
@@ -92,7 +88,7 @@ func TestLogRotatesBySizeCompressesAndRetainsThreeArchives(t *testing.T) {
 		archive := rotatedLogPath(dest, index)
 		data := readGzipFile(t, archive)
 		if len(nonEmptyLines(data)) != 1 {
-			t.Fatalf("archive %d = %q, want one JSON line", index, data)
+			t.Fatalf("archive %d = %q, want one log line", index, data)
 		}
 	}
 	if _, err := os.Stat(rotatedLogPath(dest, 4)); !os.IsNotExist(err) {
@@ -200,6 +196,114 @@ func TestLogNoDestDoesNotCreateDesktopLog(t *testing.T) {
 	}
 	if buf.Len() == 0 {
 		t.Fatal("expected stderr/writer fallback")
+	}
+}
+
+func TestRedactUserPathsMasksHomePrefix(t *testing.T) {
+	t.Parallel()
+
+	home := `C:\Users\사용자`
+	msg := `[TogglePersist] Error updating mod ini C:\Users\사용자\AppData\Roaming\XXMI Launcher\ZZMI\mods\Character\SampleMod\mod.ini: GetFileAttributesEx C:\Users\사용자\AppData\Roaming\XXMI Launcher\ZZMI\mods\Character\SampleMod\mod.ini: The system cannot find the path specified.`
+	got := redactUserPaths(msg, prepareHomeNeedles([]string{home}))
+	want := `[TogglePersist] Error updating mod ini %USERPROFILE%\AppData\Roaming\XXMI Launcher\ZZMI\mods\Character\SampleMod\mod.ini: GetFileAttributesEx %USERPROFILE%\AppData\Roaming\XXMI Launcher\ZZMI\mods\Character\SampleMod\mod.ini: The system cannot find the path specified.`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRedactUserPathsAcceptsSlashAndCaseVariants(t *testing.T) {
+	t.Parallel()
+
+	home := `C:\Users\사용자`
+	cases := []struct {
+		in, want string
+	}{
+		{`c:/users/사용자/AppData/Roaming/xxmi.ini`, `%USERPROFILE%/AppData/Roaming/xxmi.ini`},
+		{`C:\USERS\사용자\mods\a.ini`, `%USERPROFILE%\mods\a.ini`},
+		{`c:\Users\사용자`, `%USERPROFILE%`},
+		{`prefix C:\Users\사용자`, `prefix %USERPROFILE%`},
+	}
+	for _, tc := range cases {
+		got := redactUserPaths(tc.in, prepareHomeNeedles([]string{home}))
+		if got != tc.want {
+			t.Fatalf("in %q: got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestRedactUserPathsKeepsNonBoundaryMatches(t *testing.T) {
+	t.Parallel()
+
+	home := `C:\Users\사용자`
+	in := `C:\Users\사용자foo\mod.ini and C:\Users\neighbor\file.ini`
+	got := redactUserPaths(in, prepareHomeNeedles([]string{home}))
+	if got != in {
+		t.Fatalf("got %q, want unchanged", got)
+	}
+}
+
+func TestRedactUserPathsLeavesUnrelatedText(t *testing.T) {
+	t.Parallel()
+
+	in := "boom without a path"
+	got := redactUserPaths(in, prepareHomeNeedles([]string{`C:\Users\사용자`}))
+	if got != in {
+		t.Fatalf("got %q, want unchanged", got)
+	}
+}
+
+func TestRedactUserPathsHandlesJSONEscapedSeparators(t *testing.T) {
+	t.Parallel()
+
+	home := `C:\Users\사용자`
+	in := `{"path":"C:\\Users\\사용자\\AppData\\Roaming\\xxmi.ini"}`
+	got := redactUserPaths(in, prepareHomeNeedles([]string{home}))
+	want := `{"path":"%USERPROFILE%\\AppData\\Roaming\\xxmi.ini"}`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestEncodeLogLineRedactsErrorAndStructuredMsg(t *testing.T) {
+	t.Parallel()
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("UserHomeDir unavailable")
+	}
+	path := filepath.Join(home, "AppData", "Roaming", "xxmi.ini")
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+
+	line := encodeLogLine(now, "error", errors.New("update "+path), "TogglePersist")
+	got := string(bytes.TrimSpace(line))
+	if strings.Contains(got, home) {
+		t.Fatalf("line still contains home: %q", got)
+	}
+	if !strings.Contains(got, "%USERPROFILE%") {
+		t.Fatalf("line missing token: %q", got)
+	}
+	if !strings.HasPrefix(got, "2026-08-30 12:00:00.000 ERROR [TogglePersist] update ") {
+		t.Fatalf("line = %q", got)
+	}
+
+	structured := encodeLogLine(now, "error", map[string]any{"path": path}, "Mod")
+	structuredLine := string(bytes.TrimSpace(structured))
+	if strings.Contains(structuredLine, home) || strings.Contains(structuredLine, strings.ReplaceAll(home, `\`, `\\`)) {
+		t.Fatalf("structured line still contains home: %q", structuredLine)
+	}
+	if !strings.Contains(structuredLine, "%USERPROFILE%") {
+		t.Fatalf("structured line missing token: %q", structuredLine)
+	}
+	if !strings.HasPrefix(structuredLine, "2026-08-30 12:00:00.000 ERROR [Mod] ") {
+		t.Fatalf("structured line = %q", structuredLine)
+	}
+
+	console := encodeDevConsoleLine("failed "+path, "Boot")
+	if bytes.Contains(console, []byte(home)) {
+		t.Fatalf("console still contains home: %s", console)
+	}
+	if !bytes.Contains(console, []byte("%USERPROFILE%")) {
+		t.Fatalf("console missing token: %s", console)
 	}
 }
 
