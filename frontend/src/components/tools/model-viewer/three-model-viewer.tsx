@@ -1,5 +1,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { createThreeRenderer } from "@renderer/components/tools/three-renderer";
 import { cn } from "@renderer/lib/utils";
 import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import { evaluateViewerState } from "@shared/mod-viewer/eval";
@@ -75,6 +76,12 @@ const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
+const modelViewerRenderer = createThreeRenderer({
+  mode: "webgl",
+  alpha: true,
+  antialias: true,
+  preserveDrawingBuffer: true,
+});
 
 type LoadedShapeKey = {
   metadata: ModelViewerRealtimeShapeKey;
@@ -174,7 +181,7 @@ export const ThreeModelViewer = memo(
             position: DEFAULT_CAMERA_POSITION.toArray(),
           }}
           dpr={window.devicePixelRatio}
-          gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
+          gl={modelViewerRenderer}
         >
           <ambientLight intensity={lighting.ambient} />
           {lighting.hemisphere > 0 ? (
