@@ -99,8 +99,5 @@ func defaultOpenURL(target string) error {
 }
 
 func defaultOpenPath(target string) error {
-	if app := application.Get(); app != nil {
-		return app.Browser.OpenFile(target)
-	}
-	return openWithHandler(target)
+	return openShellPath(target)
 }
