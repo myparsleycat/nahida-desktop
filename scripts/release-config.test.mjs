@@ -25,12 +25,28 @@ test('publishes only the three documented draft assets', () => {
   ]);
 });
 
-test('does not use npm or git release plugins', () => {
+test('commits source versions without publishing to npm', () => {
   const names = config.plugins.map((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin));
   assert.deepEqual(names, [
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     '@semantic-release/exec',
+    '@semantic-release/git',
     '@semantic-release/github',
   ]);
+  assert.ok(!names.includes('@semantic-release/npm'));
+
+  const git = config.plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === '@semantic-release/git',
+  );
+  assert.deepEqual(git[1], {
+    assets: [
+      'build/config.yml',
+      'build/windows/info.json',
+      'build/windows/wails.exe.manifest',
+      'build/windows/nsis/wails_tools.nsh',
+      'internal/platform/shell.go',
+    ],
+    message: 'chore(release): set version ${nextRelease.version} [skip ci]',
+  });
 });
