@@ -306,6 +306,33 @@ func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
 	}
 }
 
+func TestRemapBodyShapePathUsesCanonicalPaths(t *testing.T) {
+	base := t.TempDir()
+	logicalRoot := filepath.Join(base, "junction", "Character Mod")
+	canonicalRoot := filepath.Join(base, "real", "Character Mod")
+	positionPath := filepath.Join(canonicalRoot, "Meshes", "Position.buf")
+	targetRoot := filepath.Join(base, "Character Mod (Body Shaped)")
+
+	resolve := func(path string) (string, error) {
+		if samePathFold(path, logicalRoot) {
+			return canonicalRoot, nil
+		}
+		return path, nil
+	}
+	got, err := remapBodyShapePathWithResolver(positionPath, logicalRoot, targetRoot, resolve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(targetRoot, "Meshes", "Position.buf")
+	if !samePathFold(got, want) {
+		t.Fatalf("remapped path = %q, want %q", got, want)
+	}
+	outside := filepath.Join(base, "outside", "Position.buf")
+	if _, err := remapBodyShapePathWithResolver(outside, logicalRoot, targetRoot, resolve); err == nil {
+		t.Fatal("canonical path outside the mod root was accepted")
+	}
+}
+
 func TestBodyShapeResourceRejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(filepath.Dir(root), "outside-body.buf")

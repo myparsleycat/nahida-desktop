@@ -861,11 +861,28 @@ func resolveBodyShapeResource(root, relative string) (string, error) {
 }
 
 func remapBodyShapePath(path, sourceRoot, targetRoot string) (string, error) {
+	return remapBodyShapePathWithResolver(path, sourceRoot, targetRoot, filepath.EvalSymlinks)
+}
+
+func remapBodyShapePathWithResolver(
+	path, sourceRoot, targetRoot string,
+	resolve func(string) (string, error),
+) (string, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	relative, err := filepath.Rel(sourceRoot, absolute)
+	root, err := filepath.Abs(sourceRoot)
+	if err != nil {
+		return "", err
+	}
+	comparisonRoot, comparisonPath := root, absolute
+	if realRoot, rootErr := resolve(root); rootErr == nil {
+		if realPath, pathErr := resolve(absolute); pathErr == nil {
+			comparisonRoot, comparisonPath = realRoot, realPath
+		}
+	}
+	relative, err := filepath.Rel(comparisonRoot, comparisonPath)
 	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
 		return "", contractError(fmt.Sprintf("Path is outside mod root: %s", path))
 	}
