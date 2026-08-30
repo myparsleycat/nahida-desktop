@@ -270,6 +270,58 @@ stride = 40`)
 	}
 }
 
+func TestModelViewerPositionOverridesKeepDistinctPaths(t *testing.T) {
+	dir := t.TempDir()
+	dashedDir := filepath.Join(dir, "a-b")
+	plainDir := filepath.Join(dir, "ab")
+	if err := os.MkdirAll(dashedDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(plainDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dashedPath := filepath.Join(dashedDir, "pos.buf")
+	plainPath := filepath.Join(plainDir, "pos.buf")
+	if err := os.WriteFile(dashedPath, make([]byte, 40), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plainPath, make([]byte, 80), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(`[TextureOverrideBodyPosition]
+if $frame == 0
+vb0 = ResourceDashed
+elif $frame == 1
+vb0 = ResourcePlain
+endif
+[ResourceDashed]
+filename = a-b/pos.buf
+stride = 40
+[ResourcePlain]
+filename = ab/pos.buf
+stride = 40`)
+	variables := map[string]any{"frame": float64(0), "__domain:frame": []any{float64(0), float64(1)}}
+	meshes := []modelViewerDirectMesh{{
+		component:    "Body",
+		positionFile: "base.buf",
+		conditions:   modelViewerDNFTrue(),
+		geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
+	}}
+	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes[0].positionAssignments) != 2 {
+		t.Fatalf("position assignments = %#v", meshes[0].positionAssignments)
+	}
+	sources := make(map[string]int64, len(meshes[0].positionAssignments))
+	for _, assignment := range meshes[0].positionAssignments {
+		sources[filepath.Clean(assignment.sourcePath)] = assignment.sourceBytes
+	}
+	if sources[filepath.Clean(dashedPath)] != 40 || sources[filepath.Clean(plainPath)] != 80 {
+		t.Fatalf("position sources = %#v", sources)
+	}
+}
+
 func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(t *testing.T) {
 	protocol := infra.NewProtocol()
 	service := NewWithOptions(Options{Protocol: protocol})

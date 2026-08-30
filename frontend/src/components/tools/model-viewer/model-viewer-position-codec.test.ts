@@ -31,6 +31,14 @@ describe("model viewer position decoder", () => {
         ]);
     });
 
+    it("rejects source indices beyond the available records", () => {
+        const source = positionSource([[1, 2, 3]], 40);
+
+        expect(() => decodeModelViewerPositions(source, 40, new Uint32Array([1]), 1)).toThrow(
+            RangeError,
+        );
+    });
+
     it("keeps the combined raw cache within its byte limit", () => {
         const cache = new ModelViewerByteLRU(10);
         cache.set("first", new ArrayBuffer(6));

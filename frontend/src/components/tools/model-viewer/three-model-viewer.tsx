@@ -452,6 +452,10 @@ function ThreeModelScene({
           if (disposed || pendingLoadIdRef.current !== loadId) {
             return;
           }
+          if (positionLoaderRef.current === positionLoader) {
+            positionLoaderRef.current = null;
+          }
+          positionLoader.dispose();
           activeObjectRef.current = null;
           materialRef.current = [];
           onErrorRef.current?.(error);

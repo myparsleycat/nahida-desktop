@@ -527,7 +527,7 @@ func attachModelViewerDirectPositionOverrides(meshes []modelViewerDirectMesh, se
 			if stride <= 0 {
 				stride = 40
 			}
-			key := modelViewerNormalizeKey(filepath.ToSlash(sourcePath))
+			key := strings.ToLower(filepath.Clean(sourcePath))
 			if existingIndex, exists := files[key]; exists {
 				variants[existingIndex].conditions = modelViewerDNFMergeExact(variants[existingIndex].conditions, assignment.conditions)
 				continue

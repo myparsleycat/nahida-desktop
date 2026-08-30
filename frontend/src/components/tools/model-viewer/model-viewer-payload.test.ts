@@ -52,6 +52,24 @@ function evalState(shapeWeights: Record<string, number>): EvaluatedViewerState {
     };
 }
 
+function variantEval(positionVariantIndex: number | null): EvaluatedViewerState {
+    return {
+        state: {},
+        meshes: [
+            {
+                id: "mesh",
+                visible: true,
+                texKey: null,
+                normalMapKey: null,
+                lightMapKey: null,
+                materialMapKey: null,
+                shapeWeights: {},
+                positionVariantIndex,
+            },
+        ],
+    };
+}
+
 describe("applyPayloadEval midpoint targets", () => {
     it("excludes malformed midpoint endpoints from the deformation divisor", () => {
         const mesh = meshWithTargets(
@@ -275,6 +293,43 @@ describe("lazy payload position variants", () => {
         expect(visible.userData.normalCache).toHaveLength(1);
     });
 
+    it("does not mutate geometry when loading the requested variant fails", async () => {
+        const mesh = meshWithTargets([1, 2, 3], []);
+        mesh.userData.positionVariants = [
+            { conditions: [], sourceUrl: "/broken.buf", stride: 40, sourceBytes: 40 },
+        ];
+        const root = new Group();
+        root.add(mesh);
+        const loader: PositionVariantLoader = {
+            load: async () => {
+                throw new Error("decode failed");
+            },
+        };
+
+        await expect(preparePayloadEval(root, variantEval(0), loader)).rejects.toThrow(
+            "decode failed",
+        );
+        expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([1, 2, 3]);
+        expect(mesh.userData.lastPositionVariantIndex).toBeUndefined();
+    });
+
+    it("ignores prepared positions whose length does not match the geometry", () => {
+        const mesh = meshWithTargets([1, 2, 3], []);
+        const root = new Group();
+        root.add(mesh);
+
+        commitPayloadEval(root, {
+            evalResult: variantEval(0),
+            positions: new Map([
+                ["mesh", { variantIndex: 0, positions: new Float32Array([9, 8]) }],
+            ]),
+        });
+
+        expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([1, 2, 3]);
+        expect(mesh.userData.lastPositionVariantIndex).toBeUndefined();
+        expect(mesh.userData.normalCache).toHaveLength(0);
+    });
+
     it("bounds each mesh normal cache to the current and previous position", () => {
         const mesh = meshWithTargets([0, 0, 0], []);
         mesh.userData.positionVariants = [
@@ -286,21 +341,7 @@ describe("lazy payload position variants", () => {
         root.add(mesh);
         for (let variantIndex = 0; variantIndex < 3; variantIndex++) {
             commitPayloadEval(root, {
-                evalResult: {
-                    state: {},
-                    meshes: [
-                        {
-                            id: "mesh",
-                            visible: true,
-                            texKey: null,
-                            normalMapKey: null,
-                            lightMapKey: null,
-                            materialMapKey: null,
-                            shapeWeights: {},
-                            positionVariantIndex: variantIndex,
-                        },
-                    ],
-                },
+                evalResult: variantEval(variantIndex),
                 positions: new Map([
                     [
                         "mesh",

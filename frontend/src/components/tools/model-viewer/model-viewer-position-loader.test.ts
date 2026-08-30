@@ -21,6 +21,23 @@ const descriptor = {
 };
 
 describe("ModelViewerPositionLoader", () => {
+    it("resolves the request matching the decoded worker message id", async () => {
+        const worker = new FakeWorker();
+        const loader = new ModelViewerPositionLoader(worker);
+        const request = loader.load(descriptor, undefined, 2);
+        const message = worker.messages[0] as { id: number };
+        const positions = new Float32Array([1, 2, 3, 4, 5, 6]);
+
+        worker.onmessage?.(
+            new MessageEvent("message", {
+                data: { type: "decoded", id: message.id, positions: positions.buffer },
+            }),
+        );
+
+        await expect(request).resolves.toEqual(positions);
+        loader.dispose();
+    });
+
     it("cancels pending work and ignores a late worker result", async () => {
         const worker = new FakeWorker();
         const loader = new ModelViewerPositionLoader(worker);

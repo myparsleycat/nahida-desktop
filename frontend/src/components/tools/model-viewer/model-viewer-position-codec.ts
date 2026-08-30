@@ -19,7 +19,9 @@ export function decodeModelViewerPositions(
         const sourceIndex = sourceIndices?.[outputIndex] ?? outputIndex;
         const offset = sourceIndex * stride;
         if (offset + 12 > source.byteLength) {
-            continue;
+            throw new RangeError(
+                `Model viewer position source index ${sourceIndex} exceeds the available source records`,
+            );
         }
         positions[outputIndex * 3] = view.getFloat32(offset, true);
         positions[outputIndex * 3 + 1] = view.getFloat32(offset + 4, true);
