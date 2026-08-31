@@ -18,12 +18,20 @@ const containerStyle: CSSProperties = {
 const itemClassName =
   "relative grid h-14 items-center gap-3 overflow-hidden py-2 pr-4 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]";
 const selectedItemClassName = "bg-[#cecece] dark:bg-[#2a2a2a]";
+const itemStyles = new Map<number, CSSProperties>();
 
 function getItemStyle(depth: number): CSSProperties {
-  return {
+  const cachedStyle = itemStyles.get(depth);
+  if (cachedStyle) {
+    return cachedStyle;
+  }
+
+  const style = {
     ...containerStyle,
     paddingLeft: depth > 0 ? `${depth * 16 + 8}px` : "8px",
   };
+  itemStyles.set(depth, style);
+  return style;
 }
 
 export interface CharacterSidebarRowProps extends CharacterSidebarContentProps {
@@ -81,7 +89,8 @@ export function CharacterSidebarRow({
     getItemKey: (index) => rows[index]?.group.path ?? index,
     getScrollElement: () => viewport,
     estimateSize: useCallback(() => ROW_HEIGHT, []),
-    overscan: 8,
+    overscan: 4,
+    directDomUpdates: true,
   });
 
   const pathToIndex = useMemo(() => {
@@ -180,7 +189,7 @@ export function CharacterSidebarRow({
             key={row.group.path}
             itemRefs={itemRefs}
             group={row.group}
-            onClick={(group, e) => handleItemClick(group, e, row.collapseGroupPath)}
+            onClick={handleItemClick}
             collapseGroupPath={row.collapseGroupPath}
             onDrop={onItemDrop}
             onCreateFolder={onCreateFolder}
@@ -205,8 +214,8 @@ export function CharacterSidebarRow({
 
   return (
     <div
+      ref={rowVirtualizer.containerRef}
       style={{
-        height: `${rowVirtualizer.getTotalSize()}px`,
         width: "100%",
         position: "relative",
       }}
@@ -220,6 +229,7 @@ export function CharacterSidebarRow({
         return (
           <div
             key={virtualRow.key}
+            ref={rowVirtualizer.measureElement}
             data-index={virtualRow.index}
             style={{
               position: "absolute",
@@ -227,13 +237,12 @@ export function CharacterSidebarRow({
               left: 0,
               width: "100%",
               height: `${virtualRow.size}px`,
-              transform: `translateY(${virtualRow.start}px)`,
             }}
           >
             <CharacterSidebarItem
               itemRefs={itemRefs}
               group={row.group}
-              onClick={(group, e) => handleItemClick(group, e, row.collapseGroupPath)}
+              onClick={handleItemClick}
               collapseGroupPath={row.collapseGroupPath}
               onDrop={onItemDrop}
               onCreateFolder={onCreateFolder}

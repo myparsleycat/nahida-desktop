@@ -40,7 +40,7 @@ import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
 
 interface CharacterSidebarItemProps {
   group: FolderGroup;
-  onClick: (group: FolderGroup, e: React.MouseEvent) => void;
+  onClick: (group: FolderGroup, e: React.MouseEvent, collapseGroupPath?: string) => void;
   onDrop?: (group: FolderGroup, paths: string[]) => void;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
@@ -181,7 +181,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     }
 
     userClickedRef.current = true;
-    onClick(group, e);
+    onClick(group, e, collapseGroupPath);
   };
 
   return (
