@@ -8,10 +8,12 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ListHead } from "./mod-list-head";
+import { MOD_LIST_ROW_HEIGHT } from "./mod-list-layout";
 import { ModListRow } from "./mod-list-row";
 
 interface ModListProps {
@@ -21,6 +23,7 @@ interface ModListProps {
 export function ModList(_props: ModListProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
@@ -30,14 +33,35 @@ export function ModList(_props: ModListProps) {
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
-  const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  const mods = useFilteredMods(isPlaceholderData ? [] : activeGroup?.mods || [], searchQuery);
   useModShortcuts(searchQuery, mods);
-  const getModRenderKey = useCallback(
-    (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
-    [selectedGroupPath],
-  );
   const isLoading = isPending || isPlaceholderData;
-  const showSkeleton = useDelayedSkeleton(isLoading);
+  const showDelayedSkeleton = useDelayedSkeleton(isLoading);
+  const showSkeleton = (isPlaceholderData && activeGroup != null) || showDelayedSkeleton;
+  const getRowKey = useCallback(
+    (index: number) => {
+      const modPath = mods[index]?.path;
+      return modPath ? `${selectedGroupPath ?? ""}::${modPath}` : index;
+    },
+    [mods, selectedGroupPath],
+  );
+  const rowVirtualizer = useVirtualizer({
+    count: mods.length,
+    getItemKey: getRowKey,
+    getScrollElement: () => viewport,
+    estimateSize: useCallback(() => MOD_LIST_ROW_HEIGHT, []),
+    overscan: 6,
+    directDomUpdates: true,
+  });
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTo({ top: 0 });
+    rowVirtualizer.scrollToOffset(0);
+  }, [rowVirtualizer, searchQuery, selectedGroupPath, viewport]);
 
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
@@ -68,7 +92,7 @@ export function ModList(_props: ModListProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div role="table" className="flex min-h-0 flex-1 flex-col text-sm">
       {showSkeleton ? (
         <ScrollArea className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-2 p-3">
@@ -79,23 +103,27 @@ export function ModList(_props: ModListProps) {
         </ScrollArea>
       ) : (
         <>
-          <table className="w-full shrink-0 table-auto border-collapse text-sm">
-            <ListHead />
-          </table>
-          <ScrollArea className="min-h-0 flex-1 overflow-y-auto">
-            <div className="relative w-full">
-              <table className="relative w-full table-auto border-collapse text-sm">
-                <tbody>
-                  {mods.map((mod) => (
-                    <ModListRow
-                      key={getModRenderKey(mod)}
-                      mod={mod}
-                      actions={actions}
-                      handleToggle={handleToggle}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          <ListHead />
+          <ScrollArea className="min-h-0 flex-1 overflow-y-auto" viewportRef={setViewport}>
+            <div ref={rowVirtualizer.containerRef} role="rowgroup" className="relative w-full">
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const mod = mods[virtualRow.index];
+                if (!mod) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="absolute top-0 left-0 w-full"
+                    style={{ height: `${virtualRow.size}px` }}
+                  >
+                    <ModListRow mod={mod} actions={actions} handleToggle={handleToggle} />
+                  </div>
+                );
+              })}
             </div>
           </ScrollArea>
         </>

@@ -1558,12 +1558,6 @@
           "backdrop-blur": {
             "title": "使用模糊效果",
             "description": "浏览模组时出现性能问题，请禁用此选项。"
-          },
-          "virtualization": {
-            "title": "使用虚拟化",
-            "description": "通过虚拟化模组列表来提升性能。",
-            "threshold": "阈值模组数量",
-            "thresholdDescription": "模组数量超过设定值时应用虚拟化"
           }
         }
       },

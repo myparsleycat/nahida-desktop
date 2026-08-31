@@ -1591,12 +1591,6 @@
           "backdrop-blur": {
             "title": "Use Blur",
             "description": "Disable this option if performance issues occur while exploring mods"
-          },
-          "virtualization": {
-            "title": "Use Virtualization",
-            "description": "Virtualizes the mod list to improve performance",
-            "threshold": "Threshold Mod Count",
-            "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
           }
         }
       },

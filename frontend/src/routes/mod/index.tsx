@@ -381,9 +381,9 @@ function ModRouteContent() {
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {viewMode === "grid" ? (
-              <ModGrid isDragging={isDragging} />
+              <ModGrid key={selectedGroupPath} isDragging={isDragging} />
             ) : (
-              <ModList isDragging={isDragging} />
+              <ModList key={selectedGroupPath} isDragging={isDragging} />
             )}
 
             {isDragging && (

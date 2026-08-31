@@ -3,6 +3,8 @@ import { useModStore } from "@renderer/store/mod";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { MOD_LIST_GRID_TEMPLATE_COLUMNS } from "./mod-list-layout";
+
 export function ListHead() {
   const sortType = useModStore((s) => s.sortType);
   const setSortType = useModStore((s) => s.setSortType);
@@ -20,10 +22,14 @@ export function ListHead() {
   };
 
   return (
-    <thead className="sticky top-0 z-10 bg-background text-sm">
-      <tr className="h-8">
-        <th className="w-[40px]"></th>
-        <th className="w-full pl-3 text-left align-middle font-normal">
+    <div role="rowgroup" className="shrink-0 bg-background text-sm">
+      <div
+        role="row"
+        className="grid h-8 items-center"
+        style={{ gridTemplateColumns: MOD_LIST_GRID_TEMPLATE_COLUMNS }}
+      >
+        <div role="columnheader" />
+        <div role="columnheader" className="min-w-0 pl-3 text-left font-normal">
           <button
             type="button"
             className="flex w-full flex-row items-center justify-start select-none"
@@ -40,8 +46,8 @@ export function ListHead() {
               {sortType === "name" && sortOrder === "asc" && <ArrowUpIcon size="16" />}
             </div>
           </button>
-        </th>
-        <th className="w-[1%] px-2 align-middle font-normal whitespace-nowrap">
+        </div>
+        <div role="columnheader" className="px-2 font-normal whitespace-nowrap">
           <button
             type="button"
             className="flex w-full flex-row items-center justify-end select-none"
@@ -58,8 +64,8 @@ export function ListHead() {
               {sortType === "size" && sortOrder === "asc" && <ArrowUpIcon size="16" />}
             </div>
           </button>
-        </th>
-        <th className="w-[1%] px-2 pr-3 align-middle font-normal whitespace-nowrap">
+        </div>
+        <div role="columnheader" className="px-2 pr-3 font-normal whitespace-nowrap">
           <button
             type="button"
             className="flex w-full flex-row items-center justify-end select-none"
@@ -76,8 +82,8 @@ export function ListHead() {
               {sortType === "date" && sortOrder === "asc" && <ArrowUpIcon size="16" />}
             </div>
           </button>
-        </th>
-      </tr>
-    </thead>
+        </div>
+      </div>
+    </div>
   );
 }

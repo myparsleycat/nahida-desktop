@@ -1,4 +1,3 @@
-import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
@@ -24,7 +23,6 @@ import {
   type ModGridLayoutMode,
   type SidebarLayoutMode,
 } from "@shared/mod";
-import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -37,8 +35,6 @@ const settingsConfig = {
   archiveExtractPathMode: "mod.archiveExtractPathMode",
   deleteArchiveAfterExtract: "mod.deleteArchiveAfterExtract",
   moveFolderInsteadOfCopy: "mod.moveFolderInsteadOfCopy",
-  virtualizationEnabled: "mod.virtualizationEnabled",
-  virtualizationThreshold: "mod.virtualizationThreshold",
   searchModPreview: "mod.searchModPreview",
   autoResolveDownloadTarget: "mod.autoResolveDownloadTarget",
   autoResolveDownloadTargetSources: "mod.autoResolveDownloadTargetSources",
@@ -57,8 +53,6 @@ function RouteComponent() {
 
 function ModSettingsRouteContent() {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [anim1] = useAutoAnimate({ duration: 150 });
 
   const { settings, update, setSettings, isLoading } = useSettings(settingsConfig);
 
@@ -105,32 +99,6 @@ function ModSettingsRouteContent() {
   if (isLoading) {
     return null;
   }
-
-  const handleVirtualizationEnabledChange = async (checked: boolean) => {
-    try {
-      await update("virtualizationEnabled", checked);
-      void queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleVirtualizationEnabledChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
-
-  const handleVirtualizationThresholdChange = async (value: number) => {
-    if (value < 10) {
-      toast.warning("기준 모드 개수는 10개 이상이어야 합니다.");
-      return;
-    }
-
-    try {
-      await update("virtualizationThreshold", value);
-      toast.success("설정이 저장되었습니다.");
-      void queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleVirtualizationThresholdChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
 
   const handleGridLayoutModeChange = async (mode: ModGridLayoutMode) => {
     if (!MOD_GRID_LAYOUT_MODES.includes(mode)) {
@@ -535,63 +503,6 @@ function ModSettingsRouteContent() {
                 </div>
               )}
             </FieldGroup>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">
-              {t("page.setting.mod.performance.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col space-y-2" ref={anim1}>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold">
-                    {t("page.setting.mod.performance.virtualization.title")}
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.setting.mod.performance.virtualization.description")}
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.virtualizationEnabled}
-                  onCheckedChange={handleVirtualizationEnabledChange}
-                />
-              </div>
-
-              {settings.virtualizationEnabled && (
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-sm font-bold">
-                      {t("page.setting.mod.performance.virtualization.threshold")}
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      {t("page.setting.mod.performance.virtualization.thresholdDescription")}
-                    </p>
-                  </div>
-
-                  <Input
-                    value={settings.virtualizationThreshold}
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        virtualizationThreshold: Number(e.target.value),
-                      }))
-                    }
-                    onBlur={(e) => handleVirtualizationThresholdChange(Number(e.target.value))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    className="w-20"
-                    disabled={!settings.virtualizationEnabled}
-                  />
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
       </div>

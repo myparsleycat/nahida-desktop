@@ -372,20 +372,6 @@ func (s *Setting) SetMoveFolderInsteadOfCopy(ctx context.Context, enabled bool) 
 	return s.Set(ctx, KeyModMoveFolderInsteadOfCopy, enabled)
 }
 
-func (s *Setting) GetVirtualizationEnabled(ctx context.Context) (bool, error) {
-	return s.getBool(ctx, KeyModVirtualizationEnabled)
-}
-func (s *Setting) SetVirtualizationEnabled(ctx context.Context, enabled bool) error {
-	return s.Set(ctx, KeyModVirtualizationEnabled, enabled)
-}
-
-func (s *Setting) GetVirtualizationThreshold(ctx context.Context) (int, error) {
-	return s.getInt(ctx, KeyModVirtualizationThreshold)
-}
-func (s *Setting) SetVirtualizationThreshold(ctx context.Context, threshold int) error {
-	return s.Set(ctx, KeyModVirtualizationThreshold, threshold)
-}
-
 func (s *Setting) GetGridLayoutMode(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModGridLayoutMode)
 }

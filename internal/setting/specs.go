@@ -165,30 +165,6 @@ func buildSpecs() map[string]spec {
 		KeyModArchiveExtractPathMode:    enumSpec(definitionsByKey[KeyModArchiveExtractPathMode], defaultArchiveExtractPath, archiveExtractPathModes),
 		KeyModDeleteArchiveAfterExtract: boolSpec(definitionsByKey[KeyModDeleteArchiveAfterExtract], true),
 		KeyModMoveFolderInsteadOfCopy:   boolSpec(definitionsByKey[KeyModMoveFolderInsteadOfCopy], true),
-		KeyModVirtualizationEnabled:     boolSpec(definitionsByKey[KeyModVirtualizationEnabled], true),
-		KeyModVirtualizationThreshold: {
-			def: definitionsByKey[KeyModVirtualizationThreshold],
-			getDefault: func(*Setting) any {
-				return defaultVirtualizationThreshold
-			},
-			fromStored: func(_ *Setting, value *string) any {
-				return virtualizationThresholdFromStored(value)
-			},
-			normalize: func(_ *Setting, value any) any {
-				n, ok := asFloat(value)
-				if !ok {
-					return defaultVirtualizationThreshold
-				}
-				return clampVirtualizationThreshold(n)
-			},
-			toStored: func(_ *Setting, value any) string {
-				n, ok := asFloat(value)
-				if !ok {
-					return formatInt(defaultVirtualizationThreshold)
-				}
-				return formatInt(clampVirtualizationThreshold(n))
-			},
-		},
 		KeyModSearchModPreview:          boolSpec(definitionsByKey[KeyModSearchModPreview], false),
 		KeyModAutoResolveDownloadTarget: boolSpec(definitionsByKey[KeyModAutoResolveDownloadTarget], false),
 		KeyModAutoResolveDownloadTargetSources: {

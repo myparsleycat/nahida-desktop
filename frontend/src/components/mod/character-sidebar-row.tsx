@@ -1,4 +1,3 @@
-import { useVirtualizationSettings } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -66,7 +65,6 @@ export function CharacterSidebarRow({
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const lastScrolledPathRef = useRef<string | null>(null);
   const skipNextScrollRef = useRef(false);
-  const { data: vSettings } = useVirtualizationSettings();
   const isSearching = searchTerm.trim().length > 0;
 
   const rows = useCharacterSidebarVisibleRows(
@@ -81,11 +79,8 @@ export function CharacterSidebarRow({
     onVisibleRowsChange?.(rows.map((row) => ({ path: row.group.path, group: row.group })));
   }, [onVisibleRowsChange, rows]);
 
-  const isVirtualizationEnabled =
-    (vSettings?.enabled ?? true) && rows.length >= (vSettings?.threshold ?? 30);
-
   const rowVirtualizer = useVirtualizer({
-    count: isVirtualizationEnabled ? rows.length : 0,
+    count: rows.length,
     getItemKey: (index) => rows[index]?.group.path ?? index,
     getScrollElement: () => viewport,
     estimateSize: useCallback(() => ROW_HEIGHT, []),
@@ -108,19 +103,10 @@ export function CharacterSidebarRow({
         return false;
       }
 
-      if (isVirtualizationEnabled) {
-        rowVirtualizer.scrollToIndex(index, { align: "center" });
-        return true;
-      }
-
-      const element = itemRefs.current.get(path)?.element;
-      if (!element) {
-        return false;
-      }
-      element.scrollIntoView({ behavior: "auto", block: "center" });
+      rowVirtualizer.scrollToIndex(index, { align: "center" });
       return true;
     },
-    [isVirtualizationEnabled, itemRefs, pathToIndex, rowVirtualizer],
+    [pathToIndex, rowVirtualizer],
   );
 
   useEffect(() => {
@@ -176,37 +162,6 @@ export function CharacterSidebarRow({
       <div className="flex flex-col">
         {Array.from({ length: 8 }).map((_, index) => (
           <CharacterSidebarItemSkeleton key={index.toString()} layout="row" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!isVirtualizationEnabled) {
-    return (
-      <div className="flex flex-col">
-        {rows.map((row) => (
-          <CharacterSidebarItem
-            key={row.group.path}
-            itemRefs={itemRefs}
-            group={row.group}
-            onClick={handleItemClick}
-            collapseGroupPath={row.collapseGroupPath}
-            onDrop={onItemDrop}
-            onCreateFolder={onCreateFolder}
-            onDeleteFolder={onDeleteFolder}
-            onManualSubGroupChange={onManualSubGroupChange}
-            depth={row.depth}
-            previewCacheKey={previewCacheKey}
-            layout="row"
-            parentGroupName={row.parentGroupName}
-            itemClassName={itemClassName}
-            selectedItemClassName={selectedItemClassName}
-            itemStyle={getItemStyle(row.depth)}
-            showWuwaFixer={showWuwaFixer}
-            onOpenWuwaFixer={onOpenWuwaFixer}
-            forceSelectOnClick={isSearching}
-            autoScrollOnSelect={false}
-          />
         ))}
       </div>
     );

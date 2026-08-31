@@ -8,11 +8,13 @@ import type { ModInfo } from "@renderer/types/mod";
 import { stripDisabledPrefix } from "@shared/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { FolderIcon } from "lucide-react";
+import { memo } from "react";
 
 import { ModContextMenu } from "./mod-context-menu";
+import { MOD_LIST_GRID_TEMPLATE_COLUMNS } from "./mod-list-layout";
 import { getModColorClass } from "./utils";
 
-export function ModListRow({
+export const ModListRow = memo(function ModListRow({
   mod,
   actions,
   handleToggle,
@@ -27,13 +29,15 @@ export function ModListRow({
 
   return (
     <ModContextMenu mod={mod} actions={actions}>
-      <tr
+      <div
+        role="row"
         className={cn(
-          "group relative cursor-pointer border-b border-transparent transition-colors",
+          "group relative grid h-14 cursor-pointer items-center border-b border-transparent transition-colors",
           getModColorClass(mod.isEnabled),
           isMergeSelected && "ring-2 ring-primary ring-inset",
           "after:pointer-events-none after:absolute after:inset-0 hover:after:bg-black/10 dark:hover:after:bg-white/10",
         )}
+        style={{ gridTemplateColumns: MOD_LIST_GRID_TEMPLATE_COLUMNS }}
         onClick={(e) => {
           const target = e.target as HTMLElement;
           if (target.closest("button") || target.closest(".preview-trigger")) {
@@ -42,7 +46,7 @@ export function ModListRow({
           handleToggle(mod, e);
         }}
       >
-        <td className="w-10 py-2 pl-2 text-center align-middle">
+        <div role="cell" className="flex items-center justify-center py-2 pl-2 text-center">
           {mod.preview ? (
             <PreviewLightbox
               className="preview-trigger flex size-10 shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-sm bg-secondary"
@@ -55,19 +59,19 @@ export function ModListRow({
               <FolderIcon className="size-5 text-muted-foreground" />
             </div>
           )}
-        </td>
-        <td className="w-full max-w-0 p-2 text-left align-middle">
+        </div>
+        <div role="cell" className="min-w-0 p-2 text-left">
           <span className="block w-full truncate text-left font-medium">
             {stripDisabledPrefix(mod.name)}
           </span>
-        </td>
-        <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-muted-foreground">
+        </div>
+        <div role="cell" className="p-2 text-right whitespace-nowrap text-muted-foreground">
           {formatSize(mod.size || 0)}
-        </td>
-        <td className="w-[1%] p-2 pr-3 text-right align-middle whitespace-nowrap text-muted-foreground">
+        </div>
+        <div role="cell" className="p-2 pr-3 text-right whitespace-nowrap text-muted-foreground">
           {formatDate(new Date(mod.mtime), i18n.language)}
-        </td>
-      </tr>
+        </div>
+      </div>
     </ModContextMenu>
   );
-}
+});

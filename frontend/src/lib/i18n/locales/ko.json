@@ -1577,12 +1577,6 @@
           "backdrop-blur": {
             "title": "블러 사용",
             "description": "모드 탐색시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
-          },
-          "virtualization": {
-            "title": "가상화 사용",
-            "description": "모드 목록을 가상화하여 성능을 향상시킵니다",
-            "threshold": "기준 모드 개수",
-            "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
           }
         }
       },

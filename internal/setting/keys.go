@@ -19,8 +19,6 @@ const (
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
 	KeyModMoveFolderInsteadOfCopy          = "mod.moveFolderInsteadOfCopy"
-	KeyModVirtualizationEnabled            = "mod.virtualizationEnabled"
-	KeyModVirtualizationThreshold          = "mod.virtualizationThreshold"
 	KeyModSearchModPreview                 = "mod.searchModPreview"
 	KeyModAutoResolveDownloadTarget        = "mod.autoResolveDownloadTarget"
 	KeyModAutoResolveDownloadTargetSources = "mod.autoResolveDownloadTargetSources"
@@ -96,8 +94,6 @@ var allDefinitions = []Definition{
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},
 	{KeyModMoveFolderInsteadOfCopy, ScopeMod, "mod_move_folder_instead_of_copy"},
-	{KeyModVirtualizationEnabled, ScopeMod, "mod_virtualization_enabled"},
-	{KeyModVirtualizationThreshold, ScopeMod, "mod_virtualization_threshold"},
 	{KeyModSearchModPreview, ScopeMod, "mod_search_mod_preview"},
 	{KeyModAutoResolveDownloadTarget, ScopeMod, "mod_auto_resolve_download_target"},
 	{KeyModAutoResolveDownloadTargetSources, ScopeMod, "mod_auto_resolve_download_target_sources"},

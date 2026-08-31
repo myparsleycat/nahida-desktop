@@ -127,27 +127,6 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
     };
 }
 
-export function useVirtualizationSettings() {
-    const keys = ["mod.virtualizationEnabled", "mod.virtualizationThreshold"] as const;
-    const queryKey = settingsManyQueryKey(keys);
-
-    useInvalidateOnSettingUpdate(keys, queryKey);
-
-    return useQuery({
-        queryKey,
-        queryFn: async () => {
-            const settings = await getSetting(keys);
-
-            return {
-                enabled: settings["mod.virtualizationEnabled"],
-                threshold: settings["mod.virtualizationThreshold"],
-            };
-        },
-        staleTime: Number.POSITIVE_INFINITY,
-        refetchOnWindowFocus: false,
-    });
-}
-
 export function useModGridLayoutSettings() {
     const keys = [
         "mod.gridLayoutMode",

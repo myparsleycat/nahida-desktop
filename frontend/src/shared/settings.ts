@@ -24,8 +24,6 @@ export interface AppSettings {
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
     "mod.moveFolderInsteadOfCopy": boolean;
-    "mod.virtualizationEnabled": boolean;
-    "mod.virtualizationThreshold": number;
     "mod.searchModPreview": boolean;
     "mod.autoResolveDownloadTarget": boolean;
     "mod.autoResolveDownloadTargetSources": DownloadSource[];
@@ -149,16 +147,6 @@ export const APP_SETTINGS = {
         publicKey: "mod.moveFolderInsteadOfCopy",
         scope: "mod",
         storageKey: "mod_move_folder_instead_of_copy",
-    },
-    "mod.virtualizationEnabled": {
-        publicKey: "mod.virtualizationEnabled",
-        scope: "mod",
-        storageKey: "mod_virtualization_enabled",
-    },
-    "mod.virtualizationThreshold": {
-        publicKey: "mod.virtualizationThreshold",
-        scope: "mod",
-        storageKey: "mod_virtualization_threshold",
     },
     "mod.searchModPreview": {
         publicKey: "mod.searchModPreview",

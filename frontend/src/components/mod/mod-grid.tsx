@@ -6,11 +6,9 @@ import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
-import { useModGridLayoutSettings, useVirtualizationSettings } from "@renderer/hooks/use-settings";
+import { useModGridLayoutSettings } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { chunk } from "es-toolkit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -37,12 +35,12 @@ export function ModGrid(_props: ModGridProps) {
   const { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation } =
     useModMutations();
 
-  const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  const mods = useFilteredMods(isPlaceholderData ? [] : activeGroup?.mods || [], searchQuery);
   useModShortcuts(searchQuery, mods);
   const isLoading = isPending || isPlaceholderData;
-  const showSkeleton = useDelayedSkeleton(isLoading);
+  const showDelayedSkeleton = useDelayedSkeleton(isLoading);
+  const showSkeleton = (isPlaceholderData && activeGroup != null) || showDelayedSkeleton;
 
-  const { data: vSettings } = useVirtualizationSettings();
   const { data: gridLayoutSettings } = useModGridLayoutSettings();
 
   const [availableWidth, setAvailableWidth] = useState(0);
@@ -74,40 +72,16 @@ export function ModGrid(_props: ModGridProps) {
     () => resolveModGridLayout(availableWidth, normalizeModGridLayoutSettings(gridLayoutSettings)),
     [availableWidth, gridLayoutSettings],
   );
-  const columnCount = resolvedGridLayout.columnCount;
-  const overscan = useMemo(() => {
-    const targetOverscanCardCount = 16;
-    return Math.max(2, Math.min(6, Math.ceil(targetOverscanCardCount / columnCount)));
-  }, [columnCount]);
-
-  const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
   const getModRenderKey = useCallback(
     (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
     [selectedGroupPath],
   );
-  const isVirtualizationEnabled =
-    (vSettings?.enabled ?? true) && mods.length >= (vSettings?.threshold ?? 30);
-
-  const rowVirtualizer = useVirtualizer({
-    count: isVirtualizationEnabled ? rows.length : 0,
-    getItemKey: (index) => {
-      const rowMods = rows[index] ?? [];
-      return `${selectedGroupPath ?? ""}::${JSON.stringify(rowMods.map((mod) => mod.path))}`;
-    },
-    getScrollElement: () => viewport,
-    estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
-    overscan,
-    measureElement: (element) => element?.getBoundingClientRect().height,
-  });
 
   useEffect(() => {
     if (viewport) {
-      viewport.scrollTop = 0;
+      viewport.scrollTo({ top: 0 });
     }
-    if (isVirtualizationEnabled && rowVirtualizer) {
-      rowVirtualizer.scrollToOffset(0);
-    }
-  }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled, viewport]);
+  }, [selectedGroupPath, searchQuery, viewport]);
 
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
@@ -185,7 +159,7 @@ export function ModGrid(_props: ModGridProps) {
                 </div>
               ))}
             </div>
-          ) : !isVirtualizationEnabled ? (
+          ) : (
             <div
               className="grid gap-3"
               style={{
@@ -195,63 +169,23 @@ export function ModGrid(_props: ModGridProps) {
               // ref={parent}
             >
               {mods.map((mod) => (
-                <ModCard
+                <div
                   key={getModRenderKey(mod)}
-                  mod={mod}
-                  selectedGroupPath={selectedGroupPath}
-                  actions={actions}
-                  onToggle={handleToggle}
-                  onToggleKeyUpdate={handleToggleKeyUpdate}
-                />
+                  className="min-w-0"
+                  style={{
+                    contentVisibility: "auto",
+                    containIntrinsicBlockSize: "auto 400px",
+                  }}
+                >
+                  <ModCard
+                    mod={mod}
+                    selectedGroupPath={selectedGroupPath}
+                    actions={actions}
+                    onToggle={handleToggle}
+                    onToggleKeyUpdate={handleToggleKeyUpdate}
+                  />
+                </div>
               ))}
-            </div>
-          ) : (
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                width: "100%",
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const rowMods = rows[virtualRow.index];
-                if (!rowMods) return null;
-
-                return (
-                  <div
-                    key={virtualRow.key}
-                    data-index={virtualRow.index}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualRow.size}px`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                    className="grid gap-3"
-                  >
-                    <div
-                      className="grid w-full gap-3"
-                      style={{
-                        gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
-                        justifyContent: resolvedGridLayout.justifyContent,
-                      }}
-                    >
-                      {rowMods.map((mod) => (
-                        <ModCard
-                          key={getModRenderKey(mod)}
-                          mod={mod}
-                          selectedGroupPath={selectedGroupPath}
-                          actions={actions}
-                          onToggle={handleToggle}
-                          onToggleKeyUpdate={handleToggleKeyUpdate}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>

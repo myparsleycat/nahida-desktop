@@ -43,7 +43,7 @@ func TestGetMissingWritesDefaultAndSurvivesReopen(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	got, err := s.Get(ctx, KeyModVirtualizationEnabled)
+	got, err := s.Get(ctx, KeyModDeleteArchiveAfterExtract)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestGetMissingWritesDefaultAndSurvivesReopen(t *testing.T) {
 	if !ok || !enabled {
 		t.Fatalf("Get = %#v, want true", got)
 	}
-	if raw := rawValue(t, s, "mod_virtualization_enabled"); raw != "true" {
+	if raw := rawValue(t, s, "mod_delete_archive_after_extract"); raw != "true" {
 		t.Fatalf("stored %q, want %q", raw, "true")
 	}
 	if err := s.Close(); err != nil {
@@ -64,7 +64,7 @@ func TestGetMissingWritesDefaultAndSurvivesReopen(t *testing.T) {
 	}
 	defer func() { _ = reopened.Close() }()
 
-	got, err = reopened.Get(ctx, KeyModVirtualizationEnabled)
+	got, err = reopened.Get(ctx, KeyModDeleteArchiveAfterExtract)
 	if err != nil {
 		t.Fatalf("Get after reopen: %v", err)
 	}

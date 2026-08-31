@@ -21,8 +21,6 @@ const (
 	exposureMin         = 0.0
 	exposureMax         = 4.0
 
-	defaultVirtualizationThreshold = 30
-
 	transferDownloadConcurrencyDefault = 32
 	transferDownloadConcurrencyMin     = 16
 	transferDownloadConcurrencyMax     = 64
@@ -138,21 +136,6 @@ func clampIntegerSetting(value float64, min, max, fallback int) int {
 		return max
 	}
 	return truncated
-}
-
-func clampVirtualizationThreshold(value float64) int {
-	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
-		return defaultVirtualizationThreshold
-	}
-	return int(math.Trunc(value))
-}
-
-func virtualizationThresholdFromStored(value *string) int {
-	parsed, ok := parseJSInt(deref(value))
-	if !ok || parsed == 0 {
-		return defaultVirtualizationThreshold
-	}
-	return parsed
 }
 
 func clampModelViewerExposure(value float64) float64 {

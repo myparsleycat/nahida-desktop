@@ -1559,12 +1559,6 @@
           "backdrop-blur": {
             "title": "ブラー使用",
             "description": "Mod を探索する際にパフォーマンス問題が発生する場合は、このオプションを無効にしてください。"
-          },
-          "virtualization": {
-            "title": "仮想化使用",
-            "description": "Modリストを仮想化してパフォーマンスを向上させます。",
-            "threshold": "基準MOD数",
-            "thresholdDescription": "設定した数以上のMODがある場合に仮想化を適用します"
           }
         }
       },
