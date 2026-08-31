@@ -22,7 +22,6 @@ import {
   PersonStandingIcon,
   SparklesIcon,
   SwordsIcon,
-  TerminalSquareIcon,
   TrashIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -178,18 +177,6 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
               title="Model Viewer"
             >
               {isConvertingModel ? <Loader2Icon className="animate-spin" /> : <BoxIcon />}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 hover:bg-accent/20"
-              onClick={(event) => {
-                event.stopPropagation();
-                void Shell.OpenCmd(mod.path);
-              }}
-            >
-              <TerminalSquareIcon />
             </Button>
           </>
         )}
