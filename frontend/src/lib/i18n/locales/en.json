@@ -614,7 +614,6 @@
             "success": "Game settings saved"
           },
           "reorder-games-mutation": {
-            "success": "Game order saved",
             "failed": "Failed to save game order"
           },
           "set-game-executable-path": {

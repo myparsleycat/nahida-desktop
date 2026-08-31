@@ -233,7 +233,6 @@ export function useGameMutations() {
 
             queryClient.setQueryData(["games"], reorderedGames);
             void queryClient.invalidateQueries({ queryKey: ["games"] });
-            toast.success(t("page.mod.hooks.use-mod-mutations.reorder-games-mutation.success"));
         },
         onError: () => {
             toast.error(t("page.mod.hooks.use-mod-mutations.reorder-games-mutation.failed"));
