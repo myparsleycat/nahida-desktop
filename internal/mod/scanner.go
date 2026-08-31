@@ -2,8 +2,6 @@ package mod
 
 import (
 	"bufio"
-	"context"
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,9 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
-
-	"nahida.live/desktop/internal/db"
 )
 
 var mediaExtensions = map[string]bool{
@@ -127,7 +122,7 @@ func mapParallel[T, R any](items []T, fn func(T) R) []R {
 	return out
 }
 
-func scanGroup(ctx context.Context, groupPath string, cache *db.ModScanCacheStore) FolderGroup {
+func scanGroup(groupPath string) FolderGroup {
 	groupPath = filepath.Clean(groupPath)
 	result := FolderGroup{
 		Name: filepath.Base(groupPath), Path: groupPath, Mods: []ModInfo{},
@@ -160,7 +155,7 @@ func scanGroup(ctx context.Context, groupPath string, cache *db.ModScanCacheStor
 	wg.Wait()
 
 	result.Preview = preview
-	result.Mods = hydrateWalkedMods(ctx, walked, cache)
+	result.Mods = collectWalkedMods(walked)
 	result.ModCount = len(result.Mods)
 	for _, info := range result.Mods {
 		if info.IsEnabled {
@@ -291,102 +286,28 @@ func scanMod(groupPath, modPath string) *ModInfo {
 	return walked.info
 }
 
-func hydrateWalkedMods(ctx context.Context, walked []*walkedMod, cache *db.ModScanCacheStore) []ModInfo {
+func collectWalkedMods(walked []*walkedMod) []ModInfo {
 	items := make([]*walkedMod, 0, len(walked))
 	for _, item := range walked {
-		if item != nil && item.info != nil {
-			items = append(items, item)
+		if item == nil || item.info == nil {
+			continue
 		}
+		items = append(items, item)
 	}
-	cached := map[string]db.ModScanCacheRow{}
-	if cache != nil {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		paths := make([]string, len(items))
-		for i, item := range items {
-			paths[i] = item.info.Path
-		}
-		if rows, err := cache.GetMany(ctx, paths); err == nil {
-			cached = rows
-		}
-	}
-
-	type hydrated struct {
-		info  *ModInfo
-		store *db.ModScanCacheRow
-	}
-	results := mapParallel(items, func(item *walkedMod) hydrated {
-		info := item.info
-		if row, ok := cached[info.Path]; ok && row.Mtime == int64(info.Mtime) {
-			if inis, err := decodeCachedInis(row.Payload); err == nil {
-				info.Inis = sortINIs(inis)
-				return hydrated{info: info}
-			}
-		}
-		info.Inis = parseAndSortINIs(item.iniPaths)
-		payload, err := encodeCachedInis(info.Inis)
-		if err != nil || cache == nil {
-			return hydrated{info: info}
-		}
-		return hydrated{
-			info: info,
-			store: &db.ModScanCacheRow{
-				Path:      info.Path,
-				Mtime:     int64(info.Mtime),
-				Payload:   payload,
-				UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-			},
-		}
+	parsed := mapParallel(items, func(item *walkedMod) *ModInfo {
+		item.info.Inis = parseAndSortINIs(item.iniPaths)
+		return item.info
 	})
-
-	if cache != nil {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		rows := make([]db.ModScanCacheRow, 0, len(results))
-		for _, item := range results {
-			if item.store != nil {
-				rows = append(rows, *item.store)
-			}
-		}
-		if len(rows) > 0 {
-			_ = cache.UpsertMany(ctx, rows)
-		}
-	}
-
-	mods := make([]ModInfo, 0, len(results))
-	for _, item := range results {
-		if item.info != nil {
-			mods = append(mods, *item.info)
+	mods := make([]ModInfo, 0, len(parsed))
+	for _, info := range parsed {
+		if info != nil {
+			mods = append(mods, *info)
 		}
 	}
 	sort.Slice(mods, func(i, j int) bool {
 		return naturalLess(mods[i].Name, mods[j].Name)
 	})
 	return mods
-}
-
-func encodeCachedInis(inis []IniResult) (string, error) {
-	if inis == nil {
-		inis = []IniResult{}
-	}
-	raw, err := json.Marshal(inis)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func decodeCachedInis(payload string) ([]IniResult, error) {
-	var inis []IniResult
-	if err := json.Unmarshal([]byte(payload), &inis); err != nil {
-		return nil, err
-	}
-	if inis == nil {
-		inis = []IniResult{}
-	}
-	return inis, nil
 }
 
 func parseAndSortINIs(paths []string) []IniResult {

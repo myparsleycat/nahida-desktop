@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func writeModFile(t *testing.T, root, relative, content string) string {
@@ -78,7 +77,7 @@ func TestScanGroupScansModsInParallel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	group := scanGroup(context.Background(), root, nil)
+	group := scanGroup(root)
 	if group.ModCount != 3 || group.EnabledModCount != 2 {
 		t.Fatalf("counts = %+v", group)
 	}
@@ -99,7 +98,7 @@ func TestScannerAndNteUseTheirSeparateElectronCollations(t *testing.T) {
 	for _, name := range []string{"Mod10", "Mod2"} {
 		writeModFile(t, ordinaryRoot, filepath.Join(name, "mod.ini"), "[Constants]\n")
 	}
-	ordinary := scanGroup(context.Background(), ordinaryRoot, nil)
+	ordinary := scanGroup(ordinaryRoot)
 	if len(ordinary.Mods) != 2 || ordinary.Mods[0].Name != "Mod2" || ordinary.Mods[1].Name != "Mod10" {
 		t.Fatalf("ordinary scanner order = %#v, want natural Mod2, Mod10", modNames(ordinary))
 	}
@@ -154,14 +153,16 @@ func TestGetModsLightDefersIniParse(t *testing.T) {
 	}
 }
 
-func TestGetModsReusesIniCacheUntilMtimeChanges(t *testing.T) {
+func TestGetModsReparsesIniPathsWithoutScanCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{preview: true})
 	modsRoot := filepath.Join(root, "mods")
 	group := filepath.Join(modsRoot, "CharF")
 	modPath := filepath.Join(group, "Costume")
-	iniPath := writeModFile(t, modPath, "mod.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
+	iniPath := writeModFile(t, modPath, "CC.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
+	faceDir := filepath.Join(modPath, "DD_face")
+	faceINI := writeModFile(t, faceDir, "face.ini", "[KeyToggle]\nkey = F3\n$swap = 0\n")
 	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -170,37 +171,50 @@ func TestGetModsReusesIniCacheUntilMtimeChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cached, err := service.client.ModScanCache.Get(ctx, first.Mods[0].Path)
-	if err != nil || cached == nil || cached.Mtime != int64(first.Mods[0].Mtime) {
-		t.Fatalf("cache after first scan: %+v %v", cached, err)
+	if cached, err := service.client.ModScanCache.Get(ctx, first.Mods[0].Path); err != nil || cached != nil {
+		t.Fatalf("first scan should not write cache: %+v %v", cached, err)
 	}
-	if cached.Payload == "" {
-		t.Fatal("cache payload empty")
+	if len(first.Mods[0].Inis) != 2 {
+		t.Fatalf("first scan inis = %#v", first.Mods[0].Inis)
+	}
+
+	renamedINI := filepath.Join(modPath, "CC88.ini")
+	if err := os.Rename(iniPath, renamedINI); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(renamedINI, []byte("[KeyToggle]\nkey = F2\n$swap = 0, 1, 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	renamedFaceDir := filepath.Join(modPath, "DD_face8")
+	if err := os.Rename(faceDir, renamedFaceDir); err != nil {
+		t.Fatal(err)
+	}
+	renamedFaceINI := filepath.Join(renamedFaceDir, "face.ini")
+	if _, err := os.Stat(renamedFaceINI); err != nil {
+		t.Fatal(err)
 	}
 
 	second, err := service.GetMods(ctx, group)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(second.Mods[0].Inis) != 1 || second.Mods[0].Inis[0].ToggleKeys[0].Variable != "$swap" {
+	if cached, err := service.client.ModScanCache.Get(ctx, second.Mods[0].Path); err != nil || cached != nil {
+		t.Fatalf("second scan should not write cache: %+v %v", cached, err)
+	}
+	if len(second.Mods[0].Inis) != 2 {
 		t.Fatalf("second scan inis = %#v", second.Mods[0].Inis)
 	}
-
-	if err := os.Chtimes(iniPath, time.Now().Add(2*time.Second), time.Now().Add(2*time.Second)); err != nil {
-		t.Fatal(err)
+	paths := map[string]IniResult{}
+	for _, ini := range second.Mods[0].Inis {
+		paths[ini.Path] = ini
 	}
-	if err := os.WriteFile(iniPath, []byte("[KeyToggle]\nkey = F2\n$swap = 0, 1, 2\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if got, ok := paths[renamedINI]; !ok || got.Name != "CC88.ini" || got.ToggleKeys[0].Key == nil || *got.ToggleKeys[0].Key != "F2" || len(got.ToggleKeys[0].Values) != 3 {
+		t.Fatalf("renamed ini not reparsed: %#v", second.Mods[0].Inis)
 	}
-	third, err := service.GetMods(ctx, group)
-	if err != nil {
-		t.Fatal(err)
+	if _, ok := paths[renamedFaceINI]; !ok {
+		t.Fatalf("renamed nested ini missing: %#v", second.Mods[0].Inis)
 	}
-	if got := third.Mods[0].Inis[0].ToggleKeys[0]; got.Key == nil || *got.Key != "F2" || len(got.Values) != 3 {
-		t.Fatalf("mtime miss should reparse: %#v", third.Mods[0].Inis)
-	}
-	updated, err := service.client.ModScanCache.Get(ctx, third.Mods[0].Path)
-	if err != nil || updated == nil || updated.Mtime == cached.Mtime {
-		t.Fatalf("cache should update mtime: %+v vs %+v %v", updated, cached, err)
+	if _, err := os.Stat(faceINI); !os.IsNotExist(err) {
+		t.Fatalf("old nested ini still present: %v", err)
 	}
 }

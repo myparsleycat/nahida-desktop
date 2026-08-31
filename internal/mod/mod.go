@@ -612,7 +612,7 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 		}
 		return nteScanGroup(nteRootsFor(*game), groupPath, search), nil
 	}
-	group := scanGroup(ctx, groupPath, m.modScanCache())
+	group := scanGroup(groupPath)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
 }
 
@@ -630,13 +630,6 @@ func (m *Mod) GetModsLight(ctx context.Context, groupPath string) (FolderGroup, 
 	}
 	group := scanGroupLight(groupPath)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
-}
-
-func (m *Mod) modScanCache() *db.ModScanCacheStore {
-	if m == nil || m.client == nil {
-		return nil
-	}
-	return &m.client.ModScanCache
 }
 
 func (m *Mod) GetLastGame(ctx context.Context) (*string, error) {
