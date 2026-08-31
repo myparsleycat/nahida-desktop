@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
@@ -227,6 +228,61 @@ func TestActiveDownloadDestinationRejectsDirectModActions(t *testing.T) {
 				t.Fatalf("active download folder changed: %v", statErr)
 			}
 		})
+	}
+}
+
+func TestModActionStaysBlockedUntilDownloadRunnerFinalizes(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	active := filepath.Join(modsRoot, "Group", "Active")
+	if err := os.MkdirAll(active, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	service.transfer = transfer.New()
+	if _, err := service.transfer.Create(transfer.CreateParams{
+		PID: "finalizing", Type: "download", Name: "finalizing",
+		InitialStatus: transfer.StatusPending, DestinationPaths: []string{active}, ManualStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	finalizing := make(chan struct{})
+	releaseRunner := make(chan struct{})
+	if err := service.transfer.RegisterRunner("finalizing", func(_ context.Context, transfers *transfer.Transfer, pid string) error {
+		completed := transfer.StatusCompleted
+		if err := transfers.Update(pid, transfer.Updates{Status: &completed}); err != nil {
+			return err
+		}
+		close(finalizing)
+		<-releaseRunner
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- service.transfer.ProcessQueue(ctx) }()
+	select {
+	case <-finalizing:
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not reach finalization barrier")
+	}
+	if _, err := service.Rename(ctx, active, "Renamed"); err == nil || err.Error() != "MOD_DOWNLOAD_IN_PROGRESS" {
+		t.Fatalf("rename during finalization error = %v", err)
+	}
+	close(releaseRunner)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not finish")
+	}
+	if renamed, err := service.Rename(ctx, active, "Renamed"); err != nil || filepath.Base(renamed) != "Renamed" {
+		t.Fatalf("rename after finalization = %q, %v", renamed, err)
 	}
 }
 

@@ -169,6 +169,85 @@ func TestIsActiveDownloadDestinationMatchesOverlappingOpenDownloadPaths(t *testi
 	}
 }
 
+func TestCanceledDownloadKeepsDestinationReservedUntilRunnerStops(t *testing.T) {
+	service := New()
+	path := `C:\Mods\Character\Active`
+	if _, err := service.Create(CreateParams{
+		PID: "canceling", Type: "download", Name: "canceling", InitialStatus: StatusPending,
+		DestinationPaths: []string{path}, ManualStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	releaseRunner := make(chan struct{})
+	if err := service.RegisterRunner("canceling", func(ctx context.Context, _ *Transfer, _ string) error {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+		<-releaseRunner
+		return ctx.Err()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- service.ProcessQueue(context.Background()) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not start")
+	}
+	if err := service.Cancel("canceling"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not observe cancellation")
+	}
+	if !service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation released before canceled runner stopped")
+	}
+	close(releaseRunner)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled runner did not stop")
+	}
+	if service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation remains after canceled runner stopped")
+	}
+}
+
+func TestFailedDownloadReleasesDestinationAfterRunnerStops(t *testing.T) {
+	service := New()
+	path := `C:\Mods\Character\Failed`
+	if _, err := service.Create(CreateParams{
+		PID: "failing", Type: "download", Name: "failing", InitialStatus: StatusPending,
+		DestinationPaths: []string{path}, ManualStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterRunner("failing", func(context.Context, *Transfer, string) error {
+		return errors.New("download failed")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record, ok := service.Get("failing")
+	if !ok || record.Status != StatusError {
+		t.Fatalf("failed transfer = %+v, ok=%v", record, ok)
+	}
+	if service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation remains after failed runner stopped")
+	}
+}
+
 func TestCreateEmitsStartToastAndOptionalNavigation(t *testing.T) {
 	var events []struct {
 		name string

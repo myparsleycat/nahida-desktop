@@ -32,11 +32,6 @@ type StartDownloadResult struct {
 	Status string `json:"status"`
 }
 
-type downloadRunnerState struct {
-	mu       sync.Mutex
-	metadata *DownloadMetadata
-}
-
 func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (result StartDownloadResult, err error) {
 	defer normalizeDriveBoundaryError(&err, "fn:startDownload")
 	if d == nil || d.transfer == nil || d.download == nil {
@@ -74,26 +69,51 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 		return StartDownloadResult{}, fmt.Errorf("path is not writable: %s", targetPath)
 	}
 	params.TargetPath = filepath.Clean(targetPath)
+	var metadata DownloadMetadata
+	if params.Data == nil {
+		metadata, err = d.fetchDownloadMetadata(ctx, params.Items, params.Link)
+		if err != nil {
+			return StartDownloadResult{}, err
+		}
+	} else {
+		metadata = cloneDownloadMetadata(*params.Data)
+	}
+	prepared, err := d.prepareDownloadMetadata(ctx, nil, "", metadata, params)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			if ctx.Err() != nil {
+				return StartDownloadResult{}, ctx.Err()
+			}
+			return StartDownloadResult{Status: "canceled"}, nil
+		}
+		return StartDownloadResult{}, err
+	}
+	destinationTargets, err := resolveDownloadDestinationTargets(prepared, params.TargetPath)
+	if err != nil {
+		return StartDownloadResult{}, err
+	}
+	data := transfer.Data{Root: &prepared.Root, Files: slices.Clone(prepared.Files), Dirs: slices.Clone(prepared.Dirs)}
+	name := prepared.Root.Name
+	if len(params.Items) != 1 {
+		name = fmt.Sprintf("%d items", len(params.Items))
+	}
 	pid := uuid.NewString()
-	rootName := "Loading"
-	initial := transfer.Data{Root: &transfer.Root{Name: rootName}, Files: []transfer.DownloadFile{}, Dirs: []transfer.Directory{}}
-	name := "Preparing Download..."
 	if _, err := d.transfer.Create(transfer.CreateParams{
-		PID:           pid,
-		Type:          "download",
-		Name:          name,
-		Path:          filepath.ToSlash(params.TargetPath),
-		CurrentID:     downloadCurrentID(params),
-		InitialStatus: transfer.StatusPreparing,
-		Data:          initial,
-		RestartData:   params,
+		PID:                pid,
+		Type:               "download",
+		Name:               name,
+		Path:               filepath.ToSlash(params.TargetPath),
+		DestinationTargets: destinationTargets,
+		CurrentID:          downloadCurrentID(params),
+		InitialStatus:      transfer.StatusPreparing,
+		Data:               data,
+		RestartData:        params,
 	}); err != nil {
 		return StartDownloadResult{}, err
 	}
-	state := &downloadRunnerState{}
-	if params.Data != nil {
-		cloned := cloneDownloadMetadata(*params.Data)
-		state.metadata = &cloned
+	if err := d.transfer.SetData(pid, data, prepared.TotalBytes, name, destinationTargets); err != nil {
+		_ = d.transfer.Cancel(pid)
+		return StartDownloadResult{}, err
 	}
 	pending := transfer.StatusPending
 	if err := d.transfer.Update(pid, transfer.Updates{Status: &pending}); err != nil {
@@ -101,7 +121,7 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 		return StartDownloadResult{}, err
 	}
 	if err := d.transfer.RegisterRunner(pid, func(runCtx context.Context, transfers *transfer.Transfer, runnerPID string) error {
-		return d.runDownload(runCtx, transfers, runnerPID, params, state)
+		return d.runDownload(runCtx, transfers, runnerPID, params, prepared)
 	}); err != nil {
 		_ = d.transfer.Cancel(pid)
 		return StartDownloadResult{}, err
@@ -161,30 +181,16 @@ func (d *Drive) resolveDownloadTarget(ctx context.Context, params StartDownloadP
 	return resolvedDownloadTarget{path: *path, suggestedName: suggestedName}, nil
 }
 
-func (d *Drive) runDownload(ctx context.Context, transfers *transfer.Transfer, pid string, params StartDownloadParams, state *downloadRunnerState) error {
+func (d *Drive) runDownload(
+	ctx context.Context,
+	transfers *transfer.Transfer,
+	pid string,
+	params StartDownloadParams,
+	prepared DownloadMetadata,
+) error {
 	preparing := transfer.StatusPreparing
 	if err := transfers.Update(pid, transfer.Updates{Status: &preparing, ClearError: true, ClearErrorCode: true}); err != nil {
 		return err
-	}
-	state.mu.Lock()
-	metadata := state.metadata
-	state.mu.Unlock()
-	if metadata == nil {
-		fetched, err := d.fetchDownloadMetadata(ctx, params.Items, params.Link)
-		if err != nil {
-			return d.failDownloadTransfer(transfers, pid, err)
-		}
-		metadata = &fetched
-		state.mu.Lock()
-		state.metadata = metadata
-		state.mu.Unlock()
-	}
-	prepared, err := d.prepareDownloadMetadata(ctx, transfers, pid, *metadata, params)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		return d.failDownloadTransfer(transfers, pid, err)
 	}
 	name := prepared.Root.Name
 	if len(params.Items) != 1 {

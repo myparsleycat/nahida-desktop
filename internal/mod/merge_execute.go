@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -98,6 +99,14 @@ func (m *Mod) MergeMods(ctx context.Context, request MergeModsRequest) (result M
 	if err := m.validateMergeRequest(ctx, request); err != nil {
 		return result, err
 	}
+	leaves := []string{}
+	collectMergeLeafPaths(request.Root, &leaves)
+	blocked, release := m.guardActiveDownloadActions(leaves)
+	if slices.Contains(blocked, true) {
+		release()
+		return result, errors.New("MOD_DOWNLOAD_IN_PROGRESS")
+	}
+	defer release()
 	created := []mergeRollback{}
 	defer func() {
 		if err != nil {
@@ -141,9 +150,11 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 		if _, err := m.ownedPath(ctx, leaf); err != nil {
 			return mergeOwnedPathError(err)
 		}
-		if err := m.rejectActiveDownloadAction(leaf); err != nil {
+		release, err := m.rejectActiveDownloadAction(leaf)
+		if err != nil {
 			return err
 		}
+		release()
 		resolved, err := resolveForCompare(leaf)
 		if err != nil {
 			return err
@@ -153,6 +164,16 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 		}
 	}
 	return validateMergeOutputs(request.Root, group, request.PackName)
+}
+
+func collectMergeLeafPaths(node MergePlanNode, leaves *[]string) {
+	if node.Kind == "leaf" {
+		*leaves = append(*leaves, node.Path)
+		return
+	}
+	for _, child := range node.Children {
+		collectMergeLeafPaths(child, leaves)
+	}
 }
 
 func uniqueLexicalMergeLeaves(leaves []string) bool {

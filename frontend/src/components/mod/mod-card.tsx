@@ -84,7 +84,12 @@ export const ModCard = memo(function ModCard({
           }}
           draggable={false}
         >
-          <div className="contents" inert={isDownloading}>
+          {/* Remount menu owners so their portaled content closes before this subtree becomes inert. */}
+          <div
+            key={isDownloading ? "downloading" : "interactive"}
+            className="contents"
+            inert={isDownloading}
+          >
             {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
               <div
                 className="pointer-events-none absolute inset-0 z-0 scale-110 opacity-25 blur-lg"

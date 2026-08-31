@@ -47,6 +47,24 @@ describe("getModDownloadDisplay", () => {
         });
     });
 
+    it("clamps known-size progress below zero", () => {
+        expect(getModDownloadDisplay(transfer({ progress: -10, speed: 2048 }))).toEqual({
+            status: "downloading",
+            progress: 0,
+            speed: 2048,
+            pulse: false,
+        });
+    });
+
+    it("clamps known-size progress above 100 and finalizes", () => {
+        expect(getModDownloadDisplay(transfer({ progress: 125, speed: 2048 }))).toEqual({
+            status: "finalizing",
+            progress: 100,
+            speed: null,
+            pulse: false,
+        });
+    });
+
     it("uses an unknown pulsing progress when total size is unavailable", () => {
         expect(
             getModDownloadDisplay(transfer({ totalSize: 0, progress: 100, speed: 512 })),

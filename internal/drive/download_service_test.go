@@ -269,6 +269,74 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}
 }
 
+func TestQueuedDownloadReservesDestinationBeforeRunnerStarts(t *testing.T) {
+	content := []byte("queued content")
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			close(requestStarted)
+			<-releaseRequest
+		}
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	transfers := transfer.New()
+	drive := downloadServiceTestDrive(server, transfers)
+	metadata := DownloadMetadata{
+		Root:       transfer.Root{ID: "file", Name: "mod.bin"},
+		TotalBytes: int64(len(content)),
+		Files: []transfer.DownloadFile{{
+			ID: "file", FileID: "file", Name: "mod.bin", Size: int64(len(content)), URL: server.URL,
+		}},
+	}
+	target := t.TempDir()
+	params := StartDownloadParams{
+		Items: []DownloadItem{{ID: "file", Name: "mod.bin"}}, TargetPath: target, Data: &metadata,
+	}
+	first, err := drive.StartDownload(context.Background(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- transfers.ProcessQueue(context.Background()) }()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first download did not block")
+	}
+	second, err := drive.StartDownload(context.Background(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(target, "mod.bin")
+	queued, ok := transfers.Get(second.PID)
+	if !ok || queued.Status != transfer.StatusPending {
+		t.Fatalf("queued transfer = %+v, ok=%v", queued, ok)
+	}
+	if len(queued.DestinationTargets) != 1 || queued.DestinationTargets[0].Path != want ||
+		queued.DestinationTargets[0].Kind != transfer.DestinationFile {
+		t.Fatalf("queued destination targets = %#v, want %q", queued.DestinationTargets, want)
+	}
+	if !transfers.IsActiveDownloadDestination(want) {
+		t.Fatalf("queued destination %q is not reserved", want)
+	}
+	close(releaseRequest)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("download queue did not finish")
+	}
+	if record, ok := transfers.Get(first.PID); !ok || record.Status != transfer.StatusCompleted {
+		t.Fatalf("first transfer = %+v, ok=%v", record, ok)
+	}
+}
+
 func TestDownloadFallsBackToFreshPresignedURLAfterForbidden(t *testing.T) {
 	content := []byte("fresh")
 	var server *httptest.Server

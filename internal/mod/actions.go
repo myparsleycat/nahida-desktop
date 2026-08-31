@@ -15,9 +15,11 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+	release, err := m.rejectActiveDownloadAction(modPath)
+	if err != nil {
 		return "", err
 	}
+	defer release()
 	if isNTEImporter(game.Importer) {
 		return m.setNteModEnabled(ctx, modPath, !isNteModEnabled(modPath))
 	}
@@ -36,9 +38,11 @@ func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+	release, err := m.rejectActiveDownloadAction(modPath)
+	if err != nil {
 		return "", err
 	}
+	defer release()
 	if isNTEImporter(game.Importer) {
 		return m.setNteModEnabled(ctx, modPath, false)
 	}
@@ -61,9 +65,11 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+	release, err := m.rejectActiveDownloadAction(modPath)
+	if err != nil {
 		return "", err
 	}
+	defer release()
 	if isNTEImporter(game.Importer) {
 		return m.setNteModEnabled(ctx, modPath, true)
 	}
@@ -75,24 +81,45 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if err := m.rejectActiveDownloadAction(modPath); err != nil {
-		return "", err
-	}
 	if isNTEImporter(game.Importer) {
 		roots := nteRootsFor(*game)
 		groupPath := filepath.Dir(modPath)
 		if isNtePakWrapper(roots, groupPath) {
 			groupPath = filepath.Dir(groupPath)
 		}
+		entries := collectNteModEntries(roots, groupPath)
+		paths := make([]string, len(entries)+1)
+		paths[0] = modPath
+		for index, entry := range entries {
+			paths[index+1] = entry.path
+		}
+		blocked, release := m.guardActiveDownloadActions(paths)
+		if blocked[0] {
+			release()
+			return "", errors.New("MOD_DOWNLOAD_IN_PROGRESS")
+		}
+		defer release()
 		return m.retryExclusiveToggleOperation(ctx, modPath, func() (string, error) {
 			if isNteModEnabled(modPath) {
 				return m.setNteModEnabled(ctx, modPath, false)
 			}
-			m.setAllNteBestEffort(ctx, collectNteModEntries(roots, groupPath), false)
+			for index, entry := range entries {
+				if blocked[index+1] || !isNteModEnabled(entry.path) {
+					continue
+				}
+				if _, err := m.setNteModEnabled(ctx, entry.path, false); err != nil {
+					m.logActionError(err, "Mod:setAllNte:"+entry.path)
+				}
+			}
 			return m.setNteModEnabled(ctx, modPath, true)
 		})
 	}
 	if !isDisabled(filepath.Base(modPath)) {
+		release, err := m.rejectActiveDownloadAction(modPath)
+		if err != nil {
+			return "", err
+		}
+		defer release()
 		return m.retryExclusiveToggleOperation(ctx, modPath, func() (string, error) {
 			return m.disableWithShaders(ctx, modPath)
 		})
@@ -101,13 +128,21 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	paths := []string{modPath}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
+		if !strings.HasPrefix(entry.Name(), ".") && entry.IsDir() &&
+			!samePath(filepath.Join(filepath.Dir(modPath), entry.Name()), modPath) && !isDisabled(entry.Name()) {
+			paths = append(paths, filepath.Join(filepath.Dir(modPath), entry.Name()))
 		}
-		path := filepath.Join(filepath.Dir(modPath), entry.Name())
-		if entry.IsDir() && !samePath(path, modPath) && !isDisabled(entry.Name()) &&
-			!m.isActiveDownloadDestination(path) {
+	}
+	blocked, release := m.guardActiveDownloadActions(paths)
+	if blocked[0] {
+		release()
+		return "", errors.New("MOD_DOWNLOAD_IN_PROGRESS")
+	}
+	defer release()
+	for index, path := range paths[1:] {
+		if !blocked[index+1] {
 			if _, err := m.retryExclusiveToggleOperation(ctx, path, func() (string, error) {
 				return m.disableWithShaders(ctx, path)
 			}); err != nil {
@@ -124,9 +159,11 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 	if _, err := m.ownedPath(ctx, modPath); err != nil {
 		return "", err
 	}
-	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+	release, err := m.rejectActiveDownloadAction(modPath)
+	if err != nil {
 		return "", err
 	}
+	defer release()
 	newName = stripDisabled(newName)
 	if newName == "" {
 		return "", errors.New("INVALID_MOD_NAME")
@@ -167,12 +204,16 @@ func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 	if err != nil {
 		return err
 	}
+	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
+		if !strings.HasPrefix(entry.Name(), ".") && entry.IsDir() && isDisabled(entry.Name()) {
+			paths = append(paths, filepath.Join(groupPath, entry.Name()))
 		}
-		path := filepath.Join(groupPath, entry.Name())
-		if entry.IsDir() && isDisabled(entry.Name()) && !m.isActiveDownloadDestination(path) {
+	}
+	blocked, release := m.guardActiveDownloadActions(paths)
+	defer release()
+	for index, path := range paths {
+		if !blocked[index] {
 			if _, err := m.enableWithShaders(ctx, path); err != nil {
 				m.logActionError(err, "Mod:enableAll:"+path)
 			}
@@ -194,12 +235,16 @@ func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
 	if err != nil {
 		return err
 	}
+	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
+		if !strings.HasPrefix(entry.Name(), ".") && entry.IsDir() && !isDisabled(entry.Name()) {
+			paths = append(paths, filepath.Join(groupPath, entry.Name()))
 		}
-		path := filepath.Join(groupPath, entry.Name())
-		if entry.IsDir() && !isDisabled(entry.Name()) && !m.isActiveDownloadDestination(path) {
+	}
+	blocked, release := m.guardActiveDownloadActions(paths)
+	defer release()
+	for index, path := range paths {
+		if !blocked[index] {
 			if _, err := m.disableWithShaders(ctx, path); err != nil {
 				m.logActionError(err, "Mod:disableAll:"+path)
 			}
@@ -242,8 +287,14 @@ func isRetryableExclusiveToggleError(err error) bool {
 }
 
 func (m *Mod) setAllNteBestEffort(ctx context.Context, entries []nteModEntry, enabled bool) {
-	for _, entry := range entries {
-		if isNteModEnabled(entry.path) == enabled || m.isActiveDownloadDestination(entry.path) {
+	paths := make([]string, len(entries))
+	for index, entry := range entries {
+		paths[index] = entry.path
+	}
+	blocked, release := m.guardActiveDownloadActions(paths)
+	defer release()
+	for index, entry := range entries {
+		if isNteModEnabled(entry.path) == enabled || blocked[index] {
 			continue
 		}
 		if _, err := m.setNteModEnabled(ctx, entry.path, enabled); err != nil {
@@ -252,15 +303,24 @@ func (m *Mod) setAllNteBestEffort(ctx context.Context, entries []nteModEntry, en
 	}
 }
 
-func (m *Mod) rejectActiveDownloadAction(path string) error {
-	if m.isActiveDownloadDestination(path) {
-		return errors.New("MOD_DOWNLOAD_IN_PROGRESS")
+func (m *Mod) rejectActiveDownloadAction(path string) (func(), error) {
+	blocked, release := m.guardActiveDownloadActions([]string{path})
+	if blocked[0] {
+		release()
+		return nil, errors.New("MOD_DOWNLOAD_IN_PROGRESS")
 	}
-	return nil
+	return release, nil
 }
 
 func (m *Mod) isActiveDownloadDestination(path string) bool {
 	return m != nil && m.transfer != nil && m.transfer.IsActiveDownloadDestination(path)
+}
+
+func (m *Mod) guardActiveDownloadActions(paths []string) ([]bool, func()) {
+	if m == nil || m.transfer == nil {
+		return make([]bool, len(paths)), func() {}
+	}
+	return m.transfer.GuardDownloadDestinations(paths)
 }
 
 func (m *Mod) logActionError(err error, where string) {

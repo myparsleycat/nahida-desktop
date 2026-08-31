@@ -225,6 +225,7 @@ type entry struct {
 
 type Transfer struct {
 	mu                 sync.RWMutex
+	destinationMu      sync.RWMutex
 	emitMu             sync.Mutex
 	powerMu            sync.Mutex
 	entries            map[string]*entry
@@ -381,16 +382,19 @@ func orderSnapshots(items []orderedSnapshot) []Snapshot {
 }
 
 func (t *Transfer) Cancel(pid string) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
-	if isTerminal(item.record.Status) {
+	if isTerminal(item.record.Status) && item.cancel == nil {
 		delete(t.entries, pid)
 		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		if shouldEmit {
 			t.emit()
 		}
@@ -402,6 +406,7 @@ func (t *Transfer) Cancel(pid string) error {
 	item.record.Status = StatusCanceled
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -410,14 +415,17 @@ func (t *Transfer) Cancel(pid string) error {
 }
 
 func (t *Transfer) Pause(pid string) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	if item.record.Status != StatusPending && item.record.Status != StatusPreparing && item.record.Status != StatusProgress {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return nil
 	}
 	item.record.Status = StatusPaused
@@ -426,6 +434,7 @@ func (t *Transfer) Pause(pid string) error {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -486,16 +495,18 @@ func (t *Transfer) ResumeAll() error {
 }
 
 func (t *Transfer) Clear() error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	changed := false
 	for pid, item := range t.entries {
-		if isTerminal(item.record.Status) {
+		if isTerminal(item.record.Status) && item.cancel == nil {
 			delete(t.entries, pid)
 			changed = true
 		}
 	}
 	shouldEmit := changed && t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -538,9 +549,11 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 		}
 	}
 
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	if _, exists := t.entries[params.PID]; exists {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return Record{}, fmt.Errorf("transfer %q already exists", params.PID)
 	}
 	queueGroupID := params.QueueGroupID
@@ -590,6 +603,7 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -610,12 +624,14 @@ func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 	if cancel == nil {
 		return errors.New("transfer cancel function is required")
 	}
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if ok {
 		item.cancel = cancel
 	}
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if !ok {
 		return fmt.Errorf("transfer %q not found", pid)
 	}
@@ -626,11 +642,13 @@ func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 //
 //wails:ignore
 func (t *Transfer) ClearCancel(pid string) {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	if item, ok := t.entries[pid]; ok {
 		item.cancel = nil
 	}
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 }
 
 func (t *Transfer) notifyStarted(ctx context.Context, name string) {
@@ -712,16 +730,19 @@ func (t *Transfer) next(parent context.Context) (string, Runner, context.Context
 }
 
 func (t *Transfer) finishRun(pid string, runErr error) {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return
 	}
 	item.cancel = nil
 	if item.record.Status == StatusPaused || item.record.Status == StatusCanceled {
 		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		if shouldEmit {
 			t.emit()
 		}
@@ -734,6 +755,7 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -743,10 +765,17 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 //wails:ignore
 func (t *Transfer) Update(pid string, updates Updates) error {
 	now := t.now()
+	reservationChange := updates.Status != nil || updates.DestinationPaths != nil || updates.DestinationTargets != nil
+	if reservationChange {
+		t.destinationMu.Lock()
+	}
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		if reservationChange {
+			t.destinationMu.Unlock()
+		}
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	applyUpdates(&item.record.Snapshot, updates)
@@ -783,6 +812,9 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 	}
 	shouldEmit := t.scheduleEmitLocked(updates.Status != nil, now)
 	t.mu.Unlock()
+	if reservationChange {
+		t.destinationMu.Unlock()
+	}
 	if shouldEmit {
 		t.emit()
 	}
@@ -807,11 +839,36 @@ func (t *Transfer) Get(pid string) (Record, bool) {
 
 //wails:ignore
 func (t *Transfer) IsActiveDownloadDestination(path string) bool {
+	t.destinationMu.RLock()
+	defer t.destinationMu.RUnlock()
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	return t.isActiveDownloadDestinationLocked(path)
+}
+
+// GuardDownloadDestinations takes a stable snapshot of active destination
+// conflicts and prevents transfer registration or state changes until release.
+// Callers must invoke release after the protected filesystem operations finish.
+//
+//wails:ignore
+func (t *Transfer) GuardDownloadDestinations(paths []string) (blocked []bool, release func()) {
+	if t == nil {
+		return make([]bool, len(paths)), func() {}
+	}
+	t.destinationMu.RLock()
+	t.mu.RLock()
+	blocked = make([]bool, len(paths))
+	for index, path := range paths {
+		blocked[index] = t.isActiveDownloadDestinationLocked(path)
+	}
+	t.mu.RUnlock()
+	return blocked, t.destinationMu.RUnlock
+}
+
+func (t *Transfer) isActiveDownloadDestinationLocked(path string) bool {
 	for _, item := range t.entries {
 		if item.record.Type != "download" ||
-			(!isOpen(item.record.Status) && item.record.Status != StatusPaused) {
+			(!isOpen(item.record.Status) && item.record.Status != StatusPaused && item.cancel == nil) {
 			continue
 		}
 		if slices.ContainsFunc(item.record.DestinationPaths, func(destinationPath string) bool {
@@ -825,10 +882,12 @@ func (t *Transfer) IsActiveDownloadDestination(path string) bool {
 
 //wails:ignore
 func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string, destinationTargets []DestinationTarget) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	item.record.Data = cloneData(data)
@@ -841,6 +900,7 @@ func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string, 
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -1042,14 +1102,17 @@ func (t *Transfer) ManualStart(pid string) error {
 		}
 	}
 
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok = t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	if item.runner == nil {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q has no registered runner", pid)
 	}
 	if !isOpen(item.record.Status) || item.record.QueueGroupID == nil {
@@ -1080,6 +1143,7 @@ func (t *Transfer) ManualStart(pid string) error {
 	item.record.ErrorCode = ""
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
