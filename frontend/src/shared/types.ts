@@ -263,6 +263,8 @@ export interface ModInfo {
     preview?: string;
     mtime: number;
     size: number;
+    isDownloading?: boolean;
+    isDownloadPlaceholder?: boolean;
     inis: {
         name: string;
         path: string;
@@ -562,6 +564,11 @@ export interface Transfer {
     transferedFiles: number;
     failedFiles: number;
     path?: string;
+    destinationPaths?: string[];
+    destinationTargets?: {
+        path: string;
+        kind: "file" | "directory";
+    }[];
     error?: string;
     errorCode?: string;
     planPhase?: PlanPhase;

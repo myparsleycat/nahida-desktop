@@ -123,7 +123,12 @@ export function MergeModsDialog() {
       toast.success(t("page.mod.merge.success"));
       exitMergeMode();
     } catch (error) {
-      toast.error(toErrorMessage(error) || t("page.mod.merge.failed"));
+      const errorMessage = toErrorMessage(error);
+      if (errorMessage.includes("MOD_DOWNLOAD_IN_PROGRESS")) {
+        toast.warning(t("page.mod.download_action_blocked"));
+      } else {
+        toast.error(errorMessage || t("page.mod.merge.failed"));
+      }
     } finally {
       setIsMerging(false);
     }

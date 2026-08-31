@@ -40,9 +40,10 @@ interface ModContextMenuProps {
   mod: ModInfo;
   actions: ModActionApi;
   children: ReactNode;
+  disabled?: boolean;
 }
 
-export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) {
+export function ModContextMenu({ mod, actions, children, disabled = false }: ModContextMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [gameBananaSource, setGameBananaSource] = useState<{
@@ -52,6 +53,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
   const gameBananaModId =
     gameBananaSource?.modPath === mod.path ? gameBananaSource.modId : undefined;
   const isConvertingModel = actions.convertingModelPath === mod.path;
+
+  if (disabled) {
+    return children;
+  }
 
   const loadGameBananaModId = () => {
     if (gameBananaSource?.modPath === mod.path) return;

@@ -190,8 +190,12 @@ func (d *Drive) runDownload(ctx context.Context, transfers *transfer.Transfer, p
 	if len(params.Items) != 1 {
 		name = fmt.Sprintf("%d items", len(params.Items))
 	}
+	destinationTargets, err := resolveDownloadDestinationTargets(prepared, params.TargetPath)
+	if err != nil {
+		return d.failDownloadTransfer(transfers, pid, err)
+	}
 	data := transfer.Data{Root: &prepared.Root, Files: slices.Clone(prepared.Files), Dirs: slices.Clone(prepared.Dirs)}
-	if err := transfers.SetData(pid, data, prepared.TotalBytes, name); err != nil {
+	if err := transfers.SetData(pid, data, prepared.TotalBytes, name, destinationTargets); err != nil {
 		return err
 	}
 	if err := d.executeDownload(ctx, transfers, pid, params, prepared); err != nil {
@@ -517,6 +521,48 @@ func resolveDownloadPaths(metadata DownloadMetadata, targetPath string) (map[str
 		}
 	}
 	return paths, false, nil
+}
+
+func resolveDownloadDestinationTargets(metadata DownloadMetadata, targetPath string) ([]transfer.DestinationTarget, error) {
+	paths, singleFile, err := resolveDownloadPaths(metadata, targetPath)
+	if err != nil {
+		return nil, err
+	}
+	if singleFile {
+		return []transfer.DestinationTarget{{
+			Path: filepath.Join(targetPath, metadata.Files[0].Name),
+			Kind: transfer.DestinationFile,
+		}}, nil
+	}
+	if metadata.Root.Name != "" {
+		return []transfer.DestinationTarget{{
+			Path: paths[metadata.Root.ID],
+			Kind: transfer.DestinationDirectory,
+		}}, nil
+	}
+
+	destinationTargets := make([]transfer.DestinationTarget, 0)
+	for _, directory := range metadata.Dirs {
+		if directory.ParentID == nil || *directory.ParentID != metadata.Root.ID {
+			continue
+		}
+		if path := paths[directory.ID]; path != "" {
+			destinationTargets = append(destinationTargets, transfer.DestinationTarget{
+				Path: path,
+				Kind: transfer.DestinationDirectory,
+			})
+		}
+	}
+	rootPath := paths[metadata.Root.ID]
+	for _, file := range metadata.Files {
+		if file.ParentID != nil && *file.ParentID == metadata.Root.ID {
+			destinationTargets = append(destinationTargets, transfer.DestinationTarget{
+				Path: filepath.Join(rootPath, file.Name),
+				Kind: transfer.DestinationFile,
+			})
+		}
+	}
+	return destinationTargets, nil
 }
 
 func parentDownloadKey(file transfer.DownloadFile, rootID string, singleFile bool) string {

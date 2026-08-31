@@ -4,6 +4,7 @@ import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
+import { useModsWithDownloadPlaceholders } from "@renderer/hooks/use-mod-download-placeholders";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
@@ -33,11 +34,16 @@ export function ModList(_props: ModListProps) {
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
-  const mods = useFilteredMods(isPlaceholderData ? [] : activeGroup?.mods || [], searchQuery);
+  const displayMods = useModsWithDownloadPlaceholders(
+    selectedGroupPath,
+    isPlaceholderData ? [] : activeGroup?.mods || [],
+  );
+  const mods = useFilteredMods(displayMods, searchQuery);
   useModShortcuts(searchQuery, mods);
   const isLoading = isPending || isPlaceholderData;
   const showDelayedSkeleton = useDelayedSkeleton(isLoading);
-  const showSkeleton = (isPlaceholderData && activeGroup != null) || showDelayedSkeleton;
+  const showSkeleton =
+    displayMods.length === 0 && ((isPlaceholderData && activeGroup != null) || showDelayedSkeleton);
   const getRowKey = useCallback(
     (index: number) => {
       const modPath = mods[index]?.path;

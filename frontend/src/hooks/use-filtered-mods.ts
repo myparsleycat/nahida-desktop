@@ -34,6 +34,10 @@ export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
 
         return filtered
             .sort((a, b) => {
+                if (Boolean(a.mod.isDownloading) !== Boolean(b.mod.isDownloading)) {
+                    return a.mod.isDownloading ? -1 : 1;
+                }
+
                 if (a.mod.isEnabled !== b.mod.isEnabled) {
                     return a.mod.isEnabled ? -1 : 1;
                 }

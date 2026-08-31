@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -122,6 +123,19 @@ func TestCanceledDownloadDoesNotCreateQueuedEmptyDirectories(t *testing.T) {
 	case <-requestStarted:
 	case <-time.After(time.Second):
 		t.Fatal("download did not start")
+	}
+	record, ok := transfers.Get(result.PID)
+	if !ok || record.Status != transfer.StatusProgress {
+		t.Fatalf("active transfer = %+v, ok=%v", record, ok)
+	}
+	wantDestination := filepath.Join(target, "package")
+	if len(record.DestinationPaths) != 1 || record.DestinationPaths[0] != wantDestination {
+		t.Fatalf("active destination paths = %#v, want %q", record.DestinationPaths, wantDestination)
+	}
+	if len(record.DestinationTargets) != 1 ||
+		record.DestinationTargets[0].Path != wantDestination ||
+		record.DestinationTargets[0].Kind != transfer.DestinationDirectory {
+		t.Fatalf("active destination targets = %#v", record.DestinationTargets)
 	}
 	if err := transfers.Cancel(result.PID); err != nil {
 		t.Fatal(err)
@@ -432,6 +446,70 @@ func TestResolveDownloadPathsRejectsDuplicateDirectoryID(t *testing.T) {
 	}
 	if _, _, err := resolveDownloadPaths(metadata, t.TempDir()); err == nil {
 		t.Fatal("expected duplicate directory error")
+	}
+}
+
+func TestResolveDownloadDestinationTargets(t *testing.T) {
+	target := filepath.Join(`C:\Mods`, "Character")
+	rootID := "root"
+	batchID := "batch-root"
+
+	tests := []struct {
+		name     string
+		metadata DownloadMetadata
+		want     []transfer.DestinationTarget
+	}{
+		{
+			name: "single file",
+			metadata: DownloadMetadata{
+				Root:  transfer.Root{ID: "file", Name: "mod.zip"},
+				Files: []transfer.DownloadFile{{ID: "file", Name: "mod.zip"}},
+			},
+			want: []transfer.DestinationTarget{{
+				Path: filepath.Join(target, "mod.zip"),
+				Kind: transfer.DestinationFile,
+			}},
+		},
+		{
+			name: "single renamed folder",
+			metadata: DownloadMetadata{
+				Root: transfer.Root{ID: rootID, Name: "Mod (2)"},
+				Dirs: []transfer.Directory{{ID: rootID, Name: "Mod (2)"}},
+			},
+			want: []transfer.DestinationTarget{{
+				Path: filepath.Join(target, "Mod (2)"),
+				Kind: transfer.DestinationDirectory,
+			}},
+		},
+		{
+			name: "batch folders and file",
+			metadata: DownloadMetadata{
+				Root: transfer.Root{ID: batchID},
+				Dirs: []transfer.Directory{
+					{ID: "one", ParentID: &batchID, Name: "One"},
+					{ID: "nested", ParentID: &rootID, Name: "Nested"},
+					{ID: rootID, ParentID: &batchID, Name: "Two"},
+				},
+				Files: []transfer.DownloadFile{{ID: "file", ParentID: &batchID, Name: "readme.txt"}},
+			},
+			want: []transfer.DestinationTarget{
+				{Path: filepath.Join(target, "One"), Kind: transfer.DestinationDirectory},
+				{Path: filepath.Join(target, "Two"), Kind: transfer.DestinationDirectory},
+				{Path: filepath.Join(target, "readme.txt"), Kind: transfer.DestinationFile},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := resolveDownloadDestinationTargets(test.metadata, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("destination targets = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 

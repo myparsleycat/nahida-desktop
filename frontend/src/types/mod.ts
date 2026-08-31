@@ -23,6 +23,8 @@ export interface ModInfo {
     preview?: string;
     mtime: number;
     size: number;
+    isDownloading?: boolean;
+    isDownloadPlaceholder?: boolean;
     inis: {
         name: string;
         path: string;

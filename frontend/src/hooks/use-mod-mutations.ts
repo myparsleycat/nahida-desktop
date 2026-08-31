@@ -304,6 +304,11 @@ export function useModMutations() {
             return;
         }
 
+        if (errorMessage.includes("MOD_DOWNLOAD_IN_PROGRESS")) {
+            toast.warning(t("page.mod.download_action_blocked"));
+            return;
+        }
+
         toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
     };
 
@@ -338,6 +343,11 @@ export function useModMutations() {
             errorMessage.includes("INVALID_MOD_NAME")
         ) {
             toast.error(t("page.mod.hooks.use-mod-mutations.rename-mutation.2"));
+            return;
+        }
+
+        if (errorMessage.includes("MOD_DOWNLOAD_IN_PROGRESS")) {
+            toast.warning(t("page.mod.download_action_blocked"));
             return;
         }
 

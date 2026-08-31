@@ -1,7 +1,10 @@
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { globalStore } from "@renderer/store/global";
 import { modStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useEffect, useLayoutEffect, useRef } from "react";
+
+import { findModDownloadTransfer } from "./use-mod-download-transfer";
 
 export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
     const latestSearchQueryRef = useRef(searchQuery);
@@ -69,8 +72,16 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
                 return;
             }
 
+            const mod = latestFilteredModsRef.current[0];
             e.preventDefault();
-            exclusiveToggleRef.current(latestFilteredModsRef.current[0]);
+            if (
+                mod.isDownloading ||
+                findModDownloadTransfer(globalStore.getState().transfers, mod.path)
+            ) {
+                return;
+            }
+
+            exclusiveToggleRef.current(mod);
             modStore.getState().setSearchQuery("");
         };
 

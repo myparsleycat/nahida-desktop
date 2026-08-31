@@ -82,6 +82,7 @@ interface ModState {
     enterMergeMode: () => void;
     exitMergeMode: () => void;
     toggleMergeSelection: (modPath: string) => void;
+    removeMergeSelections: (modPaths: string[]) => void;
     setMergeDialogOpen: (open: boolean) => void;
 }
 
@@ -228,6 +229,21 @@ export const modStore = createStore<ModState>((set) => ({
             if (next.has(modPath)) next.delete(modPath);
             else next.add(modPath);
             return { selectedModPaths: next };
+        }),
+    removeMergeSelections: (modPaths) =>
+        set((state) => {
+            const next = new Set(state.selectedModPaths);
+            const changed = modPaths.reduce(
+                (removed, modPath) => next.delete(modPath) || removed,
+                false,
+            );
+            if (!changed) {
+                return state;
+            }
+            return {
+                selectedModPaths: next,
+                isMergeDialogOpen: next.size >= 2 && state.isMergeDialogOpen,
+            };
         }),
     setMergeDialogOpen: (isMergeDialogOpen) => set({ isMergeDialogOpen }),
 

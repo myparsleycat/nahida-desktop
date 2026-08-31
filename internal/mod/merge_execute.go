@@ -141,6 +141,9 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 		if _, err := m.ownedPath(ctx, leaf); err != nil {
 			return mergeOwnedPathError(err)
 		}
+		if err := m.rejectActiveDownloadAction(leaf); err != nil {
+			return err
+		}
 		resolved, err := resolveForCompare(leaf)
 		if err != nil {
 			return err

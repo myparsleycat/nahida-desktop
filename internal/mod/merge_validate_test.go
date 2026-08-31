@@ -127,6 +127,35 @@ func TestValidateMergeRequestRejectsPathsOutsideManagedRootOrGroup(t *testing.T)
 	}
 }
 
+func TestValidateMergeRequestRejectsActiveDownloadLeaf(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "CharA")
+	first := filepath.Join(group, "A")
+	second := filepath.Join(group, "B")
+	for _, path := range []string{first, second} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	registerActiveModDownload(t, service, "merge-active", first)
+	request := MergeModsRequest{
+		GroupPath: group, Placement: "new_folder", PackName: "Merged",
+		Root: MergePlanNode{
+			Kind: "group", ID: "root", Engine: "classic", Name: "Merged", ForwardKey: "vk_right",
+			Children: []MergePlanNode{{Kind: "leaf", Path: first}, {Kind: "leaf", Path: second}},
+		},
+	}
+
+	if err := service.validateMergeRequest(ctx, request); err == nil || err.Error() != "MOD_DOWNLOAD_IN_PROGRESS" {
+		t.Fatalf("merge validation error = %v", err)
+	}
+}
+
 func TestValidateMergeRequestFollowsGroupSymlinks(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})

@@ -15,6 +15,9 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+		return "", err
+	}
 	if isNTEImporter(game.Importer) {
 		return m.setNteModEnabled(ctx, modPath, !isNteModEnabled(modPath))
 	}
@@ -31,6 +34,9 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
+		return "", err
+	}
+	if err := m.rejectActiveDownloadAction(modPath); err != nil {
 		return "", err
 	}
 	if isNTEImporter(game.Importer) {
@@ -55,6 +61,9 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := m.rejectActiveDownloadAction(modPath); err != nil {
+		return "", err
+	}
 	if isNTEImporter(game.Importer) {
 		return m.setNteModEnabled(ctx, modPath, true)
 	}
@@ -64,6 +73,9 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, error) {
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
+		return "", err
+	}
+	if err := m.rejectActiveDownloadAction(modPath); err != nil {
 		return "", err
 	}
 	if isNTEImporter(game.Importer) {
@@ -94,7 +106,8 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 			continue
 		}
 		path := filepath.Join(filepath.Dir(modPath), entry.Name())
-		if entry.IsDir() && !samePath(path, modPath) && !isDisabled(entry.Name()) {
+		if entry.IsDir() && !samePath(path, modPath) && !isDisabled(entry.Name()) &&
+			!m.isActiveDownloadDestination(path) {
 			if _, err := m.retryExclusiveToggleOperation(ctx, path, func() (string, error) {
 				return m.disableWithShaders(ctx, path)
 			}); err != nil {
@@ -109,6 +122,9 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 
 func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, error) {
 	if _, err := m.ownedPath(ctx, modPath); err != nil {
+		return "", err
+	}
+	if err := m.rejectActiveDownloadAction(modPath); err != nil {
 		return "", err
 	}
 	newName = stripDisabled(newName)
@@ -155,9 +171,10 @@ func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		if entry.IsDir() && isDisabled(entry.Name()) {
-			if _, err := m.enableWithShaders(ctx, filepath.Join(groupPath, entry.Name())); err != nil {
-				m.logActionError(err, "Mod:enableAll:"+filepath.Join(groupPath, entry.Name()))
+		path := filepath.Join(groupPath, entry.Name())
+		if entry.IsDir() && isDisabled(entry.Name()) && !m.isActiveDownloadDestination(path) {
+			if _, err := m.enableWithShaders(ctx, path); err != nil {
+				m.logActionError(err, "Mod:enableAll:"+path)
 			}
 		}
 	}
@@ -181,9 +198,10 @@ func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
 		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		if entry.IsDir() && !isDisabled(entry.Name()) {
-			if _, err := m.disableWithShaders(ctx, filepath.Join(groupPath, entry.Name())); err != nil {
-				m.logActionError(err, "Mod:disableAll:"+filepath.Join(groupPath, entry.Name()))
+		path := filepath.Join(groupPath, entry.Name())
+		if entry.IsDir() && !isDisabled(entry.Name()) && !m.isActiveDownloadDestination(path) {
+			if _, err := m.disableWithShaders(ctx, path); err != nil {
+				m.logActionError(err, "Mod:disableAll:"+path)
 			}
 		}
 	}
@@ -225,13 +243,24 @@ func isRetryableExclusiveToggleError(err error) bool {
 
 func (m *Mod) setAllNteBestEffort(ctx context.Context, entries []nteModEntry, enabled bool) {
 	for _, entry := range entries {
-		if isNteModEnabled(entry.path) == enabled {
+		if isNteModEnabled(entry.path) == enabled || m.isActiveDownloadDestination(entry.path) {
 			continue
 		}
 		if _, err := m.setNteModEnabled(ctx, entry.path, enabled); err != nil {
 			m.logActionError(err, "Mod:setAllNte:"+entry.path)
 		}
 	}
+}
+
+func (m *Mod) rejectActiveDownloadAction(path string) error {
+	if m.isActiveDownloadDestination(path) {
+		return errors.New("MOD_DOWNLOAD_IN_PROGRESS")
+	}
+	return nil
+}
+
+func (m *Mod) isActiveDownloadDestination(path string) bool {
+	return m != nil && m.transfer != nil && m.transfer.IsActiveDownloadDestination(path)
 }
 
 func (m *Mod) logActionError(err error, where string) {
