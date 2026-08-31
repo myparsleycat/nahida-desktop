@@ -61,6 +61,193 @@ func TestCreateBuildsRecordAndListOmitsData(t *testing.T) {
 	}
 }
 
+func TestDestinationPathsAreClonedAcrossTransferBoundaries(t *testing.T) {
+	service := New()
+	createdPaths := []string{`C:\Mods\Legacy`}
+	createdTargets := []DestinationTarget{{Path: `C:\Mods\First`, Kind: DestinationDirectory}}
+	record, err := service.Create(CreateParams{
+		PID: "paths", Type: "download", Name: "paths", InitialStatus: StatusPreparing,
+		DestinationPaths: createdPaths, DestinationTargets: createdTargets, ManualStart: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdPaths[0] = `C:\Mods\Mutated`
+	createdTargets[0].Path = `C:\Mods\MutatedTarget`
+	record.DestinationPaths[0] = `C:\Mods\Returned`
+	record.DestinationTargets[0].Path = `C:\Mods\ReturnedTarget`
+	if got := service.List()[0].DestinationPaths[0]; got != `C:\Mods\First` {
+		t.Fatalf("created destination path = %q", got)
+	}
+	if got := service.List()[0].DestinationTargets[0]; got.Path != `C:\Mods\First` || got.Kind != DestinationDirectory {
+		t.Fatalf("created destination target = %#v", got)
+	}
+
+	updatedTargets := []DestinationTarget{
+		{Path: `C:\Mods\Second`, Kind: DestinationDirectory},
+		{Path: `C:\Mods\Third.zip`, Kind: DestinationFile},
+	}
+	if err := service.Update("paths", Updates{DestinationTargets: updatedTargets}); err != nil {
+		t.Fatal(err)
+	}
+	updatedTargets[0].Path = `C:\Mods\MutatedAgain`
+	listed := service.List()
+	listed[0].DestinationPaths[1] = `C:\Mods\ReturnedAgain`
+	listed[0].DestinationTargets[1].Path = `C:\Mods\ReturnedTargetAgain`
+	got := service.List()[0].DestinationPaths
+	if len(got) != 2 || got[0] != `C:\Mods\Second` || got[1] != `C:\Mods\Third.zip` {
+		t.Fatalf("updated destination paths = %#v", got)
+	}
+	gotTargets := service.List()[0].DestinationTargets
+	if len(gotTargets) != 2 || gotTargets[0].Path != `C:\Mods\Second` || gotTargets[1].Kind != DestinationFile {
+		t.Fatalf("updated destination targets = %#v", gotTargets)
+	}
+
+	setDataTargets := []DestinationTarget{{Path: `C:\Mods\SetData`, Kind: DestinationDirectory}}
+	if err := service.SetData("paths", Data{}, 0, "paths", setDataTargets); err != nil {
+		t.Fatal(err)
+	}
+	setDataTargets[0].Path = `C:\Mods\MutatedSetData`
+	gotRecord, ok := service.Get("paths")
+	if !ok {
+		t.Fatal("SetData transfer not found")
+	}
+	gotRecord.DestinationTargets[0].Path = `C:\Mods\ReturnedSetData`
+	if got := service.List()[0]; len(got.DestinationPaths) != 1 || got.DestinationPaths[0] != `C:\Mods\SetData` ||
+		got.DestinationTargets[0].Path != `C:\Mods\SetData` {
+		t.Fatalf("SetData destinations = %#v, %#v", got.DestinationPaths, got.DestinationTargets)
+	}
+
+	legacyPaths := []string{`C:\Mods\LegacySecond`}
+	if err := service.Update("paths", Updates{DestinationPaths: legacyPaths}); err != nil {
+		t.Fatal(err)
+	}
+	legacyPaths[0] = `C:\Mods\MutatedLegacy`
+	if got := service.List()[0]; len(got.DestinationPaths) != 1 || got.DestinationPaths[0] != `C:\Mods\LegacySecond` ||
+		got.DestinationTargets != nil {
+		t.Fatalf("legacy destination update = %#v, %#v", got.DestinationPaths, got.DestinationTargets)
+	}
+}
+
+func TestIsActiveDownloadDestinationMatchesOverlappingOpenDownloadPaths(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		type_  string
+		status Status
+		want   bool
+	}{
+		{name: "pending", type_: "download", status: StatusPending, want: true},
+		{name: "preparing", type_: "download", status: StatusPreparing, want: true},
+		{name: "progress", type_: "download", status: StatusProgress, want: true},
+		{name: "paused", type_: "download", status: StatusPaused, want: true},
+		{name: "completed", type_: "download", status: StatusCompleted},
+		{name: "canceled", type_: "download", status: StatusCanceled},
+		{name: "error", type_: "download", status: StatusError},
+		{name: "upload", type_: "upload", status: StatusProgress},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := New()
+			if _, err := service.Create(CreateParams{
+				PID: "active", Type: test.type_, Name: "active", InitialStatus: test.status,
+				DestinationPaths: []string{`C:\Mods\Character\Active`}, ManualStart: true,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range []string{
+				`c:\mods\character\active`,
+				`C:\Mods\Character\Active\Nested`,
+				`C:\Mods\Character`,
+			} {
+				if got := service.IsActiveDownloadDestination(path); got != test.want {
+					t.Fatalf("IsActiveDownloadDestination(%q) = %v, want %v", path, got, test.want)
+				}
+			}
+			if service.IsActiveDownloadDestination(`C:\Mods\Character\Other`) {
+				t.Fatal("unrelated sibling matched active destination")
+			}
+		})
+	}
+}
+
+func TestCanceledDownloadKeepsDestinationReservedUntilRunnerStops(t *testing.T) {
+	service := New()
+	path := `C:\Mods\Character\Active`
+	if _, err := service.Create(CreateParams{
+		PID: "canceling", Type: "download", Name: "canceling", InitialStatus: StatusPending,
+		DestinationPaths: []string{path}, ManualStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	releaseRunner := make(chan struct{})
+	if err := service.RegisterRunner("canceling", func(ctx context.Context, _ *Transfer, _ string) error {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+		<-releaseRunner
+		return ctx.Err()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- service.ProcessQueue(context.Background()) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not start")
+	}
+	if err := service.Cancel("canceling"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("download runner did not observe cancellation")
+	}
+	if !service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation released before canceled runner stopped")
+	}
+	close(releaseRunner)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled runner did not stop")
+	}
+	if service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation remains after canceled runner stopped")
+	}
+}
+
+func TestFailedDownloadReleasesDestinationAfterRunnerStops(t *testing.T) {
+	service := New()
+	path := `C:\Mods\Character\Failed`
+	if _, err := service.Create(CreateParams{
+		PID: "failing", Type: "download", Name: "failing", InitialStatus: StatusPending,
+		DestinationPaths: []string{path}, ManualStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterRunner("failing", func(context.Context, *Transfer, string) error {
+		return errors.New("download failed")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record, ok := service.Get("failing")
+	if !ok || record.Status != StatusError {
+		t.Fatalf("failed transfer = %+v, ok=%v", record, ok)
+	}
+	if service.IsActiveDownloadDestination(path) {
+		t.Fatal("destination reservation remains after failed runner stopped")
+	}
+}
+
 func TestCreateEmitsStartToastAndOptionalNavigation(t *testing.T) {
 	var events []struct {
 		name string

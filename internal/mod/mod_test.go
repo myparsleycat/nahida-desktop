@@ -439,6 +439,48 @@ func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
 	}
 }
 
+func TestApplyPresetSkipsActiveDownloadDestination(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Character")
+	modPath := filepath.Join(group, "Costume")
+	if err := os.MkdirAll(modPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modPath, "mod.ini"), []byte("[Constants]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	disabledPath, err := service.Toggle(ctx, modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preset, err := service.CreatePreset(ctx, "Game", "Disabled", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabledPath, err := service.Toggle(ctx, disabledPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerActiveModDownload(t, service, "preset-active", enabledPath)
+
+	result, err := service.ApplyPreset(ctx, preset.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Applied) != 0 || len(result.Skipped) != 1 ||
+		!strings.EqualFold(result.Skipped[0], filepath.ToSlash(filepath.Join("Character", "Costume"))) {
+		t.Fatalf("apply result = %#v", result)
+	}
+	if _, err := os.Stat(enabledPath); err != nil {
+		t.Fatalf("active download folder changed: %v", err)
+	}
+}
+
 func TestApplyPresetRoutesNteModsThroughPakToggle(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

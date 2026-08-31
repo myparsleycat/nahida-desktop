@@ -262,6 +262,14 @@
         "description": "圧縮ファイルは自動的に解凍されます"
       },
       "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
+      "download_action_blocked": "ダウンロード中のMODは変更できません。",
+      "download_overlay": {
+        "queued": "待機中",
+        "preparing": "準備中",
+        "downloading": "ダウンロード中",
+        "finalizing": "完了処理中",
+        "paused": "一時停止"
+      },
       "all_enabled": "すべて有効化",
       "all_disabled": "すべて無効化",
       "merge": {

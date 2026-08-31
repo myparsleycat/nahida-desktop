@@ -261,6 +261,14 @@
         "description": "압축 파일은 자동으로 압축 해제됩니다"
       },
       "download_completed": "\"{{name}}\" 다운로드가 완료되었습니다.",
+      "download_action_blocked": "다운로드 중인 모드는 변경할 수 없습니다.",
+      "download_overlay": {
+        "queued": "대기 중",
+        "preparing": "준비 중",
+        "downloading": "다운로드 중",
+        "finalizing": "마무리 중",
+        "paused": "일시정지"
+      },
       "all_enabled": "모두 활성화",
       "all_disabled": "모두 비활성화",
       "merge": {

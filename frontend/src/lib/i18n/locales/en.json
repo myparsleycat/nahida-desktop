@@ -278,6 +278,14 @@
         "description": "Compressed files will be automatically extracted"
       },
       "download_completed": "Downloaded \"{{name}}\".",
+      "download_action_blocked": "A mod cannot be changed while it is downloading.",
+      "download_overlay": {
+        "queued": "Queued",
+        "preparing": "Preparing",
+        "downloading": "Downloading",
+        "finalizing": "Finalizing",
+        "paused": "Paused"
+      },
       "all_enabled": "Enable all",
       "all_disabled": "Disable all",
       "merge": {

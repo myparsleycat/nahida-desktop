@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,6 +88,18 @@ type Directory struct {
 	Name     string  `json:"name" cbor:"name"`
 }
 
+type DestinationKind string
+
+const (
+	DestinationFile      DestinationKind = "file"
+	DestinationDirectory DestinationKind = "directory"
+)
+
+type DestinationTarget struct {
+	Path string          `json:"path"`
+	Kind DestinationKind `json:"kind"`
+}
+
 type Data struct {
 	Root  *Root          `json:"root,omitempty"`
 	Files []DownloadFile `json:"files"`
@@ -95,26 +109,28 @@ type Data struct {
 // Snapshot is the renderer-safe transfer shape. The payload Data and runner
 // state are deliberately absent, matching Electron's getDisplayTransfers.
 type Snapshot struct {
-	PID              string     `json:"pid"`
-	Type             string     `json:"type"`
-	QueueGroupID     *uint64    `json:"queueGroupId,omitempty"`
-	CurrentID        string     `json:"currentId,omitempty"`
-	Status           Status     `json:"status"`
-	TotalSize        int64      `json:"totalSize"`
-	TransferredSize  int64      `json:"transferedSize"`
-	Progress         float64    `json:"progress"`
-	Speed            float64    `json:"speed"`
-	ETA              float64    `json:"eta"`
-	StartTime        int64      `json:"startTime"`
-	Name             string     `json:"name"`
-	TotalFiles       int        `json:"totalFiles"`
-	TransferredFiles int        `json:"transferedFiles"`
-	FailedFiles      int        `json:"failedFiles"`
-	Path             string     `json:"path,omitempty"`
-	Error            string     `json:"error,omitempty"`
-	ErrorCode        string     `json:"errorCode,omitempty"`
-	PlanPhase        *PlanPhase `json:"planPhase,omitempty"`
-	PlanProgress     *float64   `json:"planProgress,omitempty"`
+	PID                string              `json:"pid"`
+	Type               string              `json:"type"`
+	QueueGroupID       *uint64             `json:"queueGroupId,omitempty"`
+	CurrentID          string              `json:"currentId,omitempty"`
+	Status             Status              `json:"status"`
+	TotalSize          int64               `json:"totalSize"`
+	TransferredSize    int64               `json:"transferedSize"`
+	Progress           float64             `json:"progress"`
+	Speed              float64             `json:"speed"`
+	ETA                float64             `json:"eta"`
+	StartTime          int64               `json:"startTime"`
+	Name               string              `json:"name"`
+	TotalFiles         int                 `json:"totalFiles"`
+	TransferredFiles   int                 `json:"transferedFiles"`
+	FailedFiles        int                 `json:"failedFiles"`
+	Path               string              `json:"path,omitempty"`
+	DestinationPaths   []string            `json:"destinationPaths,omitempty"`
+	DestinationTargets []DestinationTarget `json:"destinationTargets,omitempty"`
+	Error              string              `json:"error,omitempty"`
+	ErrorCode          string              `json:"errorCode,omitempty"`
+	PlanPhase          *PlanPhase          `json:"planPhase,omitempty"`
+	PlanProgress       *float64            `json:"planProgress,omitempty"`
 }
 
 type Record struct {
@@ -123,16 +139,18 @@ type Record struct {
 }
 
 type CreateParams struct {
-	PID           string
-	Type          string
-	Name          string
-	Path          string
-	CurrentID     string
-	InitialStatus Status
-	Data          Data
-	QueueGroupID  *uint64
-	ManualStart   bool
-	RestartData   any
+	PID                string
+	Type               string
+	Name               string
+	Path               string
+	DestinationPaths   []string
+	DestinationTargets []DestinationTarget
+	CurrentID          string
+	InitialStatus      Status
+	Data               Data
+	QueueGroupID       *uint64
+	ManualStart        bool
+	RestartData        any
 }
 
 // Runner performs one transfer attempt. Implementations must stop promptly
@@ -162,24 +180,26 @@ type Options struct {
 }
 
 type Updates struct {
-	Status            *Status
-	CurrentID         *string
-	TotalSize         *int64
-	TotalFiles        *int
-	TransferredSize   *int64
-	Progress          *float64
-	TransferredFiles  *int
-	FailedFiles       *int
-	Path              *string
-	Error             *string
-	ErrorCode         *string
-	PlanPhase         *PlanPhase
-	PlanProgress      *float64
-	ClearCurrentID    bool
-	ClearError        bool
-	ClearErrorCode    bool
-	ClearPlanPhase    bool
-	ClearPlanProgress bool
+	Status             *Status
+	CurrentID          *string
+	TotalSize          *int64
+	TotalFiles         *int
+	TransferredSize    *int64
+	Progress           *float64
+	TransferredFiles   *int
+	FailedFiles        *int
+	Path               *string
+	DestinationPaths   []string
+	DestinationTargets []DestinationTarget
+	Error              *string
+	ErrorCode          *string
+	PlanPhase          *PlanPhase
+	PlanProgress       *float64
+	ClearCurrentID     bool
+	ClearError         bool
+	ClearErrorCode     bool
+	ClearPlanPhase     bool
+	ClearPlanProgress  bool
 }
 
 type speedSample struct {
@@ -205,6 +225,7 @@ type entry struct {
 
 type Transfer struct {
 	mu                 sync.RWMutex
+	destinationMu      sync.RWMutex
 	emitMu             sync.Mutex
 	powerMu            sync.Mutex
 	entries            map[string]*entry
@@ -337,7 +358,7 @@ func (t *Transfer) List() []Snapshot {
 func (t *Transfer) snapshotEntriesLocked() []orderedSnapshot {
 	items := make([]orderedSnapshot, 0, len(t.entries))
 	for _, item := range t.entries {
-		items = append(items, orderedSnapshot{snapshot: item.record.Snapshot, order: item.createdOrder})
+		items = append(items, orderedSnapshot{snapshot: cloneSnapshot(item.record.Snapshot), order: item.createdOrder})
 	}
 	return items
 }
@@ -361,16 +382,19 @@ func orderSnapshots(items []orderedSnapshot) []Snapshot {
 }
 
 func (t *Transfer) Cancel(pid string) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
-	if isTerminal(item.record.Status) {
+	if isTerminal(item.record.Status) && item.cancel == nil {
 		delete(t.entries, pid)
 		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		if shouldEmit {
 			t.emit()
 		}
@@ -382,6 +406,7 @@ func (t *Transfer) Cancel(pid string) error {
 	item.record.Status = StatusCanceled
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -390,14 +415,17 @@ func (t *Transfer) Cancel(pid string) error {
 }
 
 func (t *Transfer) Pause(pid string) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	if item.record.Status != StatusPending && item.record.Status != StatusPreparing && item.record.Status != StatusProgress {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return nil
 	}
 	item.record.Status = StatusPaused
@@ -406,6 +434,7 @@ func (t *Transfer) Pause(pid string) error {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -466,16 +495,18 @@ func (t *Transfer) ResumeAll() error {
 }
 
 func (t *Transfer) Clear() error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	changed := false
 	for pid, item := range t.entries {
-		if isTerminal(item.record.Status) {
+		if isTerminal(item.record.Status) && item.cancel == nil {
 			delete(t.entries, pid)
 			changed = true
 		}
 	}
 	shouldEmit := changed && t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -518,9 +549,11 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 		}
 	}
 
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	if _, exists := t.entries[params.PID]; exists {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return Record{}, fmt.Errorf("transfer %q already exists", params.PID)
 	}
 	queueGroupID := params.QueueGroupID
@@ -540,18 +573,24 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 	}
 	t.creationSequence++
 	t.queueSequence++
+	destinationPaths := slices.Clone(params.DestinationPaths)
+	if params.DestinationTargets != nil {
+		destinationPaths = destinationTargetPaths(params.DestinationTargets)
+	}
 	record := Record{
 		Snapshot: Snapshot{
-			PID:          params.PID,
-			Type:         params.Type,
-			QueueGroupID: queueGroupID,
-			CurrentID:    params.CurrentID,
-			Status:       initialStatus,
-			TotalSize:    totalSize,
-			StartTime:    t.now().UnixMilli(),
-			Name:         params.Name,
-			TotalFiles:   len(params.Data.Files),
-			Path:         params.Path,
+			PID:                params.PID,
+			Type:               params.Type,
+			QueueGroupID:       queueGroupID,
+			CurrentID:          params.CurrentID,
+			Status:             initialStatus,
+			TotalSize:          totalSize,
+			StartTime:          t.now().UnixMilli(),
+			Name:               params.Name,
+			TotalFiles:         len(params.Data.Files),
+			Path:               params.Path,
+			DestinationPaths:   destinationPaths,
+			DestinationTargets: slices.Clone(params.DestinationTargets),
 		},
 		Data: cloneData(params.Data),
 	}
@@ -564,6 +603,7 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -584,12 +624,14 @@ func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 	if cancel == nil {
 		return errors.New("transfer cancel function is required")
 	}
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if ok {
 		item.cancel = cancel
 	}
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if !ok {
 		return fmt.Errorf("transfer %q not found", pid)
 	}
@@ -600,11 +642,13 @@ func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 //
 //wails:ignore
 func (t *Transfer) ClearCancel(pid string) {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	if item, ok := t.entries[pid]; ok {
 		item.cancel = nil
 	}
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 }
 
 func (t *Transfer) notifyStarted(ctx context.Context, name string) {
@@ -686,16 +730,19 @@ func (t *Transfer) next(parent context.Context) (string, Runner, context.Context
 }
 
 func (t *Transfer) finishRun(pid string, runErr error) {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return
 	}
 	item.cancel = nil
 	if item.record.Status == StatusPaused || item.record.Status == StatusCanceled {
 		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		if shouldEmit {
 			t.emit()
 		}
@@ -708,6 +755,7 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -717,10 +765,17 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 //wails:ignore
 func (t *Transfer) Update(pid string, updates Updates) error {
 	now := t.now()
+	reservationChange := updates.Status != nil || updates.DestinationPaths != nil || updates.DestinationTargets != nil
+	if reservationChange {
+		t.destinationMu.Lock()
+	}
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		if reservationChange {
+			t.destinationMu.Unlock()
+		}
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	applyUpdates(&item.record.Snapshot, updates)
@@ -757,6 +812,9 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 	}
 	shouldEmit := t.scheduleEmitLocked(updates.Status != nil, now)
 	t.mu.Unlock()
+	if reservationChange {
+		t.destinationMu.Unlock()
+	}
 	if shouldEmit {
 		t.emit()
 	}
@@ -780,21 +838,69 @@ func (t *Transfer) Get(pid string) (Record, bool) {
 }
 
 //wails:ignore
-func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string) error {
+func (t *Transfer) IsActiveDownloadDestination(path string) bool {
+	t.destinationMu.RLock()
+	defer t.destinationMu.RUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.isActiveDownloadDestinationLocked(path)
+}
+
+// GuardDownloadDestinations takes a stable snapshot of active destination
+// conflicts and prevents transfer registration or state changes until release.
+// Callers must invoke release after the protected filesystem operations finish.
+//
+//wails:ignore
+func (t *Transfer) GuardDownloadDestinations(paths []string) (blocked []bool, release func()) {
+	if t == nil {
+		return make([]bool, len(paths)), func() {}
+	}
+	t.destinationMu.RLock()
+	t.mu.RLock()
+	blocked = make([]bool, len(paths))
+	for index, path := range paths {
+		blocked[index] = t.isActiveDownloadDestinationLocked(path)
+	}
+	t.mu.RUnlock()
+	return blocked, t.destinationMu.RUnlock
+}
+
+func (t *Transfer) isActiveDownloadDestinationLocked(path string) bool {
+	for _, item := range t.entries {
+		if item.record.Type != "download" ||
+			(!isOpen(item.record.Status) && item.record.Status != StatusPaused && item.cancel == nil) {
+			continue
+		}
+		if slices.ContainsFunc(item.record.DestinationPaths, func(destinationPath string) bool {
+			return transferPathsOverlap(path, destinationPath)
+		}) {
+			return true
+		}
+	}
+	return false
+}
+
+//wails:ignore
+func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string, destinationTargets []DestinationTarget) error {
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	item.record.Data = cloneData(data)
 	item.record.TotalSize = max(0, totalSize)
 	item.record.TotalFiles = len(data.Files)
+	item.record.DestinationPaths = destinationTargetPaths(destinationTargets)
+	item.record.DestinationTargets = slices.Clone(destinationTargets)
 	if name != "" {
 		item.record.Name = name
 	}
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -996,14 +1102,17 @@ func (t *Transfer) ManualStart(pid string) error {
 		}
 	}
 
+	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok = t.entries[pid]
 	if !ok {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
 	if item.runner == nil {
 		t.mu.Unlock()
+		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q has no registered runner", pid)
 	}
 	if !isOpen(item.record.Status) || item.record.QueueGroupID == nil {
@@ -1034,6 +1143,7 @@ func (t *Transfer) ManualStart(pid string) error {
 	item.record.ErrorCode = ""
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
+	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
@@ -1218,6 +1328,14 @@ func applyUpdates(record *Snapshot, updates Updates) {
 	}
 	if updates.Path != nil {
 		record.Path = *updates.Path
+	}
+	if updates.DestinationPaths != nil {
+		record.DestinationPaths = slices.Clone(updates.DestinationPaths)
+		record.DestinationTargets = nil
+	}
+	if updates.DestinationTargets != nil {
+		record.DestinationTargets = slices.Clone(updates.DestinationTargets)
+		record.DestinationPaths = destinationTargetPaths(updates.DestinationTargets)
 	}
 	if updates.Error != nil {
 		record.Error = *updates.Error
@@ -1404,17 +1522,55 @@ func cloneData(data Data) Data {
 
 func cloneRecord(record Record) Record {
 	record.Data = cloneData(record.Data)
-	if record.QueueGroupID != nil {
-		id := *record.QueueGroupID
-		record.QueueGroupID = &id
-	}
-	if record.PlanPhase != nil {
-		phase := *record.PlanPhase
-		record.PlanPhase = &phase
-	}
-	if record.PlanProgress != nil {
-		progress := *record.PlanProgress
-		record.PlanProgress = &progress
-	}
+	record.Snapshot = cloneSnapshot(record.Snapshot)
 	return record
+}
+
+func cloneSnapshot(snapshot Snapshot) Snapshot {
+	snapshot.DestinationPaths = slices.Clone(snapshot.DestinationPaths)
+	snapshot.DestinationTargets = slices.Clone(snapshot.DestinationTargets)
+	if snapshot.QueueGroupID != nil {
+		id := *snapshot.QueueGroupID
+		snapshot.QueueGroupID = &id
+	}
+	if snapshot.PlanPhase != nil {
+		phase := *snapshot.PlanPhase
+		snapshot.PlanPhase = &phase
+	}
+	if snapshot.PlanProgress != nil {
+		progress := *snapshot.PlanProgress
+		snapshot.PlanProgress = &progress
+	}
+	return snapshot
+}
+
+func destinationTargetPaths(targets []DestinationTarget) []string {
+	paths := make([]string, len(targets))
+	for index, target := range targets {
+		paths[index] = target.Path
+	}
+	return paths
+}
+
+func transferPathsOverlap(first, second string) bool {
+	first = cleanTransferPath(first)
+	second = cleanTransferPath(second)
+	return pathContains(first, second) || pathContains(second, first)
+}
+
+func cleanTransferPath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	return filepath.Clean(path)
+}
+
+func pathContains(parent, child string) bool {
+	if strings.EqualFold(parent, child) {
+		return true
+	}
+	if !strings.HasSuffix(parent, string(filepath.Separator)) {
+		parent += string(filepath.Separator)
+	}
+	return strings.HasPrefix(strings.ToLower(child), strings.ToLower(parent))
 }

@@ -202,15 +202,23 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 			result.Skipped = append(result.Skipped, item.RelativePath)
 			continue
 		}
+		if m.isActiveDownloadDestination(item.ActualPath) {
+			result.Skipped = append(result.Skipped, item.RelativePath)
+			continue
+		}
 		var actionErr error
 		if wanted.IsEnabled {
 			_, actionErr = m.Enable(ctx, item.ActualPath)
 		} else {
 			_, actionErr = m.Disable(ctx, item.ActualPath)
 		}
-		if actionErr == nil {
-			result.Applied = append(result.Applied, item.RelativePath)
+		if actionErr != nil {
+			if actionErr.Error() == "MOD_DOWNLOAD_IN_PROGRESS" {
+				result.Skipped = append(result.Skipped, item.RelativePath)
+			}
+			continue
 		}
+		result.Applied = append(result.Applied, item.RelativePath)
 	}
 	return result, nil
 }

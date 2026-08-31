@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -122,6 +123,19 @@ func TestCanceledDownloadDoesNotCreateQueuedEmptyDirectories(t *testing.T) {
 	case <-requestStarted:
 	case <-time.After(time.Second):
 		t.Fatal("download did not start")
+	}
+	record, ok := transfers.Get(result.PID)
+	if !ok || record.Status != transfer.StatusProgress {
+		t.Fatalf("active transfer = %+v, ok=%v", record, ok)
+	}
+	wantDestination := filepath.Join(target, "package")
+	if len(record.DestinationPaths) != 1 || record.DestinationPaths[0] != wantDestination {
+		t.Fatalf("active destination paths = %#v, want %q", record.DestinationPaths, wantDestination)
+	}
+	if len(record.DestinationTargets) != 1 ||
+		record.DestinationTargets[0].Path != wantDestination ||
+		record.DestinationTargets[0].Kind != transfer.DestinationDirectory {
+		t.Fatalf("active destination targets = %#v", record.DestinationTargets)
 	}
 	if err := transfers.Cancel(result.PID); err != nil {
 		t.Fatal(err)
@@ -252,6 +266,74 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}
 	if completedEvent["path"] != target || completedEvent["name"] != "renamed.bin" {
 		t.Fatalf("completion event = %#v", completedEvent)
+	}
+}
+
+func TestQueuedDownloadReservesDestinationBeforeRunnerStarts(t *testing.T) {
+	content := []byte("queued content")
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			close(requestStarted)
+			<-releaseRequest
+		}
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	transfers := transfer.New()
+	drive := downloadServiceTestDrive(server, transfers)
+	metadata := DownloadMetadata{
+		Root:       transfer.Root{ID: "file", Name: "mod.bin"},
+		TotalBytes: int64(len(content)),
+		Files: []transfer.DownloadFile{{
+			ID: "file", FileID: "file", Name: "mod.bin", Size: int64(len(content)), URL: server.URL,
+		}},
+	}
+	target := t.TempDir()
+	params := StartDownloadParams{
+		Items: []DownloadItem{{ID: "file", Name: "mod.bin"}}, TargetPath: target, Data: &metadata,
+	}
+	first, err := drive.StartDownload(context.Background(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- transfers.ProcessQueue(context.Background()) }()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first download did not block")
+	}
+	second, err := drive.StartDownload(context.Background(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(target, "mod.bin")
+	queued, ok := transfers.Get(second.PID)
+	if !ok || queued.Status != transfer.StatusPending {
+		t.Fatalf("queued transfer = %+v, ok=%v", queued, ok)
+	}
+	if len(queued.DestinationTargets) != 1 || queued.DestinationTargets[0].Path != want ||
+		queued.DestinationTargets[0].Kind != transfer.DestinationFile {
+		t.Fatalf("queued destination targets = %#v, want %q", queued.DestinationTargets, want)
+	}
+	if !transfers.IsActiveDownloadDestination(want) {
+		t.Fatalf("queued destination %q is not reserved", want)
+	}
+	close(releaseRequest)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("download queue did not finish")
+	}
+	if record, ok := transfers.Get(first.PID); !ok || record.Status != transfer.StatusCompleted {
+		t.Fatalf("first transfer = %+v, ok=%v", record, ok)
 	}
 }
 
@@ -432,6 +514,70 @@ func TestResolveDownloadPathsRejectsDuplicateDirectoryID(t *testing.T) {
 	}
 	if _, _, err := resolveDownloadPaths(metadata, t.TempDir()); err == nil {
 		t.Fatal("expected duplicate directory error")
+	}
+}
+
+func TestResolveDownloadDestinationTargets(t *testing.T) {
+	target := filepath.Join(`C:\Mods`, "Character")
+	rootID := "root"
+	batchID := "batch-root"
+
+	tests := []struct {
+		name     string
+		metadata DownloadMetadata
+		want     []transfer.DestinationTarget
+	}{
+		{
+			name: "single file",
+			metadata: DownloadMetadata{
+				Root:  transfer.Root{ID: "file", Name: "mod.zip"},
+				Files: []transfer.DownloadFile{{ID: "file", Name: "mod.zip"}},
+			},
+			want: []transfer.DestinationTarget{{
+				Path: filepath.Join(target, "mod.zip"),
+				Kind: transfer.DestinationFile,
+			}},
+		},
+		{
+			name: "single renamed folder",
+			metadata: DownloadMetadata{
+				Root: transfer.Root{ID: rootID, Name: "Mod (2)"},
+				Dirs: []transfer.Directory{{ID: rootID, Name: "Mod (2)"}},
+			},
+			want: []transfer.DestinationTarget{{
+				Path: filepath.Join(target, "Mod (2)"),
+				Kind: transfer.DestinationDirectory,
+			}},
+		},
+		{
+			name: "batch folders and file",
+			metadata: DownloadMetadata{
+				Root: transfer.Root{ID: batchID},
+				Dirs: []transfer.Directory{
+					{ID: "one", ParentID: &batchID, Name: "One"},
+					{ID: "nested", ParentID: &rootID, Name: "Nested"},
+					{ID: rootID, ParentID: &batchID, Name: "Two"},
+				},
+				Files: []transfer.DownloadFile{{ID: "file", ParentID: &batchID, Name: "readme.txt"}},
+			},
+			want: []transfer.DestinationTarget{
+				{Path: filepath.Join(target, "One"), Kind: transfer.DestinationDirectory},
+				{Path: filepath.Join(target, "Two"), Kind: transfer.DestinationDirectory},
+				{Path: filepath.Join(target, "readme.txt"), Kind: transfer.DestinationFile},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := resolveDownloadDestinationTargets(test.metadata, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("destination targets = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 

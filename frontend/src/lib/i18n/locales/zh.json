@@ -261,6 +261,14 @@
         "description": "压缩文件将自动解压"
       },
       "download_completed": "已下载 \"{{name}}\"。",
+      "download_action_blocked": "模组下载期间无法修改。",
+      "download_overlay": {
+        "queued": "等待中",
+        "preparing": "准备中",
+        "downloading": "下载中",
+        "finalizing": "正在完成",
+        "paused": "已暂停"
+      },
       "all_enabled": "全部启用",
       "all_disabled": "全部禁用",
       "merge": {
