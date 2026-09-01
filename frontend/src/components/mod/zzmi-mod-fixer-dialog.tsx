@@ -48,7 +48,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
   return (
     <>
       <Dialog open={runner.showZZMIDialog} onOpenChange={runner.setShowZZMIDialog}>
-        <DialogContent className="flex max-h-[88vh] min-w-lg max-w-4xl flex-col overflow-hidden">
+        <DialogContent className="flex max-h-[88vh] max-w-4xl min-w-lg flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <img src={zzmiModFixerIcon} className="size-7 rounded" />
