@@ -601,6 +601,59 @@
           "log": {
             "input_placeholder": "Input..."
           }
+        },
+        "zzmi-fix-runner": {
+          "only_zzmi": "ZZMI Mod Fixer is only available for ZZMI games.",
+          "rules": {
+            "source": "Rule source: {{source}}",
+            "refresh": "Refresh"
+          },
+          "update": {
+            "available": "New ZZMI fixer rules are available.",
+            "action": "Update and use",
+            "success": "ZZMI fixer rules updated."
+          },
+          "tabs": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap",
+            "rollback": "Rollback"
+          },
+          "hash": {
+            "title": "Hash Fix",
+            "description": "Updates outdated ZZZ hashes and applies the matching INI and vertex-buffer migrations under the selected mod path."
+          },
+          "jane": {
+            "title": "Jane Doe Blend Remap",
+            "description": "Remaps Jane Doe hair and hand blend indices for the current model layout. Only recognized stride-32 resources are changed."
+          },
+          "dialyn": {
+            "title": "Dialyn Blend Remap",
+            "description": "Remaps Dialyn blend indices for the current model layout. Only recognized stride-32 resources are changed."
+          },
+          "run": {
+            "action": "Run fixer",
+            "warning": "Completed with {{count}} warning(s)."
+          },
+          "tool": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap"
+          },
+          "rollback": {
+            "summary": "{{count}} session(s), {{size}}",
+            "empty": "No ZZMI fixer backups exist for this mod.",
+            "restore_session": "Restore session",
+            "success": "ZZMI backup restored.",
+            "conflict_title": "Files changed after the fixer ran",
+            "conflict_description": "{{count}} file(s) no longer match the recorded fixed state. Force restore will overwrite those changes.",
+            "force": "Force restore",
+            "delete_title": "Delete this backup?",
+            "delete_description": "The selected backup data will be permanently removed.",
+            "delete_all": "Delete all",
+            "delete_all_title": "Delete all ZZMI backups?",
+            "delete_all_description": "Every ZZMI fixer backup for this selected mod will be permanently removed."
+          }
         }
       },
       "hooks": {

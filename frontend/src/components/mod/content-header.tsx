@@ -25,6 +25,7 @@ import { useBulkModToggle } from "@renderer/hooks/use-bulk-mod-toggle";
 import { useGames } from "@renderer/hooks/use-mod-data";
 import { isThreedmigotoImporter } from "@renderer/lib/mod-merge";
 import { useModStore } from "@renderer/store/mod";
+import type { ModFixerAction } from "@shared/types";
 import {
   ArrowDown10,
   ArrowDownAZ,
@@ -47,18 +48,15 @@ import {
 import { useTranslation } from "react-i18next";
 
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
+import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
 interface ContentHeaderProps {
-  showWuwaFixer: boolean;
-  handleOpenWuwaFixer: (path: string) => Promise<void>;
+  modFixer: ModFixerAction | null;
+  handleOpenModFixer: (path: string) => Promise<void>;
   isPreparing: boolean;
 }
 
-export function ContentHeader({
-  showWuwaFixer,
-  handleOpenWuwaFixer,
-  isPreparing,
-}: ContentHeaderProps) {
+export function ContentHeader({ modFixer, handleOpenModFixer, isPreparing }: ContentHeaderProps) {
   const { t } = useTranslation();
 
   const searchValue = useModStore((s) => s.searchQuery);
@@ -274,7 +272,7 @@ export function ContentHeader({
               {t("g.download")}
             </DropdownMenuItem>
 
-            {showWuwaFixer && hasSelectedGroup && (
+            {modFixer && hasSelectedGroup && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
@@ -285,10 +283,13 @@ export function ContentHeader({
                   <DropdownMenuSubContent>
                     <DropdownMenuItem
                       disabled={isPreparing}
-                      onClick={() => void handleOpenWuwaFixer(groupPath!)}
+                      onClick={() => void handleOpenModFixer(groupPath!)}
                     >
-                      <img src={wuwaModFixerIcon} className="size-4" />
-                      {t("page.mod.content-header.wuwa-mod-fixer")}
+                      <img
+                        src={modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon}
+                        className="size-4"
+                      />
+                      {modFixer.label}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

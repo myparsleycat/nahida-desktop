@@ -89,6 +89,9 @@ func newRuntime() *runtime {
 	archive := infra.NewArchive()
 	protocolService := infra.NewProtocol()
 	protocolService.Configure(httpClient, log)
+	githubRate := infra.NewGitHubRateCoordinator()
+	githubRate.UseHTTP(httpClient)
+	githubRate.UseLog(log)
 	xxmiService := xxmi.NewWithOptions(xxmi.Options{
 		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit,
 	})
@@ -145,7 +148,7 @@ func newRuntime() *runtime {
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
 			Log: log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
-			FS: fs, HTTP: httpClient, Download: download, Archive: archive, Protocol: protocolService, Mod: modService,
+			FS: fs, HTTP: httpClient, Download: download, Archive: archive, Protocol: protocolService, GitHubRate: githubRate, Mod: modService,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
 					ID: "wuwa-mod-fixer-updated", Title: title, Body: body,

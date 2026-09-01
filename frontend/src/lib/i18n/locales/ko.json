@@ -585,6 +585,59 @@
           "log": {
             "input_placeholder": "입력..."
           }
+        },
+        "zzmi-fix-runner": {
+          "only_zzmi": "ZZMI Mod Fixer는 ZZMI 게임에서만 사용할 수 있습니다.",
+          "rules": {
+            "source": "규칙 출처: {{source}}",
+            "refresh": "새로고침"
+          },
+          "update": {
+            "available": "새 ZZMI fixer 규칙을 사용할 수 있습니다.",
+            "action": "업데이트 후 사용",
+            "success": "ZZMI fixer 규칙을 업데이트했습니다."
+          },
+          "tabs": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap",
+            "rollback": "롤백"
+          },
+          "hash": {
+            "title": "Hash Fix",
+            "description": "선택한 모드 경로에서 오래된 ZZZ 해시를 갱신하고 필요한 INI 및 버텍스 버퍼 마이그레이션을 적용합니다."
+          },
+          "jane": {
+            "title": "Jane Doe Blend Remap",
+            "description": "Jane Doe의 머리카락 및 손 blend index를 현재 모델 구조에 맞게 변경합니다. 인식된 stride-32 리소스만 수정합니다."
+          },
+          "dialyn": {
+            "title": "Dialyn Blend Remap",
+            "description": "Dialyn의 blend index를 현재 모델 구조에 맞게 변경합니다. 인식된 stride-32 리소스만 수정합니다."
+          },
+          "run": {
+            "action": "Fixer 실행",
+            "warning": "경고 {{count}}개와 함께 완료되었습니다."
+          },
+          "tool": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap"
+          },
+          "rollback": {
+            "summary": "세션 {{count}}개, {{size}}",
+            "empty": "이 모드에 저장된 ZZMI fixer 백업이 없습니다.",
+            "restore_session": "세션 복구",
+            "success": "ZZMI 백업을 복구했습니다.",
+            "conflict_title": "Fixer 실행 후 파일이 변경됨",
+            "conflict_description": "파일 {{count}}개가 기록된 수정 상태와 다릅니다. 강제 복구하면 현재 변경 내용을 덮어씁니다.",
+            "force": "강제 복구",
+            "delete_title": "이 백업을 삭제할까요?",
+            "delete_description": "선택한 백업 데이터가 영구적으로 삭제됩니다.",
+            "delete_all": "모두 삭제",
+            "delete_all_title": "ZZMI 백업을 모두 삭제할까요?",
+            "delete_all_description": "현재 선택한 모드의 모든 ZZMI fixer 백업이 영구적으로 삭제됩니다."
+          }
         }
       },
       "hooks": {

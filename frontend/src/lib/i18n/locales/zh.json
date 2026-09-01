@@ -582,6 +582,59 @@
           "log": {
             "input_placeholder": "输入..."
           }
+        },
+        "zzmi-fix-runner": {
+          "only_zzmi": "ZZMI Mod Fixer 仅可用于 ZZMI 游戏。",
+          "rules": {
+            "source": "规则来源：{{source}}",
+            "refresh": "刷新"
+          },
+          "update": {
+            "available": "有新的 ZZMI fixer 规则可用。",
+            "action": "更新并使用",
+            "success": "ZZMI fixer 规则已更新。"
+          },
+          "tabs": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap",
+            "rollback": "回滚"
+          },
+          "hash": {
+            "title": "Hash Fix",
+            "description": "更新所选模组路径中的旧 ZZZ 哈希，并应用所需的 INI 与顶点缓冲区迁移。"
+          },
+          "jane": {
+            "title": "Jane Doe Blend Remap",
+            "description": "将 Jane Doe 的头发和手部 blend index 重映射到当前模型结构。仅修改已识别的 stride-32 资源。"
+          },
+          "dialyn": {
+            "title": "Dialyn Blend Remap",
+            "description": "将 Dialyn 的 blend index 重映射到当前模型结构。仅修改已识别的 stride-32 资源。"
+          },
+          "run": {
+            "action": "运行 Fixer",
+            "warning": "已完成，但有 {{count}} 条警告。"
+          },
+          "tool": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap"
+          },
+          "rollback": {
+            "summary": "{{count}} 个会话，{{size}}",
+            "empty": "此模组没有 ZZMI fixer 备份。",
+            "restore_session": "恢复会话",
+            "success": "ZZMI 备份已恢复。",
+            "conflict_title": "Fixer 运行后文件已被修改",
+            "conflict_description": "{{count}} 个文件与记录的修复状态不一致。强制恢复将覆盖当前更改。",
+            "force": "强制恢复",
+            "delete_title": "删除此备份？",
+            "delete_description": "所选备份数据将被永久删除。",
+            "delete_all": "全部删除",
+            "delete_all_title": "删除所有 ZZMI 备份？",
+            "delete_all_description": "当前所选模组的所有 ZZMI fixer 备份将被永久删除。"
+          }
         }
       },
       "hooks": {

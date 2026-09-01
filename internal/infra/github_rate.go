@@ -161,6 +161,21 @@ func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRat
 	return state
 }
 
+// CaptureResponse records GitHub core-rate headers returned by an API request.
+func (c *GitHubRateCoordinator) CaptureResponse(ctx context.Context, header http.Header) (*GitHubRateState, error) {
+	if c == nil {
+		return nil, nil
+	}
+	state := extractGitHubRateState(header)
+	if state == nil {
+		return nil, nil
+	}
+	if err := c.saveRateState(ctx, state); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
 func (c *GitHubRateCoordinator) saveRateState(ctx context.Context, state *GitHubRateState) error {
 	if c == nil || state == nil {
 		return nil

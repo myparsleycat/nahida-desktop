@@ -35,6 +35,8 @@ import path from "path-browserify";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ZZMIModFixerDialog } from "./zzmi-mod-fixer-dialog";
+
 type ModFixRunner = ReturnType<typeof useModFixRunner>;
 
 export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
@@ -52,6 +54,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
 
   return (
     <>
+      <ZZMIModFixerDialog runner={runner} />
       <AlertDialog open={runner.showInstallDialog} onOpenChange={runner.setShowInstallDialog}>
         <AlertDialogContent onClick={(event) => event.stopPropagation()}>
           <AlertDialogHeader>
@@ -563,29 +566,31 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
               )}
             </div>
           </ScrollArea>
-          <div className="flex gap-2">
-            <Input
-              ref={inputRef}
-              placeholder={t(`${translationKey}.log.input_placeholder`)}
-              value={runner.inputCmd}
-              disabled={!runner.isRunning}
-              onChange={(event) => runner.setInputCmd(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && runner.isRunning) {
-                  runner.handleSendInput();
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={runner.handleSendInput}
-              disabled={!runner.isRunning}
-            >
-              <TerminalSquareIcon className="size-4" />
-            </Button>
-          </div>
+          {runner.activeRunKind !== "zzmi" ? (
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                placeholder={t(`${translationKey}.log.input_placeholder`)}
+                value={runner.inputCmd}
+                disabled={!runner.isRunning}
+                onChange={(event) => runner.setInputCmd(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && runner.isRunning) {
+                    runner.handleSendInput();
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={runner.handleSendInput}
+                disabled={!runner.isRunning}
+              >
+                <TerminalSquareIcon className="size-4" />
+              </Button>
+            </div>
+          ) : null}
           <AlertDialogFooter>
             {runner.isRunning ? (
               <Button variant="destructive" onClick={runner.handleCancel}>

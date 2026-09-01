@@ -1,4 +1,9 @@
-import { Tools } from "@bindings/tools";
+import {
+  Tools,
+  type ZZMIBackupSession,
+  type ZZMIFixerPrepareResult,
+  type ZZMIFixerRestoreConflict,
+} from "@bindings/tools";
 import { useModStore } from "@renderer/store/mod";
 import { getFixToolPresets, getFixToolScripts } from "@renderer/wails/fix-tools";
 import {
@@ -15,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { getModFixerAvailability } from "./mod-fixer-action";
 import { useGames } from "./use-mod-data";
 
 const defaultWuwaOptions = (): WuwaFixerOptions => ({
@@ -31,7 +37,7 @@ export function useModFixRunner() {
   const { data: games = [] } = useGames();
   const selectedGameConfig = games.find((game) => game.game === selectedGame) ?? null;
   const selectedImporter = selectedGameConfig?.importer ?? null;
-  const showWuwaFixer = selectedImporter === null || selectedImporter?.toUpperCase() === "WWMI";
+  const { showWuwaFixer, showZZMIFixer, modFixer } = getModFixerAvailability(selectedImporter);
 
   const { data: fixTools = [] } = useQuery({
     queryKey: ["ftm:scripts"],
@@ -52,6 +58,7 @@ export function useModFixRunner() {
   const [logs, setLogs] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const [isRunning, setIsRunning] = useState(false);
+  const [activeRunKind, setActiveRunKind] = useState<"script" | "wuwa" | "zzmi">("script");
   const [isPreparing, setIsPreparing] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const [prepareResult, setPrepareResult] = useState<WuwaFixerPrepareResult | null>(null);
@@ -63,6 +70,18 @@ export function useModFixRunner() {
   const [cleanConfirmInput, setCleanConfirmInput] = useState("");
   const runInProgressRef = useRef(false);
   const translationKey = "page.mod.dialog.wuwa-fix-runner";
+
+  const [showZZMIDialog, setShowZZMIDialog] = useState(false);
+  const [zzmiTab, setZZMITab] = useState<"hash" | "jane" | "dialyn" | "rollback">("hash");
+  const [zzmiPrepare, setZZMIPrepare] = useState<ZZMIFixerPrepareResult | null>(null);
+  const [zzmiUpdateBusy, setZZMIUpdateBusy] = useState(false);
+  const [zzmiRollbackBusy, setZZMIRollbackBusy] = useState(false);
+  const [zzmiConflicts, setZZMIConflicts] = useState<ZZMIFixerRestoreConflict[]>([]);
+  const [zzmiPendingRestore, setZZMIPendingRestore] = useState<{
+    sessionId: string;
+    entryId?: string;
+  } | null>(null);
+  const [showZZMICleanConfirm, setShowZZMICleanConfirm] = useState(false);
 
   const { data: backupsData, isLoading: isLoadingBackups } = useQuery({
     queryKey: ["wuwaFixer:backups", activeModPath],
@@ -93,6 +112,23 @@ export function useModFixRunner() {
     [activeModPath, queryClient],
   );
 
+  const { data: zzmiBackups = [], isLoading: isLoadingZZMIBackups } = useQuery({
+    queryKey: ["zzmiFixer:backups", activeModPath],
+    queryFn: async () => {
+      if (!activeModPath) return [] as ZZMIBackupSession[];
+      return (await Tools.ZZMIFixerListBackups(activeModPath)) ?? [];
+    },
+    enabled: showZZMIDialog && zzmiTab === "rollback" && !!activeModPath,
+  });
+
+  const refreshZZMIBackups = useCallback(
+    async (modPath = activeModPath) => {
+      if (!modPath) return;
+      await queryClient.invalidateQueries({ queryKey: ["zzmiFixer:backups", modPath] });
+    },
+    [activeModPath, queryClient],
+  );
+
   useEffect(() => {
     if (!showLogModal) return;
     const off = Events.On("ftm:log", (event) => {
@@ -115,6 +151,7 @@ export function useModFixRunner() {
 
     runInProgressRef.current = true;
     setActiveModPath(modPath);
+    setActiveRunKind("script");
     setShowLogModal(true);
     setLogs([]);
     setIsRunning(true);
@@ -216,6 +253,7 @@ export function useModFixRunner() {
       return;
     }
 
+    setActiveRunKind("wuwa");
     setShowLogModal(true);
     setLogs([]);
     setIsRunning(true);
@@ -226,6 +264,140 @@ export function useModFixRunner() {
       console.error(error);
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const prepareZZMI = async (modPath: string, forceRefresh: boolean) => {
+    const result = await Tools.ZZMIFixerPrepare(modPath, forceRefresh);
+    setZZMIPrepare(result);
+    return result;
+  };
+
+  const handleOpenZZMIFixer = async (modPath: string) => {
+    if (!showZZMIFixer) {
+      toast.error(t("page.mod.dialog.zzmi-fix-runner.only_zzmi"));
+      return;
+    }
+
+    setActiveModPath(modPath);
+    setIsPreparing(true);
+    setZZMITab("hash");
+    setZZMIConflicts([]);
+    try {
+      await prepareZZMI(modPath, false);
+      setShowZZMIDialog(true);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const handleRefreshZZMIRules = async () => {
+    if (!activeModPath) return;
+    setZZMIUpdateBusy(true);
+    try {
+      await prepareZZMI(activeModPath, true);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setZZMIUpdateBusy(false);
+    }
+  };
+
+  const handleUpdateZZMIRules = async () => {
+    if (!activeModPath) return;
+    setZZMIUpdateBusy(true);
+    try {
+      await Tools.ZZMIFixerActivateLatestRules();
+      await prepareZZMI(activeModPath, false);
+      toast.success(t("page.mod.dialog.zzmi-fix-runner.update.success"));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setZZMIUpdateBusy(false);
+    }
+  };
+
+  const handleRunZZMIFixer = async (tool: "hash" | "jane" | "dialyn") => {
+    if (!activeModPath || runInProgressRef.current) return;
+    runInProgressRef.current = true;
+    setActiveRunKind("zzmi");
+    setShowZZMIDialog(false);
+    setShowLogModal(true);
+    setLogs([]);
+    setIsRunning(true);
+    try {
+      const result = await Tools.ZZMIFixerRun({ path: activeModPath, tool });
+      if (result.sessionId) {
+        await refreshZZMIBackups(activeModPath);
+      }
+      if ((result.warnings?.length ?? 0) > 0) {
+        toast.warning(
+          t("page.mod.dialog.zzmi-fix-runner.run.warning", {
+            count: result.warnings?.length ?? 0,
+          }),
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error((error as Error).message);
+    } finally {
+      setIsRunning(false);
+      runInProgressRef.current = false;
+    }
+  };
+
+  const restoreZZMI = async (sessionId: string, entryId?: string, force = false) => {
+    if (!activeModPath || zzmiRollbackBusy) return;
+    setZZMIRollbackBusy(true);
+    try {
+      const result = await Tools.ZZMIFixerRestore({
+        path: activeModPath,
+        sessionId,
+        entryId,
+        force,
+      });
+      if ((result.conflicts?.length ?? 0) > 0) {
+        setZZMIConflicts(result.conflicts ?? []);
+        setZZMIPendingRestore({ sessionId, entryId });
+        return;
+      }
+      setZZMIConflicts([]);
+      setZZMIPendingRestore(null);
+      toast.success(t("page.mod.dialog.zzmi-fix-runner.rollback.success"));
+      await refreshZZMIBackups(activeModPath);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setZZMIRollbackBusy(false);
+    }
+  };
+
+  const handleDeleteZZMIBackup = async (sessionId: string, entryId?: string) => {
+    if (!activeModPath || zzmiRollbackBusy) return;
+    setZZMIRollbackBusy(true);
+    try {
+      await Tools.ZZMIFixerDeleteBackup({ path: activeModPath, sessionId, entryId });
+      await refreshZZMIBackups(activeModPath);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setZZMIRollbackBusy(false);
+    }
+  };
+
+  const handleDeleteAllZZMIBackups = async () => {
+    if (!activeModPath || zzmiRollbackBusy) return;
+    setZZMIRollbackBusy(true);
+    try {
+      await Tools.ZZMIFixerDeleteAllBackups(activeModPath);
+      setShowZZMICleanConfirm(false);
+      await refreshZZMIBackups(activeModPath);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setZZMIRollbackBusy(false);
     }
   };
 
@@ -305,11 +477,12 @@ export function useModFixRunner() {
 
   const isRateLimited = prepareResult?.rateLimited ?? false;
   const rateResetText = formatRateResetText(prepareResult?.rateState ?? null);
-
   return {
     fixTools,
     presets,
     showWuwaFixer,
+    showZZMIFixer,
+    modFixer,
     activeModPath,
     selectedImporter,
     showLogModal,
@@ -324,6 +497,7 @@ export function useModFixRunner() {
     setOptionsTab,
     logs,
     isRunning,
+    activeRunKind,
     isPreparing,
     inputCmd,
     setInputCmd,
@@ -348,6 +522,8 @@ export function useModFixRunner() {
     handleCancel,
     handleSendInput,
     handleOpenWuwaFixer,
+    handleOpenZZMIFixer,
+    handleOpenModFixer: showZZMIFixer ? handleOpenZZMIFixer : handleOpenWuwaFixer,
     handleInstallAndContinue: installOrUpdateAndContinue,
     handleUpdateAndContinue: installOrUpdateAndContinue,
     handleProceedWithoutUpdate: () => {
@@ -361,6 +537,28 @@ export function useModFixRunner() {
     refreshBackups,
     handleRollbackToGroup,
     handleCleanBackups,
+    showZZMIDialog,
+    setShowZZMIDialog,
+    zzmiTab,
+    setZZMITab,
+    zzmiPrepare,
+    zzmiUpdateBusy,
+    zzmiBackups,
+    isLoadingZZMIBackups,
+    refreshZZMIBackups,
+    zzmiRollbackBusy,
+    zzmiConflicts,
+    zzmiPendingRestore,
+    setZZMIConflicts,
+    setZZMIPendingRestore,
+    showZZMICleanConfirm,
+    setShowZZMICleanConfirm,
+    handleRefreshZZMIRules,
+    handleUpdateZZMIRules,
+    handleRunZZMIFixer,
+    restoreZZMI,
+    handleDeleteZZMIBackup,
+    handleDeleteAllZZMIBackups,
     labels: {
       logTitle: t("page.mod.log-dialog.title"),
     },

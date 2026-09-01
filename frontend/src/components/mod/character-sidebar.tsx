@@ -45,6 +45,7 @@ import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import type { ModFixerAction } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -109,15 +110,15 @@ function getParentGroup(
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
-  showWuwaFixer?: boolean;
-  onOpenWuwaFixer?: (path: string) => Promise<void>;
+  modFixer?: ModFixerAction | null;
+  onOpenModFixer?: (path: string) => Promise<void>;
 }
 
 export const CharacterSidebar = memo(function CharacterSidebar({
   groups,
   isLoading = false,
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
 }: CharacterSidebarProps) {
   const { t } = useTranslation();
   const createFolderFormId = "character-sidebar-create-folder-form";
@@ -416,8 +417,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onManualSubGroupChange: handleManualSubGroupChange,
     showSkeleton,
     previewCacheKey,
-    showWuwaFixer,
-    onOpenWuwaFixer,
+    modFixer,
+    onOpenModFixer,
   };
 
   return (

@@ -56,8 +56,8 @@ export function CharacterSidebarRow({
   onManualSubGroupChange,
   showSkeleton,
   previewCacheKey,
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
 }: CharacterSidebarRowProps) {
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const expandedGroups = useModStore((s) => s.expandedGroups);
@@ -210,8 +210,8 @@ export function CharacterSidebarRow({
               itemClassName={itemClassName}
               selectedItemClassName={selectedItemClassName}
               itemStyle={getItemStyle(row.depth)}
-              showWuwaFixer={showWuwaFixer}
-              onOpenWuwaFixer={onOpenWuwaFixer}
+              modFixer={modFixer}
+              onOpenModFixer={onOpenModFixer}
               forceSelectOnClick={isSearching}
               autoScrollOnSelect={false}
             />

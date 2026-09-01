@@ -65,6 +65,7 @@ Windows Defender and some antivirus programs may occasionally block the installe
 ## Credits
 
 - [Wuwa Mod Fixer](https://github.com/Moonholder/Wuwa_Mod_Fixer) by [Moonholder](https://github.com/Moonholder) — used to fix Wuthering Waves mods
+- [ZZZ-Mod-Fixer](https://github.com/Vonksdesu/ZZZ-Mod-Fixer) maintained by [VonksDesuuu](https://github.com/Vonksdesu), based on the [original tool](https://gamebanana.com/tools/21671) by [petrascyll](https://gamebanana.com/members/2644630) — hash-fixing and remapping logic used by the native ZZMI Mod Fixer, licensed under the MIT License
 
 ## License
 

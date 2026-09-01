@@ -6,6 +6,7 @@ import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useCharacterSidebarWidthSetting } from "@renderer/hooks/use-settings";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
+import type { ModFixerAction } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const CHARACTER_SIDEBAR_WIDTH_DEFAULT = 256;
@@ -25,11 +26,11 @@ function clampCharacterSidebarWidth(width: number) {
 }
 
 export default function ModSidebar({
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
 }: {
-  showWuwaFixer: boolean;
-  onOpenWuwaFixer: (path: string) => Promise<void>;
+  modFixer: ModFixerAction | null;
+  onOpenModFixer: (path: string) => Promise<void>;
 }) {
   const selectedGame = useModStore((s) => s.selectedGame);
   const setDeletingGame = useModStore((s) => s.setDeletingGame);
@@ -241,8 +242,8 @@ export default function ModSidebar({
         <CharacterSidebar
           groups={characters}
           isLoading={isPending || isPlaceholderData}
-          showWuwaFixer={showWuwaFixer}
-          onOpenWuwaFixer={onOpenWuwaFixer}
+          modFixer={modFixer}
+          onOpenModFixer={onOpenModFixer}
         />
       </div>
 

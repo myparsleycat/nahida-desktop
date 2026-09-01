@@ -29,6 +29,7 @@ import { memo } from "react";
 import { useTranslation } from "react-i18next";
 
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
+import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
 interface ModCardHeaderProps {
   mod: ModInfo;
@@ -101,16 +102,23 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     {t("page.mod.context-menu.find-conflict")}
                   </DropdownMenuItem>
 
-                  {actions.runner.showWuwaFixer && (
+                  {actions.runner.modFixer && (
                     <DropdownMenuItem
                       disabled={actions.runner.isPreparing}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void actions.openWuwaFixer(mod);
+                        void actions.openModFixer(mod);
                       }}
                     >
-                      <img src={wuwaModFixerIcon} className="size-4" />
-                      Wuwa Mod Fixer
+                      <img
+                        src={
+                          actions.runner.modFixer.id === "zzmi"
+                            ? zzmiModFixerIcon
+                            : wuwaModFixerIcon
+                        }
+                        className="size-4"
+                      />
+                      {actions.runner.modFixer.label}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuGroup>
