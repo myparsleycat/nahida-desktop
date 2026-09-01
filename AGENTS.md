@@ -52,8 +52,9 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 
 ### Wails bindings
 
-- `frontend/bindings` is generated from registered Go services and is checked into git.
+- `frontend/bindings` is generated from registered Go services and is gitignored; CI regenerates it during validation and release builds.
 - When an exported service method, parameter, return type, or bound model changes, regenerate bindings with `task common:generate:bindings` or run `task build`, which includes binding generation.
+- A fresh clone has no bindings until one of the generation commands runs; do that before frontend work that imports `@bindings`.
 - Import backend APIs through the `@bindings` alias. Do not hand-write copies of generated service or model definitions.
 - Never edit files in `frontend/bindings` manually.
 
