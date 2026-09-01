@@ -13,6 +13,7 @@ import (
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/menumaker"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -37,6 +38,7 @@ type runtime struct {
 	drive           *drive.Drive
 	transfer        *transfer.Transfer
 	gamebanana      *gamebanana.GameBanana
+	menuMaker       *menumaker.MenuMaker
 	mod             *mod.Mod
 	xxmi            *xxmi.XXMI
 	tools           *tools.Tools
@@ -144,6 +146,7 @@ func newRuntime() *runtime {
 		}),
 		transfer:   transferService,
 		gamebanana: gameBananaService,
+		menuMaker:  menumaker.NewWithOptions(menumaker.Options{Log: log}),
 		mod:        modService,
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
@@ -461,6 +464,7 @@ func (rt *runtime) services() []application.Service {
 		application.NewService(rt.fs),
 		application.NewService(rt.gamebanana),
 		application.NewService(rt.log),
+		application.NewService(rt.menuMaker),
 		application.NewService(rt.mod),
 		application.NewService(rt.notifications),
 		application.NewServiceWithOptions(rt.protocol, application.ServiceOptions{Route: "/protocol"}),

@@ -64,6 +64,16 @@ func TestRuntimeSettingHooksApplyOpenConsoleToWindow(t *testing.T) {
 	}
 }
 
+func TestRuntimeRegistersMenuMakerService(t *testing.T) {
+	rt := newRuntime()
+	if rt.menuMaker == nil {
+		t.Fatal("Menu Maker service is not initialized")
+	}
+	if len(rt.services()) != 17 {
+		t.Fatalf("services = %d, want 17 including Menu Maker", len(rt.services()))
+	}
+}
+
 func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 	t.Parallel()
 

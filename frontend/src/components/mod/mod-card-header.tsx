@@ -14,11 +14,13 @@ import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { stripDisabledPrefix } from "@shared/mod";
+import { useNavigate } from "@tanstack/react-router";
 import {
   BoxIcon,
   FolderIcon,
   ImageIcon,
   Loader2Icon,
+  PanelsTopLeftIcon,
   PersonStandingIcon,
   SparklesIcon,
   SwordsIcon,
@@ -38,6 +40,7 @@ interface ModCardHeaderProps {
 
 export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCardHeaderProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const isConvertingModel = actions.convertingModelPath === mod.path;
 
   return (
@@ -70,6 +73,19 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   >
                     <ImageIcon className="size-4" />
                     {t("page.tools.texture_resizer.title")}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void navigate({
+                        to: "/tools/menu-maker",
+                        search: { path: mod.path, name: mod.name, ini: "" },
+                      });
+                    }}
+                  >
+                    <PanelsTopLeftIcon className="size-4" />
+                    {t("page.tools.menu_maker.title")}
                   </DropdownMenuItem>
 
                   <DropdownMenuItem

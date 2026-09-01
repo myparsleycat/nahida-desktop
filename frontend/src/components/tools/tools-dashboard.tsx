@@ -41,6 +41,11 @@ const toolPages: ToolPage[] = [
     component: () => <TogglePersistence />,
   },
   {
+    nameKey: "page.tools.menu_maker.title",
+    initials: "MM",
+    path: "/tools/menu-maker",
+  },
+  {
     nameKey: "page.tools.toggle_viewer_generator.title",
     initials: "TV",
     component: () => <ToggleViewerGenerator />,
