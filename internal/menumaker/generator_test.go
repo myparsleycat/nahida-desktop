@@ -203,6 +203,24 @@ func TestGenerateMergeModesAndKeyDeletion(t *testing.T) {
 	}
 }
 
+func TestCalculateGeometryDefaultsZeroColumnsToThree(t *testing.T) {
+	t.Parallel()
+	document := parseDocument("[KeyA]\nkey = 1\n$x = 0,1\n[KeyB]\nkey = 2\n$y = 0,1\n[KeyC]\nkey = 3\n$z = 0,1\n[KeyD]\nkey = 4\n$w = 0,1")
+	zero := defaultSettings()
+	zero.Columns = 0
+	got := calculateGeometry(document.Slots, zero)
+	want := calculateGeometry(document.Slots, defaultSettings())
+	if got.PanelWidth != want.PanelWidth || got.PanelHeight != want.PanelHeight {
+		t.Fatalf("zero columns geometry %+v != default %+v", got, want)
+	}
+	one := defaultSettings()
+	one.Columns = 1
+	narrow := calculateGeometry(document.Slots, one)
+	if got.PanelWidth <= narrow.PanelWidth || got.PanelHeight >= narrow.PanelHeight {
+		t.Fatalf("zero-column default should stay 3-wide, got %+v vs 1-col %+v", got, narrow)
+	}
+}
+
 func TestGenerateOmitsTitleWhenEmpty(t *testing.T) {
 	t.Parallel()
 	document := parseDocument("[KeyA]\nkey = 1\n$x = 0,1")

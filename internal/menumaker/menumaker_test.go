@@ -116,8 +116,12 @@ func TestApplyBundleOriginalNameBacksUpAndPreservesUnmanagedResources(t *testing
 	if result.OutputINIPath != sourcePath || result.BackupPath != filepath.Join(root, "mod.txt") || result.RolledBack {
 		t.Fatalf("unexpected result: %+v", result)
 	}
+	written := []byte("[Present]\r\nrun = CommandListGuiMenu\r\n")
+	if result.SourceSHA256 != sha256Hex(written) {
+		t.Fatalf("unexpected overwrite sha256: %q", result.SourceSHA256)
+	}
 	assertFile(t, result.BackupPath, original)
-	assertFile(t, sourcePath, []byte("[Present]\r\nrun = CommandListGuiMenu\r\n"))
+	assertFile(t, sourcePath, written)
 	assertFile(t, filepath.Join(root, "res_gui", "keep.dat"), []byte("keep"))
 	assertFile(t, filepath.Join(root, "res_gui", "draw_2d.hlsl"), []byte("shader"))
 }
@@ -141,6 +145,9 @@ func TestApplyBundleNewNameDisablesINIOnlyAfterOutput(t *testing.T) {
 	}
 	assertFile(t, result.BackupPath, original)
 	assertFile(t, filepath.Join(root, "mod_gui.ini"), []byte("generated"))
+	if result.SourceSHA256 != "" {
+		t.Fatalf("new-name apply should not refresh source sha256: %+v", result)
+	}
 }
 
 func TestApplyBundleUsesTimestampedBackupWhenTXTNameExists(t *testing.T) {
@@ -181,6 +188,9 @@ func TestApplyBundleTXTAlwaysPreservesSource(t *testing.T) {
 	}
 	assertFile(t, sourcePath, original)
 	assertFile(t, result.OutputINIPath, []byte("generated"))
+	if result.SourceSHA256 != "" {
+		t.Fatalf("txt apply should not refresh source sha256: %+v", result)
+	}
 }
 
 func TestApplyBundleRejectsChangedSourceAndAssetTraversal(t *testing.T) {
@@ -228,6 +238,37 @@ func TestApplyBundleRollsBackPromotedINIWhenResourceCommitFails(t *testing.T) {
 	assertFile(t, sourcePath, original)
 	if _, statErr := os.Stat(filepath.Join(root, "mod.txt")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("failed transaction left a backup behind: %v", statErr)
+	}
+}
+
+func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "mod.ini")
+	original := []byte("[KeySwap]\nkey = 5\n$x = 0,1\n")
+	mustWrite(t, sourcePath, original)
+	svc := New()
+	first, err := svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), OutputININame: "mod.ini",
+		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
+		Encoding: "utf8", Newline: "lf", UseOriginalININame: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.SourceSHA256 == "" || first.SourceSHA256 == sha256Hex(original) || first.SourceSHA256 != sha256Hex(written) {
+		t.Fatalf("unexpected overwrite sha256: got %q original %q file %q", first.SourceSHA256, sha256Hex(original), sha256Hex(written))
+	}
+	if _, err = svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: sourcePath, SourceSHA256: first.SourceSHA256, OutputININame: "mod.ini",
+		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
+		Encoding: "utf8", Newline: "lf", UseOriginalININame: true,
+	}); err != nil {
+		t.Fatalf("reapply with returned hash failed: %v", err)
 	}
 }
 

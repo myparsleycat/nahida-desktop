@@ -352,6 +352,9 @@ func (m *MenuMaker) applyGenerated(
 
 	*cleanupState = "complete"
 	result.OutputINIPath = outputPath
+	if samePath(req.sourcePath, outputPath) {
+		result.SourceSHA256 = sha256Hex(iniBytes)
+	}
 	result.ResourcePaths = make([]string, 0, len(assets))
 	for _, asset := range assets {
 		result.ResourcePaths = append(result.ResourcePaths, filepath.Join(dir, filepath.FromSlash(asset.RelativePath)))

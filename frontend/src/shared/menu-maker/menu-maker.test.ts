@@ -4,6 +4,7 @@ import { coveredImageDrawRect, MENU_MAKER_CROP_PREVIEW_SIZE } from "./crop";
 import {
     canSplitMenuMakerSlot,
     calculateMenuMakerPreviewScale,
+    menuMakerColumnCount,
     mergeMenuMakerSlots,
     moveMenuMakerSlot,
 } from "./generator";
@@ -89,6 +90,13 @@ describe("Menu Maker slot layout helpers", () => {
                 baseHeight: 1080,
             }),
         ).toBeCloseTo(1920 / 3440);
+    });
+
+    it("defaults unset columns to three like backend geometry", () => {
+        expect(menuMakerColumnCount(0)).toBe(3);
+        expect(menuMakerColumnCount(Number.NaN)).toBe(3);
+        expect(menuMakerColumnCount(-2)).toBe(1);
+        expect(menuMakerColumnCount(4)).toBe(4);
     });
 
     it("moves the dragged slot to the drop target index", () => {

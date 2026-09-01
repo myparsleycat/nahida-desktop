@@ -19,6 +19,10 @@ export function calculateMenuMakerPreviewScale(settings: MenuMakerSettings): num
     );
 }
 
+export function menuMakerColumnCount(columns: number): number {
+    return Math.max(1, columns || 3);
+}
+
 export function moveMenuMakerSlot(
     slots: MenuMakerSlot[],
     fromId: string,

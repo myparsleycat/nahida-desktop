@@ -44,6 +44,7 @@ import {
 } from "@shared/menu-maker/drafts";
 import {
   calculateMenuMakerPreviewScale,
+  menuMakerColumnCount,
   mergeMenuMakerSlots,
   moveMenuMakerSlot,
 } from "@shared/menu-maker/generator";
@@ -132,6 +133,7 @@ type EditorAction =
       sourceAvailable?: boolean;
     }
   | { type: "sourceAvailable"; value: boolean }
+  | { type: "sourceContent"; text: string; sha256: string }
   | { type: "slots"; value: MenuMakerSlot[] }
   | { type: "settings"; value: Partial<MenuMakerSettings> }
   | { type: "palette"; key: keyof MenuMakerSettings["palette"]; value: string | number };
@@ -238,29 +240,43 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
 
   const persistDraft = useCallback(() => {
     if (!state.source || !state.document) return;
-    const id = `${state.source.sha256}:${slotSignature(state.document.slots ?? [])}`;
+    const source = state.source;
+    const signature = slotSignature(state.document.slots ?? []);
+    const id = `${source.sha256}:${signature}`;
     const detached = detachDraftMedia(state.settings, state.slots);
+    const existing = loadDraftMetadata();
+    const superseded = existing.filter(
+      (draft) =>
+        draft.id !== id && draft.sourcePath === source.path && draft.slotSignature === signature,
+    );
     try {
       saveDraftMetadata([
         {
           id,
-          sourcePath: state.source.path,
-          sourceName: state.source.fileName,
-          sourceSHA256: state.source.sha256,
-          slotSignature: slotSignature(state.document.slots ?? []),
+          sourcePath: source.path,
+          sourceName: source.fileName,
+          sourceSHA256: source.sha256,
+          slotSignature: signature,
           updatedAt: Date.now(),
-          sourceEncoding: state.source.encoding,
-          sourceHasBOM: state.source.hasBOM,
-          sourceNewline: state.source.newline,
+          sourceEncoding: source.encoding,
+          sourceHasBOM: source.hasBOM,
+          sourceNewline: source.newline,
           settings: detached.settings,
           slots: detached.slots,
         },
-        ...loadDraftMetadata().filter((draft) => draft.id !== id),
+        ...existing.filter(
+          (draft) => draft.id !== id && !superseded.some((item) => item.id === draft.id),
+        ),
       ]);
     } catch (error) {
       Logger.error({ error: String(error), draftId: id }, "MenuMakerPage:saveDraftMetadata");
     }
-    void saveDraftBlobs(id, { originalText: state.source.text, ...detached.blobs }).catch((error) =>
+    for (const draft of superseded) {
+      void deleteDraftBlobs(draft.id).catch((error) =>
+        Logger.error({ error: String(error), draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
+      );
+    }
+    void saveDraftBlobs(id, { originalText: source.text, ...detached.blobs }).catch((error) =>
       Logger.error({ error: String(error), draftId: id }, "MenuMakerPage:saveDraftBlobs"),
     );
   }, [state.document, state.settings, state.slots, state.source]);
@@ -389,8 +405,15 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         useOriginalININame: state.settings.useOriginalININame,
       });
       toast.success(t("page.tools.menu_maker.applied", { path: result.outputINIPath }));
-      if (/\.ini$/i.test(state.source.fileName) && !state.settings.useOriginalININame)
+      if (result.sourceSHA256) {
+        dispatch({
+          type: "sourceContent",
+          text: generated.iniText,
+          sha256: result.sourceSHA256,
+        });
+      } else if (/\.ini$/i.test(state.source.fileName) && !state.settings.useOriginalININame) {
         dispatch({ type: "sourceAvailable", value: false });
+      }
     } catch (error) {
       Logger.error(
         { error: String(error), sourcePath: state.source.path, outputName },
@@ -690,7 +713,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
                 <div
                   className="grid"
                   style={{
-                    gridTemplateColumns: `repeat(${Math.max(1, state.settings.columns)}, ${geometry.slotSize}px)`,
+                    gridTemplateColumns: `repeat(${menuMakerColumnCount(state.settings.columns)}, ${geometry.slotSize}px)`,
                     gap: geometry.scaledGap,
                     padding: `${geometry.padding}px ${geometry.padding}px ${geometry.padding}px`,
                   }}
@@ -983,6 +1006,13 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
 function reducer(state: EditorState, action: EditorAction): EditorState {
   if (action.type === "busy") return { ...state, busy: action.value };
   if (action.type === "sourceAvailable") return { ...state, sourceAvailable: action.value };
+  if (action.type === "sourceContent") {
+    if (!state.source) return state;
+    return {
+      ...state,
+      source: { ...state.source, text: action.text, sha256: action.sha256 },
+    };
+  }
   if (action.type === "scan") return { ...state, scan: action.value };
   if (action.type === "load")
     return {
@@ -1948,6 +1978,7 @@ function loadStoredSettings(): MenuMakerSettings {
     return {
       ...DEFAULT_MENU_MAKER_SETTINGS,
       ...stored,
+      columns: stored.columns || DEFAULT_MENU_MAKER_SETTINGS.columns,
       palette: { ...DEFAULT_MENU_MAKER_SETTINGS.palette, ...stored.palette },
     };
   } catch {

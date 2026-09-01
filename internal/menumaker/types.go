@@ -78,6 +78,7 @@ type MenuMakerWriteResult struct {
 	OutputINIPath string   `json:"outputINIPath,omitempty"`
 	ArchivePath   string   `json:"archivePath,omitempty"`
 	BackupPath    string   `json:"backupPath,omitempty"`
+	SourceSHA256  string   `json:"sourceSHA256,omitempty"`
 	ResourcePaths []string `json:"resourcePaths"`
 	RolledBack    bool     `json:"rolledBack"`
 }
