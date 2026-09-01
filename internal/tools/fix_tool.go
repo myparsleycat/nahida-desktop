@@ -230,7 +230,7 @@ func (t *Tools) SendInput(input string) bool {
 	t.runMu.Lock()
 	run := t.run
 	t.runMu.Unlock()
-	if run == nil || !run.executor.sendInput(input) {
+	if run == nil || run.executor == nil || !run.executor.sendInput(input) {
 		if t.log != nil {
 			t.log.Warn("Cannot send input: No active script running", "FixTool")
 		}
@@ -347,7 +347,7 @@ func (t *Tools) validateRunDestination(destPath string) error {
 	return nil
 }
 
-func (t *Tools) runScriptSafe(ctx context.Context, run *scriptRun, script *db.ScriptRow, destPath string, args []string) bool {
+func (t *Tools) runScriptSafe(ctx context.Context, run *toolRun, script *db.ScriptRow, destPath string, args []string) bool {
 	ext := "exe"
 	if script.Type == db.ScriptTypePython {
 		ext = "py"

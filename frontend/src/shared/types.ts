@@ -64,6 +64,11 @@ export interface GitHubRateState {
     updatedAt: string;
 }
 
+export interface ModFixerAction {
+    id: "wuwa" | "zzmi";
+    label: string;
+}
+
 export interface WuwaFixerOptions {
     derivedHashes: boolean;
     stableTexture: boolean;

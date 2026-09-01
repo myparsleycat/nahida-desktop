@@ -35,6 +35,7 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
+import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
 interface ModContextMenuProps {
   mod: ModInfo;
@@ -175,13 +176,18 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                   </ContextMenuGroup>
                 </ContextMenuSubContent>
               </ContextMenuSub>
-              {actions.runner.showWuwaFixer && (
+              {actions.runner.modFixer && (
                 <ContextMenuItem
                   disabled={actions.runner.isPreparing}
-                  onClick={() => actions.openWuwaFixer(mod)}
+                  onClick={() => actions.openModFixer(mod)}
                 >
-                  <img src={wuwaModFixerIcon} className="size-4" />
-                  Wuwa Mod Fixer
+                  <img
+                    src={
+                      actions.runner.modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon
+                    }
+                    className="size-4"
+                  />
+                  {actions.runner.modFixer.label}
                 </ContextMenuItem>
               )}
             </ContextMenuGroup>

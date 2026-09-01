@@ -2,6 +2,7 @@ import { Mod } from "@bindings/mod";
 import { type FolderSortDirection, type FolderSortKey, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
+import type { ModFixerAction } from "@shared/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo } from "react";
 
@@ -22,8 +23,8 @@ export interface CharacterSidebarContentProps {
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
   showSkeleton: boolean;
   previewCacheKey: number;
-  showWuwaFixer?: boolean;
-  onOpenWuwaFixer?: (path: string) => Promise<void>;
+  modFixer?: ModFixerAction | null;
+  onOpenModFixer?: (path: string) => Promise<void>;
 }
 
 interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProps {
@@ -81,8 +82,8 @@ interface CharacterSidebarItemWithChildrenProps {
   parentGroupName?: string;
   collapseGroupPath?: string;
   previewCacheKey: number;
-  showWuwaFixer?: boolean;
-  onOpenWuwaFixer?: (path: string) => Promise<void>;
+  modFixer?: ModFixerAction | null;
+  onOpenModFixer?: (path: string) => Promise<void>;
 }
 
 const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithChildren({
@@ -108,8 +109,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   itemStyle,
   parentGroupName,
   collapseGroupPath,
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
 }: CharacterSidebarItemWithChildrenProps) {
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
@@ -173,8 +174,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           selectedItemClassName={selectedItemClassName}
           nestedItemClassName={nestedItemClassName}
           itemStyle={resolvedItemStyle}
-          showWuwaFixer={showWuwaFixer}
-          onOpenWuwaFixer={onOpenWuwaFixer}
+          modFixer={modFixer}
+          onOpenModFixer={onOpenModFixer}
           forceSelectOnClick={isSearching}
         />
       )}
@@ -204,8 +205,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             nestedItemClassName={nestedItemClassName}
             itemStyle={itemStyle}
             parentGroupName={group.name}
-            showWuwaFixer={showWuwaFixer}
-            onOpenWuwaFixer={onOpenWuwaFixer}
+            modFixer={modFixer}
+            onOpenModFixer={onOpenModFixer}
           />
         ))}
     </>
@@ -233,8 +234,8 @@ export function CharacterSidebarContent({
   selectedItemClassName,
   nestedItemClassName,
   itemStyle,
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
 }: CharacterSidebarContentLayoutProps) {
   return (
     <div className={listClassName} style={listStyle}>
@@ -265,8 +266,8 @@ export function CharacterSidebarContent({
               selectedItemClassName={selectedItemClassName}
               nestedItemClassName={nestedItemClassName}
               itemStyle={itemStyle}
-              showWuwaFixer={showWuwaFixer}
-              onOpenWuwaFixer={onOpenWuwaFixer}
+              modFixer={modFixer}
+              onOpenModFixer={onOpenModFixer}
             />
           ))}
     </div>

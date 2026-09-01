@@ -357,10 +357,7 @@ function ModRouteContent() {
   return (
     <>
       <div className="flex h-full flex-1 overflow-hidden">
-        <ModSidebar
-          showWuwaFixer={runner.showWuwaFixer}
-          onOpenWuwaFixer={runner.handleOpenWuwaFixer}
-        />
+        <ModSidebar modFixer={runner.modFixer} onOpenModFixer={runner.handleOpenModFixer} />
 
         <div
           id={FileDropTargetID.modContent}
@@ -373,8 +370,8 @@ function ModRouteContent() {
         >
           {selectedGroupPath && (
             <ContentHeader
-              showWuwaFixer={runner.showWuwaFixer}
-              handleOpenWuwaFixer={runner.handleOpenWuwaFixer}
+              modFixer={runner.modFixer}
+              handleOpenModFixer={runner.handleOpenModFixer}
               isPreparing={runner.isPreparing}
             />
           )}

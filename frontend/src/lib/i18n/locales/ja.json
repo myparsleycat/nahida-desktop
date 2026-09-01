@@ -313,6 +313,7 @@
         "all_disabled": "すべてのMODが無効になりました",
         "tools": "ツール",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
         "download_dialog": {
           "title": "URLからダウンロード",
           "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
@@ -350,7 +351,8 @@
         "persist-subgroups": "サブフォルダーとして指定",
         "unmark-manual-subgroup": "手動サブグループ指定を解除",
         "tools": "ツール",
-        "wuwa-mod-fixer": "Wuwa Mod Fixer"
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "対象パスが設定されていません。",
@@ -582,6 +584,59 @@
           },
           "log": {
             "input_placeholder": "入力..."
+          }
+        },
+        "zzmi-fix-runner": {
+          "only_zzmi": "ZZMI Mod Fixer は ZZMI ゲームでのみ使用できます。",
+          "rules": {
+            "source": "ルールの取得元: {{source}}",
+            "refresh": "更新"
+          },
+          "update": {
+            "available": "新しい ZZMI fixer ルールを利用できます。",
+            "action": "更新して使用",
+            "success": "ZZMI fixer ルールを更新しました。"
+          },
+          "tabs": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap",
+            "rollback": "ロールバック"
+          },
+          "hash": {
+            "title": "Hash Fix",
+            "description": "選択した MOD パスの古い ZZZ ハッシュを更新し、必要な INI と頂点バッファーの移行を適用します。"
+          },
+          "jane": {
+            "title": "Jane Doe Blend Remap",
+            "description": "Jane Doe の髪と手の blend index を現在のモデル構造に合わせます。認識された stride-32 リソースのみ変更します。"
+          },
+          "dialyn": {
+            "title": "Dialyn Blend Remap",
+            "description": "Dialyn の blend index を現在のモデル構造に合わせます。認識された stride-32 リソースのみ変更します。"
+          },
+          "run": {
+            "action": "Fixer を実行",
+            "warning": "{{count}} 件の警告を伴って完了しました。"
+          },
+          "tool": {
+            "hash": "Hash Fix",
+            "jane": "Jane Remap",
+            "dialyn": "Dialyn Remap"
+          },
+          "rollback": {
+            "summary": "{{count}} セッション、{{size}}",
+            "empty": "この MOD の ZZMI fixer バックアップはありません。",
+            "restore_session": "セッションを復元",
+            "success": "ZZMI バックアップを復元しました。",
+            "conflict_title": "Fixer 実行後にファイルが変更されています",
+            "conflict_description": "{{count}} 件のファイルが記録済みの修正状態と一致しません。強制復元すると現在の変更を上書きします。",
+            "force": "強制復元",
+            "delete_title": "このバックアップを削除しますか？",
+            "delete_description": "選択したバックアップデータは完全に削除されます。",
+            "delete_all": "すべて削除",
+            "delete_all_title": "ZZMI バックアップをすべて削除しますか？",
+            "delete_all_description": "選択した MOD のすべての ZZMI fixer バックアップが完全に削除されます。"
           }
         }
       },

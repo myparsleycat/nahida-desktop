@@ -16,6 +16,7 @@ import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { FILE_DROP_GROUP_PATH_ATTRIBUTE, useWindowFileDrop } from "@renderer/wails/file-drop";
 import type { SidebarLayoutMode } from "@shared/mod";
+import type { ModFixerAction } from "@shared/types";
 import {
   ChevronDown,
   ChevronRight,
@@ -33,6 +34,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
+import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
 import { buttonVariants } from "../ui/button";
 import { CharacterSidebarItemGrid } from "./character-sidebar-item-grid";
@@ -54,8 +56,8 @@ interface CharacterSidebarItemProps {
   nestedItemClassName?: string;
   itemStyle?: React.CSSProperties;
   previewCacheKey?: number;
-  showWuwaFixer?: boolean;
-  onOpenWuwaFixer?: (path: string) => Promise<void>;
+  modFixer?: ModFixerAction | null;
+  onOpenModFixer?: (path: string) => Promise<void>;
   forceSelectOnClick?: boolean;
   autoScrollOnSelect?: boolean;
   collapseGroupPath?: string;
@@ -77,8 +79,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   nestedItemClassName,
   itemStyle,
   previewCacheKey,
-  showWuwaFixer,
-  onOpenWuwaFixer,
+  modFixer,
+  onOpenModFixer,
   forceSelectOnClick,
   autoScrollOnSelect = true,
   collapseGroupPath,
@@ -329,7 +331,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
           </ContextMenuItem>
         )}
 
-        {showWuwaFixer && onOpenWuwaFixer && (
+        {modFixer && onOpenModFixer && (
           <>
             <ContextMenuSeparator />
             <ContextMenuSub>
@@ -338,9 +340,13 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
                 {t("page.mod.character-sidebar.tools")}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                <ContextMenuItem onClick={() => void onOpenWuwaFixer(group.path)}>
-                  <img src={wuwaModFixerIcon} className="size-4" />
-                  {t("page.mod.character-sidebar.wuwa-mod-fixer")}
+                <ContextMenuItem onClick={() => void onOpenModFixer(group.path)}>
+                  <img
+                    src={modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon}
+                    alt=""
+                    className="size-4"
+                  />
+                  {modFixer.label}
                 </ContextMenuItem>
               </ContextMenuSubContent>
             </ContextMenuSub>

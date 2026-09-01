@@ -86,7 +86,7 @@ export interface ModActionApi {
   openBodyShapeDialog: (mod: ModInfo) => void;
   openTouchProfileDialog: (mod: ModInfo) => void;
   openConflictFinder: (mod: ModInfo) => void;
-  openWuwaFixer: (mod: ModInfo) => Promise<void>;
+  openModFixer: (mod: ModInfo) => Promise<void>;
   markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
   runPreset: (mod: ModInfo, presetId: string) => Promise<void>;
   runTool: (mod: ModInfo, toolId: string) => Promise<void>;
@@ -384,8 +384,8 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
     openTouchProfileDialog: (mod) => setTouchProfileMod(mod),
     openConflictFinder: (mod) => setConflictFinderMod(mod),
-    openWuwaFixer: async (mod) => {
-      await runner.handleOpenWuwaFixer(mod.path);
+    openModFixer: async (mod) => {
+      await runner.handleOpenModFixer(mod.path);
     },
     markAsManualSubGroup: async (mod) => {
       await Mod.SetManualSubGroup(mod.path, true)

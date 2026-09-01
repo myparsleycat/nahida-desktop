@@ -34,38 +34,40 @@ type contractError string
 func (e contractError) Error() string { return string(e) }
 
 type Options struct {
-	Log       *infra.Log
-	EventEmit func(string, ...any)
-	Notify    func(title, body string) error
-	Settings  BisectSettings
-	XXMI      *xxmi.XXMI
-	FS        *platform.FS
-	HTTP      *infra.Client
-	Download  *infra.Download
-	Archive   *infra.Archive
-	Protocol  *infra.Protocol
-	Mod       ModDisabler
+	Log        *infra.Log
+	EventEmit  func(string, ...any)
+	Notify     func(title, body string) error
+	Settings   BisectSettings
+	XXMI       *xxmi.XXMI
+	FS         *platform.FS
+	HTTP       *infra.Client
+	Download   *infra.Download
+	Archive    *infra.Archive
+	Protocol   *infra.Protocol
+	GitHubRate *infra.GitHubRateCoordinator
+	Mod        ModDisabler
 	// PEDiversifier diversifies packed executable content.
 	PEDiversifier PEDiversifier
 }
 
 type Tools struct {
-	appData  *appdata.Store
-	client   *db.Client
-	log      *infra.Log
-	emit     func(string, ...any)
-	notify   func(title, body string) error
-	settings BisectSettings
-	xxmi     *xxmi.XXMI
-	fs       *platform.FS
-	http     *infra.Client
-	download *infra.Download
-	archive  *infra.Archive
-	protocol *infra.Protocol
-	mod      ModDisabler
+	appData    *appdata.Store
+	client     *db.Client
+	log        *infra.Log
+	emit       func(string, ...any)
+	notify     func(title, body string) error
+	settings   BisectSettings
+	xxmi       *xxmi.XXMI
+	fs         *platform.FS
+	http       *infra.Client
+	download   *infra.Download
+	archive    *infra.Archive
+	protocol   *infra.Protocol
+	githubRate *infra.GitHubRateCoordinator
+	mod        ModDisabler
 
 	runMu sync.Mutex
-	run   *scriptRun
+	run   *toolRun
 
 	bisectMu sync.Mutex
 	bisect   *bisectSession
@@ -84,6 +86,10 @@ type Tools struct {
 	wuwaInstallMu  sync.Mutex
 	wuwaAutoCancel context.CancelFunc
 	wuwaAutoDone   chan struct{}
+
+	zzmiMu      sync.Mutex
+	zzmiLatest  *zzmiLatestRelease
+	zzmiChecked time.Time
 
 	toggleMu      sync.Mutex
 	toggleTask    *toggleViewerTask
@@ -113,7 +119,7 @@ type Tools struct {
 	persist             *persistEngine
 }
 
-type scriptRun struct {
+type toolRun struct {
 	cancel   context.CancelFunc
 	executor *scriptExecutor
 	done     chan struct{}
@@ -130,7 +136,7 @@ func NewWithOptions(opts Options) *Tools {
 	}
 	t := &Tools{
 		log: opts.Log, emit: opts.EventEmit, notify: opts.Notify, settings: opts.Settings, xxmi: opts.XXMI,
-		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, mod: opts.Mod,
+		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, githubRate: opts.GitHubRate, mod: opts.Mod,
 		peDiversifier: opts.PEDiversifier,
 		textureState:  TextureResizeProgressEvent{Status: "idle"},
 		textureJobs:   make(map[uint64]TextureResizeProgressEvent), releaseCache: make(map[string]releaseCacheEntry), releaseCalls: make(map[string]*releaseFetchCall),
@@ -154,10 +160,20 @@ func NewWithOptions(opts Options) *Tools {
 }
 
 //wails:ignore
-func (t *Tools) UseClient(client *db.Client) { t.client = client }
+func (t *Tools) UseClient(client *db.Client) {
+	t.client = client
+	if t.githubRate != nil && client != nil {
+		t.githubRate.UseAppState(client.AppState)
+	}
+}
 
 //wails:ignore
-func (t *Tools) UseAppData(data *appdata.Store) { t.appData = data }
+func (t *Tools) UseAppData(data *appdata.Store) {
+	t.appData = data
+	if err := t.zzmiCleanupAbandonedStaging(); err != nil {
+		t.logError(err, "ZZMIFixerCleanup")
+	}
+}
 
 func (t *Tools) appDataPath(relative string) (string, error) {
 	if t == nil || t.appData == nil {
@@ -185,20 +201,23 @@ func (t *Tools) logError(err error, where string) {
 	}
 }
 
-func (t *Tools) beginScriptRun(parent context.Context) (*scriptRun, context.Context, error) {
+func (t *Tools) beginToolRun(parent context.Context, executor *scriptExecutor) (*toolRun, context.Context, error) {
 	t.runMu.Lock()
 	defer t.runMu.Unlock()
 	if t.run != nil {
 		return nil, nil, contractError("Another process is running.")
 	}
 	ctx, cancel := context.WithCancel(parent)
-	run := &scriptRun{cancel: cancel, done: make(chan struct{})}
-	run.executor = newScriptExecutor(t.emitFixToolLog)
+	run := &toolRun{cancel: cancel, executor: executor, done: make(chan struct{})}
 	t.run = run
 	return run, ctx, nil
 }
 
-func (t *Tools) finishScriptRun(run *scriptRun) {
+func (t *Tools) beginScriptRun(parent context.Context) (*toolRun, context.Context, error) {
+	return t.beginToolRun(parent, newScriptExecutor(t.emitFixToolLog))
+}
+
+func (t *Tools) finishScriptRun(run *toolRun) {
 	if run == nil {
 		return
 	}
