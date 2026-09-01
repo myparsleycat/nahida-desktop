@@ -24,6 +24,7 @@ import {
   FolderTreeIcon,
   ImageIcon,
   Loader2Icon,
+  PanelsTopLeftIcon,
   PencilIcon,
   PersonStandingIcon,
   SparklesIcon,
@@ -244,6 +245,17 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
               <ContextMenuItem onClick={() => actions.openTextureResizeDialog(mod)}>
                 <ImageIcon className="mr-2 size-4" />
                 {t("page.tools.texture_resizer.title")}
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() =>
+                  void navigate({
+                    to: "/tools/menu-maker",
+                    search: { path: mod.path, name: mod.name, ini: "" },
+                  })
+                }
+              >
+                <PanelsTopLeftIcon className="mr-2 size-4" />
+                {t("page.tools.menu_maker.title")}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
                 <PersonStandingIcon className="mr-2 size-4" />
