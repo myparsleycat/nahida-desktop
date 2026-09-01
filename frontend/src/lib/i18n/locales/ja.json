@@ -313,6 +313,7 @@
         "all_disabled": "すべてのMODが無効になりました",
         "tools": "ツール",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
         "download_dialog": {
           "title": "URLからダウンロード",
           "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
@@ -350,7 +351,8 @@
         "persist-subgroups": "サブフォルダーとして指定",
         "unmark-manual-subgroup": "手動サブグループ指定を解除",
         "tools": "ツール",
-        "wuwa-mod-fixer": "Wuwa Mod Fixer"
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "対象パスが設定されていません。",

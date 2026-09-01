@@ -201,24 +201,20 @@ func (t *Tools) logError(err error, where string) {
 	}
 }
 
-func (t *Tools) beginToolRun(parent context.Context) (*toolRun, context.Context, error) {
+func (t *Tools) beginToolRun(parent context.Context, executor *scriptExecutor) (*toolRun, context.Context, error) {
 	t.runMu.Lock()
 	defer t.runMu.Unlock()
 	if t.run != nil {
 		return nil, nil, contractError("Another process is running.")
 	}
 	ctx, cancel := context.WithCancel(parent)
-	run := &toolRun{cancel: cancel, done: make(chan struct{})}
+	run := &toolRun{cancel: cancel, executor: executor, done: make(chan struct{})}
 	t.run = run
 	return run, ctx, nil
 }
 
 func (t *Tools) beginScriptRun(parent context.Context) (*toolRun, context.Context, error) {
-	run, ctx, err := t.beginToolRun(parent)
-	if err == nil {
-		run.executor = newScriptExecutor(t.emitFixToolLog)
-	}
-	return run, ctx, err
+	return t.beginToolRun(parent, newScriptExecutor(t.emitFixToolLog))
 }
 
 func (t *Tools) finishScriptRun(run *toolRun) {

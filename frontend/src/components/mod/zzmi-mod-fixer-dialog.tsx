@@ -133,7 +133,10 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={() => void runner.handleRunZZMIFixer(tool)}>
+                    <Button
+                      disabled={runner.zzmiUpdateBusy}
+                      onClick={() => void runner.handleRunZZMIFixer(tool)}
+                    >
                       {t(`${key}.run.action`)}
                     </Button>
                   </div>

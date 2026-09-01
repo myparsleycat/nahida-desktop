@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -298,7 +299,7 @@ func uintMapping(value any) (map[uint32]uint32, error) {
 			return nil, err
 		}
 		to, err := intValue(item)
-		if err != nil || to < 0 {
+		if err != nil || to < 0 || uint64(to) > math.MaxUint32 {
 			return nil, errors.New("invalid remapper index")
 		}
 		result[uint32(from)] = uint32(to)

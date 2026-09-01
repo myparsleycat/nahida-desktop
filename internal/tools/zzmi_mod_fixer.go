@@ -224,7 +224,7 @@ func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMI
 	if err != nil {
 		return ZZMIFixerRunResult{}, err
 	}
-	run, runCtx, err := t.beginToolRun(ctx)
+	run, runCtx, err := t.beginToolRun(ctx, nil)
 	if err != nil {
 		return ZZMIFixerRunResult{}, err
 	}
@@ -273,7 +273,7 @@ func (t *Tools) ZZMIFixerRestore(ctx context.Context, input ZZMIFixerRestoreInpu
 	if err != nil {
 		return ZZMIFixerRestoreResult{}, err
 	}
-	run, runCtx, err := t.beginToolRun(ctx)
+	run, runCtx, err := t.beginToolRun(ctx, nil)
 	if err != nil {
 		return ZZMIFixerRestoreResult{}, err
 	}
@@ -501,12 +501,16 @@ func loadZZMIPackVersion(dir, expectedDigest string) (*zzmiengine.RulePack, erro
 	return pack, nil
 }
 
-func validSHA256Hex(value string) bool {
-	if len(value) != sha256.Size*2 {
+func validHex(value string, length int) bool {
+	if len(value) != length {
 		return false
 	}
 	_, err := hex.DecodeString(value)
 	return err == nil
+}
+
+func validSHA256Hex(value string) bool {
+	return validHex(value, sha256.Size*2)
 }
 
 func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRelease, bool, error) {
@@ -552,7 +556,7 @@ func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRel
 			commit = tag.SHA
 		}
 	}
-	if len(commit) != 40 {
+	if !validHex(commit, 40) {
 		return nil, true, errors.New("latest ZZMI release has an invalid commit")
 	}
 	var tree zzmiTreeResponse

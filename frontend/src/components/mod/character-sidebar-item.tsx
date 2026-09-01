@@ -343,6 +343,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
                 <ContextMenuItem onClick={() => void onOpenModFixer(group.path)}>
                   <img
                     src={modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon}
+                    alt=""
                     className="size-4"
                   />
                   {modFixer.label}

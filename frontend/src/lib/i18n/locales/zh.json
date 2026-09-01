@@ -312,6 +312,7 @@
         "all_disabled": "所有模组已禁用",
         "tools": "工具",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
         "download_dialog": {
           "title": "通过 URL 下载",
           "description": "将输入的压缩包 URL 下载到当前选中的角色文件夹，并自动解压。",
@@ -349,7 +350,8 @@
         "persist-subgroups": "指定为子文件夹",
         "unmark-manual-subgroup": "取消手动子分组指定",
         "tools": "工具",
-        "wuwa-mod-fixer": "Wuwa Mod Fixer"
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
+        "zzmi-mod-fixer": "ZZMI Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "未设置目标路径。",

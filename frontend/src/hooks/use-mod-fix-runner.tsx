@@ -37,7 +37,7 @@ export function useModFixRunner() {
   const { data: games = [] } = useGames();
   const selectedGameConfig = games.find((game) => game.game === selectedGame) ?? null;
   const selectedImporter = selectedGameConfig?.importer ?? null;
-  const { showWuwaFixer, showZZMIFixer, modFixer } = getModFixerAvailability(selectedImporter);
+  const { showWuwaFixer, showZZMIFixer, modFixer } = getModFixerAvailability(selectedImporter, t);
 
   const { data: fixTools = [] } = useQuery({
     queryKey: ["ftm:scripts"],
@@ -320,7 +320,7 @@ export function useModFixRunner() {
   };
 
   const handleRunZZMIFixer = async (tool: "hash" | "jane" | "dialyn") => {
-    if (!activeModPath || runInProgressRef.current) return;
+    if (!activeModPath || runInProgressRef.current || zzmiUpdateBusy) return;
     runInProgressRef.current = true;
     setActiveRunKind("zzmi");
     setShowZZMIDialog(false);
@@ -361,6 +361,7 @@ export function useModFixRunner() {
       if ((result.conflicts?.length ?? 0) > 0) {
         setZZMIConflicts(result.conflicts ?? []);
         setZZMIPendingRestore({ sessionId, entryId });
+        await refreshZZMIBackups(activeModPath);
         return;
       }
       setZZMIConflicts([]);

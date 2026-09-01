@@ -505,3 +505,16 @@ filename = ../outside.buf
 		t.Fatalf("expected unsafe resource warning: %+v", result)
 	}
 }
+
+func TestCompileJaneRejectsUint32Overflow(t *testing.T) {
+	t.Parallel()
+	_, err := compileJane([]byte(`
+HAIR_MAPPINGS={0:4294967296}
+HAND_MAPPINGS={4:0}
+POSITION_TO_BLEND={'33a09cfe':'e42171df','82e7c056':'d06a9206'}
+STRIDE=32
+`))
+	if err == nil || err.Error() != "invalid remapper index" {
+		t.Fatalf("expected invalid remapper index, got %v", err)
+	}
+}

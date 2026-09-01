@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -263,7 +264,7 @@ func (e *engine) executeCommand(filename, content, activeHash string, known map[
 				return content, nil, err
 			}
 		}
-		newSection := fmt.Sprintf("\n[TextureOverride%s]\nhash = %s\n%s", title, hashes[0], body)
+		newSection := fmt.Sprintf("\n[TextureOverride%s]\nhash = %s\n%s\n", title, hashes[0], body)
 		return content[:active.end] + newSection + content[active.end:], []string{hashes[0]}, nil
 	case "add_ib_check_if_missing":
 		return addIBChecks(content, activeHash), nil, nil
@@ -478,10 +479,7 @@ func (e *engine) shrinkTexcoord(filename, content, hash string, args []any) (str
 		for offset := 0; offset < len(data); offset += stride {
 			for component := range 4 {
 				value := math.Float32frombits(binary.LittleEndian.Uint32(data[offset+component*4:]))
-				if math.IsNaN(float64(value)) {
-					value = 0
-				}
-				out = append(out, byte(max(0, min(255, int(value*255)))))
+				out = append(out, unormByte(value))
 			}
 			out = append(out, data[offset+16:offset+stride]...)
 		}
@@ -601,7 +599,8 @@ func (e *engine) fixRemapperFile(filename, tool string) ([]Change, error) {
 			}
 		}
 	}
-	for resource, hash := range resourceTargets {
+	for _, resource := range slices.Sorted(maps.Keys(resourceTargets)) {
+		hash := resourceTargets[resource]
 		path, stride, pathErr := e.resourceFile(filename, content, resource)
 		if pathErr != nil {
 			e.warn(fmt.Sprintf("Skipped resource %s in %s: %v", resource, relativeDisplay(e.root, filename), pathErr))
@@ -759,6 +758,17 @@ func trimResourcePrefix(value string) string {
 		return value[len(prefix):]
 	}
 	return value
+}
+
+func unormByte(value float32) byte {
+	scaled := float64(value) * 255
+	if math.IsNaN(scaled) || scaled <= 0 {
+		return 0
+	}
+	if scaled >= 255 {
+		return 255
+	}
+	return byte(scaled)
 }
 func (e *engine) warn(message string) {
 	e.warnings = append(e.warnings, message)
@@ -921,7 +931,7 @@ func updateResourceStride(content, resource string, stride int) string {
 	sections := parseSections(content)
 	for i := len(sections) - 1; i >= 0; i-- {
 		item := sections[i]
-		if !strings.EqualFold(item.title, strings.TrimPrefix(resource, "[")) {
+		if !strings.EqualFold(item.title, "Resource"+trimResourcePrefix(resource)) {
 			continue
 		}
 		lines := strings.Split(item.body, "\n")
@@ -1062,10 +1072,7 @@ func convertChunk(data []byte, oldChunk, newChunk string) ([]byte, error) {
 	switch newChunk[len(newChunk)-1] {
 	case 'B':
 		for i, v := range values {
-			if math.IsNaN(float64(v)) {
-				v = 0
-			}
-			out[i] = byte(max(0, min(255, int(v*255))))
+			out[i] = unormByte(v)
 		}
 	case 'e':
 		for i, v := range values {

@@ -287,6 +287,7 @@ export function ContentHeader({ modFixer, handleOpenModFixer, isPreparing }: Con
                     >
                       <img
                         src={modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon}
+                        alt=""
                         className="size-4"
                       />
                       {modFixer.label}
