@@ -33,4 +33,3 @@ After the XXMI path is configured, you can use the following features:
 - Quick launch games
 - d3d11.dll Builder
 - Persist Toggles
-- Toggle Viewer Generator

@@ -1038,26 +1038,6 @@
         "original_logic": "Original logic",
         "generated_logic": "Generated logic"
       },
-      "toggle_viewer_generator": {
-        "title": "Toggle Viewer Generator",
-        "not_configured": "XXMI path is not configured. Configure XXMI first.",
-        "auto_generate": "Toggle Viewer Auto Generate",
-        "auto_generate_desc": "Auto-generate toggle-viewer files from mod ini toggle sections.",
-        "hotkey": "Toggle Viewer Key",
-        "batch_generate": "Batch Generate",
-        "batch_delete": "Batch Delete",
-        "stop": "Stop",
-        "running": "Running: {{mode}}",
-        "idle": "Idle",
-        "unknown": "unknown",
-        "logs": "Logs",
-        "no_logs": "No logs yet.",
-        "dialog": {
-          "trigger": "Hotkey:",
-          "title": "Toggle Viewer Hotkey",
-          "description": "Press the key combination to set"
-        }
-      },
       "texture_resizer": {
         "title": "Texture Resizer",
         "target_folder": "Target folder",
@@ -1627,7 +1607,7 @@
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
           "runInBackgroundDisableConfirmTitle": "Disable background run?",
-          "runInBackgroundDisableConfirmDescription": "Toggle Persist and Toggle Viewer work more reliably when background run is enabled. If you turn this off, closing all windows will quit the app, and you will not be able to use those features until the app is open again. Do you still want to turn off background run?",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist works more reliably when background run is enabled. If you turn this off, closing all windows will quit the app, and you will not be able to use that feature until the app is open again. Do you still want to turn off background run?",
           "runInBackgroundDisableConfirmAction": "Turn off anyway",
           "autoUpdate": "Auto update",
           "updateStatus": "Update status",

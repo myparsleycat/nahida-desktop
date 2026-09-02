@@ -432,7 +432,6 @@ export type IpcEvents = {
         errorFiles: number;
     }) => void;
     "setting:xxmi:persistLogs": (logs: string[]) => void;
-    "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:4001FixerProgress": (event: FourThousandOneFixerProgressEvent) => void;
     "tools:textureResizeProgress": (event: TextureResizeProgressEvent) => void;
     "tools:textureUpscaleProgress": (event: TextureUpscaleProgressEvent) => void;

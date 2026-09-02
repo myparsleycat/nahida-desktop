@@ -91,14 +91,6 @@ type Tools struct {
 	zzmiLatest  *zzmiLatestRelease
 	zzmiChecked time.Time
 
-	toggleMu      sync.Mutex
-	toggleTask    *toggleViewerTask
-	toggleLogs    []string
-	togglePending bool
-	toggleWatcher *toggleViewerWatcher
-	toggleClosing bool
-	toggleWG      sync.WaitGroup
-
 	textureRuntimeMu sync.Mutex
 	textureEventMu   sync.Mutex
 	textureMu        sync.Mutex
@@ -249,5 +241,5 @@ func (t *Tools) ServiceShutdown() error {
 			err = errors.New("timed out waiting for tools process to stop")
 		}
 	}
-	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownToggleViewer(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
 }

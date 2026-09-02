@@ -1003,26 +1003,6 @@
         "original_logic": "原始逻辑",
         "generated_logic": "生成逻辑"
       },
-      "toggle_viewer_generator": {
-        "title": "Toggle Viewer 生成器",
-        "not_configured": "未配置 XXMI 路径。请先配置 XXMI。",
-        "auto_generate": "自动生成 Toggle Viewer",
-        "auto_generate_desc": "从模组 ini 的切换部分自动生成 toggle-viewer 文件。",
-        "hotkey": "Toggle Viewer 快捷键",
-        "batch_generate": "批量生成",
-        "batch_delete": "批量删除",
-        "stop": "停止",
-        "running": "运行中: {{mode}}",
-        "idle": "空闲",
-        "unknown": "未知",
-        "logs": "日志",
-        "no_logs": "暂无日志。",
-        "dialog": {
-          "trigger": "快捷键:",
-          "title": "Toggle Viewer 快捷键",
-          "description": "按下键盘组合以设置快捷键"
-        }
-      },
       "texture_resizer": {
         "title": "纹理缩放器",
         "target_folder": "目标文件夹",
@@ -1594,7 +1574,7 @@
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
           "runInBackgroundDisableConfirmTitle": "要关闭后台运行吗？",
-          "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 或 `Toggle Viewer` 时，保持后台运行会更安全、更稳定。如果关闭此选项，一旦关闭所有窗口，应用就会退出，因此在重新打开应用之前将无法使用这两个功能。\n\n仍然要关闭后台运行吗？",
+          "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 时，保持后台运行会更安全、更稳定。如果关闭此选项，一旦关闭所有窗口，应用就会退出，因此在重新打开应用之前将无法使用该功能。\n\n仍然要关闭后台运行吗？",
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
           "updateStatus": "更新状态",

@@ -227,32 +227,6 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 				windowService.SetConsoleWindowEnabled(enabled)
 			}
 		},
-		AfterToggleViewerAutoGenerateChanged: func(enabled bool) {
-			if toolsService == nil {
-				return
-			}
-			if enabled {
-				state := toolsService.ToggleViewerGetState()
-				if state.Mode != nil && *state.Mode == "generate" {
-					return
-				}
-				if err := toolsService.StartToggleViewerWatcher(context.Background()); err != nil {
-					log.Error(err.Error(), "Setting.xxmi.toggleViewerAutoGenerate")
-				}
-				return
-			}
-			toolsService.ToggleViewerCancelCurrentWork()
-			if err := toolsService.StopToggleViewerWatcher(); err != nil {
-				log.Error(err.Error(), "Setting.xxmi.toggleViewerAutoGenerate")
-			}
-		},
-		AfterToggleViewerHotkeyChanged: func(hotkey string) {
-			if toolsService != nil {
-				if err := toolsService.ToggleViewerApplyHotkeyToArtifacts(context.Background(), hotkey); err != nil {
-					log.Error(err.Error(), "Setting.xxmi.toggleViewerHotkey")
-				}
-			}
-		},
 		AfterPersistTogglesChanged: func(enabled bool) {
 			if toolsService == nil {
 				return
@@ -399,9 +373,6 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 			rt.log.Error(err.Error(), "ModBisect")
 		}
 		rt.tools.StartWuwaAutoUpdateCheck()
-		if err := rt.tools.StartToggleViewerWatcher(ctx); err != nil {
-			rt.log.Error(err.Error(), "ToggleViewer")
-		}
 		if err := rt.tools.StartPersistWatcher(ctx); err != nil {
 			rt.log.Error(err.Error(), "TogglePersist")
 		}

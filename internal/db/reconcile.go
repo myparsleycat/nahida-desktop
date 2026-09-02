@@ -62,7 +62,7 @@ type reconcileAction struct {
 
 // Reconcile creates missing tables, ADD COLUMNs when safe, rebuilds on
 // name/type/null/PK/FK/extra-column mismatch, ensures indexes, records
-// app_schema_version, and applies the one-shot NTE game_paths migration.
+// app_schema_version, and applies one-shot migrations.
 func (c *Client) Reconcile(ctx context.Context) error {
 	tableNames, err := c.listUserTables(ctx)
 	if err != nil {
@@ -101,7 +101,10 @@ func (c *Client) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	return c.migrateGamePathsNteLauncherPath(ctx)
+	if err := c.migrateGamePathsNteLauncherPath(ctx); err != nil {
+		return err
+	}
+	return c.dropToggleViewerArtifactTable(ctx)
 }
 
 func (c *Client) listUserTables(ctx context.Context) (map[string]struct{}, error) {
@@ -592,4 +595,24 @@ WHERE "importer" = ?
 	}
 
 	return c.SchemaState.Upsert(ctx, SchemaKeyGamePathsNTELauncher, "1", time.Now().UTC().Format(time.RFC3339Nano))
+}
+
+func (c *Client) dropToggleViewerArtifactTable(ctx context.Context) error {
+	migrated, err := c.SchemaState.Get(ctx, SchemaKeyToggleViewerArtifactDropped)
+	if err != nil {
+		return err
+	}
+	if migrated != nil && migrated.Value == "1" {
+		return nil
+	}
+
+	if err := c.exec(ctx, `DROP TABLE IF EXISTS `+quoteIdent("toggle_viewer_artifact")); err != nil {
+		return fmt.Errorf("drop toggle_viewer_artifact: %w", err)
+	}
+	if err := c.exec(ctx, `DELETE FROM "setting" WHERE "key" IN (?, ?)`,
+		"xxmi_toggle_viewer_auto_generate", "xxmi_toggle_viewer_hotkey"); err != nil {
+		return fmt.Errorf("delete toggle viewer settings: %w", err)
+	}
+
+	return c.SchemaState.Upsert(ctx, SchemaKeyToggleViewerArtifactDropped, "1", time.Now().UTC().Format(time.RFC3339Nano))
 }

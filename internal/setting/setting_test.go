@@ -591,42 +591,6 @@ func TestPersistTogglesEnablesRunInBackground(t *testing.T) {
 	}
 }
 
-func TestToggleViewerSettingsInvokeHooksAndEnableBackground(t *testing.T) {
-	t.Parallel()
-	var autoValues []bool
-	var hotkeys []string
-	s, _ := openTemp(t, Options{Hooks: Hooks{
-		AfterToggleViewerAutoGenerateChanged: func(enabled bool) {
-			autoValues = append(autoValues, enabled)
-		},
-		AfterToggleViewerHotkeyChanged: func(hotkey string) {
-			hotkeys = append(hotkeys, hotkey)
-		},
-	}})
-	ctx := context.Background()
-	if err := s.Set(ctx, KeyGeneralRunInBackground, false); err != nil {
-		t.Fatalf("disable background: %v", err)
-	}
-	if err := s.Set(ctx, KeyXXMIToggleViewerAutoGenerate, true); err != nil {
-		t.Fatalf("enable toggle viewer: %v", err)
-	}
-	if err := s.Set(ctx, KeyXXMIToggleViewerAutoGenerate, false); err != nil {
-		t.Fatalf("disable toggle viewer: %v", err)
-	}
-	if err := s.Set(ctx, KeyXXMIToggleViewerHotkey, "   "); err != nil {
-		t.Fatalf("set empty hotkey: %v", err)
-	}
-	if got, err := s.Get(ctx, KeyGeneralRunInBackground); err != nil || got != true {
-		t.Fatalf("runInBackground = %#v %v, want true", got, err)
-	}
-	if len(autoValues) != 2 || !autoValues[0] || autoValues[1] {
-		t.Fatalf("auto-generation hook values = %v, want [true false]", autoValues)
-	}
-	if len(hotkeys) != 1 || hotkeys[0] != defaultToggleHotkey {
-		t.Fatalf("hotkey hook values = %v, want [%q]", hotkeys, defaultToggleHotkey)
-	}
-}
-
 func TestEveryAppSettingGetSetRoundTrip(t *testing.T) {
 	t.Parallel()
 

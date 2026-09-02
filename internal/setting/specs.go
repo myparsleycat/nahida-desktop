@@ -422,51 +422,6 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
-		KeyXXMIToggleViewerAutoGenerate: {
-			def:        definitionsByKey[KeyXXMIToggleViewerAutoGenerate],
-			getDefault: func(*Setting) any { return false },
-			fromStored: func(_ *Setting, value *string) any {
-				return parseBooleanSetting(value, false)
-			},
-			toStored: func(_ *Setting, value any) string {
-				return formatBool(asBool(value))
-			},
-			afterSet: func(s *Setting, ctx context.Context, value any) error {
-				enabled := asBool(value)
-				if enabled {
-					if err := s.Set(ctx, KeyGeneralRunInBackground, true); err != nil {
-						return err
-					}
-				}
-				s.opts.Hooks.toggleViewerAutoGenerateChanged(enabled)
-				return nil
-			},
-		},
-		KeyXXMIToggleViewerHotkey: {
-			def: definitionsByKey[KeyXXMIToggleViewerHotkey],
-			getDefault: func(*Setting) any {
-				return defaultToggleHotkey
-			},
-			fromStored: func(_ *Setting, value *string) any {
-				if value == nil {
-					return defaultToggleHotkey
-				}
-				if trimmed := strings.TrimSpace(*value); trimmed != "" {
-					return trimmed
-				}
-				return defaultToggleHotkey
-			},
-			normalize: func(_ *Setting, value any) any {
-				if trimmed := strings.TrimSpace(asString(value)); trimmed != "" {
-					return trimmed
-				}
-				return defaultToggleHotkey
-			},
-			afterSet: func(s *Setting, _ context.Context, value any) error {
-				s.opts.Hooks.toggleViewerHotkeyChanged(asString(value))
-				return nil
-			},
-		},
 	}
 	return specs
 }

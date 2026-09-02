@@ -492,20 +492,6 @@ func (s *Setting) SetPersistToggles(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyXXMIPersistToggles, enabled)
 }
 
-func (s *Setting) GetToggleViewerAutoGenerate(ctx context.Context) (bool, error) {
-	return s.getBool(ctx, KeyXXMIToggleViewerAutoGenerate)
-}
-func (s *Setting) SetToggleViewerAutoGenerate(ctx context.Context, enabled bool) error {
-	return s.Set(ctx, KeyXXMIToggleViewerAutoGenerate, enabled)
-}
-
-func (s *Setting) GetToggleViewerHotkey(ctx context.Context) (string, error) {
-	return s.getString(ctx, KeyXXMIToggleViewerHotkey)
-}
-func (s *Setting) SetToggleViewerHotkey(ctx context.Context, hotkey string) error {
-	return s.Set(ctx, KeyXXMIToggleViewerHotkey, hotkey)
-}
-
 func (s *Setting) getBool(ctx context.Context, key string) (bool, error) {
 	value, err := s.Get(ctx, key)
 	if err != nil {

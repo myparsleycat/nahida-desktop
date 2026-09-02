@@ -3,18 +3,16 @@ package setting
 // Hooks are optional afterSet side effects owned by runtime services.
 // Empty Hooks are a no-op so settings remain usable in tests and headless callers.
 type Hooks struct {
-	AfterSet                             func(key string, value any)
-	AfterRunOnStartupChanged             func(enabled bool) error
-	AfterLanguageChanged                 func(language string)
-	AfterAutoUpdateModeChanged           func(mode string)
-	AfterLogLevelChanged                 func(level string)
-	AfterPowerSaveBlockChanged           func()
-	AfterBandwidthLimitChanged           func(mibps int)
-	AfterOpenConsoleChanged              func(enabled bool)
-	AfterToggleViewerAutoGenerateChanged func(enabled bool)
-	AfterToggleViewerHotkeyChanged       func(hotkey string)
-	AfterPersistTogglesChanged           func(enabled bool)
-	AfterRendererReload                  func()
+	AfterSet                   func(key string, value any)
+	AfterRunOnStartupChanged   func(enabled bool) error
+	AfterLanguageChanged       func(language string)
+	AfterAutoUpdateModeChanged func(mode string)
+	AfterLogLevelChanged       func(level string)
+	AfterPowerSaveBlockChanged func()
+	AfterBandwidthLimitChanged func(mibps int)
+	AfterOpenConsoleChanged    func(enabled bool)
+	AfterPersistTogglesChanged func(enabled bool)
+	AfterRendererReload        func()
 }
 
 func (h Hooks) runOnStartupChanged(enabled bool) error {
@@ -63,18 +61,6 @@ func (h Hooks) bandwidthLimitChanged(mibps int) {
 func (h Hooks) openConsoleChanged(enabled bool) {
 	if h.AfterOpenConsoleChanged != nil {
 		h.AfterOpenConsoleChanged(enabled)
-	}
-}
-
-func (h Hooks) toggleViewerAutoGenerateChanged(enabled bool) {
-	if h.AfterToggleViewerAutoGenerateChanged != nil {
-		h.AfterToggleViewerAutoGenerateChanged(enabled)
-	}
-}
-
-func (h Hooks) toggleViewerHotkeyChanged(hotkey string) {
-	if h.AfterToggleViewerHotkeyChanged != nil {
-		h.AfterToggleViewerHotkeyChanged(hotkey)
 	}
 }
 

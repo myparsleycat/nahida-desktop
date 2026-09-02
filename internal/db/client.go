@@ -22,7 +22,6 @@ type Client struct {
 	Scripts                 ScriptsStore
 	ScriptPresets           ScriptPresetsStore
 	ScriptPresetItems       ScriptPresetItemsStore
-	ToggleViewerArtifacts   ToggleViewerArtifactsStore
 	SchemaState             SchemaStateStore
 }
 
@@ -48,7 +47,6 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.Scripts = ScriptsStore{c: c}
 	c.ScriptPresets = ScriptPresetsStore{c: c}
 	c.ScriptPresetItems = ScriptPresetItemsStore{c: c}
-	c.ToggleViewerArtifacts = ToggleViewerArtifactsStore{c: c}
 	c.SchemaState = SchemaStateStore{c: c}
 	return c
 }
