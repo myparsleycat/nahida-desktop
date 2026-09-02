@@ -1,12 +1,13 @@
 package db
 
-const AppSchemaVersion = 3
+const AppSchemaVersion = 4
 
 const (
-	SchemaKeyAppVersion           = "app_schema_version"
-	SchemaKeyGamePathsNTELauncher = "game_paths_nte_launcher_path"
-	NTEImporter                   = "NTE"
-	NTEGameExeKeepSuffix          = "%htgame.exe"
+	SchemaKeyAppVersion                  = "app_schema_version"
+	SchemaKeyGamePathsNTELauncher        = "game_paths_nte_launcher_path"
+	SchemaKeyToggleViewerArtifactDropped = "toggle_viewer_artifact_dropped"
+	NTEImporter                          = "NTE"
+	NTEGameExeKeepSuffix                 = "%htgame.exe"
 )
 
 type ColumnType string
@@ -218,21 +219,6 @@ var TableSpecs = []TableSpec{
 		},
 	},
 	{
-		Name: "toggle_viewer_artifact",
-		Columns: []ColumnSpec{
-			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "target_ini_path", Type: TypeText, NotNull: true},
-			{Name: "toggle_txt_path", Type: TypeText, NotNull: true},
-			{Name: "toggle_ini_path", Type: TypeText, NotNull: true},
-			{Name: "toggle_txt_hash", Type: TypeText, NotNull: true},
-			{Name: "toggle_ini_hash", Type: TypeText, NotNull: true},
-			{Name: "updated_at", Type: TypeText, NotNull: true},
-		},
-		Indexes: []IndexSpec{
-			{Name: "toggle_viewer_artifact_target_ini_path_unique", Columns: []string{"target_ini_path"}, Unique: true},
-		},
-	},
-	{
 		Name: "_schema_state",
 		Columns: []ColumnSpec{
 			{Name: "key", Type: TypeText, PrimaryKey: true, NotNull: true},
@@ -344,16 +330,6 @@ type ScriptPresetItemUsage struct {
 	ScriptID   string
 	Order      int64
 	PresetName string
-}
-
-type ToggleViewerArtifactRow struct {
-	ID            string
-	TargetIniPath string
-	ToggleTxtPath string
-	ToggleIniPath string
-	ToggleTxtHash string
-	ToggleIniHash string
-	UpdatedAt     string
 }
 
 type SchemaStateRow struct {

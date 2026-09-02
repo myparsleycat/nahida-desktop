@@ -52,9 +52,7 @@ const (
 	KeyModelViewerEnvironment = "modelViewer.environment"
 	KeyModelViewerExposure    = "modelViewer.exposure"
 
-	KeyXXMIPersistToggles           = "xxmi.persistToggles"
-	KeyXXMIToggleViewerAutoGenerate = "xxmi.toggleViewerAutoGenerate"
-	KeyXXMIToggleViewerHotkey       = "xxmi.toggleViewerHotkey"
+	KeyXXMIPersistToggles = "xxmi.persistToggles"
 )
 
 const (
@@ -128,8 +126,6 @@ var allDefinitions = []Definition{
 	{KeyModelViewerExposure, ScopeModelViewer, "model_viewer_exposure"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
-	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},
-	{KeyXXMIToggleViewerHotkey, ScopeXXMI, "xxmi_toggle_viewer_hotkey"},
 }
 
 type storageKeyMigration struct {

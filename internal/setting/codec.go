@@ -11,15 +11,14 @@ import (
 )
 
 const (
-	defaultStartPage    = "/mod"
-	defaultLogLevel     = "error"
-	defaultLanguage     = "en"
-	defaultToggleHotkey = "ctrl H"
-	defaultToneMapping  = "neutral"
-	defaultEnvironment  = "studio"
-	defaultExposure     = 0.7
-	exposureMin         = 0.0
-	exposureMax         = 4.0
+	defaultStartPage   = "/mod"
+	defaultLogLevel    = "error"
+	defaultLanguage    = "en"
+	defaultToneMapping = "neutral"
+	defaultEnvironment = "studio"
+	defaultExposure    = 0.7
+	exposureMin        = 0.0
+	exposureMax        = 4.0
 
 	transferDownloadConcurrencyDefault = 32
 	transferDownloadConcurrencyMin     = 16

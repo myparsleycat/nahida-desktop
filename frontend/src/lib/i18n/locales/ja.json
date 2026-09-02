@@ -1004,26 +1004,6 @@
         "original_logic": "元のロジック",
         "generated_logic": "生成後のロジック"
       },
-      "toggle_viewer_generator": {
-        "title": "Toggle Viewer ジェネレーター",
-        "not_configured": "XXMIパスが設定されていません。先にXXMIを設定してください。",
-        "auto_generate": "Toggle Viewer 自動生成",
-        "auto_generate_desc": "MODのiniトグルセクションからtoggle-viewerファイルを自動生成します。",
-        "hotkey": "Toggle Viewer ホットキー",
-        "batch_generate": "一括生成",
-        "batch_delete": "一括削除",
-        "stop": "停止",
-        "running": "実行中: {{mode}}",
-        "idle": "待機中",
-        "unknown": "不明",
-        "logs": "ログ",
-        "no_logs": "まだログはありません。",
-        "dialog": {
-          "trigger": "ホットキー:",
-          "title": "Toggle Viewer ホットキー",
-          "description": "設定するキーの組み合わせを押してください"
-        }
-      },
       "texture_resizer": {
         "title": "テクスチャ リサイザー",
         "target_folder": "対象フォルダー",
@@ -1595,7 +1575,7 @@
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
           "runInBackgroundDisableConfirmTitle": "バックグラウンド実行を無効にしますか？",
-          "runInBackgroundDisableConfirmDescription": "Toggle Persist と Toggle Viewer は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じた時点でアプリが終了するため、アプリを再度開くまでこれらの機能は使えなくなります。それでもバックグラウンド実行をオフにしますか？",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じた時点でアプリが終了するため、アプリを再度開くまでこの機能は使えなくなります。それでもバックグラウンド実行をオフにしますか？",
           "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
           "updateStatus": "更新状態",

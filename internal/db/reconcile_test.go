@@ -24,8 +24,8 @@ func TestReconcileEmptyDatabaseCreatesElectronSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schema version: %v", err)
 	}
-	if state == nil || state.Value != "3" {
-		t.Fatalf("app_schema_version = %+v, want 3", state)
+	if state == nil || state.Value != "4" {
+		t.Fatalf("app_schema_version = %+v, want 4", state)
 	}
 }
 
@@ -341,6 +341,70 @@ VALUES
 	}
 	if again.GameExecutablePath == nil || *again.GameExecutablePath != "C:/games/new-launcher.exe" {
 		t.Fatalf("second pass should leave the new exe path: %+v", again.GameExecutablePath)
+	}
+}
+
+func TestReconcileDropsToggleViewerArtifactTable(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "toggle.db")
+	client, err := New(path)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	if _, err := client.db.Exec(`DELETE FROM "_schema_state" WHERE "key" = ?`, SchemaKeyToggleViewerArtifactDropped); err != nil {
+		t.Fatalf("clear flag: %v", err)
+	}
+	if _, err := client.db.Exec(`
+CREATE TABLE "toggle_viewer_artifact" (
+	"id" TEXT PRIMARY KEY NOT NULL,
+	"target_ini_path" TEXT NOT NULL
+)`); err != nil {
+		t.Fatalf("seed leftover table: %v", err)
+	}
+	enabled := "true"
+	hotkey := "ctrl H"
+	if err := client.Settings.Insert(ctx, SettingRow{Key: "xxmi_toggle_viewer_auto_generate", Value: &enabled}); err != nil {
+		t.Fatalf("seed auto generate: %v", err)
+	}
+	if err := client.Settings.Insert(ctx, SettingRow{Key: "xxmi_toggle_viewer_hotkey", Value: &hotkey}); err != nil {
+		t.Fatalf("seed hotkey: %v", err)
+	}
+
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("drop reconcile: %v", err)
+	}
+
+	if _, ok := userTables(t, client)["toggle_viewer_artifact"]; ok {
+		t.Fatal("toggle_viewer_artifact should have been dropped")
+	}
+	if row, err := client.Settings.Get(ctx, "xxmi_toggle_viewer_auto_generate"); err != nil || row != nil {
+		t.Fatalf("auto generate leftover = %+v %v", row, err)
+	}
+	if row, err := client.Settings.Get(ctx, "xxmi_toggle_viewer_hotkey"); err != nil || row != nil {
+		t.Fatalf("hotkey leftover = %+v %v", row, err)
+	}
+
+	flag, err := client.SchemaState.Get(ctx, SchemaKeyToggleViewerArtifactDropped)
+	if err != nil || flag == nil || flag.Value != "1" {
+		t.Fatalf("drop flag = %+v %v", flag, err)
+	}
+
+	if _, err := client.db.Exec(`CREATE TABLE "toggle_viewer_artifact" ("id" TEXT PRIMARY KEY NOT NULL)`); err != nil {
+		t.Fatalf("replant table: %v", err)
+	}
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("second drop reconcile: %v", err)
+	}
+	if _, ok := userTables(t, client)["toggle_viewer_artifact"]; !ok {
+		t.Fatal("one-shot drop should not run again")
 	}
 }
 

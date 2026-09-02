@@ -58,8 +58,6 @@ export interface AppSettings {
     "modelViewer.exposure": number;
 
     "xxmi.persistToggles": boolean;
-    "xxmi.toggleViewerAutoGenerate": boolean;
-    "xxmi.toggleViewerHotkey": string;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -297,15 +295,5 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.persistToggles",
         scope: "xxmi",
         storageKey: "xxmi_persist_toggles",
-    },
-    "xxmi.toggleViewerAutoGenerate": {
-        publicKey: "xxmi.toggleViewerAutoGenerate",
-        scope: "xxmi",
-        storageKey: "xxmi_toggle_viewer_auto_generate",
-    },
-    "xxmi.toggleViewerHotkey": {
-        publicKey: "xxmi.toggleViewerHotkey",
-        scope: "xxmi",
-        storageKey: "xxmi_toggle_viewer_hotkey",
     },
 } as const satisfies Record<SettingKey, SettingDefinition>;

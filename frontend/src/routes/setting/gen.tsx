@@ -82,12 +82,9 @@ function RouteComponent() {
       return;
     }
 
-    const [persistEnabled, toggleViewerEnabled] = await Promise.all([
-      Setting.GetPersistToggles(),
-      Setting.GetToggleViewerAutoGenerate(),
-    ]);
+    const persistEnabled = await Setting.GetPersistToggles();
 
-    if (persistEnabled || toggleViewerEnabled) {
+    if (persistEnabled) {
       setIsRunInBackgroundConfirmOpen(true);
       setSettings((prev) => ({ ...prev, runInBackground: true }));
       return;

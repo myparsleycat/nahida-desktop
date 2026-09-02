@@ -3,7 +3,6 @@ import BodyShapeTool from "@renderer/components/tools/body-shape/body-shape";
 import ModBisect from "@renderer/components/tools/mod-bisect";
 import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
-import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
 import TouchProfileTool from "@renderer/components/tools/touch-profile/touch-profile";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -44,11 +43,6 @@ const toolPages: ToolPage[] = [
     nameKey: "page.tools.menu_maker.title",
     initials: "MM",
     path: "/tools/menu-maker",
-  },
-  {
-    nameKey: "page.tools.toggle_viewer_generator.title",
-    initials: "TV",
-    component: () => <ToggleViewerGenerator />,
   },
   {
     nameKey: "page.tools.texture_resizer.title",
