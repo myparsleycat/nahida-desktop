@@ -103,15 +103,11 @@ function ModRouteContent() {
       return;
     }
 
-    const matchingGame =
-      games.find(
-        (game) =>
-          game.importer?.toLowerCase() === pendingModFixerRequest.importer.toLowerCase() &&
-          isPathInside(game.modFolderPath, pendingModFixerRequest.modPath),
-      ) ??
-      games.find(
-        (game) => game.importer?.toLowerCase() === pendingModFixerRequest.importer.toLowerCase(),
-      );
+    const matchingGame = games.find(
+      (game) =>
+        game.importer?.toLowerCase() === pendingModFixerRequest.importer.toLowerCase() &&
+        isPathInside(game.modFolderPath, pendingModFixerRequest.modPath),
+    );
     if (!matchingGame) {
       return;
     }

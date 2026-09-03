@@ -159,6 +159,58 @@ func TestFixInspectionStateWatchesExternalChanges(t *testing.T) {
 	waitForFixInspectionCount(t, service, 0)
 }
 
+func TestInspectModForFixRunsInspectorOnce(t *testing.T) {
+	inspector := &countingFixInspector{}
+	service := New()
+	service.fixInspectors = NewFixInspectorRegistry()
+	service.fixInspectors.Register(inspector)
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	if _, err := service.InspectModForFix(context.Background(), target, "COUNT"); err != nil {
+		t.Fatal(err)
+	}
+	if inspector.calls != 1 {
+		t.Fatalf("inspector ran %d times, want 1", inspector.calls)
+	}
+}
+
+func TestShutdownFixInspectionsCancelsActiveRefresh(t *testing.T) {
+	inspector := &blockingFixInspector{started: make(chan struct{}), stopped: make(chan struct{})}
+	service := New()
+	service.fixInspectors = NewFixInspectorRegistry()
+	service.fixInspectors.Register(inspector)
+
+	target := t.TempDir()
+	key := fixInspectionKey(target)
+	service.fixInspections[key] = &trackedFixInspection{record: FixInspectionRecord{
+		ModPath: target,
+		Result:  FixInspectionResult{Importer: "BLOCK"},
+	}}
+	service.queueFixInspectionRefresh(key)
+	<-inspector.started
+
+	shutdown := make(chan error, 1)
+	go func() { shutdown <- service.ServiceShutdown() }()
+	select {
+	case err := <-shutdown:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("service shutdown did not cancel the active inspector")
+	}
+	select {
+	case <-inspector.stopped:
+	default:
+		t.Fatal("active inspector did not observe lifecycle cancellation")
+	}
+}
+
 func TestFixInspectionStateFollowsDisabledFolderRenames(t *testing.T) {
 	service := newMarkerInspectionService()
 	t.Cleanup(func() {
@@ -247,6 +299,35 @@ func (*markerFixInspector) Inspect(_ context.Context, modPath string) (*FixInspe
 		Summary:    "marker requires a fix",
 		ActionTool: "marker",
 	}, nil
+}
+
+type countingFixInspector struct {
+	calls int
+}
+
+func (*countingFixInspector) CanInspect(importer string) bool { return importer == "COUNT" }
+
+func (i *countingFixInspector) Inspect(_ context.Context, _ string) (*FixInspectionResult, error) {
+	i.calls++
+	return &FixInspectionResult{
+		NeedsFix: true,
+		Importer: "COUNT",
+		ToolName: "Counting Fixer",
+	}, nil
+}
+
+type blockingFixInspector struct {
+	started chan struct{}
+	stopped chan struct{}
+}
+
+func (*blockingFixInspector) CanInspect(importer string) bool { return importer == "BLOCK" }
+
+func (i *blockingFixInspector) Inspect(ctx context.Context, _ string) (*FixInspectionResult, error) {
+	close(i.started)
+	<-ctx.Done()
+	close(i.stopped)
+	return nil, ctx.Err()
 }
 
 func newMarkerInspectionService() *Tools {

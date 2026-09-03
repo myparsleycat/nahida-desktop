@@ -1652,6 +1652,8 @@
           },
           "searchModPreview": "在子文件夹中搜索模组预览",
           "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。",
+          "autoInspectFix": "自动检查模组是否需要修复",
+          "autoInspectFixDescription": "在后台检查新下载或添加的模组，并在建议修复时发出通知。",
           "autoResolveDownloadTarget": "自动选择下载目标文件夹",
           "autoResolveDownloadTargetDescription": "自动选择名称与下载内容相似的模组文件夹。",
           "downloadSources": {

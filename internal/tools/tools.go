@@ -120,6 +120,8 @@ type Tools struct {
 	fixInspections        map[string]*trackedFixInspection
 	fixInspectionRevision uint64
 	fixInspectionClosed   bool
+	fixInspectionCtx      context.Context
+	fixInspectionCancel   context.CancelFunc
 	fixInspectionWG       sync.WaitGroup
 }
 
@@ -138,6 +140,7 @@ func NewWithOptions(opts Options) *Tools {
 	if opts.Protocol == nil {
 		opts.Protocol = infra.NewProtocol()
 	}
+	fixInspectionCtx, fixInspectionCancel := context.WithCancel(context.Background())
 	t := &Tools{
 		log: opts.Log, emit: opts.EventEmit, notify: opts.Notify, settings: opts.Settings, xxmi: opts.XXMI,
 		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, githubRate: opts.GitHubRate, mod: opts.Mod,
@@ -150,6 +153,8 @@ func NewWithOptions(opts Options) *Tools {
 		persist:             newPersistEngine(),
 		fixInspectors:       NewFixInspectorRegistry(),
 		fixInspections:      make(map[string]*trackedFixInspection),
+		fixInspectionCtx:    fixInspectionCtx,
+		fixInspectionCancel: fixInspectionCancel,
 	}
 	t.fixInspectors.Register(NewZZMIFixInspector(t))
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }

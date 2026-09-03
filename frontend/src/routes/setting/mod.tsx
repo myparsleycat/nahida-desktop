@@ -48,6 +48,8 @@ const settingsConfig = {
   gridFixedColumnCount: "mod.gridFixedColumnCount",
 } as const;
 
+const AUTO_INSPECT_FIX_LABEL_ID = "setting-mod-auto-inspect-fix-title";
+
 function RouteComponent() {
   return <ModSettingsRouteContent />;
 }
@@ -124,6 +126,17 @@ function ModSettingsRouteContent() {
     } catch (error) {
       Logger.error(error, "ModSettings:handleSidebarLayoutChange");
       toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleAutoInspectFixChange = async (val: boolean) => {
+    const previous = settings.autoInspectFix;
+    try {
+      await update("autoInspectFix", val);
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleAutoInspectFixChange");
+      await update("autoInspectFix", previous).catch(() => {});
+      toast.error(t("page.setting.tools.wuwaFixer.autoUpdateNotification.save_failed"));
     }
   };
 
@@ -243,7 +256,7 @@ function ModSettingsRouteContent() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
-                <span className="text-sm font-medium">
+                <span id={AUTO_INSPECT_FIX_LABEL_ID} className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.autoInspectFix")}
                 </span>
                 <p className="text-xs text-muted-foreground">
@@ -252,7 +265,8 @@ function ModSettingsRouteContent() {
               </div>
               <Switch
                 checked={settings.autoInspectFix}
-                onCheckedChange={(val) => update("autoInspectFix", val)}
+                aria-labelledby={AUTO_INSPECT_FIX_LABEL_ID}
+                onCheckedChange={(val) => void handleAutoInspectFixChange(val)}
               />
             </div>
 

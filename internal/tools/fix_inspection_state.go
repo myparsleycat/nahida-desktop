@@ -79,7 +79,7 @@ func (t *Tools) InspectModForFix(ctx context.Context, modPath, importer string) 
 	if watchErr != nil {
 		t.logError(watchErr, "FixInspector.watch")
 	}
-	refreshed, stopped := t.refreshFixInspectionLocked(ctx, fixInspectionKey(resolved))
+	refreshed, stopped := t.refreshFixInspectionLocked(ctx, fixInspectionKey(resolved), result)
 	changed = changed || refreshed
 	t.logError(closeFixInspectionWatchers(stopped), "FixInspector.stopWatch")
 	if changed {
@@ -131,12 +131,19 @@ func (t *Tools) QueueFixInspections(paths []string) {
 		return
 	}
 	t.fixInspectionWG.Add(1)
+	ctx := t.fixInspectionCtx
 	t.fixInspectionMu.Unlock()
 
 	go func() {
 		defer t.fixInspectionWG.Done()
 		for _, path := range targets {
-			if err := t.inspectAddedModForFix(context.Background(), path); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if err := t.inspectAddedModForFix(ctx, path); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				t.logError(fmt.Errorf("inspect added mod %q: %w", path, err), "FixInspector.addedMod")
 			}
 		}
@@ -283,12 +290,13 @@ func (t *Tools) queueFixInspectionRefresh(key string) {
 		return
 	}
 	t.fixInspectionWG.Add(1)
+	ctx := t.fixInspectionCtx
 	t.fixInspectionMu.Unlock()
 
 	go func() {
 		defer t.fixInspectionWG.Done()
 		t.fixInspectionRunMu.Lock()
-		changed, stopped := t.refreshFixInspectionLocked(context.Background(), key)
+		changed, stopped := t.refreshFixInspectionLocked(ctx, key, nil)
 		t.fixInspectionRunMu.Unlock()
 		t.logError(closeFixInspectionWatchers(stopped), "FixInspector.stopWatch")
 		if changed {
@@ -308,7 +316,7 @@ func (t *Tools) refreshAllFixInspectionsLocked(ctx context.Context) (bool, []*tr
 	var changed bool
 	var stopped []*trackedFixInspection
 	for _, key := range keys {
-		itemChanged, itemStopped := t.refreshFixInspectionLocked(ctx, key)
+		itemChanged, itemStopped := t.refreshFixInspectionLocked(ctx, key, nil)
 		changed = changed || itemChanged
 		stopped = append(stopped, itemStopped...)
 		if ctx.Err() != nil {
@@ -318,7 +326,7 @@ func (t *Tools) refreshAllFixInspectionsLocked(ctx context.Context) (bool, []*tr
 	return changed, stopped
 }
 
-func (t *Tools) refreshFixInspectionLocked(ctx context.Context, key string) (bool, []*trackedFixInspection) {
+func (t *Tools) refreshFixInspectionLocked(ctx context.Context, key string, inspected *FixInspectionResult) (bool, []*trackedFixInspection) {
 	t.fixInspectionMu.Lock()
 	if t.fixInspectionClosed {
 		t.fixInspectionMu.Unlock()
@@ -358,14 +366,20 @@ func (t *Tools) refreshFixInspectionLocked(ctx context.Context, key string) (boo
 		}
 	}
 
-	result, err := t.fixInspectors.Inspect(ctx, record.ModPath, record.Result.Importer)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			removed, removedWatchers := t.removeFixInspection(record.ModPath)
-			return changed || removed, append(stopped, removedWatchers...)
+	result := inspected
+	if result == nil {
+		result, err = t.fixInspectors.Inspect(ctx, record.ModPath, record.Result.Importer)
+		if err != nil {
+			if ctx.Err() != nil {
+				return changed, stopped
+			}
+			if errors.Is(err, fs.ErrNotExist) {
+				removed, removedWatchers := t.removeFixInspection(record.ModPath)
+				return changed || removed, append(stopped, removedWatchers...)
+			}
+			t.logError(fmt.Errorf("refresh fix inspection target %q: %w", record.ModPath, err), "FixInspector.refresh")
+			return changed, stopped
 		}
-		t.logError(fmt.Errorf("refresh fix inspection target %q: %w", record.ModPath, err), "FixInspector.refresh")
-		return changed, stopped
 	}
 	if !result.NeedsFix {
 		removed, removedWatchers := t.removeFixInspection(record.ModPath)
@@ -478,8 +492,10 @@ func (t *Tools) shutdownFixInspections() error {
 		tracked = append(tracked, item)
 	}
 	t.fixInspections = make(map[string]*trackedFixInspection)
+	cancel := t.fixInspectionCancel
 	t.fixInspectionMu.Unlock()
 
+	cancel()
 	err := closeFixInspectionWatchers(tracked)
 	t.fixInspectionWG.Wait()
 	t.fixInspectionRunMu.Lock()

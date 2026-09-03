@@ -65,10 +65,17 @@ func (d *dummyInspector) Inspect(_ context.Context, _ string) (*FixInspectionRes
 func TestZZMIFixInspector(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
+	appDataDir := t.TempDir()
+	client := openToolsTestDB(t)
 
 	service := New()
-	service.UseClient(openToolsTestDB(t))
-	useToolsTestAppData(t, service, t.TempDir())
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+	service.UseClient(client)
+	useToolsTestAppData(t, service, appDataDir)
 	importer := "ZZMI"
 	if err := service.client.GamePaths.Insert(ctx, db.GamePathRow{
 		Game:          "ZZZ",
