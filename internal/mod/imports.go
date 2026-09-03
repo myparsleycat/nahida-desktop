@@ -131,6 +131,7 @@ func (m *Mod) ExtractArchiveToGroup(
 	if err != nil {
 		return "", err
 	}
+	m.queueFixInspection(target)
 	deleteAfter := false
 	if m.settings != nil {
 		deleteAfter, err = m.settings.GetDeleteArchiveAfterExtract(ctx)
@@ -176,6 +177,7 @@ func (m *Mod) CopyFolderToGroup(
 	}
 	if move {
 		if err := os.Rename(source, target); err == nil {
+			m.queueFixInspection(target)
 			return target, nil
 		}
 	}
@@ -192,6 +194,7 @@ func (m *Mod) CopyFolderToGroup(
 			return target, err
 		}
 	}
+	m.queueFixInspection(target)
 	return target, nil
 }
 

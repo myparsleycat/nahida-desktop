@@ -261,6 +261,10 @@
         "description": "압축 파일은 자동으로 압축 해제됩니다"
       },
       "download_completed": "\"{{name}}\" 다운로드가 완료되었습니다.",
+      "fix_needed_toast": {
+        "title": "\"{{name}}\" 모드에 수정이 필요한 항목이 있습니다.",
+        "action": "Fixer 열기"
+      },
       "download_action_blocked": "다운로드 중인 모드는 변경할 수 없습니다.",
       "download_overlay": {
         "queued": "대기 중",
@@ -1667,6 +1671,8 @@
           },
           "searchModPreview": "하위 폴더에서 미리보기 검색",
           "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다.",
+          "autoInspectFix": "모드 추가 시 Fix 필요 여부 자동 검사",
+          "autoInspectFixDescription": "모드를 다운로드하거나 추가할 때 수정(Fix)이 필요한지 백그라운드에서 검사하고 알립니다.",
           "autoResolveDownloadTarget": "다운로드 대상 폴더 자동 선택",
           "autoResolveDownloadTargetDescription": "다운로드 이름과 비슷한 모드 폴더를 자동으로 선택합니다.",
           "downloadSources": {
@@ -1882,6 +1888,10 @@
         "converting": "텍스처 포맷 변환 중",
         "resizing_and_converting": "텍스처 리사이즈 및 변환 중",
         "upscaling_and_converting": "텍스처 업스케일 및 변환 중"
+      },
+      "modFix": {
+        "label": "수정 필요",
+        "dismiss": "알림 닫기"
       }
     }
   },

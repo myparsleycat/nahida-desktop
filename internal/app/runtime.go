@@ -176,6 +176,15 @@ func newRuntime() *runtime {
 	if rt.drive != nil && rt.mod != nil {
 		rt.drive.UsePathSelector(rt.mod)
 	}
+	if rt.tools != nil {
+		queueFixInspections := rt.tools.QueueFixInspections
+		if rt.mod != nil {
+			rt.mod.UseFixInspection(queueFixInspections)
+		}
+		if rt.drive != nil {
+			rt.drive.UseFixInspection(queueFixInspections)
+		}
+	}
 	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit))
 	return rt
 }

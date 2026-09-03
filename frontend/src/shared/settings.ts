@@ -36,6 +36,7 @@ export interface AppSettings {
     "mod.gridFixedColumnCount": number;
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
     "mod.returnToGamebananaAfterDownload": boolean;
+    "mod.autoInspectFix": boolean;
 
     "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
     "tools.touchProfileLlmEndpoint": string;
@@ -205,6 +206,11 @@ export const APP_SETTINGS = {
         publicKey: "mod.returnToGamebananaAfterDownload",
         scope: "mod",
         storageKey: "mod_return_to_gamebanana_after_download",
+    },
+    "mod.autoInspectFix": {
+        publicKey: "mod.autoInspectFix",
+        scope: "mod",
+        storageKey: "mod_auto_inspect_fix",
     },
 
     "tools.touchProfileLlmProtocol": {

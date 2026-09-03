@@ -1,6 +1,9 @@
-import { buildTransferTitlebarActivity } from "@renderer/components/titlebar/titlebar-activity";
+import {
+    buildModFixTitlebarActivity,
+    buildTransferTitlebarActivity,
+} from "@renderer/components/titlebar/titlebar-activity";
 import type { TransferWithoutData } from "@shared/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const t = (key: string) => key;
 
@@ -97,5 +100,60 @@ describe("buildTransferTitlebarActivity", () => {
             t,
         );
         expect(activity).toBeNull();
+    });
+});
+
+describe("buildModFixTitlebarActivity", () => {
+    it("builds warning activity with defaultOpen popover and wiring", () => {
+        const onOpenFixer = vi.fn();
+        const activity = buildModFixTitlebarActivity({
+            modPath: "E:/Mods/TestMod",
+            displayName: "TestMod",
+            result: {
+                needsFix: true,
+                importer: "ZZMI",
+                toolName: "ZZMI Fixer",
+                summary: "1 file outdated",
+                details: ["mod.ini"],
+                affectedFiles: ["mod.ini"],
+                actionTool: "hash",
+            },
+            onOpenFixer,
+            t: (key) => key,
+        });
+
+        expect(activity.id).toBe("mod-fix:E:/Mods/TestMod");
+        expect(activity.status).toBe("warning");
+        expect(activity.order).toBe(5);
+        expect(activity.label).toBe("titlebar.activity.modFix.label");
+        expect(activity.detail).toBe("TestMod");
+        expect(activity.popover).toBeDefined();
+        expect(activity.popover?.defaultOpen).toBe(true);
+        expect(activity.popover?.title).toBe("page.mod.fix_needed_toast.title");
+        expect(activity.popover?.description).toBe("1 file outdated");
+        expect(activity.popover?.actionLabel).toBe("page.mod.fix_needed_toast.action");
+        expect(activity.popover?.dismissLabel).toBe("titlebar.activity.modFix.dismiss");
+
+        activity.popover?.onAction?.();
+        expect(onOpenFixer).toHaveBeenCalledWith("E:/Mods/TestMod", "hash");
+    });
+
+    it("truncates long mod names in detail", () => {
+        const activity = buildModFixTitlebarActivity({
+            modPath: "E:/Mods/Skimpier Burnice",
+            displayName: "Skimpier Burnice",
+            result: {
+                needsFix: true,
+                importer: "ZZMI",
+                toolName: "ZZMI Fixer",
+                summary: "outdated",
+                details: null,
+                affectedFiles: null,
+                actionTool: "hash",
+            },
+            t: (key) => key,
+        });
+
+        expect(activity.detail).toBe("Skimpier…");
     });
 });

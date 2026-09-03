@@ -6,6 +6,11 @@ import { createStore, useStore } from "zustand";
 export type FolderSortKey = "name" | "mod-count" | "enabled-mod-count";
 export type FolderSortDirection = "ascending" | "descending";
 export type DownloadMode = NonNullable<ModState["downloadMode"]>;
+export type PendingModFixerRequest = {
+    modPath: string;
+    importer: string;
+    actionTool?: string;
+};
 
 interface ModState {
     selectedGame: string;
@@ -55,6 +60,8 @@ interface ModState {
     resetUserSelectedDuringDownload: () => void;
     archiveExtractPrompt: { requestId: string; fileName: string } | null;
     setArchiveExtractPrompt: (prompt: { requestId: string; fileName: string } | null) => void;
+    pendingModFixerRequest: PendingModFixerRequest | null;
+    setPendingModFixerRequest: (request: PendingModFixerRequest | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     viewMode: "grid" | "list";
@@ -133,6 +140,8 @@ export const modStore = createStore<ModState>((set) => ({
     resetUserSelectedDuringDownload: () => set({ userSelectedDuringDownload: false }),
     archiveExtractPrompt: null,
     setArchiveExtractPrompt: (archiveExtractPrompt) => set({ archiveExtractPrompt }),
+    pendingModFixerRequest: null,
+    setPendingModFixerRequest: (pendingModFixerRequest) => set({ pendingModFixerRequest }),
     searchQuery: "",
     setSearchQuery: (searchQuery) => set({ searchQuery }),
     viewMode: "grid",

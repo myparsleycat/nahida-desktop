@@ -487,10 +487,19 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 	if err := transfers.Update(pid, transfer.Updates{Status: &completed, TransferredSize: &total, TransferredFiles: &totalFiles, Progress: &hundred}); err != nil {
 		return err
 	}
+	inspectionPaths := make([]string, 0, len(record.DestinationTargets))
+	for _, target := range record.DestinationTargets {
+		if target.Kind == transfer.DestinationDirectory {
+			inspectionPaths = append(inspectionPaths, target.Path)
+		}
+	}
+	if d.inspectAddedMods != nil && len(inspectionPaths) > 0 {
+		d.inspectAddedMods(inspectionPaths)
+	}
 	if d.eventEmit != nil {
 		name := metadata.Root.Name
-		if record, ok := transfers.Get(pid); ok && record.Name != "" {
-			name = record.Name
+		if latest, ok := transfers.Get(pid); ok && latest.Name != "" {
+			name = latest.Name
 		}
 		d.eventEmit("download:completed", map[string]any{"path": params.TargetPath, "name": name})
 	}

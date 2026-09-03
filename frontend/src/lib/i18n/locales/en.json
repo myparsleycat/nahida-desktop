@@ -278,6 +278,10 @@
         "description": "Compressed files will be automatically extracted"
       },
       "download_completed": "Downloaded \"{{name}}\".",
+      "fix_needed_toast": {
+        "title": "\"{{name}}\" requires a fix to work properly.",
+        "action": "Open Fixer"
+      },
       "download_action_blocked": "A mod cannot be changed while it is downloading.",
       "download_overlay": {
         "queued": "Queued",
@@ -1681,6 +1685,8 @@
           },
           "searchModPreview": "Search Preview in Subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
+          "autoInspectFix": "Automatically inspect mods for required fixes",
+          "autoInspectFixDescription": "Inspects newly downloaded or added mods in the background and notifies you if a fix is recommended.",
           "autoResolveDownloadTarget": "Automatically select download target folder",
           "autoResolveDownloadTargetDescription": "Automatically select a mod folder with a name similar to the download.",
           "downloadSources": {
@@ -1896,6 +1902,10 @@
         "converting": "Converting texture format",
         "resizing_and_converting": "Resizing & converting texture",
         "upscaling_and_converting": "Upscaling & converting texture"
+      },
+      "modFix": {
+        "label": "Fix Needed",
+        "dismiss": "Dismiss"
       }
     }
   },

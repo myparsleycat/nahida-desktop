@@ -1,7 +1,17 @@
 import type { LucideIcon } from "lucide-react";
 import { createStore, useStore } from "zustand";
 
-export type TitlebarActivityStatus = "running" | "paused" | "error";
+export type TitlebarActivityStatus = "running" | "paused" | "error" | "warning";
+
+export type TitlebarActivityPopover = {
+    title: string;
+    description?: string;
+    actionLabel?: string;
+    dismissLabel?: string;
+    onAction?: () => void;
+    onDismiss?: () => void;
+    defaultOpen?: boolean;
+};
 
 export type TitlebarActivity = {
     id: string;
@@ -10,6 +20,7 @@ export type TitlebarActivity = {
     icon: LucideIcon;
     detail?: string;
     tooltip?: string;
+    popover?: TitlebarActivityPopover;
     progress?: number;
     order?: number;
     href?: string;
@@ -34,7 +45,14 @@ function isSameActivity(a: TitlebarActivity, b: TitlebarActivity) {
         a.progress === b.progress &&
         a.order === b.order &&
         a.href === b.href &&
-        a.onClick === b.onClick
+        a.onClick === b.onClick &&
+        a.popover?.title === b.popover?.title &&
+        a.popover?.description === b.popover?.description &&
+        a.popover?.actionLabel === b.popover?.actionLabel &&
+        a.popover?.dismissLabel === b.popover?.dismissLabel &&
+        a.popover?.defaultOpen === b.popover?.defaultOpen &&
+        a.popover?.onAction === b.popover?.onAction &&
+        a.popover?.onDismiss === b.popover?.onDismiss
     );
 }
 

@@ -262,6 +262,10 @@
         "description": "圧縮ファイルは自動的に解凍されます"
       },
       "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
+      "fix_needed_toast": {
+        "title": "「{{name}}」MODに修正が必要な項目があります。",
+        "action": "Fixerを開く"
+      },
       "download_action_blocked": "ダウンロード中のMODは変更できません。",
       "download_overlay": {
         "queued": "待機中",
@@ -1649,6 +1653,8 @@
           },
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
+          "autoInspectFix": "MODに必要な修正を自動検査",
+          "autoInspectFixDescription": "新しくダウンロードまたは追加したMODをバックグラウンドで検査し、修正が推奨される場合に通知します。",
           "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",
           "autoResolveDownloadTargetDescription": "ダウンロード名に似たMODフォルダーを自動的に選択します。",
           "downloadSources": {
@@ -1864,6 +1870,10 @@
         "converting": "テクスチャフォーマット変換中",
         "resizing_and_converting": "テクスチャリサイズおよび変換中",
         "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
+      },
+      "modFix": {
+        "label": "修正が必要",
+        "dismiss": "通知を閉じる"
       }
     }
   },

@@ -31,6 +31,7 @@ const (
 	KeyModGridFixedColumnCount             = "mod.gridFixedColumnCount"
 	KeyModDisabledPrefixStyle              = "mod.disabledPrefixStyle"
 	KeyModReturnToGamebananaAfterDownload  = "mod.returnToGamebananaAfterDownload"
+	KeyModAutoInspectFix                   = "mod.autoInspectFix"
 
 	KeyToolsTouchProfileLlmProtocol     = "tools.touchProfileLlmProtocol"
 	KeyToolsTouchProfileLlmEndpoint     = "tools.touchProfileLlmEndpoint"
@@ -104,6 +105,7 @@ var allDefinitions = []Definition{
 	{KeyModGridFixedColumnCount, ScopeMod, "mod_grid_fixed_column_count"},
 	{KeyModDisabledPrefixStyle, ScopeMod, "mod_disabled_prefix_style"},
 	{KeyModReturnToGamebananaAfterDownload, ScopeMod, "mod_return_to_gamebanana_after_download"},
+	{KeyModAutoInspectFix, ScopeMod, "mod_auto_inspect_fix"},
 
 	{KeyToolsTouchProfileLlmProtocol, ScopeTools, "tools_touch_profile_llm_protocol"},
 	{KeyToolsTouchProfileLlmEndpoint, ScopeTools, "tools_touch_profile_llm_endpoint"},

@@ -1,3 +1,4 @@
+import type { FixInspectionResult } from "@bindings/tools";
 import type { TitlebarActivity } from "@renderer/store/titlebar-activity";
 import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
@@ -161,5 +162,51 @@ export function buildTextureResizerTitlebarActivity(
         detail: detail || undefined,
         order: 30,
         href: "/tools",
+    };
+}
+
+function truncateModName(name: string, maxLength = 8): string {
+    const trimmed = name.trim();
+    if (trimmed.length <= maxLength) return trimmed;
+    return `${trimmed.slice(0, maxLength)}…`;
+}
+
+export function buildModFixTitlebarActivity({
+    modPath,
+    displayName,
+    result,
+    onOpenFixer,
+    t,
+}: {
+    modPath: string;
+    displayName: string;
+    result: FixInspectionResult;
+    onOpenFixer?: (modPath: string, actionTool?: string) => void;
+    t: (key: string, opts?: Record<string, unknown>) => string;
+}): TitlebarActivity {
+    const detail = truncateModName(displayName);
+
+    return {
+        id: `mod-fix:${modPath}`,
+        label: t("titlebar.activity.modFix.label"),
+        detail: detail || undefined,
+        status: "warning",
+        icon: WrenchIcon,
+        order: 5,
+        popover: {
+            title: t("page.mod.fix_needed_toast.title", {
+                name: displayName,
+                tool: result.toolName,
+            }),
+            description: result.summary,
+            actionLabel: onOpenFixer ? t("page.mod.fix_needed_toast.action") : undefined,
+            dismissLabel: t("titlebar.activity.modFix.dismiss"),
+            onAction: onOpenFixer
+                ? () => {
+                      onOpenFixer(modPath, result.actionTool);
+                  }
+                : undefined,
+            defaultOpen: true,
+        },
     };
 }

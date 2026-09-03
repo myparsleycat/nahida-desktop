@@ -19,6 +19,7 @@ import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
 import { DEFAULT_BG } from "@renderer/const";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
+import { useModFixInspectionTitlebarActivity } from "@renderer/hooks/use-mod-fix-inspection";
 import { useTitleBarOverlay } from "@renderer/hooks/use-title-bar-overlay";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
@@ -67,6 +68,7 @@ function RootComponent() {
   use4001FixerTitlebarActivity();
   useModBisectTitlebarActivity();
   useTextureResizerTitlebarActivity();
+  useModFixInspectionTitlebarActivity();
 
   useDownloadArchiveExtractPromptHandler();
 

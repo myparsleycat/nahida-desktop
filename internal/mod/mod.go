@@ -84,6 +84,7 @@ type Mod struct {
 	gameWatcher       *managedWatcher
 	characterWatcher  *managedWatcher
 	emit              func(string, ...any)
+	inspectAddedMods  func([]string)
 	nteSigBypasserURL string
 	nteASILoaderURL   string
 }
@@ -145,6 +146,19 @@ func (m *Mod) UseFocus(fn func()) {
 func (m *Mod) UseWindowReady(fn func(context.Context) (bool, error)) {
 	if m != nil && m.paths != nil {
 		m.paths.waitReady = fn
+	}
+}
+
+//wails:ignore
+func (m *Mod) UseFixInspection(fn func([]string)) {
+	if m != nil {
+		m.inspectAddedMods = fn
+	}
+}
+
+func (m *Mod) queueFixInspection(paths ...string) {
+	if m != nil && m.inspectAddedMods != nil && len(paths) > 0 {
+		m.inspectAddedMods(paths)
 	}
 }
 

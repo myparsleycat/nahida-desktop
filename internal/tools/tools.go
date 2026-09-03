@@ -18,6 +18,10 @@ type BisectSettings interface {
 	GetDisabledPrefixStyle(context.Context) (string, error)
 }
 
+type FixInspectionSettings interface {
+	GetAutoInspectFix(context.Context) (bool, error)
+}
+
 type ModDisabler interface {
 	Disable(context.Context, string) (string, error)
 	Enable(context.Context, string) (string, error)
@@ -109,6 +113,16 @@ type Tools struct {
 	modelViewerMu       sync.Mutex
 	modelViewerSessions map[string]*modelViewerSession
 	persist             *persistEngine
+
+	fixInspectors         *FixInspectorRegistry
+	fixInspectionRunMu    sync.Mutex
+	fixInspectionMu       sync.Mutex
+	fixInspections        map[string]*trackedFixInspection
+	fixInspectionRevision uint64
+	fixInspectionClosed   bool
+	fixInspectionCtx      context.Context
+	fixInspectionCancel   context.CancelFunc
+	fixInspectionWG       sync.WaitGroup
 }
 
 type toolRun struct {
@@ -126,6 +140,7 @@ func NewWithOptions(opts Options) *Tools {
 	if opts.Protocol == nil {
 		opts.Protocol = infra.NewProtocol()
 	}
+	fixInspectionCtx, fixInspectionCancel := context.WithCancel(context.Background())
 	t := &Tools{
 		log: opts.Log, emit: opts.EventEmit, notify: opts.Notify, settings: opts.Settings, xxmi: opts.XXMI,
 		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, githubRate: opts.GitHubRate, mod: opts.Mod,
@@ -136,7 +151,12 @@ func NewWithOptions(opts Options) *Tools {
 		bodyShapeSessions:   make(map[string]*bodyShapeSession),
 		modelViewerSessions: make(map[string]*modelViewerSession),
 		persist:             newPersistEngine(),
+		fixInspectors:       NewFixInspectorRegistry(),
+		fixInspections:      make(map[string]*trackedFixInspection),
+		fixInspectionCtx:    fixInspectionCtx,
+		fixInspectionCancel: fixInspectionCancel,
 	}
+	t.fixInspectors.Register(NewZZMIFixInspector(t))
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }
 	t.persist.infoFn = func(message string) {
 		if t.log != nil {
@@ -241,5 +261,5 @@ func (t *Tools) ServiceShutdown() error {
 			err = errors.New("timed out waiting for tools process to stop")
 		}
 	}
-	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+	return errors.Join(err, t.shutdownFixInspections(), t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
 }

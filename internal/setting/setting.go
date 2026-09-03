@@ -407,6 +407,14 @@ func (s *Setting) SetSearchModPreview(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModSearchModPreview, enabled)
 }
 
+func (s *Setting) GetAutoInspectFix(ctx context.Context) (bool, error) {
+	return s.getBool(ctx, KeyModAutoInspectFix)
+}
+
+func (s *Setting) SetAutoInspectFix(ctx context.Context, enabled bool) error {
+	return s.Set(ctx, KeyModAutoInspectFix, enabled)
+}
+
 func (s *Setting) GetBisectPreserveD3dx(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyGeneralBisectPreserveD3dx)
 }
