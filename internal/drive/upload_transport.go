@@ -21,10 +21,8 @@ import (
 )
 
 const (
-	directUploadThreshold = 80 * 1024 * 1024
-	uploadPartSize        = 25 * 1024 * 1024
-	uploadRetryLimit      = 3
-	uploadCompleteLimit   = 15 * time.Minute
+	uploadRetryLimit    = 3
+	uploadCompleteLimit = 15 * time.Minute
 )
 
 type uploadHTTPResult struct {
@@ -47,21 +45,22 @@ func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
 }
 
 func (d *Drive) uploadIntent(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, onProgress func(int64)) error {
-	if file.Size >= directUploadThreshold {
-		return d.uploadParts(ctx, upload, file, onProgress)
-	}
-	data, compression, err := prepareDirectUpload(file)
+	rules, err := d.UploadRules(ctx)
 	if err != nil {
 		return err
+	}
+	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.MaxUploadBodyBytes)
+	if err != nil {
+		return err
+	}
+	if useParts {
+		return d.uploadParts(ctx, upload, file, rules, onProgress)
 	}
 	return d.uploadPreparedDirect(ctx, upload, file, data, compression, onProgress)
 }
 
 func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, data []byte, compression string, onProgress func(int64)) error {
-	fields := [][2]string{{"token", upload.Form.Token}}
-	if compression != "" {
-		fields = append(fields, [2]string{"compAlg", compression})
-	}
+	fields := directUploadFields(upload, compression)
 	for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -110,13 +109,17 @@ func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry
 	return errors.New("direct upload exhausted retries")
 }
 
-func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, onProgress func(int64)) (returnErr error) {
+func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, rules UploadRules, onProgress func(int64)) (returnErr error) {
 	handle, err := os.Open(filepath.FromSlash(file.FullPath))
 	if err != nil {
 		return fmt.Errorf("open upload file %q: %w", file.Name, err)
 	}
 	defer func() { _ = handle.Close() }()
-	totalParts := int((file.Size + uploadPartSize - 1) / uploadPartSize)
+	partSize, ok := rules.partSizeForFile(file.Size)
+	if !ok || file.Size > rules.MaxFileSize {
+		return &UploadV2Error{Code: "file_too_large", Message: file.Name + ": file_too_large"}
+	}
+	totalParts := uploadPartCount(file.Size, partSize)
 	reported := int64(0)
 	report := func(bytes int64) {
 		reported += bytes
@@ -131,8 +134,8 @@ func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file Fi
 	}()
 	sendAllParts := func() (bool, error) {
 		for index := range totalParts {
-			start := int64(index) * uploadPartSize
-			size := min(int64(uploadPartSize), file.Size-start)
+			start := int64(index) * partSize
+			size := min(partSize, file.Size-start)
 			completedEarly := false
 			for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 				attemptReported := int64(0)
@@ -290,6 +293,52 @@ func infraFetchJSON(method string, body []byte) infra.FetchOptions {
 		Body:              bytes.NewReader(body),
 		DisableHTTPErrors: true,
 	}
+}
+
+func prepareUploadRoute(file FinalUploadFile, upload UploadPlanEntry, maxBody int64) ([]byte, string, bool, error) {
+	data, compression, err := prepareDirectUpload(file)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if directUploadExceedsMaxBody(file, data, compression, upload, maxBody) {
+		return nil, "", true, nil
+	}
+	return data, compression, false, nil
+}
+
+func directUploadFields(upload UploadPlanEntry, compression string) [][2]string {
+	fields := [][2]string{{"token", upload.Form.Token}}
+	if compression != "" {
+		fields = append(fields, [2]string{"compAlg", compression})
+	}
+	return fields
+}
+
+func directUploadExceedsMaxBody(file FinalUploadFile, data []byte, compression string, upload UploadPlanEntry, maxBody int64) bool {
+	if maxBody <= 0 {
+		return true
+	}
+	size, err := multipartRequestSize(directUploadFields(upload, compression), int64(len(data)), file.Name, "file")
+	if err != nil {
+		return true
+	}
+	return size > maxBody
+}
+
+func multipartRequestSize(fields [][2]string, fileSize int64, filename, fieldName string) (int64, error) {
+	boundary := "----nahida-desktop-" + "00000000-0000-0000-0000-000000000000"
+	prefix, suffix, err := multipartEnvelope(boundary, fields, filename, fieldName)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(prefix)) + fileSize + int64(len(suffix)), nil
+}
+
+func uploadPartCount(fileSize, partSize int64) int {
+	if fileSize <= 0 || partSize <= 0 {
+		return 0
+	}
+	return int((fileSize-1)/partSize + 1)
 }
 
 func multipartEnvelope(boundary string, fields [][2]string, filename, fieldName string) ([]byte, []byte, error) {

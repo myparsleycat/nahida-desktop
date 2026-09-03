@@ -63,6 +63,7 @@ func TestPlanUploadV2ConsumesProgressAndCompleteEvents(t *testing.T) {
 	defer server.Close()
 	client := infra.NewClientWithOptions(infra.ClientOptions{BackendURL: server.URL, HTTPClient: server.Client(), Status: infra.BackendOnline})
 	drive := NewWithOptions(Options{HTTP: client})
+	drive.setUploadRules(testUploadRules())
 	var progress UploadPlanProgress
 	plan, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini", Path: "file.ini", Size: 4},
@@ -80,6 +81,39 @@ func TestPlanUploadV2ConsumesProgressAndCompleteEvents(t *testing.T) {
 	}
 }
 
+func TestPlanUploadV2BoundsPageSizeToFileCount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/akasha/v2/sse/drive/files:plan" || request.Method != http.MethodPost {
+			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
+		}
+		var body struct {
+			Files []json.RawMessage `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Files) != 1 {
+			t.Fatalf("page size = %d, want 1", len(body.Files))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: complete\ndata: {\"items\":[{\"clientId\":\"client\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[],\"nteBundles\":[]}\n\n")
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	rules := testUploadRules()
+	rules.MaxPlanFiles = 1_000_000_000
+	drive.setUploadRules(rules)
+	if _, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
+		UploadFile: UploadFile{FID: "client", Name: "file.ini"},
+	}}, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPlanUploadV2PreservesServerErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -92,6 +126,7 @@ func TestPlanUploadV2PreservesServerErrorCode(t *testing.T) {
 		HTTPClient: server.Client(),
 		Status:     infra.BackendOnline,
 	})})
+	drive.setUploadRules(testUploadRules())
 	_, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini"},
 	}}, nil)
