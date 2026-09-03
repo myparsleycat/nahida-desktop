@@ -76,12 +76,19 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 	t.Run("custom URL", func(t *testing.T) {
 		destination := t.TempDir()
 		service, transfers := customDownloadTestService(t, server, destination, "", false)
+		var inspectionPaths []string
+		service.UseFixInspection(func(paths []string) {
+			inspectionPaths = append([]string(nil), paths...)
+		})
 		status, err := service.DownloadFromURL(context.Background(), server.URL+"/custom.zip", destination)
 		if err != nil || status != "started" {
 			t.Fatalf("DownloadFromURL = %q, %v", status, err)
 		}
 		processCustomDownloadQueue(t, transfers, int64(len(customArchive)))
 		assertCustomDownloadFile(t, filepath.Join(destination, "CustomRoot", "mod.ini"), "custom")
+		if len(inspectionPaths) != 1 || inspectionPaths[0] != filepath.Join(destination, "CustomRoot") {
+			t.Fatalf("queued inspection paths = %#v", inspectionPaths)
+		}
 	})
 
 	t.Run("GameBanana", func(t *testing.T) {

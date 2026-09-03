@@ -262,6 +262,10 @@
         "description": "圧縮ファイルは自動的に解凍されます"
       },
       "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
+      "fix_needed_toast": {
+        "title": "「{{name}}」MODに修正が必要な項目があります。",
+        "action": "Fixerを開く"
+      },
       "download_action_blocked": "ダウンロード中のMODは変更できません。",
       "download_overlay": {
         "queued": "待機中",
@@ -1864,6 +1868,10 @@
         "converting": "テクスチャフォーマット変換中",
         "resizing_and_converting": "テクスチャリサイズおよび変換中",
         "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
+      },
+      "modFix": {
+        "label": "修正が必要",
+        "dismiss": "通知を閉じる"
       }
     }
   },

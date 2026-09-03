@@ -269,6 +269,46 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}
 }
 
+func TestFolderDownloadCompletionUsesCreatedDirectoryForInspection(t *testing.T) {
+	content := []byte("downloaded content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	transfers := transfer.New()
+	drive := downloadServiceTestDrive(server, transfers)
+	var inspectionPaths []string
+	drive.UseFixInspection(func(paths []string) {
+		inspectionPaths = slices.Clone(paths)
+	})
+	rootID := "root"
+	metadata := DownloadMetadata{
+		Root:       transfer.Root{ID: rootID, Name: "package"},
+		TotalBytes: int64(len(content)),
+		Files: []transfer.DownloadFile{{
+			ID: "file", FileID: "file", ParentID: &rootID, Name: "mod.ini", Size: int64(len(content)), URL: server.URL,
+		}},
+		Dirs: []transfer.Directory{{ID: rootID, Name: "package"}},
+	}
+	target := t.TempDir()
+	if _, err := drive.StartDownload(context.Background(), StartDownloadParams{
+		Items:      []DownloadItem{{ID: rootID, Name: "package", IsDir: true}},
+		TargetPath: target,
+		Data:       &metadata,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(target, "package")
+	if len(inspectionPaths) != 1 || inspectionPaths[0] != want {
+		t.Fatalf("queued folder inspection paths = %#v, want %q", inspectionPaths, want)
+	}
+}
+
 func TestQueuedDownloadReservesDestinationBeforeRunnerStarts(t *testing.T) {
 	content := []byte("queued content")
 	requestStarted := make(chan struct{})

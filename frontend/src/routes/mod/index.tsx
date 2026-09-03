@@ -56,6 +56,15 @@ function getParentGroupPath(groupPath: string) {
   return groupPath.slice(0, separatorIndex);
 }
 
+function isPathInside(parent: string, child: string) {
+  if (!parent) return false;
+  const normalizedParent = parent.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+  const normalizedChild = child.replaceAll("/", "\\").toLowerCase();
+  return (
+    normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}\\`)
+  );
+}
+
 function ModRouteContent() {
   const { t } = useTranslation();
   const { queryClient } = Route.useRouteContext();
@@ -72,6 +81,8 @@ function ModRouteContent() {
   const userSelectedDuringDownload = useModStore((s) => s.userSelectedDuringDownload);
   const archiveExtractPrompt = useModStore((s) => s.archiveExtractPrompt);
   const setArchiveExtractPrompt = useModStore((s) => s.setArchiveExtractPrompt);
+  const pendingModFixerRequest = useModStore((s) => s.pendingModFixerRequest);
+  const setPendingModFixerRequest = useModStore((s) => s.setPendingModFixerRequest);
   const viewMode = useModStore((s) => s.viewMode);
 
   const runner = useModFixRunner();
@@ -86,6 +97,47 @@ function ModRouteContent() {
   } | null>(null);
   const [pendingTargetVersion, setPendingTargetVersion] = useState(0);
   const resolvedDownloadIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!pendingModFixerRequest || games.length === 0) {
+      return;
+    }
+
+    const matchingGame =
+      games.find(
+        (game) =>
+          game.importer?.toLowerCase() === pendingModFixerRequest.importer.toLowerCase() &&
+          isPathInside(game.modFolderPath, pendingModFixerRequest.modPath),
+      ) ??
+      games.find(
+        (game) => game.importer?.toLowerCase() === pendingModFixerRequest.importer.toLowerCase(),
+      );
+    if (!matchingGame) {
+      return;
+    }
+    if (matchingGame.game !== selectedGame) {
+      setSelectedGame(matchingGame.game);
+      return;
+    }
+    if (!runner.modFixer) {
+      return;
+    }
+
+    setPendingModFixerRequest(null);
+    void runner.handleOpenModFixer(pendingModFixerRequest.modPath).then(() => {
+      const actionTool = pendingModFixerRequest.actionTool;
+      if (actionTool === "hash" || actionTool === "jane" || actionTool === "dialyn") {
+        runner.setZZMITab(actionTool);
+      }
+    });
+  }, [
+    games,
+    pendingModFixerRequest,
+    runner,
+    selectedGame,
+    setPendingModFixerRequest,
+    setSelectedGame,
+  ]);
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, selectedGroupPath, queryClient);

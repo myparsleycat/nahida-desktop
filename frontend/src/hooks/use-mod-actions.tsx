@@ -152,7 +152,12 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       path: mod.path,
       title: t("page.mod.dialog.delete-mod.title"),
       description: t("page.mod.dialog.delete-mod.description"),
-      onSuccess: () => invalidateModGroup(queryClient, selectedGroupPath),
+      onSuccess: async () => {
+        await Promise.all([
+          invalidateModGroup(queryClient, selectedGroupPath),
+          Tools.RefreshFixInspections(),
+        ]);
+      },
     });
   };
 

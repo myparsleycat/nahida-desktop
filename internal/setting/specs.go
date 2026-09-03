@@ -211,6 +211,7 @@ func buildSpecs() map[string]spec {
 		),
 		KeyModDisabledPrefixStyle:             enumSpec(definitionsByKey[KeyModDisabledPrefixStyle], defaultDisabledPrefix, disabledPrefixStyles),
 		KeyModReturnToGamebananaAfterDownload: boolSpec(definitionsByKey[KeyModReturnToGamebananaAfterDownload], false),
+		KeyModAutoInspectFix:                  boolSpec(definitionsByKey[KeyModAutoInspectFix], true),
 
 		KeyToolsTouchProfileLlmProtocol: {
 			def: definitionsByKey[KeyToolsTouchProfileLlmProtocol],

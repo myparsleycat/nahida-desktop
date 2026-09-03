@@ -60,6 +60,7 @@ type Drive struct {
 	settings         UploadSettings
 	paths            PathSelector
 	eventEmit        func(string, ...any)
+	inspectAddedMods func([]string)
 	sleep            func(context.Context, time.Duration) error
 	now              func() time.Time
 	dirRetries       int
@@ -173,6 +174,13 @@ func (d *Drive) UsePathSelector(paths PathSelector) {
 		return
 	}
 	d.paths = paths
+}
+
+//wails:ignore
+func (d *Drive) UseFixInspection(fn func([]string)) {
+	if d != nil {
+		d.inspectAddedMods = fn
+	}
 }
 
 func (d *Drive) GetItem(ctx context.Context, itemID string) (result any, err error) {

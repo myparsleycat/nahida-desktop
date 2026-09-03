@@ -18,6 +18,10 @@ type BisectSettings interface {
 	GetDisabledPrefixStyle(context.Context) (string, error)
 }
 
+type FixInspectionSettings interface {
+	GetAutoInspectFix(context.Context) (bool, error)
+}
+
 type ModDisabler interface {
 	Disable(context.Context, string) (string, error)
 	Enable(context.Context, string) (string, error)
@@ -109,6 +113,14 @@ type Tools struct {
 	modelViewerMu       sync.Mutex
 	modelViewerSessions map[string]*modelViewerSession
 	persist             *persistEngine
+
+	fixInspectors         *FixInspectorRegistry
+	fixInspectionRunMu    sync.Mutex
+	fixInspectionMu       sync.Mutex
+	fixInspections        map[string]*trackedFixInspection
+	fixInspectionRevision uint64
+	fixInspectionClosed   bool
+	fixInspectionWG       sync.WaitGroup
 }
 
 type toolRun struct {
@@ -136,7 +148,10 @@ func NewWithOptions(opts Options) *Tools {
 		bodyShapeSessions:   make(map[string]*bodyShapeSession),
 		modelViewerSessions: make(map[string]*modelViewerSession),
 		persist:             newPersistEngine(),
+		fixInspectors:       NewFixInspectorRegistry(),
+		fixInspections:      make(map[string]*trackedFixInspection),
 	}
+	t.fixInspectors.Register(NewZZMIFixInspector(t))
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }
 	t.persist.infoFn = func(message string) {
 		if t.log != nil {
@@ -241,5 +256,5 @@ func (t *Tools) ServiceShutdown() error {
 			err = errors.New("timed out waiting for tools process to stop")
 		}
 	}
-	return errors.Join(err, t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+	return errors.Join(err, t.shutdownFixInspections(), t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
 }

@@ -308,7 +308,7 @@ func (m *Mod) runGroupDownload(
 		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
 	}
 	_ = finalized.Commit()
-	return m.finishDownloadOK(transfers, pid, head, downloaded, groupPath, suggested)
+	return m.finishDownloadOK(transfers, pid, head, downloaded, groupPath, suggested, finalized.DestinationPaths)
 }
 
 func (m *Mod) runGameBananaDownload(
@@ -365,7 +365,7 @@ func (m *Mod) runGameBananaDownload(
 		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
 	}
 	_ = finalized.Commit()
-	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName)
+	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
 }
 
 func (m *Mod) runHuiCustomDownload(
@@ -403,7 +403,7 @@ func (m *Mod) runHuiCustomDownload(
 		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
 	}
 	_ = finalized.Commit()
-	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName)
+	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
 }
 
 func (m *Mod) downloadFileTo(
@@ -499,7 +499,14 @@ func (m *Mod) promptArchiveExtractMode(archivePath string) (string, error) {
 	return mode, nil
 }
 
-func (m *Mod) finishDownloadOK(transfers *transfer.Transfer, pid string, head downloadHead, downloaded int64, dest, name string) error {
+func (m *Mod) finishDownloadOK(
+	transfers *transfer.Transfer,
+	pid string,
+	head downloadHead,
+	downloaded int64,
+	dest, name string,
+	inspectionPaths []string,
+) error {
 	_ = transfers.MarkFileCompleted(pid, pid)
 	completed := transfer.StatusCompleted
 	hundred := 100.0
@@ -509,10 +516,22 @@ func (m *Mod) finishDownloadOK(transfers *transfer.Transfer, pid string, head do
 	}
 	one := 1
 	_ = transfers.Update(pid, transfer.Updates{Status: &completed, Progress: &hundred, TransferredSize: &transferred, TransferredFiles: &one})
+	directories := existingDownloadDirectories(inspectionPaths)
+	m.queueFixInspection(directories...)
 	if m.emit != nil {
 		m.emit("download:completed", map[string]string{"path": dest, "name": name})
 	}
 	return nil
+}
+
+func existingDownloadDirectories(paths []string) []string {
+	directories := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			directories = append(directories, path)
+		}
+	}
+	return directories
 }
 
 func (m *Mod) finishDownloadError(ctx context.Context, transfers *transfer.Transfer, pid string, err error, where string) error {

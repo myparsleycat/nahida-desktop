@@ -261,6 +261,10 @@
         "description": "压缩文件将自动解压"
       },
       "download_completed": "已下载 \"{{name}}\"。",
+      "fix_needed_toast": {
+        "title": "模组“{{name}}”存在需要修复的项目。",
+        "action": "打开修复工具"
+      },
       "download_action_blocked": "模组下载期间无法修改。",
       "download_overlay": {
         "queued": "等待中",
@@ -1863,6 +1867,10 @@
         "converting": "正在转换纹理格式",
         "resizing_and_converting": "正在调整纹理大小并转换",
         "upscaling_and_converting": "正在放大纹理并转换"
+      },
+      "modFix": {
+        "label": "需要修复",
+        "dismiss": "忽略"
       }
     }
   },

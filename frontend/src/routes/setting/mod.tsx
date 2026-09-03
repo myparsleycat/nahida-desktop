@@ -35,6 +35,7 @@ const settingsConfig = {
   archiveExtractPathMode: "mod.archiveExtractPathMode",
   deleteArchiveAfterExtract: "mod.deleteArchiveAfterExtract",
   moveFolderInsteadOfCopy: "mod.moveFolderInsteadOfCopy",
+  autoInspectFix: "mod.autoInspectFix",
   searchModPreview: "mod.searchModPreview",
   autoResolveDownloadTarget: "mod.autoResolveDownloadTarget",
   autoResolveDownloadTargetSources: "mod.autoResolveDownloadTargetSources",
@@ -235,6 +236,23 @@ function ModSettingsRouteContent() {
               <Switch
                 checked={settings.moveFolderInsteadOfCopy}
                 onCheckedChange={(val) => update("moveFolderInsteadOfCopy", val)}
+              />
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.autoInspectFix")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.mod.mod_management.autoInspectFixDescription")}
+                </p>
+              </div>
+              <Switch
+                checked={settings.autoInspectFix}
+                onCheckedChange={(val) => update("autoInspectFix", val)}
               />
             </div>
 

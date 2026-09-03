@@ -1,6 +1,7 @@
 // oxlint-disable react/no-children-prop
 import { Mod } from "@bindings/mod";
 import { FS } from "@bindings/platform";
+import { Tools } from "@bindings/tools";
 import { ValidateName } from "@renderer/components/akasha/dialogs";
 import {
   AlertDialog,
@@ -355,6 +356,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
             parentGroupPath
               ? queryClient.invalidateQueries({ queryKey: ["subGroups", parentGroupPath] })
               : Promise.resolve(),
+            Tools.RefreshFixInspections(),
           ]);
         },
       });
