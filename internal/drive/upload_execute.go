@@ -315,7 +315,12 @@ func (d *Drive) executeUploadPlanV2(
 			continue
 		}
 		source := targets[0]
-		if source.Size >= rules.DirectThreshold() {
+		data, compression, useParts, err := prepareUploadRoute(source, upload, rules.MaxUploadBodyBytes)
+		if err != nil {
+			failTargets(err, targets)
+			continue
+		}
+		if useParts {
 			taskCtx := targetContext(targets)
 			if err := queueTask(func() {
 				select {
@@ -335,11 +340,6 @@ func (d *Drive) executeUploadPlanV2(
 			}); err != nil {
 				return err
 			}
-			continue
-		}
-		data, compression, err := prepareDirectUpload(source)
-		if err != nil {
-			failTargets(err, targets)
 			continue
 		}
 		member := preparedUpload{

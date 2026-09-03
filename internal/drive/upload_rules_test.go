@@ -3,6 +3,7 @@ package drive
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,5 +71,47 @@ func TestUploadRulesFetchesAndCaches(t *testing.T) {
 func TestParseUploadRulesRejectsIncompletePayload(t *testing.T) {
 	if _, err := parseUploadRules(map[string]any{"maxFileSize": 1}); err == nil {
 		t.Fatal("expected unavailable rules")
+	}
+}
+
+func TestUploadFilePermittedCapsExtensionLimitAtMaxFileSize(t *testing.T) {
+	allowed := map[string]int64{".bin": 200}
+	if uploadFilePermitted("mod.bin", 150, allowed, false, 100) {
+		t.Fatal("matching extension should not exceed maxFileSize")
+	}
+	if !uploadFilePermitted("mod.bin", 100, allowed, false, 100) {
+		t.Fatal("size equal to maxFileSize should remain permitted")
+	}
+	if !uploadFilePermitted("mod.bin", 50, allowed, false, 100) {
+		t.Fatal("size under the capped limit should remain permitted")
+	}
+}
+
+func TestPartSizeForFileRaisesOnlyWhenFixedSizeExceedsMaxParts(t *testing.T) {
+	rules := testUploadRules()
+	fixed, ok := rules.partSizeForFile(preferredUploadPartSize)
+	if !ok || fixed != preferredUploadPartSize {
+		t.Fatalf("fixed part size = %d ok=%v, want %d", fixed, ok, preferredUploadPartSize)
+	}
+	fileSize := preferredUploadPartSize*int64(rules.Parts.MaxParts) + 1
+	got, ok := rules.partSizeForFile(fileSize)
+	want := requiredUploadPartSize(fileSize, rules.Parts.MaxParts)
+	if !ok || got != want || got <= preferredUploadPartSize {
+		t.Fatalf("raised part size = %d ok=%v, want %d", got, ok, want)
+	}
+	tooLarge := rules.Parts.MaxBytes*int64(rules.Parts.MaxParts) + 1
+	if _, ok := rules.partSizeForFile(tooLarge); ok {
+		t.Fatal("required part size over MaxBytes should be rejected")
+	}
+	if _, ok := (UploadRules{}).partSizeForFile(1); ok {
+		t.Fatal("invalid part limits should be rejected")
+	}
+}
+
+func TestRequiredUploadPartSizeIsOverflowSafe(t *testing.T) {
+	got := requiredUploadPartSize(math.MaxInt64, 2)
+	want := int64(math.MaxInt64/2 + 1)
+	if got != want {
+		t.Fatalf("required part size = %d, want %d", got, want)
 	}
 }

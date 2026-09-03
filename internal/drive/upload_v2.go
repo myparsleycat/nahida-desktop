@@ -152,7 +152,7 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 			return UploadPlan{}, &UploadV2Error{Code: "upload_file_too_large", Message: file.Name + ": upload_file_too_large"}
 		}
 	}
-	pages, err := paginateUploadFiles(files, rules.MaxPlanFiles)
+	pages, err := paginateUploadFiles(files, min(rules.MaxPlanFiles, max(len(files), 1)))
 	if err != nil {
 		return UploadPlan{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -133,6 +134,44 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	slices.Sort(completed)
 	if bytes != 5 || !slices.Equal(completed, []string{"file-1", "file-2"}) {
 		t.Fatalf("bytes = %d, completed = %v", bytes, completed)
+	}
+}
+
+func TestExecuteUploadPlanUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
+	var partRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch {
+		case strings.HasSuffix(request.URL.Path, "/parts/0"):
+			partRequests.Add(1)
+			if err := request.ParseMultipartForm(1024); err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.WriteString(w, `{}`)
+		case strings.HasSuffix(request.URL.Path, "/complete"):
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			t.Fatalf("unexpected path %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	directory := t.TempDir()
+	files := []FinalUploadFile{uploadExecutionFile(t, directory, "file-1", "one.ini", "ab")}
+	plan := UploadPlan{
+		Items: []UploadPlanItem{{ClientID: "file-1", Status: "pending", IntentID: "one"}},
+		Uploads: map[string]UploadPlanEntry{
+			"one": uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
+		},
+		Bundles: map[string]NTEBundle{},
+	}
+	drive := uploadTestDrive(server)
+	rules := testUploadRules()
+	rules.MaxUploadBodyBytes = 32
+	drive.setUploadRules(rules)
+	if err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
+		t.Fatal(err)
+	}
+	if partRequests.Load() != 1 {
+		t.Fatalf("part requests = %d, want 1", partRequests.Load())
 	}
 }
 

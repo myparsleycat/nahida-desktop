@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	preferredDirectUploadThreshold = 80 * 1024 * 1024
-	preferredUploadPartSize        = 25 * 1024 * 1024
+	preferredUploadPartSize = 25 * 1024 * 1024
 )
 
 type UploadExtensionRule struct {
@@ -39,18 +38,38 @@ type UploadRules struct {
 	Parts              UploadPartRules       `json:"parts"`
 }
 
-func (r UploadRules) DirectThreshold() int64 {
-	if r.MaxUploadBodyBytes > 0 && r.MaxUploadBodyBytes < preferredDirectUploadThreshold {
-		return r.MaxUploadBodyBytes
-	}
-	return preferredDirectUploadThreshold
-}
-
 func (r UploadRules) PartSize() int64 {
 	if r.Parts.MaxBytes > 0 && r.Parts.MaxBytes < preferredUploadPartSize {
 		return r.Parts.MaxBytes
 	}
 	return preferredUploadPartSize
+}
+
+func (r UploadRules) partSizeForFile(fileSize int64) (int64, bool) {
+	if r.Parts.MaxBytes <= 0 || r.Parts.MaxParts <= 0 {
+		return 0, false
+	}
+	partSize := r.PartSize()
+	required := requiredUploadPartSize(fileSize, r.Parts.MaxParts)
+	if required > partSize {
+		partSize = required
+	}
+	if partSize > r.Parts.MaxBytes {
+		return 0, false
+	}
+	return partSize, true
+}
+
+func requiredUploadPartSize(fileSize int64, maxParts int) int64 {
+	if fileSize <= 0 || maxParts <= 0 {
+		return 0
+	}
+	n := int64(maxParts)
+	size := fileSize / n
+	if fileSize%n != 0 {
+		size++
+	}
+	return size
 }
 
 func (r UploadRules) MaxSizeFor(name string) (int64, bool) {
@@ -167,6 +186,9 @@ func uploadFilePermitted(name string, size int64, allowed map[string]int64, allo
 	}
 	if maxSize <= 0 {
 		maxSize = maxFileSize
+	}
+	if maxFileSize > 0 {
+		maxSize = min(maxSize, maxFileSize)
 	}
 	return size <= maxSize
 }
