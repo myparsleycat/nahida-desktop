@@ -24,13 +24,15 @@ func (f uploadRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, e
 }
 
 func uploadTestDrive(server *httptest.Server) *Drive {
-	return NewWithOptions(Options{
+	drive := NewWithOptions(Options{
 		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
 			HTTPClient: server.Client(),
 			Status:     infra.BackendOnline,
 		}),
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
+	drive.setUploadRules(testUploadRules())
+	return drive
 }
 
 func TestUploadIntentSendsDirectMultipart(t *testing.T) {
@@ -170,6 +172,7 @@ func TestUploadIntentRetriesTransportError(t *testing.T) {
 		HTTP:  infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: client, Status: infra.BackendOnline}),
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
+	drive.setUploadRules(testUploadRules())
 	path := filepath.Join(t.TempDir(), "file.ini")
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatal(err)
@@ -220,7 +223,7 @@ func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
 	progress := int64(0)
 	if err := uploadTestDrive(server).uploadParts(context.Background(), upload, FinalUploadFile{
 		UploadFile: UploadFile{Name: "file.bin", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
-	}, func(bytes int64) { progress += bytes }); err != nil {
+	}, testUploadRules(), func(bytes int64) { progress += bytes }); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 2 || completeRequests.Load() != 2 || progress != int64(len(content)) {

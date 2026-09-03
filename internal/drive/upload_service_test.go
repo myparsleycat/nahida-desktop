@@ -46,6 +46,11 @@ func TestStartUploadRunsThroughTransferQueue(t *testing.T) {
 		switch request.URL.Path {
 		case "/akasha/content/dest":
 			_, _ = io.WriteString(w, `{"children":[]}`)
+		case "/akasha/v2/upload-rules":
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(testUploadRules()); err != nil {
+				t.Fatal(err)
+			}
 		case "/akasha/v2/sse/drive/files:plan":
 			raw, err := io.ReadAll(request.Body)
 			if err != nil {

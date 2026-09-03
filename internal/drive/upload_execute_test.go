@@ -62,10 +62,11 @@ func TestUploadPackAndMultipartLimitsMatchElectron(t *testing.T) {
 	if maxMultipartUploadConcurrency != 4 {
 		t.Fatalf("multipart concurrency = %d, want 4", maxMultipartUploadConcurrency)
 	}
-	if shouldFlushUploadPack(uploadPackMaxFiles-1, uploadPackPayloadBudget-1) {
+	pack := testUploadRules().Pack
+	if shouldFlushUploadPack(pack.MaxFiles-1, pack.PayloadBudget-1, pack) {
 		t.Fatal("pack flushed below both limits")
 	}
-	if !shouldFlushUploadPack(uploadPackMaxFiles, 1) || !shouldFlushUploadPack(1, uploadPackPayloadBudget) {
+	if !shouldFlushUploadPack(pack.MaxFiles, 1, pack) || !shouldFlushUploadPack(1, pack.PayloadBudget, pack) {
 		t.Fatal("pack did not flush at an Electron limit")
 	}
 }

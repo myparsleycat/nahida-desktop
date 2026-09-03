@@ -129,7 +129,11 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 	if err != nil {
 		return StartUploadResult{}, err
 	}
-	preparation, err := PrepareUpload(params.Paths, slices.Collect(stringsMapKeys(childNames(item))), params.ConflictStrategy, params.AdditionalExtensions, params.AllowAllFiles)
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return StartUploadResult{}, err
+	}
+	preparation, err := PrepareUpload(params.Paths, slices.Collect(stringsMapKeys(childNames(item))), params.ConflictStrategy, rules, params.AdditionalExtensions, params.AllowAllFiles)
 	if err != nil {
 		return StartUploadResult{}, err
 	}

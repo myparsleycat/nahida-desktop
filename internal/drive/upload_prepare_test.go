@@ -64,7 +64,7 @@ func TestPrepareUploadCollectsAllowedFilesAndSkipsSystemEntries(t *testing.T) {
 	writeUploadFile(t, filepath.Join(root, "__MACOSX", "metadata.ini"), "metadata")
 	writeUploadFile(t, filepath.Join(root, "desktop.ini"), "metadata")
 
-	prepared, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, nil, false)
+	prepared, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,11 +90,11 @@ func TestPrepareUploadCollectsAllowedFilesAndSkipsSystemEntries(t *testing.T) {
 func TestPrepareUploadStableIDsAreDeterministic(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Mod")
 	writeUploadFile(t, filepath.Join(root, "file.ini"), "value")
-	first, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, nil, false)
+	first, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, nil, false)
+	second, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +113,7 @@ func TestPrepareUploadSuffixesRootConflicts(t *testing.T) {
 		[]string{root, rootFile},
 		[]string{"Mod", "preview.png", "Mod (2)"},
 		UploadConflictSuffix,
+		testUploadRules(),
 		nil,
 		false,
 	)
@@ -143,6 +144,7 @@ func TestPrepareUploadSkipDropsConflictingRootTree(t *testing.T) {
 		[]string{root, other},
 		[]string{"Mod"},
 		UploadConflictSkip,
+		testUploadRules(),
 		nil,
 		false,
 	)
@@ -163,18 +165,35 @@ func TestPrepareUploadAllowsAdditionalExtensionAndAllFiles(t *testing.T) {
 	executable := filepath.Join(base, "tool.exe")
 	writeUploadFile(t, custom, "custom")
 	writeUploadFile(t, executable, "tool")
-	withExtension, err := PrepareUpload([]string{custom}, nil, UploadConflictSuffix, []string{"xyz"}, false)
+	withExtension, err := PrepareUpload([]string{custom}, nil, UploadConflictSuffix, testUploadRules(), []string{"xyz"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(withExtension.Files) != 1 {
 		t.Fatalf("additional extension files = %#v", withExtension.Files)
 	}
-	all, err := PrepareUpload([]string{executable}, nil, UploadConflictSuffix, nil, true)
+	all, err := PrepareUpload([]string{executable}, nil, UploadConflictSuffix, testUploadRules(), nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(all.Files) != 1 {
 		t.Fatalf("allow-all files = %#v", all.Files)
+	}
+}
+
+func TestPrepareUploadSkipsOversizedFiles(t *testing.T) {
+	root := t.TempDir()
+	allowed := filepath.Join(root, "ok.ini")
+	oversized := filepath.Join(root, "huge.png")
+	writeUploadFile(t, allowed, "ini")
+	if err := os.WriteFile(oversized, make([]byte, 100*1024*1024), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := PrepareUpload([]string{root}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prepared.Files) != 1 || prepared.Files[0].Name != "ok.ini" {
+		t.Fatalf("files = %#v", prepared.Files)
 	}
 }

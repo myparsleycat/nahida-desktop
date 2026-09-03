@@ -6,12 +6,6 @@ import (
 	"regexp"
 )
 
-const (
-	uploadPackPayloadBudget = 90 * 1024 * 1024
-	uploadPackMemberMax     = 4 * 1024 * 1024
-	uploadPackMaxFiles      = 100
-)
-
 var uploadIntentURLPattern = regexp.MustCompile(`/uploads/[^/]+$`)
 
 type preparedUpload struct {
@@ -28,25 +22,25 @@ type packedUploadGroup struct {
 	members []preparedUpload
 }
 
-func partitionPackedUploads(members []preparedUpload) []packedUploadGroup {
+func partitionPackedUploads(members []preparedUpload, pack UploadPackRules) []packedUploadGroup {
 	groups := make([]packedUploadGroup, 0)
-	current := make([]preparedUpload, 0, uploadPackMaxFiles)
+	current := make([]preparedUpload, 0, max(1, pack.MaxFiles))
 	var bytes int64
 	flush := func() {
 		if len(current) == 0 {
 			return
 		}
 		groups = append(groups, packedUploadGroup{members: current})
-		current = make([]preparedUpload, 0, uploadPackMaxFiles)
+		current = make([]preparedUpload, 0, max(1, pack.MaxFiles))
 		bytes = 0
 	}
 	for _, member := range members {
-		if member.payloadBytes > uploadPackMemberMax {
+		if member.payloadBytes > pack.MemberMax {
 			flush()
 			groups = append(groups, packedUploadGroup{members: []preparedUpload{member}})
 			continue
 		}
-		if len(current) > 0 && (len(current) >= uploadPackMaxFiles || bytes+member.payloadBytes > uploadPackPayloadBudget) {
+		if len(current) > 0 && (len(current) >= pack.MaxFiles || bytes+member.payloadBytes > pack.PayloadBudget) {
 			flush()
 		}
 		current = append(current, member)

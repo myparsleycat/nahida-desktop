@@ -63,6 +63,7 @@ func TestPlanUploadV2ConsumesProgressAndCompleteEvents(t *testing.T) {
 	defer server.Close()
 	client := infra.NewClientWithOptions(infra.ClientOptions{BackendURL: server.URL, HTTPClient: server.Client(), Status: infra.BackendOnline})
 	drive := NewWithOptions(Options{HTTP: client})
+	drive.setUploadRules(testUploadRules())
 	var progress UploadPlanProgress
 	plan, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini", Path: "file.ini", Size: 4},
@@ -92,6 +93,7 @@ func TestPlanUploadV2PreservesServerErrorCode(t *testing.T) {
 		HTTPClient: server.Client(),
 		Status:     infra.BackendOnline,
 	})})
+	drive.setUploadRules(testUploadRules())
 	_, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini"},
 	}}, nil)

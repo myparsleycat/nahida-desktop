@@ -17,12 +17,6 @@ import (
 	"sync"
 )
 
-var defaultUploadExtensions = []string{
-	".buf", ".ib", ".vb", ".dds", ".ini", ".jpeg", ".jpg", ".png", ".webp", ".gif",
-	".avif", ".avifs", ".bmp", ".hlsl", ".py", ".json", ".txt", ".pmx", ".tga", ".spa",
-	".assets", ".wem", ".mp4", ".webm", ".blend", ".pck", ".bin", ".pak", ".utoc", ".ucas",
-}
-
 type UploadFile struct {
 	FID        string `json:"FID"`
 	Path       string `json:"path"`
@@ -82,7 +76,11 @@ func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflict
 		return UploadConflictsResult{}, err
 	}
 	existingNames := childNames(item)
-	files, directories, err := collectUploadPaths(params.Paths, nil, false)
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return UploadConflictsResult{}, err
+	}
+	files, directories, err := collectUploadPaths(params.Paths, rules, nil, false)
 	if err != nil {
 		return UploadConflictsResult{}, err
 	}
@@ -125,14 +123,14 @@ func ensureUploadSourceReadable(path string) error {
 }
 
 //wails:ignore
-func PrepareUpload(paths []string, existingNames []string, strategy UploadConflictStrategy, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
+func PrepareUpload(paths []string, existingNames []string, strategy UploadConflictStrategy, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
 	if strategy == "" {
 		strategy = UploadConflictSuffix
 	}
 	if strategy != UploadConflictSuffix && strategy != UploadConflictSkip {
 		return UploadPreparation{}, fmt.Errorf("unsupported upload conflict strategy %q", strategy)
 	}
-	files, directories, err := collectUploadPaths(paths, additionalExtensions, allowAllFiles)
+	files, directories, err := collectUploadPaths(paths, rules, additionalExtensions, allowAllFiles)
 	if err != nil {
 		return UploadPreparation{}, err
 	}
@@ -216,18 +214,8 @@ func PrepareUpload(paths []string, existingNames []string, strategy UploadConfli
 	}, nil
 }
 
-func collectUploadPaths(paths, additionalExtensions []string, allowAllFiles bool) ([]UploadFile, []UploadDirectory, error) {
-	allowed := make(map[string]struct{}, len(defaultUploadExtensions)+len(additionalExtensions))
-	for _, extension := range append(slices.Clone(defaultUploadExtensions), additionalExtensions...) {
-		extension = strings.ToLower(strings.TrimSpace(extension))
-		if extension == "" {
-			continue
-		}
-		if !strings.HasPrefix(extension, ".") {
-			extension = "." + extension
-		}
-		allowed[extension] = struct{}{}
-	}
+func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) ([]UploadFile, []UploadDirectory, error) {
+	allowed := extensionMaxSizes(rules, additionalExtensions)
 	files := make([]UploadFile, 0)
 	directories := make([]UploadDirectory, 0)
 	for _, rawPath := range paths {
@@ -244,7 +232,7 @@ func collectUploadPaths(paths, additionalExtensions []string, allowAllFiles bool
 			continue
 		}
 		if info.Mode().IsRegular() {
-			if allowAllFiles || uploadExtensionAllowed(info.Name(), allowed) {
+			if uploadFilePermitted(info.Name(), info.Size(), allowed, allowAllFiles, rules.MaxFileSize) {
 				files = append(files, UploadFile{
 					Path:       info.Name(),
 					Name:       info.Name(),
@@ -286,7 +274,7 @@ func collectUploadPaths(paths, additionalExtensions []string, allowAllFiles bool
 			if infoErr != nil {
 				return infoErr
 			}
-			if !entryInfo.Mode().IsRegular() || (!allowAllFiles && !uploadExtensionAllowed(entry.Name(), allowed)) {
+			if !entryInfo.Mode().IsRegular() || !uploadFilePermitted(entry.Name(), entryInfo.Size(), allowed, allowAllFiles, rules.MaxFileSize) {
 				return nil
 			}
 			files = append(files, UploadFile{
@@ -441,11 +429,6 @@ func isSystemFile(name string) bool {
 		name == ".TemporaryItems" || name == ".apdisk" || name == "__MACOSX" ||
 		lower == "thumbs.db" || (strings.HasPrefix(lower, "ehthumbs") && strings.HasSuffix(lower, ".db")) ||
 		lower == "desktop.ini" || name == "~"
-}
-
-func uploadExtensionAllowed(name string, allowed map[string]struct{}) bool {
-	_, ok := allowed[strings.ToLower(filepath.Ext(name))]
-	return ok
 }
 
 func uniqueUploadName(base string, existing map[string]struct{}) string {

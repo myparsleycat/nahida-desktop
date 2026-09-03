@@ -64,8 +64,10 @@ type Drive struct {
 	now              func() time.Time
 	dirRetries       int
 
-	mu  sync.Mutex
-	ops map[string]*copyOperation
+	mu            sync.Mutex
+	ops           map[string]*copyOperation
+	uploadRulesMu sync.Mutex
+	uploadRules   *UploadRules
 }
 
 func New() *Drive {

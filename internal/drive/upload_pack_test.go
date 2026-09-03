@@ -7,26 +7,28 @@ func packMember(payload, logical int64) preparedUpload {
 }
 
 func TestPartitionPackedUploadsHonorsMemberAndGroupLimits(t *testing.T) {
+	pack := testUploadRules().Pack
 	members := []preparedUpload{
 		packMember(2*1024*1024, 3),
 		packMember(2*1024*1024, 4),
-		packMember(uploadPackMemberMax+1, 5),
-		packMember(uploadPackPayloadBudget-1, 6),
+		packMember(pack.MemberMax+1, 5),
+		packMember(pack.PayloadBudget-1, 6),
 		packMember(2, 7),
 	}
-	groups := partitionPackedUploads(members)
+	groups := partitionPackedUploads(members, pack)
 	if len(groups) != 4 || len(groups[0].members) != 2 || len(groups[1].members) != 1 || len(groups[2].members) != 1 || len(groups[3].members) != 1 {
 		t.Fatalf("groups = %#v", groups)
 	}
 }
 
 func TestPartitionPackedUploadsHonorsFileLimit(t *testing.T) {
-	members := make([]preparedUpload, uploadPackMaxFiles+1)
+	pack := testUploadRules().Pack
+	members := make([]preparedUpload, pack.MaxFiles+1)
 	for index := range members {
 		members[index] = packMember(1, 1)
 	}
-	groups := partitionPackedUploads(members)
-	if len(groups) != 2 || len(groups[0].members) != uploadPackMaxFiles || len(groups[1].members) != 1 {
+	groups := partitionPackedUploads(members, pack)
+	if len(groups) != 2 || len(groups[0].members) != pack.MaxFiles || len(groups[1].members) != 1 {
 		t.Fatalf("group sizes = %d, %d", len(groups[0].members), len(groups[1].members))
 	}
 }

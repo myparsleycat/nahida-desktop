@@ -54,6 +54,13 @@ func (d *Drive) executeUploadPlanV2(
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
 ) error {
+	if d == nil || d.http == nil {
+		return errDriveHTTPUnconfigured
+	}
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return err
+	}
 	filesByID := make(map[string]FinalUploadFile, len(files))
 	for _, file := range files {
 		filesByID[file.FID] = file
@@ -228,7 +235,7 @@ func (d *Drive) executeUploadPlanV2(
 		failTargets(&UploadV2Error{Code: reason, Message: file.Name + ": " + reason}, []FinalUploadFile{file})
 	}
 
-	packed := make([]preparedUpload, 0, uploadPackMaxFiles)
+	packed := make([]preparedUpload, 0, max(1, rules.Pack.MaxFiles))
 	var packedBytes int64
 	taskPool := newUploadTaskPool(ctx, concurrency)
 	defer func() { _ = taskPool.Close() }()
@@ -241,8 +248,8 @@ func (d *Drive) executeUploadPlanV2(
 		return nil
 	}
 	flushPacked := func() error {
-		groups := partitionPackedUploads(packed)
-		packed = make([]preparedUpload, 0, uploadPackMaxFiles)
+		groups := partitionPackedUploads(packed, rules.Pack)
+		packed = make([]preparedUpload, 0, max(1, rules.Pack.MaxFiles))
 		packedBytes = 0
 		for _, group := range groups {
 			if len(group.members) == 1 {
@@ -308,7 +315,7 @@ func (d *Drive) executeUploadPlanV2(
 			continue
 		}
 		source := targets[0]
-		if source.Size >= directUploadThreshold {
+		if source.Size >= rules.DirectThreshold() {
 			taskCtx := targetContext(targets)
 			if err := queueTask(func() {
 				select {
@@ -317,7 +324,7 @@ func (d *Drive) executeUploadPlanV2(
 					return
 				}
 				defer func() { <-multipartSlots }()
-				err := d.uploadParts(taskCtx, upload, source, func(bytes int64) { report(source, bytes, false) })
+				err := d.uploadParts(taskCtx, upload, source, rules, func(bytes int64) { report(source, bytes, false) })
 				if err != nil {
 					if taskCtx.Err() == nil || ctx.Err() != nil {
 						failTargets(err, targets)
@@ -362,7 +369,7 @@ func (d *Drive) executeUploadPlanV2(
 		}
 		packed = append(packed, member)
 		packedBytes += member.payloadBytes
-		if shouldFlushUploadPack(len(packed), packedBytes) {
+		if shouldFlushUploadPack(len(packed), packedBytes, rules.Pack) {
 			if err := flushPacked(); err != nil {
 				return err
 			}
@@ -433,8 +440,8 @@ func (d *Drive) executeUploadPlanV2(
 	return nil
 }
 
-func shouldFlushUploadPack(files int, payloadBytes int64) bool {
-	return files >= uploadPackMaxFiles || payloadBytes >= uploadPackPayloadBudget
+func shouldFlushUploadPack(files int, payloadBytes int64, pack UploadPackRules) bool {
+	return files >= pack.MaxFiles || payloadBytes >= pack.PayloadBudget
 }
 
 func runUploadTasks(ctx context.Context, concurrency int, tasks []func()) error {

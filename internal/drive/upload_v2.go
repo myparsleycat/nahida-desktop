@@ -19,7 +19,6 @@ import (
 
 const (
 	uploadPlanPageSize = 500
-	maxUploadFileSize  = 1024 * 1024 * 1024
 )
 
 var (
@@ -140,12 +139,20 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 	if d == nil || d.http == nil {
 		return UploadPlan{}, errDriveHTTPUnconfigured
 	}
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return UploadPlan{}, err
+	}
 	for _, file := range files {
-		if file.Size > maxUploadFileSize {
+		maxSize := rules.MaxFileSize
+		if limit, ok := rules.MaxSizeFor(file.Name); ok {
+			maxSize = limit
+		}
+		if file.Size > maxSize {
 			return UploadPlan{}, &UploadV2Error{Code: "upload_file_too_large", Message: file.Name + ": upload_file_too_large"}
 		}
 	}
-	pages, err := paginateUploadFiles(files, uploadPlanPageSize)
+	pages, err := paginateUploadFiles(files, rules.MaxPlanFiles)
 	if err != nil {
 		return UploadPlan{}, err
 	}

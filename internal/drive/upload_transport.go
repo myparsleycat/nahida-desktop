@@ -21,10 +21,8 @@ import (
 )
 
 const (
-	directUploadThreshold = 80 * 1024 * 1024
-	uploadPartSize        = 25 * 1024 * 1024
-	uploadRetryLimit      = 3
-	uploadCompleteLimit   = 15 * time.Minute
+	uploadRetryLimit    = 3
+	uploadCompleteLimit = 15 * time.Minute
 )
 
 type uploadHTTPResult struct {
@@ -47,8 +45,12 @@ func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
 }
 
 func (d *Drive) uploadIntent(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, onProgress func(int64)) error {
-	if file.Size >= directUploadThreshold {
-		return d.uploadParts(ctx, upload, file, onProgress)
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return err
+	}
+	if file.Size >= rules.DirectThreshold() {
+		return d.uploadParts(ctx, upload, file, rules, onProgress)
 	}
 	data, compression, err := prepareDirectUpload(file)
 	if err != nil {
@@ -110,13 +112,17 @@ func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry
 	return errors.New("direct upload exhausted retries")
 }
 
-func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, onProgress func(int64)) (returnErr error) {
+func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, rules UploadRules, onProgress func(int64)) (returnErr error) {
 	handle, err := os.Open(filepath.FromSlash(file.FullPath))
 	if err != nil {
 		return fmt.Errorf("open upload file %q: %w", file.Name, err)
 	}
 	defer func() { _ = handle.Close() }()
-	totalParts := int((file.Size + uploadPartSize - 1) / uploadPartSize)
+	partSize := rules.PartSize()
+	totalParts := int((file.Size + partSize - 1) / partSize)
+	if file.Size > rules.MaxFileSize || totalParts > rules.Parts.MaxParts {
+		return &UploadV2Error{Code: "file_too_large", Message: file.Name + ": file_too_large"}
+	}
 	reported := int64(0)
 	report := func(bytes int64) {
 		reported += bytes
@@ -131,8 +137,8 @@ func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file Fi
 	}()
 	sendAllParts := func() (bool, error) {
 		for index := range totalParts {
-			start := int64(index) * uploadPartSize
-			size := min(int64(uploadPartSize), file.Size-start)
+			start := int64(index) * partSize
+			size := min(partSize, file.Size-start)
 			completedEarly := false
 			for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 				attemptReported := int64(0)
