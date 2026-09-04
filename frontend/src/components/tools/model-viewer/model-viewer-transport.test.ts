@@ -48,7 +48,7 @@ describe("normalizeModelViewerTransport", () => {
                     id: "animation",
                     label: "Animation",
                     variableIds: null,
-                    fps: 30,
+                    fps: 120,
                     frameStart: 0,
                     frameEnd: 0,
                     loop: false,
@@ -80,6 +80,7 @@ describe("normalizeModelViewerTransport", () => {
         expect(result.defaultState).toEqual({});
         expect(result.stateRules).toEqual([]);
         expect(result.animations[0]?.variableIds).toEqual([]);
+        expect(result.animations[0]?.fps).toBe(60);
         expect(result.animations[0]?.frames[0]?.values).toEqual({});
     });
 

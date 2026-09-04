@@ -43,6 +43,7 @@ import { toast } from "sonner";
 
 import type { ModelViewerDialogSource, VariableStateValue } from "./model-viewer-dialog-types";
 
+import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
 import {
   formatOrientation,
   type ModelViewerCameraState,
@@ -204,26 +205,13 @@ export function ModelViewerDialog({
     setAnimationPlaying(Boolean(activeAnimation && activeAnimation.frames.length > 1));
   }
 
-  useEffect(() => {
-    if (!activeAnimation || !animationPlaying || activeAnimation.frames.length <= 1) {
-      return;
-    }
-
-    const intervalMs = 1000 / Math.max(activeAnimation.fps, 1);
-    const timer = window.setInterval(() => {
-      const current = animationFrameIndexRef.current;
-      const next = current + 1;
-      const frameIndex =
-        next < activeAnimation.frames.length ? next : activeAnimation.loop ? 0 : current;
-      animationFrameIndexRef.current = frameIndex;
-      viewerRef.current?.setAnimationFrame(frameIndex);
-      setAnimationFrameIndex(frameIndex);
-    }, intervalMs);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [activeAnimation, animationPlaying]);
+  useModelViewerAnimationClock({
+    clip: activeAnimation,
+    frameIndex: animationFrameIndex,
+    playing: open && animationPlaying,
+    onFrame: setAnimationFrameIndex,
+    onComplete: () => setAnimationPlaying(false),
+  });
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
@@ -342,10 +330,8 @@ export function ModelViewerDialog({
   };
 
   const handleAnimationReset = () => {
-    animationFrameIndexRef.current = 0;
     setAnimationFrameIndex(0);
     setAnimationPlaying(false);
-    viewerRef.current?.setAnimationFrame(0);
   };
 
   const effectiveState = previewState ?? activeState;
@@ -754,9 +740,7 @@ export function ModelViewerDialog({
                   onChange={(event) => {
                     const index = Number(event.currentTarget.value);
                     setAnimationPlaying(false);
-                    animationFrameIndexRef.current = index;
                     setAnimationFrameIndex(index);
-                    viewerRef.current?.setAnimationFrame(index);
                   }}
                 />
                 <span className="text-right text-xs text-muted-foreground tabular-nums">

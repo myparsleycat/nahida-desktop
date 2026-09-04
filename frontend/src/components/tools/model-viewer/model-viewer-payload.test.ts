@@ -72,6 +72,67 @@ function variantEval(positionVariantIndex: number | null): EvaluatedViewerState 
 }
 
 describe("applyPayloadEval midpoint targets", () => {
+    it("skips geometry work when the ordered shape signature is unchanged", () => {
+        const mesh = meshWithTargets(
+            [0, 0, 0],
+            [{ var: "shape", positions: new Float32Array([1, 0, 0]) }],
+        );
+        const root = new Group();
+        root.add(mesh);
+        const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
+        const bounds = vi.spyOn(mesh.geometry, "computeBoundingSphere");
+
+        applyPayloadEval(root, evalState({ shape: 0.5 }));
+        normals.mockClear();
+        bounds.mockClear();
+        applyPayloadEval(root, evalState({ shape: 0.5 }));
+
+        expect(normals).not.toHaveBeenCalled();
+        expect(bounds).not.toHaveBeenCalled();
+        expect(mesh.userData.lastShapeSignature).toBe("shape:0.5");
+    });
+
+    it("recomputes geometry once when a shape weight changes", () => {
+        const mesh = meshWithTargets(
+            [0, 0, 0],
+            [{ var: "shape", positions: new Float32Array([1, 0, 0]) }],
+        );
+        const root = new Group();
+        root.add(mesh);
+        applyPayloadEval(root, evalState({ shape: 0.25 }));
+        const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
+
+        applyPayloadEval(root, evalState({ shape: 0.75 }));
+        applyPayloadEval(root, evalState({ shape: 0.75 }));
+
+        expect(normals).toHaveBeenCalledOnce();
+    });
+
+    it("restores shape geometry after applying a position variant", () => {
+        const mesh = meshWithTargets(
+            [0, 0, 0],
+            [{ var: "shape", positions: new Float32Array([2, 0, 0]) }],
+        );
+        mesh.userData.positionVariants = [
+            { conditions: [], sourceUrl: "/variant.buf", stride: 40, sourceBytes: 12 },
+        ];
+        const root = new Group();
+        root.add(mesh);
+        applyPayloadEval(root, evalState({ shape: 1 }));
+        commitPayloadEval(root, {
+            evalResult: variantEval(0),
+            positions: new Map([
+                ["mesh", { variantIndex: 0, positions: new Float32Array([9, 0, 0]) }],
+            ]),
+        });
+        const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
+
+        applyPayloadEval(root, evalState({ shape: 1 }));
+
+        expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([2, 0, 0]);
+        expect(normals).toHaveBeenCalledOnce();
+    });
+
     it("excludes malformed midpoint endpoints from the deformation divisor", () => {
         const mesh = meshWithTargets(
             [0, 0, 0],
@@ -542,6 +603,7 @@ describe("lazy payload position variants", () => {
             { conditions: [], sourceUrl: "/0.buf", stride: 40, sourceBytes: 40 },
         ];
         mesh.userData.normalCache = [{ key: 0, normal: new Float32Array(3) }];
+        mesh.userData.lastShapeSignature = "shape:1";
         const texture = new Texture();
         const dispose = vi.spyOn(texture, "dispose");
         const root = new Group();
@@ -556,5 +618,6 @@ describe("lazy payload position variants", () => {
         expect(mesh.userData.shapeTargets).toHaveLength(0);
         expect(mesh.userData.positionVariants).toHaveLength(0);
         expect(mesh.userData.normalCache).toHaveLength(0);
+        expect(mesh.userData.lastShapeSignature).toBeUndefined();
     });
 });

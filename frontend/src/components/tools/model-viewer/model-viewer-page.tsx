@@ -3,11 +3,15 @@ import { Button } from "@renderer/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ModelViewerAnimationClip } from "./model-viewer-contract";
 
+import {
+  normalizeAnimationFPS,
+  useModelViewerAnimationClock,
+} from "./model-viewer-animation-clock";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
@@ -59,31 +63,20 @@ export function ModelViewerPage({
     manifestPath: manifestPath || "",
   };
   const displayPath = sourceContext.artifactRoot || path;
-  const activeAnimation = manifest?.animations?.[0] ?? null;
+  const rawAnimation = manifest?.animations?.[0] ?? null;
+  const activeAnimation = useMemo(
+    () => (rawAnimation ? { ...rawAnimation, fps: normalizeAnimationFPS(rawAnimation.fps) } : null),
+    [rawAnimation],
+  );
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
 
-  useEffect(() => {
-    if (!activeAnimation || !animationPlaying || activeAnimation.frames.length <= 1) {
-      return;
-    }
-
-    const timer = window.setInterval(
-      () => {
-        setAnimationFrameIndex((current) => {
-          const next = current + 1;
-          if (next < activeAnimation.frames.length) {
-            return next;
-          }
-          return activeAnimation.loop ? 0 : current;
-        });
-      },
-      1000 / Math.max(activeAnimation.fps, 1),
-    );
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [activeAnimation, animationPlaying]);
+  useModelViewerAnimationClock({
+    clip: activeAnimation,
+    frameIndex: animationFrameIndex,
+    playing: animationPlaying,
+    onFrame: setAnimationFrameIndex,
+    onComplete: () => setAnimationPlaying(false),
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">

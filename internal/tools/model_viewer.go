@@ -400,7 +400,7 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		transport.DefaultState[key] = value
 	}
 	for _, prepared := range animations {
-		clip := ModelViewerAnimationClip{ID: prepared.ID, Label: prepared.Label, VariableIDs: prepared.VariableIDs, FPS: prepared.FPS, FrameStart: prepared.FrameStart, FrameEnd: prepared.FrameEnd, Loop: prepared.Loop}
+		clip := ModelViewerAnimationClip{ID: prepared.ID, Label: prepared.Label, VariableIDs: prepared.VariableIDs, FPS: normalizeModelViewerAnimationFPS(prepared.FPS), FrameStart: prepared.FrameStart, FrameEnd: prepared.FrameEnd, Loop: prepared.Loop}
 		for _, frame := range prepared.Frames {
 			clip.Frames = append(clip.Frames, ModelViewerAnimationFrame(frame))
 		}

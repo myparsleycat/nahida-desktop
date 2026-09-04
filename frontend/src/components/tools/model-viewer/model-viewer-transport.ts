@@ -10,6 +10,8 @@ import type {
     ViewerTextureRole,
 } from "@shared/mod-viewer/types";
 
+import { normalizeAnimationFPS } from "./model-viewer-animation-clock";
+
 function normalizeDNF(value: ModelViewerDNF): Dnf {
     return (value ?? []).map((group) =>
         (group ?? []).map((clause) => ({
@@ -152,7 +154,7 @@ export function normalizeModelViewerTransport(
             id: clip.id,
             label: clip.label,
             variableIds: clip.variableIds ?? [],
-            fps: clip.fps,
+            fps: normalizeAnimationFPS(clip.fps),
             frameStart: clip.frameStart,
             frameEnd: clip.frameEnd,
             loop: clip.loop,

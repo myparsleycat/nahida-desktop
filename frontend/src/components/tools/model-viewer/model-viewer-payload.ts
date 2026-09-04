@@ -39,6 +39,7 @@ type PayloadMeshUserData = {
     materialProfile?: ModViewerTransport["materialProfile"];
     toonShadows: boolean;
     lastPositionVariantIndex?: number | null;
+    lastShapeSignature?: string;
     lastMaps?: {
         texKey: string | null;
         normalMapKey: string | null;
@@ -231,6 +232,7 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.normalCache.length = 0;
         userData.lastMaps = undefined;
         userData.lastPositionVariantIndex = undefined;
+        userData.lastShapeSignature = undefined;
     });
 }
 
@@ -504,6 +506,10 @@ function applyPositionVariant(
     position.array.set(next);
     position.needsUpdate = true;
     userData.lastPositionVariantIndex = variantIndex;
+    userData.lastShapeSignature = undefined;
+    if (variantIndex === null && userData.shapeTargets.length > 0) {
+        return;
+    }
 
     const cacheKey = variantIndex ?? -1;
     const cached = userData.normalCache.find((entry) => entry.key === cacheKey)?.normal;
@@ -527,6 +533,12 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
     const userData = object.userData as PayloadMeshUserData;
     const targets = userData.shapeTargets ?? [];
     if (targets.length === 0) {
+        return;
+    }
+    const signature = targets
+        .map((target) => `${target.var}:${normalizeShapeWeight(weights[target.var])}`)
+        .join("|");
+    if (userData.lastShapeSignature === signature) {
         return;
     }
     const attr = object.geometry.attributes.position;
@@ -574,6 +586,13 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
     object.geometry.computeVertexNormals();
     object.geometry.computeBoundingBox();
     object.geometry.computeBoundingSphere();
+    userData.lastShapeSignature = signature;
+}
+
+function normalizeShapeWeight(value: number | undefined): string {
+    const numeric = Number(value ?? 0);
+    if (!Number.isFinite(numeric)) return "invalid";
+    return String(Object.is(numeric, -0) ? 0 : numeric);
 }
 
 async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry> {

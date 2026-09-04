@@ -26,7 +26,10 @@ type modelViewerPreparedAnimationClip struct {
 	Frames      []modelViewerPreparedAnimationFrame
 }
 
-const maxModelViewerAnimationFrames = 4096
+const (
+	maxModelViewerAnimationFrames = 4096
+	maxModelViewerAnimationFPS    = 60
+)
 
 var modelViewerPresentAssignmentRE = regexp.MustCompile(`(?i)^(?:post\s+)?\$([\w.]+)\s*=\s*(.+)$`)
 
@@ -53,8 +56,8 @@ func detectModelViewerPresentAnimations(sections []modINISection, defaults map[s
 			if len(values) < 2 {
 				continue
 			}
-			fps := resolveModelViewerAnimationFPS(defaults, match[2])
-			if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) {
+			fps := normalizeModelViewerAnimationFPS(resolveModelViewerAnimationFPS(defaults, match[2]))
+			if fps == 0 {
 				continue
 			}
 			clip := modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: values[0], FrameEnd: values[len(values)-1], Loop: true}
@@ -138,7 +141,8 @@ func detectModelViewerAccumulatorAnimations(sections []modINISection, defaults m
 }
 
 func buildModelViewerPreparedAnimationClip(variable string, fps float64, start, end int) *modelViewerPreparedAnimationClip {
-	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) || !validModelViewerAnimationRange(start, end) {
+	fps = normalizeModelViewerAnimationFPS(fps)
+	if fps == 0 || !validModelViewerAnimationRange(start, end) {
 		return nil
 	}
 	clip := &modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: start, FrameEnd: end, Loop: true}
@@ -200,7 +204,10 @@ func detectModelViewerIncrementalAnimations(sections []modINISection, defaults m
 				if !increment || !startOK || !endOK || !speedOK || end <= start || speed <= 0 {
 					continue
 				}
-				fps := 60 / speed
+				fps := normalizeModelViewerAnimationFPS(60 / speed)
+				if fps == 0 {
+					continue
+				}
 				clip := modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: int(start), FrameEnd: int(end), Loop: true}
 				if start != math.Trunc(start) || end != math.Trunc(end) || !validModelViewerAnimationRange(clip.FrameStart, clip.FrameEnd) {
 					continue
@@ -218,6 +225,13 @@ func detectModelViewerIncrementalAnimations(sections []modINISection, defaults m
 
 func validModelViewerAnimationRange(start, end int) bool {
 	return end > start && end-start+1 <= maxModelViewerAnimationFrames
+}
+
+func normalizeModelViewerAnimationFPS(fps float64) float64 {
+	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) {
+		return 0
+	}
+	return max(1, min(fps, maxModelViewerAnimationFPS))
 }
 
 func collectModelViewerDiscreteBranchValues(sections []modINISection, variable string) []int {
