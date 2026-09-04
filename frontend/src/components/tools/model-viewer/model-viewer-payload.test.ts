@@ -9,6 +9,7 @@ import {
     clearPayloadModelData,
     commitPayloadEval,
     preparePayloadEval,
+    setPayloadToonShadows,
 } from "./model-viewer-payload";
 
 function meshWithTargets(
@@ -232,6 +233,179 @@ describe("applyPayloadEval packed maps", () => {
         });
 
         expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
+    });
+
+    it("uses Three.js's derivative tangent frame for RabbitFX normals", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
+        const material = new MeshStandardMaterial({ metalness: 0.5, roughness: 0.5 });
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            normalCache: [],
+            materialProfile: "wuwa:rabbitfx",
+            toonShadows: false,
+        };
+        const normal = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["normal", normal]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: "normal",
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect(material.normalMap).toBe(normal);
+        expect(material.normalScale.y).toBe(-1);
+        expect(material.metalness).toBe(0);
+        expect(material.roughness).toBe(1);
+        expect(geometry.attributes.tangent).toBeUndefined();
+    });
+
+    it("adapts RabbitFX LightMap.G without occupying generic PBR map slots", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
+        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        const material = new MeshStandardMaterial();
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            normalCache: [],
+            materialProfile: "wuwa:rabbitfx",
+            toonShadows: true,
+        };
+        const diffuse = new Texture();
+        const normal = new Texture();
+        const firstLight = new Texture();
+        const secondLight = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([
+            ["diffuse", diffuse],
+            ["normal", normal],
+            ["light-a", firstLight],
+            ["light-b", secondLight],
+        ]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: "diffuse",
+                    normalMapKey: "normal",
+                    lightMapKey: "light-a",
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect(material.map).toBe(diffuse);
+        expect(material.normalMap).toBe(normal);
+        expect(material.aoMap).toBeNull();
+        expect(material.metalnessMap).toBeNull();
+        expect(material.roughnessMap).toBeNull();
+        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v1");
+
+        const shader = {
+            vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",
+            fragmentShader: "#include <common>\nvoid main() {\n#include <lights_fragment_begin>\n}",
+            uniforms: {},
+        };
+        material.onBeforeCompile(shader as never, {} as never);
+        expect(shader.vertexShader).toContain("vRabbitFXUv = uv");
+        expect(shader.fragmentShader).toContain("mask <= 0.01 || mask >= 0.99");
+        expect(shader.fragmentShader).toContain("step( 0.1, mask )");
+        expect(shader.fragmentShader).toContain("rabbitFXDirectDiffuseContribution");
+        expect(
+            shader.fragmentShader.match(/vec3 rabbitFXDirectDiffuseContribution;/g),
+        ).toHaveLength(1);
+        expect(shader.fragmentShader).not.toContain("#include <lights_fragment_begin>");
+        expect(
+            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
+        ).toBe(firstLight);
+        expect(
+            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXToonEnabled?.value,
+        ).toBe(1);
+
+        const version = material.version;
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: "diffuse",
+                    normalMapKey: "normal",
+                    lightMapKey: "light-b",
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+        expect(material.version).toBe(version);
+        expect(
+            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
+        ).toBe(secondLight);
+
+        setPayloadToonShadows(root, false);
+        expect(
+            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXToonEnabled?.value,
+        ).toBe(0);
+        expect(material.version).toBe(version);
+    });
+
+    it("keeps RabbitFX materials on the stock shader when primary UVs are absent", () => {
+        const mesh = meshWithTargets([0, 0, 0], []);
+        mesh.userData.materialProfile = "wuwa:rabbitfx";
+        mesh.userData.toonShadows = true;
+        const light = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["light", light]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: null,
+                    lightMapKey: "light",
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect((mesh.material as MeshStandardMaterial).userData.rabbitFXMaterial).toBeUndefined();
     });
 });
 

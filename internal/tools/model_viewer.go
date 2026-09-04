@@ -298,13 +298,6 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		}
 		iniValidateMs += time.Since(stageStartedAt).Milliseconds()
 		allSections = append(allSections, sections...)
-		for _, section := range sections {
-			for _, line := range section.Lines {
-				if modelViewerZZMIResourceRE.MatchString(line) {
-					transport.MaterialProfile = "zzmi"
-				}
-			}
-		}
 		iniParseMs += time.Since(stageStartedAt).Milliseconds()
 		stageStartedAt = time.Now()
 		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesAt(iniPath, folder, assetPath, sections, bufferCache, meshTiming)
@@ -329,6 +322,7 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	for _, work := range textureWorks {
 		textureJobs = append(textureJobs, work.jobs...)
 	}
+	transport.MaterialProfile = detectModelViewerMaterialProfile(allSections)
 	settings.MaterialProfile = transport.MaterialProfile
 	texturesByBatch, textureStats := runModelViewerTextureJobs(ctx, settings, len(textureWorks), textureJobs)
 	stageStartedAt = time.Now()
@@ -678,6 +672,9 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 				active = append(active, uint32(value))
 			}
 		}
+		if layoutName == "wwmi" {
+			reverseModelViewerTriangleWinding(active)
+		}
 		geoKey := fmt.Sprintf("%s|%d|%s|%s|%s|%d|%d|%d", strings.Join(task.entry.group.SourceFiles, "|"), task.entry.group.Stride, modelViewerLayoutKey(task.entry.layout), filepath.Join(modDir, filepath.FromSlash(task.entry.ib.Filename)), firstModelViewerString(task.entry.ib.Format, task.entry.layout.IndexFormat), task.draw.draw.StartIndex, task.draw.draw.IndexCount, task.draw.draw.BaseVertex)
 		geometry, geometryErr := cache.geometry(geoKey, func() (*modelViewerGeometry, error) {
 			geometry, err := extractModelViewerGeometry(task.entry.group.VB, task.entry.group.Stride, task.entry.layout, active, true, false, true, nil)
@@ -813,15 +810,25 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 		layout.IndexFormat = "DXGI_FORMAT_R32_UINT"
 	}
 	if layoutName == "wwmi" {
-		offset, texcoordOffset := 0, -1
+		byKind := make(map[string]modelViewerResource)
 		for _, resource := range resources {
 			typed := parseModelViewerWwmiResourceName(resource.Name)
 			if typed == nil || !modelViewerKeyMatches(typed.Key, group.Key, true) {
 				continue
 			}
-			switch typed.Kind {
+			byKind[typed.Kind] = resource
+		}
+		offset, texcoordOffset := 0, -1
+		for _, kind := range []string{"position", "vector", "blend", "color", "texcoord"} {
+			resource, exists := byKind[kind]
+			if !exists {
+				continue
+			}
+			switch kind {
 			case "position":
 				layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: offset, InputSlotClass: "per-vertex"})
+			case "vector":
+				layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: firstModelViewerString(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"), AlignedByteOffset: offset, InputSlotClass: "per-vertex"})
 			case "texcoord":
 				texcoordOffset = offset
 			}
@@ -1215,9 +1222,13 @@ func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []mo
 		resourceMap[key] = resource
 	}
 	var resourceNames []string
+	bindingRoles := make(map[string]string)
 	for _, binding := range bindings {
 		for _, name := range appendUniqueModelViewer(binding.TextureResourceNames, binding.DiffuseResourceName) {
 			resourceNames = appendUniqueModelViewer(resourceNames, name)
+		}
+		for key, role := range binding.TextureRoles {
+			bindingRoles[key] = role
 		}
 	}
 	for _, mesh := range meshes {
@@ -1237,7 +1248,10 @@ func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []mo
 		if !ok || resource.Filename == "" {
 			continue
 		}
-		role := classifyModelViewerTextureRole(name)
+		role := bindingRoles[resourceKey]
+		if role == "" {
+			role = classifyModelViewerTextureRole(name)
+		}
 		for _, mesh := range meshes {
 			for _, assignment := range mesh.textureAssignments {
 				if modelViewerNormalizeKey(assignment.resource) == resourceKey && assignment.role != "" {
@@ -1384,6 +1398,8 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 		transform modelViewerTextureTransform
 		format    string
 		quality   int
+		profile   string
+		role      string
 	}
 	prepareStartedAt := time.Now()
 	prepareWork := make(chan int)
@@ -1411,8 +1427,10 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 					variant := encodeVariant{
 						invert:    modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
 						transform: modelViewerTextureTransformFor(settings.MaterialProfile, job.role),
-						format:    format,
+						format:    modelViewerTextureFormatFor(settings.MaterialProfile, job.role, format),
 						quality:   quality,
+						profile:   settings.MaterialProfile,
+						role:      job.role,
 					}
 					texture, exists := variants[variant]
 					if !exists {

@@ -52,6 +52,7 @@ const (
 	KeyModelViewerToneMapping = "modelViewer.toneMapping"
 	KeyModelViewerEnvironment = "modelViewer.environment"
 	KeyModelViewerExposure    = "modelViewer.exposure"
+	KeyModelViewerToonShadows = "modelViewer.toonShadows"
 
 	KeyXXMIPersistToggles = "xxmi.persistToggles"
 )
@@ -126,6 +127,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerToneMapping, ScopeModelViewer, "model_viewer_tone_mapping"},
 	{KeyModelViewerEnvironment, ScopeModelViewer, "model_viewer_environment"},
 	{KeyModelViewerExposure, ScopeModelViewer, "model_viewer_exposure"},
+	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 }

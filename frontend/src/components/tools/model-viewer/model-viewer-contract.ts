@@ -106,6 +106,7 @@ export type ModelViewerSurfaceProps = {
     threeToneMapping?: ModelViewerThreeToneMapping;
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;
+    toonShadows?: boolean;
     onError?: (error: unknown) => void;
     onLoad?: () => void;
 };

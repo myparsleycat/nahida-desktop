@@ -106,6 +106,7 @@ export function ModelViewerDialog({
   const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
+  const [toonShadows, setToonShadows] = useState(false);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
@@ -158,8 +159,9 @@ export function ModelViewerDialog({
       getSetting("modelViewer.toneMapping"),
       getSetting("modelViewer.environment"),
       getSetting("modelViewer.exposure"),
+      getSetting("modelViewer.toonShadows"),
     ])
-      .then(([toneMapping, environment, exposure]) => {
+      .then(([toneMapping, environment, exposure, storedToonShadows]) => {
         if (cancelled) {
           return;
         }
@@ -167,6 +169,7 @@ export function ModelViewerDialog({
         setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
         setThreeEnvironment(normalizeThreeEnvironment(environment));
         setThreeExposure(clampThreeExposure(exposure));
+        setToonShadows(storedToonShadows === true);
       })
       .catch((error) => {
         console.error("Failed to load model viewer rendering settings", error);
@@ -244,6 +247,14 @@ export function ModelViewerDialog({
     void setSetting("modelViewer.exposure", nextValue).catch((error) => {
       console.error("Failed to persist model viewer exposure", error);
       toast.error("Failed to save exposure setting.");
+    });
+  };
+
+  const updateToonShadows = (value: boolean) => {
+    setToonShadows(value);
+    void setSetting("modelViewer.toonShadows", value).catch((error) => {
+      console.error("Failed to persist model viewer toon shadows", error);
+      toast.error("Failed to save toon shadow setting.");
     });
   };
 
@@ -456,6 +467,9 @@ export function ModelViewerDialog({
             exposure={threeExposure}
             onExposureDraftChange={(v) => setThreeExposure(v)}
             onExposureCommit={updateThreeExposure}
+            showToonShadows={payloadTransport?.materialProfile === "wuwa:rabbitfx"}
+            toonShadows={toonShadows}
+            onToonShadowsChange={updateToonShadows}
             showToggleViewer={showToggleViewer}
             isViewerBusy={false}
             onSaveTogglesToIni={handleSaveTogglesToIni}
@@ -482,6 +496,7 @@ export function ModelViewerDialog({
                   threeToneMapping={threeToneMapping}
                   threeEnvironment={threeEnvironment}
                   threeExposure={threeExposure}
+                  toonShadows={toonShadows}
                   onLoad={handleViewerLoad}
                   onError={handleViewerError}
                 />

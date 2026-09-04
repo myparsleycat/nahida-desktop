@@ -50,6 +50,89 @@ filename = body.png`)
 	}
 }
 
+func TestModelViewerRabbitFXTextureBindingPreservesSemanticRoles(t *testing.T) {
+	sections := parseModINI(`[TextureOverrideBody]
+ib = ResourceBodyIB
+Resource\RabbitFX\Diffuse = ref ResourceTexture15
+Resource\RabbitFX\NormalMap = ref ResourceTexture17
+Resource\RabbitFX\LightMap = ref ResourceTexture16
+Resource\RabbitFX\MaterialMap = ref ResourceTexture18
+
+[ResourceTexture15]
+filename = diffuse.dds
+
+[ResourceTexture16]
+filename = light.dds
+
+[ResourceTexture17]
+filename = normal.dds
+
+[ResourceTexture18]
+filename = material.dds`)
+	bindings := collectModelViewerTextureBindings(sections, nil)
+	if len(bindings) != 1 {
+		t.Fatalf("bindings = %#v", bindings)
+	}
+	binding := bindings[0]
+	if binding.DiffuseResourceName != "Texture15" {
+		t.Fatalf("diffuse = %q, want Texture15", binding.DiffuseResourceName)
+	}
+	want := map[string]string{
+		"texture15": "diffuse",
+		"texture16": "light_map",
+		"texture17": "normal_map",
+		"texture18": "material_map",
+	}
+	for key, role := range want {
+		if binding.TextureRoles[key] != role {
+			t.Fatalf("role[%q] = %q, want %q; roles=%#v", key, binding.TextureRoles[key], role, binding.TextureRoles)
+		}
+	}
+}
+
+func TestDetectModelViewerMaterialProfile(t *testing.T) {
+	tests := []struct {
+		name, ini, want string
+	}{
+		{
+			name: "WWMI and RabbitFX",
+			ini: `[Constants]
+global $required_wwmi_version = 0.70
+[CommandListTextures]
+Resource\RabbitFX\NormalMap = ref ResourceTexture17
+run = CommandList\RabbitFX\SetTextures`,
+			want: "wuwa:rabbitfx",
+		},
+		{
+			name: "case insensitive WWMI marker",
+			ini: `[CommandListTextures]
+$\wwmiv1\shapekey_id = 3
+resource\rabbitfx\diffuse = ref ResourceTexture15`,
+			want: "wuwa:rabbitfx",
+		},
+		{name: "RabbitFX without WWMI", ini: `[CommandListTextures]
+Resource\RabbitFX\Diffuse = ref ResourceTexture15`, want: ""},
+		{name: "existing ZZMI", ini: `[CommandListTextures]
+Resource\ZZMI\Diffuse = ref ResourceTexture15`, want: "zzmi"},
+		{
+			name: "strong WWMI RabbitFX wins stray ZZMI resource",
+			ini: `[Constants]
+global $required_wwmi_version = 0.70
+[CommandListTextures]
+Resource\RabbitFX\Diffuse = ref ResourceTexture15
+Resource\ZZMI\NormalMap = ref ResourceUnused`,
+			want: "wuwa:rabbitfx",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := detectModelViewerMaterialProfile(parseModINI(test.ini)); got != test.want {
+				t.Fatalf("profile = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestPrepareModelViewerTextureDecodesUncompressedDDS(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "body.dds")
 	if err := os.WriteFile(path, encodeUncompressedDDS(color.NRGBA{R: 12, G: 34, B: 56, A: 255}), 0o600); err != nil {
@@ -174,6 +257,8 @@ func TestModelViewerTextureTransformForProfileAndRole(t *testing.T) {
 		{name: "zzmi diffuse", profile: "zzmi", role: "diffuse", want: modelViewerTextureTransformPassthrough},
 		{name: "zzmi light map", profile: "zzmi", role: "light_map", want: modelViewerTextureTransformPassthrough},
 		{name: "zzmi material map", profile: "zzmi", role: "material_map", want: modelViewerTextureTransformPassthrough},
+		{name: "RabbitFX normal", profile: "wuwa:rabbitfx", role: "normal_map", want: modelViewerTextureTransformNormalXYReconstruct},
+		{name: "RabbitFX light map", profile: "wuwa:rabbitfx", role: "light_map", want: modelViewerTextureTransformPassthrough},
 		{name: "gimi normal", profile: "gimi", role: "normal_map", want: modelViewerTextureTransformPassthrough},
 		{name: "unprofiled normal", role: "normal_map", want: modelViewerTextureTransformPassthrough},
 	}
@@ -183,6 +268,23 @@ func TestModelViewerTextureTransformForProfileAndRole(t *testing.T) {
 				t.Fatalf("modelViewerTextureTransformFor(%q, %q) = %q, want %q", test.profile, test.role, got, test.want)
 			}
 		})
+	}
+}
+
+func TestModelViewerTextureFormatForProfileAndRole(t *testing.T) {
+	tests := []struct {
+		profile, role, requested, want string
+	}{
+		{profile: "wuwa:rabbitfx", role: "normal_map", requested: "jpeg-safe", want: "png"},
+		{profile: "wuwa:rabbitfx", role: "light_map", requested: "jpeg-force", want: "png"},
+		{profile: "wuwa:rabbitfx", role: "material_map", requested: "jpeg-safe", want: "png"},
+		{profile: "wuwa:rabbitfx", role: "diffuse", requested: "jpeg-safe", want: "jpeg-safe"},
+		{profile: "zzmi", role: "light_map", requested: "jpeg-safe", want: "jpeg-safe"},
+	}
+	for _, test := range tests {
+		if got := modelViewerTextureFormatFor(test.profile, test.role, test.requested); got != test.want {
+			t.Errorf("formatFor(%q, %q, %q) = %q, want %q", test.profile, test.role, test.requested, got, test.want)
+		}
 	}
 }
 
@@ -288,6 +390,38 @@ func TestRunModelViewerTextureJobsKeepsZZMINormalTransformVariant(t *testing.T) 
 	}
 }
 
+func TestRunModelViewerTextureJobsUsesLosslessRabbitFXPackedMaps(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "packed.png")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	input.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
+	if err = png.Encode(file, input); err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := modelViewerTextureSettings{TextureFormat: "jpeg-force", JPEGQuality: 85, MaterialProfile: "wuwa:rabbitfx"}
+	output, stats := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
+		{path: path, resourceName: "Texture15", keys: []string{"diffuse"}, role: "diffuse", canonicalKey: "diffuse"},
+		{path: path, resourceName: "Texture17", keys: []string{"normal"}, role: "normal_map", canonicalKey: "normal"},
+		{path: path, resourceName: "Texture16", keys: []string{"light"}, role: "light_map", canonicalKey: "light"},
+	})
+	if stats.Decodes != 1 || stats.Encodes != 3 || stats.LogicalTextures != 3 {
+		t.Fatalf("stats = %#v", stats)
+	}
+	if output[0]["diffuse"].MIMEType != "image/jpeg" || output[0]["normal"].MIMEType != "image/png" || output[0]["light"].MIMEType != "image/png" {
+		t.Fatalf("payload formats = diffuse:%q normal:%q light:%q", output[0]["diffuse"].MIMEType, output[0]["normal"].MIMEType, output[0]["light"].MIMEType)
+	}
+	if pixel := decodeModelViewerTestPNGPixel(t, output[0]["normal"].Bytes, 0, 0); pixel != (color.NRGBA{R: 128, G: 128, B: 255, A: 255}) {
+		t.Fatalf("normal pixel = %#v", pixel)
+	}
+}
+
 func TestRunModelViewerTextureJobsDeduplicatesZZMINormalTransform(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "packed-normal.png")
@@ -319,8 +453,8 @@ func TestRunModelViewerTextureJobsScopesZZMINormalTransform(t *testing.T) {
 		encodes  int
 		wantBlue uint8
 	}{
-		{name: "zzmi non-normal roles", profile: "zzmi", roles: []string{"diffuse", "light_map", "material_map"}, encodes: 1, wantBlue: 17},
-		{name: "non-zzmi normal", profile: "gimi", roles: []string{"diffuse", "normal_map"}, encodes: 1, wantBlue: 17},
+		{name: "zzmi non-normal roles", profile: "zzmi", roles: []string{"diffuse", "light_map", "material_map"}, encodes: 3, wantBlue: 17},
+		{name: "non-zzmi normal", profile: "gimi", roles: []string{"diffuse", "normal_map"}, encodes: 2, wantBlue: 17},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

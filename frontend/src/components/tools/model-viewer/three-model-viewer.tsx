@@ -59,6 +59,7 @@ import {
   commitPayloadEval,
   type PreparedPayloadEval,
   preparePayloadEval,
+  setPayloadToonShadows,
 } from "./model-viewer-payload";
 import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
@@ -122,6 +123,7 @@ export const ThreeModelViewer = memo(
       threeEnvironment = "studio",
       threeExposure = 1,
       threeToneMapping = "neutral",
+      toonShadows = false,
       variantState,
     },
     ref,
@@ -204,6 +206,7 @@ export const ThreeModelViewer = memo(
             threeEnvironment={threeEnvironment}
             threeExposure={threeExposure}
             threeToneMapping={threeToneMapping}
+            toonShadows={toonShadows}
             onError={onError}
             onLoad={onLoad}
             payloadEval={payloadEval}
@@ -231,6 +234,7 @@ function ThreeModelScene({
   threeEnvironment = "studio",
   threeExposure = 1,
   threeToneMapping = "neutral",
+  toonShadows = false,
   variantState,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
@@ -247,6 +251,7 @@ function ThreeModelScene({
   const onErrorRef = useRef(onError);
   const payloadEvalRef = useRef(payloadEval);
   const payloadTransportRef = useRef(payloadTransport);
+  const toonShadowsRef = useRef(toonShadows);
   const animationClipRef = useRef(animationClip);
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
@@ -441,6 +446,7 @@ function ThreeModelScene({
         payloadEvalRef.current ?? { state: {}, meshes: [] },
         true,
         positionLoader,
+        toonShadowsRef.current,
       )
         .then((nextRoot) => {
           if (disposed || pendingLoadIdRef.current !== loadId) {
@@ -517,6 +523,15 @@ function ThreeModelScene({
       disposed = true;
     };
   }, [payloadTransport, src]);
+
+  useEffect(() => {
+    toonShadowsRef.current = toonShadows;
+    if (!modelRoot) {
+      return;
+    }
+    setPayloadToonShadows(modelRoot, toonShadows);
+    invalidate();
+  }, [invalidate, modelRoot, toonShadows]);
 
   useEffect(() => {
     if (!modelRoot || !payloadEval || !payloadTransport) {

@@ -7,13 +7,16 @@ import type {
 import {
     BufferAttribute,
     BufferGeometry,
+    DataTexture,
     DoubleSide,
     Group,
     Mesh,
     MeshStandardMaterial,
     Object3D,
-    LinearSRGBColorSpace,
+    NoColorSpace,
+    RGBAFormat,
     SRGBColorSpace,
+    ShaderChunk,
     Texture,
     TextureLoader,
 } from "three";
@@ -34,6 +37,7 @@ type PayloadMeshUserData = {
     sourceIndicesUrl?: string;
     normalCache: Array<{ key: number; normal: Float32Array }>;
     materialProfile?: ModViewerTransport["materialProfile"];
+    toonShadows: boolean;
     lastPositionVariantIndex?: number | null;
     lastMaps?: {
         texKey: string | null;
@@ -43,7 +47,21 @@ type PayloadMeshUserData = {
     };
 };
 
+type RabbitFXShaderState = {
+    lightMap: { value: Texture };
+    lightMapEnabled: { value: number };
+    toonEnabled: { value: number };
+};
+
 const textureLoader = new TextureLoader();
+const rabbitFXFallbackLightMap = new DataTexture(
+    new Uint8Array([255, 255, 255, 255]),
+    1,
+    1,
+    RGBAFormat,
+);
+rabbitFXFallbackLightMap.colorSpace = NoColorSpace;
+rabbitFXFallbackLightMap.needsUpdate = true;
 
 export type PreparedPayloadEval = {
     evalResult: EvaluatedViewerState;
@@ -55,6 +73,7 @@ export async function buildPayloadModel(
     evalResult: EvaluatedViewerState,
     doubleSided: boolean,
     positionLoader: PositionVariantLoader,
+    toonShadows = false,
 ): Promise<Group> {
     const textureCache = new Map<string, Promise<Texture | null>>();
     const textures = new Map<string, Texture>();
@@ -62,8 +81,7 @@ export async function buildPayloadModel(
         Object.entries(transport.textures).map(async ([key, entry]) => {
             const texture = await loadTexture(entry.url, textureCache);
             if (texture) {
-                texture.colorSpace =
-                    entry.role === "diffuse" ? SRGBColorSpace : LinearSRGBColorSpace;
+                texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
                 textures.set(key, texture);
             }
         }),
@@ -75,10 +93,11 @@ export async function buildPayloadModel(
     try {
         for (const mesh of transport.meshes) {
             const geometry = await buildGeometry(mesh);
+            const rabbitFX = transport.materialProfile === "wuwa:rabbitfx";
             const material = new MeshStandardMaterial({
                 color: 0xffffff,
-                metalness: 0.05,
-                roughness: 0.65,
+                metalness: rabbitFX ? 0 : 0.05,
+                roughness: rabbitFX ? 1 : 0.65,
                 side: doubleSided ? DoubleSide : undefined,
             });
             const object = new Mesh(geometry, material);
@@ -103,6 +122,7 @@ export async function buildPayloadModel(
                 sourceIndicesUrl: mesh.sourceIndicesUrl,
                 normalCache: [],
                 materialProfile: transport.materialProfile,
+                toonShadows,
             } satisfies PayloadMeshUserData;
         }
         commitPayloadEval(group, await preparePayloadEval(group, evalResult, positionLoader));
@@ -115,6 +135,24 @@ export async function buildPayloadModel(
 
 export function applyPayloadEval(root: Object3D, evalResult: EvaluatedViewerState): void {
     commitPayloadEval(root, { evalResult, positions: new Map() });
+}
+
+export function setPayloadToonShadows(root: Object3D, enabled: boolean): void {
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.toonShadows = enabled;
+        const material = object.material;
+        if (!(material instanceof MeshStandardMaterial)) {
+            return;
+        }
+        const state = material.userData.rabbitFXMaterial as RabbitFXShaderState | undefined;
+        if (state) {
+            state.toonEnabled.value = enabled ? 1 : 0;
+        }
+    });
 }
 
 export async function preparePayloadEval(
@@ -249,6 +287,8 @@ function applyEvaluatedMaps(
 ): void {
     if (userData.materialProfile === "zzmi") {
         configurePackedMaterialShader(material);
+    } else if (userData.materialProfile === "wuwa:rabbitfx" && object.geometry.attributes.uv) {
+        configureRabbitFXMaterialShader(material, userData.toonShadows);
     }
     const last = userData.lastMaps;
     if (
@@ -260,9 +300,18 @@ function applyEvaluatedMaps(
     ) {
         return;
     }
+    const hadMap = Boolean(material.map);
+    const hadNormalMap = Boolean(material.normalMap);
+    const hadMetalnessMap = Boolean(material.metalnessMap);
+    const hadRoughnessMap = Boolean(material.roughnessMap);
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
+    const canUseDerivativeTangentFrame =
+        userData.materialProfile === "wuwa:rabbitfx" &&
+        object.geometry.attributes.normal &&
+        object.geometry.attributes.uv;
     material.normalMap =
-        evaluated.normalMapKey && object.geometry.attributes.tangent
+        evaluated.normalMapKey &&
+        (object.geometry.attributes.tangent || canUseDerivativeTangentFrame)
             ? (textures.get(evaluated.normalMapKey) ?? null)
             : null;
     if (material.normalMap) {
@@ -276,13 +325,37 @@ function applyEvaluatedMaps(
         userData.materialProfile === "zzmi" && evaluated.lightMapKey
             ? (textures.get(evaluated.lightMapKey) ?? null)
             : null;
-    material.metalness = material.metalnessMap ? 1 : 0.05;
+    material.metalness = material.metalnessMap
+        ? 1
+        : userData.materialProfile === "wuwa:rabbitfx"
+          ? 0
+          : 0.05;
     material.roughnessMap =
         userData.materialProfile === "zzmi" && evaluated.materialMapKey
             ? (textures.get(evaluated.materialMapKey) ?? null)
             : null;
-    material.roughness = material.roughnessMap ? 1 : 0.65;
-    material.needsUpdate = true;
+    material.roughness = material.roughnessMap
+        ? 1
+        : userData.materialProfile === "wuwa:rabbitfx"
+          ? 1
+          : 0.65;
+    const rabbitFXState = material.userData.rabbitFXMaterial as RabbitFXShaderState | undefined;
+    const rabbitFXLightMap =
+        userData.materialProfile === "wuwa:rabbitfx" && evaluated.lightMapKey
+            ? (textures.get(evaluated.lightMapKey) ?? null)
+            : null;
+    if (rabbitFXState) {
+        rabbitFXState.lightMap.value = rabbitFXLightMap ?? rabbitFXFallbackLightMap;
+        rabbitFXState.lightMapEnabled.value = rabbitFXLightMap ? 1 : 0;
+    }
+    if (
+        hadMap !== Boolean(material.map) ||
+        hadNormalMap !== Boolean(material.normalMap) ||
+        hadMetalnessMap !== Boolean(material.metalnessMap) ||
+        hadRoughnessMap !== Boolean(material.roughnessMap)
+    ) {
+        material.needsUpdate = true;
+    }
     userData.lastMaps = {
         texKey: evaluated.texKey,
         normalMapKey: evaluated.normalMapKey,
@@ -316,6 +389,97 @@ function configurePackedMaterialShader(material: MeshStandardMaterial): void {
             );
     };
     material.customProgramCacheKey = () => "zzmi-packed-material-v1";
+}
+
+function configureRabbitFXMaterialShader(
+    material: MeshStandardMaterial,
+    toonShadows: boolean,
+): void {
+    if (material.userData.rabbitFXMaterial) {
+        return;
+    }
+    const state: RabbitFXShaderState = {
+        lightMap: { value: rabbitFXFallbackLightMap },
+        lightMapEnabled: { value: 0 },
+        toonEnabled: { value: toonShadows ? 1 : 0 },
+    };
+    material.userData.rabbitFXMaterial = state;
+    material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+        shader.uniforms.rabbitFXLightMap = state.lightMap;
+        shader.uniforms.rabbitFXLightMapEnabled = state.lightMapEnabled;
+        shader.uniforms.rabbitFXToonEnabled = state.toonEnabled;
+        shader.vertexShader = replaceRabbitFXShaderAnchor(
+            shader.vertexShader,
+            "#include <common>",
+            `#include <common>
+varying vec2 vRabbitFXUv;`,
+        );
+        shader.vertexShader = replaceRabbitFXShaderAnchor(
+            shader.vertexShader,
+            "#include <uv_vertex>",
+            `#include <uv_vertex>
+vRabbitFXUv = uv;`,
+        );
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <common>",
+            `#include <common>
+varying vec2 vRabbitFXUv;
+uniform sampler2D rabbitFXLightMap;
+uniform float rabbitFXLightMapEnabled;
+uniform float rabbitFXToonEnabled;
+
+float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection ) {
+    if ( rabbitFXLightMapEnabled < 0.5 ) return 1.0;
+    float mask = texture2D( rabbitFXLightMap, vRabbitFXUv ).g;
+    if ( mask <= 0.01 || mask >= 0.99 ) return 1.0;
+    float visibility = step( 0.1, mask );
+    float boundary = smoothstep( 0.55, 0.81, dot( surfaceNormal, lightDirection ) + 0.4 );
+    return mix( 1.0, boundary * visibility, rabbitFXToonEnabled );
+}`,
+        );
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <lights_fragment_begin>",
+            patchRabbitFXDirectionalLights(ShaderChunk.lights_fragment_begin),
+        );
+    };
+    material.customProgramCacheKey = () => "wuwa-rabbitfx-v1";
+    material.needsUpdate = true;
+}
+
+function patchRabbitFXDirectionalLights(source: string): string {
+    const startAnchor = "#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )";
+    const endAnchor = "#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )";
+    const start = source.indexOf(startAnchor);
+    const end = source.indexOf(endAnchor, start + startAnchor.length);
+    if (start < 0 || end < 0 || source.indexOf(startAnchor, start + 1) >= 0) {
+        throw new Error("Three.js directional-light shader anchor changed");
+    }
+    const declarationsAnchor = "\tDirectionalLight directionalLight;";
+    const section = replaceRabbitFXShaderAnchor(
+        source.slice(start, end),
+        declarationsAnchor,
+        `${declarationsAnchor}
+    vec3 rabbitFXDirectDiffuseBefore;
+    vec3 rabbitFXDirectDiffuseContribution;`,
+    );
+    const directCall =
+        "\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );";
+    const replacement = `        rabbitFXDirectDiffuseBefore = reflectedLight.directDiffuse;
+        RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+        rabbitFXDirectDiffuseContribution = reflectedLight.directDiffuse - rabbitFXDirectDiffuseBefore;
+        reflectedLight.directDiffuse = rabbitFXDirectDiffuseBefore + rabbitFXDirectDiffuseContribution * rabbitFXDirectionalDiffuseFactor( geometryNormal, directLight.direction );`;
+    const patchedSection = replaceRabbitFXShaderAnchor(section, directCall, replacement);
+    return source.slice(0, start) + patchedSection + source.slice(end);
+}
+
+function replaceRabbitFXShaderAnchor(source: string, anchor: string, replacement: string): string {
+    const first = source.indexOf(anchor);
+    if (first < 0 || source.indexOf(anchor, first + anchor.length) >= 0) {
+        throw new Error(`Three.js shader anchor changed: ${anchor}`);
+    }
+    return source.slice(0, first) + replacement + source.slice(first + anchor.length);
 }
 
 function applyPositionVariant(

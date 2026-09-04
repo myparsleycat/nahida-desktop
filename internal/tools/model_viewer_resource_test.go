@@ -34,3 +34,30 @@ func TestModelViewerResourceGrouping(t *testing.T) {
 		t.Fatalf("groups = %#v", groups)
 	}
 }
+
+func TestInferModelViewerWWMILayoutUsesInterleaveOrder(t *testing.T) {
+	resources := []modelViewerResource{
+		{Name: "ColorBuffer", Stride: 4, Format: "DXGI_FORMAT_R8G8B8A8_UNORM"},
+		{Name: "PositionBuffer", Stride: 12, Format: "DXGI_FORMAT_R32G32B32_FLOAT"},
+		{Name: "TexCoordBuffer", Stride: 16, Format: "DXGI_FORMAT_R16G16_FLOAT"},
+		{Name: "BlendBuffer", Stride: 8, Format: "DXGI_FORMAT_R8_UINT"},
+		{Name: "VectorBuffer", Stride: 8, Format: "DXGI_FORMAT_R8G8B8A8_SNORM"},
+	}
+	layout, err := inferModelViewerFmtLayout(
+		modelViewerBufferGroup{Key: "IndexBuffer", Stride: 48},
+		resources,
+		"wwmi",
+		"DXGI_FORMAT_R32_UINT",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normal := findModelViewerElement(layout, "NORMAL", -1)
+	texcoord := findModelViewerElement(layout, "TEXCOORD", 0)
+	if normal == nil || normal.AlignedByteOffset != 12 || normal.Format != "DXGI_FORMAT_R8G8B8A8_SNORM" {
+		t.Fatalf("normal = %#v", normal)
+	}
+	if texcoord == nil || texcoord.AlignedByteOffset != 32 {
+		t.Fatalf("texcoord = %#v", texcoord)
+	}
+}

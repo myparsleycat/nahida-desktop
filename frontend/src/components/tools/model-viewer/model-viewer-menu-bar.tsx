@@ -64,6 +64,9 @@ export interface ModelViewerMenuBarProps {
   exposure: number;
   onExposureDraftChange: (value: number) => void;
   onExposureCommit: (value: number) => void;
+  showToonShadows?: boolean;
+  toonShadows?: boolean;
+  onToonShadowsChange?: (value: boolean) => void;
 
   /* Toggle (variant mode only) */
   showToggleViewer: boolean;
@@ -98,6 +101,9 @@ export function ModelViewerMenuBar({
   exposure,
   onExposureDraftChange,
   onExposureCommit,
+  showToonShadows = false,
+  toonShadows = false,
+  onToonShadowsChange,
   showToggleViewer,
   isViewerBusy,
   onSaveTogglesToIni,
@@ -332,6 +338,19 @@ export function ModelViewerMenuBar({
                 </div>
               </div>
             </MenubarGroup>
+            {showToonShadows ? (
+              <>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarCheckboxItem
+                    checked={toonShadows}
+                    onCheckedChange={(checked) => onToonShadowsChange?.(checked === true)}
+                  >
+                    Toon Shadows
+                  </MenubarCheckboxItem>
+                </MenubarGroup>
+              </>
+            ) : null}
           </MenubarContent>
         </MenubarMenu>
       ) : null}

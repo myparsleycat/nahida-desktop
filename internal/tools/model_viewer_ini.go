@@ -36,7 +36,27 @@ var (
 	modelViewerVariableUseRE  = regexp.MustCompile(`\$(\w+)`)
 	modelViewerVariableDeclRE = regexp.MustCompile(`(?i)^global\s+(?:persist\s+)?\$(\w+)\b`)
 	modelViewerZZMIResourceRE = regexp.MustCompile(`(?i)Resource\\ZZMI\\(?:Diffuse|NormalMap|LightMap|MaterialMap)`)
+	modelViewerWWMIMarkerRE   = regexp.MustCompile(`(?i)(?:global\s+\$required_wwmi_version\b|(?:Resource|CommandList|\$)\\WWMIv1\\)`)
+	modelViewerRabbitFXRE     = regexp.MustCompile(`(?i)(?:Resource\\RabbitFX\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|run\s*=\s*CommandList\\RabbitFX\\SetTextures\b)`)
 )
+
+func detectModelViewerMaterialProfile(sections []modINISection) string {
+	wwmi, rabbitFX, zzmi := false, false, false
+	for _, section := range sections {
+		for _, line := range section.Lines {
+			wwmi = wwmi || modelViewerWWMIMarkerRE.MatchString(line)
+			rabbitFX = rabbitFX || modelViewerRabbitFXRE.MatchString(line)
+			zzmi = zzmi || modelViewerZZMIResourceRE.MatchString(line)
+		}
+	}
+	if wwmi && rabbitFX {
+		return "wuwa:rabbitfx"
+	}
+	if zzmi {
+		return "zzmi"
+	}
+	return ""
+}
 
 // parseModelViewerINI is the Go equivalent of Electron's parseIniText. It is
 // intentionally separate from parseModINI because the latter is shared by

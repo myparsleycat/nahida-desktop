@@ -111,6 +111,9 @@ func modelViewerTextureAssignment(key, value, sectionName string) (string, strin
 	sectionRole := hashTextureSuffixRE.FindString(sectionName)
 	channel := ""
 	authored := false
+	if role, ok := modelViewerSemanticTextureRole(normalizedKey); ok {
+		return role, resource, role == "diffuse", true
+	}
 	switch {
 	case strings.Contains(normalizedKey, "normalmap"):
 		channel = "normal_map"
@@ -158,6 +161,24 @@ func modelViewerTextureAssignment(key, value, sectionName string) (string, strin
 		return "", "", false, false
 	}
 	return channel, resource, authored, true
+}
+
+func modelViewerSemanticTextureRole(key string) (string, bool) {
+	normalized := modelViewerNormalizeKey(key)
+	for _, namespace := range []string{"gimi", "zzmi", "rabbitfx", "wwmi"} {
+		prefix := "resource" + namespace
+		switch normalized {
+		case prefix + "diffuse":
+			return "diffuse", true
+		case prefix + "normalmap":
+			return "normal_map", true
+		case prefix + "lightmap":
+			return "light_map", true
+		case prefix + "materialmap":
+			return "material_map", true
+		}
+	}
+	return "", false
 }
 
 func dedupeModelViewerDirectDrawRecords(records []modelViewerDirectDrawRecord) []modelViewerDirectDrawRecord {
@@ -270,6 +291,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 	}
 	stageStartedAt = time.Now()
 	resources := collectModelViewerResources(sections)
+	layoutName := detectModelViewerLayout(sections, resources)
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
 		resourceMap[modelViewerNormalizeKey(resource.Name)] = resource
@@ -292,7 +314,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		if state.ib == "" {
 			state.ib = globalBuffers.ib
 		}
-		if state.vb0 == "" || state.vb1 == "" {
+		if state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "" {
 			hash := extractSectionHash(record.sectionName)
 			if hash == "" {
 				hash = extractSectionHash(state.ib)
@@ -315,10 +337,10 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 					state.vb1 = lookupModelViewerComponentValue(componentTexcoords, component)
 				}
 			}
-			if (state.vb0 == "" || state.vb1 == "") && globalBuffers.vb0 != "" && globalBuffers.vb1 != "" {
+			if (state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "") && globalBuffers.vb0 != "" && globalBuffers.vb1 != "" {
 				state.vb0 = globalBuffers.vb0
 				state.vb1 = globalBuffers.vb1
-				state.vb2 = ""
+				state.vb2 = globalBuffers.vb2
 			}
 		}
 		ib, ibOK := resourceMap[modelViewerNormalizeKey(state.ib)]
@@ -326,12 +348,18 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		if !ibOK || !posOK || ib.Filename == "" || position.Filename == "" {
 			continue
 		}
+		vectorName := ""
 		texcoordName := state.vb1
+		if layoutName == "wwmi" {
+			vectorName = state.vb1
+			texcoordName = state.vb2
+		}
+		vector, vectorOK := resourceMap[modelViewerNormalizeKey(vectorName)]
 		texcoord, tcOK := resourceMap[modelViewerNormalizeKey(texcoordName)]
-		if !tcOK || texcoord.Filename == "" {
+		if !tcOK || texcoord.Filename == "" || layoutName == "wwmi" && (!vectorOK || vector.Filename == "") {
 			continue
 		}
-		geometryKey := fmt.Sprintf("%s|%s|%s|%s|%d|%d|%t", record.sectionName, ib.Filename, position.Filename, texcoord.Filename, record.draw.IndexCount, record.draw.StartIndex, record.auto)
+		geometryKey := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%t", record.sectionName, ib.Filename, position.Filename, vector.Filename, texcoord.Filename, record.draw.IndexCount, record.draw.StartIndex, record.auto)
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, conditions)
@@ -360,6 +388,9 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		for _, index := range indices[record.draw.StartIndex:end] {
 			active = append(active, index+uint32(record.draw.BaseVertex))
 		}
+		if layoutName == "wwmi" {
+			reverseModelViewerTriangleWinding(active)
+		}
 		posStride := position.Stride
 		if posStride <= 0 {
 			posStride = 40
@@ -368,13 +399,50 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		if tcStride <= 0 {
 			tcStride = 20
 		}
-		buffers, buffersErr := cache.paired(filepath.Join(modDir, filepath.FromSlash(position.Filename)), posStride, filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)), tcStride)
-		if buffersErr != nil {
-			continue
+		var combined []byte
+		var stride, uvOffset int
+		var uvFormat string
+		hasFrame := false
+		layout := modelViewerFmtLayout{Topology: "trianglelist", IndexFormat: ib.Format}
+		if layoutName == "wwmi" {
+			vectorStride := vector.Stride
+			if vectorStride <= 0 {
+				vectorStride = 8
+			}
+			parts, readErr := readModelViewerResourceSet(modDir, []*modelViewerResource{&position, &vector, &texcoord}, cache)
+			if readErr != nil {
+				continue
+			}
+			strides := []int{posStride, vectorStride, tcStride}
+			key := strings.ToLower(strings.Join([]string{position.Filename, vector.Filename, texcoord.Filename}, "|")) + "#" + fmt.Sprint(strides)
+			var buffersErr error
+			combined, stride, buffersErr = cache.interleavedBuffers(key, func() ([]byte, int, error) {
+				bytes, combinedStride, _, combineErr := interleaveModelViewerBuffers(parts, strides)
+				return bytes, combinedStride, combineErr
+			})
+			if buffersErr != nil {
+				continue
+			}
+			uvOffset, uvFormat = detectModelViewerUVBest(combined, stride, posStride+vectorStride, tcStride)
+			vectorFormat := firstModelViewerString(vector.Format, "DXGI_FORMAT_R8G8B8A8_SNORM")
+			layout = modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: ib.Format, Elements: []modelViewerFmtElement{
+				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
+				{SemanticName: "NORMAL", Format: vectorFormat, AlignedByteOffset: posStride, InputSlotClass: "per-vertex"},
+				{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"},
+			}}
+		} else {
+			buffers, buffersErr := cache.paired(filepath.Join(modDir, filepath.FromSlash(position.Filename)), posStride, filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)), tcStride)
+			if buffersErr != nil {
+				continue
+			}
+			combined, stride, uvOffset, uvFormat = buffers.combined, buffers.stride, buffers.uvOffset, buffers.uvFormat
+			hasFrame = buffers.hasFrame
+			layout = modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: ib.Format, Elements: []modelViewerFmtElement{
+				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
+				{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"},
+			}}
 		}
-		combined, stride, uvOffset, uvFormat := buffers.combined, buffers.stride, buffers.uvOffset, buffers.uvFormat
-		layout := modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: ib.Format, Elements: []modelViewerFmtElement{{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"}, {SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"}}}
-		if posStride >= 40 && buffers.hasFrame {
+		if posStride >= 40 && hasFrame {
 			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
 		}
 		stageStartedAt = time.Now()
@@ -465,6 +533,9 @@ func collectModelViewerGlobalBuffers(sections []modINISection, variables map[str
 		}
 		if global.vb1 == "" {
 			global.vb1 = unconditional("vb1")
+		}
+		if global.vb2 == "" {
+			global.vb2 = unconditional("vb2")
 		}
 	}
 

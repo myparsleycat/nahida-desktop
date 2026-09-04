@@ -100,4 +100,28 @@ describe("normalizeModelViewerTransport", () => {
 
         expect(normalizeModelViewerTransport(input).animations).toEqual([]);
     });
+
+    it("preserves supported material profiles and rejects unknown profiles", () => {
+        const base = {
+            memorySessionId: "session",
+            iniPath: "mod.ini",
+            modPath: "mod",
+            name: "Example",
+            meshes: null,
+            textures: null,
+            variables: null,
+            defaultState: null,
+            stateRules: null,
+            uiAssets: {},
+            animations: null,
+        } satisfies WailsModelViewerTransport;
+
+        expect(
+            normalizeModelViewerTransport({ ...base, materialProfile: "wuwa:rabbitfx" })
+                .materialProfile,
+        ).toBe("wuwa:rabbitfx");
+        expect(
+            normalizeModelViewerTransport({ ...base, materialProfile: "unknown" }).materialProfile,
+        ).toBeUndefined();
+    });
 });

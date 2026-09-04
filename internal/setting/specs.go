@@ -402,6 +402,7 @@ func buildSpecs() map[string]spec {
 				return formatFloat(clampModelViewerExposure(n))
 			},
 		},
+		KeyModelViewerToonShadows: boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
 
 		KeyXXMIPersistToggles: {
 			def:        definitionsByKey[KeyXXMIPersistToggles],

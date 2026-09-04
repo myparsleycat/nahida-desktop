@@ -173,6 +173,12 @@ func modelViewerCompactIndices(indices []uint32, vertexCount int, warn func(stri
 	return remapped, sources, true
 }
 
+func reverseModelViewerTriangleWinding(indices []uint32) {
+	for start := 0; start+2 < len(indices); start += 3 {
+		indices[start+1], indices[start+2] = indices[start+2], indices[start+1]
+	}
+}
+
 func ensureModelViewerVec4(data []float32, vertexCount, width int, fillW float32) []float32 {
 	if width == 4 {
 		return data

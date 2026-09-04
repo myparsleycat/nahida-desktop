@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -49,6 +50,93 @@ drawindexed = 3, 0, 0`)
 	}
 	if !states["BodyIB:Pos"] || !states["AltIB:AltPos"] || records[0].conditions[0][0].Negate == records[1].conditions[0][0].Negate {
 		t.Fatalf("states=%v records=%#v", states, records)
+	}
+}
+
+func TestModelViewerWWMIDirectGeometryUsesVectorAndVB2Texcoord(t *testing.T) {
+	dir := t.TempDir()
+	iniText := `[Constants]
+global $required_wwmi_version = 0.70
+[TextureOverrideComponent]
+run = CommandListOverrideSharedResources
+drawindexed = 3, 0, 0
+[CommandListOverrideSharedResources]
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceVectorBuffer
+vb2 = ResourceTexCoordBuffer
+[ResourceIndexBuffer]
+filename = index.buf
+format = DXGI_FORMAT_R32_UINT
+[ResourcePositionBuffer]
+filename = position.buf
+format = DXGI_FORMAT_R32G32B32_FLOAT
+stride = 12
+[ResourceVectorBuffer]
+filename = vector.buf
+format = DXGI_FORMAT_R8G8B8A8_SNORM
+stride = 8
+[ResourceTexCoordBuffer]
+filename = texcoord.buf
+format = DXGI_FORMAT_R16G16_FLOAT
+stride = 16`
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	positions := make([]byte, 3*12)
+	for vertex, position := range [][3]float32{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}} {
+		for component, value := range position {
+			binary.LittleEndian.PutUint32(positions[vertex*12+component*4:], math.Float32bits(value))
+		}
+	}
+	vectors := make([]byte, 3*8)
+	for vertex := range 3 {
+		vectors[vertex*8+2] = 127
+	}
+	texcoords := make([]byte, 3*16)
+	for vertex, uv := range [][2]float32{{0, .25}, {1, .75}, {.5, .5}} {
+		binary.LittleEndian.PutUint32(texcoords[vertex*16+4:], math.Float32bits(uv[0]))
+		binary.LittleEndian.PutUint32(texcoords[vertex*16+8:], math.Float32bits(uv[1]))
+	}
+	for name, data := range map[string][]byte{
+		"index.buf":    modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		"position.buf": positions,
+		"vector.buf":   vectors,
+		"texcoord.buf": texcoords,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(iniText)
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		iniPath,
+		dir,
+		sections,
+		collectModelViewerDefaultVariables(sections),
+		newModelViewerBufferCache(),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+	geometry := meshes[0].geometry
+	if !slices.Equal(geometry.Indices, []uint32{0, 2, 1}) {
+		t.Fatalf("indices = %v", geometry.Indices)
+	}
+	wantUVs := []float32{0, .75, 1, .25, .5, .5}
+	if !slices.Equal(geometry.Texcoord0, wantUVs) {
+		t.Fatalf("uvs = %v, want %v", geometry.Texcoord0, wantUVs)
+	}
+	if len(geometry.Normal) != 9 || geometry.Normal[2] != 1 || geometry.Normal[5] != 1 || geometry.Normal[8] != 1 {
+		t.Fatalf("normals = %v", geometry.Normal)
+	}
+	if len(geometry.Tangent) != 0 {
+		t.Fatalf("WWMI tangent should use Three.js derivative frame: %v", geometry.Tangent)
 	}
 }
 

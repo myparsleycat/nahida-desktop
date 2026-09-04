@@ -44,7 +44,7 @@ export type ViewerMesh = {
 };
 
 export type ViewerTextureRole = "diffuse" | "normal_map" | "light_map" | "material_map";
-export type ViewerMaterialProfile = "zzmi";
+export type ViewerMaterialProfile = "zzmi" | "wuwa:rabbitfx";
 
 export type ViewerTexture = {
     texKey: string;

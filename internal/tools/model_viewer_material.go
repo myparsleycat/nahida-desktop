@@ -31,6 +31,7 @@ type modelViewerTextureBinding struct {
 	IBResourceName       string
 	DiffuseResourceName  string
 	TextureResourceNames []string
+	TextureRoles         map[string]string
 	OverrideHash         string
 }
 
@@ -69,7 +70,12 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		if !strings.EqualFold(section.Header, "TextureOverride") {
 			continue
 		}
-		wanted := []string{"ib", "this", "Resource\\ZZMI\\Diffuse"}
+		wanted := []string{"ib", "this"}
+		for _, namespace := range []string{"GIMI", "ZZMI", "RabbitFX", "WWMI"} {
+			for _, role := range []string{"Diffuse", "NormalMap", "LightMap", "MaterialMap"} {
+				wanted = append(wanted, fmt.Sprintf("Resource\\%s\\%s", namespace, role))
+			}
+		}
 		for index := range 32 {
 			wanted = append(wanted, fmt.Sprintf("ps-t%d", index))
 		}
@@ -82,12 +88,21 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			continue
 		}
 		var textureNames []string
+		textureRoles := make(map[string]string)
+		semanticDiffuse := ""
 		for key, value := range assignments {
 			lowerValue := strings.ToLower(value)
-			if (strings.HasPrefix(key, "pst") || key == modelViewerNormalizeKey("Resource\\ZZMI\\Diffuse")) && (strings.HasPrefix(lowerValue, "resource") || strings.HasPrefix(lowerValue, "ref resource")) {
+			_, semantic := modelViewerSemanticTextureRole(key)
+			if (strings.HasPrefix(key, "pst") || semantic) && (strings.HasPrefix(lowerValue, "resource") || strings.HasPrefix(lowerValue, "ref resource")) {
 				name := modelViewerTrimResourcePrefix(strings.TrimPrefix(value, "ref "))
 				if resolved := resolveModelViewerTextureReference(name, section, lookup, variables, make(map[string]bool)); resolved != "" {
 					textureNames = appendUniqueModelViewer(textureNames, resolved)
+					if role, ok := modelViewerSemanticTextureRole(key); ok {
+						textureRoles[modelViewerNormalizeKey(resolved)] = role
+						if role == "diffuse" {
+							semanticDiffuse = resolved
+						}
+					}
 				}
 			}
 		}
@@ -96,7 +111,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			direct = modelViewerTrimResourcePrefix(strings.TrimPrefix(value, "ref "))
 		}
 		for _, ibName := range ibNames {
-			diffuse := ""
+			diffuse := semanticDiffuse
 			for _, name := range textureNames {
 				if strings.Contains(strings.ToLower(name), "diffuse") || strings.Contains(strings.ToLower(name), "basecolor") || strings.Contains(strings.ToLower(name), "albedo") {
 					diffuse = name
@@ -115,7 +130,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			if diffuse == "" {
 				diffuse = direct
 			}
-			bindings = append(bindings, modelViewerTextureBinding{SectionName: section.Name, IBResourceName: modelViewerTrimResourcePrefix(ibName), DiffuseResourceName: diffuse, TextureResourceNames: textureNames, OverrideHash: strings.TrimSpace(modelViewerSectionValue(section, "hash"))})
+			bindings = append(bindings, modelViewerTextureBinding{SectionName: section.Name, IBResourceName: modelViewerTrimResourcePrefix(ibName), DiffuseResourceName: diffuse, TextureResourceNames: textureNames, TextureRoles: textureRoles, OverrideHash: strings.TrimSpace(modelViewerSectionValue(section, "hash"))})
 		}
 	}
 	return bindings
@@ -260,10 +275,17 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 }
 
 func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
-	if materialProfile == "zzmi" && role == "normal_map" {
+	if (materialProfile == "zzmi" || materialProfile == "wuwa:rabbitfx") && role == "normal_map" {
 		return modelViewerTextureTransformNormalXYReconstruct
 	}
 	return modelViewerTextureTransformPassthrough
+}
+
+func modelViewerTextureFormatFor(materialProfile, role, requested string) string {
+	if materialProfile == "wuwa:rabbitfx" && (role == "normal_map" || role == "light_map" || role == "material_map") {
+		return "png"
+	}
+	return normalizeModelViewerFormat(requested)
 }
 
 func modelViewerTextureFileHash(path string) (string, int64, error) {
