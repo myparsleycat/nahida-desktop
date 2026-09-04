@@ -30,7 +30,7 @@ const (
 	moveFileReplaceExisting         = 0x1
 	moveFileWriteThrough            = 0x8
 	compressionLedgerPrefix         = "mod_compression:file:"
-	defaultXpressWorkerCount        = 2
+	minimumXpressBatchSize          = 64
 )
 
 var (
@@ -46,6 +46,8 @@ var (
 	wofStateCall               = nativeWofState
 	fileAttributesCall         = nativeFileAttributes
 	fileIdentityCall           = nativeFileIdentity
+	fileIdentityFromHandleCall = nativeFileIdentityFromHandle
+	volumeClusterSizeCall      = volumeClusterSize
 )
 
 type wofCompressionInfoV1 struct {
@@ -69,6 +71,32 @@ const (
 	wofBackingForeign
 )
 
+type xpressCompressionPlan struct {
+	files         []compressionFile
+	managed       map[string]wofLedgerEntry
+	ledgerUpdates []wofLedgerEntry
+	external      []string
+}
+
+type xpressInspection struct {
+	file         *compressionFile
+	ledgerUpdate *wofLedgerEntry
+	external     string
+	err          error
+}
+
+type preparedXpressFile struct {
+	file   compressionFile
+	handle windows.Handle
+	entry  wofLedgerEntry
+}
+
+type xpressCompressionResult struct {
+	file  compressionFile
+	entry wofLedgerEntry
+	err   error
+}
+
 var xpressSkippedExtensions = map[string]struct{}{
 	".dl_": {}, ".gif": {}, ".jpg": {}, ".jpeg": {}, ".png": {}, ".wmf": {},
 	".mkv": {}, ".mp4": {}, ".wmv": {}, ".avi": {}, ".bik": {}, ".bk2": {},
@@ -79,111 +107,378 @@ var xpressSkippedExtensions = map[string]struct{}{
 	".dmg": {}, ".bz2": {}, ".tgz": {}, ".lz": {}, ".xz": {}, ".txz": {}, ".zst": {},
 }
 
+func planXpress4K(ctx context.Context, roots []string, client *db.Client) (xpressCompressionPlan, error) {
+	managed, legacyUpdates, err := loadManagedWofIDs(ctx, client)
+	if err != nil {
+		return xpressCompressionPlan{}, err
+	}
+	files, scanErr := walkCompressionFiles(roots, func(string, fs.FileInfo) bool { return true })
+	plan := xpressCompressionPlan{managed: managed}
+	updates := make(map[string]wofLedgerEntry, len(legacyUpdates))
+	for _, entry := range legacyUpdates {
+		updates[entry.FileID] = entry
+	}
+
+	clusters := make(map[string]uint32)
+	badVolumes := make(map[string]struct{})
+	var errs []error
+	if scanErr != nil {
+		errs = append(errs, scanErr)
+	}
+	for _, file := range files {
+		volume := strings.ToLower(filepath.VolumeName(file.path))
+		if _, ok := clusters[volume]; ok {
+			continue
+		}
+		if _, ok := badVolumes[volume]; ok {
+			continue
+		}
+		cluster, clusterErr := volumeClusterSizeCall(file.path)
+		if clusterErr != nil {
+			badVolumes[volume] = struct{}{}
+			errs = append(errs, fmt.Errorf("cluster size for volume %q: %w", filepath.VolumeName(file.path), clusterErr))
+			continue
+		}
+		clusters[volume] = cluster
+	}
+
+	inspections, inspectErr := inspectXpressFiles(ctx, files, managed, clusters)
+	if inspectErr != nil {
+		errs = append(errs, inspectErr)
+	}
+	for _, inspection := range inspections {
+		if inspection.err != nil {
+			errs = append(errs, inspection.err)
+		}
+		if inspection.file != nil {
+			plan.files = append(plan.files, *inspection.file)
+		}
+		if inspection.ledgerUpdate != nil {
+			updates[inspection.ledgerUpdate.FileID] = *inspection.ledgerUpdate
+		}
+		if inspection.external != "" {
+			plan.external = append(plan.external, inspection.external)
+		}
+	}
+	for _, entry := range updates {
+		plan.ledgerUpdates = append(plan.ledgerUpdates, entry)
+	}
+	return plan, errors.Join(errs...)
+}
+
+func inspectXpressFiles(
+	ctx context.Context,
+	files []compressionFile,
+	managed map[string]wofLedgerEntry,
+	clusters map[string]uint32,
+) ([]xpressInspection, error) {
+	inspections := make([]xpressInspection, len(files))
+	if len(files) == 0 {
+		return inspections, ctx.Err()
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	workers := min(xpressWorkerCount(runtime.GOMAXPROCS(0)), len(files))
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				if err := ctx.Err(); err != nil {
+					inspections[index].err = err
+					continue
+				}
+				inspections[index] = inspectXpressFile(files[index], managed, clusters)
+			}
+		}()
+	}
+	for index := range files {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return inspections, ctx.Err()
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	return inspections, nil
+}
+
+func inspectXpressFile(
+	file compressionFile,
+	managed map[string]wofLedgerEntry,
+	clusters map[string]uint32,
+) xpressInspection {
+	attributes, err := fileAttributesCall(file.path)
+	if err != nil {
+		return xpressInspection{err: fmt.Errorf("attributes %q: %w", file.path, err)}
+	}
+	external, provider, algorithm, err := wofStateCall(file.path)
+	if err != nil {
+		return xpressInspection{err: fmt.Errorf("WOF state %q: %w", file.path, err)}
+	}
+	if external || attributes&windows.FILE_ATTRIBUTE_COMPRESSED != 0 {
+		id, identityErr := fileIdentityCall(file.path)
+		if identityErr != nil {
+			return xpressInspection{err: fmt.Errorf("file identity %q: %w", file.path, identityErr)}
+		}
+		entry, ok := managed[id]
+		managedBacking := ok && external && attributes&windows.FILE_ATTRIBUTE_COMPRESSED == 0 &&
+			provider == entry.Provider && algorithm == entry.Algorithm
+		if !managedBacking {
+			return xpressInspection{external: file.path}
+		}
+		if !samePath(entry.Path, file.path) {
+			entry.Path = file.path
+			return xpressInspection{ledgerUpdate: &entry}
+		}
+		return xpressInspection{}
+	}
+	if _, skipped := xpressSkippedExtensions[strings.ToLower(filepath.Ext(file.path))]; skipped {
+		return xpressInspection{}
+	}
+	cluster, ok := clusters[strings.ToLower(filepath.VolumeName(file.path))]
+	if !ok || file.size <= int64(cluster) {
+		return xpressInspection{}
+	}
+	return xpressInspection{file: &file}
+}
+
 func applyXpress4K(
 	ctx context.Context,
-	roots []string,
+	plan xpressCompressionPlan,
 	client *db.Client,
 	setTotals func(int, int64),
 	progress func(string, int64, bool),
 	mark compressionMutationMarker,
 ) error {
-	managed, managedErr := managedWofIDs(ctx, client)
-	if managedErr != nil {
-		return managedErr
-	}
-	files, scanErr := walkCompressionFiles(roots, func(path string, info fs.FileInfo) bool {
-		if _, skipped := xpressSkippedExtensions[strings.ToLower(filepath.Ext(path))]; skipped {
-			return false
-		}
-		cluster, err := volumeClusterSize(path)
-		return err == nil && info.Size() > int64(cluster)
-	})
-	var errs []error
-	if scanErr != nil {
-		errs = append(errs, scanErr)
-	}
 	var totalBytes int64
-	for _, file := range files {
+	for _, file := range plan.files {
 		totalBytes += file.size
 	}
-	setTotals(len(files), totalBytes)
-	workers := defaultXpressWorkerCount
-	if runtime.GOMAXPROCS(0) < workers {
-		workers = 1
+	setTotals(len(plan.files), totalBytes)
+	if err := applyWofLedgerBatch(ctx, client, plan.ledgerUpdates, nil); err != nil {
+		return err
 	}
-	jobs := make(chan compressionFile)
-	results := make(chan error, len(files))
-	var wg sync.WaitGroup
-	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for file := range jobs {
-				err := applyXpressFile(ctx, client, managed, file.path, mark)
-				progress(file.path, file.size, err != nil)
-				results <- err
-			}
-		}()
+	for _, entry := range plan.ledgerUpdates {
+		plan.managed[entry.FileID] = entry
 	}
-	for _, file := range files {
-		select {
-		case jobs <- file:
-		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			close(results)
-			return errors.Join(append(errs, ctx.Err())...)
+	workers := xpressWorkerCount(runtime.GOMAXPROCS(0))
+	batchSize := max(minimumXpressBatchSize, workers*4)
+	seenIDs := make(map[string]struct{}, len(plan.files))
+	var errs []error
+	for start := 0; start < len(plan.files); start += batchSize {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(errs, err)...)
 		}
-	}
-	close(jobs)
-	wg.Wait()
-	close(results)
-	for err := range results {
-		if err != nil {
-			errs = append(errs, err)
+		end := min(start+batchSize, len(plan.files))
+		batchErr := applyXpressBatch(ctx, plan.files[start:end], plan.managed, seenIDs, client, workers, progress, mark)
+		if batchErr != nil {
+			errs = append(errs, batchErr)
+		}
+		if errors.Is(batchErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return errors.Join(errs...)
+		}
+		if errors.Is(batchErr, errUnmanagedWofBacking) || errors.Is(batchErr, errWofLedgerCommit) {
+			return errors.Join(errs...)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func applyXpressFile(ctx context.Context, client *db.Client, managed map[string]wofLedgerEntry, path string, mark compressionMutationMarker) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	external, provider, algorithm, err := wofStateCall(path)
-	if err != nil {
-		return err
-	}
-	id, err := fileIdentityCall(path)
-	if err != nil {
-		return err
-	}
-	if external {
-		if entry, ok := managed[id]; ok && provider == entry.Provider && algorithm == entry.Algorithm {
-			if !samePath(entry.Path, path) {
-				entry.Path = path
-				return saveWofLedger(ctx, client, entry)
+var (
+	errUnmanagedWofBacking = errors.New("unmanaged WOF backing")
+	errWofLedgerCommit     = errors.New("WOF ledger commit failed")
+)
+
+func applyXpressBatch(
+	ctx context.Context,
+	files []compressionFile,
+	managed map[string]wofLedgerEntry,
+	seenIDs map[string]struct{},
+	client *db.Client,
+	workers int,
+	progress func(string, int64, bool),
+	mark compressionMutationMarker,
+) error {
+	prepared := make([]preparedXpressFile, 0, len(files))
+	revalidatedUpdates := make([]wofLedgerEntry, 0)
+	revalidatedFiles := make([]compressionFile, 0)
+	var errs []error
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			closePreparedXpressFiles(prepared)
+			return errors.Join(append(errs, err)...)
+		}
+		handle, err := openPreparedXpressFile(file.path)
+		if err != nil {
+			progress(file.path, file.size, true)
+			errs = append(errs, fmt.Errorf("open XPRESS4K file %q: %w", file.path, err))
+			continue
+		}
+		attributes, err := fileAttributesCall(file.path)
+		if err != nil {
+			_ = windows.CloseHandle(handle)
+			progress(file.path, file.size, true)
+			errs = append(errs, fmt.Errorf("attributes %q: %w", file.path, err))
+			continue
+		}
+		if attributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			_ = windows.CloseHandle(handle)
+			progress(file.path, file.size, true)
+			errs = append(errs, fmt.Errorf("XPRESS4K target became a reparse point: %s", file.path))
+			continue
+		}
+		external, provider, algorithm, err := wofStateCall(file.path)
+		if err != nil {
+			_ = windows.CloseHandle(handle)
+			progress(file.path, file.size, true)
+			errs = append(errs, fmt.Errorf("WOF state %q: %w", file.path, err))
+			continue
+		}
+		id, err := fileIdentityFromHandleCall(handle)
+		if err != nil {
+			_ = windows.CloseHandle(handle)
+			progress(file.path, file.size, true)
+			errs = append(errs, fmt.Errorf("file identity %q: %w", file.path, err))
+			continue
+		}
+		if external || attributes&windows.FILE_ATTRIBUTE_COMPRESSED != 0 {
+			_ = windows.CloseHandle(handle)
+			entry, ok := managed[id]
+			managedBacking := ok && external && attributes&windows.FILE_ATTRIBUTE_COMPRESSED == 0 &&
+				provider == entry.Provider && algorithm == entry.Algorithm
+			if managedBacking {
+				if !samePath(entry.Path, file.path) {
+					entry.Path = file.path
+					revalidatedUpdates = append(revalidatedUpdates, entry)
+					revalidatedFiles = append(revalidatedFiles, file)
+				} else {
+					progress(file.path, file.size, false)
+				}
+				continue
 			}
-			return nil
+			closePreparedXpressFiles(prepared)
+			progress(file.path, file.size, true)
+			return errors.Join(append(errs, fmt.Errorf("%w detected: %s", errUnmanagedWofBacking, file.path))...)
 		}
-		return fmt.Errorf("unmanaged WOF backing detected: %s", path)
-	}
-	entry := wofLedgerEntry{
-		FileID: id, Path: path, Provider: wofProviderFile,
-		Algorithm: fileProviderCompressionXpress4K, State: "compressing",
-	}
-	if err := saveWofLedger(ctx, client, entry); err != nil {
-		return err
-	}
-	mark(path)
-	if err := wofCompress(path); err != nil {
-		if errors.Is(err, errCompressionNotBeneficial) {
-			return client.AppState.Delete(ctx, compressionLedgerPrefix+id)
+		if _, duplicate := seenIDs[id]; duplicate {
+			_ = windows.CloseHandle(handle)
+			progress(file.path, file.size, false)
+			continue
 		}
-		return err
+		seenIDs[id] = struct{}{}
+		prepared = append(prepared, preparedXpressFile{
+			file: file, handle: handle,
+			entry: wofLedgerEntry{FileID: id, Path: file.path, Provider: wofProviderFile,
+				Algorithm: fileProviderCompressionXpress4K, State: "compressing"},
+		})
 	}
-	entry.State = "compressed"
-	return saveWofLedger(ctx, client, entry)
+	if len(prepared) == 0 && len(revalidatedUpdates) == 0 {
+		return errors.Join(errs...)
+	}
+	preEntries := make([]wofLedgerEntry, 0, len(prepared)+len(revalidatedUpdates))
+	preEntries = append(preEntries, revalidatedUpdates...)
+	for index := range prepared {
+		preEntries = append(preEntries, prepared[index].entry)
+	}
+	if err := applyWofLedgerBatch(ctx, client, preEntries, nil); err != nil {
+		closePreparedXpressFiles(prepared)
+		for _, file := range revalidatedFiles {
+			progress(file.path, file.size, true)
+		}
+		for _, file := range prepared {
+			progress(file.file.path, file.file.size, true)
+		}
+		return errors.Join(append(errs, fmt.Errorf("%w: %w", errWofLedgerCommit, err))...)
+	}
+	for _, file := range prepared {
+		managed[file.entry.FileID] = file.entry
+	}
+	for _, entry := range revalidatedUpdates {
+		managed[entry.FileID] = entry
+	}
+	for _, file := range revalidatedFiles {
+		progress(file.path, file.size, false)
+	}
+	if len(prepared) == 0 {
+		return errors.Join(errs...)
+	}
+	results := compressPreparedXpressFiles(ctx, prepared, workers, mark)
+	completed := make([]wofLedgerEntry, 0, len(results))
+	deletes := make([]string, 0, len(results))
+	for _, result := range results {
+		switch {
+		case result.err == nil:
+			result.entry.State = "compressed"
+			completed = append(completed, result.entry)
+		case errors.Is(result.err, errCompressionNotBeneficial):
+			deletes = append(deletes, compressionLedgerPrefix+result.entry.FileID)
+		default:
+			errs = append(errs, fmt.Errorf("compress XPRESS4K %q: %w", result.file.path, result.err))
+		}
+	}
+	postErr := applyWofLedgerBatch(ctx, client, completed, deletes)
+	if postErr != nil {
+		errs = append(errs, fmt.Errorf("%w: %w", errWofLedgerCommit, postErr))
+	} else {
+		for _, entry := range completed {
+			managed[entry.FileID] = entry
+		}
+		for _, key := range deletes {
+			delete(managed, strings.TrimPrefix(key, compressionLedgerPrefix))
+		}
+	}
+	for _, result := range results {
+		failed := postErr != nil || result.err != nil && !errors.Is(result.err, errCompressionNotBeneficial)
+		progress(result.file.path, result.file.size, failed)
+	}
+	return errors.Join(errs...)
+}
+
+func compressPreparedXpressFiles(
+	ctx context.Context,
+	prepared []preparedXpressFile,
+	workers int,
+	mark compressionMutationMarker,
+) []xpressCompressionResult {
+	results := make([]xpressCompressionResult, len(prepared))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for range min(workers, len(prepared)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				file := prepared[index]
+				err := ctx.Err()
+				if err == nil {
+					mark(file.file.path)
+					err = wofCompressHandle(file.handle)
+				}
+				_ = windows.CloseHandle(file.handle)
+				results[index] = xpressCompressionResult{file: file.file, entry: file.entry, err: err}
+			}
+		}()
+	}
+	for index := range prepared {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+	return results
+}
+
+func closePreparedXpressFiles(files []preparedXpressFile) {
+	for _, file := range files {
+		_ = windows.CloseHandle(file.handle)
+	}
+}
+
+func xpressWorkerCount(gomaxprocs int) int {
+	return max(1, gomaxprocs)
 }
 
 func cleanupMissingWofLedgers(ctx context.Context, scopes []string, client *db.Client) error {
@@ -192,6 +487,7 @@ func cleanupMissingWofLedgers(ctx context.Context, scopes []string, client *db.C
 		return err
 	}
 	var errs []error
+	var deleteKeys []string
 	for id, entry := range managed {
 		contained := false
 		for _, scope := range scopes {
@@ -204,12 +500,13 @@ func cleanupMissingWofLedgers(ctx context.Context, scopes []string, client *db.C
 			continue
 		}
 		if _, err := os.Stat(entry.Path); errors.Is(err, os.ErrNotExist) {
-			if deleteErr := client.AppState.Delete(ctx, compressionLedgerPrefix+id); deleteErr != nil {
-				errs = append(errs, deleteErr)
-			}
+			deleteKeys = append(deleteKeys, compressionLedgerPrefix+id)
 		} else if err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if err := client.AppState.ApplyBatch(ctx, nil, deleteKeys); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
@@ -439,33 +736,54 @@ func decompressExternalFile(path string, mark compressionMutationMarker) error {
 }
 
 func managedWofIDs(ctx context.Context, client *db.Client) (map[string]wofLedgerEntry, error) {
-	rows, err := client.AppState.ListByPrefix(ctx, compressionLedgerPrefix)
+	managed, updates, err := loadManagedWofIDs(ctx, client)
 	if err != nil {
 		return nil, err
 	}
+	if err := applyWofLedgerBatch(ctx, client, updates, nil); err != nil {
+		return nil, err
+	}
+	return managed, nil
+}
+
+func loadManagedWofIDs(ctx context.Context, client *db.Client) (map[string]wofLedgerEntry, []wofLedgerEntry, error) {
+	rows, err := client.AppState.ListByPrefix(ctx, compressionLedgerPrefix)
+	if err != nil {
+		return nil, nil, err
+	}
 	out := make(map[string]wofLedgerEntry, len(rows))
+	var updates []wofLedgerEntry
 	for _, row := range rows {
 		var entry wofLedgerEntry
 		if err := json.Unmarshal([]byte(row.Value), &entry); err != nil {
-			return nil, fmt.Errorf("decode WOF ledger %q: %w", row.Key, err)
+			return nil, nil, fmt.Errorf("decode WOF ledger %q: %w", row.Key, err)
 		}
 		if entry.Provider == 0 {
 			entry.Provider = wofProviderFile
-			if err := saveWofLedger(ctx, client, entry); err != nil {
-				return nil, err
-			}
+			updates = append(updates, entry)
 		}
 		out[entry.FileID] = entry
 	}
-	return out, nil
+	return out, updates, nil
 }
 
 func saveWofLedger(ctx context.Context, client *db.Client, entry wofLedgerEntry) error {
-	raw, err := json.Marshal(entry)
-	if err != nil {
-		return err
+	return applyWofLedgerBatch(ctx, client, []wofLedgerEntry{entry}, nil)
+}
+
+func applyWofLedgerBatch(ctx context.Context, client *db.Client, entries []wofLedgerEntry, deleteKeys []string) error {
+	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	rows := make([]db.AppStateRow, 0, len(entries))
+	for _, entry := range entries {
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, db.AppStateRow{
+			Key: compressionLedgerPrefix + entry.FileID, Value: string(raw), UpdatedAt: updatedAt,
+		})
 	}
-	return client.AppState.Upsert(ctx, compressionLedgerPrefix+entry.FileID, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	return client.AppState.ApplyBatch(ctx, rows, deleteKeys)
 }
 
 func nativeWofState(path string) (bool, uint32, uint32, error) {
@@ -495,6 +813,10 @@ func wofCompress(path string) error {
 		return err
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
+	return wofCompressHandle(handle)
+}
+
+func wofCompressHandle(handle windows.Handle) error {
 	info := wofCompressionInfoV1{Algorithm: fileProviderCompressionXpress4K}
 	hr := wofSetFileDataLocationCall(handle, wofProviderFile, &info)
 	if uint32(hr) == hresultCompressionNotBeneficial {
@@ -562,18 +884,34 @@ func openCompressionFile(path string) (windows.Handle, error) {
 	return openCompressionFileWithAccess(path, windows.GENERIC_READ|windows.GENERIC_WRITE)
 }
 
+func openPreparedXpressFile(path string) (windows.Handle, error) {
+	return openCompressionFileWithOptions(
+		path,
+		windows.GENERIC_READ|windows.GENERIC_WRITE,
+		windows.FILE_SHARE_READ,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_SEQUENTIAL_SCAN|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+	)
+}
+
 func openDecompressionFile(path string) (windows.Handle, error) {
 	return openCompressionFileWithAccess(path, windows.GENERIC_READ)
 }
 
 func openCompressionFileWithAccess(path string, access uint32) (windows.Handle, error) {
+	return openCompressionFileWithOptions(
+		path,
+		access,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_DELETE,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_SEQUENTIAL_SCAN,
+	)
+}
+
+func openCompressionFileWithOptions(path string, access, share, flags uint32) (windows.Handle, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return windows.InvalidHandle, err
 	}
-	return windows.CreateFile(pathPtr, access,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_SEQUENTIAL_SCAN, 0)
+	return windows.CreateFile(pathPtr, access, share, nil, windows.OPEN_EXISTING, flags, 0)
 }
 
 func nativeFileIdentity(path string) (string, error) {
@@ -588,6 +926,10 @@ func nativeFileIdentity(path string) (string, error) {
 		return "", err
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
+	return nativeFileIdentityFromHandle(handle)
+}
+
+func nativeFileIdentityFromHandle(handle windows.Handle) (string, error) {
 	var info windows.ByHandleFileInformation
 	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
 		return "", err

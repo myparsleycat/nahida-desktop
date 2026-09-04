@@ -82,6 +82,7 @@ type compressionCoordinator struct {
 	selfChangeMu         sync.Mutex
 	selfChanges          map[string]time.Time
 	selfChangeTimer      *time.Timer
+	selfChangeDeadline   time.Time
 	selfChangeGeneration uint64
 	lastProgressEmit     time.Time
 	stopped              atomic.Bool
@@ -571,7 +572,14 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 			return
 		}
 	}
-	external, err := unmanagedCompressionFiles(ctx, workRoots, c.owner.client)
+	var xpressPlan xpressCompressionPlan
+	var external []string
+	if target && method == "xpress4k" {
+		xpressPlan, err = planXpress4K(ctx, workRoots, c.owner.client)
+		external = xpressPlan.external
+	} else {
+		external, err = unmanagedCompressionFiles(ctx, workRoots, c.owner.client)
+	}
 	if err != nil {
 		c.fail(err, "check-external", "", "")
 		return
@@ -645,7 +653,7 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 				ledgerScopes = work.scopes
 			}
 			err = errors.Join(
-				applyXpress4K(ctx, workRoots, c.owner.client, c.setTotals, c.progress, c.markSelfChanges),
+				applyXpress4K(ctx, xpressPlan, c.owner.client, c.setTotals, c.progress, c.markSelfChanges),
 				cleanupMissingWofLedgers(ctx, ledgerScopes, c.owner.client),
 			)
 		}
@@ -866,6 +874,7 @@ func (c *compressionCoordinator) stop() error {
 		c.selfChangeTimer = nil
 	}
 	c.selfChangeGeneration++
+	c.selfChangeDeadline = time.Time{}
 	clear(c.selfChanges)
 	c.selfChangeMu.Unlock()
 	if cancel != nil {
@@ -1025,15 +1034,38 @@ func (c *compressionCoordinator) markSelfChanges(paths ...string) {
 	for _, path := range paths {
 		c.selfChanges[strings.ToLower(filepath.Clean(path))] = expires
 	}
-	if c.selfChangeTimer != nil {
+	if c.selfChangeTimer == nil {
+		c.scheduleSelfChangeTimerLocked()
+	} else if expires.Before(c.selfChangeDeadline) {
 		c.selfChangeTimer.Stop()
+		c.selfChangeTimer = nil
+		c.scheduleSelfChangeTimerLocked()
+	}
+	c.selfChangeMu.Unlock()
+}
+
+func (c *compressionCoordinator) scheduleSelfChangeTimerLocked() {
+	var next time.Time
+	for _, expires := range c.selfChanges {
+		if next.IsZero() || expires.Before(next) {
+			next = expires
+		}
+	}
+	if next.IsZero() {
+		c.selfChangeTimer = nil
+		c.selfChangeDeadline = time.Time{}
+		return
+	}
+	delay := time.Until(next)
+	if delay < 0 {
+		delay = 0
 	}
 	c.selfChangeGeneration++
 	generation := c.selfChangeGeneration
-	c.selfChangeTimer = time.AfterFunc(compressionSelfChangeTTL, func() {
+	c.selfChangeDeadline = next
+	c.selfChangeTimer = time.AfterFunc(delay, func() {
 		c.clearExpiredSelfChanges(generation)
 	})
-	c.selfChangeMu.Unlock()
 }
 
 func (c *compressionCoordinator) clearExpiredSelfChanges(generation uint64) {
@@ -1049,21 +1081,8 @@ func (c *compressionCoordinator) clearExpiredSelfChanges(generation uint64) {
 		}
 	}
 	c.selfChangeTimer = nil
-	if len(c.selfChanges) > 0 {
-		var next time.Time
-		for _, expires := range c.selfChanges {
-			if next.IsZero() || expires.Before(next) {
-				next = expires
-			}
-		}
-		delay := time.Until(next)
-		if delay < 0 {
-			delay = 0
-		}
-		c.selfChangeTimer = time.AfterFunc(delay, func() {
-			c.clearExpiredSelfChanges(generation)
-		})
-	}
+	c.selfChangeDeadline = time.Time{}
+	c.scheduleSelfChangeTimerLocked()
 	c.selfChangeMu.Unlock()
 }
 

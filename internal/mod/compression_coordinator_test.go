@@ -396,3 +396,29 @@ func waitForCompression(t *testing.T, coordinator *compressionCoordinator) {
 	coordinator.mu.Unlock()
 	t.Fatalf("compression worker did not stop: state=%+v pendingFull=%v pendingScopes=%v", state, pendingFull, pendingScopes)
 }
+
+func TestMarkSelfChangesReusesExpiryTimer(t *testing.T) {
+	coordinator := newCompressionCoordinator(nil)
+	coordinator.markSelfChanges(`C:\mods\first.bin`)
+	coordinator.selfChangeMu.Lock()
+	firstTimer := coordinator.selfChangeTimer
+	firstGeneration := coordinator.selfChangeGeneration
+	coordinator.selfChangeMu.Unlock()
+
+	coordinator.markSelfChanges(`C:\mods\second.bin`)
+	coordinator.selfChangeMu.Lock()
+	secondTimer := coordinator.selfChangeTimer
+	secondGeneration := coordinator.selfChangeGeneration
+	if coordinator.selfChangeTimer != nil {
+		coordinator.selfChangeTimer.Stop()
+		coordinator.selfChangeTimer = nil
+	}
+	coordinator.selfChangeMu.Unlock()
+
+	if firstTimer == nil || firstTimer != secondTimer {
+		t.Fatal("self-change timer was replaced for a later expiration")
+	}
+	if firstGeneration != secondGeneration {
+		t.Fatalf("timer generation changed from %d to %d", firstGeneration, secondGeneration)
+	}
+}
