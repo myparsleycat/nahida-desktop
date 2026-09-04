@@ -5,6 +5,7 @@ import { Progress } from "@renderer/components/ui/progress";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -101,8 +102,10 @@ export function ModCompressionCard() {
               <SelectValue>{state.method === "zstd" ? "Zstd" : "XPRESS4K"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="zstd">Zstd</SelectItem>
-              <SelectItem value="xpress4k">XPRESS4K</SelectItem>
+              <SelectGroup>
+                <SelectItem value="zstd">Zstd</SelectItem>
+                <SelectItem value="xpress4k">XPRESS4K</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
