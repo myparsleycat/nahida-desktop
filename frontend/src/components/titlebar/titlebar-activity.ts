@@ -201,7 +201,6 @@ export function buildModCompressionTitlebarActivity(
         status:
             state.status === "blocked" ? "warning" : state.status === "error" ? "error" : "running",
         icon: ArchiveIcon,
-        detail: state.currentFileName || undefined,
         progress: progress === undefined ? undefined : Math.min(100, progress),
         order: 25,
         href: "/setting/mod",

@@ -131,7 +131,7 @@ describe("buildModCompressionTitlebarActivity", () => {
         expect(buildModCompressionTitlebarActivity(null, t)).toBeNull();
     });
 
-    it("shows byte progress and current file while compressing", () => {
+    it("shows byte progress without the current file while compressing", () => {
         const activity = buildModCompressionTitlebarActivity(
             state({
                 status: "compressing",
@@ -145,10 +145,10 @@ describe("buildModCompressionTitlebarActivity", () => {
             id: "mod:compression",
             label: "titlebar.activity.modCompression.compressing",
             status: "running",
-            detail: "mod.bin",
             progress: 25,
             href: "/setting/mod",
         });
+        expect(activity).not.toHaveProperty("detail");
     });
 
     it("keeps blocked state visible as a warning", () => {
