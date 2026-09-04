@@ -99,7 +99,7 @@ func restoreZstdFiles(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		err := restoreZstdFile(ctx, archive.path, mark)
+		err := restoreZstdFile(ctx, archive.path, maxZstdRestoreSize, mark)
 		progress(archive.path, archive.size, false)
 		if errors.Is(err, context.Canceled) {
 			return err
@@ -263,7 +263,7 @@ func compressZstdFile(ctx context.Context, sourcePath string, mark compressionMu
 	return os.Remove(sourcePath)
 }
 
-func restoreZstdFile(ctx context.Context, targetPath string, mark compressionMutationMarker) error {
+func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark compressionMutationMarker) error {
 	if !isManagedZstdPath(targetPath) {
 		return fmt.Errorf("not a managed zstd path: %s", targetPath)
 	}
@@ -289,7 +289,7 @@ func restoreZstdFile(ctx context.Context, targetPath string, mark compressionMut
 	if err := os.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := streamRestoreZstd(ctx, targetPath, tempPath); err != nil {
+	if err := streamRestoreZstdWithLimit(ctx, targetPath, tempPath, limit); err != nil {
 		_ = os.Remove(tempPath)
 		return err
 	}
@@ -343,10 +343,6 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) error 
 	}
 	remove = false
 	return nil
-}
-
-func streamRestoreZstd(ctx context.Context, sourcePath, tempPath string) error {
-	return streamRestoreZstdWithLimit(ctx, sourcePath, tempPath, maxZstdRestoreSize)
 }
 
 func streamRestoreZstdWithLimit(ctx context.Context, sourcePath, tempPath string, limit int64) error {

@@ -72,6 +72,7 @@ type compressionCoordinator struct {
 	selfChangeTimer      *time.Timer
 	selfChangeDeadline   time.Time
 	selfChangeGeneration uint64
+	wofOwnership         compressionFileOwnership
 	lastProgressEmit     time.Time
 	stopped              atomic.Bool
 }
@@ -436,14 +437,14 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.setTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
 			)
 		} else {
-			err = applyXpress4K(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("compress-file"))
+			err = applyXpress4K(ctx, workRoots, c.setTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("compress-file"))
 		}
 	} else if work.full {
 		c.setStatus("decompressing")
 		if method == "zstd" {
 			err = restoreAllZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("restore-file"))
 		} else {
-			err = restoreWOF(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("decompress-file"))
+			err = restoreWOF(ctx, workRoots, c.setTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("decompress-file"))
 		}
 	}
 	if errors.Is(err, context.Canceled) {
@@ -912,6 +913,41 @@ func boolPointer(value bool) *bool { return &value }
 type compressionFile struct {
 	path string
 	size int64
+}
+
+type compressionFileOwnership struct {
+	mu    sync.Mutex
+	files map[string]struct{}
+}
+
+func (o *compressionFileOwnership) add(id string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.files == nil {
+		o.files = map[string]struct{}{}
+	}
+	o.files[id] = struct{}{}
+}
+
+func (o *compressionFileOwnership) contains(id string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_, ok := o.files[id]
+	return ok
+}
+
+func (o *compressionFileOwnership) remove(id string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.files, id)
+}
+
+func setCompressionTotals(files []compressionFile, setTotals func(int, int64)) {
+	var totalBytes int64
+	for _, file := range files {
+		totalBytes += file.size
+	}
+	setTotals(len(files), totalBytes)
 }
 
 func walkCompressionFiles(roots []string, accept func(string, fs.FileInfo) bool) ([]compressionFile, error) {

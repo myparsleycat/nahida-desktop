@@ -207,7 +207,7 @@ func TestZstdCompressionUsesSourceWhenDestinationExists(t *testing.T) {
 	if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreZstdFile(context.Background(), path+managedZstdExtension, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFile(context.Background(), path+managedZstdExtension, maxZstdRestoreSize, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -227,7 +227,7 @@ func TestZstdRestoreUsesExistingSourceAndRemovesArchive(t *testing.T) {
 	if err := os.WriteFile(targetPath, []byte("not-even-zstd"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreZstdFile(context.Background(), targetPath, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFile(context.Background(), targetPath, maxZstdRestoreSize, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(sourcePath)
@@ -279,8 +279,7 @@ func TestZstdRestoreLimitPreservesArchiveAndCleansTemp(t *testing.T) {
 		t.Fatal(err)
 	}
 	tempPath := sourcePath + compressionTempMarker
-	err := streamRestoreZstdWithLimit(context.Background(), targetPath, tempPath, 1024)
-	_ = os.Remove(tempPath)
+	err := restoreZstdFile(context.Background(), targetPath, 1024, ignoreCompressionMutations)
 	if err == nil || !strings.Contains(err.Error(), "exceeds restore limit") {
 		t.Fatalf("restore error = %v", err)
 	}

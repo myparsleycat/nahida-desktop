@@ -33,6 +33,7 @@ var (
 	wofSetFileDataLocationCall = nativeWofSetFileDataLocation
 	deleteExternalBackingCall  = nativeDeleteExternalBacking
 	wofStateCall               = nativeWofState
+	fileIdentityCall           = nativeFileIdentity
 	volumeClusterSizeCall      = volumeClusterSize
 )
 
@@ -56,6 +57,7 @@ func applyXpress4K(
 	roots []string,
 	setTotals func(int, int64),
 	progress func(string, int64, bool),
+	ownership *compressionFileOwnership,
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
@@ -70,8 +72,22 @@ func applyXpress4K(
 			return fmt.Errorf("open: %w", err)
 		}
 		defer func() { _ = windows.CloseHandle(handle) }()
+		id, err := fileIdentityCall(handle)
+		if err != nil {
+			return fmt.Errorf("identify: %w", err)
+		}
+		external, _, _, err := wofStateCall(file.path)
+		if err != nil {
+			return fmt.Errorf("inspect WOF state: %w", err)
+		}
 		mark(file.path)
-		return wofCompressHandle(handle)
+		if err := wofCompressHandle(handle); err != nil {
+			return err
+		}
+		if !external {
+			ownership.add(id)
+		}
+		return nil
 	})
 }
 
@@ -80,6 +96,7 @@ func restoreWOF(
 	roots []string,
 	setTotals func(int, int64),
 	progress func(string, int64, bool),
+	ownership *compressionFileOwnership,
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
@@ -101,10 +118,18 @@ func restoreWOF(
 			return fmt.Errorf("open: %w", err)
 		}
 		defer func() { _ = windows.CloseHandle(handle) }()
+		id, err := fileIdentityCall(handle)
+		if err != nil {
+			return fmt.Errorf("identify: %w", err)
+		}
+		if !ownership.contains(id) {
+			return nil
+		}
 		mark(file.path)
 		if err := deleteExternalBackingCall(handle); err != nil {
 			return fmt.Errorf("remove WOF backing: %w", err)
 		}
+		ownership.remove(id)
 		return nil
 	})
 }
@@ -146,14 +171,6 @@ func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
 		}
 	}
 	return result, nil
-}
-
-func setCompressionTotals(files []compressionFile, setTotals func(int, int64)) {
-	var totalBytes int64
-	for _, file := range files {
-		totalBytes += file.size
-	}
-	setTotals(len(files), totalBytes)
 }
 
 func runXpressWorkers(
@@ -262,6 +279,14 @@ func nativeWofSetFileDataLocation(handle windows.Handle, provider uint32, info *
 func nativeDeleteExternalBacking(handle windows.Handle) error {
 	var returned uint32
 	return windows.DeviceIoControl(handle, fsctlDeleteExternalBacking, nil, 0, nil, 0, &returned, nil)
+}
+
+func nativeFileIdentity(handle windows.Handle) (string, error) {
+	var info windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%08x:%08x%08x", info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow), nil
 }
 
 func openXpressFile(path string) (windows.Handle, error) {
