@@ -175,12 +175,20 @@ func extensionMaxSizes(rules UploadRules, additional []string) map[string]int64 
 	return allowed
 }
 
-func uploadFilePermitted(name string, size int64, allowed map[string]int64, allowAll bool, maxFileSize int64) bool {
+type uploadFileDenial string
+
+const (
+	uploadFileDenialNone      uploadFileDenial = ""
+	uploadFileDenialExtension uploadFileDenial = "denied_file_type"
+	uploadFileDenialSize      uploadFileDenial = "file_too_large"
+)
+
+func classifyUploadFile(name string, size int64, allowed map[string]int64, allowAll bool, maxFileSize int64) uploadFileDenial {
 	ext := strings.ToLower(filepath.Ext(name))
 	maxSize, ok := allowed[ext]
 	if !ok {
 		if !allowAll {
-			return false
+			return uploadFileDenialExtension
 		}
 		maxSize = maxFileSize
 	}
@@ -190,5 +198,12 @@ func uploadFilePermitted(name string, size int64, allowed map[string]int64, allo
 	if maxFileSize > 0 {
 		maxSize = min(maxSize, maxFileSize)
 	}
-	return size <= maxSize
+	if size > maxSize {
+		return uploadFileDenialSize
+	}
+	return uploadFileDenialNone
+}
+
+func uploadFilePermitted(name string, size int64, allowed map[string]int64, allowAll bool, maxFileSize int64) bool {
+	return classifyUploadFile(name, size, allowed, allowAll, maxFileSize) == uploadFileDenialNone
 }

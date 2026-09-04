@@ -45,12 +45,21 @@ export function useDrag() {
     const uploadPaths = async (paths: string[], itemId: string) => {
         if (paths.length < 1) return;
 
-        const { selectedPaths, conflicts } = await Drive.GetUploadConflicts({
+        const { selectedPaths, conflicts, skippedExtensions } = await Drive.GetUploadConflicts({
             destId: itemId,
             paths,
         });
 
         if (!selectedPaths || selectedPaths.length < 1) return;
+
+        if ((skippedExtensions ?? []).length > 0) {
+            const result = await dialogStore
+                .getState()
+                .showDialog<"proceed" | "cancel">("unsupportedExtensionsDialog", {
+                    extensions: skippedExtensions ?? [],
+                });
+            if (result !== "proceed") return;
+        }
 
         let conflictStrategy: "suffix" | "skip" = "suffix";
         if ((conflicts ?? []).length > 0) {

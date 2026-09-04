@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -59,8 +60,17 @@ type GetUploadConflictsParams struct {
 }
 
 type UploadConflictsResult struct {
-	SelectedPaths []string `json:"selectedPaths"`
-	Conflicts     []string `json:"conflicts"`
+	SelectedPaths     []string `json:"selectedPaths"`
+	Conflicts         []string `json:"conflicts"`
+	SkippedExtensions []string `json:"skippedExtensions"`
+	SkippedCount      int      `json:"skippedCount"`
+}
+
+type collectedUploadPaths struct {
+	Files             []UploadFile
+	Directories       []UploadDirectory
+	SkippedExtensions []string
+	SkippedCount      int
 }
 
 func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflictsParams) (result UploadConflictsResult, err error) {
@@ -80,10 +90,12 @@ func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflict
 	if err != nil {
 		return UploadConflictsResult{}, err
 	}
-	files, directories, err := collectUploadPaths(params.Paths, rules, nil, false)
+	collected, err := collectUploadPaths(params.Paths, rules, nil, false)
 	if err != nil {
 		return UploadConflictsResult{}, err
 	}
+	files := collected.Files
+	directories := collected.Directories
 	seen := make(map[string]struct{})
 	conflicts := make([]string, 0)
 	for _, directory := range directories {
@@ -108,7 +120,12 @@ func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflict
 		}
 		seen[file.Name] = struct{}{}
 	}
-	return UploadConflictsResult{SelectedPaths: slices.Clone(params.Paths), Conflicts: conflicts}, nil
+	return UploadConflictsResult{
+		SelectedPaths:     slices.Clone(params.Paths),
+		Conflicts:         conflicts,
+		SkippedExtensions: collected.SkippedExtensions,
+		SkippedCount:      collected.SkippedCount,
+	}, nil
 }
 
 func ensureUploadSourceReadable(path string) error {
@@ -130,10 +147,12 @@ func PrepareUpload(paths []string, existingNames []string, strategy UploadConfli
 	if strategy != UploadConflictSuffix && strategy != UploadConflictSkip {
 		return UploadPreparation{}, fmt.Errorf("unsupported upload conflict strategy %q", strategy)
 	}
-	files, directories, err := collectUploadPaths(paths, rules, additionalExtensions, allowAllFiles)
+	collected, err := collectUploadPaths(paths, rules, additionalExtensions, allowAllFiles)
 	if err != nil {
 		return UploadPreparation{}, err
 	}
+	files := collected.Files
+	directories := collected.Directories
 	existing := make(map[string]struct{}, len(existingNames))
 	for _, name := range existingNames {
 		existing[name] = struct{}{}
@@ -214,10 +233,27 @@ func PrepareUpload(paths []string, existingNames []string, strategy UploadConfli
 	}, nil
 }
 
-func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) ([]UploadFile, []UploadDirectory, error) {
+func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (collectedUploadPaths, error) {
 	allowed := extensionMaxSizes(rules, additionalExtensions)
 	files := make([]UploadFile, 0)
 	directories := make([]UploadDirectory, 0)
+	skipped := make(map[string]struct{})
+	skippedCount := 0
+	noteSkippedExtension := func(name string) {
+		skippedCount++
+		skipped[strings.ToLower(filepath.Ext(name))] = struct{}{}
+	}
+	considerFile := func(name string, size int64) bool {
+		switch classifyUploadFile(name, size, allowed, allowAllFiles, rules.MaxFileSize) {
+		case uploadFileDenialExtension:
+			noteSkippedExtension(name)
+			return false
+		case uploadFileDenialNone:
+			return true
+		default:
+			return false
+		}
+	}
 	for _, rawPath := range paths {
 		absolute, err := filepath.EvalSymlinks(rawPath)
 		if err != nil {
@@ -232,7 +268,7 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			continue
 		}
 		if info.Mode().IsRegular() {
-			if uploadFilePermitted(info.Name(), info.Size(), allowed, allowAllFiles, rules.MaxFileSize) {
+			if considerFile(info.Name(), info.Size()) {
 				files = append(files, UploadFile{
 					Path:       info.Name(),
 					Name:       info.Name(),
@@ -274,7 +310,7 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			if infoErr != nil {
 				return infoErr
 			}
-			if !entryInfo.Mode().IsRegular() || !uploadFilePermitted(entry.Name(), entryInfo.Size(), allowed, allowAllFiles, rules.MaxFileSize) {
+			if !entryInfo.Mode().IsRegular() || !considerFile(entry.Name(), entryInfo.Size()) {
 				return nil
 			}
 			files = append(files, UploadFile{
@@ -287,11 +323,16 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			return nil
 		})
 		if walkErr != nil {
-			return nil, nil, walkErr
+			return collectedUploadPaths{}, walkErr
 		}
 	}
 	assignStableUploadFileIDs(files)
-	return files, directories, nil
+	return collectedUploadPaths{
+		Files:             files,
+		Directories:       directories,
+		SkippedExtensions: slices.Sorted(maps.Keys(skipped)),
+		SkippedCount:      skippedCount,
+	}, nil
 }
 
 func assignStableUploadFileIDs(files []UploadFile) {

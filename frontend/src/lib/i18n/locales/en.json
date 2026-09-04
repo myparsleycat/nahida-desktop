@@ -252,6 +252,12 @@
           "action_skip": "Skip",
           "action_suffix": "Rename"
         },
+        "unsupported_extensions": {
+          "title": "Too many files cannot be uploaded.",
+          "description": "The extensions below are not currently supported. You can continue without these files or cancel the upload.",
+          "none": "no extension",
+          "action_proceed": "Exclude and continue"
+        },
         "delete_items": {
           "title": "Delete Items",
           "description": "Items will disappear from the list immediately, and cleanup continues in the background. This action cannot be undone.",

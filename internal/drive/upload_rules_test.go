@@ -74,6 +74,22 @@ func TestParseUploadRulesRejectsIncompletePayload(t *testing.T) {
 	}
 }
 
+func TestClassifyUploadFileSeparatesExtensionAndSize(t *testing.T) {
+	allowed := map[string]int64{".bin": 100}
+	if got := classifyUploadFile("tool.exe", 10, allowed, false, 1000); got != uploadFileDenialExtension {
+		t.Fatalf("exe denial = %q, want %q", got, uploadFileDenialExtension)
+	}
+	if got := classifyUploadFile("mod.bin", 150, allowed, false, 1000); got != uploadFileDenialSize {
+		t.Fatalf("oversized denial = %q, want %q", got, uploadFileDenialSize)
+	}
+	if got := classifyUploadFile("mod.bin", 50, allowed, false, 1000); got != uploadFileDenialNone {
+		t.Fatalf("permitted denial = %q, want empty", got)
+	}
+	if got := classifyUploadFile("tool.exe", 10, allowed, true, 1000); got != uploadFileDenialNone {
+		t.Fatalf("allow-all denial = %q, want empty", got)
+	}
+}
+
 func TestUploadFilePermittedCapsExtensionLimitAtMaxFileSize(t *testing.T) {
 	allowed := map[string]int64{".bin": 200}
 	if uploadFilePermitted("mod.bin", 150, allowed, false, 100) {
