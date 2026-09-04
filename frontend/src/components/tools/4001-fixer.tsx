@@ -1,5 +1,6 @@
 import { Tools } from "@bindings/tools";
 import { XXMI } from "@bindings/xxmi";
+import { FourThousandOneFixerBuildToolsPath } from "@renderer/components/tools/4001-fixer-build-tools-path";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -317,6 +318,8 @@ export default function FourThousandOneFixer() {
         </TabsList>
 
         <TabsContent value="build" className="space-y-4">
+          <FourThousandOneFixerBuildToolsPath disabled={isRunning} />
+
           <div className="grid grid-cols-1 gap-4 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">

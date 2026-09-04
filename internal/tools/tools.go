@@ -213,6 +213,14 @@ func (t *Tools) setAppState(ctx context.Context, key, value string) error {
 	return client.AppState.Upsert(ctx, key, value, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
+func (t *Tools) deleteAppState(ctx context.Context, key string) error {
+	client, err := t.requireClient()
+	if err != nil {
+		return err
+	}
+	return client.AppState.Delete(ctx, key)
+}
+
 func (t *Tools) emitEvent(name string, data any) {
 	if t != nil && t.emit != nil {
 		t.emit(name, data)

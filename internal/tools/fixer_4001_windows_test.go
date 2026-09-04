@@ -47,10 +47,39 @@ func TestCmdScriptRunsQuotedBatchWithSpaces(t *testing.T) {
 }
 
 func TestD3DBuildCommandQuotesVSAndProjectPaths(t *testing.T) {
-	got := d3dBuildCommand(`C:\Program Files (x86)\vcvars64.bat`, `C:\Temp\XXMI Libs`)
+	got, err := d3dBuildCommand(`C:\Program Files (x86)\vcvars64.bat`, `C:\Temp\XXMI Libs`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := `"C:\Program Files (x86)\vcvars64.bat" && cd /d "C:\Temp\XXMI Libs" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`
 	if got != want {
 		t.Fatalf("d3dBuildCommand() = %q, want %q", got, want)
+	}
+}
+
+func TestD3DBuildCommandRejectsUnsafePaths(t *testing.T) {
+	project := `C:\Temp\XXMI Libs`
+	for _, vcvars := range []string{
+		`C:\Program Files (x86)\vcvars64.bat" && calc && "`,
+		`C:\Tools\%PATH%\vcvars64.bat`,
+		`\\attacker\share\vcvars64.bat`,
+	} {
+		if _, err := d3dBuildCommand(vcvars, project); err == nil {
+			t.Fatalf("d3dBuildCommand(%q) succeeded", vcvars)
+		}
+	}
+}
+
+func TestResolveVSDevCmdRejectsUNCAndDeviceNamespace(t *testing.T) {
+	for _, path := range []string{
+		`\\attacker\share\vcvars64.bat`,
+		`//attacker/share/vcvars64.bat`,
+		`\\?\C:\Windows\vcvars64.bat`,
+		`\\.\C:\Windows\vcvars64.bat`,
+	} {
+		if got := resolveVSDevCmd(path); got != "" {
+			t.Errorf("resolveVSDevCmd(%q) = %q", path, got)
+		}
 	}
 }
 
