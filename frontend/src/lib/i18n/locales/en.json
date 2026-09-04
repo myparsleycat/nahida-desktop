@@ -1695,7 +1695,12 @@
             "error": "Some files failed"
           },
           "files": "{{processed}} / {{total}} files",
-          "external": "{{count}} files compressed by an external tool such as CompactGUI were detected. Decompress them in that tool to automatically unblock this feature.",
+          "external": "{{count}} files compressed by an external tool such as CompactGUI were detected.",
+          "externalManual": "Select XPRESS4K to decompress them here, or decompress them with the external tool that created them.",
+          "externalDiskWarning": "Decompressing may increase disk usage.",
+          "externalDecompress": "Decompress external files",
+          "externalDecompressFailed": "{{count}} files could not be decompressed. You can retry the remaining files.",
+          "externalDecompressRequestFailed": "Failed to start external decompression.",
           "error": "{{count}} files could not be processed. Toggle the switch again to retry the remaining work.",
           "saveFailed": "Failed to save compression settings.",
           "toggleFailed": "Failed to change compression state."

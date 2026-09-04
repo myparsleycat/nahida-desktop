@@ -1663,7 +1663,12 @@
             "error": "一部のファイルで失敗"
           },
           "files": "{{processed}} / {{total}} ファイル",
-          "external": "CompactGUIなどの外部ツールで圧縮されたファイルが{{count}}個見つかりました。外部ツールで解凍すると自動的に利用可能になります。",
+          "external": "CompactGUIなどの外部ツールで圧縮されたファイルが{{count}}個見つかりました。",
+          "externalManual": "アプリで解除するにはXPRESS4Kを選択するか、圧縮に使用した外部ツールで解除してください。",
+          "externalDiskWarning": "解凍するとディスク使用量が増える場合があります。",
+          "externalDecompress": "外部圧縮を解除",
+          "externalDecompressFailed": "{{count}}個のファイルを解凍できませんでした。残りのファイルを再試行できます。",
+          "externalDecompressRequestFailed": "外部圧縮の解除を開始できませんでした。",
           "error": "{{count}}個のファイルを処理できませんでした。スイッチを再度操作すると残りを再試行できます。",
           "saveFailed": "圧縮設定を保存できませんでした。",
           "toggleFailed": "圧縮状態を変更できませんでした。"

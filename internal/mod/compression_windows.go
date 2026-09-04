@@ -42,7 +42,9 @@ var (
 	procMoveFileExW            = kernel32CompressionDLL.NewProc("MoveFileExW")
 	wofSetFileDataLocationCall = nativeWofSetFileDataLocation
 	deleteExternalBackingCall  = nativeDeleteExternalBacking
+	setCompressionCall         = nativeSetCompression
 	wofStateCall               = nativeWofState
+	fileAttributesCall         = nativeFileAttributes
 	fileIdentityCall           = nativeFileIdentity
 )
 
@@ -309,7 +311,7 @@ func restoreManagedWOF(
 }
 
 func inspectWofOwnership(path string, entry wofLedgerEntry) (wofOwnership, error) {
-	attributes, err := windows.GetFileAttributes(windows.StringToUTF16Ptr(path))
+	attributes, err := fileAttributesCall(path)
 	if err != nil {
 		return wofBackingNone, err
 	}
@@ -344,7 +346,7 @@ func unmanagedCompressionFiles(ctx context.Context, roots []string, client *db.C
 		if err := ctx.Err(); err != nil {
 			return external, errors.Join(append(errs, err)...)
 		}
-		attributes, err := windows.GetFileAttributes(windows.StringToUTF16Ptr(file.path))
+		attributes, err := fileAttributesCall(file.path)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -370,6 +372,70 @@ func unmanagedCompressionFiles(ctx context.Context, roots []string, client *db.C
 		}
 	}
 	return external, errors.Join(errs...)
+}
+
+func decompressExternalFiles(
+	ctx context.Context,
+	paths []string,
+	setTotals func(int, int64),
+	progress func(string, int64, bool),
+	mark compressionMutationMarker,
+	onError func(string, error),
+) error {
+	files := make([]compressionFile, 0, len(paths))
+	var errs []error
+	var totalBytes int64
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			onError(path, err)
+			errs = append(errs, fmt.Errorf("stat external compression %q: %w", path, err))
+			continue
+		}
+		files = append(files, compressionFile{path: path, size: info.Size()})
+		totalBytes += info.Size()
+	}
+	setTotals(len(files), totalBytes)
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
+		err := decompressExternalFile(file.path, mark)
+		progress(file.path, file.size, err != nil)
+		if err != nil {
+			onError(file.path, err)
+			errs = append(errs, fmt.Errorf("decompress external compression %q: %w", file.path, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func decompressExternalFile(path string, mark compressionMutationMarker) error {
+	attributes, err := fileAttributesCall(path)
+	if err != nil {
+		return err
+	}
+	external, _, _, err := wofStateCall(path)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	if external {
+		mark(path)
+		if err := wofDecompress(path); err != nil {
+			errs = append(errs, fmt.Errorf("remove WOF backing: %w", err))
+		}
+	}
+	if attributes&windows.FILE_ATTRIBUTE_COMPRESSED != 0 {
+		mark(path)
+		if err := ntfsDecompress(path); err != nil {
+			errs = append(errs, fmt.Errorf("remove NTFS compression: %w", err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func managedWofIDs(ctx context.Context, client *db.Client) (map[string]wofLedgerEntry, error) {
@@ -459,6 +525,37 @@ func nativeWofSetFileDataLocation(handle windows.Handle, provider uint32, info *
 func nativeDeleteExternalBacking(handle windows.Handle) error {
 	var returned uint32
 	return windows.DeviceIoControl(handle, fsctlDeleteExternalBacking, nil, 0, nil, 0, &returned, nil)
+}
+
+func ntfsDecompress(path string) error {
+	handle, err := openCompressionFile(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	return setCompressionCall(handle, 0)
+}
+
+func nativeSetCompression(handle windows.Handle, format uint16) error {
+	var returned uint32
+	return windows.DeviceIoControl(
+		handle,
+		windows.FSCTL_SET_COMPRESSION,
+		(*byte)(unsafe.Pointer(&format)),
+		uint32(unsafe.Sizeof(format)),
+		nil,
+		0,
+		&returned,
+		nil,
+	)
+}
+
+func nativeFileAttributes(path string) (uint32, error) {
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+	return windows.GetFileAttributes(pathPtr)
 }
 
 func openCompressionFile(path string) (windows.Handle, error) {

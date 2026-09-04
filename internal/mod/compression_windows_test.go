@@ -87,6 +87,152 @@ func TestWofDecompressUsesDeleteExternalBacking(t *testing.T) {
 	}
 }
 
+func TestDecompressExternalFileRemovesWofAndNTFSCompression(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "external-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := file.Name()
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	previousState := wofStateCall
+	previousAttributes := fileAttributesCall
+	previousDelete := deleteExternalBackingCall
+	previousSetCompression := setCompressionCall
+	t.Cleanup(func() {
+		wofStateCall = previousState
+		fileAttributesCall = previousAttributes
+		deleteExternalBackingCall = previousDelete
+		setCompressionCall = previousSetCompression
+	})
+	wofStateCall = func(string) (bool, uint32, uint32, error) {
+		return true, wofProviderFile, fileProviderCompressionXpress4K, nil
+	}
+	fileAttributesCall = func(string) (uint32, error) {
+		return windows.FILE_ATTRIBUTE_COMPRESSED, nil
+	}
+	deleted := false
+	deleteExternalBackingCall = func(windows.Handle) error {
+		deleted = true
+		return nil
+	}
+	compressionFormat := uint16(1)
+	setCompressionCall = func(_ windows.Handle, format uint16) error {
+		compressionFormat = format
+		return nil
+	}
+	var marked []string
+	if err := decompressExternalFile(path, func(paths ...string) { marked = append(marked, paths...) }); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("WOF backing was not removed")
+	}
+	if compressionFormat != 0 {
+		t.Fatalf("compression format = %d, want COMPRESSION_FORMAT_NONE", compressionFormat)
+	}
+	if len(marked) != 2 || marked[0] != path || marked[1] != path {
+		t.Fatalf("marked paths = %v", marked)
+	}
+}
+
+func TestExternalDecompressionRetriesRemainingFilesAndStaysDisabled(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	importer := filepath.Join(base, "Importer")
+	root := filepath.Join(importer, "Mods")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{filepath.Join(root, "first.bin"), filepath.Join(root, "second.bin")}
+	for _, path := range paths {
+		if err := os.WriteFile(path, make([]byte, 8192), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings, err := setting.Open(ctx, filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+
+	compressed := map[string]bool{paths[0]: true, paths[1]: true}
+	previousState := wofStateCall
+	previousAttributes := fileAttributesCall
+	previousIdentity := fileIdentityCall
+	previousSetCompression := setCompressionCall
+	t.Cleanup(func() {
+		wofStateCall = previousState
+		fileAttributesCall = previousAttributes
+		fileIdentityCall = previousIdentity
+		setCompressionCall = previousSetCompression
+	})
+	wofStateCall = func(string) (bool, uint32, uint32, error) { return false, 0, 0, nil }
+	fileAttributesCall = func(path string) (uint32, error) {
+		if compressed[path] {
+			return windows.FILE_ATTRIBUTE_COMPRESSED, nil
+		}
+		return 0, nil
+	}
+	fileIdentityCall = func(path string) (string, error) { return path, nil }
+	call := 0
+	setCompressionCall = func(windows.Handle, uint16) error {
+		path := paths[call]
+		call++
+		if path == paths[1] {
+			return errors.New("disk full")
+		}
+		compressed[path] = false
+		return nil
+	}
+
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	state, err := m.GetCompressionState(ctx)
+	if err != nil || state.Status != "blocked" || state.ExternalFiles != 2 || !state.CanDecompressExternal {
+		t.Fatalf("blocked state = %+v, err=%v", state, err)
+	}
+	queued, err := m.DecompressExternalCompression(ctx)
+	if err != nil || queued.Status != "decompressing" || queued.CanDecompressExternal {
+		t.Fatalf("queued state = %+v, err=%v", queued, err)
+	}
+	waitForCompression(t, m.compression)
+	state, err = m.GetCompressionState(ctx)
+	if err != nil || state.Status != "blocked" || state.ExternalFiles != 1 || state.FailedFiles != 1 ||
+		state.Error != "EXTERNAL_DECOMPRESSION_FAILED" || !state.CanDecompressExternal || state.Enabled {
+		t.Fatalf("partial state = %+v, err=%v", state, err)
+	}
+
+	setCompressionCall = func(windows.Handle, uint16) error {
+		compressed[paths[1]] = false
+		return nil
+	}
+	if _, err := m.DecompressExternalCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	state, err = m.GetCompressionState(ctx)
+	if err != nil || state.Status != "idle" || state.ExternalFiles != 0 || state.Error != "" || state.Enabled ||
+		state.TargetEnabled != nil || state.CanDecompressExternal {
+		t.Fatalf("completed state = %+v, err=%v", state, err)
+	}
+	if _, err := m.DecompressExternalCompression(ctx); err == nil || err.Error() != "EXTERNAL_DECOMPRESSION_LOCKED" {
+		t.Fatalf("idle decompression error = %v", err)
+	}
+}
+
 func TestCompactGUIDefaultSkipExtensions(t *testing.T) {
 	for _, extension := range []string{".png", ".mp4", ".zip", ".docx", ".xz"} {
 		if _, ok := xpressSkippedExtensions[extension]; !ok {

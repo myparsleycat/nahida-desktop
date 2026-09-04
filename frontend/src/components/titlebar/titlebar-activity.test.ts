@@ -119,6 +119,7 @@ describe("buildModCompressionTitlebarActivity", () => {
         externalFiles: 0,
         canToggle: true,
         canConfigure: true,
+        canDecompressExternal: false,
         ...partial,
     });
 

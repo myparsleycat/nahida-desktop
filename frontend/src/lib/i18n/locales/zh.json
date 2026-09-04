@@ -1660,7 +1660,12 @@
             "error": "部分文件处理失败"
           },
           "files": "{{processed}} / {{total}} 个文件",
-          "external": "检测到 {{count}} 个由 CompactGUI 等外部工具压缩的文件。请先在外部工具中解压，之后此功能会自动解除阻止。",
+          "external": "检测到 {{count}} 个由 CompactGUI 等外部工具压缩的文件。",
+          "externalManual": "若要在应用中解压，请选择 XPRESS4K；也可以使用创建这些压缩文件的外部工具解压。",
+          "externalDiskWarning": "解压后磁盘占用可能会增加。",
+          "externalDecompress": "解除外部压缩",
+          "externalDecompressFailed": "有 {{count}} 个文件无法解压。可以重试剩余文件。",
+          "externalDecompressRequestFailed": "无法开始解除外部压缩。",
           "error": "{{count}} 个文件处理失败。再次切换开关可重试剩余任务。",
           "saveFailed": "无法保存压缩设置。",
           "toggleFailed": "无法更改压缩状态。"

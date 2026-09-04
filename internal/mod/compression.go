@@ -33,21 +33,22 @@ type CompressionConfig struct {
 }
 
 type CompressionState struct {
-	Enabled         bool   `json:"enabled"`
-	Method          string `json:"method"`
-	ThresholdMiB    int    `json:"thresholdMiB"`
-	Status          string `json:"status"`
-	TargetEnabled   *bool  `json:"targetEnabled,omitempty"`
-	ProcessedFiles  int    `json:"processedFiles"`
-	TotalFiles      int    `json:"totalFiles"`
-	ProcessedBytes  int64  `json:"processedBytes"`
-	TotalBytes      int64  `json:"totalBytes"`
-	CurrentFileName string `json:"currentFileName,omitempty"`
-	FailedFiles     int    `json:"failedFiles"`
-	ExternalFiles   int    `json:"externalFiles"`
-	Error           string `json:"error,omitempty"`
-	CanToggle       bool   `json:"canToggle"`
-	CanConfigure    bool   `json:"canConfigure"`
+	Enabled               bool   `json:"enabled"`
+	Method                string `json:"method"`
+	ThresholdMiB          int    `json:"thresholdMiB"`
+	Status                string `json:"status"`
+	TargetEnabled         *bool  `json:"targetEnabled,omitempty"`
+	ProcessedFiles        int    `json:"processedFiles"`
+	TotalFiles            int    `json:"totalFiles"`
+	ProcessedBytes        int64  `json:"processedBytes"`
+	TotalBytes            int64  `json:"totalBytes"`
+	CurrentFileName       string `json:"currentFileName,omitempty"`
+	FailedFiles           int    `json:"failedFiles"`
+	ExternalFiles         int    `json:"externalFiles"`
+	Error                 string `json:"error,omitempty"`
+	CanToggle             bool   `json:"canToggle"`
+	CanConfigure          bool   `json:"canConfigure"`
+	CanDecompressExternal bool   `json:"canDecompressExternal"`
 }
 
 type compressionTransition struct {
@@ -68,6 +69,7 @@ type compressionCoordinator struct {
 	running              bool
 	configuring          bool
 	pendingFull          bool
+	pendingExternal      bool
 	pendingScopes        map[string]struct{}
 	debounceTimer        *time.Timer
 	cancel               context.CancelFunc
@@ -191,6 +193,22 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	return m.compression.snapshot(), nil
 }
 
+func (m *Mod) DecompressExternalCompression(ctx context.Context) (CompressionState, error) {
+	if m == nil || m.compression == nil || m.client == nil {
+		return CompressionState{}, errors.New("mod compression is not configured")
+	}
+	if !m.compression.requestMu.TryLock() {
+		return m.compression.snapshot(), errors.New("EXTERNAL_DECOMPRESSION_LOCKED")
+	}
+	defer m.compression.requestMu.Unlock()
+	state := m.compression.snapshot()
+	if !state.CanDecompressExternal {
+		return state, errors.New("EXTERNAL_DECOMPRESSION_LOCKED")
+	}
+	m.compression.enqueueExternalDecompressionLocked()
+	return m.compression.snapshot(), nil
+}
+
 func (c *compressionCoordinator) loadStateIfNeeded(ctx context.Context) error {
 	c.mu.Lock()
 	loaded := c.loaded
@@ -243,8 +261,9 @@ func (c *compressionCoordinator) schedule() {
 }
 
 type compressionWork struct {
-	full   bool
-	scopes []string
+	full               bool
+	decompressExternal bool
+	scopes             []string
 }
 
 type compressionMutationMarker func(...string)
@@ -254,6 +273,20 @@ func ignoreCompressionMutations(...string) {}
 func (c *compressionCoordinator) enqueueFullLocked() {
 	c.mu.Lock()
 	c.pendingFull = true
+	c.pendingExternal = false
+	clear(c.pendingScopes)
+	if c.debounceTimer != nil {
+		c.debounceTimer.Stop()
+		c.debounceTimer = nil
+	}
+	c.mu.Unlock()
+	c.startPendingLocked()
+}
+
+func (c *compressionCoordinator) enqueueExternalDecompressionLocked() {
+	c.mu.Lock()
+	c.pendingFull = false
+	c.pendingExternal = true
 	clear(c.pendingScopes)
 	if c.debounceTimer != nil {
 		c.debounceTimer.Stop()
@@ -306,14 +339,18 @@ func (c *compressionCoordinator) startPendingLocked() {
 		return
 	}
 	c.mu.Lock()
-	if c.running || !c.pendingFull && len(c.pendingScopes) == 0 {
+	if c.running || !c.pendingFull && !c.pendingExternal && len(c.pendingScopes) == 0 {
 		c.mu.Unlock()
 		return
 	}
 	work := c.takePendingLocked()
 	ctx, cancel := context.WithCancel(context.Background())
 	c.running, c.cancel, c.done = true, cancel, make(chan struct{})
-	c.state.Status = "checking"
+	if work.decompressExternal {
+		c.resetExternalProgressLocked()
+	} else {
+		c.state.Status = "checking"
+	}
 	c.deriveCapabilitiesLocked()
 	done := c.done
 	c.mu.Unlock()
@@ -324,10 +361,14 @@ func (c *compressionCoordinator) startPendingLocked() {
 func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, work compressionWork) {
 	defer close(done)
 	for {
-		c.reconcile(ctx, work)
+		if work.decompressExternal {
+			c.decompressExternal(ctx)
+		} else {
+			c.reconcile(ctx, work)
+		}
 		c.requestMu.Lock()
 		c.mu.Lock()
-		if ctx.Err() != nil || !c.pendingFull && len(c.pendingScopes) == 0 {
+		if ctx.Err() != nil || !c.pendingFull && !c.pendingExternal && len(c.pendingScopes) == 0 {
 			c.running, c.cancel = false, nil
 			c.deriveCapabilitiesLocked()
 			c.mu.Unlock()
@@ -336,7 +377,11 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 			return
 		}
 		work = c.takePendingLocked()
-		c.state.Status = "checking"
+		if work.decompressExternal {
+			c.resetExternalProgressLocked()
+		} else {
+			c.state.Status = "checking"
+		}
 		c.deriveCapabilitiesLocked()
 		c.mu.Unlock()
 		c.requestMu.Unlock()
@@ -345,14 +390,27 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 }
 
 func (c *compressionCoordinator) takePendingLocked() compressionWork {
-	work := compressionWork{full: c.pendingFull, scopes: make([]string, 0, len(c.pendingScopes))}
+	work := compressionWork{
+		full: c.pendingFull, decompressExternal: c.pendingExternal,
+		scopes: make([]string, 0, len(c.pendingScopes)),
+	}
 	for scope := range c.pendingScopes {
 		work.scopes = append(work.scopes, scope)
 	}
 	slices.Sort(work.scopes)
 	c.pendingFull = false
+	c.pendingExternal = false
 	clear(c.pendingScopes)
 	return work
+}
+
+func (c *compressionCoordinator) resetExternalProgressLocked() {
+	c.state.Status = "decompressing"
+	c.state.TargetEnabled = boolPointer(false)
+	c.state.ProcessedFiles, c.state.TotalFiles = 0, 0
+	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
+	c.state.FailedFiles = 0
+	c.state.CurrentFileName, c.state.Error = "", ""
 }
 
 func addCompressionScope(scopes map[string]struct{}, path string) {
@@ -373,6 +431,82 @@ func pathContains(parent, child string) bool {
 	parent = strings.TrimSuffix(strings.ToLower(filepath.Clean(parent)), string(filepath.Separator))
 	child = strings.ToLower(filepath.Clean(child))
 	return child == parent || strings.HasPrefix(child, parent+string(filepath.Separator))
+}
+
+func (c *compressionCoordinator) decompressExternal(ctx context.Context) {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+
+	roots, err := c.roots(ctx)
+	if err != nil {
+		c.blockExternalDecompression(err, "resolve-importers", 0)
+		return
+	}
+	external, scanErr := unmanagedCompressionFiles(ctx, roots, c.owner.client)
+	if scanErr != nil {
+		c.logError(scanErr, "scan-external-decompression", "xpress4k", "")
+	}
+	decompressErr := decompressExternalFiles(
+		ctx,
+		external,
+		c.setTotals,
+		c.progress,
+		c.markSelfChanges,
+		func(path string, err error) { c.logError(err, "decompress-external", "xpress4k", path) },
+	)
+	if errors.Is(decompressErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return
+	}
+	remaining, rescanErr := unmanagedCompressionFiles(ctx, roots, c.owner.client)
+	if rescanErr != nil {
+		c.logError(rescanErr, "rescan-external-decompression", "xpress4k", "")
+	}
+	if rescanErr != nil || len(remaining) > 0 {
+		remainingCount := len(remaining)
+		if rescanErr != nil && remainingCount == 0 {
+			remainingCount = len(external)
+		}
+		c.blockExternalDecompression(errors.Join(scanErr, decompressErr, rescanErr), "decompress-external", remainingCount)
+		return
+	}
+
+	c.mu.Lock()
+	c.state.Enabled = false
+	c.state.Status = "idle"
+	c.state.TargetEnabled = nil
+	c.state.CurrentFileName = ""
+	c.state.FailedFiles = 0
+	c.state.ExternalFiles = 0
+	c.state.Error = ""
+	c.deriveCapabilitiesLocked()
+	c.mu.Unlock()
+	c.publish()
+}
+
+func (c *compressionCoordinator) blockExternalDecompression(err error, stage string, remainingCount int) {
+	if err != nil && stage != "decompress-external" {
+		c.logError(err, stage, "xpress4k", "")
+	}
+	c.mu.Lock()
+	c.state.Enabled = false
+	c.state.Status = "blocked"
+	c.state.TargetEnabled = nil
+	c.state.CurrentFileName = ""
+	if remainingCount == 0 {
+		remainingCount = c.state.ExternalFiles
+	}
+	c.state.ExternalFiles = remainingCount
+	if err != nil {
+		c.state.Error = "EXTERNAL_DECOMPRESSION_FAILED"
+		if c.state.FailedFiles == 0 {
+			c.state.FailedFiles = 1
+		}
+	} else {
+		c.state.Error = ""
+	}
+	c.deriveCapabilitiesLocked()
+	c.mu.Unlock()
+	c.publish()
 }
 
 func (c *compressionCoordinator) reconcile(ctx context.Context, work compressionWork) {
@@ -710,6 +844,7 @@ func (c *compressionCoordinator) stop() error {
 		c.debounceTimer = nil
 	}
 	c.pendingFull = false
+	c.pendingExternal = false
 	clear(c.pendingScopes)
 	cancel, done := c.cancel, c.done
 	c.cancel = nil
@@ -992,9 +1127,11 @@ func (c *compressionCoordinator) publish() {
 }
 
 func (c *compressionCoordinator) deriveCapabilitiesLocked() {
-	busy := c.state.Status == "checking" || c.state.Status == "compressing" || c.state.Status == "decompressing"
+	busy := c.running || c.state.Status == "checking" || c.state.Status == "compressing" || c.state.Status == "decompressing"
 	c.state.CanToggle = !c.configuring && !busy && c.state.Status != "blocked"
 	c.state.CanConfigure = !c.configuring && !c.state.Enabled && !busy && c.state.Status != "error"
+	c.state.CanDecompressExternal = !c.configuring && !busy && c.state.Status == "blocked" &&
+		c.state.Method == "xpress4k" && c.state.ExternalFiles > 0
 }
 
 func (c *compressionCoordinator) reloadConfigState(ctx context.Context, settings compressionSettings) {
