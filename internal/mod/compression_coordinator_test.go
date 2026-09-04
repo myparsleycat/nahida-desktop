@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 type blockingCompressionSettings struct {
@@ -24,6 +26,27 @@ type blockingCompressionSettings struct {
 type failingCompressionSettings struct {
 	*setting.Setting
 	err error
+}
+
+type cancelableCompressionImporterSource struct {
+	mu       sync.Mutex
+	calls    int
+	started  chan struct{}
+	canceled chan struct{}
+}
+
+func (s *cancelableCompressionImporterSource) GetEnabledImporters(ctx context.Context) ([]xxmi.EnabledImporter, error) {
+	s.mu.Lock()
+	s.calls++
+	first := s.calls == 1
+	s.mu.Unlock()
+	if !first {
+		return nil, nil
+	}
+	close(s.started)
+	<-ctx.Done()
+	close(s.canceled)
+	return nil, ctx.Err()
 }
 
 func (s *failingCompressionSettings) GetCompressionMethod(context.Context) (string, error) {
@@ -93,6 +116,183 @@ func TestCompressionTransitionCommitsOnlyAfterReconciliation(t *testing.T) {
 	state, err = m.GetCompressionState(ctx)
 	if err != nil || state.Enabled || state.Status != "idle" || !state.CanConfigure {
 		t.Fatalf("disabled state = %+v, err=%v", state, err)
+	}
+}
+
+func TestCompressionCapabilitiesAllowOnlyInterruptingEnable(t *testing.T) {
+	trueValue, falseValue := true, false
+	tests := []struct {
+		name      string
+		status    string
+		target    *bool
+		canToggle bool
+	}{
+		{name: "idle", status: "idle", canToggle: true},
+		{name: "checking enable", status: "checking", target: &trueValue, canToggle: true},
+		{name: "compressing", status: "compressing", target: &trueValue, canToggle: true},
+		{name: "checking disable", status: "checking", target: &falseValue},
+		{name: "decompressing", status: "decompressing", target: &falseValue},
+		{name: "startup checking", status: "checking"},
+		{name: "blocked", status: "blocked"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			coordinator := newCompressionCoordinator(New())
+			coordinator.state.Status = test.status
+			coordinator.state.TargetEnabled = test.target
+			coordinator.deriveCapabilitiesLocked()
+			if coordinator.state.CanToggle != test.canToggle {
+				t.Fatalf("CanToggle = %v, want %v for state %+v", coordinator.state.CanToggle, test.canToggle, coordinator.state)
+			}
+		})
+	}
+}
+
+func TestCompressionCheckingUsesCurrentEnabledTarget(t *testing.T) {
+	coordinator := newCompressionCoordinator(New())
+	coordinator.state.Enabled = true
+	coordinator.state.Status = "idle"
+	coordinator.state.TargetEnabled = nil
+
+	coordinator.resetCheckingLocked()
+	coordinator.deriveCapabilitiesLocked()
+
+	state := coordinator.state
+	if state.Status != "checking" || state.TargetEnabled == nil || !*state.TargetEnabled || !state.CanToggle {
+		t.Fatalf("checking state = %+v", state)
+	}
+}
+
+func TestCompressionToggleOffCancelsActiveEnableAndRestores(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	importers := &cancelableCompressionImporterSource{
+		started: make(chan struct{}), canceled: make(chan struct{}),
+	}
+	m := NewWithOptions(Options{Settings: settings, XXMI: importers})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.compression.loadState(ctx); err != nil {
+		t.Fatal(err)
+	}
+	m.compression.mu.Lock()
+	m.compression.state.Status = "idle"
+	m.compression.deriveCapabilitiesLocked()
+	m.compression.mu.Unlock()
+
+	if _, err := m.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-importers.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("compression did not start")
+	}
+	state, err := m.GetCompressionState(ctx)
+	if err != nil || state.TargetEnabled == nil || !*state.TargetEnabled || !state.CanToggle {
+		t.Fatalf("active compression state = %+v, err=%v", state, err)
+	}
+
+	toggleDone := make(chan error, 1)
+	go func() {
+		_, err := m.SetCompressionEnabled(ctx, false)
+		toggleDone <- err
+	}()
+	select {
+	case err := <-toggleDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("toggle off deadlocked while waiting for compression cancellation")
+	}
+	select {
+	case <-importers.canceled:
+	default:
+		t.Fatal("active compression context was not canceled")
+	}
+
+	waitForCompression(t, m.compression)
+	state, err = m.GetCompressionState(ctx)
+	if err != nil || state.Enabled || state.Status != "idle" || state.TargetEnabled != nil || state.Error != "" {
+		t.Fatalf("restored compression state = %+v, err=%v", state, err)
+	}
+	persisted, err := settings.GetCompressionEnabled(ctx)
+	if err != nil || persisted {
+		t.Fatalf("persisted enabled = %v, err=%v", persisted, err)
+	}
+	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
+	if err != nil || transition != nil {
+		t.Fatalf("transition = %v, err=%v", transition, err)
+	}
+}
+
+func TestCompressionToggleOffResumesEnableWhenTransitionSaveFails(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	importers := &cancelableCompressionImporterSource{
+		started: make(chan struct{}), canceled: make(chan struct{}),
+	}
+	m := NewWithOptions(Options{Settings: settings, XXMI: importers})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.compression.loadState(ctx); err != nil {
+		t.Fatal(err)
+	}
+	m.compression.mu.Lock()
+	m.compression.state.Status = "idle"
+	m.compression.deriveCapabilitiesLocked()
+	m.compression.mu.Unlock()
+
+	if _, err := m.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-importers.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("compression did not start")
+	}
+	if _, err := settings.Client().SQL().ExecContext(ctx, `CREATE TRIGGER fail_disable_transition
+BEFORE UPDATE ON app_state
+WHEN NEW.key = 'mod_compression:transition' AND NEW.value LIKE '%"targetEnabled":false%'
+BEGIN
+    SELECT RAISE(ABORT, 'disable transition failed');
+END`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.SetCompressionEnabled(ctx, false); err == nil {
+		t.Fatal("toggle off unexpectedly succeeded")
+	}
+	select {
+	case <-importers.canceled:
+	default:
+		t.Fatal("active compression context was not canceled")
+	}
+	waitForCompression(t, m.compression)
+	state, err := m.GetCompressionState(ctx)
+	if err != nil || !state.Enabled || state.Status != "idle" || state.TargetEnabled != nil || state.Error != "" {
+		t.Fatalf("resumed compression state = %+v, err=%v", state, err)
+	}
+	persisted, err := settings.GetCompressionEnabled(ctx)
+	if err != nil || !persisted {
+		t.Fatalf("persisted enabled = %v, err=%v", persisted, err)
+	}
+	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
+	if err != nil || transition != nil {
+		t.Fatalf("transition = %v, err=%v", transition, err)
 	}
 }
 

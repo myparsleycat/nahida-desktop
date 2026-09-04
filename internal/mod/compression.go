@@ -182,15 +182,24 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	}
 	defer m.compression.requestMu.Unlock()
 	state := m.compression.snapshot()
-	if state.Status == "blocked" || (!state.CanToggle && state.Status != "error") {
+	interruptingEnable := !enabled && compressionEnableInProgress(state)
+	if state.Status == "blocked" || (!state.CanToggle && state.Status != "error") ||
+		(enabled && compressionEnableInProgress(state)) {
 		return state, errors.New("COMPRESSION_TOGGLE_LOCKED")
+	}
+	if interruptingEnable {
+		m.compression.cancelCurrentWorkLocked()
 	}
 	transition := compressionTransition{
 		TargetEnabled: enabled, Method: state.Method, ThresholdMiB: state.ThresholdMiB,
 		Stage: "queued", StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if err := m.compression.saveTransition(ctx, transition); err != nil {
-		return state, err
+		m.compression.logError(err, "save-transition", state.Method, "")
+		if interruptingEnable {
+			m.compression.enqueueFullLocked()
+		}
+		return m.compression.snapshot(), err
 	}
 	m.compression.mu.Lock()
 	m.compression.state.TargetEnabled = boolPointer(enabled)
@@ -202,6 +211,11 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	m.compression.publish()
 	m.compression.enqueueFullLocked()
 	return m.compression.snapshot(), nil
+}
+
+func compressionEnableInProgress(state CompressionState) bool {
+	return (state.Status == "checking" || state.Status == "compressing") &&
+		state.TargetEnabled != nil && *state.TargetEnabled
 }
 
 func (m *Mod) DecompressExternalCompression(ctx context.Context) (CompressionState, error) {
@@ -360,13 +374,35 @@ func (c *compressionCoordinator) startPendingLocked() {
 	if work.decompressExternal {
 		c.resetExternalProgressLocked()
 	} else {
-		c.state.Status = "checking"
+		c.resetCheckingLocked()
 	}
 	c.deriveCapabilitiesLocked()
 	done := c.done
 	c.mu.Unlock()
 	c.publish()
 	go c.run(ctx, done, work)
+}
+
+// cancelCurrentWorkLocked supersedes all work for the current transition.
+// The caller must hold requestMu so no new requests or watcher work can be
+// queued while the worker reaches its cancellation boundary.
+func (c *compressionCoordinator) cancelCurrentWorkLocked() {
+	c.mu.Lock()
+	c.pendingFull = false
+	c.pendingExternal = false
+	clear(c.pendingScopes)
+	if c.debounceTimer != nil {
+		c.debounceTimer.Stop()
+		c.debounceTimer = nil
+	}
+	cancel, done := c.cancel, c.done
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, work compressionWork) {
@@ -377,13 +413,11 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 		} else {
 			c.reconcile(ctx, work)
 		}
-		c.requestMu.Lock()
 		c.mu.Lock()
 		if ctx.Err() != nil || !c.pendingFull && !c.pendingExternal && len(c.pendingScopes) == 0 {
 			c.running, c.cancel = false, nil
 			c.deriveCapabilitiesLocked()
 			c.mu.Unlock()
-			c.requestMu.Unlock()
 			c.publish()
 			return
 		}
@@ -391,11 +425,10 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 		if work.decompressExternal {
 			c.resetExternalProgressLocked()
 		} else {
-			c.state.Status = "checking"
+			c.resetCheckingLocked()
 		}
 		c.deriveCapabilitiesLocked()
 		c.mu.Unlock()
-		c.requestMu.Unlock()
 		c.publish()
 	}
 }
@@ -422,6 +455,13 @@ func (c *compressionCoordinator) resetExternalProgressLocked() {
 	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
 	c.state.FailedFiles = 0
 	c.state.CurrentFileName, c.state.Error = "", ""
+}
+
+func (c *compressionCoordinator) resetCheckingLocked() {
+	c.state.Status = "checking"
+	if c.state.TargetEnabled == nil {
+		c.state.TargetEnabled = boolPointer(c.state.Enabled)
+	}
 }
 
 func addCompressionScope(scopes map[string]struct{}, path string) {
@@ -1166,7 +1206,8 @@ func (c *compressionCoordinator) publish() {
 
 func (c *compressionCoordinator) deriveCapabilitiesLocked() {
 	busy := c.running || c.state.Status == "checking" || c.state.Status == "compressing" || c.state.Status == "decompressing"
-	c.state.CanToggle = !c.configuring && !busy && c.state.Status != "blocked"
+	interruptibleEnable := compressionEnableInProgress(c.state)
+	c.state.CanToggle = !c.configuring && c.state.Status != "blocked" && (!busy || interruptibleEnable)
 	c.state.CanConfigure = !c.configuring && !c.state.Enabled && !busy && c.state.Status != "error"
 	c.state.CanDecompressExternal = !c.configuring && !busy && c.state.Status == "blocked" &&
 		c.state.Method == "xpress4k" && c.state.ExternalFiles > 0

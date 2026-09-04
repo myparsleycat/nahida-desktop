@@ -103,18 +103,52 @@ describe("ModCompressionCard", () => {
     });
   });
 
-  it("locks controls and shows target state while a transition is running", () => {
+  it("allows an active compression to be switched off while configuration stays locked", () => {
     currentState = state({
       status: "compressing",
       targetEnabled: true,
-      canToggle: false,
+      canToggle: true,
       canConfigure: false,
     });
     render(<ModCompressionCard />);
     const toggle = screen.getByRole("switch");
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.hasAttribute("data-disabled")).toBe(true);
+    expect(toggle.hasAttribute("data-disabled")).toBe(false);
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("requests one cancellation and locks immediately when compression is switched off", () => {
+    currentState = state({
+      status: "compressing",
+      targetEnabled: true,
+      canToggle: true,
+      canConfigure: false,
+    });
+    vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new Promise(() => {}));
+    render(<ModCompressionCard />);
+
+    const toggle = screen.getByRole("switch");
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+
+    expect(Mod.SetCompressionEnabled).toHaveBeenCalledTimes(1);
+    expect(Mod.SetCompressionEnabled).toHaveBeenCalledWith(false);
+    expect(toggle.hasAttribute("data-disabled")).toBe(true);
+  });
+
+  it("keeps the switch off and locked while decompression is running", () => {
+    currentState = state({
+      enabled: true,
+      status: "decompressing",
+      targetEnabled: false,
+      canToggle: false,
+      canConfigure: false,
+    });
+    render(<ModCompressionCard />);
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.hasAttribute("data-disabled")).toBe(true);
   });
 
   it("locks immediately and suppresses duplicate toggle requests", () => {
