@@ -3,17 +3,49 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
+
+func TestRuntimeErrorAndPanicHandlersLogSanitizedDetails(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	home, _ := os.UserHomeDir()
+	runtimeErrorHandler(log, errors.New("webview failed at "+filepath.Join(home, "private")+" token=runtime-secret"))
+	exitCode := 0
+	runtimePanicHandler(log, &application.PanicDetails{
+		Error:      errors.New("panic Bearer panic-secret"),
+		StackTrace: "frame\n" + filepath.Join(home, "source.go:10"),
+	}, func(code int) { exitCode = code })
+	if exitCode != 1 {
+		t.Fatalf("panic exit code = %d, want 1", exitCode)
+	}
+	got := output.String()
+	if strings.Count(got, " ERROR ") != 2 || !strings.Contains(got, `"operation":"runtime"`) || !strings.Contains(got, `"operation":"panic"`) {
+		t.Fatalf("handler output = %q", got)
+	}
+	for _, secret := range []string{home, "runtime-secret", "panic-secret"} {
+		if secret != "" && strings.Contains(got, secret) {
+			t.Fatalf("handler output contains %q: %q", secret, got)
+		}
+	}
+	if !strings.Contains(got, "%USERPROFILE%") || !strings.Contains(got, "stackTrace") {
+		t.Fatalf("handler output lacks sanitized stack: %q", got)
+	}
+}
 
 func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 	t.Parallel()
@@ -140,11 +172,11 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get logLevel: %v", err)
 	}
-	if got != "error" {
-		t.Fatalf("Get logLevel = %#v, want error", got)
+	if got != "warn" {
+		t.Fatalf("Get logLevel = %#v, want warn", got)
 	}
-	if rt.log.Level() != "error" {
-		t.Fatalf("logger level = %q, want error", rt.log.Level())
+	if rt.log.Level() != "warn" {
+		t.Fatalf("logger level = %q, want warn", rt.log.Level())
 	}
 
 	// Re-attach dest after boot so we can assert filtering without a live app data file.
@@ -279,8 +311,8 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 	defer func() { _ = rt.Close() }()
 
 	rt.log.Configure(infra.LogOptions{Writer: &buf, Dev: true})
-	if rt.log.Level() != "error" {
-		t.Fatalf("logger level = %q, want error", rt.log.Level())
+	if rt.log.Level() != "warn" {
+		t.Fatalf("logger level = %q, want warn", rt.log.Level())
 	}
 	rt.log.Info("Starting model viewer load", "StaticGlb.loadForViewer")
 	if !strings.Contains(buf.String(), "[StaticGlb.loadForViewer] Starting model viewer load") {

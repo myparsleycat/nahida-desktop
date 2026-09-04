@@ -58,6 +58,27 @@ type DriveAPIError struct {
 	Cause   error
 }
 
+//wails:ignore
+func (e *DriveAPIError) DiagnosticSeverity() infra.DiagnosticSeverity {
+	if e == nil {
+		return infra.DiagnosticError
+	}
+	if e.Status >= 400 && e.Status < 500 {
+		return infra.DiagnosticWarn
+	}
+	switch e.Code {
+	case codeLinkPasswordRequired, codeLinkInvalidPassword,
+		codeModPasswordRequired, codeModInvalidPassword,
+		codeLinkInvalidResponse, codeModInvalidResponse,
+		codeLinkContentInvalid, codeModContentInvalid,
+		codeImportInvalidResponse, codeCollectionNotFound,
+		codeCollectionEmpty, codeInvalidSourceURL:
+		return infra.DiagnosticWarn
+	default:
+		return infra.DiagnosticError
+	}
+}
+
 func (e *DriveAPIError) Error() string {
 	if e == nil {
 		return ""

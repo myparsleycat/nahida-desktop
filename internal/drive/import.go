@@ -158,6 +158,12 @@ func isCanceled(err error) bool {
 
 // CopyFromURL is Electron drive.fn.copyFromUrl.
 func (d *Drive) CopyFromURL(ctx context.Context, params CopyFromURLParams) (result CopyFromURLResult, err error) {
+	stage := "parse-source"
+	defer func() {
+		if err != nil {
+			err = d.reportCopyFailure(err, params, "copy-from-url", stage)
+		}
+	}()
 	defer normalizeDriveBoundaryError(&err, "fn:copyFromUrl")
 	source, err := ParseDriveSourceUrl(params.URL)
 	if err != nil {
@@ -166,6 +172,7 @@ func (d *Drive) CopyFromURL(ctx context.Context, params CopyFromURLParams) (resu
 	opCtx, operationID, _, done := d.beginCopy(ctx, params.OperationID, source.Type)
 	defer done()
 	params.OperationID = operationID
+	stage = "copy"
 	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: max(1, len(params.SelectedIDs))})
 
 	result, err = d.runCopyFromURL(opCtx, params, source)
@@ -185,10 +192,16 @@ func (d *Drive) CopyFromURL(ctx context.Context, params CopyFromURLParams) (resu
 
 // CopyFromURLMany is Electron drive.fn.copyFromUrlMany.
 func (d *Drive) CopyFromURLMany(ctx context.Context, params CopyFromURLParams) (result CopyFromURLResult, err error) {
-	defer normalizeDriveBoundaryError(&err, "fn:copyFromUrlMany")
 	if len(params.SelectedIDs) == 0 {
 		return d.CopyFromURL(ctx, params)
 	}
+	stage := "parse-source"
+	defer func() {
+		if err != nil {
+			err = d.reportCopyFailure(err, params, "copy-from-url-many", stage)
+		}
+	}()
+	defer normalizeDriveBoundaryError(&err, "fn:copyFromUrlMany")
 	source, err := ParseDriveSourceUrl(params.URL)
 	if err != nil {
 		return CopyFromURLResult{}, err
@@ -196,6 +209,7 @@ func (d *Drive) CopyFromURLMany(ctx context.Context, params CopyFromURLParams) (
 	opCtx, operationID, _, done := d.beginCopy(ctx, params.OperationID, source.Type)
 	defer done()
 	params.OperationID = operationID
+	stage = "copy"
 	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: len(params.SelectedIDs)})
 
 	result, err = d.runCopyFromURLMany(opCtx, params, source)
@@ -242,7 +256,27 @@ func (d *Drive) setImportTransferFailure(operationID string, status transfer.Sta
 	if message != "" {
 		updates.Error = &message
 	}
-	_ = d.transfer.Update(operationID, updates)
+	if err := d.transfer.Update(operationID, updates); err != nil {
+		_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "copy-from-url", Stage: "record-failure",
+			Fields: map[string]any{"operationId": operationID, "status": status},
+		})
+	}
+}
+
+func (d *Drive) reportCopyFailure(err error, params CopyFromURLParams, operation, stage string) error {
+	return infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
+		Operation: operation,
+		Stage:     stage,
+		Fields: map[string]any{
+			"operationId":    params.OperationID,
+			"destinationId":  params.DestinationID,
+			"itemId":         params.ItemID,
+			"collectionId":   params.CollectionID,
+			"selectedCount":  len(params.SelectedIDs),
+			"sourceEndpoint": infra.SanitizeLogURL(params.URL),
+		},
+	})
 }
 
 func (d *Drive) runCopyFromURL(ctx context.Context, params CopyFromURLParams, source DriveSource) (CopyFromURLResult, error) {

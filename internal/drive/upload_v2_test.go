@@ -135,3 +135,31 @@ func TestPlanUploadV2PreservesServerErrorCode(t *testing.T) {
 		t.Fatalf("error = %#v", err)
 	}
 }
+
+func TestUploadV2APIErrorClassifiesHTTPStatusWithoutChangingJSON(t *testing.T) {
+	t.Parallel()
+
+	err := uploadV2APIError(map[string]any{
+		"code":    "quota_exceeded",
+		"message": "quota reached",
+	}, http.StatusUnprocessableEntity)
+	var uploadErr *UploadV2Error
+	if !errors.As(err, &uploadErr) {
+		t.Fatalf("error = %#v", err)
+	}
+	if got := uploadErr.DiagnosticSeverity(); got != infra.DiagnosticWarn {
+		t.Fatalf("DiagnosticSeverity() = %q, want warn", got)
+	}
+	encoded, marshalErr := json.Marshal(uploadErr)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if got, want := string(encoded), `{"Code":"quota_exceeded","Message":"quota reached"}`; got != want {
+		t.Fatalf("json = %s, want %s", got, want)
+	}
+
+	serverErr := uploadV2APIError(map[string]any{"code": "backend_failure"}, http.StatusServiceUnavailable)
+	if got := infra.ClassifyError(serverErr); got != infra.DiagnosticError {
+		t.Fatalf("5xx severity = %q, want error", got)
+	}
+}

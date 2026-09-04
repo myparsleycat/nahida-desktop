@@ -29,6 +29,26 @@ var (
 type UploadV2Error struct {
 	Code    string
 	Message string
+	status  int
+}
+
+//wails:ignore
+func (e *UploadV2Error) DiagnosticSeverity() infra.DiagnosticSeverity {
+	if e == nil {
+		return infra.DiagnosticError
+	}
+	if e.status >= 400 && e.status < 500 {
+		return infra.DiagnosticWarn
+	}
+	code := strings.ToLower(e.Code)
+	if strings.HasPrefix(code, "http_4") ||
+		strings.Contains(code, "validation") || strings.Contains(code, "permission") ||
+		strings.Contains(code, "policy") || strings.Contains(code, "unsupported") ||
+		strings.Contains(code, "conflict") || strings.Contains(code, "too_large") ||
+		strings.HasPrefix(code, "invalid_") || strings.HasSuffix(code, "_invalid") {
+		return infra.DiagnosticWarn
+	}
+	return infra.DiagnosticError
 }
 
 func (e *UploadV2Error) Error() string {
@@ -276,5 +296,5 @@ func uploadV2APIError(value any, status int) error {
 	if code == "" {
 		code = fmt.Sprintf("http_%d", status)
 	}
-	return &UploadV2Error{Code: code, Message: message}
+	return &UploadV2Error{Code: code, Message: message, status: status}
 }

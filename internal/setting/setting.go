@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 // Options configure locale-sensitive defaults and optional afterSet hooks.
@@ -126,17 +127,17 @@ func (s *Setting) spec(key string) (spec, error) {
 func (s *Setting) Get(ctx context.Context, key string) (any, error) {
 	sp, err := s.spec(key)
 	if err != nil {
-		return nil, err
+		return nil, settingError(err, "get", "validate-key", key, infra.DiagnosticWarn)
 	}
 	row, err := s.client.Settings.Get(ctx, sp.def.StorageKey)
 	if err != nil {
-		return nil, err
+		return nil, settingError(err, "get", "read", key, infra.DiagnosticError)
 	}
 	if row == nil || row.Value == nil {
 		fallback := sp.resolved(s, sp.getDefault(s))
 		stored := sp.stored(s, fallback)
 		if err := s.client.Settings.Upsert(ctx, sp.def.StorageKey, &stored); err != nil {
-			return nil, err
+			return nil, settingError(err, "get", "seed-default", key, infra.DiagnosticError)
 		}
 		return fallback, nil
 	}
@@ -145,7 +146,7 @@ func (s *Setting) Get(ctx context.Context, key string) (any, error) {
 	stored := sp.stored(s, resolved)
 	if stored != *row.Value {
 		if err := s.client.Settings.Upsert(ctx, sp.def.StorageKey, &stored); err != nil {
-			return nil, err
+			return nil, settingError(err, "get", "normalize-storage", key, infra.DiagnosticError)
 		}
 	}
 	return resolved, nil
@@ -156,7 +157,7 @@ func (s *Setting) GetMany(ctx context.Context, keys []string) (map[string]any, e
 	for _, key := range keys {
 		value, err := s.Get(ctx, key)
 		if err != nil {
-			return nil, err
+			return nil, settingError(err, "get-many", "read", key, infra.DiagnosticError)
 		}
 		out[key] = value
 	}
@@ -166,16 +167,16 @@ func (s *Setting) GetMany(ctx context.Context, keys []string) (map[string]any, e
 func (s *Setting) Set(ctx context.Context, key string, value any) error {
 	sp, err := s.spec(key)
 	if err != nil {
-		return err
+		return settingError(err, "set", "validate-key", key, infra.DiagnosticWarn)
 	}
 	normalized := sp.resolved(s, value)
 	stored := sp.stored(s, normalized)
 	if err := s.client.Settings.Upsert(ctx, sp.def.StorageKey, &stored); err != nil {
-		return err
+		return settingError(err, "set", "write", key, infra.DiagnosticError)
 	}
 	if sp.afterSet != nil {
 		if err := sp.afterSet(s, ctx, normalized); err != nil {
-			return err
+			return settingError(err, "set", "after-set", key, infra.DiagnosticError)
 		}
 	}
 	s.opts.Hooks.set(key, normalized)
@@ -208,11 +209,11 @@ func (s *Setting) SetSettingBounds(ctx context.Context, bounds Bounds) error {
 func (s *Setting) getStoredBounds(ctx context.Context, key string) (*Bounds, error) {
 	row, err := s.client.Settings.Get(ctx, key)
 	if err != nil || row == nil || row.Value == nil {
-		return nil, err
+		return nil, settingError(err, "bounds-get", "read", key, infra.DiagnosticError)
 	}
 	var bounds Bounds
 	if err := json.Unmarshal([]byte(*row.Value), &bounds); err != nil {
-		return nil, fmt.Errorf("decode %s bounds: %w", key, err)
+		return nil, settingError(fmt.Errorf("decode %s bounds: %w", key, err), "bounds-get", "decode", key, infra.DiagnosticError)
 	}
 	return &bounds, nil
 }
@@ -220,18 +221,19 @@ func (s *Setting) getStoredBounds(ctx context.Context, key string) (*Bounds, err
 func (s *Setting) setStoredBounds(ctx context.Context, key string, bounds Bounds) error {
 	raw, err := json.Marshal(bounds)
 	if err != nil {
-		return err
+		return settingError(err, "bounds-set", "encode", key, infra.DiagnosticError)
 	}
 	value := string(raw)
-	return s.client.Settings.Upsert(ctx, key, &value)
+	return settingError(s.client.Settings.Upsert(ctx, key, &value), "bounds-set", "write", key, infra.DiagnosticError)
 }
 
 func (s *Setting) GetImageCacheSize(ctx context.Context) (int64, error) {
-	return s.client.ImageCache.SumSize(ctx)
+	size, err := s.client.ImageCache.SumSize(ctx)
+	return size, settingError(err, "image-cache", "measure", "", infra.DiagnosticError)
 }
 
 func (s *Setting) ClearImageCache(ctx context.Context) error {
-	return s.client.ImageCache.DeleteAll(ctx)
+	return settingError(s.client.ImageCache.DeleteAll(ctx), "image-cache", "clear", "", infra.DiagnosticError)
 }
 
 type AdvancedRow struct {
@@ -242,11 +244,11 @@ type AdvancedRow struct {
 func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 	// Touch debug.openConsole so a missing row is seeded, matching Electron.
 	if _, err := s.Get(ctx, KeyDebugOpenConsole); err != nil {
-		return nil, err
+		return nil, settingError(err, "advanced-get-all", "seed", KeyDebugOpenConsole, infra.DiagnosticError)
 	}
 	rows, err := s.client.Settings.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, settingError(err, "advanced-get-all", "list", "", infra.DiagnosticError)
 	}
 	out := make([]AdvancedRow, 0, len(rows))
 	for _, row := range rows {
@@ -261,17 +263,17 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
 	existing, err := s.client.Settings.Get(ctx, key)
 	if err != nil {
-		return err
+		return settingError(err, "advanced-set", "read", key, infra.DiagnosticError)
 	}
 	if existing == nil {
-		return fmt.Errorf("setting key %q not found", key)
+		return settingError(fmt.Errorf("setting key %q not found", key), "advanced-set", "validate-key", key, infra.DiagnosticWarn)
 	}
 	stored := value
 	if key == definitionsByKey[KeyDebugOpenConsole].StorageKey {
 		stored = formatBool(parseBooleanSetting(&value, false))
 	}
 	if err := s.client.Settings.UpdateValue(ctx, key, &stored); err != nil {
-		return err
+		return settingError(err, "advanced-set", "write", key, infra.DiagnosticError)
 	}
 	if key == definitionsByKey[KeyDebugOpenConsole].StorageKey {
 		s.opts.Hooks.openConsoleChanged(stored == "true")
@@ -279,6 +281,19 @@ func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
 	s.opts.Hooks.set(key, stored)
 	s.opts.Hooks.rendererReload()
 	return nil
+}
+
+func settingError(err error, operation, stage, key string, severity infra.DiagnosticSeverity) error {
+	if err == nil {
+		return nil
+	}
+	fields := map[string]any{}
+	if key != "" {
+		fields["key"] = key
+	}
+	return infra.AnnotateError(err, infra.Diagnostic{
+		Severity: severity, Operation: operation, Stage: stage, Fields: fields,
+	})
 }
 
 func (s *Setting) GetRunOnStartup(ctx context.Context) (bool, error) {

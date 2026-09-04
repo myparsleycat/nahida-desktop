@@ -28,7 +28,7 @@ func (d *Drive) downloadDriveFile(
 ) error {
 	if file.Size == 0 {
 		if err := os.WriteFile(destination, nil, 0o644); err != nil {
-			return err
+			return infra.AnnotateError(err, infra.Diagnostic{Stage: "write"})
 		}
 		return nil
 	}
@@ -130,7 +130,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 				}
 			},
 		}
-		err := d.download.File(attemptCtx, request)
+		err := infra.AnnotateError(d.download.File(attemptCtx, request), infra.Diagnostic{Stage: "download"})
 		attemptCancel()
 		snapshot, monitored := transfers.SlowChunks().Get(monitorKey)
 		transfers.SlowChunks().Unregister(monitorKey)
@@ -214,7 +214,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 				}
 				continue
 			}
-			err = errors.Join(err, freshErr)
+			return infra.AnnotateError(errors.Join(err, freshErr), infra.Diagnostic{Stage: "presign"})
 		}
 		return err
 	}

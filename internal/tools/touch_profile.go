@@ -91,6 +91,15 @@ type touchCachedPreview struct {
 }
 
 func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadInput) (result TouchModInspection, err error) {
+	stage := "validate"
+	defer func() {
+		if err != nil {
+			err = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+				Operation: "touch-profile-prepare", Stage: stage,
+				Fields: map[string]any{"modPath": input.ModPath},
+			})
+		}
+	}()
 	if err = ctx.Err(); err != nil {
 		return result, err
 	}
@@ -113,9 +122,15 @@ func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadI
 	}
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(sessionDir)
+			if cleanupErr := os.RemoveAll(sessionDir); cleanupErr != nil {
+				_ = infra.ReportError(t.log, cleanupErr, "Tools", infra.Diagnostic{
+					Severity: infra.DiagnosticError, Operation: "touch-profile-prepare", Stage: "cleanup",
+					Fields: map[string]any{"sessionId": id, "sessionDir": sessionDir},
+				})
+			}
 		}
 	}()
+	stage = "scan"
 	t.emitTouchProgress(id, "scan", .05, "Scanning mod structure", "")
 	analysis, err := analyzeTouchMod(input.ModPath, func(message string) {
 		if t.log != nil {
@@ -123,7 +138,6 @@ func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadI
 		}
 	})
 	if err != nil {
-		t.logError(err, "TouchProfile:prepareMod:"+input.ModPath)
 		return result, err
 	}
 	if err = ctx.Err(); err != nil {

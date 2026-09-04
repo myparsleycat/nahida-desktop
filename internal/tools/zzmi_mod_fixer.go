@@ -235,8 +235,7 @@ func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMI
 	stage := "scan"
 	result, err := zzmiengine.Run(runCtx, target, input.Tool, pack, func(message string) { t.emitFixToolLog(message, false) })
 	if err != nil {
-		t.zzmiLogRunError(err, input, stage, pack, "not-started")
-		return ZZMIFixerRunResult{}, err
+		return ZZMIFixerRunResult{}, t.zzmiLogRunError(err, input, stage, pack, "not-started")
 	}
 	output := ZZMIFixerRunResult{ScannedINI: result.ScannedINI, ChangedINI: result.ChangedINI, ChangedBUF: result.ChangedBUF, SkippedFiles: result.SkippedFiles, Warnings: result.Warnings}
 	if len(result.Changes) == 0 {
@@ -246,8 +245,7 @@ func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMI
 	stage = "commit"
 	session, err := t.zzmiCommit(runCtx, target, input.Tool, *pack, result.Changes)
 	if err != nil {
-		t.zzmiLogRunError(err, input, stage, pack, "automatic-rollback-attempted")
-		return ZZMIFixerRunResult{}, err
+		return ZZMIFixerRunResult{}, t.zzmiLogRunError(err, input, stage, pack, "automatic-rollback-attempted")
 	}
 	output.SessionID = &session.ID
 	t.emitFixToolLog(fmt.Sprintf("ZZMI fixer completed: %d INI, %d buffers changed.", result.ChangedINI, result.ChangedBUF), false)
@@ -980,9 +978,16 @@ func backupEntriesSize(entries []ZZMIBackupEntry) int64 {
 	}
 	return size
 }
-func (t *Tools) zzmiLogRunError(err error, input ZZMIFixerRunInput, stage string, pack *zzmiengine.RulePack, rollback string) {
-	if err == nil || t.log == nil {
-		return
+func (t *Tools) zzmiLogRunError(err error, input ZZMIFixerRunInput, stage string, pack *zzmiengine.RulePack, rollback string) error {
+	if err == nil {
+		return nil
 	}
-	t.log.Error(fmt.Sprintf("ZZMI Mod Fixer failed: tool=%s stage=%s path=%q rules=%s commit=%s rollback=%s error=%v", input.Tool, stage, input.Path, pack.UpstreamTag, pack.CommitSHA, rollback, err), "ZZMIFixerRun")
+	fields := map[string]any{"tool": input.Tool, "path": input.Path, "rollback": rollback}
+	if pack != nil {
+		fields["rules"] = pack.UpstreamTag
+		fields["commit"] = pack.CommitSHA
+	}
+	return infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+		Severity: infra.DiagnosticError, Operation: "zzmi-fixer", Stage: stage, Fields: fields,
+	})
 }

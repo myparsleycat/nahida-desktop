@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
 )
@@ -190,7 +191,7 @@ func (d *Drive) runDownload(
 ) error {
 	preparing := transfer.StatusPreparing
 	if err := transfers.Update(pid, transfer.Updates{Status: &preparing, ClearError: true, ClearErrorCode: true}); err != nil {
-		return err
+		return d.reportDownloadFailure(transfers, pid, "prepare", err)
 	}
 	name := prepared.Root.Name
 	if len(params.Items) != 1 {
@@ -198,17 +199,17 @@ func (d *Drive) runDownload(
 	}
 	destinationTargets, err := resolveDownloadDestinationTargets(prepared, params.TargetPath)
 	if err != nil {
-		return d.failDownloadTransfer(transfers, pid, err)
+		return d.failDownloadTransfer(transfers, pid, "resolve-target", err)
 	}
 	data := transfer.Data{Root: &prepared.Root, Files: slices.Clone(prepared.Files), Dirs: slices.Clone(prepared.Dirs)}
 	if err := transfers.SetData(pid, data, prepared.TotalBytes, name, destinationTargets); err != nil {
-		return err
+		return d.failDownloadTransfer(transfers, pid, "metadata", err)
 	}
 	if err := d.executeDownload(ctx, transfers, pid, params, prepared); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
-		return d.failDownloadTransfer(transfers, pid, err)
+		return d.failDownloadTransfer(transfers, pid, "", err)
 	}
 	return nil
 }
@@ -331,7 +332,7 @@ func setDownloadRootName(metadata *DownloadMetadata, name string) {
 func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfer, pid string, params StartDownloadParams, metadata DownloadMetadata) error {
 	paths, singleFile, err := resolveDownloadPaths(metadata, params.TargetPath)
 	if err != nil {
-		return err
+		return infra.AnnotateError(err, infra.Diagnostic{Stage: "resolve-target"})
 	}
 	record, _ := transfers.Get(pid)
 	downloadedBytes := record.TransferredSize
@@ -352,7 +353,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 	}
 	progress := transfer.StatusProgress
 	if err := transfers.Update(pid, transfer.Updates{Status: &progress, TransferredSize: &downloadedBytes, TransferredFiles: &downloadedFiles}); err != nil {
-		return err
+		return infra.AnnotateError(err, infra.Diagnostic{Stage: "prepare"})
 	}
 
 	concurrency := d.downloadConcurrency(ctx)
@@ -376,7 +377,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 				}
 				if job.file == nil {
 					if err := os.MkdirAll(job.dirPath, 0o755); err != nil {
-						failure := fmt.Errorf("create download directory %q: %w", job.dirPath, err)
+						failure := infra.AnnotateError(fmt.Errorf("create download directory %q: %w", job.dirPath, err), infra.Diagnostic{Stage: "write"})
 						stateMu.Lock()
 						failures = append(failures, failure)
 						stateMu.Unlock()
@@ -389,7 +390,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 				}
 				parentPath := paths[parentDownloadKey(file, metadata.Root.ID, singleFile)]
 				if parentPath == "" {
-					failure := fmt.Errorf("download parent path missing for %s", file.Name)
+					failure := infra.AnnotateError(fmt.Errorf("download parent path missing for %s", file.Name), infra.Diagnostic{Stage: "resolve-target"})
 					stateMu.Lock()
 					failures = append(failures, failure)
 					stateMu.Unlock()
@@ -398,7 +399,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 				}
 				if !singleFile {
 					if err := os.MkdirAll(parentPath, 0o755); err != nil {
-						failure := fmt.Errorf("create download directory %q: %w", parentPath, err)
+						failure := infra.AnnotateError(fmt.Errorf("create download directory %q: %w", parentPath, err), infra.Diagnostic{Stage: "write"})
 						stateMu.Lock()
 						failures = append(failures, failure)
 						stateMu.Unlock()
@@ -409,7 +410,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 				destination := filepath.Join(parentPath, file.Name)
 				if info, statErr := os.Stat(destination); statErr == nil {
 					if !info.Mode().IsRegular() {
-						failure := fmt.Errorf("download target is not a file: %s", destination)
+						failure := infra.AnnotateError(fmt.Errorf("download target is not a file: %s", destination), infra.Diagnostic{Stage: "write"})
 						stateMu.Lock()
 						failures = append(failures, failure)
 						stateMu.Unlock()
@@ -485,7 +486,7 @@ func (d *Drive) executeDownload(ctx context.Context, transfers *transfer.Transfe
 	total := metadata.TotalBytes
 	totalFiles := len(metadata.Files)
 	if err := transfers.Update(pid, transfer.Updates{Status: &completed, TransferredSize: &total, TransferredFiles: &totalFiles, Progress: &hundred}); err != nil {
-		return err
+		return infra.AnnotateError(err, infra.Diagnostic{Stage: "finalize"})
 	}
 	inspectionPaths := make([]string, 0, len(record.DestinationTargets))
 	for _, target := range record.DestinationTargets {
@@ -654,14 +655,32 @@ func (d *Drive) downloadConcurrency(ctx context.Context) int {
 	return value
 }
 
-func (d *Drive) failDownloadTransfer(transfers *transfer.Transfer, pid string, failure error) error {
+func (d *Drive) failDownloadTransfer(transfers *transfer.Transfer, pid, stage string, failure error) error {
 	if errors.Is(failure, context.Canceled) {
 		return failure
 	}
 	status := transfer.StatusError
 	message := failure.Error()
-	_ = transfers.Update(pid, transfer.Updates{Status: &status, Error: &message})
-	return failure
+	updateErr := transfers.Update(pid, transfer.Updates{Status: &status, Error: &message})
+	reported := d.reportDownloadFailure(transfers, pid, stage, failure)
+	if updateErr == nil {
+		return reported
+	}
+	updateReported := infra.ReportError(d.log, updateErr, "Drive", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "download",
+		Stage:     "record-failure",
+		Fields:    driveTransferFields(transfers, pid, ""),
+	})
+	return errors.Join(reported, updateReported)
+}
+
+func (d *Drive) reportDownloadFailure(transfers *transfer.Transfer, pid, stage string, failure error) error {
+	return infra.ReportError(d.log, failure, "Drive", infra.Diagnostic{
+		Operation: "download",
+		Stage:     stage,
+		Fields:    driveTransferFields(transfers, pid, ""),
+	})
 }
 
 func cloneDownloadMetadata(metadata DownloadMetadata) DownloadMetadata {

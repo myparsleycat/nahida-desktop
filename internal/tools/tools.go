@@ -229,7 +229,9 @@ func (t *Tools) emitEvent(name string, data any) {
 
 func (t *Tools) logError(err error, where string) {
 	if err != nil && t != nil && t.log != nil {
-		t.log.Error(err.Error(), where)
+		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
+		})
 	}
 }
 

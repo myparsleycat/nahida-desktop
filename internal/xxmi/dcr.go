@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -52,28 +54,24 @@ func (x *XXMI) DisableGenshinDynamicCharacterResolution(ctx context.Context) err
 	}
 	raw, err := readGenshinRegistryGeneralData()
 	if err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to read Genshin Impact graphics settings: %v", err), xxmiDisableDCRWhere)
-		return err
+		return x.reportDCRFailure(err, "read")
 	}
 	data, err := parseGenshinGeneralData(raw)
 	if err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to parse Genshin Impact graphics settings: %v", err), xxmiDisableDCRWhere)
-		return err
+		return x.reportDCRFailure(err, "decode")
 	}
 	if !data.disableDCR() {
 		return nil
 	}
 	encoded, err := data.encode()
 	if err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to encode Genshin Impact graphics settings: %v", err), xxmiDisableDCRWhere)
-		return err
+		return x.reportDCRFailure(err, "encode")
 	}
 	if x.log != nil {
 		x.log.Info("Disabling Genshin Impact Dynamic Character Resolution", xxmiDisableDCRWhere)
 	}
 	if err := writeGenshinRegistryGeneralData(encoded); err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to write Genshin Impact graphics settings: %v", err), xxmiDisableDCRWhere)
-		return err
+		return x.reportDCRFailure(err, "write")
 	}
 	return nil
 }
@@ -87,27 +85,35 @@ func (x *XXMI) rejectEnabledGimiDCR(ctx context.Context, importer string) error 
 	}
 	raw, err := readGenshinRegistryGeneralData()
 	if err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to read Genshin Impact graphics settings: %v", err), xxmiCheckDCRWhere)
-		return err
+		return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "start-game", Stage: "dcr-read",
+			Fields: map[string]any{"importer": importer},
+		})
 	}
 	data, err := parseGenshinGeneralData(raw)
 	if err != nil {
-		x.logDCRError(fmt.Sprintf("Failed to parse Genshin Impact graphics settings: %v", err), xxmiCheckDCRWhere)
-		return err
+		return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "start-game", Stage: "dcr-decode",
+			Fields: map[string]any{"importer": importer},
+		})
 	}
 	if data.dcrEnabled() {
 		if x.log != nil {
 			x.log.Info(fmt.Sprintf("Rejected StartGame at DCR check for importer %s", importer), xxmiCheckDCRWhere)
 		}
-		return errGimiDCREnabled
+		return infra.AnnotateError(errGimiDCREnabled, infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "dcr-policy",
+			Fields: map[string]any{"importer": importer},
+		})
 	}
 	return nil
 }
 
-func (x *XXMI) logDCRError(message, where string) {
-	if x != nil && x.log != nil {
-		x.log.Error(message, where)
-	}
+func (x *XXMI) reportDCRFailure(err error, stage string) error {
+	return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
+		Severity: infra.DiagnosticError, Operation: "disable-dcr", Stage: stage,
+		Fields: map[string]any{"importer": gimiImporterKey},
+	})
 }
 
 func parseGenshinGeneralData(raw []byte) (*genshinGeneralData, error) {

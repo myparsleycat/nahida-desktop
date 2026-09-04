@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -15,7 +17,7 @@ import (
 )
 
 const (
-	defaultLogLevel        = "error"
+	defaultLogLevel        = "warn"
 	desktopLogName         = "desktop.log"
 	defaultLogMaxSize      = 10 * 1024 * 1024
 	defaultLogRotateEvery  = 7 * 24 * time.Hour
@@ -24,8 +26,13 @@ const (
 )
 
 var (
-	homeNeedlesOnce sync.Once
-	homeNeedles     []string
+	homeNeedlesOnce     sync.Once
+	homeNeedles         []string
+	bearerPattern       = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
+	urlUserInfoPattern  = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
+	jsonSecretPattern   = regexp.MustCompile(`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`)
+	cookieHeaderPattern = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
+	plainSecretPattern  = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`)
 )
 
 var levelPriority = map[string]int{
@@ -141,7 +148,7 @@ func (l *Log) closeFileLocked() error {
 	return err
 }
 
-// SetLevel updates the current level. Empty and unknown values become "error"
+// SetLevel updates the current level. Empty and unknown values become "warn"
 // so a corrupted setting cannot silence every log entry.
 //
 //wails:ignore
@@ -355,7 +362,7 @@ func encodeLogLine(now time.Time, level string, msg any, where string) []byte {
 }
 
 func formatLogContent(msg any, where string) string {
-	content := redactUserPaths(formatLogMsg(msg), currentHomeNeedles())
+	content := redactSecrets(redactUserPaths(formatLogMsg(msg), currentHomeNeedles()))
 	if where == "" {
 		return content
 	}
@@ -363,6 +370,33 @@ func formatLogContent(msg any, where string) string {
 		return "[" + where + "]"
 	}
 	return "[" + where + "] " + content
+}
+
+func redactSecrets(value string) string {
+	if value == "" {
+		return ""
+	}
+	value = bearerPattern.ReplaceAllString(value, "Bearer %REDACTED%")
+	value = urlUserInfoPattern.ReplaceAllString(value, `${1}%REDACTED%@`)
+	value = cookieHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
+	value = jsonSecretPattern.ReplaceAllString(value, `${1}"%REDACTED%"`)
+	return plainSecretPattern.ReplaceAllString(value, `${1}${2}%REDACTED%`)
+}
+
+// SanitizeLogURL removes credentials, query parameters, and fragments from a
+// URL before it is placed in diagnostic context.
+//
+//wails:ignore
+func SanitizeLogURL(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func flattenLogLine(s string) string {
@@ -387,8 +421,37 @@ func formatLogMsg(msg any) string {
 		if err != nil {
 			return fmt.Sprint(v)
 		}
-		return string(raw)
+		return flattenJSONNewlines(string(raw))
 	}
+}
+
+// flattenJSONNewlines replaces encoded CR/LF characters inside JSON strings
+// without mistaking an escaped backslash followed by n or r for a newline.
+func flattenJSONNewlines(value string) string {
+	var result strings.Builder
+	result.Grow(len(value))
+	for index := 0; index < len(value); index++ {
+		if value[index] != '\\' || index+1 >= len(value) {
+			result.WriteByte(value[index])
+			continue
+		}
+		next := value[index+1]
+		if next == '\\' {
+			result.WriteString(`\\`)
+			index++
+			continue
+		}
+		if next != 'r' && next != 'n' {
+			result.WriteByte(value[index])
+			continue
+		}
+		result.WriteByte(' ')
+		index++
+		if next == 'r' && index+2 < len(value) && value[index+1] == '\\' && value[index+2] == 'n' {
+			index += 2
+		}
+	}
+	return result.String()
 }
 
 func currentHomeNeedles() []string {

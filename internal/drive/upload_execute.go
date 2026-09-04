@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const maxMultipartUploadConcurrency = 4
@@ -149,8 +151,11 @@ func (d *Drive) executeUploadPlanV2(
 		}
 		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
-		if err := d.abortNTEBundle(abortCtx, bundle); err != nil && d.log != nil {
-			d.log.Error(errors.Join(cause, err), "Drive:UploadV2:bundle-abort:"+bundleID)
+		if err := d.abortNTEBundle(abortCtx, bundle); err != nil {
+			_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
+				Severity: infra.DiagnosticError, Operation: "upload", Stage: "bundle-abort",
+				Fields: map[string]any{"bundleId": bundleID, "primaryError": cause.Error()},
+			})
 		}
 	}
 	failTargets := func(failure error, targets []FinalUploadFile) {
@@ -531,8 +536,11 @@ func (d *Drive) abortAllNTEBundles(ctx context.Context, bundles map[string]NTEBu
 		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		err := d.abortNTEBundle(abortCtx, bundle)
 		cancel()
-		if err != nil && d.log != nil {
-			d.log.Error(err, "Drive:UploadV2:bundle-abort:"+strings.TrimSpace(id))
+		if err != nil {
+			_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
+				Severity: infra.DiagnosticError, Operation: "upload", Stage: "bundle-abort",
+				Fields: map[string]any{"bundleId": strings.TrimSpace(id)},
+			})
 		}
 	}
 }

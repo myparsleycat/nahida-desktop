@@ -538,15 +538,40 @@ func (m *Mod) finishDownloadError(ctx context.Context, transfers *transfer.Trans
 	canceled := ctx.Err() != nil || isAbortErr(err)
 	if canceled {
 		status := transfer.StatusCanceled
-		_ = transfers.Update(pid, transfer.Updates{Status: &status})
+		if updateErr := transfers.Update(pid, transfer.Updates{Status: &status}); updateErr != nil && m.log != nil {
+			_ = infra.ReportError(m.log, updateErr, "Mod", infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "custom-download",
+				Stage:     "record-cancellation",
+				Fields:    map[string]any{"pid": pid},
+			})
+		}
 		return nil
 	}
-	if m.log != nil {
-		m.log.Error(err.Error(), where)
+	fields := map[string]any{"pid": pid, "boundary": where}
+	if record, ok := transfers.Get(pid); ok {
+		fields["name"] = record.Name
+		fields["path"] = record.Path
+		fields["currentId"] = record.CurrentID
+		fields["totalBytes"] = record.TotalSize
+		fields["transferredBytes"] = record.TransferredSize
 	}
+	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "custom-download",
+		Stage:     "execute",
+		Fields:    fields,
+	})
 	failed := transfer.StatusError
 	msg := err.Error()
-	_ = transfers.Update(pid, transfer.Updates{Status: &failed, Error: &msg})
+	if updateErr := transfers.Update(pid, transfer.Updates{Status: &failed, Error: &msg}); updateErr != nil {
+		_ = infra.ReportError(m.log, updateErr, "Mod", infra.Diagnostic{
+			Severity:  infra.DiagnosticError,
+			Operation: "custom-download",
+			Stage:     "record-failure",
+			Fields:    fields,
+		})
+	}
 	return nil
 }
 

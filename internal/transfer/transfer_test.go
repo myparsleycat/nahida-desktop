@@ -17,6 +17,18 @@ type testSettings struct {
 	err     error
 }
 
+type captureTransferLogger struct {
+	records []any
+}
+
+func (l *captureTransferLogger) Error(msg any, _ string) {
+	l.records = append(l.records, msg)
+}
+
+type reportedRunnerError struct{ error }
+
+func (reportedRunnerError) DiagnosticReported() bool { return true }
+
 func (s testSettings) GetDownloadBandwidthLimitMibps(context.Context) (int, error) {
 	return s.mibps, s.err
 }
@@ -406,6 +418,53 @@ func TestProcessQueueContinuesAfterRunnerError(t *testing.T) {
 	completed, ok := service.Get("completed")
 	if !ok || completed.Status != StatusCompleted || completed.Progress != 100 {
 		t.Fatalf("completed transfer = %#v, ok = %v", completed, ok)
+	}
+}
+
+func TestFinishRunLogsUnreportedTerminalRunnerErrorOnce(t *testing.T) {
+	t.Parallel()
+
+	log := &captureTransferLogger{}
+	service := NewWithOptions(Options{Log: log})
+	createTestTransfer(t, service, "terminal", StatusPending, true)
+	if err := service.RegisterRunner("terminal", func(_ context.Context, transfers *Transfer, pid string) error {
+		failed := StatusError
+		message := "owner failed"
+		if err := transfers.Update(pid, Updates{Status: &failed, Error: &message}); err != nil {
+			return err
+		}
+		return errors.New(message)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.records) != 1 {
+		t.Fatalf("records = %#v, want one", log.records)
+	}
+	record, ok := log.records[0].(map[string]any)
+	if !ok || record["pid"] != "terminal" || record["operation"] != "run" || record["error"] != "owner failed" {
+		t.Fatalf("record = %#v", log.records[0])
+	}
+}
+
+func TestFinishRunSkipsReportedRunnerError(t *testing.T) {
+	t.Parallel()
+
+	log := &captureTransferLogger{}
+	service := NewWithOptions(Options{Log: log})
+	createTestTransfer(t, service, "reported", StatusPending, true)
+	if err := service.RegisterRunner("reported", func(context.Context, *Transfer, string) error {
+		return reportedRunnerError{error: errors.New("already logged")}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.records) != 0 {
+		t.Fatalf("reported failure logged again: %#v", log.records)
 	}
 }
 

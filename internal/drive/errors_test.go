@@ -1,10 +1,30 @@
 package drive
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
 )
+
+func TestDiagnosticWrapperPreservesDriveAPIErrorJSON(t *testing.T) {
+	t.Parallel()
+
+	apiErr := newDriveAPIError("DRIVE_POLICY", "rejected", 422, nil)
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: io.Discard, DisableFile: true})
+	wrapped := infra.ReportError(log, apiErr, "Drive", infra.Diagnostic{Operation: "upload", Stage: "plan/file_validation"})
+	got := log.ServiceErrorMarshaler("Drive")(wrapped)
+	var original error = apiErr
+	want, err := json.Marshal(&original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("marshaled = %s, want %s", got, want)
+	}
+}
 
 func TestCreateDriveAPIErrorPreservesExisting(t *testing.T) {
 	t.Parallel()

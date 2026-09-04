@@ -1,10 +1,11 @@
-package infra
+package infra_test
 
 import (
 	"context"
 	"path/filepath"
 	"testing"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
 )
 
@@ -13,7 +14,7 @@ func TestOpenStoreReconcilesAndServesSetting(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "data.db")
 	ctx := context.Background()
-	store, err := OpenStore(ctx, path)
+	store, err := infra.OpenStore(ctx, path)
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

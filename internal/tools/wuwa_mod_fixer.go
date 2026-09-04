@@ -276,16 +276,20 @@ func (t *Tools) WuwaFixerRun(ctx context.Context, modPath string, options WuwaFi
 
 func (t *Tools) WuwaFixerScanBackups(ctx context.Context, modPath string) ([]WuwaBackupGroup, error) {
 	if err := t.wuwaRequireModPath(ctx, modPath); err != nil {
-		t.logError(err, "wuwaFixer:scanBackups:"+modPath)
-		return nil, err
+		return nil, infra.AnnotateError(err, infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "wuwa-fixer-scan-backups", Stage: "validate-path",
+			Fields: map[string]any{"modPath": modPath},
+		})
 	}
 	return collectWuwaBackupGroups(modPath)
 }
 
 func (t *Tools) WuwaFixerGetBackupSize(ctx context.Context, modPath string) (WuwaBackupSize, error) {
 	if err := t.wuwaRequireModPath(ctx, modPath); err != nil {
-		t.logError(err, "wuwaFixer:getBackupSize:"+modPath)
-		return WuwaBackupSize{}, err
+		return WuwaBackupSize{}, infra.AnnotateError(err, infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "wuwa-fixer-backup-size", Stage: "validate-path",
+			Fields: map[string]any{"modPath": modPath},
+		})
 	}
 	paths, err := listWuwaBackupFiles(modPath)
 	if err != nil {

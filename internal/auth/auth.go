@@ -553,14 +553,14 @@ func (a *Auth) signOut(ctx context.Context, token string) {
 	url := strings.TrimRight(a.http.BackendURL(), "/") + signOutPath
 	req, err := http.NewRequestWithContext(signCtx, http.MethodPost, url, nil)
 	if err != nil {
-		a.error(err)
+		a.reportBackgroundError(err, "sign-out", "create-request", signOutPath)
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", "Nahida Desktop/"+platform.AppVersion)
 	resp, err := a.do(req)
 	if err != nil {
-		a.error(err)
+		a.reportBackgroundError(err, "sign-out", "request", signOutPath)
 		return
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
@@ -587,9 +587,24 @@ func (a *Auth) info(msg string) {
 }
 
 func (a *Auth) error(err any) {
-	if a.log != nil {
-		a.log.Error(err, "Auth")
+	if err == nil {
+		return
 	}
+	failure, ok := err.(error)
+	if !ok {
+		failure = fmt.Errorf("%v", err)
+	}
+	a.reportBackgroundError(failure, "background", "callback", "")
+}
+
+func (a *Auth) reportBackgroundError(err error, operation, stage, endpoint string) {
+	fields := map[string]any{}
+	if endpoint != "" {
+		fields["endpoint"] = endpoint
+	}
+	_ = infra.ReportError(a.log, err, "Auth", infra.Diagnostic{
+		Operation: operation, Stage: stage, Fields: fields,
+	})
 }
 
 func (a *Auth) probeLoop(ctx context.Context) {

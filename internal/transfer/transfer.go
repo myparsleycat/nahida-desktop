@@ -753,13 +753,47 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 		item.record.Status = StatusError
 		item.record.Error = runErr.Error()
 	}
+	snapshot := item.record.Snapshot
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
 	t.destinationMu.Unlock()
 	if shouldEmit {
 		t.emit()
 	}
-	_ = t.RefreshPowerSaveBlock(context.Background())
+	if runErr != nil && !isNormalRunnerCancellation(runErr) && !isReportedRunnerError(runErr) {
+		t.logRecord(map[string]any{
+			"operation":        "run",
+			"stage":            "finish",
+			"type":             snapshot.Type,
+			"pid":              snapshot.PID,
+			"name":             snapshot.Name,
+			"currentId":        snapshot.CurrentID,
+			"path":             snapshot.Path,
+			"totalBytes":       snapshot.TotalSize,
+			"transferredBytes": snapshot.TransferredSize,
+			"totalFiles":       snapshot.TotalFiles,
+			"transferredFiles": snapshot.TransferredFiles,
+			"error":            runErr.Error(),
+		}, "Transfer")
+	}
+	if err := t.RefreshPowerSaveBlock(context.Background()); err != nil {
+		t.logRecord(map[string]any{"operation": "finish", "stage": "power-save", "pid": pid, "error": err.Error()}, "Transfer")
+	}
+}
+
+func isReportedRunnerError(err error) bool {
+	var reported interface{ DiagnosticReported() bool }
+	return errors.As(err, &reported) && reported.DiagnosticReported()
+}
+
+func isNormalRunnerCancellation(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	message := strings.ToUpper(strings.TrimSpace(err.Error()))
+	return message == "DRIVE_COPY_CANCELED" || strings.HasPrefix(message, "DRIVE_COPY_CANCELED:") ||
+		message == "CUSTOM_DOWNLOAD_ABORTED" || strings.HasPrefix(message, "CUSTOM_DOWNLOAD_ABORTED:") ||
+		message == "CUSTOM_DOWNLOAD_CANCELED" || strings.HasPrefix(message, "CUSTOM_DOWNLOAD_CANCELED:")
 }
 
 //wails:ignore
@@ -1293,6 +1327,13 @@ func (t *Transfer) logError(err error, where string) {
 		return
 	}
 	t.log.Error(err.Error(), where)
+}
+
+func (t *Transfer) logRecord(record map[string]any, where string) {
+	if t.log == nil {
+		return
+	}
+	t.log.Error(record, where)
 }
 
 func applyUpdates(record *Snapshot, updates Updates) {

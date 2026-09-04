@@ -3,6 +3,8 @@ package infra
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -142,14 +144,27 @@ func readGzipFile(t *testing.T, path string) []byte {
 	return data
 }
 
-func TestLogSetLevelInvalidIsError(t *testing.T) {
+func TestLogSetLevelInvalidIsWarn(t *testing.T) {
 	t.Parallel()
 	for _, level := range []string{"", "verbose", "ERROR"} {
 		l := NewLog()
 		l.SetLevel(level)
-		if l.Level() != "error" {
-			t.Fatalf("SetLevel(%q) = %q, want error", level, l.Level())
+		if l.Level() != "warn" {
+			t.Fatalf("SetLevel(%q) = %q, want warn", level, l.Level())
 		}
+	}
+}
+
+func TestLogDefaultWarnWritesWarnAndFiltersInfo(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	l := NewLogWithOptions(LogOptions{Writer: &buf, DisableFile: true})
+	l.Info("quiet", "Default")
+	l.Warn("visible", "Default")
+	got := buf.String()
+	if strings.Contains(got, "quiet") || !strings.Contains(got, " WARN ") || !strings.Contains(got, "visible") {
+		t.Fatalf("default log output = %q", got)
 	}
 }
 
@@ -304,6 +319,174 @@ func TestEncodeLogLineRedactsErrorAndStructuredMsg(t *testing.T) {
 	}
 	if !bytes.Contains(console, []byte("%USERPROFILE%")) {
 		t.Fatalf("console missing token: %s", console)
+	}
+}
+
+func TestEncodeLogLineRedactsSecretsAndFlattensMultiline(t *testing.T) {
+	t.Parallel()
+
+	line := strings.TrimSpace(string(encodeLogLine(time.Unix(0, 0), "warn", map[string]any{
+		"authorization": "Bearer top.secret",
+		"cookie":        "rmc=session-value",
+		"detail":        "first\nsecond password=hunter2 access_token=abc signature=signed",
+		"url":           "https://user:pass@example.com/path?api_key=key&safe=1#fragment",
+	}, "Secrets")))
+	for _, secret := range []string{"top.secret", "session-value", "hunter2", "abc", "signed", "user:pass"} {
+		if strings.Contains(line, secret) {
+			t.Fatalf("line contains %q: %q", secret, line)
+		}
+	}
+	if strings.Contains(line, "\n") || strings.Contains(line, "\r") || !strings.Contains(line, "%REDACTED%") {
+		t.Fatalf("line was not flattened/redacted: %q", line)
+	}
+}
+
+func TestRedactSecretsRedactsEntireCookieHeaders(t *testing.T) {
+	t.Parallel()
+
+	got := redactSecrets("request failed\r\nCookie: sid=one; session=two\r\nSet-Cookie: refresh=three; Path=/; HttpOnly\r\nnext")
+	for _, secret := range []string{"sid=one", "session=two", "refresh=three"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("redacted output contains %q: %q", secret, got)
+		}
+	}
+	if !strings.Contains(got, "Cookie: %REDACTED%") ||
+		!strings.Contains(got, "Set-Cookie: %REDACTED%") ||
+		!strings.HasSuffix(got, "\r\nnext") {
+		t.Fatalf("redacted output = %q", got)
+	}
+}
+
+func TestRedactSecretsDoesNotConsumeStructuredFieldsAfterCookie(t *testing.T) {
+	t.Parallel()
+
+	got := redactSecrets(`{"cookie":null,"detail":"keep"}`)
+	if !json.Valid([]byte(got)) || !strings.Contains(got, `"detail":"keep"`) {
+		t.Fatalf("redacted output = %q", got)
+	}
+}
+
+func TestFormatLogMsgFlattensStructuredNewlinesWithoutCorruptingWindowsPaths(t *testing.T) {
+	t.Parallel()
+
+	got := formatLogMsg(map[string]any{
+		"detail": "first\r\nsecond\nthird",
+		"path":   `C:\new\repo\file.ini`,
+	})
+	if !json.Valid([]byte(got)) {
+		t.Fatalf("structured log is invalid JSON: %q", got)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(got), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["detail"] != "first second third" {
+		t.Fatalf("detail = %q", decoded["detail"])
+	}
+	if decoded["path"] != `C:\new\repo\file.ini` {
+		t.Fatalf("path = %q", decoded["path"])
+	}
+}
+
+func TestSanitizeLogURLStripsSensitiveComponents(t *testing.T) {
+	t.Parallel()
+	got := SanitizeLogURL("https://user:pass@example.com/api/items?token=secret#part")
+	if got != "https://example.com/api/items" {
+		t.Fatalf("SanitizeLogURL = %q", got)
+	}
+}
+
+type diagnosticTestError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *diagnosticTestError) Error() string { return e.Code + ": " + e.Message }
+
+func TestDiagnosticWrapperPreservesErrorIdentityAndJSON(t *testing.T) {
+	t.Parallel()
+
+	cause := &diagnosticTestError{Code: "TEST_CODE", Message: "original"}
+	wrapped := AnnotateError(cause, Diagnostic{Operation: "test", Stage: "validate"})
+	if wrapped.Error() != cause.Error() || !errors.Is(wrapped, cause) {
+		t.Fatalf("wrapper does not preserve error: %v", wrapped)
+	}
+	var asCause *diagnosticTestError
+	if !errors.As(wrapped, &asCause) || asCause != cause {
+		t.Fatalf("errors.As = %#v", asCause)
+	}
+	marshaled := NewLogWithOptions(LogOptions{Writer: io.Discard, DisableFile: true}).ServiceErrorMarshaler("Test")(wrapped)
+	want, _ := json.Marshal(&cause)
+	if !bytes.Equal(marshaled, want) {
+		t.Fatalf("marshaled = %s, want %s", marshaled, want)
+	}
+}
+
+func TestServiceErrorMarshalerLogsOnceAndSkipsCancellation(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	l := NewLogWithOptions(LogOptions{Writer: &buf, DisableFile: true})
+	marshaler := l.ServiceErrorMarshaler("Drive")
+	cause := errors.New("remote validation failed")
+	reported := ReportError(l, cause, "Drive", Diagnostic{
+		Severity: DiagnosticWarn, Operation: "upload", Stage: "plan/file_validation",
+	})
+	_ = marshaler(reported)
+	_ = marshaler(context.Canceled)
+	lines := nonEmptyLines(buf.Bytes())
+	if len(lines) != 1 {
+		t.Fatalf("got %d records, want 1: %q", len(lines), buf.String())
+	}
+	line := string(lines[0])
+	if !strings.Contains(line, " WARN ") || !strings.Contains(line, "plan/file_validation") || !strings.Contains(line, cause.Error()) {
+		t.Fatalf("record = %q", line)
+	}
+}
+
+func TestServiceErrorMarshalerClassifiesHTTP4xxAsWarn(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	l := NewLogWithOptions(LogOptions{Writer: &buf, DisableFile: true})
+	_ = l.ServiceErrorMarshaler("Auth")(&HTTPError{Status: 403})
+	if got := buf.String(); !strings.Contains(got, " WARN ") || !strings.Contains(got, "403") {
+		t.Fatalf("record = %q", got)
+	}
+}
+
+func TestClassifyErrorDoesNotTreatInternalInvalidMessagesAsValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		"invalid session payload: user.id",
+		"invalid login event",
+		"cached manifest is invalid",
+	} {
+		if got := ClassifyError(errors.New(message)); got != DiagnosticError {
+			t.Fatalf("ClassifyError(%q) = %q, want error", message, got)
+		}
+	}
+}
+
+func TestServiceErrorMarshalerPreservesDomainDiagnosticContext(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	l := NewLogWithOptions(LogOptions{Writer: &buf, DisableFile: true})
+	err := AnnotateError(errors.New("database read failed"), Diagnostic{
+		Severity: DiagnosticError, Operation: "get", Stage: "read",
+		Fields: map[string]any{"key": "general.logLevel"},
+	})
+	_ = l.ServiceErrorMarshaler("Setting")(err)
+	got := buf.String()
+	for _, want := range []string{`"service":"Setting"`, `"operation":"get"`, `"stage":"read"`, `"key":"general.logLevel"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("record missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, `"operation":"wails-call"`) {
+		t.Fatalf("domain operation was replaced: %q", got)
 	}
 }
 

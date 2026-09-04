@@ -170,8 +170,19 @@ func (m *MenuMaker) ApplyBundle(ctx context.Context, req MenuMakerApplyRequest) 
 	writtenPaths := []string{}
 	rollbackError := ""
 	defer func() {
-		if err != nil && m != nil && m.log != nil {
-			m.log.Error(fmt.Sprintf("menu maker apply failed: stage=%s source=%q output=%q written=%q rollback=%t rollback_error=%q cleanup=%s error=%v", stage, req.SourcePath, req.OutputININame, writtenPaths, result.RolledBack, rollbackError, cleanupState, err), "MenuMaker.ApplyBundle")
+		if err != nil {
+			fields := map[string]any{
+				"sourcePath": req.SourcePath, "outputName": req.OutputININame,
+				"writtenPaths": writtenPaths, "rolledBack": result.RolledBack,
+				"rollbackError": rollbackError, "cleanupState": cleanupState,
+			}
+			var log *infra.Log
+			if m != nil {
+				log = m.log
+			}
+			err = infra.ReportError(log, err, "MenuMaker", infra.Diagnostic{
+				Operation: "apply-bundle", Stage: stage, Fields: fields,
+			})
 		}
 	}()
 	sourcePath, err := requireSourceFile(req.SourcePath)
