@@ -232,10 +232,10 @@ func (t *Tools) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus, 
 	if err := t.wuwaCleanupOldBinaries(finalPath); err != nil {
 		return WuwaFixerStatus{}, err
 	}
-	if err := t.wuwaSetAppState(ctx, wuwaInstalledVersionKey, release.Version); err != nil {
+	if err := t.setAppState(ctx, wuwaInstalledVersionKey, release.Version); err != nil {
 		return WuwaFixerStatus{}, err
 	}
-	if err := t.wuwaSetAppState(ctx, wuwaBinaryPathKey, finalPath); err != nil {
+	if err := t.setAppState(ctx, wuwaBinaryPathKey, finalPath); err != nil {
 		return WuwaFixerStatus{}, err
 	}
 	wwmi := "WWMI"
@@ -474,7 +474,7 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
-	lastCheck, err := t.wuwaGetAppState(ctx, wuwaLastCheckKey)
+	lastCheck, err := t.getAppState(ctx, wuwaLastCheckKey)
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
@@ -513,10 +513,10 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 	now := time.Now().UTC()
 	latest.CheckedAt = now.Format(time.RFC3339Nano)
 	raw, _ := json.Marshal(latest)
-	if err := t.wuwaSetAppState(ctx, wuwaLastCheckKey, now.Format(time.RFC3339Nano)); err != nil {
+	if err := t.setAppState(ctx, wuwaLastCheckKey, now.Format(time.RFC3339Nano)); err != nil {
 		return wuwaRefreshResult{}, err
 	}
-	if err := t.wuwaSetAppState(ctx, wuwaLatestReleaseKey, string(raw)); err != nil {
+	if err := t.setAppState(ctx, wuwaLatestReleaseKey, string(raw)); err != nil {
 		return wuwaRefreshResult{}, err
 	}
 	next := now.Add(wuwaCheckCooldown).Format(time.RFC3339Nano)
@@ -566,11 +566,11 @@ func (t *Tools) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 }
 
 func (t *Tools) wuwaGetInstalledBinaryInfo(ctx context.Context) (wuwaInstalledInfo, error) {
-	pathValue, err := t.wuwaGetAppState(ctx, wuwaBinaryPathKey)
+	pathValue, err := t.getAppState(ctx, wuwaBinaryPathKey)
 	if err != nil {
 		return wuwaInstalledInfo{}, err
 	}
-	version, err := t.wuwaGetAppState(ctx, wuwaInstalledVersionKey)
+	version, err := t.getAppState(ctx, wuwaInstalledVersionKey)
 	if err != nil {
 		return wuwaInstalledInfo{}, err
 	}
@@ -610,11 +610,11 @@ func (t *Tools) wuwaGetInstalledBinaryInfo(ctx context.Context) (wuwaInstalledIn
 	}
 	resolved := filepath.Join(toolDir, match)
 	version = extractWuwaVersion(match)
-	if err := t.wuwaSetAppState(ctx, wuwaBinaryPathKey, resolved); err != nil {
+	if err := t.setAppState(ctx, wuwaBinaryPathKey, resolved); err != nil {
 		return wuwaInstalledInfo{}, err
 	}
 	if version != nil {
-		if err := t.wuwaSetAppState(ctx, wuwaInstalledVersionKey, *version); err != nil {
+		if err := t.setAppState(ctx, wuwaInstalledVersionKey, *version); err != nil {
 			return wuwaInstalledInfo{}, err
 		}
 	}
@@ -679,24 +679,8 @@ func (t *Tools) wuwaSupportedImporter(importer *string) bool {
 	return importer == nil || strings.EqualFold(*importer, "WWMI")
 }
 
-func (t *Tools) wuwaGetAppState(ctx context.Context, key string) (*string, error) {
-	client, err := t.requireClient()
-	if err != nil {
-		return nil, err
-	}
-	return client.AppState.GetValue(ctx, key)
-}
-
-func (t *Tools) wuwaSetAppState(ctx context.Context, key, value string) error {
-	client, err := t.requireClient()
-	if err != nil {
-		return err
-	}
-	return client.AppState.Upsert(ctx, key, value, time.Now().UTC().Format(time.RFC3339Nano))
-}
-
 func (t *Tools) wuwaGetCachedLatestRelease(ctx context.Context) (*wuwaLatestReleaseCache, error) {
-	raw, err := t.wuwaGetAppState(ctx, wuwaLatestReleaseKey)
+	raw, err := t.getAppState(ctx, wuwaLatestReleaseKey)
 	if err != nil || raw == nil {
 		return nil, err
 	}
@@ -709,7 +693,7 @@ func (t *Tools) wuwaGetCachedLatestRelease(ctx context.Context) (*wuwaLatestRele
 }
 
 func (t *Tools) wuwaGetRateState(ctx context.Context) (*GitHubRateState, error) {
-	raw, err := t.wuwaGetAppState(ctx, githubCoreRateKey)
+	raw, err := t.getAppState(ctx, githubCoreRateKey)
 	if err != nil || raw == nil {
 		return nil, err
 	}
@@ -742,7 +726,7 @@ func (t *Tools) wuwaRefreshRateState(ctx context.Context) *GitHubRateState {
 		payload.Rate.Resource = "core"
 	}
 	raw, _ := json.Marshal(payload.Rate)
-	_ = t.wuwaSetAppState(ctx, githubCoreRateKey, string(raw))
+	_ = t.setAppState(ctx, githubCoreRateKey, string(raw))
 	return payload.Rate
 }
 
@@ -768,7 +752,7 @@ func (t *Tools) wuwaCaptureRate(ctx context.Context, header http.Header) (*GitHu
 	}
 	state := &GitHubRateState{Limit: limit, Remaining: remaining, Reset: reset, Used: used, Resource: resource, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	raw, _ := json.Marshal(state)
-	if err := t.wuwaSetAppState(ctx, githubCoreRateKey, string(raw)); err != nil {
+	if err := t.setAppState(ctx, githubCoreRateKey, string(raw)); err != nil {
 		return nil, err
 	}
 	return state, nil

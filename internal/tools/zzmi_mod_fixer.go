@@ -32,7 +32,8 @@ const (
 	zzmiRulesCacheDirName = "rules"
 	zzmiRulesActiveName   = "active-rules"
 	zzmiMaxDownload       = 64 << 20
-	zzmiCheckCooldown     = 15 * time.Minute
+	zzmiCheckCooldown     = 1 * time.Hour
+	zzmiLatestReleaseKey  = "mod_tools:zzmi-mod-fixer:latest-release"
 )
 
 type ZZMIFixerRuleStatus struct {
@@ -119,11 +120,12 @@ type ZZMIFixerDeleteBackupInput struct {
 }
 
 type zzmiLatestRelease struct {
-	Tag       string
-	Commit    string
-	Zipball   string
-	Published string
-	Blobs     map[string]string
+	Tag       string            `json:"tag"`
+	Commit    string            `json:"commit"`
+	Zipball   string            `json:"zipball"`
+	Published string            `json:"published"`
+	Blobs     map[string]string `json:"blobs"`
+	CheckedAt string            `json:"checkedAt"`
 }
 
 type zzmiReleaseResponse struct {
@@ -513,14 +515,54 @@ func validSHA256Hex(value string) bool {
 	return validHex(value, sha256.Size*2)
 }
 
-func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRelease, bool, error) {
-	t.zzmiMu.Lock()
-	if !force && t.zzmiLatest != nil && time.Since(t.zzmiChecked) < zzmiCheckCooldown {
-		latest := t.zzmiLatest
-		t.zzmiMu.Unlock()
-		return latest, false, nil
+func (t *Tools) zzmiGetCachedLatestRelease(ctx context.Context) *zzmiLatestRelease {
+	raw, err := t.getAppState(ctx, zzmiLatestReleaseKey)
+	if err != nil || raw == nil {
+		return nil
 	}
-	t.zzmiMu.Unlock()
+	var release zzmiLatestRelease
+	if json.Unmarshal([]byte(*raw), &release) != nil || release.Tag == "" || release.Commit == "" || release.Zipball == "" {
+		return nil
+	}
+	return &release
+}
+
+func (t *Tools) zzmiRememberLatest(ctx context.Context, latest *zzmiLatestRelease) error {
+	stored := *latest
+	stored.CheckedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	raw, err := json.Marshal(stored)
+	if err != nil {
+		return err
+	}
+	if err := t.setAppState(ctx, zzmiLatestReleaseKey, string(raw)); err != nil {
+		return err
+	}
+	*latest = stored
+	return nil
+}
+
+func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRelease, bool, error) {
+	cached := t.zzmiGetCachedLatestRelease(ctx)
+	if !force && cached != nil && time.Since(parseRFC3339(cached.CheckedAt)) < zzmiCheckCooldown {
+		return cached, false, nil
+	}
+	latest, checked, err := t.zzmiFetchLatest(ctx)
+	if err != nil {
+		if !force && cached != nil {
+			if persistErr := t.zzmiRememberLatest(ctx, cached); persistErr != nil {
+				t.logError(persistErr, "ZZMIFixerCache")
+			}
+			return cached, false, nil
+		}
+		return nil, checked, err
+	}
+	if err := t.zzmiRememberLatest(ctx, latest); err != nil {
+		return nil, true, err
+	}
+	return latest, true, nil
+}
+
+func (t *Tools) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool, error) {
 	if t.githubRate != nil {
 		allowed, _, err := t.githubRate.CanUseGitHubAPI(ctx, infra.GitHubRateCheckOptions{RefreshIfMissing: true})
 		if err != nil {
@@ -572,12 +614,7 @@ func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRel
 			blobs[entry.Path] = entry.SHA
 		}
 	}
-	latest := &zzmiLatestRelease{Tag: release.TagName, Commit: commit, Zipball: release.ZipballURL, Published: release.PublishedAt, Blobs: blobs}
-	t.zzmiMu.Lock()
-	t.zzmiLatest = latest
-	t.zzmiChecked = time.Now()
-	t.zzmiMu.Unlock()
-	return latest, true, nil
+	return &zzmiLatestRelease{Tag: release.TagName, Commit: commit, Zipball: release.ZipballURL, Published: release.PublishedAt, Blobs: blobs}, true, nil
 }
 
 func (t *Tools) zzmiFetchJSON(ctx context.Context, rawURL string, target any) error {

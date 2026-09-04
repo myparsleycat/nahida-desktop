@@ -91,10 +91,6 @@ type Tools struct {
 	wuwaAutoCancel context.CancelFunc
 	wuwaAutoDone   chan struct{}
 
-	zzmiMu      sync.Mutex
-	zzmiLatest  *zzmiLatestRelease
-	zzmiChecked time.Time
-
 	textureRuntimeMu sync.Mutex
 	textureEventMu   sync.Mutex
 	textureMu        sync.Mutex
@@ -199,6 +195,22 @@ func (t *Tools) requireClient() (*db.Client, error) {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
+}
+
+func (t *Tools) getAppState(ctx context.Context, key string) (*string, error) {
+	client, err := t.requireClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.AppState.GetValue(ctx, key)
+}
+
+func (t *Tools) setAppState(ctx context.Context, key, value string) error {
+	client, err := t.requireClient()
+	if err != nil {
+		return err
+	}
+	return client.AppState.Upsert(ctx, key, value, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func (t *Tools) emitEvent(name string, data any) {
