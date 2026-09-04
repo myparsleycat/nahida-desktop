@@ -1,4 +1,5 @@
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
+import { ModCompressionCard } from "@renderer/components/setting/mod-compression-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { FieldDescription, FieldGroup, FieldTitle } from "@renderer/components/ui/field";
@@ -179,6 +180,7 @@ function ModSettingsRouteContent() {
   return (
     <div className="space-y-6 p-4">
       <div className="space-y-6">
+        <ModCompressionCard />
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium">

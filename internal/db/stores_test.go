@@ -3,8 +3,85 @@ package db
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 )
+
+func TestAppStateApplyBatch(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if err := client.AppState.Upsert(ctx, "delete", "old", "before"); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AppState.ApplyBatch(ctx, []AppStateRow{
+		{Key: "first", Value: "1", UpdatedAt: "now"},
+		{Key: "second", Value: "2", UpdatedAt: "now"},
+	}, []string{"delete"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := client.AppState.List(ctx)
+	if err != nil || len(rows) != 2 || rows[0].Key != "first" || rows[1].Key != "second" {
+		t.Fatalf("rows = %+v, err = %v", rows, err)
+	}
+	if err := client.AppState.ApplyBatch(ctx, nil, nil); err != nil {
+		t.Fatalf("empty batch: %v", err)
+	}
+}
+
+func TestAppStateApplyBatchRollsBack(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if _, err := client.SQL().ExecContext(ctx, `CREATE TRIGGER fail_app_state_batch
+BEFORE DELETE ON app_state WHEN OLD.key = 'fail-delete'
+BEGIN SELECT RAISE(ABORT, 'batch failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"delete-first", "fail-delete"} {
+		if err := client.AppState.Upsert(ctx, key, "value", "before"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := client.AppState.ApplyBatch(ctx, []AppStateRow{
+		{Key: "added", Value: "1", UpdatedAt: "now"},
+		{Key: "second", Value: "2", UpdatedAt: "now"},
+	}, []string{"delete-first", "fail-delete"})
+	if err == nil {
+		t.Fatal("expected batch failure")
+	}
+	rows, listErr := client.AppState.List(ctx)
+	if listErr != nil || len(rows) != 2 || rows[0].Key != "delete-first" || rows[1].Key != "fail-delete" {
+		t.Fatalf("rows after rollback = %+v, err = %v", rows, listErr)
+	}
+}
+
+func TestAppStateApplyBatchHonorsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	err := client.AppState.ApplyBatch(canceled, []AppStateRow{{Key: "nope", Value: "1", UpdatedAt: "now"}}, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if row, getErr := client.AppState.Get(ctx, "nope"); getErr != nil || row != nil {
+		t.Fatalf("canceled batch row = %+v, err = %v", row, getErr)
+	}
+}
 
 func TestTableAccessorsRoundTrip(t *testing.T) {
 	t.Parallel()

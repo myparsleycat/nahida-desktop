@@ -58,6 +58,18 @@ func (s SettingsStore) Upsert(ctx context.Context, key string, value *string) er
                  ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(value))
 }
 
+func (s SettingsStore) UpsertMany(ctx context.Context, values map[string]*string) error {
+	return s.c.withImmediate(ctx, func(q queryExec) error {
+		for key, value := range values {
+			if _, err := q.ExecContext(ctx, `INSERT INTO "setting" ("key", "value") VALUES (?, ?)
+                 ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(value)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (s SettingsStore) UpdateValue(ctx context.Context, key string, value *string) error {
 	return s.c.exec(ctx, `UPDATE "setting" SET "value" = ? WHERE "key" = ?`, argString(value), key)
 }
@@ -139,6 +151,28 @@ func (s AppStateStore) Upsert(ctx context.Context, key, value, updatedAt string)
 	return s.c.exec(ctx, `INSERT INTO "app_state" ("key", "value", "updated_at") VALUES (?, ?, ?)
                  ON CONFLICT("key") DO UPDATE
                  SET "value" = excluded."value", "updated_at" = excluded."updated_at"`, key, value, updatedAt)
+}
+
+// ApplyBatch atomically applies app-state upserts followed by deletes.
+func (s AppStateStore) ApplyBatch(ctx context.Context, upserts []AppStateRow, deleteKeys []string) error {
+	if len(upserts) == 0 && len(deleteKeys) == 0 {
+		return nil
+	}
+	return s.c.withImmediate(ctx, func(q queryExec) error {
+		for _, row := range upserts {
+			if _, err := q.ExecContext(ctx, `INSERT INTO "app_state" ("key", "value", "updated_at") VALUES (?, ?, ?)
+                 ON CONFLICT("key") DO UPDATE
+                 SET "value" = excluded."value", "updated_at" = excluded."updated_at"`, row.Key, row.Value, row.UpdatedAt); err != nil {
+				return err
+			}
+		}
+		for _, key := range deleteKeys {
+			if _, err := q.ExecContext(ctx, `DELETE FROM "app_state" WHERE "key" = ?`, key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s AppStateStore) Delete(ctx context.Context, key string) error {

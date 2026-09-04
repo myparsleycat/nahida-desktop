@@ -365,6 +365,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	if rt.mod != nil {
 		rt.mod.UseClient(store.DB)
 		rt.mod.UseSettings(rt.setting)
+		if err := rt.mod.StartCompression(ctx); err != nil {
+			rt.log.Error(err.Error(), "Mod:compression:start")
+		}
 	}
 	if rt.native != nil {
 		rt.native.StartFocusTracking()

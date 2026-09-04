@@ -437,6 +437,54 @@ func (s *Setting) SetDisabledPrefixStyle(ctx context.Context, style string) erro
 	return s.Set(ctx, KeyModDisabledPrefixStyle, style)
 }
 
+func (s *Setting) GetCompressionMethod(ctx context.Context) (string, error) {
+	return s.getString(ctx, KeyModCompressionMethod)
+}
+func (s *Setting) SetCompressionMethod(ctx context.Context, method string) error {
+	return s.Set(ctx, KeyModCompressionMethod, method)
+}
+
+func (s *Setting) GetCompressionThresholdMib(ctx context.Context) (int, error) {
+	return s.getInt(ctx, KeyModCompressionThresholdMib)
+}
+func (s *Setting) SetCompressionThresholdMib(ctx context.Context, threshold int) error {
+	return s.Set(ctx, KeyModCompressionThresholdMib, threshold)
+}
+
+// SetCompressionConfig stores the method and threshold as one transition snapshot.
+//
+//wails:ignore
+func (s *Setting) SetCompressionConfig(ctx context.Context, method string, threshold int) error {
+	methodSpec, err := s.spec(KeyModCompressionMethod)
+	if err != nil {
+		return err
+	}
+	thresholdSpec, err := s.spec(KeyModCompressionThresholdMib)
+	if err != nil {
+		return err
+	}
+	resolvedMethod := methodSpec.resolved(s, method)
+	resolvedThreshold := thresholdSpec.resolved(s, threshold)
+	storedMethod := methodSpec.stored(s, resolvedMethod)
+	storedThreshold := thresholdSpec.stored(s, resolvedThreshold)
+	if err := s.client.Settings.UpsertMany(ctx, map[string]*string{
+		methodSpec.def.StorageKey:    &storedMethod,
+		thresholdSpec.def.StorageKey: &storedThreshold,
+	}); err != nil {
+		return err
+	}
+	s.opts.Hooks.set(KeyModCompressionMethod, resolvedMethod)
+	s.opts.Hooks.set(KeyModCompressionThresholdMib, resolvedThreshold)
+	return nil
+}
+
+func (s *Setting) GetCompressionEnabled(ctx context.Context) (bool, error) {
+	return s.getBool(ctx, KeyModCompressionEnabled)
+}
+func (s *Setting) SetCompressionEnabled(ctx context.Context, enabled bool) error {
+	return s.Set(ctx, KeyModCompressionEnabled, enabled)
+}
+
 func (s *Setting) GetDownloadConcurrency(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyTransferDownloadConcurrency)
 }

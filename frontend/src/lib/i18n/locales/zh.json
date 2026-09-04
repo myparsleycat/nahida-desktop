@@ -1641,6 +1641,28 @@
       },
       "mod": {
         "title": "模组",
+        "compression": {
+          "title": "模组压缩",
+          "method": "压缩方式",
+          "methods": {
+            "zstd": { "description": "将已禁用模组中的大文件压缩为 .nzst 文件。" },
+            "xpress4k": { "description": "使用 Windows XPRESS4K 透明压缩所有模组文件。" }
+          },
+          "threshold": "压缩大小阈值",
+          "thresholdDescription": "仅对不小于此大小的文件尝试 Zstd 压缩。范围：1–64 MiB。",
+          "toggle": "启用模组压缩",
+          "status": {
+            "idle": "空闲",
+            "checking": "正在检查文件",
+            "compressing": "正在压缩",
+            "decompressing": "正在还原",
+            "error": "压缩任务错误"
+          },
+          "files": "{{processed}} / {{total}} 个文件",
+          "error": "无法完成压缩任务。切换开关可重试。",
+          "saveFailed": "无法保存压缩设置。",
+          "toggleFailed": "无法更改压缩状态。"
+        },
         "mod_management": {
           "title": "模组管理",
           "archiveExtractPathMode": "压缩包解压路径",
@@ -1881,6 +1903,12 @@
         "converting": "正在转换纹理格式",
         "resizing_and_converting": "正在调整纹理大小并转换",
         "upscaling_and_converting": "正在放大纹理并转换"
+      },
+      "modCompression": {
+        "checking": "正在检查模组压缩",
+        "compressing": "正在压缩模组",
+        "decompressing": "正在还原模组",
+        "error": "模组压缩错误"
       },
       "modFix": {
         "label": "需要修复",

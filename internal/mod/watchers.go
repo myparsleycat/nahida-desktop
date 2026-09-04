@@ -68,7 +68,11 @@ func (m *Mod) ServiceShutdown() error {
 	game, character := m.gameWatcher, m.characterWatcher
 	m.gameWatcher, m.characterWatcher = nil, nil
 	m.watchMu.Unlock()
-	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character))
+	var compressionErr error
+	if m.compression != nil {
+		compressionErr = m.compression.stop()
+	}
+	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr)
 }
 
 func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {

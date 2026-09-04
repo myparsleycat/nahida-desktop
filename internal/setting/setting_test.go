@@ -74,6 +74,82 @@ func TestGetMissingWritesDefaultAndSurvivesReopen(t *testing.T) {
 	}
 }
 
+func TestModCompressionDefaultsAndBounds(t *testing.T) {
+	t.Parallel()
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+
+	method, err := s.GetCompressionMethod(ctx)
+	if err != nil || method != "xpress4k" {
+		t.Fatalf("method = %q, err=%v", method, err)
+	}
+	threshold, err := s.GetCompressionThresholdMib(ctx)
+	if err != nil || threshold != 1 {
+		t.Fatalf("threshold = %d, err=%v", threshold, err)
+	}
+	enabled, err := s.GetCompressionEnabled(ctx)
+	if err != nil || enabled {
+		t.Fatalf("enabled = %v, err=%v", enabled, err)
+	}
+
+	if err := s.SetCompressionThresholdMib(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	threshold, err = s.GetCompressionThresholdMib(ctx)
+	if err != nil || threshold != 64 {
+		t.Fatalf("clamped threshold = %d, err=%v", threshold, err)
+	}
+	if err := s.SetCompressionMethod(ctx, "invalid"); err != nil {
+		t.Fatal(err)
+	}
+	method, err = s.GetCompressionMethod(ctx)
+	if err != nil || method != "xpress4k" {
+		t.Fatalf("normalized method = %q, err=%v", method, err)
+	}
+}
+
+func TestSetCompressionConfigStoresOneSnapshot(t *testing.T) {
+	t.Parallel()
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+	if err := s.SetCompressionConfig(ctx, "zstd", 32); err != nil {
+		t.Fatal(err)
+	}
+	method, methodErr := s.GetCompressionMethod(ctx)
+	threshold, thresholdErr := s.GetCompressionThresholdMib(ctx)
+	if methodErr != nil || thresholdErr != nil || method != "zstd" || threshold != 32 {
+		t.Fatalf("config = %q/%d, methodErr=%v thresholdErr=%v", method, threshold, methodErr, thresholdErr)
+	}
+}
+
+func TestSetCompressionConfigRollsBackBothValues(t *testing.T) {
+	t.Parallel()
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+	if _, err := s.GetCompressionMethod(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetCompressionThresholdMib(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.client.SQL().ExecContext(ctx, `CREATE TRIGGER fail_compression_threshold
+BEFORE UPDATE ON setting
+WHEN NEW.key = 'mod_compression_threshold_mib'
+BEGIN
+  SELECT RAISE(ABORT, 'threshold write failed');
+END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCompressionConfig(ctx, "zstd", 32); err == nil {
+		t.Fatal("expected compression config transaction to fail")
+	}
+	method, methodErr := s.GetCompressionMethod(ctx)
+	threshold, thresholdErr := s.GetCompressionThresholdMib(ctx)
+	if methodErr != nil || thresholdErr != nil || method != "xpress4k" || threshold != 1 {
+		t.Fatalf("rolled back config = %q/%d, methodErr=%v thresholdErr=%v", method, threshold, methodErr, thresholdErr)
+	}
+}
+
 func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T) {
 	t.Parallel()
 

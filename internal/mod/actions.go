@@ -368,6 +368,11 @@ func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error
 	if !isDisabled(filepath.Base(path)) {
 		return filepath.Clean(path), nil
 	}
+	if m.compression != nil {
+		if err := m.compression.restoreBeforeEnable(ctx, path); err != nil {
+			return "", err
+		}
+	}
 	copyShaderFixes := false
 	if m.settings != nil {
 		value, err := m.settings.GetCopyShaderFixesOnEnable(ctx)
@@ -412,7 +417,11 @@ func (m *Mod) disableWithShaders(ctx context.Context, path string) (string, erro
 			return "", err
 		}
 	}
-	return m.disable(ctx, path)
+	result, err := m.disable(ctx, path)
+	if err == nil && m.compression != nil {
+		m.compression.scheduleScope(result)
+	}
+	return result, err
 }
 
 func (m *Mod) lockedFolderError(err error, modPath string) error {

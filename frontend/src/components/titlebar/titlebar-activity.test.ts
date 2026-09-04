@@ -1,4 +1,6 @@
+import type { CompressionState } from "@bindings/mod";
 import {
+    buildModCompressionTitlebarActivity,
     buildModFixTitlebarActivity,
     buildTransferTitlebarActivity,
 } from "@renderer/components/titlebar/titlebar-activity";
@@ -100,6 +102,82 @@ describe("buildTransferTitlebarActivity", () => {
             t,
         );
         expect(activity).toBeNull();
+    });
+});
+
+describe("buildModCompressionTitlebarActivity", () => {
+    const state = (partial: Partial<CompressionState>): CompressionState => ({
+        enabled: false,
+        method: "xpress4k",
+        thresholdMiB: 1,
+        status: "idle",
+        processedFiles: 0,
+        totalFiles: 0,
+        processedBytes: 0,
+        totalBytes: 0,
+        canToggle: true,
+        canConfigure: true,
+        ...partial,
+    });
+
+    it("removes the badge while idle", () => {
+        expect(buildModCompressionTitlebarActivity(state({}), t)).toBeNull();
+    });
+
+    it("removes the badge when compression state is unavailable", () => {
+        expect(buildModCompressionTitlebarActivity(null, t)).toBeNull();
+    });
+
+    it("shows byte progress without the current file while compressing", () => {
+        const activity = buildModCompressionTitlebarActivity(
+            state({
+                status: "compressing",
+                processedBytes: 25,
+                totalBytes: 100,
+                currentFileName: "mod.bin",
+            }),
+            t,
+        );
+        expect(activity).toMatchObject({
+            id: "mod:compression",
+            label: "titlebar.activity.modCompression.compressing",
+            status: "running",
+            progress: 25,
+            href: "/setting/mod",
+        });
+        expect(activity).not.toHaveProperty("detail");
+    });
+
+    it("falls back to file-count progress when total bytes is zero", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({
+                    status: "compressing",
+                    processedFiles: 3,
+                    totalFiles: 4,
+                    totalBytes: 0,
+                }),
+                t,
+            ),
+        ).toMatchObject({ progress: 75 });
+    });
+
+    it("caps progress at 100", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({ status: "compressing", processedBytes: 125, totalBytes: 100 }),
+                t,
+            ),
+        ).toMatchObject({ progress: 100 });
+    });
+
+    it.each([
+        ["error", "error", "titlebar.activity.modCompression.error"],
+        ["decompressing", "running", "titlebar.activity.modCompression.decompressing"],
+    ] as const)("maps %s to its titlebar status and label", (compressionStatus, status, label) => {
+        expect(
+            buildModCompressionTitlebarActivity(state({ status: compressionStatus }), t),
+        ).toMatchObject({ status, label });
     });
 });
 

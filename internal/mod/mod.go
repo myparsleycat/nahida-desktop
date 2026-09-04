@@ -41,6 +41,14 @@ type Settings interface {
 	GetCopyShaderFixesOnEnable(context.Context) (bool, error)
 }
 
+type compressionSettings interface {
+	GetCompressionMethod(context.Context) (string, error)
+	GetCompressionThresholdMib(context.Context) (int, error)
+	SetCompressionConfig(context.Context, string, int) error
+	GetCompressionEnabled(context.Context) (bool, error)
+	SetCompressionEnabled(context.Context, bool) error
+}
+
 type ImporterSource interface {
 	GetEnabledImporters(context.Context) ([]xxmi.EnabledImporter, error)
 }
@@ -87,6 +95,7 @@ type Mod struct {
 	inspectAddedMods  func([]string)
 	nteSigBypasserURL string
 	nteASILoaderURL   string
+	compression       *compressionCoordinator
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -123,6 +132,7 @@ func NewWithOptions(opts Options) *Mod {
 	m.shaders.getImporters = m.shaderImporters
 	m.shaders.getGames = m.shaderGames
 	m.shaders.logError = m.logShaderError
+	m.compression = newCompressionCoordinator(m)
 	return m
 }
 

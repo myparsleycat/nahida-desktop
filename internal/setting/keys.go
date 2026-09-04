@@ -32,6 +32,9 @@ const (
 	KeyModDisabledPrefixStyle              = "mod.disabledPrefixStyle"
 	KeyModReturnToGamebananaAfterDownload  = "mod.returnToGamebananaAfterDownload"
 	KeyModAutoInspectFix                   = "mod.autoInspectFix"
+	KeyModCompressionMethod                = "mod.compressionMethod"
+	KeyModCompressionThresholdMib          = "mod.compressionThresholdMib"
+	KeyModCompressionEnabled               = "mod.compressionEnabled"
 
 	KeyToolsTouchProfileLlmProtocol     = "tools.touchProfileLlmProtocol"
 	KeyToolsTouchProfileLlmEndpoint     = "tools.touchProfileLlmEndpoint"
@@ -107,6 +110,9 @@ var allDefinitions = []Definition{
 	{KeyModDisabledPrefixStyle, ScopeMod, "mod_disabled_prefix_style"},
 	{KeyModReturnToGamebananaAfterDownload, ScopeMod, "mod_return_to_gamebanana_after_download"},
 	{KeyModAutoInspectFix, ScopeMod, "mod_auto_inspect_fix"},
+	{KeyModCompressionMethod, ScopeMod, "mod_compression_method"},
+	{KeyModCompressionThresholdMib, ScopeMod, "mod_compression_threshold_mib"},
+	{KeyModCompressionEnabled, ScopeMod, "mod_compression_enabled"},
 
 	{KeyToolsTouchProfileLlmProtocol, ScopeTools, "tools_touch_profile_llm_protocol"},
 	{KeyToolsTouchProfileLlmEndpoint, ScopeTools, "tools_touch_profile_llm_endpoint"},

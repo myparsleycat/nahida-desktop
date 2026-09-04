@@ -1674,6 +1674,30 @@
       },
       "mod": {
         "title": "Mod",
+        "compression": {
+          "title": "Mod compression",
+          "method": "Compression method",
+          "methods": {
+            "zstd": { "description": "Compresses large files in disabled mods into .nzst files." },
+            "xpress4k": {
+              "description": "Transparently compresses every mod file with Windows XPRESS4K."
+            }
+          },
+          "threshold": "Compression size threshold",
+          "thresholdDescription": "Only files at least this large are considered for Zstd compression. Range: 1–64 MiB.",
+          "toggle": "Enable mod compression",
+          "status": {
+            "idle": "Idle",
+            "checking": "Checking files",
+            "compressing": "Compressing",
+            "decompressing": "Restoring",
+            "error": "Compression error"
+          },
+          "files": "{{processed}} / {{total}} files",
+          "error": "The compression task could not be completed. Toggle the switch to retry.",
+          "saveFailed": "Failed to save compression settings.",
+          "toggleFailed": "Failed to change compression state."
+        },
         "mod_management": {
           "title": "Mod Management",
           "archiveExtractPathMode": "Archive extraction path",
@@ -1914,6 +1938,12 @@
         "converting": "Converting texture format",
         "resizing_and_converting": "Resizing & converting texture",
         "upscaling_and_converting": "Upscaling & converting texture"
+      },
+      "modCompression": {
+        "checking": "Checking mod compression",
+        "compressing": "Compressing mods",
+        "decompressing": "Restoring mods",
+        "error": "Mod compression error"
       },
       "modFix": {
         "label": "Fix Needed",
