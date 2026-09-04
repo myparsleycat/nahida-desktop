@@ -28,17 +28,21 @@ import (
 )
 
 const (
-	targetD3D11DLL       = "d3d11.dll"
-	d3dBuildStatePrefix  = "mod_tools:d3d_build:"
-	d3dBuildTempDirName  = "nahida-tools-d3d-build"
-	diversifierBackupPre = targetD3D11DLL + ".pepd-backup-"
-	fixer4001Event       = "tools:4001FixerProgress"
+	targetD3D11DLL           = "d3d11.dll"
+	d3dBuildStatePrefix      = "mod_tools:d3d_build:"
+	d3dBuildTempDirName      = "nahida-tools-d3d-build"
+	diversifierBackupPre     = targetD3D11DLL + ".pepd-backup-"
+	fixer4001Event           = "tools:4001FixerProgress"
+	fixer4001VSDevCmdPathKey = "mod_tools:4001-fixer:vs-devcmd-path"
+	vsDevCmdFileName         = "vcvars64.bat"
 )
 
 var (
-	d3dBuildIDRE = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-	providerRE   = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
-	backupHashRE = regexp.MustCompile(`^d3d11\.dll\.pepd-backup-([a-f0-9]{7})-\d+\.bak$`)
+	d3dBuildIDRE     = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	providerRE       = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	backupHashRE     = regexp.MustCompile(`^d3d11\.dll\.pepd-backup-([a-f0-9]{7})-\d+\.bak$`)
+	vsDevCmdEditions = []string{"Community", "Professional", "Enterprise", "Insiders", "BuildTools"}
+	vsDevCmdVersions = []string{"2025", "2022", "18", "17"}
 )
 
 type releaseCacheEntry struct {
@@ -84,6 +88,11 @@ type Fixer4001Result struct {
 	Success      bool    `json:"success"`
 	ErrorMessage *string `json:"errorMessage,omitempty"`
 	BackupPath   *string `json:"backupPath,omitempty"`
+}
+
+type Fixer4001BuildToolsResult struct {
+	Found bool   `json:"found"`
+	Path  string `json:"path"`
 }
 
 type DiversificationState struct {
@@ -223,6 +232,43 @@ func (t *Tools) Start4001ReleasePrefetch() {
 	}()
 }
 
+func (t *Tools) FourThousandOneFixerGetBuildToolsPath(ctx context.Context) (string, error) {
+	value, err := t.getAppState(ctx, fixer4001VSDevCmdPathKey)
+	if err != nil || value == nil {
+		return "", err
+	}
+	return strings.TrimSpace(*value), nil
+}
+
+func (t *Tools) FourThousandOneFixerSetBuildToolsPath(ctx context.Context, path string) (Fixer4001BuildToolsResult, error) {
+	resolved := resolveVSDevCmd(path)
+	if resolved == "" {
+		return Fixer4001BuildToolsResult{}, nil
+	}
+	if err := t.setAppState(ctx, fixer4001VSDevCmdPathKey, resolved); err != nil {
+		return Fixer4001BuildToolsResult{}, err
+	}
+	return Fixer4001BuildToolsResult{Found: true, Path: resolved}, nil
+}
+
+func (t *Tools) FourThousandOneFixerClearBuildToolsPath(ctx context.Context) error {
+	return t.deleteAppState(ctx, fixer4001VSDevCmdPathKey)
+}
+
+func (t *Tools) locate4001VSDevCmd(ctx context.Context) (string, error) {
+	stored, err := t.FourThousandOneFixerGetBuildToolsPath(ctx)
+	if err != nil {
+		return "", err
+	}
+	if stored != "" {
+		if regularFile(stored) {
+			return stored, nil
+		}
+		return "", nil
+	}
+	return findVSDevCmd(), nil
+}
+
 func (t *Tools) FourThousandOneFixerGetDiversificationState(input Fixer4001PathInput) (DiversificationState, error) {
 	path, ok := existingImporterPath(input.ImporterPath)
 	if !ok {
@@ -269,7 +315,10 @@ func (t *Tools) FourThousandOneFixerBuildDll(ctx context.Context, input Fixer400
 	useElevated := !access.Writable
 
 	t.update4001Progress("XXMI_FIND_VS", "")
-	vcvarsPath := findVSDevCmd()
+	vcvarsPath, err := t.locate4001VSDevCmd(ctx)
+	if err != nil {
+		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
+	}
 	if vcvarsPath == "" {
 		t.update4001Progress("XXMI_ERR_VS_NOT_FOUND", "")
 		return result
@@ -579,21 +628,70 @@ func findStereovisionProject(root string) (string, error) {
 var errProjectFound = errors.New("project found")
 
 func findVSDevCmd() string {
-	baseDirs := []string{
-		filepath.Join(envOr("ProgramFiles", `C:\Program Files`), "Microsoft Visual Studio"),
-		filepath.Join(envOr("ProgramFiles(x86)", `C:\Program Files (x86)`), "Microsoft Visual Studio"),
-	}
-	for _, base := range baseDirs {
-		for _, version := range []string{"2025", "2022", "18", "17"} {
-			for _, edition := range []string{"Community", "Professional", "Enterprise", "Insiders", "BuildTools"} {
-				candidate := filepath.Join(base, version, edition, "VC", "Auxiliary", "Build", "vcvars64.bat")
-				if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+	for _, root := range defaultVSInstallRoots() {
+		for _, version := range vsDevCmdVersions {
+			for _, edition := range vsDevCmdEditions {
+				candidate := filepath.Join(root, version, edition, "VC", "Auxiliary", "Build", vsDevCmdFileName)
+				if regularFile(candidate) {
 					return candidate
 				}
 			}
 		}
 	}
 	return ""
+}
+
+func defaultVSInstallRoots() []string {
+	return []string{
+		filepath.Join(envOr("ProgramFiles", `C:\Program Files`), "Microsoft Visual Studio"),
+		filepath.Join(envOr("ProgramFiles(x86)", `C:\Program Files (x86)`), "Microsoft Visual Studio"),
+	}
+}
+
+func resolveVSDevCmd(raw string) string {
+	path := strings.TrimSpace(raw)
+	if path == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return ""
+	}
+	if info.Mode().IsRegular() {
+		if strings.EqualFold(info.Name(), vsDevCmdFileName) {
+			return abs
+		}
+		return ""
+	}
+	if !info.IsDir() {
+		return ""
+	}
+	for _, candidate := range vsDevCmdCandidates(abs) {
+		if regularFile(candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func vsDevCmdCandidates(root string) []string {
+	candidates := []string{
+		filepath.Join(root, vsDevCmdFileName),
+		filepath.Join(root, "VC", "Auxiliary", "Build", vsDevCmdFileName),
+	}
+	for _, edition := range vsDevCmdEditions {
+		candidates = append(candidates, filepath.Join(root, edition, "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	}
+	for _, version := range vsDevCmdVersions {
+		for _, edition := range vsDevCmdEditions {
+			candidates = append(candidates, filepath.Join(root, version, edition, "VC", "Auxiliary", "Build", vsDevCmdFileName))
+		}
+	}
+	return candidates
 }
 
 func envOr(key, fallback string) string {

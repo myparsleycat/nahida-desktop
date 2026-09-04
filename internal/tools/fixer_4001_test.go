@@ -363,3 +363,143 @@ func TestCleanupStaleD3DBuildsUsesValidatedStateKey(t *testing.T) {
 		t.Fatalf("stale states = %#v, %v", states, err)
 	}
 }
+
+func TestResolveVSDevCmdAcceptsFileAndBoundedInstallTrees(t *testing.T) {
+	root := t.TempDir()
+	direct := writeVSDevCmd(t, filepath.Join(root, "direct", vsDevCmdFileName))
+	if got := resolveVSDevCmd(direct); got != direct {
+		t.Fatalf("direct file = %q, want %q", got, direct)
+	}
+	if got := resolveVSDevCmd(filepath.Join(root, "direct")); got != direct {
+		t.Fatalf("direct dir = %q, want %q", got, direct)
+	}
+
+	aux := writeVSDevCmd(t, filepath.Join(root, "aux", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	if got := resolveVSDevCmd(filepath.Join(root, "aux")); got != aux {
+		t.Fatalf("aux tree = %q, want %q", got, aux)
+	}
+
+	edition := writeVSDevCmd(t, filepath.Join(root, "edition", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	if got := resolveVSDevCmd(filepath.Join(root, "edition")); got != edition {
+		t.Fatalf("edition tree = %q, want %q", got, edition)
+	}
+
+	versioned := writeVSDevCmd(t, filepath.Join(root, "versioned", "2022", "BuildTools", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	if got := resolveVSDevCmd(filepath.Join(root, "versioned")); got != versioned {
+		t.Fatalf("versioned tree = %q, want %q", got, versioned)
+	}
+
+	other := filepath.Join(root, "other.bat")
+	if err := os.WriteFile(other, []byte("@echo off\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveVSDevCmd(other); got != "" {
+		t.Fatalf("non-vcvars file = %q", got)
+	}
+	if got := resolveVSDevCmd(filepath.Join(root, "missing")); got != "" {
+		t.Fatalf("missing path = %q", got)
+	}
+}
+
+func TestFourThousandOneFixerBuildToolsPathPersistsResolvedFile(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	service := New()
+	service.UseClient(client)
+	root := t.TempDir()
+	want := writeVSDevCmd(t, filepath.Join(root, "2022", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+
+	got, err := service.FourThousandOneFixerGetBuildToolsPath(ctx)
+	if err != nil || got != "" {
+		t.Fatalf("empty get = %q, %v", got, err)
+	}
+
+	result, err := service.FourThousandOneFixerSetBuildToolsPath(ctx, root)
+	if err != nil || !result.Found || result.Path != want {
+		t.Fatalf("set = %#v, %v", result, err)
+	}
+	stored, err := service.FourThousandOneFixerGetBuildToolsPath(ctx)
+	if err != nil || stored != want {
+		t.Fatalf("stored = %q, %v", stored, err)
+	}
+
+	missing, err := service.FourThousandOneFixerSetBuildToolsPath(ctx, filepath.Join(root, "absent"))
+	if err != nil || missing.Found || missing.Path != "" {
+		t.Fatalf("missing set = %#v, %v", missing, err)
+	}
+	stored, err = service.FourThousandOneFixerGetBuildToolsPath(ctx)
+	if err != nil || stored != want {
+		t.Fatalf("stored after miss = %q, %v", stored, err)
+	}
+
+	if err := service.FourThousandOneFixerClearBuildToolsPath(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = service.FourThousandOneFixerGetBuildToolsPath(ctx)
+	if err != nil || stored != "" {
+		t.Fatalf("cleared = %q, %v", stored, err)
+	}
+}
+
+func TestFindVSDevCmdIgnoresVersionlessEditionRoots(t *testing.T) {
+	programFiles := t.TempDir()
+	programFilesX86 := t.TempDir()
+	t.Setenv("ProgramFiles", programFiles)
+	t.Setenv("ProgramFiles(x86)", programFilesX86)
+
+	stale := writeVSDevCmd(t, filepath.Join(programFiles, "Microsoft Visual Studio", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	want := writeVSDevCmd(t, filepath.Join(programFiles, "Microsoft Visual Studio", "2022", "BuildTools", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	if got := findVSDevCmd(); got != want {
+		t.Fatalf("findVSDevCmd() = %q, want versioned layout %q, not %q", got, want, stale)
+	}
+}
+
+func TestLocate4001VSDevCmdUsesSavedPathWithoutDefaultFallback(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	service := New()
+	service.UseClient(client)
+	saved := writeVSDevCmd(t, filepath.Join(t.TempDir(), vsDevCmdFileName))
+
+	if _, err := service.FourThousandOneFixerSetBuildToolsPath(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.locate4001VSDevCmd(ctx)
+	if err != nil || got != saved {
+		t.Fatalf("saved locate = %q, %v", got, err)
+	}
+
+	if err := os.Remove(saved); err != nil {
+		t.Fatal(err)
+	}
+	got, err = service.locate4001VSDevCmd(ctx)
+	if err != nil || got != "" {
+		t.Fatalf("missing saved locate = %q, %v, want empty without default fallback", got, err)
+	}
+
+	if err := service.FourThousandOneFixerClearBuildToolsPath(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err = service.locate4001VSDevCmd(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != findVSDevCmd() {
+		t.Fatalf("cleared locate = %q, want default %q", got, findVSDevCmd())
+	}
+}
+
+func writeVSDevCmd(t *testing.T, path string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("@echo off\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
