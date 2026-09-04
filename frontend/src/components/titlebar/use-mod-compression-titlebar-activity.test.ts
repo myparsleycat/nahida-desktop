@@ -33,11 +33,8 @@ describe("useModCompressionTitlebarActivity", () => {
             totalFiles: 2,
             processedBytes: 10,
             totalBytes: 20,
-            failedFiles: 0,
-            externalFiles: 0,
             canToggle: false,
             canConfigure: false,
-            canDecompressExternal: false,
         };
 
         const { unmount } = renderHook(() => useModCompressionTitlebarActivity());

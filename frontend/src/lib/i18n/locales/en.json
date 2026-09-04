@@ -1678,7 +1678,7 @@
           "title": "Mod compression",
           "method": "Compression method",
           "methods": {
-            "zstd": { "description": "Compresses large files in disabled mods into .zst files." },
+            "zstd": { "description": "Compresses large files in disabled mods into .nzst files." },
             "xpress4k": {
               "description": "Transparently compresses every mod file with Windows XPRESS4K."
             }
@@ -1691,17 +1691,10 @@
             "checking": "Checking files",
             "compressing": "Compressing",
             "decompressing": "Restoring",
-            "blocked": "External compression detected",
-            "error": "Some files failed"
+            "error": "Compression error"
           },
           "files": "{{processed}} / {{total}} files",
-          "external": "{{count}} files compressed by an external tool such as CompactGUI were detected.",
-          "externalManual": "Select XPRESS4K to decompress them here, or decompress them with the external tool that created them.",
-          "externalDiskWarning": "Decompressing may increase disk usage.",
-          "externalDecompress": "Decompress external files",
-          "externalDecompressFailed": "{{count}} files could not be decompressed. You can retry the remaining files.",
-          "externalDecompressRequestFailed": "Failed to start external decompression.",
-          "error": "{{count}} files could not be processed. Toggle the switch again to retry the remaining work.",
+          "error": "The compression task could not be completed. Toggle the switch to retry.",
           "saveFailed": "Failed to save compression settings.",
           "toggleFailed": "Failed to change compression state."
         },
@@ -1950,7 +1943,6 @@
         "checking": "Checking mod compression",
         "compressing": "Compressing mods",
         "decompressing": "Restoring mods",
-        "blocked": "External mod compression",
         "error": "Mod compression error"
       },
       "modFix": {

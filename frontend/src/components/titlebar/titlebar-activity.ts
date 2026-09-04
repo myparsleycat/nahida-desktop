@@ -185,21 +185,18 @@ export function buildModCompressionTitlebarActivity(
               ? (state.processedFiles / state.totalFiles) * 100
               : undefined;
     const labelKey =
-        state.status === "blocked"
-            ? "titlebar.activity.modCompression.blocked"
-            : state.status === "error"
-              ? "titlebar.activity.modCompression.error"
-              : state.status === "decompressing"
-                ? "titlebar.activity.modCompression.decompressing"
-                : state.status === "compressing"
-                  ? "titlebar.activity.modCompression.compressing"
-                  : "titlebar.activity.modCompression.checking";
+        state.status === "error"
+            ? "titlebar.activity.modCompression.error"
+            : state.status === "decompressing"
+              ? "titlebar.activity.modCompression.decompressing"
+              : state.status === "compressing"
+                ? "titlebar.activity.modCompression.compressing"
+                : "titlebar.activity.modCompression.checking";
 
     return {
         id: "mod:compression",
         label: t(labelKey),
-        status:
-            state.status === "blocked" ? "warning" : state.status === "error" ? "error" : "running",
+        status: state.status === "error" ? "error" : "running",
         icon: ArchiveIcon,
         progress: progress === undefined ? undefined : Math.min(100, progress),
         order: 25,

@@ -120,8 +120,8 @@ func TestDisabledModFoldersAndZstdThreshold(t *testing.T) {
 	}
 }
 
-func TestZstdRoundTripRestoresMetadata(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED_Test")
+func TestZstdRoundTripRestoresMetadataWithoutManifest(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "DISABLED Test")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -139,24 +139,21 @@ func TestZstdRoundTripRestoresMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
+	if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("original should be removed, err=%v", err)
 	}
-	if _, err := os.Stat(path + ".zst"); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(folder, legacyCompressionManifestName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("manifest was created: %v", err)
 	}
-	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatal("restored data differs")
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("restored data differs: err=%v", err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -165,7 +162,7 @@ func TestZstdRoundTripRestoresMetadata(t *testing.T) {
 	if info.Mode().Perm() != originalInfo.Mode().Perm() || !info.ModTime().Equal(mtime) {
 		t.Fatalf("metadata = %v %v", info.Mode().Perm(), info.ModTime())
 	}
-	if _, err := os.Stat(path + ".zst"); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(path + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("compressed file should be removed, err=%v", err)
 	}
 }
@@ -183,268 +180,246 @@ func TestZstdKeepsOriginalWhenCompressionIsNotBeneficial(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
+	if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path + ".zst"); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(path + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("unexpected zstd output, err=%v", err)
 	}
 }
 
-func TestZstdRefusesDestinationCollision(t *testing.T) {
+func TestZstdCompressionUsesSourceWhenDestinationExists(t *testing.T) {
 	folder := filepath.Join(t.TempDir(), "DISABLED Collision")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(folder, "payload.bin")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("x"), 8192), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path+".zst", []byte("external"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err == nil {
-		t.Fatal("expected collision error")
-	}
-	got, err := os.ReadFile(path)
-	if err != nil || len(got) != 8192 {
-		t.Fatalf("original was not preserved: len=%d err=%v", len(got), err)
-	}
-}
-
-func TestZstdManifestPathsCannotEscapeManagedFolder(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Unsafe")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	outside := filepath.Join(filepath.Dir(folder), "victim.bin")
-	if err := os.WriteFile(outside, []byte("preserve"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, relative := range []string{
-		`..\victim.bin`, `../victim.bin`, `nested\..\..\victim.bin`, outside, `C:victim.bin`,
-	} {
-		t.Run(relative, func(t *testing.T) {
-			entry := &zstdManifestEntry{
-				OriginalPath: relative, ZstdPath: relative + ".zst", State: "compressed",
-			}
-			manifest := &zstdManifest{Version: 1, Entries: map[string]*zstdManifestEntry{relative: entry}}
-			if err := recoverZstdEntry(context.Background(), folder, manifest, relative, entry, ignoreCompressionMutations); err == nil {
-				t.Fatal("expected unsafe manifest path to fail")
-			}
-			if got, err := os.ReadFile(outside); err != nil || !bytes.Equal(got, []byte("preserve")) {
-				t.Fatalf("outside file changed: %q, err=%v", got, err)
-			}
-		})
-	}
-}
-
-func TestZstdManifestRequiresMatchingKeyAndDestination(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Unsafe")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	entry := &zstdManifestEntry{OriginalPath: "payload.bin", ZstdPath: "other.zst", State: "compressed"}
-	manifest := &zstdManifest{Version: 1, Entries: map[string]*zstdManifestEntry{"wrong.bin": entry}}
-	if err := recoverZstdEntry(context.Background(), folder, manifest, "wrong.bin", entry, ignoreCompressionMutations); err == nil {
-		t.Fatal("expected mismatched manifest key to fail")
-	}
-	manifest.Entries = map[string]*zstdManifestEntry{entry.OriginalPath: entry}
-	if err := recoverZstdEntry(context.Background(), folder, manifest, entry.OriginalPath, entry, ignoreCompressionMutations); err == nil {
-		t.Fatal("expected mismatched zstd destination to fail")
-	}
-}
-
-func TestZstdRestoreClearsCanceledCompressionIntent(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Canceled")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(folder, "payload.bin")
-	want := bytes.Repeat([]byte("original"), 1024)
+	want := bytes.Repeat([]byte("source-wins"), 8192)
 	if err := os.WriteFile(path, want, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	entry := &zstdManifestEntry{
-		OriginalPath: "payload.bin", ZstdPath: "payload.bin.zst", OriginalSize: int64(len(want)),
-		State: "compressing",
-	}
-	manifest := &zstdManifest{Version: 1, Entries: map[string]*zstdManifestEntry{entry.OriginalPath: entry}}
-	if err := writeZstdManifest(folder, manifest); err != nil {
+	if err := os.WriteFile(path+managedZstdExtension, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tempPath := path + ".zst" + compressionTempMarker
-	if err := os.WriteFile(tempPath, []byte("partial"), 0o600); err != nil {
+	if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFile(context.Background(), path+managedZstdExtension, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(got, want) {
-		t.Fatalf("original changed: err=%v", err)
+		t.Fatalf("source did not replace stale target: err=%v", err)
 	}
-	for _, removed := range []string{tempPath, filepath.Join(folder, compressionManifestName)} {
-		if _, err := os.Stat(removed); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("recovery artifact remains: %s, err=%v", removed, err)
+}
+
+func TestZstdRestoreUsesExistingSourceAndRemovesArchive(t *testing.T) {
+	folder := t.TempDir()
+	sourcePath := filepath.Join(folder, "payload.bin")
+	targetPath := sourcePath + managedZstdExtension
+	want := []byte("source-is-canonical")
+	if err := os.WriteFile(sourcePath, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetPath, []byte("not-even-zstd"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreZstdFile(context.Background(), targetPath, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(sourcePath)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("existing source changed: err=%v", err)
+	}
+	if _, err := os.Stat(targetPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("archive remains: %v", err)
+	}
+}
+
+func TestZstdPassRemovesLegacyManifestAndTemps(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "DISABLED Legacy")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifacts := []string{
+		filepath.Join(folder, legacyCompressionManifestName),
+		filepath.Join(folder, legacyCompressionManifestName+compressionTempMarker+"123456789"),
+		filepath.Join(folder, "payload.bin"+managedZstdExtension+compressionTempMarker),
+		filepath.Join(folder, "payload.bin"+compressionTempMarker),
+	}
+	for _, path := range artifacts {
+		if err := os.WriteFile(path, []byte("obsolete"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range artifacts {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("legacy artifact remains: %s, err=%v", path, err)
 		}
 	}
 }
 
-func TestZstdValidationHonorsCancellationAndCleansTemp(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Validation")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
+func TestZstdRestoreLimitPreservesArchiveAndCleansTemp(t *testing.T) {
+	folder := t.TempDir()
+	sourcePath := filepath.Join(folder, "payload.bin")
+	targetPath := sourcePath + managedZstdExtension
+	if err := os.WriteFile(sourcePath, bytes.Repeat([]byte("too-large"), 4096), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(folder, "payload.bin")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("compress-me"), 32*1024), 0o644); err != nil {
+	if err := streamCompressZstd(context.Background(), sourcePath, targetPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
+	if err := os.Remove(sourcePath); err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := readZstdManifest(folder)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entry := manifest.Entries["payload.bin"]
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := validateZstd(ctx, path+".zst", entry); !errors.Is(err, context.Canceled) {
-		t.Fatalf("validation error = %v", err)
-	}
-	matches, err := filepath.Glob(filepath.Join(folder, "*"+compressionTempMarker+".verify-*"))
-	if err != nil || len(matches) != 0 {
-		t.Fatalf("verification temps = %v, err=%v", matches, err)
-	}
-}
-
-func TestZstdRestoreRejectsArchiveOverMaximumAndCleansTemp(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Oversized")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(folder, "payload.bin")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("valid-zstd"), 4096), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := readZstdManifest(folder)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest.Entries["payload.bin"].OriginalSize = maxZstdRestoreSize + 1
-	if err := writeZstdManifest(folder, manifest); err != nil {
-		t.Fatal(err)
-	}
-
-	err = restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations)
+	tempPath := sourcePath + compressionTempMarker
+	err := streamRestoreZstdWithLimit(context.Background(), targetPath, tempPath, 1024)
+	_ = os.Remove(tempPath)
 	if err == nil || !strings.Contains(err.Error(), "exceeds restore limit") {
 		t.Fatalf("restore error = %v", err)
 	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary original unexpectedly remains: %v", err)
+	if _, err := os.Stat(targetPath); err != nil {
+		t.Fatalf("archive was removed: %v", err)
 	}
-	if _, err := os.Stat(path + compressionTempMarker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("restore temporary output remains: %v", err)
-	}
-	if _, err := os.Stat(path + ".zst"); err != nil {
-		t.Fatalf("valid archive was removed: %v", err)
+	if _, err := os.Stat(tempPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary output remains: %v", err)
 	}
 }
 
-func TestZstdRejectsReparseManifestPath(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Reparse")
-	outside := t.TempDir()
+func TestCorruptZstdIsPreservedAndRestoreContinues(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "Enabled")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(folder, "link")
-	if err := os.Symlink(outside, link); err != nil {
-		t.Skipf("symlink unavailable: %v", err)
+	validPath := filepath.Join(folder, "valid.bin")
+	corruptPath := filepath.Join(folder, "corrupt.bin")
+	validData := bytes.Repeat([]byte("valid"), 16*1024)
+	if err := os.WriteFile(validPath, validData, 0o644); err != nil {
+		t.Fatal(err)
 	}
-	relative := filepath.Join("link", "payload.bin")
-	entry := &zstdManifestEntry{OriginalPath: relative, ZstdPath: relative + ".zst", State: "compressed"}
-	manifest := &zstdManifest{Version: 1, Entries: map[string]*zstdManifestEntry{relative: entry}}
-	if err := recoverZstdEntry(context.Background(), folder, manifest, relative, entry, ignoreCompressionMutations); err == nil {
-		t.Fatal("expected reparse manifest path to fail")
+	if err := compressZstdFile(context.Background(), validPath, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(corruptPath+managedZstdExtension, []byte("not-zstd"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var fileErrors int
+	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations, func(string, error) {
+		fileErrors++
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fileErrors != 1 {
+		t.Fatalf("file errors = %d, want 1", fileErrors)
+	}
+	got, err := os.ReadFile(validPath)
+	if err != nil || !bytes.Equal(got, validData) {
+		t.Fatalf("valid sibling was not restored: err=%v", err)
+	}
+	if _, err := os.Stat(corruptPath + managedZstdExtension); err != nil {
+		t.Fatalf("corrupt archive was not preserved: %v", err)
+	}
+	if _, err := os.Stat(corruptPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("corrupt output unexpectedly exists: %v", err)
 	}
 }
 
-func TestCorruptZstdIsPreservedAndRestoreFails(t *testing.T) {
-	folder := filepath.Join(t.TempDir(), "DISABLED Corrupt")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(folder, "payload.bin")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("compress-me"), 64*1024), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
-		t.Fatal(err)
-	}
-	compressedPath := path + ".zst"
-	if err := os.WriteFile(compressedPath, []byte("corrupt"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations); err == nil {
-		t.Fatal("expected corrupt zstd restore to fail")
-	}
-	if _, err := os.Stat(compressedPath); err != nil {
-		t.Fatalf("corrupt compressed file was removed: %v", err)
-	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("unverified original unexpectedly exists: %v", err)
-	}
-}
-
-func TestEnabledFolderManifestIsRestoredDuringReconciliation(t *testing.T) {
+func TestRestoreEnabledZstdSkipsDisabledFolders(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Mods")
 	disabled := filepath.Join(root, "DISABLED Test")
-	if err := os.MkdirAll(disabled, 0o755); err != nil {
+	enabled := filepath.Join(root, "Enabled")
+	for _, folder := range []string{disabled, enabled} {
+		if err := os.MkdirAll(folder, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(folder, "payload.bin")
+		if err := os.WriteFile(path, bytes.Repeat([]byte(filepath.Base(folder)), 16*1024), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := restoreEnabledZstd(context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(disabled, "payload.bin")
-	want := bytes.Repeat([]byte("restore-on-rename"), 32*1024)
-	if err := os.WriteFile(path, want, 0o644); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(enabled, "payload.bin")); err != nil {
+		t.Fatalf("enabled archive was not restored: %v", err)
 	}
-	if err := compressZstdFile(context.Background(), disabled, path, ignoreCompressionMutations); err != nil {
-		t.Fatal(err)
-	}
-	enabled := filepath.Join(root, "Test")
-	if err := os.Rename(disabled, enabled); err != nil {
-		t.Fatal(err)
-	}
-	if err := restoreEnabledZstd(context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(filepath.Join(enabled, "payload.bin"))
-	if err != nil || !bytes.Equal(got, want) {
-		t.Fatalf("restored file mismatch: err=%v", err)
+	if _, err := os.Stat(filepath.Join(disabled, "payload.bin"+managedZstdExtension)); err != nil {
+		t.Fatalf("disabled archive was unexpectedly restored: %v", err)
 	}
 }
 
-func TestEnableStopsBeforeRenameWhenZstdRestoreFails(t *testing.T) {
+func TestEveryNZstdFileIsTreatedAsManaged(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "Enabled")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(folder, "external.dat")
+	targetPath := sourcePath + managedZstdExtension
+	want := bytes.Repeat([]byte("external-zstd"), 4096)
+	if err := os.WriteFile(sourcePath, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := streamCompressZstd(context.Background(), sourcePath, targetPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(sourcePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreAllZstd(context.Background(), []string{folder}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(sourcePath)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("untracked zstd was not restored: err=%v", err)
+	}
+}
+
+func TestOrdinaryZstdArchiveIsIgnored(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "DISABLED Archive")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(folder, "external.dat.zst")
+	if err := os.WriteFile(archivePath, []byte("ordinary-zstd"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var fileErrors int
+	if err := restoreAllZstd(context.Background(), []string{folder}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, func(string, error) {
+		fileErrors++
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fileErrors != 0 {
+		t.Fatalf("ordinary .zst was processed: errors=%d", fileErrors)
+	}
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Fatalf("ordinary .zst was removed: %v", err)
+	}
+	files, err := filesForZstd(folder, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("ordinary .zst became a compression candidate: %#v", files)
+	}
+}
+
+func TestEnableContinuesAfterIndividualZstdRestoreFailure(t *testing.T) {
 	root := t.TempDir()
 	disabled := filepath.Join(root, "DISABLED Unsafe")
 	if err := os.MkdirAll(disabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(disabled, "payload.bin")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("compress-me"), 32*1024), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := compressZstdFile(context.Background(), disabled, path, ignoreCompressionMutations); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path+".zst", []byte("corrupt"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(disabled, "payload.bin"+managedZstdExtension), []byte("corrupt"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -452,13 +427,15 @@ func TestEnableStopsBeforeRenameWhenZstdRestoreFails(t *testing.T) {
 	m.compression.mu.Lock()
 	m.compression.state = CompressionState{Enabled: true, Method: "zstd", ThresholdMiB: 1, Status: "idle"}
 	m.compression.mu.Unlock()
-	if _, err := m.enableWithShaders(context.Background(), disabled); err == nil {
-		t.Fatal("expected activation to stop on restore failure")
+	if _, err := m.enableWithShaders(context.Background(), disabled); err != nil {
+		t.Fatalf("activation stopped on individual restore failure: %v", err)
 	}
-	if _, err := os.Stat(disabled); err != nil {
-		t.Fatalf("disabled folder was renamed: %v", err)
+	if _, err := os.Stat(disabled); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("disabled folder still exists: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "Unsafe")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("enabled folder unexpectedly exists: %v", err)
+	if _, err := os.Stat(filepath.Join(root, "Unsafe")); err != nil {
+		t.Fatalf("enabled folder was not created: %v", err)
 	}
 }
+
+func ignoreCompressionFileErrors(string, error) {}

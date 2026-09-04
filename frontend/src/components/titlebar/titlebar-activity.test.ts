@@ -115,11 +115,8 @@ describe("buildModCompressionTitlebarActivity", () => {
         totalFiles: 0,
         processedBytes: 0,
         totalBytes: 0,
-        failedFiles: 0,
-        externalFiles: 0,
         canToggle: true,
         canConfigure: true,
-        canDecompressExternal: false,
         ...partial,
     });
 
@@ -149,13 +146,6 @@ describe("buildModCompressionTitlebarActivity", () => {
             href: "/setting/mod",
         });
         expect(activity).not.toHaveProperty("detail");
-    });
-
-    it("keeps blocked state visible as a warning", () => {
-        expect(buildModCompressionTitlebarActivity(state({ status: "blocked" }), t)).toMatchObject({
-            status: "warning",
-            label: "titlebar.activity.modCompression.blocked",
-        });
     });
 
     it("falls back to file-count progress when total bytes is zero", () => {

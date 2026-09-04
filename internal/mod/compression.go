@@ -2,7 +2,6 @@ package mod
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,14 +17,15 @@ import (
 )
 
 const (
-	compressionTransitionKey = "mod_compression:transition"
-	compressionRootsKey      = "mod_compression:roots"
-	compressionEvent         = "mod:compressionProgress"
-	compressionManifestName  = ".nahida-compression.json"
-	compressionTempMarker    = ".nahida-compression-tmp"
-	compressionProgressEvery = 100 * time.Millisecond
-	compressionWatchDebounce = 900 * time.Millisecond
-	compressionSelfChangeTTL = 2 * time.Second
+	legacyCompressionTransitionKey = "mod_compression:transition"
+	legacyCompressionRootsKey      = "mod_compression:roots"
+	legacyCompressionLedgerPrefix  = "mod_compression:file:"
+	compressionEvent               = "mod:compressionProgress"
+	legacyCompressionManifestName  = ".nahida-compression.json"
+	compressionTempMarker          = ".nahida-compression-tmp"
+	compressionProgressEvery       = 100 * time.Millisecond
+	compressionWatchDebounce       = 900 * time.Millisecond
+	compressionSelfChangeTTL       = 2 * time.Second
 )
 
 type CompressionConfig struct {
@@ -34,30 +34,19 @@ type CompressionConfig struct {
 }
 
 type CompressionState struct {
-	Enabled               bool   `json:"enabled"`
-	Method                string `json:"method"`
-	ThresholdMiB          int    `json:"thresholdMiB"`
-	Status                string `json:"status"`
-	TargetEnabled         *bool  `json:"targetEnabled,omitempty"`
-	ProcessedFiles        int    `json:"processedFiles"`
-	TotalFiles            int    `json:"totalFiles"`
-	ProcessedBytes        int64  `json:"processedBytes"`
-	TotalBytes            int64  `json:"totalBytes"`
-	CurrentFileName       string `json:"currentFileName,omitempty"`
-	FailedFiles           int    `json:"failedFiles"`
-	ExternalFiles         int    `json:"externalFiles"`
-	Error                 string `json:"error,omitempty"`
-	CanToggle             bool   `json:"canToggle"`
-	CanConfigure          bool   `json:"canConfigure"`
-	CanDecompressExternal bool   `json:"canDecompressExternal"`
-}
-
-type compressionTransition struct {
-	TargetEnabled bool   `json:"targetEnabled"`
-	Method        string `json:"method"`
-	ThresholdMiB  int    `json:"thresholdMiB"`
-	Stage         string `json:"stage"`
-	StartedAt     string `json:"startedAt"`
+	Enabled         bool   `json:"enabled"`
+	Method          string `json:"method"`
+	ThresholdMiB    int    `json:"thresholdMiB"`
+	Status          string `json:"status"`
+	TargetEnabled   *bool  `json:"targetEnabled,omitempty"`
+	ProcessedFiles  int    `json:"processedFiles"`
+	TotalFiles      int    `json:"totalFiles"`
+	ProcessedBytes  int64  `json:"processedBytes"`
+	TotalBytes      int64  `json:"totalBytes"`
+	CurrentFileName string `json:"currentFileName,omitempty"`
+	Error           string `json:"error,omitempty"`
+	CanToggle       bool   `json:"canToggle"`
+	CanConfigure    bool   `json:"canConfigure"`
 }
 
 type compressionCoordinator struct {
@@ -70,7 +59,6 @@ type compressionCoordinator struct {
 	running              bool
 	configuring          bool
 	pendingFull          bool
-	pendingExternal      bool
 	pendingScopes        map[string]struct{}
 	debounceTimer        *time.Timer
 	cancel               context.CancelFunc
@@ -95,7 +83,7 @@ func newCompressionCoordinator(owner *Mod) *compressionCoordinator {
 	}
 }
 
-// StartCompression recovers a persisted transition and begins continuous reconciliation.
+// StartCompression loads the desired setting and begins continuous reconciliation.
 //
 //wails:ignore
 func (m *Mod) StartCompression(ctx context.Context) error {
@@ -103,14 +91,11 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 		return nil
 	}
 	if err := m.compression.loadState(ctx); err != nil {
-		m.compression.logError(err, "load-state", "", "")
-		m.compression.mu.Lock()
-		m.compression.state.Status = "error"
-		m.compression.state.Error = err.Error()
-		m.compression.state.TargetEnabled = nil
-		m.compression.deriveCapabilitiesLocked()
-		m.compression.mu.Unlock()
-		m.compression.publish()
+		m.compression.fail(err, "load-state", "", "")
+		return err
+	}
+	if err := m.compression.cleanupLegacyState(ctx); err != nil {
+		m.compression.fail(err, "cleanup-legacy-state", "", "")
 		return err
 	}
 	m.compression.stopped.Store(false)
@@ -160,12 +145,14 @@ func (m *Mod) SetCompressionConfig(ctx context.Context, config CompressionConfig
 	m.compression.publish()
 	if err := settings.SetCompressionConfig(ctx, config.Method, config.ThresholdMiB); err != nil {
 		m.compression.reloadConfigState(ctx, settings)
-		m.compression.logError(err, "save-config", config.Method, "")
+		m.compression.fail(err, "save-config", config.Method, "")
 		return m.compression.snapshot(), errors.New("MOD_COMPRESSION_CONFIG_FAILED")
 	}
 	m.compression.mu.Lock()
 	m.compression.state.Method = config.Method
 	m.compression.state.ThresholdMiB = config.ThresholdMiB
+	m.compression.state.Status = "idle"
+	m.compression.state.Error = ""
 	m.compression.configuring = false
 	m.compression.deriveCapabilitiesLocked()
 	m.compression.mu.Unlock()
@@ -183,29 +170,32 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	defer m.compression.requestMu.Unlock()
 	state := m.compression.snapshot()
 	interruptingEnable := !enabled && compressionEnableInProgress(state)
-	if state.Status == "blocked" || (!state.CanToggle && state.Status != "error") ||
-		(enabled && compressionEnableInProgress(state)) {
+	if (!state.CanToggle && state.Status != "error") || (enabled && compressionEnableInProgress(state)) {
 		return state, errors.New("COMPRESSION_TOGGLE_LOCKED")
 	}
 	if interruptingEnable {
 		m.compression.cancelCurrentWorkLocked()
 	}
-	transition := compressionTransition{
-		TargetEnabled: enabled, Method: state.Method, ThresholdMiB: state.ThresholdMiB,
-		Stage: "queued", StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	settings, err := m.compression.settings()
+	if err != nil {
+		m.compression.fail(err, "resolve-settings", state.Method, "")
+		if interruptingEnable {
+			m.compression.enqueueFullLocked()
+		}
+		return m.compression.snapshot(), err
 	}
-	if err := m.compression.saveTransition(ctx, transition); err != nil {
-		m.compression.logError(err, "save-transition", state.Method, "")
+	if err := settings.SetCompressionEnabled(ctx, enabled); err != nil {
+		m.compression.fail(err, "save-enabled", state.Method, "")
 		if interruptingEnable {
 			m.compression.enqueueFullLocked()
 		}
 		return m.compression.snapshot(), err
 	}
 	m.compression.mu.Lock()
+	m.compression.state.Enabled = enabled
 	m.compression.state.TargetEnabled = boolPointer(enabled)
 	m.compression.state.Status = "checking"
 	m.compression.state.Error = ""
-	m.compression.state.FailedFiles = 0
 	m.compression.deriveCapabilitiesLocked()
 	m.compression.mu.Unlock()
 	m.compression.publish()
@@ -216,22 +206,6 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 func compressionEnableInProgress(state CompressionState) bool {
 	return (state.Status == "checking" || state.Status == "compressing") &&
 		state.TargetEnabled != nil && *state.TargetEnabled
-}
-
-func (m *Mod) DecompressExternalCompression(ctx context.Context) (CompressionState, error) {
-	if m == nil || m.compression == nil || m.client == nil {
-		return CompressionState{}, errors.New("mod compression is not configured")
-	}
-	if !m.compression.requestMu.TryLock() {
-		return m.compression.snapshot(), errors.New("EXTERNAL_DECOMPRESSION_LOCKED")
-	}
-	defer m.compression.requestMu.Unlock()
-	state := m.compression.snapshot()
-	if !state.CanDecompressExternal {
-		return state, errors.New("EXTERNAL_DECOMPRESSION_LOCKED")
-	}
-	m.compression.enqueueExternalDecompressionLocked()
-	return m.compression.snapshot(), nil
 }
 
 func (c *compressionCoordinator) loadStateIfNeeded(ctx context.Context) error {
@@ -261,18 +235,9 @@ func (c *compressionCoordinator) loadState(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	transition, err := c.loadTransition(ctx)
-	if err != nil {
-		return err
-	}
 	c.mu.Lock()
 	c.state = CompressionState{Enabled: enabled, Method: method, ThresholdMiB: threshold, Status: "checking"}
 	c.loaded = true
-	if transition != nil {
-		c.state.Method = transition.Method
-		c.state.ThresholdMiB = transition.ThresholdMiB
-		c.state.TargetEnabled = boolPointer(transition.TargetEnabled)
-	}
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
@@ -286,9 +251,8 @@ func (c *compressionCoordinator) schedule() {
 }
 
 type compressionWork struct {
-	full               bool
-	decompressExternal bool
-	scopes             []string
+	full   bool
+	scopes []string
 }
 
 type compressionMutationMarker func(...string)
@@ -298,20 +262,6 @@ func ignoreCompressionMutations(...string) {}
 func (c *compressionCoordinator) enqueueFullLocked() {
 	c.mu.Lock()
 	c.pendingFull = true
-	c.pendingExternal = false
-	clear(c.pendingScopes)
-	if c.debounceTimer != nil {
-		c.debounceTimer.Stop()
-		c.debounceTimer = nil
-	}
-	c.mu.Unlock()
-	c.startPendingLocked()
-}
-
-func (c *compressionCoordinator) enqueueExternalDecompressionLocked() {
-	c.mu.Lock()
-	c.pendingFull = false
-	c.pendingExternal = true
 	clear(c.pendingScopes)
 	if c.debounceTimer != nil {
 		c.debounceTimer.Stop()
@@ -328,10 +278,7 @@ func (c *compressionCoordinator) scheduleScope(path string) {
 	c.requestMu.Lock()
 	defer c.requestMu.Unlock()
 	c.mu.Lock()
-	if c.state.Status == "blocked" {
-		c.pendingFull = true
-		clear(c.pendingScopes)
-	} else if !c.pendingFull {
+	if !c.pendingFull {
 		addCompressionScope(c.pendingScopes, path)
 	}
 	if c.running {
@@ -364,18 +311,14 @@ func (c *compressionCoordinator) startPendingLocked() {
 		return
 	}
 	c.mu.Lock()
-	if c.running || !c.pendingFull && !c.pendingExternal && len(c.pendingScopes) == 0 {
+	if c.running || !c.pendingFull && len(c.pendingScopes) == 0 {
 		c.mu.Unlock()
 		return
 	}
 	work := c.takePendingLocked()
 	ctx, cancel := context.WithCancel(context.Background())
 	c.running, c.cancel, c.done = true, cancel, make(chan struct{})
-	if work.decompressExternal {
-		c.resetExternalProgressLocked()
-	} else {
-		c.resetCheckingLocked()
-	}
+	c.resetCheckingLocked()
 	c.deriveCapabilitiesLocked()
 	done := c.done
 	c.mu.Unlock()
@@ -389,7 +332,6 @@ func (c *compressionCoordinator) startPendingLocked() {
 func (c *compressionCoordinator) cancelCurrentWorkLocked() {
 	c.mu.Lock()
 	c.pendingFull = false
-	c.pendingExternal = false
 	clear(c.pendingScopes)
 	if c.debounceTimer != nil {
 		c.debounceTimer.Stop()
@@ -408,13 +350,9 @@ func (c *compressionCoordinator) cancelCurrentWorkLocked() {
 func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, work compressionWork) {
 	defer close(done)
 	for {
-		if work.decompressExternal {
-			c.decompressExternal(ctx)
-		} else {
-			c.reconcile(ctx, work)
-		}
+		c.reconcile(ctx, work)
 		c.mu.Lock()
-		if ctx.Err() != nil || !c.pendingFull && !c.pendingExternal && len(c.pendingScopes) == 0 {
+		if ctx.Err() != nil || !c.pendingFull && len(c.pendingScopes) == 0 {
 			c.running, c.cancel = false, nil
 			c.deriveCapabilitiesLocked()
 			c.mu.Unlock()
@@ -422,11 +360,7 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 			return
 		}
 		work = c.takePendingLocked()
-		if work.decompressExternal {
-			c.resetExternalProgressLocked()
-		} else {
-			c.resetCheckingLocked()
-		}
+		c.resetCheckingLocked()
 		c.deriveCapabilitiesLocked()
 		c.mu.Unlock()
 		c.publish()
@@ -435,7 +369,7 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 
 func (c *compressionCoordinator) takePendingLocked() compressionWork {
 	work := compressionWork{
-		full: c.pendingFull, decompressExternal: c.pendingExternal,
+		full:   c.pendingFull,
 		scopes: make([]string, 0, len(c.pendingScopes)),
 	}
 	for scope := range c.pendingScopes {
@@ -443,18 +377,8 @@ func (c *compressionCoordinator) takePendingLocked() compressionWork {
 	}
 	slices.Sort(work.scopes)
 	c.pendingFull = false
-	c.pendingExternal = false
 	clear(c.pendingScopes)
 	return work
-}
-
-func (c *compressionCoordinator) resetExternalProgressLocked() {
-	c.state.Status = "decompressing"
-	c.state.TargetEnabled = boolPointer(false)
-	c.state.ProcessedFiles, c.state.TotalFiles = 0, 0
-	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
-	c.state.FailedFiles = 0
-	c.state.CurrentFileName, c.state.Error = "", ""
 }
 
 func (c *compressionCoordinator) resetCheckingLocked() {
@@ -484,271 +408,56 @@ func pathContains(parent, child string) bool {
 	return child == parent || strings.HasPrefix(child, parent+string(filepath.Separator))
 }
 
-func (c *compressionCoordinator) decompressExternal(ctx context.Context) {
-	c.opMu.Lock()
-	defer c.opMu.Unlock()
-
-	roots, err := c.roots(ctx)
-	if err != nil {
-		c.blockExternalDecompression(err, "resolve-importers", 0)
-		return
-	}
-	external, scanErr := unmanagedCompressionFiles(ctx, roots, c.owner.client)
-	if scanErr != nil {
-		c.logError(scanErr, "scan-external-decompression", "xpress4k", "")
-	}
-	decompressErr := decompressExternalFiles(
-		ctx,
-		external,
-		c.setTotals,
-		c.progress,
-		c.markSelfChanges,
-		func(path string, err error) { c.logError(err, "decompress-external", "xpress4k", path) },
-	)
-	if errors.Is(decompressErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-		return
-	}
-	remaining, rescanErr := unmanagedCompressionFiles(ctx, roots, c.owner.client)
-	if rescanErr != nil {
-		c.logError(rescanErr, "rescan-external-decompression", "xpress4k", "")
-	}
-	if rescanErr != nil || len(remaining) > 0 {
-		remainingCount := len(remaining)
-		if rescanErr != nil && remainingCount == 0 {
-			remainingCount = len(external)
-		}
-		c.blockExternalDecompression(errors.Join(scanErr, decompressErr, rescanErr), "decompress-external", remainingCount)
-		return
-	}
-
-	c.mu.Lock()
-	c.state.Enabled = false
-	c.state.Status = "idle"
-	c.state.TargetEnabled = nil
-	c.state.CurrentFileName = ""
-	c.state.FailedFiles = 0
-	c.state.ExternalFiles = 0
-	c.state.Error = ""
-	c.deriveCapabilitiesLocked()
-	c.mu.Unlock()
-	c.publish()
-}
-
-func (c *compressionCoordinator) blockExternalDecompression(err error, stage string, remainingCount int) {
-	if err != nil && stage != "decompress-external" {
-		c.logError(err, stage, "xpress4k", "")
-	}
-	c.mu.Lock()
-	c.state.Enabled = false
-	c.state.Status = "blocked"
-	c.state.TargetEnabled = nil
-	c.state.CurrentFileName = ""
-	if remainingCount == 0 {
-		remainingCount = c.state.ExternalFiles
-	}
-	c.state.ExternalFiles = remainingCount
-	if err != nil {
-		c.state.Error = "EXTERNAL_DECOMPRESSION_FAILED"
-		if c.state.FailedFiles == 0 {
-			c.state.FailedFiles = 1
-		}
-	} else {
-		c.state.Error = ""
-	}
-	c.deriveCapabilitiesLocked()
-	c.mu.Unlock()
-	c.publish()
-}
-
 func (c *compressionCoordinator) reconcile(ctx context.Context, work compressionWork) {
 	c.opMu.Lock()
 	defer c.opMu.Unlock()
-	transition, err := c.loadTransition(ctx)
-	if err != nil {
-		c.fail(err, "load-journal", "", "")
-		return
-	}
 	state := c.snapshot()
-	fullWork := work.full
 	target := state.Enabled
 	method, threshold := state.Method, state.ThresholdMiB
-	if transition != nil {
-		fullWork = true
-		target, method, threshold = transition.TargetEnabled, transition.Method, transition.ThresholdMiB
-		transition.Stage = "checking"
-		if err := c.saveTransition(ctx, *transition); err != nil {
-			c.fail(err, "update-journal", method, "")
-			return
-		}
-	}
 	currentRoots, err := c.roots(ctx)
 	if err != nil {
 		c.fail(err, "resolve-importers", "", "")
 		return
 	}
-	managedRoots, err := c.loadManagedRoots(ctx)
-	if err != nil {
-		c.fail(err, "load-managed-roots", method, "")
-		return
-	}
 	c.resetProgress("checking", target, method, threshold)
 	workRoots := currentRoots
-	if !fullWork {
+	if !work.full {
 		workRoots = existingCompressionScopes(work.scopes, currentRoots)
 	}
-	if !target {
-		if fullWork {
-			workRoots = unionPaths(currentRoots, managedRoots)
-		}
-	} else if fullWork && len(subtractPaths(managedRoots, currentRoots)) > 0 {
-		removedRoots := subtractPaths(managedRoots, currentRoots)
-		if method == "zstd" {
-			err = restoreAllZstd(ctx, removedRoots, c.setTotals, c.progress, c.markSelfChanges)
-		} else {
-			err = restoreManagedWOF(ctx, removedRoots, c.owner.client, c.setTotals, c.progress, c.markSelfChanges)
-		}
-		if err != nil {
-			c.fail(err, "restore-removed-importers", method, "")
-			return
-		}
-	}
-	var xpressPlan xpressCompressionPlan
-	var external []string
-	if target && method == "xpress4k" {
-		xpressPlan, err = planXpress4K(ctx, workRoots, c.owner.client)
-		external = xpressPlan.external
-	} else {
-		external, err = unmanagedCompressionFiles(ctx, workRoots, c.owner.client)
-	}
-	if err != nil {
-		c.fail(err, "check-external", "", "")
-		return
-	}
-	if len(external) > 0 {
-		if !fullWork {
-			external, err = unmanagedCompressionFiles(ctx, currentRoots, c.owner.client)
-			if err != nil {
-				c.fail(err, "check-external-full", "", "")
-				return
-			}
-		}
-		// A transition may already have compressed files before the unmanaged
-		// backing appeared, so always roll back this application's ownership.
-		if method == "zstd" {
-			err = restoreAllZstd(ctx, unionPaths(workRoots, managedRoots), c.setTotals, c.progress, c.markSelfChanges)
-		} else {
-			err = restoreManagedWOF(ctx, unionPaths(workRoots, managedRoots), c.owner.client, c.setTotals, c.progress, c.markSelfChanges)
-		}
-		if err != nil {
-			c.mu.Lock()
-			c.state.ExternalFiles = len(external)
-			c.mu.Unlock()
-			c.fail(err, "rollback-external-conflict", method, "")
-			return
-		}
-		settings, settingsErr := c.settings()
-		if settingsErr != nil {
-			c.fail(settingsErr, "disable-external-conflict", method, "")
-			return
-		}
-		if err := settings.SetCompressionEnabled(ctx, false); err != nil {
-			c.fail(err, "disable-external-conflict", method, "")
-			return
-		}
-		if transition != nil {
-			if err := c.owner.client.AppState.Delete(ctx, compressionTransitionKey); err != nil {
-				c.fail(err, "clear-external-transition", method, "")
-				return
-			}
-		}
-		c.mu.Lock()
-		c.state.Enabled = false
-		c.state.Status = "blocked"
-		c.state.TargetEnabled = nil
-		c.state.ExternalFiles = len(external)
-		c.state.Error = "EXTERNAL_COMPRESSION_DETECTED"
-		c.deriveCapabilitiesLocked()
-		c.mu.Unlock()
-		c.publish()
-		return
+	logFileError := func(stage string) func(string, error) {
+		return func(path string, err error) { c.logError(err, stage, method, path) }
 	}
 
 	if target {
 		c.setStatus("compressing")
-		if transition != nil {
-			transition.Stage = "compressing"
-			if err := c.saveTransition(ctx, *transition); err != nil {
-				c.fail(err, "update-journal", method, "")
-				return
-			}
-		}
 		if method == "zstd" {
 			err = errors.Join(
-				restoreEnabledZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges),
-				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.setTotals, c.progress, c.markSelfChanges),
+				restoreEnabledZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
+				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.setTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
 			)
 		} else {
-			ledgerScopes := workRoots
-			if !fullWork {
-				ledgerScopes = work.scopes
-			}
-			err = errors.Join(
-				applyXpress4K(ctx, xpressPlan, c.owner.client, c.setTotals, c.progress, c.markSelfChanges),
-				cleanupMissingWofLedgers(ctx, ledgerScopes, c.owner.client),
-			)
+			err = applyXpress4K(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("compress-file"))
 		}
-	} else if fullWork {
+	} else if work.full {
 		c.setStatus("decompressing")
-		if transition != nil {
-			transition.Stage = "decompressing"
-			if err := c.saveTransition(ctx, *transition); err != nil {
-				c.fail(err, "update-journal", method, "")
-				return
-			}
-		}
 		if method == "zstd" {
-			err = restoreAllZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges)
+			err = restoreAllZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("restore-file"))
 		} else {
-			err = restoreManagedWOF(ctx, workRoots, c.owner.client, c.setTotals, c.progress, c.markSelfChanges)
+			err = restoreWOF(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("decompress-file"))
 		}
+	}
+	if errors.Is(err, context.Canceled) {
+		return
 	}
 	if err != nil {
 		c.fail(err, "reconcile", method, "")
 		return
 	}
-	if target && fullWork {
-		if err := c.saveManagedRoots(ctx, currentRoots); err != nil {
-			c.fail(err, "save-managed-roots", method, "")
-			return
-		}
-	} else if !target && fullWork {
-		if err := c.owner.client.AppState.Delete(ctx, compressionRootsKey); err != nil {
-			c.fail(err, "clear-managed-roots", method, "")
-			return
-		}
-	}
-	if transition != nil {
-		settings, settingsErr := c.settings()
-		if settingsErr != nil {
-			c.fail(settingsErr, "commit-setting", method, "")
-			return
-		}
-		if err := settings.SetCompressionEnabled(ctx, target); err != nil {
-			c.fail(err, "commit-setting", method, "")
-			return
-		}
-		if err := c.owner.client.AppState.Delete(ctx, compressionTransitionKey); err != nil {
-			c.fail(err, "delete-journal", method, "")
-			return
-		}
-	}
 	c.mu.Lock()
-	c.state.Enabled = target
 	c.state.Status = "idle"
 	c.state.TargetEnabled = nil
 	c.state.CurrentFileName = ""
 	c.state.Error = ""
-	c.state.ExternalFiles = 0
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
@@ -850,7 +559,7 @@ func (c *compressionCoordinator) replaceWatcher(ctx context.Context) error {
 			Depth: -1, Ops: watcher.All, Debounce: 0,
 			Filter: func(event watcher.Event) bool {
 				name := filepath.Base(event.Path)
-				return name != compressionManifestName && !strings.Contains(name, compressionTempMarker) &&
+				return name != legacyCompressionManifestName && !strings.Contains(name, compressionTempMarker) &&
 					!c.isSelfChange(event.Path) && !isCompressionDirectoryWrite(event)
 			},
 			OnError: func(err error) { c.logError(err, "watch", "", "") },
@@ -902,7 +611,6 @@ func (c *compressionCoordinator) stop() error {
 		c.debounceTimer = nil
 	}
 	c.pendingFull = false
-	c.pendingExternal = false
 	clear(c.pendingScopes)
 	cancel, done := c.cancel, c.done
 	c.cancel = nil
@@ -937,14 +645,6 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	state := c.snapshot()
 	compressionApplies := state.Method == "zstd" && (state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
 	if !compressionApplies {
-		transition, err := c.loadTransition(ctx)
-		if err != nil {
-			c.logError(err, "load-transition-before-enable", state.Method, folder)
-			return err
-		}
-		compressionApplies = transition != nil && transition.Method == "zstd" && transition.TargetEnabled
-	}
-	if !compressionApplies {
 		return nil
 	}
 	c.mu.Lock()
@@ -957,7 +657,9 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 		<-done
 	}
 	c.opMu.Lock()
-	err := restoreZstdFolder(ctx, folder, c.markSelfChanges)
+	err := restoreZstdFolder(ctx, folder, c.markSelfChanges, func(path string, err error) {
+		c.logError(err, "restore-file-before-enable", "zstd", path)
+	})
 	c.opMu.Unlock()
 	if err != nil {
 		c.fail(err, "restore-before-enable", "zstd", folder)
@@ -965,14 +667,6 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	}
 	c.scheduleScope(folder)
 	return nil
-}
-
-func (c *compressionCoordinator) saveTransition(ctx context.Context, transition compressionTransition) error {
-	raw, err := json.Marshal(transition)
-	if err != nil {
-		return err
-	}
-	return c.owner.client.AppState.Upsert(ctx, compressionTransitionKey, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func (c *compressionCoordinator) settings() (compressionSettings, error) {
@@ -983,39 +677,22 @@ func (c *compressionCoordinator) settings() (compressionSettings, error) {
 	return settings, nil
 }
 
-func (c *compressionCoordinator) loadTransition(ctx context.Context) (*compressionTransition, error) {
+func (c *compressionCoordinator) cleanupLegacyState(ctx context.Context) error {
 	if c.owner.client == nil {
-		return nil, errors.New("mod compression database is unavailable")
+		return errors.New("mod compression database is unavailable")
 	}
-	raw, err := c.owner.client.AppState.GetValue(ctx, compressionTransitionKey)
-	if err != nil || raw == nil {
-		return nil, err
-	}
-	var transition compressionTransition
-	if err := json.Unmarshal([]byte(*raw), &transition); err != nil {
-		return nil, fmt.Errorf("decode compression transition: %w", err)
-	}
-	return &transition, nil
-}
-
-func (c *compressionCoordinator) loadManagedRoots(ctx context.Context) ([]string, error) {
-	raw, err := c.owner.client.AppState.GetValue(ctx, compressionRootsKey)
-	if err != nil || raw == nil {
-		return nil, err
-	}
-	var roots []string
-	if err := json.Unmarshal([]byte(*raw), &roots); err != nil {
-		return nil, fmt.Errorf("decode compression roots: %w", err)
-	}
-	return roots, nil
-}
-
-func (c *compressionCoordinator) saveManagedRoots(ctx context.Context, roots []string) error {
-	raw, err := json.Marshal(roots)
+	rows, err := c.owner.client.AppState.ListByPrefix(ctx, legacyCompressionLedgerPrefix)
 	if err != nil {
 		return err
 	}
-	return c.owner.client.AppState.Upsert(ctx, compressionRootsKey, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	keys := make([]string, 0, len(rows)+2)
+	keys = append(keys, legacyCompressionTransitionKey, legacyCompressionRootsKey)
+	for _, row := range rows {
+		if strings.HasPrefix(row.Key, legacyCompressionLedgerPrefix) {
+			keys = append(keys, row.Key)
+		}
+	}
+	return c.owner.client.AppState.ApplyBatch(ctx, nil, keys)
 }
 
 func unionPaths(groups ...[]string) []string {
@@ -1035,28 +712,11 @@ func unionPaths(groups ...[]string) []string {
 	return result
 }
 
-func subtractPaths(paths, remove []string) []string {
-	removed := map[string]struct{}{}
-	for _, path := range remove {
-		removed[strings.ToLower(filepath.Clean(path))] = struct{}{}
-	}
-	var result []string
-	for _, path := range paths {
-		if _, ok := removed[strings.ToLower(filepath.Clean(path))]; !ok {
-			result = append(result, path)
-		}
-	}
-	return result
-}
-
-func (c *compressionCoordinator) progress(path string, size int64, failed bool) {
+func (c *compressionCoordinator) progress(path string, size int64, _ bool) {
 	c.mu.Lock()
 	c.state.ProcessedFiles++
 	c.state.ProcessedBytes += size
 	c.state.CurrentFileName = filepath.Base(path)
-	if failed {
-		c.state.FailedFiles++
-	}
 	now := time.Now()
 	publish := now.Sub(c.lastProgressEmit) >= compressionProgressEvery
 	if publish {
@@ -1154,7 +814,6 @@ func (c *compressionCoordinator) resetProgress(status string, target bool, metho
 	c.state.Status, c.state.TargetEnabled = status, boolPointer(target)
 	c.state.ProcessedFiles, c.state.TotalFiles = 0, 0
 	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
-	c.state.FailedFiles, c.state.ExternalFiles = 0, 0
 	c.state.CurrentFileName, c.state.Error = "", ""
 	c.lastProgressEmit = time.Now()
 	c.deriveCapabilitiesLocked()
@@ -1179,9 +838,6 @@ func (c *compressionCoordinator) fail(err error, stage, method, path string) {
 	c.state.Status = "error"
 	c.state.Error = "MOD_COMPRESSION_FAILED"
 	c.state.TargetEnabled = nil
-	if c.state.FailedFiles == 0 {
-		c.state.FailedFiles = 1
-	}
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
@@ -1207,10 +863,8 @@ func (c *compressionCoordinator) publish() {
 func (c *compressionCoordinator) deriveCapabilitiesLocked() {
 	busy := c.running || c.state.Status == "checking" || c.state.Status == "compressing" || c.state.Status == "decompressing"
 	interruptibleEnable := compressionEnableInProgress(c.state)
-	c.state.CanToggle = !c.configuring && c.state.Status != "blocked" && (!busy || interruptibleEnable)
-	c.state.CanConfigure = !c.configuring && !c.state.Enabled && !busy && c.state.Status != "error"
-	c.state.CanDecompressExternal = !c.configuring && !busy && c.state.Status == "blocked" &&
-		c.state.Method == "xpress4k" && c.state.ExternalFiles > 0
+	c.state.CanToggle = !c.configuring && (!busy || interruptibleEnable)
+	c.state.CanConfigure = !c.configuring && !c.state.Enabled && !busy
 }
 
 func (c *compressionCoordinator) reloadConfigState(ctx context.Context, settings compressionSettings) {

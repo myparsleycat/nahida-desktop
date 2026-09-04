@@ -1,5 +1,4 @@
 import { Mod, type CompressionState } from "@bindings/mod";
-import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
@@ -70,21 +69,6 @@ export function ModCompressionCard() {
     } catch (error) {
       Logger.error(error, "ModCompressionCard:toggle");
       toast.error(t("page.setting.mod.compression.toggleFailed"));
-    } finally {
-      requestPendingRef.current = false;
-      setRequestPending(false);
-    }
-  };
-
-  const decompressExternal = async () => {
-    if (requestPendingRef.current) return;
-    requestPendingRef.current = true;
-    setRequestPending(true);
-    try {
-      setState(await Mod.DecompressExternalCompression());
-    } catch (error) {
-      Logger.error(error, "ModCompressionCard:decompressExternal");
-      toast.error(t("page.setting.mod.compression.externalDecompressRequestFailed"));
     } finally {
       requestPendingRef.current = false;
       setRequestPending(false);
@@ -192,43 +176,9 @@ export function ModCompressionCard() {
             </div>
           )}
 
-          {state.status === "blocked" && (
-            <div className="mt-2 space-y-2">
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                {t("page.setting.mod.compression.external", { count: state.externalFiles })}
-              </p>
-              {state.method !== "xpress4k" && (
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.compression.externalManual")}
-                </p>
-              )}
-              {state.error === "EXTERNAL_DECOMPRESSION_FAILED" && (
-                <p className="text-xs text-destructive">
-                  {t("page.setting.mod.compression.externalDecompressFailed", {
-                    count: state.failedFiles,
-                  })}
-                </p>
-              )}
-              {state.canDecompressExternal && (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.setting.mod.compression.externalDiskWarning")}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={requestPending}
-                    onClick={() => void decompressExternal()}
-                  >
-                    {t("page.setting.mod.compression.externalDecompress")}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
           {state.status === "error" && (
             <p className="mt-2 text-xs text-destructive">
-              {t("page.setting.mod.compression.error", { count: state.failedFiles })}
+              {t("page.setting.mod.compression.error")}
             </p>
           )}
         </div>

@@ -8,7 +8,6 @@ let currentState: CompressionState;
 
 vi.mock("@bindings/mod", () => ({
   Mod: {
-    DecompressExternalCompression: vi.fn(),
     SetCompressionConfig: vi.fn(),
     SetCompressionEnabled: vi.fn(),
   },
@@ -30,9 +29,6 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { Logger } from "@renderer/lib/logger";
-import { toast } from "sonner";
-
 import { ModCompressionCard } from "./mod-compression-card";
 
 function state(partial: Partial<CompressionState> = {}): CompressionState {
@@ -45,11 +41,8 @@ function state(partial: Partial<CompressionState> = {}): CompressionState {
     totalFiles: 0,
     processedBytes: 0,
     totalBytes: 0,
-    failedFiles: 0,
-    externalFiles: 0,
     canToggle: true,
     canConfigure: true,
-    canDecompressExternal: false,
     ...partial,
   };
 }
@@ -165,92 +158,11 @@ describe("ModCompressionCard", () => {
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
   });
 
-  it("shows external decompression only for a retryable XPRESS4K block", () => {
-    currentState = state({
-      status: "blocked",
-      externalFiles: 2,
-      canToggle: false,
-      canDecompressExternal: true,
-    });
-    const { rerender } = render(<ModCompressionCard />);
-    expect(
-      screen.getByRole("button", { name: "page.setting.mod.compression.externalDecompress" }),
-    ).toBeTruthy();
-
-    currentState = state({
-      method: "zstd",
-      status: "blocked",
-      externalFiles: 2,
-      canToggle: false,
-      canDecompressExternal: false,
-    });
-    rerender(<ModCompressionCard />);
-    expect(
-      screen.queryByRole("button", { name: "page.setting.mod.compression.externalDecompress" }),
-    ).toBeNull();
-    expect(screen.getByText("page.setting.mod.compression.externalManual")).toBeTruthy();
-  });
-
-  it("locks immediately and suppresses duplicate external decompression requests", () => {
-    currentState = state({
-      status: "blocked",
-      externalFiles: 2,
-      canToggle: false,
-      canDecompressExternal: true,
-    });
-    vi.mocked(Mod.DecompressExternalCompression).mockReturnValue(new Promise(() => {}));
+  it("shows only the task-level error message", () => {
+    currentState = state({ status: "error", error: "MOD_COMPRESSION_FAILED" });
     render(<ModCompressionCard />);
 
-    const button = screen.getByRole("button", {
-      name: "page.setting.mod.compression.externalDecompress",
-    });
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(Mod.DecompressExternalCompression).toHaveBeenCalledTimes(1);
-    expect(button.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
-  });
-
-  it("logs and reports an external decompression request failure", async () => {
-    currentState = state({
-      status: "blocked",
-      externalFiles: 1,
-      canToggle: false,
-      canDecompressExternal: true,
-    });
-    const error = new Error("locked");
-    vi.mocked(Mod.DecompressExternalCompression).mockRejectedValue(error);
-    render(<ModCompressionCard />);
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "page.setting.mod.compression.externalDecompress",
-      }),
-    );
-
-    await waitFor(() => {
-      expect(Logger.error).toHaveBeenCalledWith(error, "ModCompressionCard:decompressExternal");
-      expect(toast.error).toHaveBeenCalledWith(
-        "page.setting.mod.compression.externalDecompressRequestFailed",
-      );
-    });
-  });
-
-  it("keeps the retry action visible after a partial decompression failure", () => {
-    currentState = state({
-      status: "blocked",
-      externalFiles: 1,
-      failedFiles: 1,
-      error: "EXTERNAL_DECOMPRESSION_FAILED",
-      canToggle: false,
-      canDecompressExternal: true,
-    });
-    render(<ModCompressionCard />);
-
-    expect(screen.getByText("page.setting.mod.compression.externalDecompressFailed")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "page.setting.mod.compression.externalDecompress" }),
-    ).toBeTruthy();
+    expect(screen.getByText("page.setting.mod.compression.error")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

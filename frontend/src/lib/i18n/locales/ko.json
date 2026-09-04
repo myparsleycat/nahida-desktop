@@ -1664,7 +1664,7 @@
           "title": "모드 압축",
           "method": "압축 방식",
           "methods": {
-            "zstd": { "description": "비활성 모드의 큰 파일을 .zst 파일로 압축합니다." },
+            "zstd": { "description": "비활성 모드의 큰 파일을 .nzst 파일로 압축합니다." },
             "xpress4k": {
               "description": "Windows XPRESS4K로 모든 모드 파일을 투명하게 압축합니다."
             }
@@ -1677,17 +1677,10 @@
             "checking": "파일 확인 중",
             "compressing": "압축 중",
             "decompressing": "복원 중",
-            "blocked": "외부 압축 감지됨",
-            "error": "일부 파일 처리 실패"
+            "error": "압축 작업 오류"
           },
           "files": "{{processed}} / {{total}}개 파일",
-          "external": "CompactGUI 등 외부 도구로 압축된 파일 {{count}}개가 감지되었습니다.",
-          "externalManual": "앱에서 해제하려면 XPRESS4K를 선택하거나, 압축에 사용한 외부 도구에서 직접 해제하세요.",
-          "externalDiskWarning": "압축을 해제하면 디스크 사용량이 증가할 수 있습니다.",
-          "externalDecompress": "외부 압축 해제",
-          "externalDecompressFailed": "{{count}}개 파일의 압축을 해제하지 못했습니다. 남은 파일을 다시 시도할 수 있습니다.",
-          "externalDecompressRequestFailed": "외부 압축 해제를 시작하지 못했습니다.",
-          "error": "{{count}}개 파일을 처리하지 못했습니다. 스위치를 다시 눌러 남은 작업을 재시도할 수 있습니다.",
+          "error": "압축 작업을 완료하지 못했습니다. 스위치를 전환해 다시 시도할 수 있습니다.",
           "saveFailed": "압축 설정을 저장하지 못했습니다.",
           "toggleFailed": "압축 상태를 변경하지 못했습니다."
         },
@@ -1936,7 +1929,6 @@
         "checking": "모드 압축 확인 중",
         "compressing": "모드 압축 중",
         "decompressing": "모드 복원 중",
-        "blocked": "외부 모드 압축 감지",
         "error": "모드 압축 오류"
       },
       "modFix": {

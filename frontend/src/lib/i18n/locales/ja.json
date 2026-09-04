@@ -1646,7 +1646,7 @@
           "title": "MOD圧縮",
           "method": "圧縮方式",
           "methods": {
-            "zstd": { "description": "無効なMODの大きなファイルを.zstに圧縮します。" },
+            "zstd": { "description": "無効なMODの大きなファイルを.nzstに圧縮します。" },
             "xpress4k": {
               "description": "Windows XPRESS4KですべてのMODファイルを透過的に圧縮します。"
             }
@@ -1659,17 +1659,10 @@
             "checking": "ファイルを確認中",
             "compressing": "圧縮中",
             "decompressing": "復元中",
-            "blocked": "外部圧縮を検出",
-            "error": "一部のファイルで失敗"
+            "error": "圧縮処理エラー"
           },
           "files": "{{processed}} / {{total}} ファイル",
-          "external": "CompactGUIなどの外部ツールで圧縮されたファイルが{{count}}個見つかりました。",
-          "externalManual": "アプリで解除するにはXPRESS4Kを選択するか、圧縮に使用した外部ツールで解除してください。",
-          "externalDiskWarning": "解凍するとディスク使用量が増える場合があります。",
-          "externalDecompress": "外部圧縮を解除",
-          "externalDecompressFailed": "{{count}}個のファイルを解凍できませんでした。残りのファイルを再試行できます。",
-          "externalDecompressRequestFailed": "外部圧縮の解除を開始できませんでした。",
-          "error": "{{count}}個のファイルを処理できませんでした。スイッチを再度操作すると残りを再試行できます。",
+          "error": "圧縮処理を完了できませんでした。スイッチを切り替えて再試行できます。",
           "saveFailed": "圧縮設定を保存できませんでした。",
           "toggleFailed": "圧縮状態を変更できませんでした。"
         },
@@ -1918,7 +1911,6 @@
         "checking": "MOD圧縮を確認中",
         "compressing": "MODを圧縮中",
         "decompressing": "MODを復元中",
-        "blocked": "外部MOD圧縮",
         "error": "MOD圧縮エラー"
       },
       "modFix": {

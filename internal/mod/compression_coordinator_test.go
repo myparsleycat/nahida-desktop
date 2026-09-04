@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -26,6 +25,32 @@ type blockingCompressionSettings struct {
 type failingCompressionSettings struct {
 	*setting.Setting
 	err error
+}
+
+type failingDisableCompressionSettings struct {
+	*setting.Setting
+	err error
+}
+
+type retryableCompressionSettings struct {
+	*setting.Setting
+	err      error
+	failures int
+}
+
+func (s *retryableCompressionSettings) SetCompressionConfig(ctx context.Context, method string, threshold int) error {
+	if s.failures > 0 {
+		s.failures--
+		return s.err
+	}
+	return s.Setting.SetCompressionConfig(ctx, method, threshold)
+}
+
+func (s *failingDisableCompressionSettings) SetCompressionEnabled(ctx context.Context, enabled bool) error {
+	if !enabled {
+		return s.err
+	}
+	return s.Setting.SetCompressionEnabled(ctx, enabled)
 }
 
 type cancelableCompressionImporterSource struct {
@@ -63,7 +88,7 @@ func (s *blockingCompressionSettings) SetCompressionConfig(ctx context.Context, 
 	return s.Setting.SetCompressionConfig(ctx, method, threshold)
 }
 
-func TestCompressionTransitionCommitsOnlyAfterReconciliation(t *testing.T) {
+func TestCompressionDesiredSettingIsPersistedBeforeReconciliation(t *testing.T) {
 	ctx := context.Background()
 	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
 	if err != nil {
@@ -101,10 +126,6 @@ func TestCompressionTransitionCommitsOnlyAfterReconciliation(t *testing.T) {
 	if err != nil || !persisted {
 		t.Fatalf("persisted enabled = %v, err=%v", persisted, err)
 	}
-	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
-	if err != nil || transition != nil {
-		t.Fatalf("transition = %v, err=%v", transition, err)
-	}
 	if _, err := m.SetCompressionConfig(ctx, CompressionConfig{Method: "xpress4k", ThresholdMiB: 1}); err == nil {
 		t.Fatal("configuration must remain locked while compression is enabled")
 	}
@@ -133,7 +154,6 @@ func TestCompressionCapabilitiesAllowOnlyInterruptingEnable(t *testing.T) {
 		{name: "checking disable", status: "checking", target: &falseValue},
 		{name: "decompressing", status: "decompressing", target: &falseValue},
 		{name: "startup checking", status: "checking"},
-		{name: "blocked", status: "blocked"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -194,6 +214,10 @@ func TestCompressionToggleOffCancelsActiveEnableAndRestores(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("compression did not start")
 	}
+	persistedDuringWork, err := settings.GetCompressionEnabled(ctx)
+	if err != nil || !persistedDuringWork {
+		t.Fatalf("desired setting was not persisted before reconciliation: enabled=%v err=%v", persistedDuringWork, err)
+	}
 	state, err := m.GetCompressionState(ctx)
 	if err != nil || state.TargetEnabled == nil || !*state.TargetEnabled || !state.CanToggle {
 		t.Fatalf("active compression state = %+v, err=%v", state, err)
@@ -227,13 +251,53 @@ func TestCompressionToggleOffCancelsActiveEnableAndRestores(t *testing.T) {
 	if err != nil || persisted {
 		t.Fatalf("persisted enabled = %v, err=%v", persisted, err)
 	}
-	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
-	if err != nil || transition != nil {
-		t.Fatalf("transition = %v, err=%v", transition, err)
+}
+
+func TestStartCompressionDeletesObsoleteStateInOneCleanup(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := settings.Client()
+	for _, key := range []string{
+		legacyCompressionTransitionKey,
+		legacyCompressionRootsKey,
+		legacyCompressionLedgerPrefix + "first",
+		legacyCompressionLedgerPrefix + "second",
+		"unrelated",
+	} {
+		if err := client.AppState.Upsert(ctx, key, "value", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := NewWithOptions(Options{Settings: settings})
+	m.UseClient(client)
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{
+		legacyCompressionTransitionKey,
+		legacyCompressionRootsKey,
+		legacyCompressionLedgerPrefix + "first",
+		legacyCompressionLedgerPrefix + "second",
+	} {
+		value, err := client.AppState.GetValue(ctx, key)
+		if err != nil || value != nil {
+			t.Fatalf("obsolete state %q = %v, err=%v", key, value, err)
+		}
+	}
+	value, err := client.AppState.GetValue(ctx, "unrelated")
+	if err != nil || value == nil {
+		t.Fatalf("unrelated state = %v, err=%v", value, err)
 	}
 }
 
-func TestCompressionToggleOffResumesEnableWhenTransitionSaveFails(t *testing.T) {
+func TestCompressionToggleOffResumesEnableWhenSettingSaveFails(t *testing.T) {
 	ctx := context.Background()
 	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
 	if err != nil {
@@ -242,7 +306,9 @@ func TestCompressionToggleOffResumesEnableWhenTransitionSaveFails(t *testing.T) 
 	importers := &cancelableCompressionImporterSource{
 		started: make(chan struct{}), canceled: make(chan struct{}),
 	}
-	m := NewWithOptions(Options{Settings: settings, XXMI: importers})
+	wantErr := errors.New("save desired state")
+	failingSettings := &failingDisableCompressionSettings{Setting: settings, err: wantErr}
+	m := NewWithOptions(Options{Settings: failingSettings, XXMI: importers})
 	m.UseClient(settings.Client())
 	t.Cleanup(func() {
 		_ = m.ServiceShutdown()
@@ -264,17 +330,8 @@ func TestCompressionToggleOffResumesEnableWhenTransitionSaveFails(t *testing.T) 
 	case <-time.After(2 * time.Second):
 		t.Fatal("compression did not start")
 	}
-	if _, err := settings.Client().SQL().ExecContext(ctx, `CREATE TRIGGER fail_disable_transition
-BEFORE UPDATE ON app_state
-WHEN NEW.key = 'mod_compression:transition' AND NEW.value LIKE '%"targetEnabled":false%'
-BEGIN
-    SELECT RAISE(ABORT, 'disable transition failed');
-END`); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := m.SetCompressionEnabled(ctx, false); err == nil {
-		t.Fatal("toggle off unexpectedly succeeded")
+	if _, err := m.SetCompressionEnabled(ctx, false); !errors.Is(err, wantErr) {
+		t.Fatalf("toggle off error = %v", err)
 	}
 	select {
 	case <-importers.canceled:
@@ -289,10 +346,6 @@ END`); err != nil {
 	persisted, err := settings.GetCompressionEnabled(ctx)
 	if err != nil || !persisted {
 		t.Fatalf("persisted enabled = %v, err=%v", persisted, err)
-	}
-	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
-	if err != nil || transition != nil {
-		t.Fatalf("transition = %v, err=%v", transition, err)
 	}
 }
 
@@ -320,7 +373,7 @@ func TestStartCompressionPublishesLoadFailure(t *testing.T) {
 	if len(published) != 1 {
 		t.Fatalf("published states = %d, want 1", len(published))
 	}
-	if got := published[0]; got.Status != "error" || got.Error != wantErr.Error() {
+	if got := published[0]; got.Status != "error" || got.Error != "MOD_COMPRESSION_FAILED" {
 		t.Fatalf("published failure state = %+v", got)
 	}
 }
@@ -340,7 +393,7 @@ func TestCompressionProgressThrottlesEventsWithoutDroppingCounters(t *testing.T)
 	if len(published) != 1 {
 		t.Fatalf("events inside throttle interval = %d, want initial state only", len(published))
 	}
-	if got := c.snapshot(); got.ProcessedFiles != 2 || got.ProcessedBytes != 30 || got.FailedFiles != 1 || got.CurrentFileName != "second.bin" {
+	if got := c.snapshot(); got.ProcessedFiles != 2 || got.ProcessedBytes != 30 || got.CurrentFileName != "second.bin" {
 		t.Fatalf("internal progress = %+v", got)
 	}
 	c.mu.Lock()
@@ -352,38 +405,6 @@ func TestCompressionProgressThrottlesEventsWithoutDroppingCounters(t *testing.T)
 	}
 	if got := published[1]; got.ProcessedFiles != 3 || got.ProcessedBytes != 60 || got.CurrentFileName != "third.bin" {
 		t.Fatalf("published progress = %+v", got)
-	}
-}
-
-func TestRestoreBeforeEnableLogsTransitionLoadFailure(t *testing.T) {
-	ctx := context.Background()
-	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := settings.Client()
-	if err := settings.Close(); err != nil {
-		t.Fatal(err)
-	}
-	var logs bytes.Buffer
-	m := NewWithOptions(Options{Log: infra.NewLogWithOptions(infra.LogOptions{
-		Writer: &logs, DisableFile: true,
-	})})
-	m.UseClient(client)
-	folder := filepath.Join(t.TempDir(), "Mod")
-
-	err = m.compression.restoreBeforeEnable(ctx, folder)
-	if err == nil {
-		t.Fatal("restoreBeforeEnable unexpectedly succeeded")
-	}
-	output := logs.String()
-	for _, want := range []string{
-		"Mod:compression", "stage=load-transition-before-enable", `method=xpress4k`,
-		`path="`, filepath.Base(folder), "cleanup=pending", err.Error(),
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("log does not contain %q: %s", want, output)
-		}
 	}
 }
 
@@ -424,9 +445,38 @@ func TestCompressionConfigRejectsConcurrentToggle(t *testing.T) {
 	if err != nil || method != "zstd" {
 		t.Fatalf("method = %q, err=%v", method, err)
 	}
-	transition, err := settings.Client().AppState.GetValue(ctx, compressionTransitionKey)
-	if err != nil || transition != nil {
-		t.Fatalf("transition = %v, err=%v", transition, err)
+}
+
+func TestCompressionConfigCanRetryAfterSaveFailure(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryable := &retryableCompressionSettings{
+		Setting: settings, err: errors.New("temporary config failure"), failures: 1,
+	}
+	m := NewWithOptions(Options{Settings: retryable})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() { _ = settings.Close() })
+	if err := m.compression.loadState(ctx); err != nil {
+		t.Fatal(err)
+	}
+	m.compression.mu.Lock()
+	m.compression.state.Status = "idle"
+	m.compression.deriveCapabilitiesLocked()
+	m.compression.mu.Unlock()
+
+	state, err := m.SetCompressionConfig(ctx, CompressionConfig{Method: "zstd", ThresholdMiB: 4})
+	if err == nil || err.Error() != "MOD_COMPRESSION_CONFIG_FAILED" {
+		t.Fatalf("first config error = %v", err)
+	}
+	if state.Status != "error" || !state.CanConfigure {
+		t.Fatalf("failed config state = %+v", state)
+	}
+	state, err = m.SetCompressionConfig(ctx, CompressionConfig{Method: "zstd", ThresholdMiB: 4})
+	if err != nil || state.Status != "idle" || state.Method != "zstd" || state.ThresholdMiB != 4 {
+		t.Fatalf("retried config state = %+v, err=%v", state, err)
 	}
 }
 
@@ -468,7 +518,7 @@ func TestCompressionSelfChangeExpires(t *testing.T) {
 	}
 }
 
-func TestZstdValidationTempsDoNotRestartWatcher(t *testing.T) {
+func TestZstdTempsDoNotRestartWatcher(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
 	importer := filepath.Join(base, "Importer")
@@ -480,7 +530,7 @@ func TestZstdValidationTempsDoNotRestartWatcher(t *testing.T) {
 	if err := os.WriteFile(path, bytes.Repeat([]byte("watcher-zstd"), 16*1024), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := compressZstdFile(ctx, folder, path, ignoreCompressionMutations); err != nil {
+	if err := compressZstdFile(ctx, path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
 	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
@@ -563,7 +613,7 @@ func TestCompressionWatcherMergesMultipleModScopes(t *testing.T) {
 	for time.Now().Before(deadline) {
 		complete := true
 		for _, folder := range folders {
-			if _, err := os.Stat(filepath.Join(folder, "payload.bin.zst")); err != nil {
+			if _, err := os.Stat(filepath.Join(folder, "payload.bin"+managedZstdExtension)); err != nil {
 				complete = false
 				break
 			}
