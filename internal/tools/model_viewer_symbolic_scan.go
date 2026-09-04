@@ -88,7 +88,24 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 		}
 		output = append(output, state.draws...)
 	}
-	return dedupeModelViewerDirectDrawRecords(output), nil
+	return dedupeModelViewerDirectDrawRecords(keepModelViewerPreviewLODRecords(output)), nil
+}
+
+// modelViewerNestedSectionName returns a section to scan as a nested draw
+// source. `run` follows any named section. Other assignments are followed
+// only when the value is a CommandList* (EFMI ALPHA-10 draw callbacks).
+func modelViewerNestedSectionName(key, value string) string {
+	target := strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(target), "ref ") {
+		target = strings.TrimSpace(target[4:])
+	}
+	if strings.EqualFold(strings.TrimSpace(key), "run") {
+		return target
+	}
+	if strings.HasPrefix(strings.ToLower(target), "commandlist") {
+		return target
+	}
+	return ""
 }
 
 func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewerSymbolicSectionState, stack []modelViewerSymbolicBranchFrame, visiting map[string]bool) error {
@@ -141,9 +158,8 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 		if len(conditions) == 0 {
 			continue
 		}
-		switch strings.ToLower(key) {
-		case "run":
-			name := modelViewerNormalizeKey(value)
+		if nested := modelViewerNestedSectionName(key, value); nested != "" {
+			name := modelViewerNormalizeKey(nested)
 			section, exists := c.lookup[name]
 			if !exists || visiting[name] || c.expansions >= maxModelViewerDirectRunExpansions {
 				continue
@@ -154,6 +170,9 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 			if err := c.scan(section.Lines, state, stack, next); err != nil {
 				return err
 			}
+			continue
+		}
+		switch strings.ToLower(key) {
 		case "ib", "vb0", "vb1", "vb2":
 			resource := modelViewerTrimResourcePrefix(value)
 			if resource != "" {

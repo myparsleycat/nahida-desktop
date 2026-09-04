@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func writeEFMIComponentBuffers(t *testing.T, dir, component string) {
@@ -149,6 +152,157 @@ filename = Texture/809f7872-114840-0-DiffuseMap.png
 	uvs := readViewerFloat32s(t, fixture.protocol, mesh.UVsURL)
 	if len(uvs) < 2 || math.Abs(float64(uvs[1]-.75)) > 1e-5 {
 		t.Fatalf("uvs = %v", uvs)
+	}
+}
+
+func TestModelViewerScannerFollowsEFMICallbackDraw(t *testing.T) {
+	sections := parseModINI(`[CommandList_Draw_Component0]
+ib = ref Resource_Component0_IB
+vb0 = ref Resource_Component0_VB0
+vb1 = ref Resource_Component0_VB1
+drawindexed = 3, 0, 0
+[CommandList_Component_DrawInstances]
+handling = skip
+run = CommandList\EFMIv1\Component_DrawInstances
+[TextureOverride_EntryPoint_Component0]
+hash = deffba8c
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif
+[TextureOverride_EntryPoint_Component0_LOD1]
+hash = aabbccdd
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif`)
+	records, err := collectModelViewerDirectDrawRecords(sections, map[string]any{"modenabled": float64(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %#v", records)
+	}
+	record := records[0]
+	if record.sectionName != "_EntryPoint_Component0" || record.state.ib != "_Component0_IB" || record.state.vb0 != "_Component0_VB0" || record.state.vb1 != "_Component0_VB1" || record.draw.IndexCount != 3 {
+		t.Fatalf("record = %#v", record)
+	}
+}
+
+func TestModelViewerScannerKeepsLOD0BuffersFromEFMIDrawList(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global $lod_level = 0
+[CommandList_Draw_Component0]
+ib = ref Resource_Component0_IB
+if $lod_level == 0
+    vb0 = ref Resource_Component0_VB0
+    vb1 = ref Resource_Component0_VB1
+elif $lod_level == 1
+    vb0 = ref Resource_Component0_VB0
+    vb1 = ref Resource_Component0_VB1_LOD1
+endif
+drawindexed = 3, 0, 0
+[TextureOverride_EntryPoint_Component0]
+hash = deffba8c
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif`)
+	records, err := collectModelViewerDirectDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].state.vb1 != "_Component0_VB1" {
+		t.Fatalf("records = %#v", records)
+	}
+}
+
+func TestLoadModViewerIgnoresEFMIDispatcherWithoutCallback(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[TextureOverride_EntryPoint_Component0]
+hash = deffba8c
+if $mod_enabled && DRAW_TYPE == 4
+    run = CommandList_Component_DrawInstances
+endif
+[CommandList_Component_DrawInstances]
+handling = skip
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{Protocol: infra.NewProtocol()})
+	_, err := service.LoadModViewer(context.Background(), dir)
+	if err == nil || err.Error() != "No mesh geometry found across 1 ini file(s)." {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadModViewerLoadsEFMIAlpha10CallbackDraw(t *testing.T) {
+	dir := t.TempDir()
+	writeEFMIComponentBuffers(t, dir, "Component0")
+	writeTextureFile(t, dir, "Textures/body.png", encodeTinyPNG())
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[Constants]
+global $required_efmi_version = 1.41
+global $mod_enabled = 0
+global $object_detected = 0
+global $lod_level = 0
+[CommandList_Draw_Component0]
+ib = ref Resource_Component0_IB
+if $lod_level == 0
+    vb0 = ref Resource_Component0_VB0
+    vb1 = ref Resource_Component0_VB1
+    vb2 = ref Resource_Component0_VB2
+elif $lod_level == 1
+    vb0 = ref Resource_Component0_VB0
+    vb1 = ref Resource_Component0_VB1_LOD1
+    vb2 = ref Resource_Component0_VB2
+endif
+ps-t20 = res Resource_SwimsuitDiffuse
+drawindexed = 3, 0, 0
+[CommandList_Component_DrawInstances]
+handling = skip
+run = CommandList\EFMIv1\Component_DrawInstances
+[TextureOverride_EntryPoint_Component0]
+hash = deffba8c
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif
+[TextureOverride_EntryPoint_Component0_LOD1]
+hash = aabbccdd
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif
+[Resource_Component0_IB]
+type = Buffer
+format = DXGI_FORMAT_R16_UINT
+filename = Meshes/Component0_IB.buf
+[Resource_Component0_VB0]
+type = Buffer
+stride = 16
+filename = Meshes/Component0_VB0.buf
+[Resource_Component0_VB1]
+type = Buffer
+stride = 12
+filename = Meshes/Component0_VB1.buf
+[Resource_Component0_VB2]
+type = Buffer
+stride = 12
+filename = Meshes/Component0_VB2.buf
+[Resource_SwimsuitDiffuse]
+filename = Textures/body.png
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := loadViewerDir(t, dir).result
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	if evaluated := evaluateViewerTransport(result, nil); !evaluated.Meshes[0].Visible {
+		t.Fatalf("default mesh is hidden: %#v", evaluated)
+	}
+	if texKey(result.Meshes[0]) == "" {
+		t.Fatalf("missing diffuse: %#v", result.Meshes[0])
 	}
 }
 

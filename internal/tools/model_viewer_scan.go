@@ -77,7 +77,12 @@ func splitModelViewerDirectConditional(lines []string, start int) ([]modelViewer
 
 func modelViewerTrimTextureValue(value string) string {
 	resource := strings.TrimSpace(value)
-	if strings.HasPrefix(strings.ToLower(resource), "ref ") {
+	lower := strings.ToLower(resource)
+	if strings.HasPrefix(lower, "ref ") {
+		resource = strings.TrimSpace(resource[4:])
+		lower = strings.ToLower(resource)
+	}
+	if strings.HasPrefix(lower, "res ") {
 		resource = strings.TrimSpace(resource[4:])
 	}
 	return modelViewerTrimResourcePrefix(resource)
@@ -652,10 +657,23 @@ func sectionHandlingSkip(section modINISection) bool {
 	return strings.EqualFold(strings.TrimSpace(modelViewerSectionValue(section, "handling")), "skip")
 }
 
-var modelViewerLODOverrideRE = regexp.MustCompile(`(?i)_LOD\d*$`)
+var (
+	modelViewerLODOverrideRE = regexp.MustCompile(`(?i)_LOD\d*$`)
+	modelViewerPreviewLOD    = ModelViewerDNF{{{Var: "lodlevel", Value: "0"}}}
+)
 
 func isModelViewerPreviewSkippedOverride(name string) bool {
 	return modelViewerLODOverrideRE.MatchString(name)
+}
+
+func keepModelViewerPreviewLODRecords(records []modelViewerDirectDrawRecord) []modelViewerDirectDrawRecord {
+	kept := make([]modelViewerDirectDrawRecord, 0, len(records))
+	for _, record := range records {
+		if modelViewerDNFIntersects(record.conditions, modelViewerPreviewLOD) {
+			kept = append(kept, record)
+		}
+	}
+	return kept
 }
 
 var (

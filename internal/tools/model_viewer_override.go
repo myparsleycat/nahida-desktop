@@ -143,9 +143,9 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 		key, value, assignment := strings.Cut(line, "=")
 		if assignment {
 			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-			if strings.EqualFold(key, "run") {
-				if nested, ok := sectionLookup[modelViewerNormalizeKey(value)]; ok {
-					draws, nextIB := collectModelViewerDrawContext(nested, variables, sectionLookup, activeConditions(), currentIB, visited)
+			if nested := modelViewerNestedSectionName(key, value); nested != "" {
+				if nestedSection, ok := sectionLookup[modelViewerNormalizeKey(nested)]; ok {
+					draws, nextIB := collectModelViewerDrawContext(nestedSection, variables, sectionLookup, activeConditions(), currentIB, visited)
 					instructions = append(instructions, draws...)
 					if nextIB != "" {
 						currentIB = nextIB
