@@ -8,6 +8,7 @@
     <img alt="License" src="https://img.shields.io/badge/license-%20%20GNU%20GPLv3%20-green?style=flat-square" />
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-lightgrey?style=flat-square" />
     <img alt="Electron" src="https://img.shields.io/badge/wails-3-DF0000?style=flat-square&logo=wails" />
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/myparsleycat/nahida-desktop/total?style=flat-square&label=Downloads" />
   </p>
 </div>
 
