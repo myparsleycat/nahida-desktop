@@ -4,7 +4,6 @@ import { parseOrientation } from "@renderer/components/tools/model-viewer/model-
 import type { BrushMode } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
 import { createThreeRenderer } from "@renderer/components/tools/three-renderer";
 import {
-  applyMultiRegionDeform,
   composeDisplayWeightsInto,
   writeWeightColors,
   type ActiveRegionDeform,
@@ -57,8 +56,10 @@ export type BodyShapeViewportProps = {
   showWeights: boolean;
   /** Bumped when region selection or amounts change. */
   weightVersion: number;
-  /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. If omitted, tracked automatically. */
-  positionsChanged?: boolean;
+  /** Bumped only after the parent has written new preview positions. */
+  positionsVersion?: number;
+  /** Whether the parent preview currently differs from the original geometry. */
+  positionsChanged: boolean;
   /** Stable identity for the mesh frame; changing mask data should not reframe the camera. */
   frameKey?: string;
   orientation?: string;
@@ -161,6 +162,7 @@ function BodyShapeMesh({
   showOriginal,
   showWeights,
   weightVersion,
+  positionsVersion = weightVersion,
   positionsChanged,
   frameKey,
   brushEnabled = false,
@@ -182,11 +184,16 @@ function BodyShapeMesh({
   const brushRingRef = useRef<LineLoop>(null);
   const framedKeyRef = useRef<string | Float32Array | null>(null);
   const isPaintingRef = useRef(false);
-  const { camera, raycaster, gl, invalidate } = useThree();
-  const prevPositionsRef = useRef<{
-    regions: readonly ActiveRegionDeform[];
-    showOriginal: boolean;
+  const pointerFrameRef = useRef<number | null>(null);
+  const pendingPointerRef = useRef<{
+    clientX: number;
+    clientY: number;
+    paint: boolean;
   } | null>(null);
+  const finishStrokeRef = useRef(false);
+  const { camera, raycaster, gl, invalidate } = useThree();
+  const appliedPositionsVersionRef = useRef<number | null>(null);
+  const hadPositionDeformationRef = useRef(false);
   const heatmapRegionsRef = useRef<ActiveRegionDeform[]>(regions);
   const onBrushStrokeRef = useRef(onBrushStroke);
   const onBrushStrokeStartRef = useRef(onBrushStrokeStart);
@@ -246,24 +253,14 @@ function BodyShapeMesh({
   }, [indices, initialColors, originalPositions, previewPositions]);
 
   useEffect(() => {
+    const versionChanged = appliedPositionsVersionRef.current !== positionsVersion;
     const isPositionsChanged =
-      positionsChanged ??
-      (prevPositionsRef.current?.regions !== regions ||
-        prevPositionsRef.current?.showOriginal !== showOriginal);
-    prevPositionsRef.current = { regions, showOriginal };
+      versionChanged && (positionsChanged || hadPositionDeformationRef.current);
+    appliedPositionsVersionRef.current = positionsVersion;
+    hadPositionDeformationRef.current = positionsChanged;
 
     const vertexCount = Math.floor(originalPositions.length / 3);
     if (isPositionsChanged) {
-      if (showOriginal || regions.length === 0) {
-        previewPositions.set(originalPositions);
-      } else {
-        applyMultiRegionDeform({
-          originalPositions,
-          previewPositions,
-          regions,
-        });
-      }
-
       const positionAttr = geometry.getAttribute("position") as BufferAttribute;
       positionAttr.needsUpdate = true;
     }
@@ -291,6 +288,7 @@ function BodyShapeMesh({
     regions,
     showOriginal,
     weightVersion,
+    positionsVersion,
     positionsChanged,
     invalidate,
   ]);
@@ -370,11 +368,15 @@ function BodyShapeMesh({
 
     const canvasElement = gl.domElement;
 
-    const performStrokeAtPointer = (event: PointerEvent) => {
+    const performStrokeAtPointer = (pointer: {
+      clientX: number;
+      clientY: number;
+      paint: boolean;
+    }) => {
       if (!meshRef.current || !onBrushStrokeRef.current) return;
       const rect = canvasElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const x = ((pointer.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((pointer.clientY - rect.top) / rect.height) * 2 + 1;
 
       raycaster.setFromCamera(new Vector2(x, y), camera);
       const intersects = raycaster.intersectObject(meshRef.current);
@@ -403,7 +405,7 @@ function BodyShapeMesh({
           invalidate();
         }
 
-        if (isPaintingRef.current) {
+        if (pointer.paint) {
           onBrushStrokeRef.current({
             localPoint,
             localNormal,
@@ -416,21 +418,49 @@ function BodyShapeMesh({
       }
     };
 
+    const flushPointer = () => {
+      pointerFrameRef.current = null;
+      const pointer = pendingPointerRef.current;
+      pendingPointerRef.current = null;
+      if (pointer) performStrokeAtPointer(pointer);
+      if (finishStrokeRef.current) {
+        finishStrokeRef.current = false;
+        onBrushStrokeEndRef.current?.();
+      }
+    };
+
+    const queuePointer = (event: PointerEvent) => {
+      pendingPointerRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        paint: isPaintingRef.current,
+      };
+      if (pointerFrameRef.current === null) {
+        pointerFrameRef.current = requestAnimationFrame(flushPointer);
+      }
+    };
+
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button === 0 && !event.altKey) {
         isPaintingRef.current = true;
         onBrushStrokeStartRef.current?.();
         if (controlsRef.current) controlsRef.current.enabled = false;
-        performStrokeAtPointer(event);
+        queuePointer(event);
       }
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      performStrokeAtPointer(event);
+      queuePointer(event);
     };
 
     const handlePointerUp = () => {
-      if (isPaintingRef.current) onBrushStrokeEndRef.current?.();
+      if (isPaintingRef.current) {
+        if (pendingPointerRef.current || pointerFrameRef.current !== null) {
+          finishStrokeRef.current = true;
+        } else {
+          onBrushStrokeEndRef.current?.();
+        }
+      }
       isPaintingRef.current = false;
       if (controlsRef.current) controlsRef.current.enabled = true;
     };
@@ -454,12 +484,18 @@ function BodyShapeMesh({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
       canvasElement.removeEventListener("wheel", handleWheel);
+      if (pointerFrameRef.current !== null) cancelAnimationFrame(pointerFrameRef.current);
+      pointerFrameRef.current = null;
+      pendingPointerRef.current = null;
+      finishStrokeRef.current = false;
+      isPaintingRef.current = false;
       if (controlsRef.current) controlsRef.current.enabled = true;
     };
   }, [
     brushEnabled,
     brushRadius,
     camera,
+    frameKey,
     gl,
     raycaster,
     controlsRef,

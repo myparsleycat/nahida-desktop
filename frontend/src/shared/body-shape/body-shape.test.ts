@@ -15,6 +15,7 @@ import {
     detectSnorm8VectorLayout,
     displacementMetrics,
     computeVertexNormals,
+    createGeodesicBrushWorkspace,
     eraseVertex,
     extractBoneWeights,
     extractPositions,
@@ -62,7 +63,7 @@ describe("body-shape weights", () => {
             strength: 1,
             mode: "paint",
         });
-        assert.equal(changed, 2);
+        assert.deepEqual([...changed], [0, 1]);
         assert.equal(weights[0], 1);
         assert.ok(weights[1] > 0 && weights[1] < 1);
         assert.equal(weights[2], 0);
@@ -113,6 +114,13 @@ describe("body-shape weights", () => {
 });
 
 describe("body-shape mesh selection", () => {
+    it("builds the same neighbor relation in CSR order", () => {
+        const adjacency = buildVertexAdjacency(4, new Uint32Array([0, 1, 2, 2, 1, 3]));
+
+        assert.deepEqual([...adjacency.offsets], [0, 2, 5, 8, 10]);
+        assert.deepEqual([...adjacency.neighbors], [1, 2, 0, 2, 3, 0, 1, 3, 1, 2]);
+    });
+
     it("does not cross to a nearby disconnected surface", () => {
         const positions = new Float32Array([
             0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0.01, 1, 0, 0.01, 0, 1, 0.01,
@@ -137,7 +145,10 @@ describe("body-shape mesh selection", () => {
 
     it("limits geodesic distance to the radius and applies falloff", () => {
         const positions = new Float32Array([0, 0, 0, 0.5, 0, 0, 1, 0, 0]);
-        const adjacency = [new Uint32Array([1]), new Uint32Array([0, 2]), new Uint32Array([1])];
+        const adjacency = {
+            offsets: new Uint32Array([0, 1, 3, 4]),
+            neighbors: new Uint32Array([1, 0, 2, 1]),
+        };
         const weights = new Float32Array(3);
 
         const changed = applyGeodesicBrush({
@@ -154,9 +165,56 @@ describe("body-shape mesh selection", () => {
         assert.deepEqual([...weights], [1, 0.5, 0]);
     });
 
+    it("reuses geodesic workspace without leaking distances between strokes", () => {
+        const positions = new Float32Array([0, 0, 0, 0.5, 0, 0, 1, 0, 0]);
+        const adjacency = {
+            offsets: new Uint32Array([0, 1, 3, 4]),
+            neighbors: new Uint32Array([1, 0, 2, 1]),
+        };
+        const workspace = createGeodesicBrushWorkspace(3);
+        const reusedWeights = new Float32Array(3);
+        applyGeodesicBrush({
+            positions,
+            adjacency,
+            weights: reusedWeights,
+            seedVertexIndices: [0],
+            radius: 0.75,
+            strength: 1,
+            mode: "paint",
+            workspace,
+        });
+        reusedWeights.fill(0);
+        const reused = applyGeodesicBrush({
+            positions,
+            adjacency,
+            weights: reusedWeights,
+            seedVertexIndices: [2],
+            radius: 0.75,
+            strength: 1,
+            mode: "paint",
+            workspace,
+        });
+        const freshWeights = new Float32Array(3);
+        const fresh = applyGeodesicBrush({
+            positions,
+            adjacency,
+            weights: freshWeights,
+            seedVertexIndices: [2],
+            radius: 0.75,
+            strength: 1,
+            mode: "paint",
+        });
+
+        assert.deepEqual([...reused], [...fresh]);
+        assert.deepEqual([...reusedWeights], [...freshWeights]);
+    });
+
     it("smooths weights from an iteration snapshot", () => {
         const weights = new Float32Array([1, 0, 0]);
-        const adjacency = [new Uint32Array([1]), new Uint32Array([0, 2]), new Uint32Array([1])];
+        const adjacency = {
+            offsets: new Uint32Array([0, 1, 3, 4]),
+            neighbors: new Uint32Array([1, 0, 2, 1]),
+        };
 
         smoothSelectionWeights(weights, adjacency, 0.5, 1);
 
@@ -791,7 +849,7 @@ describe("body-shape selection refinement", () => {
         const original = new Float32Array([0, 0, 0, 1, 0, 0]);
         const preview = new Float32Array(original.length);
 
-        applyMultiRegionDeform({
+        const metrics = applyMultiRegionDeform({
             originalPositions: original,
             previewPositions: preview,
             regions: [
@@ -808,6 +866,7 @@ describe("body-shape selection refinement", () => {
         });
 
         assert.deepEqual([...preview], [0, 2, 0, 1, 1, 0]);
+        assert.deepEqual(metrics, displacementMetrics(original, preview));
     });
 
     it("applies taper region deformation relative to pivot height", () => {

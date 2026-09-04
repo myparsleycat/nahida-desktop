@@ -55,6 +55,7 @@ export {
     REGION_PRESETS,
     type ActiveRegionDeform,
     type BodyRegionId,
+    type DeformMetrics,
     type MeshBounds,
     type RegionPreset,
     type SelectionMask,
@@ -75,12 +76,16 @@ export {
 } from "./weights";
 export {
     applyGeodesicBrush,
+    adjacencyVertexCount,
     buildConnectedComponents,
     buildSymmetryMap,
     buildVertexAdjacency,
+    createGeodesicBrushWorkspace,
     growSelectionWeights,
     mirrorWeightsWithCache,
     selectConnectedComponent,
     shrinkSelectionWeights,
     smoothSelectionWeights,
+    type GeodesicBrushWorkspace,
+    type VertexAdjacency,
 } from "./selection";

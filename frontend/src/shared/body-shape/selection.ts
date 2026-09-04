@@ -1,9 +1,22 @@
 import { brushFalloff, clamp01, eraseVertex, paintVertex, type BrushMode } from "./weights";
 
+export type VertexAdjacency = {
+    offsets: Uint32Array;
+    neighbors: Uint32Array;
+};
+
+export type GeodesicBrushWorkspace = {
+    distances: Float64Array;
+    touched: number[];
+    heapVertices: number[];
+    heapDistances: number[];
+    changed: number[];
+};
+
 export function buildVertexAdjacency(
     vertexCount: number,
     indices: ArrayLike<number>,
-): readonly Uint32Array[] {
+): VertexAdjacency {
     const neighbors = Array.from({ length: Math.max(0, vertexCount) }, () => new Set<number>());
 
     for (let i = 0; i + 2 < indices.length; i += 3) {
@@ -38,15 +51,39 @@ export function buildVertexAdjacency(
         }
     }
 
-    return neighbors.map((vertexNeighbors) =>
-        Uint32Array.from(vertexNeighbors).sort((a, b) => a - b),
-    );
+    const offsets = new Uint32Array(neighbors.length + 1);
+    for (let vertex = 0; vertex < neighbors.length; vertex += 1) {
+        offsets[vertex + 1] = offsets[vertex] + neighbors[vertex].size;
+    }
+    const flattened = new Uint32Array(offsets[offsets.length - 1]);
+    for (let vertex = 0; vertex < neighbors.length; vertex += 1) {
+        flattened.set(
+            [...neighbors[vertex]].sort((a, b) => a - b),
+            offsets[vertex],
+        );
+    }
+    return { offsets, neighbors: flattened };
+}
+
+export function adjacencyVertexCount(adjacency: VertexAdjacency): number {
+    return Math.max(0, adjacency.offsets.length - 1);
+}
+
+export function neighborsAt(adjacency: VertexAdjacency, vertex: number): Uint32Array {
+    if (vertex < 0 || vertex + 1 >= adjacency.offsets.length) return new Uint32Array();
+    return adjacency.neighbors.subarray(adjacency.offsets[vertex], adjacency.offsets[vertex + 1]);
+}
+
+export function createGeodesicBrushWorkspace(vertexCount: number): GeodesicBrushWorkspace {
+    const distances = new Float64Array(Math.max(0, vertexCount));
+    distances.fill(Number.POSITIVE_INFINITY);
+    return { distances, touched: [], heapVertices: [], heapDistances: [], changed: [] };
 }
 
 /** Applies a radius-limited brush using accumulated mesh-edge distance from all seeds. */
 export function applyGeodesicBrush(options: {
     positions: Float32Array;
-    adjacency: readonly Uint32Array[];
+    adjacency: VertexAdjacency;
     weights: Float32Array;
     seedVertexIndices: Iterable<number>;
     radius: number;
@@ -57,28 +94,35 @@ export function applyGeodesicBrush(options: {
     normals?: Float32Array;
     hitNormal?: readonly [number, number, number];
     normalThreshold?: number;
+    workspace?: GeodesicBrushWorkspace;
 }): Uint32Array {
     const vertexCount = Math.min(
         options.weights.length,
-        options.adjacency.length,
+        adjacencyVertexCount(options.adjacency),
         Math.floor(options.positions.length / 3),
     );
     if (vertexCount === 0 || options.radius <= 0) return new Uint32Array();
 
-    const distances = new Float64Array(vertexCount);
-    distances.fill(Number.POSITIVE_INFINITY);
-    const heapVertices: number[] = [];
-    const heapDistances: number[] = [];
+    const workspace =
+        options.workspace?.distances.length === vertexCount
+            ? options.workspace
+            : createGeodesicBrushWorkspace(vertexCount);
+    const { distances, touched, heapVertices, heapDistances, changed } = workspace;
+    for (const vertex of touched) distances[vertex] = Number.POSITIVE_INFINITY;
+    touched.length = 0;
+    heapVertices.length = 0;
+    heapDistances.length = 0;
+    changed.length = 0;
 
     for (const seed of options.seedVertexIndices) {
         if (!Number.isInteger(seed) || seed < 0 || seed >= vertexCount || distances[seed] === 0) {
             continue;
         }
         distances[seed] = 0;
+        touched.push(seed);
         pushMinHeap(heapVertices, heapDistances, seed, 0);
     }
 
-    const changed: number[] = [];
     const threshold = options.normalThreshold ?? 0.15;
 
     while (heapVertices.length > 0) {
@@ -112,7 +156,7 @@ export function applyGeodesicBrush(options: {
             }
         }
 
-        for (const neighbor of options.adjacency[current.vertex]) {
+        for (const neighbor of neighborsAt(options.adjacency, current.vertex)) {
             if (neighbor >= vertexCount) continue;
             const currentOffset = current.vertex * 3;
             const neighborOffset = neighbor * 3;
@@ -122,6 +166,7 @@ export function applyGeodesicBrush(options: {
             const distance = current.distance + Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (distance >= options.radius || distance >= distances[neighbor]) continue;
 
+            if (distances[neighbor] === Number.POSITIVE_INFINITY) touched.push(neighbor);
             distances[neighbor] = distance;
             pushMinHeap(heapVertices, heapDistances, neighbor, distance);
         }
@@ -232,12 +277,12 @@ export function mirrorWeightsWithCache(
 
 export function smoothSelectionWeights(
     weights: Float32Array,
-    adjacency: readonly Uint32Array[],
+    adjacency: VertexAdjacency,
     strength: number,
     iterations: number,
 ): void {
     const blend = clamp01(strength);
-    const vertexCount = Math.min(weights.length, adjacency.length);
+    const vertexCount = Math.min(weights.length, adjacencyVertexCount(adjacency));
     if (blend === 0 || vertexCount === 0) return;
 
     for (let iteration = 0; iteration < Math.floor(iterations); iteration += 1) {
@@ -245,7 +290,7 @@ export function smoothSelectionWeights(
         for (let vertex = 0; vertex < vertexCount; vertex += 1) {
             let neighborWeightSum = 0;
             let neighborCount = 0;
-            for (const neighbor of adjacency[vertex]) {
+            for (const neighbor of neighborsAt(adjacency, vertex)) {
                 if (neighbor >= weights.length) continue;
                 neighborWeightSum += previousWeights[neighbor];
                 neighborCount += 1;
@@ -314,12 +359,12 @@ function popMinHeap(
 
 export function growSelectionWeights(
     weights: Float32Array,
-    adjacency: readonly Uint32Array[],
+    adjacency: VertexAdjacency,
     amount: number,
     iterations: number,
 ): void {
     const strength = clamp01(amount);
-    const vertexCount = Math.min(weights.length, adjacency.length);
+    const vertexCount = Math.min(weights.length, adjacencyVertexCount(adjacency));
     if (strength === 0 || vertexCount === 0) return;
 
     const numIterations = Math.floor(iterations);
@@ -327,7 +372,7 @@ export function growSelectionWeights(
         const previousWeights = new Float32Array(weights);
         for (let v = 0; v < vertexCount; v += 1) {
             let maxNeighbor = previousWeights[v];
-            for (const neighbor of adjacency[v]) {
+            for (const neighbor of neighborsAt(adjacency, v)) {
                 if (neighbor >= weights.length) continue;
                 if (previousWeights[neighbor] > maxNeighbor) {
                     maxNeighbor = previousWeights[neighbor];
@@ -344,12 +389,12 @@ export function growSelectionWeights(
 
 export function shrinkSelectionWeights(
     weights: Float32Array,
-    adjacency: readonly Uint32Array[],
+    adjacency: VertexAdjacency,
     amount: number,
     iterations: number,
 ): void {
     const strength = clamp01(amount);
-    const vertexCount = Math.min(weights.length, adjacency.length);
+    const vertexCount = Math.min(weights.length, adjacencyVertexCount(adjacency));
     if (strength === 0 || vertexCount === 0) return;
 
     const numIterations = Math.floor(iterations);
@@ -358,7 +403,7 @@ export function shrinkSelectionWeights(
         for (let v = 0; v < vertexCount; v += 1) {
             if (previousWeights[v] === 0) continue;
             let minNeighbor = previousWeights[v];
-            const neighbors = adjacency[v];
+            const neighbors = neighborsAt(adjacency, v);
             if (neighbors.length === 0) {
                 minNeighbor = 0;
             } else {
@@ -383,9 +428,9 @@ export function shrinkSelectionWeights(
 
 export function buildConnectedComponents(
     vertexCount: number,
-    adjacency: readonly Uint32Array[],
+    adjacency: VertexAdjacency,
 ): Uint32Array {
-    const count = Math.min(vertexCount, adjacency.length);
+    const count = Math.min(vertexCount, adjacencyVertexCount(adjacency));
     const componentIds = new Uint32Array(vertexCount);
     if (count === 0) return componentIds;
 
@@ -403,7 +448,7 @@ export function buildConnectedComponents(
         while (head < queue.length) {
             const current = queue[head]!;
             head += 1;
-            for (const neighbor of adjacency[current]) {
+            for (const neighbor of neighborsAt(adjacency, current)) {
                 if (neighbor >= count || visited[neighbor]) continue;
                 visited[neighbor] = 1;
                 componentIds[neighbor] = currentComponentId - 1;

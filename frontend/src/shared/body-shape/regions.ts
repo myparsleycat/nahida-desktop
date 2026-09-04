@@ -277,6 +277,13 @@ export type ActiveRegionDeform = {
     taperFactor?: number;
 };
 
+export type DeformMetrics = {
+    vertexCount: number;
+    movedVertices: number;
+    maxDisplacement: number;
+    meanDisplacement: number;
+};
+
 /**
  * Compose multiple region deformations from original positions (never cumulative).
  * p' = p + Σ_r  w_r · (A_r(p - c_r) + c_r - p)
@@ -285,12 +292,18 @@ export function applyMultiRegionDeform(options: {
     originalPositions: Float32Array;
     previewPositions: Float32Array;
     regions: readonly ActiveRegionDeform[];
-}): void {
+    epsilon?: number;
+}): DeformMetrics {
     const { originalPositions, previewPositions, regions } = options;
     const vertexCount = Math.min(
         Math.floor(originalPositions.length / 3),
         Math.floor(previewPositions.length / 3),
     );
+
+    let movedVertices = 0;
+    let maxDisplacement = 0;
+    let displacementSum = 0;
+    const epsilon = options.epsilon ?? 1e-6;
 
     for (let i = 0; i < vertexCount; i++) {
         const o = i * 3;
@@ -346,7 +359,20 @@ export function applyMultiRegionDeform(options: {
         previewPositions[o] = px + dx;
         previewPositions[o + 1] = py + dy;
         previewPositions[o + 2] = pz + dz;
+        const displacement = Math.hypot(dx, dy, dz);
+        if (displacement > epsilon) {
+            movedVertices += 1;
+            displacementSum += displacement;
+            if (displacement > maxDisplacement) maxDisplacement = displacement;
+        }
     }
+
+    return {
+        vertexCount,
+        movedVertices,
+        maxDisplacement,
+        meanDisplacement: movedVertices > 0 ? displacementSum / movedVertices : 0,
+    };
 }
 
 /** Max absolute influence across active regions for weight-color visualization. */

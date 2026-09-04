@@ -31,7 +31,7 @@ export type BrushMode = "paint" | "erase";
 
 /**
  * Apply a brush stroke to vertices near hitPoint.
- * Mutates `weights` in place and returns the count of vertices that changed.
+ * Mutates `weights` in place and returns the indices of vertices that changed.
  */
 export function applyBrushStroke(options: {
     positions: Float32Array;
@@ -45,7 +45,7 @@ export function applyBrushStroke(options: {
     normals?: Float32Array;
     hitNormal?: readonly [number, number, number];
     normalThreshold?: number;
-}): number {
+}): Uint32Array {
     const {
         positions,
         weights,
@@ -60,7 +60,7 @@ export function applyBrushStroke(options: {
     } = options;
 
     const vertexCount = Math.min(weights.length, Math.floor(positions.length / 3));
-    let changed = 0;
+    const changed: number[] = [];
     const hx = hitPoint[0];
     const hy = hitPoint[1];
     const hz = hitPoint[2];
@@ -92,11 +92,11 @@ export function applyBrushStroke(options: {
                 : eraseVertex(prev, falloff, strength);
         if (next !== prev) {
             weights[i] = next;
-            changed += 1;
+            changed.push(i);
         }
     }
 
-    return changed;
+    return Uint32Array.from(changed);
 }
 
 /**
