@@ -541,9 +541,17 @@ func (t *Tools) zzmiRememberLatest(ctx context.Context, latest *zzmiLatestReleas
 	return nil
 }
 
+func zzmiCacheFresh(checkedAt string, now time.Time) bool {
+	parsed, err := time.Parse(time.RFC3339Nano, checkedAt)
+	if err != nil || parsed.After(now) {
+		return false
+	}
+	return now.Sub(parsed) < zzmiCheckCooldown
+}
+
 func (t *Tools) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestRelease, bool, error) {
 	cached := t.zzmiGetCachedLatestRelease(ctx)
-	if !force && cached != nil && time.Since(parseRFC3339(cached.CheckedAt)) < zzmiCheckCooldown {
+	if !force && cached != nil && zzmiCacheFresh(cached.CheckedAt, time.Now().UTC()) {
 		return cached, false, nil
 	}
 	latest, checked, err := t.zzmiFetchLatest(ctx)

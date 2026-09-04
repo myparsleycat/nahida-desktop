@@ -407,6 +407,40 @@ func TestZZMIFixerPrepareFallsBackAndRefreshesCooldown(t *testing.T) {
 	}
 }
 
+func TestZZMIFixerPrepareTreatsInvalidOrFutureCheckedAtAsMiss(t *testing.T) {
+	cases := []struct {
+		name      string
+		checkedAt string
+	}{
+		{name: "invalid", checkedAt: "not-a-timestamp"},
+		{name: "future", checkedAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := openToolsTestDB(t)
+			root := insertZZMITestTarget(t, client)
+			cached := sampleZZMILatestRelease(time.Time{})
+			cached.CheckedAt = test.checkedAt
+			seedZZMILatestRelease(t, client, cached)
+			remote := zzmiLatestRelease{
+				Tag:     "v9.9.9",
+				Commit:  "abcdef0123456789abcdef0123456789abcdef01",
+				Zipball: "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/zipball/v9.9.9",
+			}
+			service := newZZMIFixerTestService(t, client, zzmiRemoteReleaseHandler(remote.Tag, remote.Commit, nil))
+
+			result, err := service.ZZMIFixerPrepare(ctx, root, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.Rules.CheckedRemotely || result.Rules.LatestTag == nil || *result.Rules.LatestTag != remote.Tag {
+				t.Fatalf("%s timestamp did not refresh: %+v", test.name, result.Rules)
+			}
+		})
+	}
+}
+
 func TestZZMIFixerPrepareTreatsBrokenCacheAsMiss(t *testing.T) {
 	ctx := context.Background()
 	client := openToolsTestDB(t)
