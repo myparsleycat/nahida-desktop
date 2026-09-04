@@ -377,16 +377,16 @@ func (g *GameBanana) ToggleModLike(ctx context.Context, input ModOverviewInput) 
 		modelName = "Mod"
 	}
 	defer func() {
-		if err == nil || g.log == nil {
+		if err == nil {
 			return
 		}
-		g.log.Error(sanitizeLogMessage(err.Error()), "GameBanana:toggleModLike")
-		g.log.Error(map[string]any{
-			"channel": "gamebanana:toggleModLike", "operation": "toggleModLike",
-			"itemId": input.ItemID, "modelName": modelName,
-			"stage": stage, "cacheState": cacheState, "cleanupState": cleanupState,
-			"error": sanitizeLogMessage(err.Error()),
-		}, "GameBanana:toggleModLike:context")
+		err = infra.ReportError(g.log, err, "GameBanana", infra.Diagnostic{
+			Operation: "toggle-mod-like", Stage: stage,
+			Fields: map[string]any{
+				"itemId": input.ItemID, "modelName": modelName,
+				"cacheState": cacheState, "cleanupState": cleanupState,
+			},
+		})
 	}()
 	model, err := normalizeModelName(input.ModelName)
 	if err != nil {
@@ -495,10 +495,10 @@ func (g *GameBanana) getJSON(ctx context.Context, method, path string, query url
 	}
 	value = normalizePreviewContent(value)
 	if err := schema.validate(value); err != nil {
-		if g.log != nil {
-			g.log.Error(err.Error(), "GameBananaService:requestJson")
-		}
-		return nil, err
+		return nil, infra.AnnotateError(err, infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "request-json", Stage: "validate-response",
+			Fields: map[string]any{"method": method, "endpoint": path},
+		})
 	}
 	return value, nil
 }

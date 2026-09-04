@@ -76,8 +76,10 @@ func (s *LocalHTTP) Start() error {
 	s.server, s.listener = server, listener
 	s.runCtx, s.cancel = runCtx, cancel
 	go func() {
-		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) && log != nil {
-			log.Error(serveErr.Error(), "LocalHTTP")
+		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			_ = ReportError(log, serveErr, "LocalHTTP", Diagnostic{
+				Severity: DiagnosticError, Operation: "serve", Stage: "listener",
+			})
 		}
 	}()
 	return nil
@@ -126,8 +128,10 @@ func (s *LocalHTTP) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if result != "" {
 				response = result
 			}
-			if handleErr != nil && log != nil {
-				log.Error(handleErr.Error(), "WebSocket:Download")
+			if handleErr != nil {
+				_ = ReportError(log, handleErr, "LocalHTTP", Diagnostic{
+					Severity: DiagnosticError, Operation: "websocket-download", Stage: "handle-message",
+				})
 			}
 		}
 		if err := conn.Write(readCtx, websocket.MessageText, []byte(response)); err != nil {

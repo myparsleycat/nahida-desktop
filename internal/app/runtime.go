@@ -441,22 +441,33 @@ func (rt *runtime) Close() error {
 
 func (rt *runtime) services() []application.Service {
 	return []application.Service{
-		application.NewService(rt.auth),
-		application.NewService(rt.dialog),
-		application.NewService(rt.drive),
-		application.NewService(rt.fs),
-		application.NewService(rt.gamebanana),
+		newLoggedService(rt, "Auth", rt.auth),
+		newLoggedService(rt, "Dialog", rt.dialog),
+		newLoggedService(rt, "Drive", rt.drive),
+		newLoggedService(rt, "FS", rt.fs),
+		newLoggedService(rt, "GameBanana", rt.gamebanana),
 		application.NewService(rt.log),
-		application.NewService(rt.menuMaker),
-		application.NewService(rt.mod),
+		newLoggedService(rt, "MenuMaker", rt.menuMaker),
+		newLoggedService(rt, "Mod", rt.mod),
 		application.NewService(rt.notifications),
-		application.NewServiceWithOptions(rt.protocol, application.ServiceOptions{Route: "/protocol"}),
-		application.NewService(rt.setting),
-		application.NewService(rt.shell),
-		application.NewService(rt.tools),
-		application.NewService(rt.transfer),
-		application.NewService(rt.updater),
-		application.NewService(rt.window),
-		application.NewService(rt.xxmi),
+		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
+		newLoggedService(rt, "Setting", rt.setting),
+		newLoggedService(rt, "Shell", rt.shell),
+		newLoggedService(rt, "Tools", rt.tools),
+		newLoggedService(rt, "Transfer", rt.transfer),
+		newLoggedService(rt, "Updater", rt.updater),
+		newLoggedService(rt, "Window", rt.window),
+		newLoggedService(rt, "XXMI", rt.xxmi),
 	}
+}
+
+func newLoggedService[T any](rt *runtime, name string, instance *T) application.Service {
+	return newLoggedServiceWithOptions(rt, name, instance, application.ServiceOptions{})
+}
+
+func newLoggedServiceWithOptions[T any](rt *runtime, name string, instance *T, options application.ServiceOptions) application.Service {
+	if rt != nil && rt.log != nil {
+		options.MarshalError = rt.log.ServiceErrorMarshaler(name)
+	}
+	return application.NewServiceWithOptions(instance, options)
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const loginSessionTimeout = 5 * time.Minute
@@ -103,10 +105,10 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 }
 
 func (g *GameBanana) warnLoginFailure(stage string, err error) {
-	if g == nil || g.log == nil {
+	if g == nil || g.log == nil || infra.IsCancellationError(err) {
 		return
 	}
-	detail := map[string]any{"stage": stage}
+	detail := map[string]any{"operation": "login", "stage": stage}
 	if err != nil {
 		detail["error"] = sanitizeLogMessage(err.Error())
 	}

@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultStartPage   = "/mod"
-	defaultLogLevel    = "error"
+	defaultLogLevel    = "warn"
 	defaultLanguage    = "en"
 	defaultToneMapping = "neutral"
 	defaultEnvironment = "studio"

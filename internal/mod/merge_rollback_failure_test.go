@@ -178,7 +178,7 @@ func TestMergeModsLogsOriginalErrorAndRollbackFailures(t *testing.T) {
 	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		t.Fatalf("merge payload = %q: %v", rawPayload, err)
 	}
-	if payload.Operation != "mod:mergeMods" || payload.Stage != "execute" || payload.Error != "NAMESPACE_MERGE_NEEDS_CHILD" {
+	if payload.Operation != "merge-mods" || payload.Stage != "execute" || payload.Error != "NAMESPACE_MERGE_NEEDS_CHILD" {
 		t.Fatalf("merge payload = %#v", payload)
 	}
 	wantAction := failedPath

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
@@ -325,7 +327,9 @@ func (m *Mod) guardActiveDownloadActions(paths []string) ([]bool, func()) {
 
 func (m *Mod) logActionError(err error, where string) {
 	if err != nil && m != nil && m.log != nil {
-		m.log.Error(err.Error(), where)
+		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: where, Stage: "item-action",
+		})
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
 )
 
@@ -192,14 +193,14 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 	status := transfer.StatusPreparing
 	zero := 0
 	if err := transfers.Update(pid, transfer.Updates{Status: &status, TransferredFiles: &zero, ClearError: true, ClearErrorCode: true}); err != nil {
-		return err
+		return d.reportUploadFailure(transfers, pid, "prepare", err)
 	}
 	created := []CreatedUploadDirectory{}
 	var err error
 	if len(preparation.Directories) > 0 {
 		created, err = d.CreateDirs(ctx, restart.Params.DestID, preparation.Directories)
 		if err != nil {
-			return d.failUploadTransfer(transfers, pid, err)
+			return d.failUploadTransfer(transfers, pid, "create-dirs", err)
 		}
 	}
 	parentIDs := make(map[string]string, len(created))
@@ -217,7 +218,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 			_ = transfers.Update(pid, transfer.Updates{TransferredFiles: &count})
 		})
 		if hashErr != nil {
-			return d.failUploadTransfer(transfers, pid, hashErr)
+			return d.failUploadTransfer(transfers, pid, "hash", hashErr)
 		}
 		hashes = make(map[string]string, len(hashed))
 		for _, file := range hashed {
@@ -234,12 +235,12 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 			var ok bool
 			parentID, ok = parentIDs[file.ParentPath]
 			if !ok {
-				return d.failUploadTransfer(transfers, pid, fmt.Errorf("created directory missing for %q", file.ParentPath))
+				return d.failUploadTransfer(transfers, pid, "resolve-parent", fmt.Errorf("created directory missing for %q", file.ParentPath))
 			}
 		}
 		sha256 := hashes[file.FID]
 		if sha256 == "" {
-			return d.failUploadTransfer(transfers, pid, fmt.Errorf("hash missing for file %s", file.Name))
+			return d.failUploadTransfer(transfers, pid, "hash", fmt.Errorf("hash missing for file %s", file.Name))
 		}
 		finalFiles[index] = FinalUploadFile{UploadFile: file, ParentID: parentID, SHA256: sha256}
 	}
@@ -257,11 +258,15 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 	}
 	progressStatus := transfer.StatusProgress
 	if err := transfers.Update(pid, transfer.Updates{Status: &progressStatus, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles}); err != nil {
-		return err
+		return d.reportUploadFailure(transfers, pid, "prepare", err)
 	}
 	if len(incomplete) > 0 {
 		incomplete = redistributeUploadFiles(incomplete)
+		stage := "plan"
 		plan, planErr := d.planUploadV2(ctx, restart.Params.DestID, restart.RequestID, incomplete, func(progress UploadPlanProgress) {
+			if progress.Phase != "" {
+				stage = "plan/" + string(progress.Phase)
+			}
 			percentage := 0.0
 			if progress.Total > 0 {
 				percentage = float64(progress.Processed) / float64(progress.Total) * 100
@@ -269,7 +274,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 			_ = transfers.Update(pid, transfer.Updates{PlanPhase: &progress.Phase, PlanProgress: &percentage})
 		})
 		if planErr != nil {
-			return d.failUploadTransfer(transfers, pid, planErr)
+			return d.failUploadTransfer(transfers, pid, stage, planErr)
 		}
 		_ = transfers.Update(pid, transfer.Updates{ClearPlanPhase: true, ClearPlanProgress: true})
 		executeErr := d.executeUploadPlanV2(ctx, incomplete, plan, d.uploadConcurrency(ctx), func(progress UploadExecutionProgress) {
@@ -284,7 +289,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 			_ = transfers.Update(pid, transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles})
 		})
 		if executeErr != nil {
-			return d.failUploadTransfer(transfers, pid, executeErr)
+			return d.failUploadTransfer(transfers, pid, "execute", executeErr)
 		}
 	}
 	completed := transfer.StatusCompleted
@@ -298,7 +303,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 		ClearPlanPhase:    true,
 		ClearPlanProgress: true,
 	}); err != nil {
-		return err
+		return d.reportUploadFailure(transfers, pid, "finalize", err)
 	}
 	if d.eventEmit != nil {
 		d.eventEmit("drive:upload-completed", uploadCompletedEvent{
@@ -327,7 +332,7 @@ func uploadHashConcurrency() int {
 	return max(2, int(math.Ceil(float64(runtime.GOMAXPROCS(0))*1.5)))
 }
 
-func (d *Drive) failUploadTransfer(transfers *transfer.Transfer, pid string, failure error) error {
+func (d *Drive) failUploadTransfer(transfers *transfer.Transfer, pid, stage string, failure error) error {
 	if errors.Is(failure, context.Canceled) {
 		return failure
 	}
@@ -338,14 +343,59 @@ func (d *Drive) failUploadTransfer(transfers *transfer.Transfer, pid string, fai
 	if errors.As(failure, &uploadErr) {
 		code = uploadErr.Code
 	}
-	_ = transfers.Update(pid, transfer.Updates{
+	updateErr := transfers.Update(pid, transfer.Updates{
 		Status:            &status,
 		Error:             &message,
 		ErrorCode:         &code,
 		ClearPlanPhase:    true,
 		ClearPlanProgress: true,
 	})
-	return failure
+	reported := d.reportUploadFailure(transfers, pid, stage, failure)
+	if updateErr == nil {
+		return reported
+	}
+	updateReported := infra.ReportError(d.log, updateErr, "Drive", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "upload",
+		Stage:     "record-failure",
+		Fields:    driveTransferFields(transfers, pid, code),
+	})
+	return errors.Join(reported, updateReported)
+}
+
+func (d *Drive) reportUploadFailure(transfers *transfer.Transfer, pid, stage string, failure error) error {
+	code := ""
+	var uploadErr *UploadV2Error
+	if errors.As(failure, &uploadErr) {
+		code = uploadErr.Code
+	}
+	return infra.ReportError(d.log, failure, "Drive", infra.Diagnostic{
+		Operation: "upload",
+		Stage:     stage,
+		Fields:    driveTransferFields(transfers, pid, code),
+	})
+}
+
+func driveTransferFields(transfers *transfer.Transfer, pid, code string) map[string]any {
+	fields := map[string]any{"pid": pid}
+	if code != "" {
+		fields["errorCode"] = code
+	}
+	if transfers == nil {
+		return fields
+	}
+	record, ok := transfers.Get(pid)
+	if !ok {
+		return fields
+	}
+	fields["destinationId"] = record.CurrentID
+	fields["name"] = record.Name
+	fields["path"] = record.Path
+	fields["totalBytes"] = record.TotalSize
+	fields["transferredBytes"] = record.TransferredSize
+	fields["totalFiles"] = record.TotalFiles
+	fields["transferredFiles"] = record.TransferredFiles
+	return fields
 }
 
 func stringsMapKeys(values map[string]struct{}) func(func(string) bool) {

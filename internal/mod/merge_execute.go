@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -111,7 +113,7 @@ func (m *Mod) MergeMods(ctx context.Context, request MergeModsRequest) (result M
 	defer func() {
 		if err != nil {
 			failures := rollbackMerge(created)
-			m.logMergeFailure(request, created, failures, err)
+			err = m.logMergeFailure(request, created, failures, err)
 		}
 	}()
 	output, err := m.executeMergeNode(ctx, request.Root, request, &created)
@@ -847,9 +849,9 @@ func (m *Mod) logMergeFailure(
 	actions []mergeRollback,
 	failures []mergeRollbackFailure,
 	err error,
-) {
-	if m == nil || m.log == nil || err == nil {
-		return
+) error {
+	if err == nil {
+		return nil
 	}
 	created := make([]string, len(actions))
 	for i, action := range actions {
@@ -862,11 +864,18 @@ func (m *Mod) logMergeFailure(
 			Error:  failure.err.Error(),
 		}
 	}
-	m.log.Error(mergeFailureLog{
-		Operation: "mod:mergeMods", GroupPath: request.GroupPath,
-		Placement: request.Placement, PackName: request.PackName, Stage: "execute",
-		Created: created, RollbackFailures: rollbackFailures, Error: err.Error(),
-	}, "Mod:mergeMods:context")
+	var log *infra.Log
+	if m != nil {
+		log = m.log
+	}
+	return infra.ReportError(log, err, "Mod", infra.Diagnostic{
+		Operation: "merge-mods", Stage: "execute",
+		Fields: map[string]any{
+			"groupPath": request.GroupPath, "placement": request.Placement,
+			"packName": request.PackName, "created": created,
+			"rollbackFailures": rollbackFailures,
+		},
+	})
 }
 
 func createUniqueMergeFolder(parent, name string, created *[]mergeRollback) (string, error) {

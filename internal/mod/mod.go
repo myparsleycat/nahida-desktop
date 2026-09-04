@@ -937,7 +937,9 @@ func (m *Mod) shaderGames() []shaderGame {
 
 func (m *Mod) logShaderError(err error, where string) {
 	if err != nil && m != nil && m.log != nil {
-		m.log.Error(err.Error(), where)
+		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: where, Stage: "shader-fix",
+		})
 	}
 }
 

@@ -656,14 +656,16 @@ func (u *Updater) runLogged(fn func() error, where string) {
 }
 
 func (u *Updater) logError(err error, where string) {
-	if err == nil {
+	if err == nil || IsCancellationError(err) {
 		return
 	}
 	u.mu.Lock()
 	log := u.log
 	u.mu.Unlock()
 	if log != nil {
-		log.Error(err.Error(), where)
+		_ = ReportError(log, err, "Updater", Diagnostic{
+			Severity: DiagnosticError, Operation: where, Stage: "background",
+		})
 	}
 }
 

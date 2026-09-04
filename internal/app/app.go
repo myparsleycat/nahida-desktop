@@ -23,6 +23,12 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		Description: "Native app for nahida.live",
 		Icon:        icon,
 		Services:    rt.services(),
+		ErrorHandler: func(err error) {
+			runtimeErrorHandler(rt.log, err)
+		},
+		PanicHandler: func(details *application.PanicDetails) {
+			runtimePanicHandler(rt.log, details, os.Exit)
+		},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.nahida.desktop",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
@@ -98,6 +104,36 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	registerDeepLink(app, rt.window)
 
 	return app.Run()
+}
+
+func runtimeErrorHandler(log *infra.Log, err error) {
+	if err == nil {
+		return
+	}
+	_ = infra.ReportError(log, err, "Wails", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "runtime",
+	})
+}
+
+func runtimePanicHandler(log *infra.Log, details *application.PanicDetails, exit func(int)) {
+	if details == nil {
+		return
+	}
+	err := details.Error
+	if err == nil {
+		err = errors.New("unknown Wails panic")
+	}
+	_ = infra.ReportError(log, err, "Wails", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "panic",
+		Fields: map[string]any{
+			"stackTrace": details.StackTrace,
+		},
+	})
+	if exit != nil {
+		exit(1)
+	}
 }
 
 func windowsApplicationOptions() application.WindowsOptions {

@@ -125,10 +125,13 @@ func TestToggleModLikeLogsStageAndContextOnFailure(t *testing.T) {
 		t.Fatal("ToggleModLike succeeded with malformed profile")
 	}
 	logged := output.String()
-	for _, want := range []string{"GameBanana:toggleModLike", "GameBanana:toggleModLike:context", "profile-fetch", "cacheState", "cleanupState", "42"} {
+	for _, want := range []string{"[GameBanana]", `"operation":"toggle-mod-like"`, "profile-fetch", "cacheState", "cleanupState", `"itemId":42`, `"endpoint":"/Mod/42/ProfilePage"`} {
 		if !strings.Contains(logged, want) {
 			t.Fatalf("log %q does not contain %q", logged, want)
 		}
+	}
+	if strings.Count(logged, "GAMEBANANA_SCHEMA_ERROR") != 1 {
+		t.Fatalf("failure was not logged exactly once: %q", logged)
 	}
 }
 

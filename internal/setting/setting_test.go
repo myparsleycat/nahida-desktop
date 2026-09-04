@@ -329,6 +329,24 @@ func TestInvalidLogLevelNormalizesBeforeStorageAndHook(t *testing.T) {
 	}
 }
 
+func TestStoredErrorLogLevelIsPreserved(t *testing.T) {
+	t.Parallel()
+
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+	stored := "error"
+	if err := s.Client().Settings.Upsert(ctx, "general_log_level", &stored); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get(ctx, KeyGeneralLogLevel)
+	if err != nil || got != "error" {
+		t.Fatalf("Get stored error level = %#v, %v", got, err)
+	}
+	if raw := rawValue(t, s, "general_log_level"); raw != "error" {
+		t.Fatalf("stored log level changed to %q", raw)
+	}
+}
+
 func TestRunOnStartupInvokesPlatformHook(t *testing.T) {
 	var values []bool
 	s, _ := openTemp(t, Options{Hooks: Hooks{

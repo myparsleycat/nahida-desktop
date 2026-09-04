@@ -1,6 +1,7 @@
 package drive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +113,57 @@ func TestStartUploadRunsThroughTransferQueue(t *testing.T) {
 	}
 	if completedEventCount != 1 || !completedAtEvent {
 		t.Fatalf("completed event count = %d, completed at event = %v", completedEventCount, completedAtEvent)
+	}
+}
+
+func TestUploadPlanValidationFailureIsLoggedWithStageAndContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/akasha/content/dest":
+			_, _ = io.WriteString(w, `{"children":[]}`)
+		case "/akasha/v2/upload-rules":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(testUploadRules())
+		case "/akasha/v2/sse/drive/files:plan":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "event: progress\ndata: {\"phase\":\"file_validation\",\"processed\":1,\"total\":1}\n\n")
+			_, _ = io.WriteString(w, "event: error\ndata: {\"code\":\"upload_file_too_large\",\"message\":\"server rejected file\"}\n\n")
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+
+	var logOutput bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &logOutput, DisableFile: true})
+	transfers := transfer.NewWithOptions(transfer.Options{Log: log})
+	drive := uploadServiceTestDrive(server, transfers)
+	drive.UseLog(log)
+	path := filepath.Join(t.TempDir(), "validation.ini")
+	if err := os.WriteFile(path, []byte("upload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := drive.StartUpload(context.Background(), StartUploadParams{
+		DestID: "dest", Paths: []string{path}, ConflictStrategy: UploadConflictSuffix,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record, ok := transfers.Get(result.PID)
+	if !ok || record.Status != transfer.StatusError || record.ErrorCode != "upload_file_too_large" {
+		t.Fatalf("record = %+v, ok = %v", record, ok)
+	}
+	got := logOutput.String()
+	for _, want := range []string{" WARN ", `"operation":"upload"`, `"stage":"plan/file_validation"`, result.PID, `"destinationId":"dest"`, `"errorCode":"upload_file_too_large"`, "server rejected file"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("log missing %q: %s", want, got)
+		}
+	}
+	if strings.Count(got, "server rejected file") != 1 {
+		t.Fatalf("failure logged more than once: %s", got)
 	}
 }
 

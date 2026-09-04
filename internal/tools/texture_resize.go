@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -159,8 +161,10 @@ func (t *Tools) runTextureResizeJob(ctx context.Context, path string, settings T
 		failed := running
 		failed.Status, failed.Error = "failed", stringPointer(err.Error())
 		t.settleTextureJob(jobID, failed)
-		t.logError(err, "TextureResizer:runResizeJob")
-		return TextureResizeResult{}, err
+		return TextureResizeResult{}, infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "texture-resize", Stage: "execute",
+			Fields: map[string]any{"path": path, "mode": settings.Operation, "singleFile": singleFile},
+		})
 	}
 	completed := running
 	completed.Status = "completed"

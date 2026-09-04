@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -266,6 +267,71 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}
 	if completedEvent["path"] != target || completedEvent["name"] != "renamed.bin" {
 		t.Fatalf("completion event = %#v", completedEvent)
+	}
+}
+
+func TestDownloadWriteFailureLogsStageAndTransferContext(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	var output bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	transfers := transfer.NewWithOptions(transfer.Options{Log: log})
+	drive := downloadServiceTestDrive(server, transfers)
+	drive.UseLog(log)
+	target := t.TempDir()
+	if err := os.Mkdir(filepath.Join(target, "blocked.bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := DownloadMetadata{
+		Root:  transfer.Root{ID: "file", Name: "blocked.bin"},
+		Files: []transfer.DownloadFile{{ID: "file", FileID: "file", Name: "blocked.bin"}},
+		Dirs:  []transfer.Directory{},
+	}
+	result, err := drive.StartDownload(context.Background(), StartDownloadParams{
+		Items: []DownloadItem{{ID: "file", Name: "blocked.bin"}}, TargetPath: target, Data: &metadata,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record, ok := transfers.Get(result.PID)
+	if !ok || record.Status != transfer.StatusError {
+		t.Fatalf("record = %+v, ok = %v", record, ok)
+	}
+	got := output.String()
+	for _, want := range []string{`"operation":"download"`, `"stage":"write"`, result.PID, `"destinationId":"file"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("log missing %q: %s", want, got)
+		}
+	}
+	if strings.Count(got, `"operation":"download"`) != 1 {
+		t.Fatalf("failure logged more than once: %s", got)
+	}
+}
+
+func TestTransferCancellationDoesNotCreateDriveFailureLog(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	transfers := transfer.NewWithOptions(transfer.Options{Log: log})
+	_, err := transfers.Create(transfer.CreateParams{PID: "cancel", Type: "upload", Name: "cancel", InitialStatus: transfer.StatusProgress})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drive := NewWithOptions(Options{Log: log})
+	if got := drive.failUploadTransfer(transfers, "cancel", "execute", context.Canceled); !errors.Is(got, context.Canceled) {
+		t.Fatalf("upload cancellation = %v", got)
+	}
+	if got := drive.failDownloadTransfer(transfers, "cancel", "download", context.Canceled); !errors.Is(got, context.Canceled) {
+		t.Fatalf("download cancellation = %v", got)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("cancellation logged: %q", output.String())
 	}
 }
 
