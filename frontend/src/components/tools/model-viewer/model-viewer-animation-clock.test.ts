@@ -27,10 +27,10 @@ const clip: ModelViewerAnimationClip = {
 };
 
 describe("model viewer animation clock", () => {
-    it("normalizes scheduler FPS to the supported range", () => {
-        expect(normalizeAnimationFPS(0.5)).toBe(1);
+    it("preserves valid source FPS and falls back for invalid values", () => {
+        expect(normalizeAnimationFPS(0.5)).toBe(0.5);
         expect(normalizeAnimationFPS(30)).toBe(30);
-        expect(normalizeAnimationFPS(120)).toBe(60);
+        expect(normalizeAnimationFPS(120)).toBe(120);
         expect(normalizeAnimationFPS(Number.NaN)).toBe(1);
     });
 
@@ -44,6 +44,14 @@ describe("model viewer animation clock", () => {
 
     it("jumps to the elapsed target frame without emitting intermediate frames", () => {
         expect(advanceAnimationFrame(0, 10 * (1000 / 60), 60, 100, true).frameIndex).toBe(10);
+    });
+
+    it("keeps high-FPS clips on their original timeline while skipping render frames", () => {
+        const frameDuration = 1000 / 120;
+        expect(advanceAnimationFrame(0, 2 * frameDuration, 120, 120, true).frameIndex).toBe(2);
+        expect(
+            advanceAnimationFrame(0, 120 * frameDuration + 1e-6, 120, 120, true).frameIndex,
+        ).toBe(0);
     });
 
     it("cancels its pending frame when playback pauses or unmounts", () => {

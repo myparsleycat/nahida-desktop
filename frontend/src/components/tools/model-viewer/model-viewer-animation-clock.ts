@@ -4,7 +4,7 @@ import type { ModelViewerAnimationClip } from "./model-viewer-contract";
 
 export function normalizeAnimationFPS(fps: number): number {
     if (!Number.isFinite(fps) || fps <= 0) return 1;
-    return Math.min(60, Math.max(1, fps));
+    return fps;
 }
 
 export function advanceAnimationFrame(

@@ -26,10 +26,7 @@ type modelViewerPreparedAnimationClip struct {
 	Frames      []modelViewerPreparedAnimationFrame
 }
 
-const (
-	maxModelViewerAnimationFrames = 4096
-	maxModelViewerAnimationFPS    = 60
-)
+const maxModelViewerAnimationFrames = 4096
 
 var modelViewerPresentAssignmentRE = regexp.MustCompile(`(?i)^(?:post\s+)?\$([\w.]+)\s*=\s*(.+)$`)
 
@@ -231,7 +228,7 @@ func normalizeModelViewerAnimationFPS(fps float64) float64 {
 	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) {
 		return 0
 	}
-	return max(1, min(fps, maxModelViewerAnimationFPS))
+	return fps
 }
 
 func collectModelViewerDiscreteBranchValues(sections []modINISection, variable string) []int {

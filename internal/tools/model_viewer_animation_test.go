@@ -16,10 +16,10 @@ func TestNormalizeModelViewerAnimationFPS(t *testing.T) {
 		{name: "nan", fps: math.NaN(), want: 0},
 		{name: "positive infinity", fps: math.Inf(1), want: 0},
 		{name: "negative infinity", fps: math.Inf(-1), want: 0},
-		{name: "minimum", fps: 0.5, want: 1},
+		{name: "fractional", fps: 0.5, want: 0.5},
 		{name: "thirty", fps: 30, want: 30},
 		{name: "sixty", fps: 60, want: 60},
-		{name: "clamped", fps: 120, want: 60},
+		{name: "high", fps: 120, want: 120},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
