@@ -31,6 +31,7 @@ var (
 	bearerPattern       = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
 	urlUserInfoPattern  = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
 	jsonSecretPattern   = regexp.MustCompile(`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`)
+	authHeaderPattern   = regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`)
 	cookieHeaderPattern = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
 	plainSecretPattern  = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`)
 )
@@ -378,6 +379,7 @@ func redactSecrets(value string) string {
 	}
 	value = bearerPattern.ReplaceAllString(value, "Bearer %REDACTED%")
 	value = urlUserInfoPattern.ReplaceAllString(value, `${1}%REDACTED%@`)
+	value = authHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
 	value = cookieHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
 	value = jsonSecretPattern.ReplaceAllString(value, `${1}"%REDACTED%"`)
 	return plainSecretPattern.ReplaceAllString(value, `${1}${2}%REDACTED%`)

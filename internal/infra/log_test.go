@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -357,6 +358,22 @@ func TestRedactSecretsRedactsEntireCookieHeaders(t *testing.T) {
 	}
 }
 
+func TestRedactSecretsRedactsEntireAuthorizationHeaders(t *testing.T) {
+	t.Parallel()
+
+	got := redactSecrets("request failed\r\nAuthorization: Basic dXNlcjpwYXNz\r\nProxy-Authorization: Digest username=alice, response=secret\r\nnext")
+	for _, secret := range []string{"Basic", "dXNlcjpwYXNz", "Digest", "alice", "secret"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("redacted output contains %q: %q", secret, got)
+		}
+	}
+	if !strings.Contains(got, "Authorization: %REDACTED%") ||
+		!strings.Contains(got, "Proxy-Authorization: %REDACTED%") ||
+		!strings.HasSuffix(got, "\r\nnext") {
+		t.Fatalf("redacted output = %q", got)
+	}
+}
+
 func TestRedactSecretsDoesNotConsumeStructuredFieldsAfterCookie(t *testing.T) {
 	t.Parallel()
 
@@ -419,6 +436,30 @@ func TestDiagnosticWrapperPreservesErrorIdentityAndJSON(t *testing.T) {
 	want, _ := json.Marshal(&cause)
 	if !bytes.Equal(marshaled, want) {
 		t.Fatalf("marshaled = %s, want %s", marshaled, want)
+	}
+}
+
+func TestServiceErrorMarshalerPreservesPlainErrorMessages(t *testing.T) {
+	t.Parallel()
+
+	marshaler := NewLogWithOptions(LogOptions{Writer: io.Discard, DisableFile: true}).ServiceErrorMarshaler("Test")
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "plain", err: errors.New("DUPLICATE_GAME_NAME"), want: "DUPLICATE_GAME_NAME"},
+		{name: "wrapped", err: fmt.Errorf("save failed: %w", errors.New("disk full")), want: "save failed: disk full"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			if err := json.Unmarshal(marshaler(tc.err), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("marshaled message = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

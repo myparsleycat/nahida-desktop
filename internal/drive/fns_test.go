@@ -1,6 +1,7 @@
 package drive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
 )
@@ -717,6 +719,43 @@ func TestCopyFromURLIncompleteStream(t *testing.T) {
 	}
 	if !strings.Contains(api.Message, "parent-1") {
 		t.Fatalf("message = %q", api.Message)
+	}
+}
+
+func TestCopyFromURLLogsUnderlyingBackendFailure(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true})
+	d := NewWithOptions(Options{
+		HTTP: testClient(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return jsonResp(r, http.StatusServiceUnavailable, `{"message":"upstream gateway exploded"}`), nil
+		})),
+		FS:         platform.NewFS(),
+		Log:        log,
+		DirRetries: zeroRetries(),
+		Sleep:      func(context.Context, time.Duration) error { return nil },
+	})
+
+	_, err := d.CopyFromURL(context.Background(), CopyFromURLParams{
+		URL:           "https://nahida.live/akasha/link/qjsEdvLpcAxr",
+		DestinationID: "dest-1",
+	})
+	var api *DriveAPIError
+	if !errors.As(err, &api) || api.Code != codeBackendUnavailable || api.Status != http.StatusServiceUnavailable {
+		t.Fatalf("err = %v", err)
+	}
+	if !infra.IsReportedError(err) {
+		t.Fatalf("error was not marked as reported: %v", err)
+	}
+	if got := logs.String(); !strings.Contains(got, `"cause":"upstream gateway exploded"`) {
+		t.Fatalf("log does not contain underlying failure: %q", got)
+	}
+
+	before := logs.String()
+	_ = log.ServiceErrorMarshaler("Drive")(err)
+	if got := logs.String(); got != before {
+		t.Fatalf("Wails boundary logged the failure twice: %q", got)
 	}
 }
 

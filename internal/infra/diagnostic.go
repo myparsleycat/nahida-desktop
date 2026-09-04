@@ -200,6 +200,12 @@ func (l *Log) ServiceErrorMarshaler(service string) func(error) []byte {
 		if marshalErr != nil {
 			return nil
 		}
+		if string(data) == "{}" {
+			data, marshalErr = json.Marshal(original.Error())
+			if marshalErr != nil {
+				return nil
+			}
+		}
 		return data
 	}
 }

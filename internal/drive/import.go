@@ -265,18 +265,36 @@ func (d *Drive) setImportTransferFailure(operationID string, status transfer.Sta
 }
 
 func (d *Drive) reportCopyFailure(err error, params CopyFromURLParams, operation, stage string) error {
+	fields := map[string]any{
+		"operationId":    params.OperationID,
+		"destinationId":  params.DestinationID,
+		"itemId":         params.ItemID,
+		"collectionId":   params.CollectionID,
+		"selectedCount":  len(params.SelectedIDs),
+		"sourceEndpoint": infra.SanitizeLogURL(params.URL),
+	}
+	if cause := copyFailureCause(err); cause != "" {
+		fields["cause"] = cause
+	}
 	return infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
 		Operation: operation,
 		Stage:     stage,
-		Fields: map[string]any{
-			"operationId":    params.OperationID,
-			"destinationId":  params.DestinationID,
-			"itemId":         params.ItemID,
-			"collectionId":   params.CollectionID,
-			"selectedCount":  len(params.SelectedIDs),
-			"sourceEndpoint": infra.SanitizeLogURL(params.URL),
-		},
+		Fields:    fields,
 	})
+}
+
+func copyFailureCause(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	for cause := errors.Unwrap(err); cause != nil; cause = errors.Unwrap(err) {
+		err = cause
+	}
+	if err.Error() == message {
+		return ""
+	}
+	return err.Error()
 }
 
 func (d *Drive) runCopyFromURL(ctx context.Context, params CopyFromURLParams, source DriveSource) (CopyFromURLResult, error) {
