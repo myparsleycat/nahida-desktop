@@ -92,6 +92,10 @@ interface ConflictNameDialogData {
     conflicts: string[];
 }
 
+interface UnsupportedExtensionsDialogData {
+    extensions: string[];
+}
+
 interface DialogStates {
     gamebananaDialog: BaseDialogState;
     emptyTrashDialog: BaseDialogState;
@@ -102,6 +106,7 @@ interface DialogStates {
     shareDialog: BaseDialogState & { data: { id: string } };
     searchCommand: BaseDialogState;
     conflictNameDialog: BaseDialogState & { data: ConflictNameDialogData };
+    unsupportedExtensionsDialog: BaseDialogState & { data: UnsupportedExtensionsDialogData };
     clearPrefixDialog: BaseDialogState & { data: ClearPrefixData };
     searchDialog: BaseDialogState;
     notiDialog: BaseDialogState;
@@ -146,6 +151,7 @@ export const dialogStore = createStore<DialogStates & DialogActions>((set, get) 
     shareDialog: { open: false, data: { id: "" } },
     searchCommand: { open: false, data: {} },
     conflictNameDialog: { open: false, data: { conflicts: [] } },
+    unsupportedExtensionsDialog: { open: false, data: { extensions: [] } },
     clearPrefixDialog: {
         open: false,
         data: { id: null, name: "", inProgress: false },

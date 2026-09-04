@@ -235,6 +235,12 @@
           "action_skip": "跳过",
           "action_suffix": "重命名"
         },
+        "unsupported_extensions": {
+          "title": "无法上传的文件过多。",
+          "description": "以下扩展名当前无法上传。你可以排除这些文件后继续，或取消上传。",
+          "none": "无扩展名",
+          "action_proceed": "排除后继续"
+        },
         "delete_items": {
           "title": "删除项目",
           "description": "请求受理后会立即从列表中消失，清理将在后台继续进行。此操作无法撤销。",

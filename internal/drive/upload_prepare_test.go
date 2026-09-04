@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -178,6 +179,33 @@ func TestPrepareUploadAllowsAdditionalExtensionAndAllFiles(t *testing.T) {
 	}
 	if len(all.Files) != 1 {
 		t.Fatalf("allow-all files = %#v", all.Files)
+	}
+}
+
+func TestCollectUploadPathsReportsDeniedExtensions(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "My Mod")
+	writeUploadFile(t, filepath.Join(root, "Character", "mod.ini"), "ini")
+	writeUploadFile(t, filepath.Join(root, "Character", "ignored.exe"), "binary")
+	writeUploadFile(t, filepath.Join(root, "Character", "notes.zip"), "zip")
+	writeUploadFile(t, filepath.Join(root, "Character", "README"), "readme")
+	writeUploadFile(t, filepath.Join(root, "Character", "desktop.ini"), "metadata")
+	if err := os.WriteFile(filepath.Join(root, "Character", "huge.png"), make([]byte, 100*1024*1024), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	collected, err := collectUploadPaths([]string{root}, testUploadRules(), nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(collected.Files) != 1 || collected.Files[0].Name != "mod.ini" {
+		t.Fatalf("files = %#v", collected.Files)
+	}
+	if collected.SkippedCount != 3 {
+		t.Fatalf("skippedCount = %d, want 3", collected.SkippedCount)
+	}
+	want := []string{"", ".exe", ".zip"}
+	if !slices.Equal(collected.SkippedExtensions, want) {
+		t.Fatalf("skippedExtensions = %#v, want %#v", collected.SkippedExtensions, want)
 	}
 }
 

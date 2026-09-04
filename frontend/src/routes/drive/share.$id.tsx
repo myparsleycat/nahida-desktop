@@ -13,6 +13,7 @@ import {
   NewDirectoryDialog,
   // PubLinkDialog,
   RenameDialog,
+  UnsupportedExtensionsDialog,
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
 import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
@@ -296,6 +297,7 @@ function RouteComponent() {
         <RenameDialog />
         <DeleteItemsDialog />
         <ConflictNameDialog />
+        <UnsupportedExtensionsDialog />
         <NewDirectoryDialog contents={rawContents} />
         {/* <PubLinkDialog /> */}
       </>

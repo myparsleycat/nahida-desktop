@@ -510,3 +510,56 @@ export function ConflictNameDialog() {
     </AlertDialog>
   );
 }
+
+export function UnsupportedExtensionsDialog() {
+  const { t } = useTranslation();
+  const { unsupportedExtensionsDialog, setOpen, resolveDialog } = useDialogStore();
+  const extensions: string[] = unsupportedExtensionsDialog.data?.extensions ?? [];
+  const labels = extensions.map((extension) =>
+    extension === "" ? t("page.drive.dialog.unsupported_extensions.none") : extension,
+  );
+
+  return (
+    <AlertDialog
+      open={unsupportedExtensionsDialog.open}
+      onOpenChange={(open) => {
+        setOpen("unsupportedExtensionsDialog", open);
+        if (!open) {
+          resolveDialog("unsupportedExtensionsDialog", "cancel");
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("page.drive.dialog.unsupported_extensions.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("page.drive.dialog.unsupported_extensions.description")}
+          </AlertDialogDescription>
+          {labels.length > 0 && (
+            <p className="mt-2 w-full text-left text-sm break-all text-muted-foreground">
+              {labels.join(", ")}
+            </p>
+          )}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setOpen("unsupportedExtensionsDialog", false);
+              resolveDialog("unsupportedExtensionsDialog", "cancel");
+            }}
+          >
+            {t("g.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setOpen("unsupportedExtensionsDialog", false);
+              resolveDialog("unsupportedExtensionsDialog", "proceed");
+            }}
+          >
+            {t("page.drive.dialog.unsupported_extensions.action_proceed")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
