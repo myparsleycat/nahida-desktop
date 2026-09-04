@@ -1642,6 +1642,32 @@
       },
       "mod": {
         "title": "MOD",
+        "compression": {
+          "title": "MOD圧縮",
+          "method": "圧縮方式",
+          "methods": {
+            "zstd": { "description": "無効なMODの大きなファイルを.zstに圧縮します。" },
+            "xpress4k": {
+              "description": "Windows XPRESS4KですべてのMODファイルを透過的に圧縮します。"
+            }
+          },
+          "threshold": "圧縮サイズのしきい値",
+          "thresholdDescription": "このサイズ以上のファイルだけをZstd圧縮します。範囲: 1～64 MiB。",
+          "toggle": "MOD圧縮を有効化",
+          "status": {
+            "idle": "待機中",
+            "checking": "ファイルを確認中",
+            "compressing": "圧縮中",
+            "decompressing": "復元中",
+            "blocked": "外部圧縮を検出",
+            "error": "一部のファイルで失敗"
+          },
+          "files": "{{processed}} / {{total}} ファイル",
+          "external": "CompactGUIなどの外部ツールで圧縮されたファイルが{{count}}個見つかりました。外部ツールで解凍すると自動的に利用可能になります。",
+          "error": "{{count}}個のファイルを処理できませんでした。スイッチを再度操作すると残りを再試行できます。",
+          "saveFailed": "圧縮設定を保存できませんでした。",
+          "toggleFailed": "圧縮状態を変更できませんでした。"
+        },
         "mod_management": {
           "title": "MOD管理",
           "archiveExtractPathMode": "解凍パス方式",
@@ -1882,6 +1908,13 @@
         "converting": "テクスチャフォーマット変換中",
         "resizing_and_converting": "テクスチャリサイズおよび変換中",
         "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
+      },
+      "modCompression": {
+        "checking": "MOD圧縮を確認中",
+        "compressing": "MODを圧縮中",
+        "decompressing": "MODを復元中",
+        "blocked": "外部MOD圧縮",
+        "error": "MOD圧縮エラー"
       },
       "modFix": {
         "label": "修正が必要",

@@ -8,6 +8,7 @@ import { TitlebarActivityBadges } from "@renderer/components/titlebar/titlebar-a
 import { TitlebarWindowControls } from "@renderer/components/titlebar/titlebar-window-controls";
 import { use4001FixerTitlebarActivity } from "@renderer/components/titlebar/use-4001-fixer-titlebar-activity";
 import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-mod-bisect-titlebar-activity";
+import { useModCompressionTitlebarActivity } from "@renderer/components/titlebar/use-mod-compression-titlebar-activity";
 import { useTextureResizerTitlebarActivity } from "@renderer/components/titlebar/use-texture-resizer-titlebar-activity";
 import { useTransferTitlebarActivity } from "@renderer/components/titlebar/use-transfer-titlebar-activity";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
@@ -67,6 +68,7 @@ function RootComponent() {
   useTransferTitlebarActivity();
   use4001FixerTitlebarActivity();
   useModBisectTitlebarActivity();
+  useModCompressionTitlebarActivity();
   useTextureResizerTitlebarActivity();
   useModFixInspectionTitlebarActivity();
 

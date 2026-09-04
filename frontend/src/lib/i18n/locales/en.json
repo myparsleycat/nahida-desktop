@@ -1674,6 +1674,32 @@
       },
       "mod": {
         "title": "Mod",
+        "compression": {
+          "title": "Mod compression",
+          "method": "Compression method",
+          "methods": {
+            "zstd": { "description": "Compresses large files in disabled mods into .zst files." },
+            "xpress4k": {
+              "description": "Transparently compresses every mod file with Windows XPRESS4K."
+            }
+          },
+          "threshold": "Compression size threshold",
+          "thresholdDescription": "Only files at least this large are considered for Zstd compression. Range: 1–64 MiB.",
+          "toggle": "Enable mod compression",
+          "status": {
+            "idle": "Idle",
+            "checking": "Checking files",
+            "compressing": "Compressing",
+            "decompressing": "Restoring",
+            "blocked": "External compression detected",
+            "error": "Some files failed"
+          },
+          "files": "{{processed}} / {{total}} files",
+          "external": "{{count}} files compressed by an external tool such as CompactGUI were detected. Decompress them in that tool to automatically unblock this feature.",
+          "error": "{{count}} files could not be processed. Toggle the switch again to retry the remaining work.",
+          "saveFailed": "Failed to save compression settings.",
+          "toggleFailed": "Failed to change compression state."
+        },
         "mod_management": {
           "title": "Mod Management",
           "archiveExtractPathMode": "Archive extraction path",
@@ -1914,6 +1940,13 @@
         "converting": "Converting texture format",
         "resizing_and_converting": "Resizing & converting texture",
         "upscaling_and_converting": "Upscaling & converting texture"
+      },
+      "modCompression": {
+        "checking": "Checking mod compression",
+        "compressing": "Compressing mods",
+        "decompressing": "Restoring mods",
+        "blocked": "External mod compression",
+        "error": "Mod compression error"
       },
       "modFix": {
         "label": "Fix Needed",

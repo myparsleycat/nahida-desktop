@@ -212,6 +212,9 @@ func buildSpecs() map[string]spec {
 		KeyModDisabledPrefixStyle:             enumSpec(definitionsByKey[KeyModDisabledPrefixStyle], defaultDisabledPrefix, disabledPrefixStyles),
 		KeyModReturnToGamebananaAfterDownload: boolSpec(definitionsByKey[KeyModReturnToGamebananaAfterDownload], false),
 		KeyModAutoInspectFix:                  boolSpec(definitionsByKey[KeyModAutoInspectFix], true),
+		KeyModCompressionMethod:               enumSpec(definitionsByKey[KeyModCompressionMethod], "xpress4k", modCompressionMethods),
+		KeyModCompressionThresholdMib:         clampedIntSpec(definitionsByKey[KeyModCompressionThresholdMib], 1, 1, 64),
+		KeyModCompressionEnabled:              boolSpec(definitionsByKey[KeyModCompressionEnabled], false),
 
 		KeyToolsTouchProfileLlmProtocol: {
 			def: definitionsByKey[KeyToolsTouchProfileLlmProtocol],

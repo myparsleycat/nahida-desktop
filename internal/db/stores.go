@@ -58,6 +58,18 @@ func (s SettingsStore) Upsert(ctx context.Context, key string, value *string) er
                  ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(value))
 }
 
+func (s SettingsStore) UpsertMany(ctx context.Context, values map[string]*string) error {
+	return s.c.withImmediate(ctx, func(q queryExec) error {
+		for key, value := range values {
+			if _, err := q.ExecContext(ctx, `INSERT INTO "setting" ("key", "value") VALUES (?, ?)
+                 ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(value)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (s SettingsStore) UpdateValue(ctx context.Context, key string, value *string) error {
 	return s.c.exec(ctx, `UPDATE "setting" SET "value" = ? WHERE "key" = ?`, argString(value), key)
 }

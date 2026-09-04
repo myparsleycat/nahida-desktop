@@ -1,3 +1,4 @@
+import type { CompressionState } from "@bindings/mod";
 import type { FixInspectionResult } from "@bindings/tools";
 import type { TitlebarActivity } from "@renderer/store/titlebar-activity";
 import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
@@ -9,7 +10,13 @@ import type {
     TransferWithoutData,
 } from "@shared/types";
 import { formatSize } from "@shared/utils";
-import { ArrowUpDownIcon, GitCompareIcon, ScalingIcon, WrenchIcon } from "lucide-react";
+import {
+    ArchiveIcon,
+    ArrowUpDownIcon,
+    GitCompareIcon,
+    ScalingIcon,
+    WrenchIcon,
+} from "lucide-react";
 
 type Translate = {
     (key: string): string;
@@ -162,6 +169,42 @@ export function buildTextureResizerTitlebarActivity(
         detail: detail || undefined,
         order: 30,
         href: "/tools",
+    };
+}
+
+export function buildModCompressionTitlebarActivity(
+    state: CompressionState | null,
+    t: Translate,
+): TitlebarActivity | null {
+    if (!state || state.status === "idle") return null;
+
+    const progress =
+        state.totalBytes > 0
+            ? (state.processedBytes / state.totalBytes) * 100
+            : state.totalFiles > 0
+              ? (state.processedFiles / state.totalFiles) * 100
+              : undefined;
+    const labelKey =
+        state.status === "blocked"
+            ? "titlebar.activity.modCompression.blocked"
+            : state.status === "error"
+              ? "titlebar.activity.modCompression.error"
+              : state.status === "decompressing"
+                ? "titlebar.activity.modCompression.decompressing"
+                : state.status === "compressing"
+                  ? "titlebar.activity.modCompression.compressing"
+                  : "titlebar.activity.modCompression.checking";
+
+    return {
+        id: "mod:compression",
+        label: t(labelKey),
+        status:
+            state.status === "blocked" ? "warning" : state.status === "error" ? "error" : "running",
+        icon: ArchiveIcon,
+        detail: state.currentFileName || undefined,
+        progress: progress === undefined ? undefined : Math.min(100, progress),
+        order: 25,
+        href: "/setting/mod",
     };
 }
 

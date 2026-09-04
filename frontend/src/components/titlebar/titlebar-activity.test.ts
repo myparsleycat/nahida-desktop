@@ -1,4 +1,6 @@
+import type { CompressionState } from "@bindings/mod";
 import {
+    buildModCompressionTitlebarActivity,
     buildModFixTitlebarActivity,
     buildTransferTitlebarActivity,
 } from "@renderer/components/titlebar/titlebar-activity";
@@ -100,6 +102,55 @@ describe("buildTransferTitlebarActivity", () => {
             t,
         );
         expect(activity).toBeNull();
+    });
+});
+
+describe("buildModCompressionTitlebarActivity", () => {
+    const state = (partial: Partial<CompressionState>): CompressionState => ({
+        enabled: false,
+        method: "xpress4k",
+        thresholdMiB: 1,
+        status: "idle",
+        processedFiles: 0,
+        totalFiles: 0,
+        processedBytes: 0,
+        totalBytes: 0,
+        failedFiles: 0,
+        externalFiles: 0,
+        canToggle: true,
+        canConfigure: true,
+        ...partial,
+    });
+
+    it("removes the badge while idle", () => {
+        expect(buildModCompressionTitlebarActivity(state({}), t)).toBeNull();
+    });
+
+    it("shows byte progress and current file while compressing", () => {
+        const activity = buildModCompressionTitlebarActivity(
+            state({
+                status: "compressing",
+                processedBytes: 25,
+                totalBytes: 100,
+                currentFileName: "mod.bin",
+            }),
+            t,
+        );
+        expect(activity).toMatchObject({
+            id: "mod:compression",
+            label: "titlebar.activity.modCompression.compressing",
+            status: "running",
+            detail: "mod.bin",
+            progress: 25,
+            href: "/setting/mod",
+        });
+    });
+
+    it("keeps blocked state visible as a warning", () => {
+        expect(buildModCompressionTitlebarActivity(state({ status: "blocked" }), t)).toMatchObject({
+            status: "warning",
+            label: "titlebar.activity.modCompression.blocked",
+        });
     });
 });
 

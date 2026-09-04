@@ -37,6 +37,9 @@ export interface AppSettings {
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
     "mod.returnToGamebananaAfterDownload": boolean;
     "mod.autoInspectFix": boolean;
+    "mod.compressionMethod": "zstd" | "xpress4k";
+    "mod.compressionThresholdMib": number;
+    "mod.compressionEnabled": boolean;
 
     "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
     "tools.touchProfileLlmEndpoint": string;
@@ -212,6 +215,21 @@ export const APP_SETTINGS = {
         publicKey: "mod.autoInspectFix",
         scope: "mod",
         storageKey: "mod_auto_inspect_fix",
+    },
+    "mod.compressionMethod": {
+        publicKey: "mod.compressionMethod",
+        scope: "mod",
+        storageKey: "mod_compression_method",
+    },
+    "mod.compressionThresholdMib": {
+        publicKey: "mod.compressionThresholdMib",
+        scope: "mod",
+        storageKey: "mod_compression_threshold_mib",
+    },
+    "mod.compressionEnabled": {
+        publicKey: "mod.compressionEnabled",
+        scope: "mod",
+        storageKey: "mod_compression_enabled",
     },
 
     "tools.touchProfileLlmProtocol": {
