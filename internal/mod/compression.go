@@ -23,6 +23,7 @@ const (
 	compressionEvent         = "mod:compressionProgress"
 	compressionManifestName  = ".nahida-compression.json"
 	compressionTempMarker    = ".nahida-compression-tmp"
+	compressionProgressEvery = 100 * time.Millisecond
 	compressionWatchDebounce = 900 * time.Millisecond
 	compressionSelfChangeTTL = 2 * time.Second
 )
@@ -82,6 +83,7 @@ type compressionCoordinator struct {
 	selfChanges          map[string]time.Time
 	selfChangeTimer      *time.Timer
 	selfChangeGeneration uint64
+	lastProgressEmit     time.Time
 	stopped              atomic.Bool
 }
 
@@ -100,6 +102,14 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 		return nil
 	}
 	if err := m.compression.loadState(ctx); err != nil {
+		m.compression.logError(err, "load-state", "", "")
+		m.compression.mu.Lock()
+		m.compression.state.Status = "error"
+		m.compression.state.Error = err.Error()
+		m.compression.state.TargetEnabled = nil
+		m.compression.deriveCapabilitiesLocked()
+		m.compression.mu.Unlock()
+		m.compression.publish()
 		return err
 	}
 	m.compression.stopped.Store(false)
@@ -880,6 +890,7 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	if !compressionApplies {
 		transition, err := c.loadTransition(ctx)
 		if err != nil {
+			c.logError(err, "load-transition-before-enable", state.Method, folder)
 			return err
 		}
 		compressionApplies = transition != nil && transition.Method == "zstd" && transition.TargetEnabled
@@ -997,8 +1008,15 @@ func (c *compressionCoordinator) progress(path string, size int64, failed bool) 
 	if failed {
 		c.state.FailedFiles++
 	}
+	now := time.Now()
+	publish := now.Sub(c.lastProgressEmit) >= compressionProgressEvery
+	if publish {
+		c.lastProgressEmit = now
+	}
 	c.mu.Unlock()
-	c.publish()
+	if publish {
+		c.publish()
+	}
 }
 
 func (c *compressionCoordinator) markSelfChanges(paths ...string) {
@@ -1079,6 +1097,7 @@ func (c *compressionCoordinator) resetProgress(status string, target bool, metho
 	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
 	c.state.FailedFiles, c.state.ExternalFiles = 0, 0
 	c.state.CurrentFileName, c.state.Error = "", ""
+	c.lastProgressEmit = time.Now()
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()

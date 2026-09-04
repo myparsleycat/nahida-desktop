@@ -127,6 +127,10 @@ describe("buildModCompressionTitlebarActivity", () => {
         expect(buildModCompressionTitlebarActivity(state({}), t)).toBeNull();
     });
 
+    it("removes the badge when compression state is unavailable", () => {
+        expect(buildModCompressionTitlebarActivity(null, t)).toBeNull();
+    });
+
     it("shows byte progress and current file while compressing", () => {
         const activity = buildModCompressionTitlebarActivity(
             state({
@@ -152,6 +156,38 @@ describe("buildModCompressionTitlebarActivity", () => {
             status: "warning",
             label: "titlebar.activity.modCompression.blocked",
         });
+    });
+
+    it("falls back to file-count progress when total bytes is zero", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({
+                    status: "compressing",
+                    processedFiles: 3,
+                    totalFiles: 4,
+                    totalBytes: 0,
+                }),
+                t,
+            ),
+        ).toMatchObject({ progress: 75 });
+    });
+
+    it("caps progress at 100", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({ status: "compressing", processedBytes: 125, totalBytes: 100 }),
+                t,
+            ),
+        ).toMatchObject({ progress: 100 });
+    });
+
+    it.each([
+        ["error", "error", "titlebar.activity.modCompression.error"],
+        ["decompressing", "running", "titlebar.activity.modCompression.decompressing"],
+    ] as const)("maps %s to its titlebar status and label", (compressionStatus, status, label) => {
+        expect(
+            buildModCompressionTitlebarActivity(state({ status: compressionStatus }), t),
+        ).toMatchObject({ status, label });
     });
 });
 

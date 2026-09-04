@@ -507,7 +507,7 @@ func wofCompress(path string) error {
 }
 
 func wofDecompress(path string) error {
-	handle, err := openCompressionFile(path)
+	handle, err := openDecompressionFile(path)
 	if err != nil {
 		return err
 	}
@@ -559,11 +559,19 @@ func nativeFileAttributes(path string) (uint32, error) {
 }
 
 func openCompressionFile(path string) (windows.Handle, error) {
+	return openCompressionFileWithAccess(path, windows.GENERIC_READ|windows.GENERIC_WRITE)
+}
+
+func openDecompressionFile(path string) (windows.Handle, error) {
+	return openCompressionFileWithAccess(path, windows.GENERIC_READ)
+}
+
+func openCompressionFileWithAccess(path string, access uint32) (windows.Handle, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return windows.InvalidHandle, err
 	}
-	return windows.CreateFile(pathPtr, windows.GENERIC_READ|windows.GENERIC_WRITE,
+	return windows.CreateFile(pathPtr, access,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING,
 		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_SEQUENTIAL_SCAN, 0)
 }

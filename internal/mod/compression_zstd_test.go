@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -319,6 +320,42 @@ func TestZstdValidationHonorsCancellationAndCleansTemp(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(folder, "*"+compressionTempMarker+".verify-*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatalf("verification temps = %v, err=%v", matches, err)
+	}
+}
+
+func TestZstdRestoreRejectsArchiveOverMaximumAndCleansTemp(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "DISABLED Oversized")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(folder, "payload.bin")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("valid-zstd"), 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressZstdFile(context.Background(), folder, path, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := readZstdManifest(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Entries["payload.bin"].OriginalSize = maxZstdRestoreSize + 1
+	if err := writeZstdManifest(folder, manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	err = restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations)
+	if err == nil || !strings.Contains(err.Error(), "exceeds restore limit") {
+		t.Fatalf("restore error = %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary original unexpectedly remains: %v", err)
+	}
+	if _, err := os.Stat(path + compressionTempMarker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("restore temporary output remains: %v", err)
+	}
+	if _, err := os.Stat(path + ".zst"); err != nil {
+		t.Fatalf("valid archive was removed: %v", err)
 	}
 }
 

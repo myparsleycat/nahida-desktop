@@ -3,6 +3,7 @@ package mod
 import (
 	"bytes"
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
 )
 
@@ -17,6 +19,15 @@ type blockingCompressionSettings struct {
 	*setting.Setting
 	started chan struct{}
 	release chan struct{}
+}
+
+type failingCompressionSettings struct {
+	*setting.Setting
+	err error
+}
+
+func (s *failingCompressionSettings) GetCompressionMethod(context.Context) (string, error) {
+	return "", s.err
 }
 
 func (s *blockingCompressionSettings) SetCompressionConfig(ctx context.Context, method string, threshold int) error {
@@ -82,6 +93,97 @@ func TestCompressionTransitionCommitsOnlyAfterReconciliation(t *testing.T) {
 	state, err = m.GetCompressionState(ctx)
 	if err != nil || state.Enabled || state.Status != "idle" || !state.CanConfigure {
 		t.Fatalf("disabled state = %+v, err=%v", state, err)
+	}
+}
+
+func TestStartCompressionPublishesLoadFailure(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = settings.Close() })
+	wantErr := errors.New("load compression settings")
+	var published []CompressionState
+	m := NewWithOptions(Options{
+		Settings: &failingCompressionSettings{Setting: settings, err: wantErr},
+		EventEmit: func(name string, data ...any) {
+			if name == compressionEvent {
+				published = append(published, data[0].(CompressionState))
+			}
+		},
+	})
+
+	if err := m.StartCompression(ctx); !errors.Is(err, wantErr) {
+		t.Fatalf("StartCompression error = %v", err)
+	}
+	if len(published) != 1 {
+		t.Fatalf("published states = %d, want 1", len(published))
+	}
+	if got := published[0]; got.Status != "error" || got.Error != wantErr.Error() {
+		t.Fatalf("published failure state = %+v", got)
+	}
+}
+
+func TestCompressionProgressThrottlesEventsWithoutDroppingCounters(t *testing.T) {
+	var published []CompressionState
+	m := NewWithOptions(Options{EventEmit: func(name string, data ...any) {
+		if name == compressionEvent {
+			published = append(published, data[0].(CompressionState))
+		}
+	}})
+	c := m.compression
+	c.resetProgress("compressing", true, "zstd", 4)
+	c.progress("first.bin", 10, false)
+	c.progress("second.bin", 20, true)
+
+	if len(published) != 1 {
+		t.Fatalf("events inside throttle interval = %d, want initial state only", len(published))
+	}
+	if got := c.snapshot(); got.ProcessedFiles != 2 || got.ProcessedBytes != 30 || got.FailedFiles != 1 || got.CurrentFileName != "second.bin" {
+		t.Fatalf("internal progress = %+v", got)
+	}
+	c.mu.Lock()
+	c.lastProgressEmit = time.Now().Add(-compressionProgressEvery)
+	c.mu.Unlock()
+	c.progress("third.bin", 30, false)
+	if len(published) != 2 {
+		t.Fatalf("events after throttle interval = %d, want 2", len(published))
+	}
+	if got := published[1]; got.ProcessedFiles != 3 || got.ProcessedBytes != 60 || got.CurrentFileName != "third.bin" {
+		t.Fatalf("published progress = %+v", got)
+	}
+}
+
+func TestRestoreBeforeEnableLogsTransitionLoadFailure(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := settings.Client()
+	if err := settings.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	m := NewWithOptions(Options{Log: infra.NewLogWithOptions(infra.LogOptions{
+		Writer: &logs, DisableFile: true,
+	})})
+	m.UseClient(client)
+	folder := filepath.Join(t.TempDir(), "Mod")
+
+	err = m.compression.restoreBeforeEnable(ctx, folder)
+	if err == nil {
+		t.Fatal("restoreBeforeEnable unexpectedly succeeded")
+	}
+	output := logs.String()
+	for _, want := range []string{
+		"Mod:compression", "stage=load-transition-before-enable", `method=xpress4k`,
+		`path="`, filepath.Base(folder), "cleanup=pending", err.Error(),
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("log does not contain %q: %s", want, output)
+		}
 	}
 }
 

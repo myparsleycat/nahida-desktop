@@ -3,6 +3,7 @@
 package mod
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -330,6 +331,59 @@ func TestRestoreManagedWofDeletesMatchingBacking(t *testing.T) {
 	}
 	if !deleteCalled {
 		t.Fatal("managed WOF backing was not deleted")
+	}
+}
+
+func TestRestoreManagedWofRealXpressBackingWithReadOnlyAccess(t *testing.T) {
+	ctx := context.Background()
+	settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = settings.Close() })
+	root := t.TempDir()
+	path := filepath.Join(root, "payload.bin")
+	want := bytes.Repeat([]byte("xpress4k"), 512*1024)
+	if err := os.WriteFile(path, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := wofCompress(path); err != nil {
+		t.Skipf("WOF compression is unavailable on the test volume: %v", err)
+	}
+	t.Cleanup(func() { _ = wofDecompress(path) })
+	external, provider, algorithm, err := nativeWofState(path)
+	if err != nil || !external || provider != wofProviderFile || algorithm != fileProviderCompressionXpress4K {
+		t.Fatalf("WOF state = external:%v provider:%d algorithm:%d err:%v", external, provider, algorithm, err)
+	}
+	id, err := nativeFileIdentity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := saveWofLedger(ctx, settings.Client(), wofLedgerEntry{
+		FileID: id, Path: path, Provider: provider, Algorithm: algorithm, State: "compressed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handle, err := openDecompressionFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	if err := restoreManagedWOF(ctx, []string{root}, settings.Client(), func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	external, _, _, err = nativeWofState(path)
+	if err != nil || external {
+		t.Fatalf("WOF backing remains: external=%v err=%v", external, err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("restored data mismatch: size=%d err=%v", len(got), err)
+	}
+	ledger, err := settings.Client().AppState.GetValue(ctx, compressionLedgerPrefix+id)
+	if err != nil || ledger != nil {
+		t.Fatalf("restored ledger = %v, err=%v", ledger, err)
 	}
 }
 

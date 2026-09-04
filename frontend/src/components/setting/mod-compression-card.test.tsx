@@ -70,11 +70,37 @@ describe("ModCompressionCard", () => {
   it("shows a bounded threshold only for Zstd", () => {
     currentState = state({ method: "zstd", thresholdMiB: 4 });
     render(<ModCompressionCard />);
-    const input = screen.getByRole("spinbutton");
+    expect(
+      screen.getByRole("combobox", { name: "page.setting.mod.compression.method" }),
+    ).toBeTruthy();
+    const input = screen.getByRole("spinbutton", {
+      name: "page.setting.mod.compression.threshold",
+    });
     expect(input.getAttribute("min")).toBe("1");
     expect(input.getAttribute("max")).toBe("64");
     expect(input.getAttribute("step")).toBe("1");
     expect(input.getAttribute("value")).toBe("4");
+  });
+
+  it.each([
+    ["0", 1],
+    ["65", 64],
+  ])("clamps a blurred Zstd threshold of %s to %i", async (value, expected) => {
+    currentState = state({ method: "zstd", thresholdMiB: 4 });
+    render(<ModCompressionCard />);
+    const input = screen.getByRole("spinbutton", {
+      name: "page.setting.mod.compression.threshold",
+    });
+
+    fireEvent.change(input, { target: { value } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(Mod.SetCompressionConfig).toHaveBeenCalledWith({
+        method: "zstd",
+        thresholdMiB: expected,
+      });
+    });
   });
 
   it("locks controls and shows target state while a transition is running", () => {

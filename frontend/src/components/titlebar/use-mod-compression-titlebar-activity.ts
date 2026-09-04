@@ -18,4 +18,6 @@ export function useModCompressionTitlebarActivity() {
         }
         titlebarActivityStore.getState().removeActivity(ACTIVITY_ID);
     }, [state, t]);
+
+    useEffect(() => () => titlebarActivityStore.getState().removeActivity(ACTIVITY_ID), []);
 }

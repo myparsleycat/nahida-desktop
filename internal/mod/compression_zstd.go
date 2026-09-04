@@ -17,6 +17,8 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+const maxZstdRestoreSize int64 = 64 << 30
+
 type zstdManifest struct {
 	Version int                           `json:"version"`
 	Entries map[string]*zstdManifestEntry `json:"entries"`
@@ -475,6 +477,12 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (strin
 }
 
 func streamRestoreZstd(ctx context.Context, sourcePath, tempPath string, entry *zstdManifestEntry) error {
+	if entry == nil || entry.OriginalSize <= 0 {
+		return fmt.Errorf("invalid zstd original size for %s", sourcePath)
+	}
+	if entry.OriginalSize > maxZstdRestoreSize {
+		return fmt.Errorf("zstd original size exceeds restore limit for %s", sourcePath)
+	}
 	source, err := os.Open(sourcePath)
 	if err != nil {
 		return err
@@ -490,7 +498,8 @@ func streamRestoreZstd(ctx context.Context, sourcePath, tempPath string, entry *
 		return err
 	}
 	hasher := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(temp, hasher), &contextReader{ctx: ctx, reader: decoder})
+	decoded := io.LimitReader(&contextReader{ctx: ctx, reader: decoder}, maxZstdRestoreSize+1)
+	written, copyErr := io.Copy(io.MultiWriter(temp, hasher), decoded)
 	if copyErr != nil {
 		_ = temp.Close()
 		return copyErr

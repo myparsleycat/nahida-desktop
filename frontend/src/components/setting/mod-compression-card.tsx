@@ -113,7 +113,7 @@ export function ModCompressionCard() {
               if (method) void updateConfig(method, state.thresholdMiB);
             }}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-40" aria-label={t("page.setting.mod.compression.method")}>
               <SelectValue>{state.method === "zstd" ? "Zstd" : "XPRESS4K"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -126,15 +126,16 @@ export function ModCompressionCard() {
         {state.method === "zstd" && (
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <div className="text-sm font-medium">
+              <label className="text-sm font-medium" htmlFor="mod-compression-threshold">
                 {t("page.setting.mod.compression.threshold")}
-              </div>
+              </label>
               <p className="text-xs text-muted-foreground">
                 {t("page.setting.mod.compression.thresholdDescription")}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Input
+                id="mod-compression-threshold"
                 className="w-24"
                 type="number"
                 min={1}
