@@ -1,6 +1,7 @@
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { cn } from "@renderer/lib/utils";
 import { formatSize } from "@shared/utils";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, Loader2Icon } from "lucide-react";
 
 type TreeNode = {
@@ -15,18 +16,17 @@ type Props = {
   visibleNodes: TreeNode[];
   expanded: Set<string>;
   selected: Set<string>;
+  selectedAncestorIds: Set<string>;
   loadingIds: Set<string>;
-  descendantMap: Map<string, Set<string>>;
+  scrollElement: HTMLDivElement | null;
   onToggle: (id: string) => void;
   onExpand: (id: string) => void;
   onCollapse: (id: string) => void;
 };
 
-function getCheckState(id: string, selected: Set<string>, descendantMap: Map<string, Set<string>>) {
+function getCheckState(id: string, selected: Set<string>, selectedAncestorIds: Set<string>) {
   if (selected.has(id)) return true as const;
-  const desc = descendantMap.get(id);
-  if (!desc || desc.size === 0) return false as const;
-  for (const d of desc) if (selected.has(d)) return "indeterminate" as const;
+  if (selectedAncestorIds.has(id)) return "indeterminate" as const;
   return false as const;
 }
 
@@ -34,12 +34,24 @@ export function ImportFolderTree({
   visibleNodes,
   expanded,
   selected,
+  selectedAncestorIds,
   loadingIds,
-  descendantMap,
+  scrollElement,
   onToggle,
   onExpand,
   onCollapse,
 }: Props) {
+  const virtualizer = useVirtualizer({
+    count: visibleNodes.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 32,
+    overscan: 8,
+    getItemKey: (index) => visibleNodes[index]?.id ?? index,
+    initialRect: scrollElement
+      ? { width: scrollElement.clientWidth, height: scrollElement.clientHeight }
+      : undefined,
+  });
+
   if (visibleNodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
@@ -48,23 +60,29 @@ export function ImportFolderTree({
     );
   }
   return (
-    <div className="flex flex-col">
-      {visibleNodes.map((node) => {
+    <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+      {virtualizer.getVirtualItems().map((virtualRow) => {
+        const node = visibleNodes[virtualRow.index];
+        if (!node) return null;
         const isFolder = node.isDir;
         const isExpanded = expanded.has(node.id);
         const isLoading = loadingIds.has(node.id);
-        const checkState = isFolder ? getCheckState(node.id, selected, descendantMap) : false;
+        const checkState = isFolder ? getCheckState(node.id, selected, selectedAncestorIds) : false;
         const isChecked = checkState === true;
         const isIndeterminate = checkState === "indeterminate";
 
         return (
           <div
             key={node.id}
+            data-index={virtualRow.index}
             className={cn(
-              "flex items-center gap-2 px-2 py-1.5 hover:bg-accent/50",
+              "absolute top-0 left-0 flex w-full items-center gap-2 px-2 py-1.5 hover:bg-accent/50",
               isChecked && "bg-accent/30",
             )}
-            style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
+            style={{
+              paddingLeft: `${node.depth * 16 + 8}px`,
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
           >
             <button
               type="button"

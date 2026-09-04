@@ -39,6 +39,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ImportFolderTree, type TreeNode } from "./import-folder-tree";
+import {
+  collectSelectedAncestorIds,
+  pruneSubtreeSelection,
+  toggleSubtreeSelection,
+} from "./import-folder-tree-state";
 
 type WizardStep = 1 | 2 | 3;
 
@@ -122,6 +127,7 @@ function DriveImportDialog({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const [treeViewport, setTreeViewport] = useState<HTMLDivElement | null>(null);
   const [copyProgress, setCopyProgress] = useState<DriveCopyProgress | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -139,33 +145,11 @@ function DriveImportDialog({
     queryFn: async () => await Drive.GetItem(destinationId),
   });
 
-  const descendantMap = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    // build parent -> descendants via BFS from treeData
-    // For each node, collect all descendant folder ids (only folders)
-    const getDescendants = (nodeId: string, visited = new Set<string>()): Set<string> => {
-      if (visited.has(nodeId)) return new Set();
-      visited.add(nodeId);
-      const node = treeData.get(nodeId);
-      if (!node) return new Set();
-      const result = new Set<string>();
-      for (const childId of node.children) {
-        const child = treeData.get(childId);
-        if (!child) continue;
-        if (child.content.isDir) {
-          result.add(childId);
-          const sub = getDescendants(childId, visited);
-          for (const s of sub) result.add(s);
-        }
-      }
-      return result;
-    };
-    for (const [id, node] of treeData) {
-      if (!node.content.isDir) continue;
-      map.set(id, getDescendants(id));
-    }
-    return map;
-  }, [treeData]);
+  const getParentId = useCallback((id: string) => treeData.get(id)?.content.parentId, [treeData]);
+  const selectedAncestorIds = useMemo(
+    () => collectSelectedAncestorIds(selected, getParentId),
+    [getParentId, selected],
+  );
 
   const visibleNodes: TreeNode[] = useMemo(() => {
     if (!rootId) return [];
@@ -612,43 +596,13 @@ function DriveImportDialog({
     });
   }, []);
 
-  const getAncestors = useCallback(
-    (id: string) => {
-      const ancestors: string[] = [];
-      let cur = treeData.get(id);
-      while (cur && cur.content.parentId) {
-        const pid = cur.content.parentId;
-        ancestors.push(pid);
-        cur = treeData.get(pid);
-      }
-      return ancestors;
-    },
-    [treeData],
-  );
-
   const handleToggle = useCallback(
     (id: string) => {
       const node = treeData.get(id);
       if (!node || !node.content.isDir) return;
-      setSelected((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-          return next;
-        }
-        // if ancestor already selected, don't add (redundant)
-        const ancestors = getAncestors(id);
-        for (const anc of ancestors) {
-          if (next.has(anc)) return next;
-        }
-        // remove descendants
-        const desc = descendantMap.get(id);
-        if (desc) for (const d of desc) next.delete(d);
-        next.add(id);
-        return next;
-      });
+      setSelected((previous) => toggleSubtreeSelection(previous, id, getParentId));
     },
-    [treeData, descendantMap, getAncestors],
+    [getParentId, treeData],
   );
 
   const selectedCount = selected.size;
@@ -672,11 +626,7 @@ function DriveImportDialog({
       });
 
       // prune selectedIds: remove descendants where ancestor already selected (already pruned on toggle, but double-check)
-      const pruned = new Set(selected);
-      for (const id of [...selected]) {
-        const ancestors = getAncestors(id);
-        for (const anc of ancestors) if (selected.has(anc)) pruned.delete(id);
-      }
+      const pruned = pruneSubtreeSelection(selected, getParentId);
       const selectedIds = [...pruned];
       if (selectedIds.length === 0) throw new Error("NO_SELECTION");
 
@@ -983,7 +933,7 @@ function DriveImportDialog({
                 <span className="text-sm font-medium">폴더 선택</span>
                 <span className="text-xs text-muted-foreground">{selectedCount}개 선택됨</span>
               </div>
-              <ScrollArea className="flex-1">
+              <ScrollArea className="flex-1" viewportRef={setTreeViewport}>
                 <div className="p-2">
                   {resolving ? (
                     <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
@@ -995,8 +945,9 @@ function DriveImportDialog({
                       visibleNodes={visibleNodes}
                       expanded={expanded}
                       selected={selected}
+                      selectedAncestorIds={selectedAncestorIds}
                       loadingIds={loadingIds}
-                      descendantMap={descendantMap}
+                      scrollElement={treeViewport}
                       onToggle={handleToggle}
                       onExpand={handleExpand}
                       onCollapse={handleCollapse}
