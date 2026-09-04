@@ -593,17 +593,12 @@ func (c *compressionCoordinator) roots(ctx context.Context) ([]string, error) {
 	seen := map[string]struct{}{}
 	roots := make([]string, 0, len(importers))
 	for _, importer := range importers {
-		root, err := filepath.Abs(filepath.Join(importer.ImporterFolder, "Mods"))
+		root, err := resolveCompressionRoot(importer.ImporterFolder)
 		if err != nil {
 			continue
 		}
-		root = filepath.Clean(root)
 		key := strings.ToLower(root)
 		if _, ok := seen[key]; ok {
-			continue
-		}
-		info, err := os.Lstat(root)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
 		seen[key] = struct{}{}
@@ -611,6 +606,33 @@ func (c *compressionCoordinator) roots(ctx context.Context) ([]string, error) {
 	}
 	slices.Sort(roots)
 	return roots, nil
+}
+
+func resolveCompressionRoot(importerFolder string) (string, error) {
+	root, err := filepath.Abs(filepath.Join(importerFolder, "Mods"))
+	if err != nil {
+		return "", err
+	}
+	// XXMI commonly makes ImporterFolder\Mods a link to the user's configured
+	// mod library. Resolve that trusted boundary once; recursive walkers still
+	// reject reparse points found below the resulting root.
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	root, err = filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	root = filepath.Clean(root)
+	info, err := os.Stat(root)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("compression root is not a directory: %q", root)
+	}
+	return root, nil
 }
 
 func (c *compressionCoordinator) replaceWatcher(ctx context.Context) error {

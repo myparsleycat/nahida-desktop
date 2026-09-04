@@ -40,6 +40,50 @@ func TestCompressionRootsNormalizeDeduplicateAndSkipMissing(t *testing.T) {
 	}
 }
 
+func TestCompressionRootsResolveConfiguredSymlinkAndSkipNestedLinks(t *testing.T) {
+	base := t.TempDir()
+	importer := filepath.Join(base, "Importer")
+	target := filepath.Join(base, "Library", "Mods")
+	outside := filepath.Join(base, "Outside")
+	for _, path := range []string{importer, target, outside} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(target, "payload.bin"), []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "outside.bin"), []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(importer, "Mods")); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(target, "NestedLink")); err != nil {
+		t.Skipf("nested directory symlink unavailable: %v", err)
+	}
+
+	m := NewWithOptions(Options{XXMI: compressionImporterSource{
+		{Key: "Linked", ImporterFolder: importer},
+		{Key: "Direct", ImporterFolder: filepath.Dir(target)},
+	}})
+	roots, err := m.compression.roots(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 || !samePath(roots[0], target) {
+		t.Fatalf("roots = %v, want resolved target %s", roots, target)
+	}
+
+	files, err := walkCompressionFiles(roots, func(string, os.FileInfo) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || filepath.Base(files[0].path) != "payload.bin" {
+		t.Fatalf("files = %#v; nested symlink target must be excluded", files)
+	}
+}
+
 func TestDisabledModFoldersAndZstdThreshold(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Mods")
 	disabled := filepath.Join(root, "DISABLED Test")
