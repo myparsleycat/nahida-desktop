@@ -365,6 +365,113 @@ this = ResourceTexture0
 	}
 }
 
+func TestLoadModViewerBindsEFMIUnderscoreComponentDumpTextures(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/Components-0 t=beef001d.png", encodeColorPNG(16, 16))
+	result := loadViewerMod(t, dir, `[TextureOverride_Component0]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture0]
+filename = Textures/Components-0 t=beef001d.png
+[TextureOverride_Texture0]
+hash = beef000f
+this = Resource_Texture0
+`)
+	meshes := meshesNamed(result, "_Component0")
+	if len(meshes) < 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range meshes {
+		if !strings.Contains(texKey(mesh), "Components-0") {
+			t.Fatalf("texKey = %q", texKey(mesh))
+		}
+	}
+}
+
+func TestLoadModViewerBindsEFMIEntryPointComponentDumpTextures(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/Components-0 t=beef001d.png", encodeColorPNG(16, 16))
+	result := loadViewerMod(t, dir, `[TextureOverride_EntryPoint_Component0]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture0]
+filename = Textures/Components-0 t=beef001d.png
+[TextureOverride_Texture0]
+hash = beef000f
+this = Resource_Texture0
+`)
+	meshes := meshesNamed(result, "_EntryPoint_Component0")
+	if len(meshes) < 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range meshes {
+		if !strings.Contains(texKey(mesh), "Components-0") {
+			t.Fatalf("texKey = %q", texKey(mesh))
+		}
+	}
+}
+
+func TestLoadModViewerBindsDumpWhenAuthoredDiffuseHasNoFile(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/Components-4 t=beef001d.png", encodeColorPNG(16, 16))
+	result := loadViewerMod(t, dir, `[TextureOverride_Component4]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t18 = ResourceFaceDiffuseBlended
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceFaceDiffuseBlended]
+type = Texture2D
+format = R8G8B8A8_UNORM
+mode = uav
+[Resource_Texture0]
+filename = Textures/Components-4 t=beef001d.png
+`)
+	meshes := meshesNamed(result, "_Component4")
+	if len(meshes) < 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range meshes {
+		if !strings.Contains(texKey(mesh), "Components-4") {
+			t.Fatalf("texKey = %q", texKey(mesh))
+		}
+	}
+}
+
 func TestLoadModViewerBindsWWMIPsT0ResourcesWithoutDiffuseName(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "Textures/Components-3 t=beef001e.png", encodeColorPNG(32, 32))

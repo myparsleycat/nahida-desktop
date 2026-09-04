@@ -21,7 +21,7 @@ const (
 
 var (
 	wwmiDumpTexRE        = regexp.MustCompile(`(?i)(?:^|[/\\])Components-(\d+(?:-\d+)*)\s+t=`)
-	wwmiComponentIndexRE = regexp.MustCompile(`(?i)^Component(\d+)$`)
+	wwmiComponentIndexRE = regexp.MustCompile(`(?i)(?:^|_)Component(\d+)$`)
 	pngSignature         = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
 )
 
@@ -105,6 +105,10 @@ func wwmiComponentIndex(name string) string {
 	return match[1]
 }
 
+func meshHasBoundAuthoredDiffuse(mesh *modelViewerDirectMesh) bool {
+	return mesh != nil && mesh.textureAuthored && mesh.textureDefaultFile != ""
+}
+
 func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelViewerResource, modDir string) {
 	targets := make([]*modelViewerDirectMesh, 0)
 	for index := range meshes {
@@ -112,7 +116,7 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		if wwmiComponentIndex(mesh.component) == "" {
 			continue
 		}
-		if mesh.textureAuthored {
+		if meshHasBoundAuthoredDiffuse(mesh) {
 			continue
 		}
 		targets = append(targets, mesh)
@@ -141,7 +145,7 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		if index == "" {
 			continue
 		}
-		if mesh.textureAuthored {
+		if meshHasBoundAuthoredDiffuse(mesh) {
 			continue
 		}
 		hint := inspect(mesh.textureDefaultFile)
@@ -203,7 +207,7 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 
 	for _, mesh := range targets {
 		dumpPick := pickedByIndex[wwmiComponentIndex(mesh.component)]
-		if mesh.textureAuthored {
+		if meshHasBoundAuthoredDiffuse(mesh) {
 			continue
 		}
 		currentHint := inspect(mesh.textureDefaultFile)
