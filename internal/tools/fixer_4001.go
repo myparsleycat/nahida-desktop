@@ -261,7 +261,7 @@ func (t *Tools) locate4001VSDevCmd(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if stored != "" {
-		if regularFile(stored) {
+		if isLocalFilesystemPath(stored) && regularFile(stored) {
 			return stored, nil
 		}
 		return "", nil
@@ -653,8 +653,14 @@ func resolveVSDevCmd(raw string) string {
 	if path == "" {
 		return ""
 	}
+	if filepath.IsAbs(path) && !isLocalFilesystemPath(path) {
+		return ""
+	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
+		return ""
+	}
+	if !isLocalFilesystemPath(abs) {
 		return ""
 	}
 	info, err := os.Stat(abs)
@@ -676,6 +682,18 @@ func resolveVSDevCmd(raw string) string {
 		}
 	}
 	return ""
+}
+
+func isLocalFilesystemPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		return filepath.IsAbs(path)
+	}
+	// Drive-letter volumes only (e.g. "C:"). Reject UNC and \\?\ / \\.\ namespaces.
+	return len(volume) == 2 && volume[1] == ':'
 }
 
 func vsDevCmdCandidates(root string) []string {

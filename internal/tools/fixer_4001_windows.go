@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -15,7 +16,11 @@ import (
 )
 
 func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath string) error {
-	cmd := cmdScript(ctx, d3dBuildCommand(vcvarsPath, projectPath))
+	script, err := d3dBuildCommand(vcvarsPath, projectPath)
+	if err != nil {
+		return err
+	}
+	cmd := cmdScript(ctx, script)
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -25,8 +30,23 @@ func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath string) error 
 	return nil
 }
 
-func d3dBuildCommand(vcvarsPath, projectPath string) string {
-	return fmt.Sprintf(`"%s" && cd /d "%s" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`, vcvarsPath, projectPath)
+func d3dBuildCommand(vcvarsPath, projectPath string) (string, error) {
+	vcvars, err := cmdQuotedLocalPath(vcvarsPath)
+	if err != nil {
+		return "", err
+	}
+	project, err := cmdQuotedLocalPath(projectPath)
+	if err != nil {
+		return "", err
+	}
+	return vcvars + ` && cd /d ` + project + ` && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`, nil
+}
+
+func cmdQuotedLocalPath(path string) (string, error) {
+	if !isLocalFilesystemPath(path) || strings.ContainsAny(path, "\"%&|<>^!\r\n") {
+		return "", errors.New("invalid build path")
+	}
+	return `"` + path + `"`, nil
 }
 
 // cmdScript runs a cmd.exe script without Go's Windows argv quoting.

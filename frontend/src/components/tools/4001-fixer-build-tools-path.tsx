@@ -26,6 +26,8 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
       })
       .catch((loadError) => {
         console.error("tools:4001FixerGetBuildToolsPath failed", loadError);
+        if (cancelled) return;
+        setError(toErrorMessage(loadError));
       });
 
     return () => {
@@ -78,11 +80,15 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
 
   return (
     <div className="space-y-2 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow">
-      <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+      <label
+        htmlFor="4001-fixer-build-tools-path"
+        className="text-xs font-medium tracking-widest text-muted-foreground uppercase"
+      >
         {t("page.tools.4001_fixer.build_tools_path")}
       </label>
       <div className="flex items-center gap-2">
         <Input
+          id="4001-fixer-build-tools-path"
           className="min-w-0 flex-1 font-mono text-xs"
           value={draft}
           disabled={locked || disabled || busy}
