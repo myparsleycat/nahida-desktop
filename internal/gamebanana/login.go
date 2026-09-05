@@ -83,8 +83,7 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		return valid, verr
 	})
 	if err != nil {
-		g.warnLoginFailure("open-login", err)
-		call.err = classifyLoginError(err)
+		call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "open-login"})
 		return
 	}
 	rmc := cookieValue(cookie, "rmc")
@@ -97,8 +96,7 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		return
 	}
 	if err := g.saveCookie(ctx, merged); err != nil {
-		g.warnLoginFailure("persist-cookie", err)
-		call.err = classifyLoginError(err)
+		call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "persist-cookie"})
 		return
 	}
 	call.cookie = merged

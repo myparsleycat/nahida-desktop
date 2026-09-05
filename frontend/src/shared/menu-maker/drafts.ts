@@ -1,3 +1,5 @@
+import { Logger } from "@renderer/lib/logger";
+
 import type { MenuMakerSettings, MenuMakerSlot } from "./types";
 
 export const MENU_MAKER_DRAFT_LIMIT = 30;
@@ -47,7 +49,8 @@ export function loadDraftMetadata(): MenuMakerDraftMeta[] {
             localStorage.getItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`) ?? "[]",
         );
         return Array.isArray(value) ? value.filter(isDraftMeta) : [];
-    } catch {
+    } catch (error) {
+        Logger.capture("shared/menu-maker/drafts.ts", error);
         return [];
     }
 }
@@ -169,7 +172,8 @@ function parseSlotImages(value: Blob | string | null | undefined): Record<string
                 (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
         );
-    } catch {
+    } catch (error) {
+        Logger.capture("shared/menu-maker/drafts.ts", error);
         return {};
     }
 }

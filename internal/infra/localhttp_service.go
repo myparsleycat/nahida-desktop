@@ -113,10 +113,11 @@ func (s *LocalHTTP) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, payload, readErr := conn.Read(readCtx)
 		if readErr != nil {
+			s.reportWebSocketFailure(readCtx, readErr, "read")
 			return
 		}
 		if messageType != websocket.MessageBinary {
-			_ = conn.Write(readCtx, websocket.MessageText, []byte("invalid data"))
+			s.reportWebSocketFailure(readCtx, conn.Write(readCtx, websocket.MessageText, []byte("invalid data")), "write-validation-response")
 			continue
 		}
 		s.mu.Lock()
@@ -135,6 +136,7 @@ func (s *LocalHTTP) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := conn.Write(readCtx, websocket.MessageText, []byte(response)); err != nil {
+			s.reportWebSocketFailure(readCtx, err, "write-response")
 			return
 		}
 	}
@@ -171,4 +173,18 @@ func (s *LocalHTTP) Address() string {
 		return s.listener.Addr().String()
 	}
 	return s.opts.Address
+}
+
+func (s *LocalHTTP) reportWebSocketFailure(ctx context.Context, err error, stage string) {
+	if err == nil || ctx.Err() != nil {
+		return
+	}
+	status := websocket.CloseStatus(err)
+	if status == websocket.StatusNormalClosure || status == websocket.StatusGoingAway {
+		return
+	}
+	s.mu.Lock()
+	log := s.opts.Log
+	s.mu.Unlock()
+	_ = ReportError(log, err, "LocalHTTP", Diagnostic{Severity: DiagnosticWarn, Operation: "websocket-download", Stage: stage, Fields: map[string]any{"closeStatus": status}})
 }

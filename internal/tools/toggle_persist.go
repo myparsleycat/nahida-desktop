@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 var persistDeclarationRE = regexp.MustCompile(`(?i)^global\s+persist\s+\$(.+?)\s*=\s*(.+)$`)
@@ -103,7 +105,7 @@ func persistUpdatesFromState(state map[string]any) map[string]string {
 	return updates
 }
 
-func applyPersistUpdates(iniPath string, updates map[string]string) ([]string, error) {
+func applyPersistUpdates(iniPath string, updates map[string]string) (result []string, returnErr error) {
 	info, err := os.Stat(iniPath)
 	if err != nil {
 		return nil, err
@@ -151,7 +153,12 @@ func applyPersistUpdates(iniPath string, updates map[string]string) ([]string, e
 	if err := os.WriteFile(tempPath, []byte(strings.Join(lines, lineEnding)), info.Mode().Perm()); err != nil {
 		return nil, err
 	}
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() {
+		cleanupErr := os.Remove(tempPath)
+		if !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
+		}
+	}()
 	if err := replaceAtomic(tempPath, iniPath); err != nil {
 		return nil, err
 	}

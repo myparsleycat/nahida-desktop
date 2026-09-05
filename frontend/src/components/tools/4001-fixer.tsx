@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { Logger } from "@renderer/lib/logger";
 import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
 import { toErrorMessage } from "@shared/utils";
 import { Events } from "@wailsio/runtime";
@@ -178,7 +179,7 @@ export default function FourThousandOneFixer() {
         setBackupPath("");
       }
     } catch (error) {
-      console.error(error);
+      Logger.capture("components/tools/4001-fixer.tsx", error);
       setProgress(`Error: ${String(error)}`);
       setErrorMessage(toErrorMessage(error));
       setActiveTask(null);
@@ -206,7 +207,7 @@ export default function FourThousandOneFixer() {
         setActiveTask(null);
       }
     } catch (error) {
-      console.error(error);
+      Logger.capture("components/tools/4001-fixer.tsx", error);
       setProgress(`Error: ${String(error)}`);
       setErrorMessage(toErrorMessage(error));
       setActiveTask(null);
@@ -233,7 +234,7 @@ export default function FourThousandOneFixer() {
         setBackupPath("");
       }
     } catch (error) {
-      console.error(error);
+      Logger.capture("components/tools/4001-fixer.tsx", error);
       setProgress(`Error: ${String(error)}`);
       setErrorMessage(toErrorMessage(error));
       setActiveTask(null);

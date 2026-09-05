@@ -118,18 +118,19 @@ func walkDepth(root, path string) int {
 	return strings.Count(filepath.ToSlash(rel), "/") + 1
 }
 
-func findPreviewWalk(root string, maxDepth int) *previewCandidate {
-	return findPreviewWalkWithExtensions(root, maxDepth, mediaExtensions)
+func findPreviewWalk(root string, maxDepth int, reports ...func(error)) *previewCandidate {
+	return findPreviewWalkWithExtensions(root, maxDepth, mediaExtensions, reports...)
 }
 
-func findScannerPreviewWalk(root string, maxDepth int) *previewCandidate {
-	return findPreviewWalkWithExtensions(root, maxDepth, scannerMediaExtensions)
+func findScannerPreviewWalk(root string, maxDepth int, reports ...func(error)) *previewCandidate {
+	return findPreviewWalkWithExtensions(root, maxDepth, scannerMediaExtensions, reports...)
 }
 
-func findPreviewWalkWithExtensions(root string, maxDepth int, extensions map[string]bool) *previewCandidate {
+func findPreviewWalkWithExtensions(root string, maxDepth int, extensions map[string]bool, reports ...func(error)) *previewCandidate {
 	var buckets previewBuckets
 	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			reportScanFailure(err, reports)
 			return fs.SkipDir
 		}
 		if entry.IsDir() {
@@ -147,9 +148,10 @@ func findPreviewWalkWithExtensions(root string, maxDepth int, extensions map[str
 	return buckets.best()
 }
 
-func listChildFolders(root string) []string {
+func listChildFolders(root string, reports ...func(error)) []string {
 	entries, err := os.ReadDir(root)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return nil
 	}
 	folders := make([]string, 0, len(entries))
@@ -169,13 +171,14 @@ func findChildFolderPreview(
 	searchDepth int,
 	disabled bool,
 	extensions map[string]bool,
+	reports ...func(error),
 ) *previewCandidate {
 	var best *previewCandidate
 	for _, folder := range folders {
 		if isDisabledFolderName(filepath.Base(folder)) != disabled {
 			continue
 		}
-		candidate := findPreviewWalkWithExtensions(folder, searchDepth, extensions)
+		candidate := findPreviewWalkWithExtensions(folder, searchDepth, extensions, reports...)
 		if candidate == nil {
 			continue
 		}
@@ -189,26 +192,26 @@ func findChildFolderPreview(
 
 // findGroupPreview matches Electron rust find_group_preview: root files at
 // depth 1, then child folders at searchDepth (1 without fallback, 3 with it).
-func findGroupPreview(root string, searchDepth int) *string {
-	return findGroupPreviewWithExtensions(root, searchDepth, mediaExtensions)
+func findGroupPreview(root string, searchDepth int, reports ...func(error)) *string {
+	return findGroupPreviewWithExtensions(root, searchDepth, mediaExtensions, reports...)
 }
 
-func findScannerGroupPreview(root string, searchDepth int) *string {
-	return findGroupPreviewWithExtensions(root, searchDepth, scannerMediaExtensions)
+func findScannerGroupPreview(root string, searchDepth int, reports ...func(error)) *string {
+	return findGroupPreviewWithExtensions(root, searchDepth, scannerMediaExtensions, reports...)
 }
 
-func findGroupPreviewWithExtensions(root string, searchDepth int, extensions map[string]bool) *string {
-	if preview := findPreviewWalkWithExtensions(root, previewRootDepth, extensions); preview != nil {
+func findGroupPreviewWithExtensions(root string, searchDepth int, extensions map[string]bool, reports ...func(error)) *string {
+	if preview := findPreviewWalkWithExtensions(root, previewRootDepth, extensions, reports...); preview != nil {
 		return stringPointer(preview.path)
 	}
 	if searchDepth <= previewRootDepth {
 		return nil
 	}
-	folders := listChildFolders(root)
-	if candidate := findChildFolderPreview(folders, searchDepth, false, extensions); candidate != nil {
+	folders := listChildFolders(root, reports...)
+	if candidate := findChildFolderPreview(folders, searchDepth, false, extensions, reports...); candidate != nil {
 		return stringPointer(candidate.path)
 	}
-	if candidate := findChildFolderPreview(folders, searchDepth, true, extensions); candidate != nil {
+	if candidate := findChildFolderPreview(folders, searchDepth, true, extensions, reports...); candidate != nil {
 		return stringPointer(candidate.path)
 	}
 	return nil
@@ -216,10 +219,10 @@ func findGroupPreviewWithExtensions(root string, searchDepth int, extensions map
 
 // findPreview matches Electron preview.ts Boolean searchSubfolders, with rust
 // WalkDir caps: false stays in the root (depth 1); true uses depth 3 per child.
-func findPreview(root string, searchSubfolders bool) *string {
+func findPreview(root string, searchSubfolders bool, reports ...func(error)) *string {
 	depth := previewRootDepth
 	if searchSubfolders {
 		depth = previewSearchDepth
 	}
-	return findGroupPreview(root, depth)
+	return findGroupPreview(root, depth, reports...)
 }

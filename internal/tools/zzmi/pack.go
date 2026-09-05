@@ -19,6 +19,8 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -300,7 +302,7 @@ func uintMapping(value any) (map[uint32]uint32, error) {
 		}
 		to, err := intValue(item)
 		if err != nil || to < 0 || uint64(to) > math.MaxUint32 {
-			return nil, errors.New("invalid remapper index")
+			return nil, infra.WithCause(errors.New("invalid remapper index"), err)
 		}
 		result[uint32(from)] = uint32(to)
 	}

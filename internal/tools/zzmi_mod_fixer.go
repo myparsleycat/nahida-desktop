@@ -174,7 +174,8 @@ func (t *Tools) ZZMIFixerPrepare(ctx context.Context, targetPath string, forceRe
 		status.IncompatibilityReason = &reason
 	}
 	if t.githubRate != nil {
-		rate, _ := t.githubRate.GetRateState(ctx)
+		rate, rateErr := t.githubRate.GetRateState(ctx)
+		t.logError(rateErr, "zzmi-read-rate")
 		status.RateLimited = t.githubRate.IsRateLimited(rate)
 	}
 	sessions, err := t.zzmiListBackups(target)
@@ -322,7 +323,7 @@ func (t *Tools) ZZMIFixerRestore(ctx context.Context, input ZZMIFixerRestoreInpu
 		backupPath := filepath.Join(dir, "files", entry.BackupName)
 		backup, err := os.ReadFile(backupPath)
 		if err != nil || sha256Hex(backup) != entry.SHA256Before {
-			return result, errors.New("ZZMI backup checksum verification failed")
+			return result, infra.WithCause(errors.New("ZZMI backup checksum verification failed"), err)
 		}
 		if err := copyRegularFile(backupPath, entry.OriginalPath); err != nil {
 			return result, err
@@ -414,7 +415,7 @@ func (t *Tools) zzmiRequireTarget(ctx context.Context, targetPath string) (strin
 	target, err := filepath.EvalSymlinks(targetPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", "", contractError("Destination path does not exist")
+			return "", "", infra.WithCause(contractError("Destination path does not exist"), err)
 		}
 		return "", "", contractError("Path is outside the managed ZZMI mod folder")
 	}
@@ -431,7 +432,7 @@ func (t *Tools) zzmiRequireTarget(ctx context.Context, targetPath string) (strin
 		if sameOrChildPath(root, target) {
 			info, statErr := os.Stat(target)
 			if statErr != nil || !info.IsDir() {
-				return "", "", contractError("ZZMI fixer target must be a directory")
+				return "", "", infra.WithCause(contractError("ZZMI fixer target must be a directory"), statErr)
 			}
 			return target, root, nil
 		}
@@ -480,7 +481,7 @@ func (t *Tools) zzmiStorePack(data []byte, pack zzmiengine.RulePack) error {
 func loadZZMIPackVersion(dir, expectedDigest string) (*zzmiengine.RulePack, error) {
 	data, err := os.ReadFile(filepath.Join(dir, zzmiRulesFileName))
 	if err != nil || !strings.EqualFold(expectedDigest, sha256Hex(data)) {
-		return nil, errors.New("invalid cached ZZMI rule digest")
+		return nil, infra.WithCause(errors.New("invalid cached ZZMI rule digest"), err)
 	}
 	manifestData, err := os.ReadFile(filepath.Join(dir, zzmiRulesManifestName))
 	if err != nil {
@@ -496,7 +497,7 @@ func loadZZMIPackVersion(dir, expectedDigest string) (*zzmiengine.RulePack, erro
 	}
 	pack, err := zzmiengine.DecodePack(data)
 	if err != nil || pack.UpstreamTag != manifest.Tag || !strings.EqualFold(pack.CommitSHA, manifest.Commit) {
-		return nil, errors.New("cached ZZMI rule identity does not match its manifest")
+		return nil, infra.WithCause(errors.New("cached ZZMI rule identity does not match its manifest"), err)
 	}
 	return pack, nil
 }
@@ -644,7 +645,8 @@ func (t *Tools) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte
 	defer func() { _ = response.Body.Close() }()
 	header := response.Header.Clone()
 	if t.githubRate != nil {
-		_, _ = t.githubRate.CaptureResponse(ctx, header)
+		_, rateErr := t.githubRate.CaptureResponse(ctx, header)
+		t.logError(rateErr, "zzmi-save-rate")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
@@ -662,7 +664,7 @@ func (t *Tools) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte
 func validateZZMIZipballURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") || !strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/zipball/") {
-		return errors.New("unsafe ZZMI zipball URL")
+		return infra.WithCause(errors.New("unsafe ZZMI zipball URL"), err)
 	}
 	return nil
 }
@@ -684,7 +686,7 @@ func (t *Tools) zzmiBackupTargetDir(target string) (string, error) {
 }
 func (t *Tools) zzmiSessionDir(target, sessionID string) (string, error) {
 	if _, err := uuid.Parse(sessionID); err != nil {
-		return "", contractError("Invalid ZZMI backup session")
+		return "", infra.WithCause(contractError("Invalid ZZMI backup session"), err)
 	}
 	base, err := t.zzmiBackupTargetDir(target)
 	if err != nil {
@@ -707,10 +709,10 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 	keepSession := false
 	defer func() {
 		if !keepSession {
-			_ = os.RemoveAll(dir)
+			t.reportCleanup(os.RemoveAll(dir), "zzmiCommit")
 		}
 	}()
-	defer func() { _ = os.RemoveAll(staging) }()
+	defer func() { t.reportCleanup(os.RemoveAll(staging), "zzmiCommit") }()
 	for index, change := range changes {
 		if err := ctx.Err(); err != nil {
 			return session, err
@@ -736,7 +738,7 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 		}
 		backup, err := os.ReadFile(backupPath)
 		if err != nil || sha256Hex(backup) != sha256Hex(original) {
-			return session, errors.New("ZZMI backup verification failed")
+			return session, infra.WithCause(errors.New("ZZMI backup verification failed"), err)
 		}
 		entry := ZZMIBackupEntry{ID: entryID, OriginalPath: safe, RelativePath: relative, BackupName: backupName, Kind: change.Kind, Size: int64(len(original)), SHA256Before: sha256Hex(original), SHA256After: sha256Hex(change.Data)}
 		session.Entries = append(session.Entries, entry)
@@ -750,9 +752,9 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 		if err := ctx.Err(); err != nil {
 			if rollbackErr := rollbackZZMIEntries(dir, replaced); rollbackErr != nil {
 				session.Status = "partial"
-				_ = writeZZMISession(dir, session)
+				recordErr := writeZZMISession(dir, session)
 				keepSession = true
-				return session, errors.Join(err, rollbackErr)
+				return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
 			}
 			return session, err
 		}
@@ -761,9 +763,9 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 			rollbackErr := rollbackZZMIEntries(dir, replaced)
 			if rollbackErr != nil {
 				session.Status = "partial"
-				_ = writeZZMISession(dir, session)
+				recordErr := writeZZMISession(dir, session)
 				keepSession = true
-				return session, errors.Join(err, rollbackErr)
+				return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
 			}
 			return session, err
 		}
@@ -774,9 +776,9 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 		rollbackErr := rollbackZZMIEntries(dir, replaced)
 		if rollbackErr != nil {
 			session.Status = "partial"
-			_ = writeZZMISession(dir, session)
+			recordErr := writeZZMISession(dir, session)
 			keepSession = true
-			return session, errors.Join(err, rollbackErr)
+			return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
 		}
 		return session, err
 	}
@@ -898,7 +900,7 @@ func writeSyncFile(path string, data []byte) error {
 	closeErr := file.Close()
 	return errors.Join(writeErr, closeErr)
 }
-func writeAtomicBytes(path string, data []byte) error {
+func writeAtomicBytes(path string, data []byte) (returnErr error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -907,7 +909,12 @@ func writeAtomicBytes(path string, data []byte) error {
 		return err
 	}
 	name := temp.Name()
-	defer func() { _ = os.Remove(name) }()
+	defer func() {
+		cleanupErr := os.Remove(name)
+		if !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
+		}
+	}()
 	_, writeErr := temp.Write(data)
 	if writeErr == nil {
 		writeErr = temp.Sync()
@@ -932,7 +939,7 @@ func (t *Tools) zzmiReadSession(target, sessionID string) (ZZMIBackupSession, er
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return ZZMIBackupSession{}, contractError("ZZMI backup session not found")
+		return ZZMIBackupSession{}, infra.WithCause(contractError("ZZMI backup session not found"), err)
 	}
 	if err != nil {
 		return ZZMIBackupSession{}, err

@@ -56,7 +56,18 @@ type PathMetadata struct {
 	Birthtime   time.Time `json:"birthtime"`
 }
 
-type FS struct{}
+type FS struct {
+	diagnostic func(error, string, map[string]any)
+}
+
+//wails:ignore
+func (f *FS) UseDiagnostic(report func(error, string, map[string]any)) { f.diagnostic = report }
+
+func (f *FS) reportAccess(err error, path, stage string) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) && f.diagnostic != nil {
+		f.diagnostic(err, stage, map[string]any{"path": path})
+	}
+}
 
 func NewFS() *FS {
 	return &FS{}
@@ -191,19 +202,22 @@ func (f *FS) GetUniqueName(name string, existingNames []string) string {
 func (f *FS) IsPathWritable(pathStr string) bool {
 	info, err := os.Stat(pathStr)
 	if err != nil {
+		f.reportAccess(err, pathStr, "stat")
 		return false
 	}
 	if info.IsDir() {
 		tmp, err := os.CreateTemp(pathStr, ".nhd-w-*")
 		if err != nil {
+			f.reportAccess(err, pathStr, "probe-write")
 			return false
 		}
 		name := tmp.Name()
-		_ = tmp.Close()
-		_ = os.Remove(name)
+		f.reportAccess(tmp.Close(), name, "probe-close")
+		f.reportAccess(os.Remove(name), name, "probe-cleanup")
 		return true
 	}
 	if err := fileWritableError(pathStr); err != nil {
+		f.reportAccess(err, pathStr, "open-writable")
 		return false
 	}
 	return true

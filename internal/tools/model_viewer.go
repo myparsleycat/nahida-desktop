@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type ModelViewerDNFClause struct {
@@ -202,7 +204,7 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 			return
 		}
 		if err != nil {
-			t.log.Error(fmt.Sprintf("Model viewer load failed after %dms for %s: %s", time.Since(startedAt).Milliseconds(), modPath, err.Error()), "StaticGlb.loadForViewer")
+			err = infra.ReportError(t.log, err, "StaticGlb.loadForViewer", infra.Diagnostic{Operation: "load-model-viewer", Fields: map[string]any{"message": fmt.Sprintf("Model viewer load failed after %dms", time.Since(startedAt).Milliseconds()), "elapsedMs": time.Since(startedAt).Milliseconds(), "path": modPath}})
 			return
 		}
 		t.log.Info(fmt.Sprintf("Completed model viewer load in %dms (meshes=%d)", time.Since(startedAt).Milliseconds(), len(transport.Meshes)), "StaticGlb.loadForViewer")
@@ -216,7 +218,9 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		return ModelViewerTransport{}, absErr
 	}
 	discoveryStartedAt := time.Now()
-	iniPaths, discoverErr := discoverModelViewerActiveINIs(folder)
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(t.log, "Tools", "model-viewer-discovery")
+	iniPaths, discoverErr := discoverModelViewerActiveINIs(folder, diagnostics.Add)
 	if discoverErr != nil {
 		return ModelViewerTransport{}, discoverErr
 	}

@@ -58,14 +58,14 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}()
 
 	if err := platform.SetAppUserModelID("com.nahida"); err != nil && rt.log != nil {
-		rt.log.Error(err.Error(), "App:setAppUserModelID")
+		_ = infra.ReportError(rt.log, err, "App:setAppUserModelID", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:setAppUserModelID", Stage: "background"})
 	}
 	if executable, err := os.Executable(); err != nil {
 		if rt.log != nil {
-			rt.log.Error(err.Error(), "App:registerURLProtocol")
+			_ = infra.ReportError(rt.log, err, "App:registerURLProtocol", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:registerURLProtocol", Stage: "background"})
 		}
 	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil && rt.log != nil {
-		rt.log.Error(err.Error(), "App:registerURLProtocol")
+		_ = infra.ReportError(rt.log, err, "App:registerURLProtocol", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:registerURLProtocol", Stage: "background"})
 	}
 	autostartSync := func(enabled bool) error {
 		return syncAutostart(app.Autostart, enabled)
@@ -76,7 +76,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		err = autostartSync(enabled)
 	}
 	if err != nil && rt.log != nil {
-		rt.log.Error(err.Error(), "App:syncAutostart")
+		_ = infra.ReportError(rt.log, err, "App:syncAutostart", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncAutostart", Stage: "background"})
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)

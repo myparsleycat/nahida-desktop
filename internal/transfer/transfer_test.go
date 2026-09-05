@@ -468,6 +468,33 @@ func TestFinishRunSkipsReportedRunnerError(t *testing.T) {
 	}
 }
 
+func TestFinishRunReportsCleanupAfterPauseAndCancel(t *testing.T) {
+	for _, status := range []Status{StatusPaused, StatusCanceled} {
+		t.Run(string(status), func(t *testing.T) {
+			var captured error
+			service := NewWithOptions(Options{ReportFailure: func(err error, fields map[string]any) error {
+				captured = err
+				if fields["pid"] != "cleanup" {
+					t.Fatalf("missing transfer context: %#v", fields)
+				}
+				return err
+			}})
+			createTestTransfer(t, service, "cleanup", StatusPending, true)
+			if err := service.Update("cleanup", Updates{Status: &status}); err != nil {
+				t.Fatal(err)
+			}
+			cleanup := errors.New("rollback failed")
+			service.finishRun("cleanup", errors.Join(context.Canceled, cleanup))
+			if !errors.Is(captured, cleanup) {
+				t.Fatalf("lost cleanup: %v", captured)
+			}
+			if service.List()[0].Status != status {
+				t.Fatal("display status changed")
+			}
+		})
+	}
+}
+
 func TestPauseAndResumeUseFreshContext(t *testing.T) {
 	service := New()
 	createTestTransfer(t, service, "resume", StatusPending, true)

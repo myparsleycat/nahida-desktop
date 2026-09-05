@@ -1,4 +1,5 @@
 import { Auth } from "@bindings/auth";
+import { Logger } from "@renderer/lib/logger";
 import type { BackendStatus } from "@shared/backend";
 import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
@@ -91,7 +92,11 @@ export function useGlobalEvents(
                     setSession(session);
                     setHasToken(!!session || (await Auth.HasToken()));
                 } catch (error) {
-                    console.error("Failed to refresh session after backend recovery", error);
+                    Logger.capture(
+                        "hooks/use-global-events.ts",
+                        "Failed to refresh session after backend recovery",
+                        error,
+                    );
                 } finally {
                     if (isColdStartRestore) setPendingSessionRestore(false);
                 }

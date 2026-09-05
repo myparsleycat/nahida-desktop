@@ -130,6 +130,7 @@ func NewWithOptions(opts Options) *Mod {
 		}
 	}
 	m.shaders.getImporters = m.shaderImporters
+	m.downloader.UseLog(opts.Log)
 	m.shaders.getGames = m.shaderGames
 	m.shaders.logError = m.logShaderError
 	m.compression = newCompressionCoordinator(m)
@@ -404,7 +405,7 @@ func (m *Mod) AddGame(
 	}
 	if bootstrapInstall != nil {
 		if err := bootstrapInstall.Commit(); err != nil && m.log != nil {
-			m.log.Error(err.Error(), "Mod:commitNteBootstrap")
+			_ = infra.ReportError(m.log, err, "Mod:commitNteBootstrap", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:commitNteBootstrap", Stage: "background"})
 		}
 	}
 	return nil
@@ -503,7 +504,7 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 func (m *Mod) rollbackNteDiskChanges(rollbacks []func() error) {
 	for index := len(rollbacks) - 1; index >= 0; index-- {
 		if err := rollbacks[index](); err != nil && m != nil && m.log != nil {
-			m.log.Error(err.Error(), "Mod:rollbackNteDiskChanges")
+			_ = infra.ReportError(m.log, err, "Mod:rollbackNteDiskChanges", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:rollbackNteDiskChanges", Stage: "background"})
 		}
 	}
 }
@@ -544,7 +545,7 @@ func (m *Mod) SetNteLauncherPath(ctx context.Context, game, launcherPath string)
 	}
 	launcherPath, err = validFile(launcherPath)
 	if err != nil {
-		return errors.New("INVALID_LAUNCHER_PATH")
+		return infra.WithCause(errors.New("INVALID_LAUNCHER_PATH"), err)
 	}
 	row, err := client.GamePaths.GetByGame(ctx, game)
 	if err != nil {
@@ -570,7 +571,7 @@ func (m *Mod) StartNteLauncher(ctx context.Context, game string) error {
 	}
 	path, err := validFile(*row.NteLauncherPath)
 	if err != nil {
-		return errors.New("NTE_LAUNCHER_PATH_NOT_FOUND")
+		return infra.WithCause(errors.New("NTE_LAUNCHER_PATH_NOT_FOUND"), err)
 	}
 	return startDetached(path)
 }
@@ -580,6 +581,9 @@ func (m *Mod) GetCharacters(
 	game string,
 	searchModPreview *bool,
 ) ([]FolderGroup, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "GetCharacters")
+
 	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
@@ -598,9 +602,9 @@ func (m *Mod) GetCharacters(
 	if isNTEImporter(row.Importer) {
 		gameConfig := gameConfig(*row)
 		roots := nteRootsFor(gameConfig)
-		return nteListGroups(roots, roots.modRoot, search), nil
+		return nteListGroups(roots, roots.modRoot, search, diagnostics.Add), nil
 	}
-	groups := listGroups(row.ModFolderPath, search)
+	groups := listGroups(row.ModFolderPath, search, diagnostics.Add)
 	return m.decorateGroups(ctx, game, "", groups), nil
 }
 
@@ -609,6 +613,9 @@ func (m *Mod) GetSubGroups(
 	folderPath string,
 	searchModPreview *bool,
 ) ([]FolderGroup, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "GetSubGroups")
+
 	search, err := m.resolvePreviewSetting(ctx, searchModPreview)
 	if err != nil {
 		return nil, err
@@ -618,13 +625,16 @@ func (m *Mod) GetSubGroups(
 		return nil, err
 	}
 	if isNTEImporter(game.Importer) {
-		return nteListGroups(nteRootsFor(*game), folderPath, search), nil
+		return nteListGroups(nteRootsFor(*game), folderPath, search, diagnostics.Add), nil
 	}
-	groups := listGroups(folderPath, search)
+	groups := listGroups(folderPath, search, diagnostics.Add)
 	return m.decorateGroups(ctx, game.Game, gameRelativePath(game.ModFolderPath, folderPath), groups), nil
 }
 
 func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "GetMods")
+
 	game, err := m.ownedPath(ctx, groupPath)
 	if err != nil {
 		return FolderGroup{}, err
@@ -634,13 +644,16 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 		if settingErr != nil {
 			return FolderGroup{}, settingErr
 		}
-		return nteScanGroup(nteRootsFor(*game), groupPath, search), nil
+		return nteScanGroup(nteRootsFor(*game), groupPath, search, diagnostics.Add), nil
 	}
-	group := scanGroup(groupPath)
+	group := scanGroup(groupPath, diagnostics.Add)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
 }
 
 func (m *Mod) GetModsLight(ctx context.Context, groupPath string) (FolderGroup, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "GetModsLight")
+
 	game, err := m.ownedPath(ctx, groupPath)
 	if err != nil {
 		return FolderGroup{}, err
@@ -650,9 +663,9 @@ func (m *Mod) GetModsLight(ctx context.Context, groupPath string) (FolderGroup, 
 		if settingErr != nil {
 			return FolderGroup{}, settingErr
 		}
-		return nteScanGroupLight(nteRootsFor(*game), groupPath, search), nil
+		return nteScanGroupLight(nteRootsFor(*game), groupPath, search, diagnostics.Add), nil
 	}
-	group := scanGroupLight(groupPath)
+	group := scanGroupLight(groupPath, diagnostics.Add)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
 }
 
@@ -804,7 +817,7 @@ func validDirectory(input string) (string, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
-		return "", errors.New("INVALID_MOD_FOLDER_PATH")
+		return "", infra.WithCause(errors.New("INVALID_MOD_FOLDER_PATH"), err)
 	}
 	return filepath.Clean(path), nil
 }
@@ -836,7 +849,7 @@ func validFile(input string) (string, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("INVALID_FILE_PATH")
+		return "", infra.WithCause(errors.New("INVALID_FILE_PATH"), err)
 	}
 	return filepath.Clean(path), nil
 }

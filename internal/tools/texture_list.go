@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -290,7 +292,7 @@ func mergeTexturePatch(s TextureResizeSettings, p TextureResizeSettingsPatch) Te
 func resolveDDSFiles(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, contractError(fmt.Sprintf("Target path '%s' does not exist.", path))
+		return nil, infra.WithCause(contractError(fmt.Sprintf("Target path '%s' does not exist.", path)), err)
 	}
 	if err != nil {
 		return nil, err

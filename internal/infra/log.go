@@ -26,14 +26,16 @@ const (
 )
 
 var (
-	homeNeedlesOnce     sync.Once
-	homeNeedles         []string
-	bearerPattern       = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
-	urlUserInfoPattern  = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
-	jsonSecretPattern   = regexp.MustCompile(`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`)
-	authHeaderPattern   = regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`)
-	cookieHeaderPattern = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
-	plainSecretPattern  = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`)
+	homeNeedlesOnce      sync.Once
+	homeNeedles          []string
+	bearerPattern        = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
+	logURLPattern        = regexp.MustCompile(`https?://[^\s"<>]+`)
+	logJSONStringPattern = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
+	urlUserInfoPattern   = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
+	jsonSecretPattern    = regexp.MustCompile(`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`)
+	authHeaderPattern    = regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`)
+	cookieHeaderPattern  = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
+	plainSecretPattern   = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`)
 )
 
 var levelPriority = map[string]int{
@@ -96,7 +98,9 @@ func (l *Log) Configure(opts LogOptions) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	_ = l.closeFileLocked()
+	if err := l.closeFileLocked(); err != nil {
+		l.fileFailureLocked(err, "reconfigure-close")
+	}
 	l.fileErr = false
 	l.applyOptions(opts)
 }
@@ -137,7 +141,11 @@ func (l *Log) Close() error {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.closeFileLocked()
+	err := l.closeFileLocked()
+	if err != nil {
+		l.fileFailureLocked(err, "close")
+	}
+	return err
 }
 
 func (l *Log) closeFileLocked() error {
@@ -196,21 +204,44 @@ func (l *Log) Log(level string, msg any, where string) {
 	if l.dest != "" && !l.noFile && !l.fileErr {
 		if l.file == nil {
 			if err := l.openDestLocked(); err != nil {
-				l.fileErr = true
+				l.fileFailureLocked(err, "open")
 			}
 		}
 		if l.file != nil {
 			if err := l.rotateIfNeededLocked(int64(len(line))); err != nil {
-				_ = l.closeFileLocked()
-				l.fileErr = true
+				l.fileFailureLocked(errors.Join(err, l.closeFileLocked()), "rotate")
 			} else if l.file != nil {
-				_, _ = l.file.Write(line)
-				return
+				written, err := l.file.Write(line)
+				if err == nil && written == len(line) {
+					return
+				}
+				if err == nil {
+					err = io.ErrShortWrite
+				}
+				l.fileFailureLocked(errors.Join(err, l.closeFileLocked()), "write")
 			}
 		}
 	}
 	if l.writer != nil {
 		_, _ = l.writer.Write(line)
+	}
+}
+
+func (l *Log) fileFailureLocked(err error, stage string) {
+	if l.fileErr {
+		return
+	}
+	l.fileErr = true
+	if l.writer != nil {
+		record := map[string]any{"operation": "log-file", "stage": stage, "path": l.dest, "error": limitDiagnosticText(err.Error(), 4<<10)}
+		causes, truncated, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
+		if len(causes) > 1 {
+			record["causes"] = causes
+		}
+		if truncated {
+			record["causesTruncated"] = true
+		}
+		_, _ = l.writer.Write(encodeLogLine(l.now(), "error", record, "Log"))
 	}
 }
 
@@ -254,16 +285,13 @@ func rotateCompressedLog(path string, maxFiles int) error {
 	archive := rotatedLogPath(path, 1)
 	temp := archive + ".tmp"
 	if err := compressLogFile(path, temp); err != nil {
-		_ = os.Remove(temp)
-		return err
+		return WithCause(err, os.Remove(temp))
 	}
 	if err := os.Remove(archive); err != nil && !os.IsNotExist(err) {
-		_ = os.Remove(temp)
-		return err
+		return WithCause(err, os.Remove(temp))
 	}
 	if err := os.Rename(temp, archive); err != nil {
-		_ = os.Remove(temp)
-		return err
+		return WithCause(err, os.Remove(temp))
 	}
 	return os.Remove(path)
 }
@@ -377,12 +405,37 @@ func redactSecrets(value string) string {
 	if value == "" {
 		return ""
 	}
+	value = redactLogURLs(value)
 	value = bearerPattern.ReplaceAllString(value, "Bearer %REDACTED%")
 	value = urlUserInfoPattern.ReplaceAllString(value, `${1}%REDACTED%@`)
 	value = authHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
 	value = cookieHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
 	value = jsonSecretPattern.ReplaceAllString(value, `${1}"%REDACTED%"`)
 	return plainSecretPattern.ReplaceAllString(value, `${1}${2}%REDACTED%`)
+}
+
+// Structured logs must be decoded at the string boundary: a URL inside an
+// error may end just before an escaped quote, which is not part of the URL.
+func redactLogURLs(value string) string {
+	if !logURLPattern.MatchString(value) {
+		return value
+	}
+	if !json.Valid([]byte(value)) {
+		return logURLPattern.ReplaceAllStringFunc(value, SanitizeLogURL)
+	}
+	return logJSONStringPattern.ReplaceAllStringFunc(value, func(encoded string) string {
+		if !logURLPattern.MatchString(encoded) {
+			return encoded
+		}
+		var decoded string
+		if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
+			return encoded
+		}
+		redacted := logURLPattern.ReplaceAllStringFunc(decoded, SanitizeLogURL)
+		// A string is always JSON-marshalable; preserve all quote/backslash escapes.
+		raw, _ := json.Marshal(redacted)
+		return string(raw)
+	})
 }
 
 // SanitizeLogURL removes credentials, query parameters, and fragments from a

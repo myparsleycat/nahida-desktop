@@ -1,4 +1,5 @@
 import { Auth } from "@bindings/auth";
+import { Logger } from "@renderer/lib/logger";
 import { globalStore, useGlobalStore } from "@renderer/store/global";
 import type { Session } from "@shared/schemas/auth";
 import { useEffect } from "react";
@@ -15,7 +16,7 @@ export function useInitializeAuth() {
             try {
                 session = await Auth.GetSession();
             } catch (error) {
-                console.error("Failed to load session", error);
+                Logger.capture("hooks/use-auth.ts", "Failed to load session", error);
             }
 
             try {
@@ -26,14 +27,18 @@ export function useInitializeAuth() {
                 hasToken = nextHasToken;
                 backendStatus = nextBackendStatus as typeof backendStatus;
             } catch (error) {
-                console.error("Failed to load auth bootstrap state", error);
+                Logger.capture("hooks/use-auth.ts", "Failed to load auth bootstrap state", error);
             }
 
             if (!session && hasToken && backendStatus === "online") {
                 try {
                     session = await Auth.GetSession();
                 } catch (error) {
-                    console.error("Failed to restore session after backend became online", error);
+                    Logger.capture(
+                        "hooks/use-auth.ts",
+                        "Failed to restore session after backend became online",
+                        error,
+                    );
                 }
             }
 

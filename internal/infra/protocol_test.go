@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -201,5 +202,22 @@ func TestProtocolRejectsNonImageWebResponse(t *testing.T) {
 	service.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status = %d", recorder.Code)
+	}
+}
+
+func TestProtocolUnconfiguredWebImagePreservesUnavailableResponse(t *testing.T) {
+	var output bytes.Buffer
+	service := NewProtocol()
+	service.Configure(nil, NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true}))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/nahida/image-web?url=https://example.com/image.png", nil)
+	service.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable || strings.TrimSpace(recorder.Body.String()) != "http service unavailable" {
+		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	for _, want := range []string{"http service unavailable", "prepare-web-image", `"method":"GET"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("missing %q: %s", want, output.String())
+		}
 	}
 }

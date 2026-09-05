@@ -35,7 +35,7 @@ export class ModelViewerPositionLoader implements PositionVariantLoader {
         this.worker.onmessage = (event: MessageEvent) => {
             const message = event.data as
                 | { type: "decoded"; id: number; positions: ArrayBuffer }
-                | { type: "error"; id: number; message: string };
+                | { type: "error"; id: number; message: string; diagnostic?: unknown };
             const request = this.pending.get(message.id);
             if (!request) {
                 return;
@@ -45,7 +45,7 @@ export class ModelViewerPositionLoader implements PositionVariantLoader {
             if (message.type === "decoded") {
                 request.resolve(new Float32Array(message.positions));
             } else {
-                request.reject(new Error(message.message));
+                request.reject(new Error(message.message, { cause: message.diagnostic }));
             }
         };
         this.worker.onerror = (event) => {
@@ -53,7 +53,11 @@ export class ModelViewerPositionLoader implements PositionVariantLoader {
                 return;
             }
             this.disposed = true;
-            this.rejectAll(new Error(event.message || "Model viewer position worker failed"));
+            this.rejectAll(
+                new Error(event.message || "Model viewer position worker failed", {
+                    cause: event.error,
+                }),
+            );
             this.worker.terminate();
         };
     }

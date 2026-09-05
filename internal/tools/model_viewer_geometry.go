@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func detectModelViewerPositionFrame(data []byte, stride int) bool {
@@ -117,7 +119,7 @@ func findModelViewerElement(layout modelViewerFmtLayout, semantic string, index 
 func readModelViewerAttribute(bytes []byte, stride, vertexCount int, sourceIndices []uint32, element modelViewerFmtElement, width int) ([]float32, error) {
 	decoder, err := resolveModelViewerFormatDecoder(element.Format)
 	if err != nil || decoder.byteSize <= 0 {
-		return nil, fmt.Errorf("unsupported attribute format %s", element.Format)
+		return nil, infra.WithCause(fmt.Errorf("unsupported attribute format %s", element.Format), err)
 	}
 	endOffset := element.AlignedByteOffset + decoder.byteSize
 	if element.AlignedByteOffset < 0 || endOffset > stride {

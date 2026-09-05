@@ -24,6 +24,8 @@ type Diagnostic struct {
 	Operation string
 	Stage     string
 	Fields    map[string]any
+	// Causes are diagnostic-only: they never change the public error contract.
+	Causes []error
 }
 
 type diagnosticError struct {
@@ -57,19 +59,31 @@ func AnnotateError(err error, diagnostic Diagnostic) error {
 //
 //wails:ignore
 func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error {
-	if err == nil || IsCancellationError(err) || IsReportedError(err) {
+	if err == nil {
+		return nil
+	}
+	records, truncated, severity := collectDiagnosticCauses(err, diagnostic, false)
+	if len(records) == 0 {
 		return err
 	}
 	if log == nil {
 		return AnnotateError(err, diagnostic)
 	}
 	merged := mergeDiagnostics(err, diagnostic)
-	severity := merged.Severity
-	if severity == "" {
-		severity = ClassifyError(err)
+	if severity == "" || truncated {
+		severity = DiagnosticError
 	}
+	merged.Severity = severity
 	record := make(map[string]any, len(merged.Fields)+3)
+	for key, value := range records[0] {
+		record[key] = value
+	}
 	for key, value := range merged.Fields {
+		if key == "stack" || key == "stackTrace" {
+			if stack, ok := value.(string); ok {
+				value = limitDiagnosticText(stack, 16<<10)
+			}
+		}
 		record[key] = value
 	}
 	if merged.Operation != "" {
@@ -78,7 +92,23 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 	if merged.Stage != "" {
 		record["stage"] = merged.Stage
 	}
-	record["error"] = originalDiagnosticError(err).Error()
+	record["error"] = records[0]["error"]
+	if (merged.Stage != "" && records[0]["stage"] != merged.Stage) || (merged.Operation != "" && records[0]["operation"] != merged.Operation) {
+		// Preserve the inner context without repeating the same error text.
+		origin := make(map[string]any, len(records[0]))
+		for key, value := range records[0] {
+			if key != "error" {
+				origin[key] = value
+			}
+		}
+		origin["errorRef"] = "error"
+		record["causes"] = append([]map[string]any{origin}, records[1:]...)
+	} else if len(records) > 1 {
+		record["causes"] = records[1:]
+	}
+	if truncated {
+		record["causesTruncated"] = true
+	}
 	if severity == DiagnosticWarn {
 		log.Warn(record, where)
 	} else {
@@ -91,8 +121,9 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 //
 //wails:ignore
 func IsReportedError(err error) bool {
-	var marked interface{ DiagnosticReported() bool }
-	return errors.As(err, &marked) && marked.DiagnosticReported()
+	records, _, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
+	all, _, _ := collectDiagnosticCauses(err, Diagnostic{}, true)
+	return len(records) == 0 && len(all) > 0
 }
 
 // IsCancellationError identifies normal user or shutdown cancellation, which
@@ -103,7 +134,15 @@ func IsCancellationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) {
+	records, truncated, _ := collectDiagnosticCauses(err, Diagnostic{}, true)
+	return len(records) == 0 && !truncated
+}
+
+func isCancellationMessage(err error) bool {
+	if named, ok := err.(interface{ Name() string }); ok && named.Name() == "AbortError" {
+		return true
+	}
+	if err == context.Canceled { //nolint:errorlint // The bounded walker has already unwrapped this exact node.
 		return true
 	}
 	message := strings.ToUpper(strings.TrimSpace(err.Error()))
@@ -224,21 +263,19 @@ func mergeDiagnostics(err error, extra Diagnostic) Diagnostic {
 }
 
 func visitDiagnosticErrors(err error, visit func(*diagnosticError)) {
-	if err == nil {
-		return
-	}
-	// The exact wrapper matters here; errors.As would rediscover the same
-	// annotation while recursively walking its cause.
-	if annotated, ok := err.(*diagnosticError); ok { //nolint:errorlint
-		visit(annotated)
-	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, child := range joined.Unwrap() {
-			visitDiagnosticErrors(child, visit)
+	// Only merge the outer linear chain. Sibling metadata belongs to its cause.
+	for range 32 {
+		if err == nil {
+			return
 		}
-		return
+		if annotated, ok := err.(*diagnosticError); ok { //nolint:errorlint
+			if annotated.reported {
+				return
+			}
+			visit(annotated)
+		}
+		err = errors.Unwrap(err)
 	}
-	visitDiagnosticErrors(errors.Unwrap(err), visit)
 }
 
 func mergeDiagnostic(target *Diagnostic, source Diagnostic) {
@@ -260,7 +297,7 @@ func mergeDiagnostic(target *Diagnostic, source Diagnostic) {
 }
 
 func originalDiagnosticError(err error) error {
-	for {
+	for range 32 {
 		// Only peel our outer marker. Peeling arbitrary wrapped causes would
 		// change the JSON shape Wails exposes to the renderer.
 		annotated, ok := err.(*diagnosticError) //nolint:errorlint
@@ -269,4 +306,5 @@ func originalDiagnosticError(err error) error {
 		}
 		err = annotated.err
 	}
+	return err
 }

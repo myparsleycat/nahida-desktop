@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func newTray(app *application.App, rt *runtime, icon []byte) *application.SystemTray {
@@ -22,7 +24,7 @@ func newTray(app *application.App, rt *runtime, icon []byte) *application.System
 		}
 		go func() {
 			if err := rt.updater.CheckForUpdates(context.Background(), true); err != nil && rt.log != nil {
-				rt.log.Error(err.Error(), "updater.manualCheck")
+				_ = infra.ReportError(rt.log, err, "updater.manualCheck", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "updater.manualCheck", Stage: "background"})
 			}
 		}()
 	})

@@ -3,7 +3,9 @@ package drive
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
@@ -111,5 +113,29 @@ func TestCreateDriveAPIErrorMapsBackendUnavailable(t *testing.T) {
 	got := CreateDriveAPIError(&infra.APIError{Code: "X", Message: "no", Status: 503}, "get:item", 0)
 	if got.Code != codeBackendUnavailable || got.Status != 503 {
 		t.Fatalf("APIError 503 = %+v", got)
+	}
+}
+
+func TestDriveConversionKeepsDiagnosticSource(t *testing.T) {
+	var output bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	original := newDriveAPIError("DRIVE_POLICY", "rejected", 422, nil)
+	wrapper := infra.AnnotateError(infra.WithCause(original, errors.New("source response was truncated")), infra.Diagnostic{Stage: "read-response"})
+	converted := CreateDriveAPIError(wrapper, "upload", 0)
+	again := CreateDriveAPIError(infra.AnnotateError(converted, infra.Diagnostic{Stage: "outer"}), "upload", 0)
+	if !errors.Is(again, original) {
+		t.Fatal("nested normalization lost identity")
+	}
+	if !errors.Is(converted, original) {
+		t.Fatal("lost original domain error identity")
+	}
+	expected, _ := json.Marshal(original)
+	actual, _ := json.Marshal(converted)
+	if !bytes.Equal(expected, actual) || converted.Error() != original.Error() {
+		t.Fatal("domain wire contract changed")
+	}
+	log.ServiceErrorMarshaler("Drive")(converted)
+	if !strings.Contains(output.String(), "source response was truncated") || !strings.Contains(output.String(), "read-response") {
+		t.Fatal(output.String())
 	}
 }

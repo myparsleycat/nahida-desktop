@@ -1,5 +1,6 @@
 import { Tools } from "@bindings/tools";
 import { build4001FixerTitlebarActivity } from "@renderer/components/titlebar/titlebar-activity";
+import { Logger } from "@renderer/lib/logger";
 import { titlebarActivityStore } from "@renderer/store/titlebar-activity";
 import { Events } from "@wailsio/runtime";
 import { useEffect } from "react";
@@ -29,7 +30,11 @@ export function use4001FixerTitlebarActivity() {
                 sync(state.activeTask as Parameters<typeof sync>[0], state.progress || "");
             })
             .catch((error) => {
-                console.error("tools:4001FixerGetState failed for titlebar activity", error);
+                Logger.capture(
+                    "components/titlebar/use-4001-fixer-titlebar-activity.ts",
+                    "tools:4001FixerGetState failed for titlebar activity",
+                    error,
+                );
             });
 
         const off = Events.On("tools:4001FixerProgress", (event) => {

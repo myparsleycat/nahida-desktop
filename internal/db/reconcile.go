@@ -88,7 +88,10 @@ func (c *Client) Reconcile(ctx context.Context) error {
 
 	for _, candidate := range candidates {
 		if err := c.reconcileTable(ctx, candidate); err != nil {
-			_ = restore()
+			restoreErr := restore()
+			if restoreErr != nil {
+				return preserveRecovery(err, fmt.Errorf("restore foreign_keys: %w", restoreErr))
+			}
 			return err
 		}
 	}

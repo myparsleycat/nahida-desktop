@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"time"
 
@@ -86,6 +87,7 @@ type Tools struct {
 
 	persistMu sync.Mutex
 
+	wuwaDiagnostic infra.DiagnosticThrottle
 	wuwaMu         sync.Mutex
 	wuwaInstallMu  sync.Mutex
 	wuwaAutoCancel context.CancelFunc
@@ -158,6 +160,10 @@ func NewWithOptions(opts Options) *Tools {
 		if t.log != nil {
 			t.log.Info(message, "TogglePersist")
 		}
+	}
+	var persistDiagnostics infra.DiagnosticThrottle
+	t.persist.diagnosticFn = func(err error, message string) {
+		persistDiagnostics.Report(t.log, err, "TogglePersist", infra.Diagnostic{Operation: "toggle-persist", Stage: "background", Fields: map[string]any{"context": message}})
 	}
 	t.persist.errorFn = func(message string) {
 		if t.log != nil {
@@ -248,7 +254,9 @@ func (t *Tools) beginToolRun(parent context.Context, executor *scriptExecutor) (
 }
 
 func (t *Tools) beginScriptRun(parent context.Context) (*toolRun, context.Context, error) {
-	return t.beginToolRun(parent, newScriptExecutor(t.emitFixToolLog))
+	executor := newScriptExecutor(t.emitFixToolLog)
+	executor.onError = func(err error) { t.logError(err, "script-output-read") }
+	return t.beginToolRun(parent, executor)
 }
 
 func (t *Tools) finishScriptRun(run *toolRun) {
@@ -284,4 +292,11 @@ func (t *Tools) ServiceShutdown() error {
 		}
 	}
 	return errors.Join(err, t.shutdownFixInspections(), t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+}
+
+func (t *Tools) reportCleanup(err error, operation string) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }

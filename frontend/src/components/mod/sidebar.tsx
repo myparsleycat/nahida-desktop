@@ -4,6 +4,7 @@ import { GamePresetSelector } from "@renderer/components/mod/game-preset-selecto
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useCharacterSidebarWidthSetting } from "@renderer/hooks/use-settings";
+import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModFixerAction } from "@shared/types";
@@ -52,7 +53,7 @@ export default function ModSidebar({
     try {
       await setSetting("mod.characterSidebarWidth", width);
     } catch (error) {
-      console.error("Failed to persist mod sidebar width", error);
+      Logger.capture("components/mod/sidebar.tsx", "Failed to persist mod sidebar width", error);
     }
   }, []);
 

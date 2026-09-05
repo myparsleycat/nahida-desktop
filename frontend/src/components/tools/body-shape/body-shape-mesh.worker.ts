@@ -1,3 +1,5 @@
+import { serializeDiagnostic } from "@shared/diagnostic";
+
 import {
     processBodyShapeMesh,
     type BodyShapeMeshProcessInput,
@@ -42,6 +44,7 @@ async function processRequest(request: ProcessRequest): Promise<void> {
                 type: "error",
                 id: request.id,
                 message: error instanceof Error ? error.message : String(error),
+                diagnostic: serializeDiagnostic({ error, stage: "process-mesh" }),
             });
         }
     } finally {

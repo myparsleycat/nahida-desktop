@@ -32,20 +32,21 @@ type parsedD3dx struct {
 }
 
 type persistEngine struct {
-	mu         sync.Mutex
-	learner    *TogglePersistLearner
-	logs       []string
-	generation int
-	cached     map[string]parsedD3dx
-	revisions  map[string]int
-	now        int64
-	useFake    bool
-	timers     []*persistTimer
-	flushDue   map[string]*persistTimer
-	unwatch    []func()
-	infoFn     func(string)
-	errorFn    func(string)
-	emit       func([]string)
+	mu           sync.Mutex
+	learner      *TogglePersistLearner
+	logs         []string
+	generation   int
+	cached       map[string]parsedD3dx
+	revisions    map[string]int
+	now          int64
+	useFake      bool
+	timers       []*persistTimer
+	flushDue     map[string]*persistTimer
+	unwatch      []func()
+	infoFn       func(string)
+	errorFn      func(string)
+	diagnosticFn func(error, string)
+	emit         func([]string)
 }
 
 func newPersistEngine() *persistEngine {
@@ -127,7 +128,7 @@ func (e *persistEngine) Start(importers []persistImporter, watch func(path strin
 		}(importer, d3dxPath, generation)
 		stop, err := watch(d3dxPath, onModify)
 		if err != nil {
-			e.logError("Error watching " + d3dxPath + ": " + err.Error())
+			e.logError("Error watching "+d3dxPath+": "+err.Error(), err)
 			continue
 		}
 		e.mu.Lock()
@@ -143,7 +144,7 @@ func (e *persistEngine) handleD3dxUserINIChange(importer persistImporter, iniPat
 	// Go reads once; mid-write races are not covered by Electron tests.
 	raw, err := os.ReadFile(iniPath)
 	if err != nil {
-		e.logError("Error handling d3dx_user.ini change: " + err.Error())
+		e.logError("Error handling d3dx_user.ini change: "+err.Error(), err)
 		return
 	}
 	if !e.active(generation) {
@@ -398,7 +399,7 @@ func (e *persistEngine) flushReady(targetINIPath string, generation int) {
 		if errors.Is(err, os.ErrNotExist) {
 			return
 		}
-		e.logError("Error updating mod ini " + targetINIPath + ": " + err.Error())
+		e.logError("Error updating mod ini "+targetINIPath+": "+err.Error(), err)
 		return
 	}
 	if len(updated) == 1 {
@@ -505,15 +506,17 @@ func (e *persistEngine) logInfo(message string) {
 	e.addLog("INFO", message)
 }
 
-func (e *persistEngine) logError(message string) {
-	if e.errorFn != nil {
+func (e *persistEngine) logError(message string, causes ...error) {
+	if e.diagnosticFn != nil && len(causes) > 0 {
+		e.diagnosticFn(errors.Join(causes...), message)
+	} else if e.errorFn != nil {
 		e.errorFn(message)
 	}
 	e.addLog("ERROR", message)
 }
 
 func (e *persistEngine) logPersistProfileError(stage, targetINIPath, profilePath string, err error) {
-	e.logError("Error processing toggle persist profile: stage=" + stage + ", targetIniPath=" + targetINIPath + ", profilePath=" + profilePath + ", error=" + err.Error())
+	e.logError("Error processing toggle persist profile: stage="+stage+", targetIniPath="+targetINIPath+", profilePath="+profilePath+", error="+err.Error(), err)
 }
 
 func (e *persistEngine) addLog(level, message string) {

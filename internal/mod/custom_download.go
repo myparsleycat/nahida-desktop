@@ -261,8 +261,8 @@ func (m *Mod) runGroupDownload(
 	progress := transfer.StatusProgress
 	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
 	defer func() {
-		_ = os.RemoveAll(savePath)
-		_ = os.RemoveAll(stagingPath)
+		m.reportDownloadStep(os.RemoveAll(savePath), pid, "cleanup-download", savePath)
+		m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath)
 	}()
 	downloaded := int64(0)
 	if err := m.downloadFileTo(ctx, head, savePath, pid, "custom", func(bytes int64) {
@@ -293,9 +293,9 @@ func (m *Mod) runGroupDownload(
 	} else if err := movePathOverwrite(savePath, extractedPath); err != nil {
 		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
 	}
-	entries, _ := os.ReadDir(stagingPath)
+	entries, readErr := os.ReadDir(stagingPath)
 	if _, statErr := os.Stat(extractedPath); statErr != nil || len(entries) == 0 {
-		return m.finishDownloadError(ctx, transfers, pid, errors.New("downloaded file did not produce staged content"), "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(errors.New("downloaded file did not produce staged content"), errors.Join(readErr, statErr)), "CustomDownloader:downloadToGroup")
 	}
 	finalized, err := finalizeStagedDownload(stagingPath, groupPath)
 	if err != nil {
@@ -304,10 +304,9 @@ func (m *Mod) runGroupDownload(
 	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, map[string]any{
 		"source": "mod", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	}); err != nil {
-		_ = finalized.Restore()
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})), "CustomDownloader:downloadToGroup")
 	}
-	_ = finalized.Commit()
+	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", groupPath)
 	return m.finishDownloadOK(transfers, pid, head, downloaded, groupPath, suggested, finalized.DestinationPaths)
 }
 
@@ -321,8 +320,8 @@ func (m *Mod) runGameBananaDownload(
 ) error {
 	progress := transfer.StatusProgress
 	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
-	_ = os.MkdirAll(stagingPath, 0o755)
-	defer func() { _ = os.RemoveAll(stagingPath) }()
+	m.reportDownloadStep(os.MkdirAll(stagingPath, 0o755), pid, "prepare-staging", stagingPath)
+	defer func() { m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath) }()
 	downloaded := int64(0)
 	if err := m.downloadFileTo(ctx, head, stagedDownloadPath, pid, "gamebanana", func(bytes int64) {
 		downloaded += bytes
@@ -361,10 +360,9 @@ func (m *Mod) runGameBananaDownload(
 		"file":   map[string]any{"downloadUrl": payload.FileURL, "md5": payload.FileMD5},
 	}
 	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, metadata); err != nil {
-		_ = finalized.Restore()
-		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})), "GameBanana:downloadFromGB:context")
 	}
-	_ = finalized.Commit()
+	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", destination)
 	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
 }
 
@@ -377,8 +375,8 @@ func (m *Mod) runHuiCustomDownload(
 ) error {
 	progress := transfer.StatusProgress
 	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
-	_ = os.MkdirAll(stagingPath, 0o755)
-	defer func() { _ = os.RemoveAll(stagingPath) }()
+	m.reportDownloadStep(os.MkdirAll(stagingPath, 0o755), pid, "prepare-staging", stagingPath)
+	defer func() { m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath) }()
 	downloaded := int64(0)
 	if err := m.downloadFileTo(ctx, head, stagedDownloadPath, pid, "hui", func(bytes int64) {
 		downloaded += bytes
@@ -396,13 +394,13 @@ func (m *Mod) runHuiCustomDownload(
 		if _, err := applySelectedExtractedName(extracted, stagingPath, finalName, originalTitle, m.sanitizeName); err != nil {
 			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
 		}
-		_ = os.Remove(stagedDownloadPath)
+		m.reportDownloadStep(os.Remove(stagedDownloadPath), pid, "cleanup-archive", stagedDownloadPath)
 	}
 	finalized, err := finalizeStagedDownload(stagingPath, destination)
 	if err != nil {
 		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
 	}
-	_ = finalized.Commit()
+	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", destination)
 	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
 }
 
@@ -414,7 +412,8 @@ func (m *Mod) downloadFileTo(
 ) error {
 	adapter := modRangeDownloader{inner: m.downloader}
 	return downloadCustomFile(ctx, customDownloadFileOptions{
-		URL: head.finalURL, SavePath: savePath, FileSize: head.size, SupportsRange: head.supportsRange,
+		ReportCleanup: func(err error) { m.reportDownloadStep(err, fileID, "cleanup-attempt", savePath) },
+		URL:           head.finalURL, SavePath: savePath, FileSize: head.size, SupportsRange: head.supportsRange,
 		Downloader: adapter, HTTP: m.http, OnProgress: onProgress,
 		BandwidthLimiter: m.transfer, SlowChunkMonitor: m.transfer.SlowChunks(), FileID: fileID, CohortKey: cohort,
 	})
@@ -456,7 +455,7 @@ func (m *Mod) extractGBArchive(ctx context.Context, archivePath string) (string,
 	if err != nil {
 		return "", err
 	}
-	_ = os.Remove(archivePath)
+	m.reportDownloadStep(os.Remove(archivePath), "", "cleanup-archive", archivePath)
 	return extracted, nil
 }
 
@@ -507,7 +506,7 @@ func (m *Mod) finishDownloadOK(
 	dest, name string,
 	inspectionPaths []string,
 ) error {
-	_ = transfers.MarkFileCompleted(pid, pid)
+	m.reportDownloadStep(transfers.MarkFileCompleted(pid, pid), pid, "mark-completed", dest)
 	completed := transfer.StatusCompleted
 	hundred := 100.0
 	transferred := downloaded
@@ -515,7 +514,7 @@ func (m *Mod) finishDownloadOK(
 		transferred = *head.size
 	}
 	one := 1
-	_ = transfers.Update(pid, transfer.Updates{Status: &completed, Progress: &hundred, TransferredSize: &transferred, TransferredFiles: &one})
+	m.reportDownloadStep(transfers.Update(pid, transfer.Updates{Status: &completed, Progress: &hundred, TransferredSize: &transferred, TransferredFiles: &one}), pid, "record-completion", dest)
 	directories := existingDownloadDirectories(inspectionPaths)
 	m.queueFixInspection(directories...)
 	if m.emit != nil {
@@ -609,4 +608,11 @@ func orUnknown(value string) string {
 		return "UNKNOWN"
 	}
 	return value
+}
+
+func (m *Mod) reportDownloadStep(err error, pid, stage, path string) {
+	if err == nil {
+		return
+	}
+	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{Operation: "custom-download", Stage: stage, Fields: map[string]any{"pid": pid, "path": path}})
 }

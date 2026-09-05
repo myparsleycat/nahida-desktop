@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 var errIWantToLogin = errors.New("Failed to get iWantToLogin data") //nolint:staticcheck // Electron contract text.
@@ -29,25 +32,31 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &value); err != nil {
 		return err
 	}
-	decodeString := func(raw json.RawMessage, destination *string) bool {
+	decodeString := func(field string, raw json.RawMessage, destination *string) error {
 		if raw == nil {
-			return false
+			return fmt.Errorf("missing login field: %s (expected string)", field)
 		}
 		var decoded any
 		if err := json.Unmarshal(raw, &decoded); err != nil {
-			return false
+			return err
 		}
 		value, ok := decoded.(string)
 		if !ok {
-			return false
+			return fmt.Errorf("invalid login field: %s (expected string, got %T)", field, decoded)
 		}
 		*destination = value
-		return true
+		return nil
 	}
-	if !decodeString(value.State, &s.State) ||
-		!decodeString(value.PageURL, &s.PageURL) ||
-		!decodeString(value.StateResponse, &s.StateResponse) {
-		return errIWantToLogin
+	for _, field := range []struct {
+		name   string
+		raw    json.RawMessage
+		target *string
+	}{
+		{"state", value.State, &s.State}, {"pageUrl", value.PageURL, &s.PageURL}, {"stateResponse", value.StateResponse, &s.StateResponse},
+	} {
+		if err := decodeString(field.name, field.raw, field.target); err != nil {
+			return infra.WithCause(errIWantToLogin, err)
+		}
 	}
 	s.valid = true
 	return nil
@@ -62,7 +71,9 @@ type loginEvent struct {
 	} `json:"session"`
 }
 
-func (a *Auth) StartLogin(ctx context.Context) error {
+func (a *Auth) StartLogin(ctx context.Context) (err error) {
+	stage := "prepare"
+	defer func() { err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage}) }()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -86,22 +97,26 @@ func (a *Auth) StartLogin(ctx context.Context) error {
 	defer cancel()
 	req = req.WithContext(loginCtx)
 
+	stage = "login-request"
 	resp, err := a.do(req)
 	if err != nil {
-		return err
+		return infra.AnnotateError(err, infra.HTTPDiagnostic(http.MethodGet, loginURL, stage, nil))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	stage = "login-response"
 	if resp.StatusCode >= 400 {
-		return errIWantToLogin
+		return infra.AnnotateError(infra.WithCause(errIWantToLogin, &infra.HTTPError{Status: resp.StatusCode}), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-response", resp))
 	}
 	var start loginStart
+	stage = "login-decode"
 	if err := json.NewDecoder(resp.Body).Decode(&start); err != nil {
-		return errIWantToLogin
+		return infra.AnnotateError(infra.WithCause(errIWantToLogin, err), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-decode", resp))
 	}
 	if !start.valid {
-		return errIWantToLogin
+		return infra.AnnotateError(infra.WithCause(errIWantToLogin, errors.New("login response is not an object")), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-validate", resp))
 	}
 
+	stage = "open-browser"
 	if a.openURL == nil {
 		return errors.New("auth openURL is not configured")
 	}
@@ -109,6 +124,7 @@ func (a *Auth) StartLogin(ctx context.Context) error {
 		return err
 	}
 
+	stage = "sse-request"
 	sseReq, err := http.NewRequestWithContext(ctx, http.MethodGet, start.StateResponse, nil)
 	if err != nil {
 		return err
@@ -131,6 +147,7 @@ func (a *Auth) StartLogin(ctx context.Context) error {
 	}
 
 	a.info("start parse sse")
+	stage = "sse-read"
 	err = parseSSE(sseResp.Body, func(event, data string) error {
 		if event != "state-response" {
 			return nil

@@ -257,7 +257,7 @@ func (w *Window) registerEvents(window application.Window) {
 		runInBackground, err := settings.GetRunInBackground(context.Background())
 		if err != nil {
 			if log != nil {
-				log.Error(err.Error(), "MainWindow.runInBackground")
+				_ = infra.ReportError(log, err, "MainWindow.runInBackground", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.runInBackground", Stage: "background"})
 			}
 			return
 		}
@@ -299,7 +299,7 @@ func (w *Window) saveBoundsLocked(window application.Window) {
 	bounds := window.Bounds()
 	err := settings.SetBounds(context.Background(), setting.Bounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height})
 	if err != nil && log != nil {
-		log.Error(err.Error(), "MainWindow.saveBounds")
+		_ = infra.ReportError(log, err, "MainWindow.saveBounds", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.saveBounds", Stage: "background"})
 	}
 }
 
@@ -539,7 +539,7 @@ func (w *Window) logTaskbarError(err error) {
 	log := w.log
 	w.mu.Unlock()
 	if log != nil {
-		log.Error(err.Error(), "MainWindow.taskbarProgress")
+		_ = infra.ReportError(log, err, "MainWindow.taskbarProgress", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.taskbarProgress", Stage: "background"})
 	}
 }
 

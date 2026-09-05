@@ -1,7 +1,8 @@
+import { Window as AppWindow } from "@bindings/app";
 import "@renderer/wails/bridge";
 import "@renderer/lib/i18n";
-import { Window as AppWindow } from "@bindings/app";
 import { Shell } from "@bindings/platform";
+import { Logger } from "@renderer/lib/logger";
 import { installExternalWindowHandler } from "@renderer/wails/external-window";
 import { TITLE_BAR_HEIGHT } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,6 +16,12 @@ import { routeTree } from "./routeTree.gen";
 
 document.documentElement.style.setProperty("--app-titlebar-height", `${TITLE_BAR_HEIGHT}px`);
 installExternalWindowHandler(Shell.OpenExternal);
+window.addEventListener("error", (event) => {
+  if (event.error) Logger.capture("renderer:uncaught", event.error);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  Logger.capture("renderer:unhandled-rejection", event.reason);
+});
 
 const hashHistory = createHashHistory();
 const queryClient = new QueryClient();

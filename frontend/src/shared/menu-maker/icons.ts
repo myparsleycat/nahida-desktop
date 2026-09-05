@@ -1,3 +1,4 @@
+import { Logger } from "@renderer/lib/logger";
 import DOMPurify from "dompurify";
 import { iconNames } from "lucide-react/dynamic";
 
@@ -161,7 +162,8 @@ export function getFavoriteIconifyPrefixes(): string[] {
         return Array.isArray(value)
             ? value.filter((prefix): prefix is string => typeof prefix === "string")
             : [];
-    } catch {
+    } catch (error) {
+        Logger.capture("shared/menu-maker/icons.ts", error);
         return [];
     }
 }

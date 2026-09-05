@@ -211,11 +211,12 @@ func (t *Tools) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus, 
 	}
 	tempPath := filepath.Join(toolDir, release.Asset.Name+".download")
 	finalPath := filepath.Join(toolDir, release.Asset.Name)
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() { t.reportCleanup(os.Remove(tempPath), "WuwaFixerInstallOrUpdate") }()
 
 	body, responseHeader, err := t.wuwaFetchBytes(ctx, release.Asset.BrowserDownloadURL, nil, wuwaMaxDownloadSize)
 	if responseHeader != nil {
-		_, _ = t.wuwaCaptureRate(ctx, responseHeader)
+		_, rateErr := t.wuwaCaptureRate(ctx, responseHeader)
+		t.reportWuwaRecovery(rateErr, "save-rate")
 	}
 	if err != nil {
 		return WuwaFixerStatus{}, fmt.Errorf("Failed to download Wuwa Mod Fixer: %w", err) //nolint:staticcheck // Electron contract text.
@@ -251,7 +252,7 @@ func (t *Tools) WuwaFixerRun(ctx context.Context, modPath string, options WuwaFi
 		return contractError("Wuwa Mod Fixer is not installed")
 	}
 	if _, err := os.Stat(modPath); err != nil {
-		return contractError("Destination path does not exist")
+		return infra.WithCause(contractError("Destination path does not exist"), err)
 	}
 	configPath, err := t.wuwaEnsureLatestConfig(ctx)
 	if err != nil {
@@ -501,7 +502,9 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 	header.Set("Accept", "application/vnd.github+json")
 	body, responseHeader, err := t.wuwaFetchBytes(ctx, wuwaReleasesLatestURL, header, 8<<20)
 	if responseHeader != nil {
-		rate, _ = t.wuwaCaptureRate(ctx, responseHeader)
+		var rateErr error
+		rate, rateErr = t.wuwaCaptureRate(ctx, responseHeader)
+		t.reportWuwaRecovery(rateErr, "save-rate")
 	}
 	if err != nil {
 		return wuwaRefreshResult{}, fmt.Errorf("Failed to fetch Wuwa Mod Fixer release: %w", err) //nolint:staticcheck // Electron contract text.
@@ -559,7 +562,7 @@ func (t *Tools) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 	}
 	configPath := filepath.Join(toolDir, "config.json")
 	tempPath := configPath + ".download"
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() { t.reportCleanup(os.Remove(tempPath), "wuwaEnsureLatestConfig") }()
 	if err := os.WriteFile(tempPath, body, 0o600); err != nil {
 		return "", err
 	}
@@ -653,19 +656,19 @@ func (t *Tools) wuwaRequireModPath(ctx context.Context, modPath string) error {
 	}
 	resolvedTarget, err := filepath.Abs(modPath)
 	if err != nil {
-		return contractError("Path is outside the managed mod folder")
+		return infra.WithCause(contractError("Path is outside the managed mod folder"), err)
 	}
 	_, statErr := os.Stat(modPath)
 	if statErr == nil {
 		resolvedTarget, err = filepath.EvalSymlinks(modPath)
 		if err != nil {
-			return contractError("Path is outside the managed mod folder")
+			return infra.WithCause(contractError("Path is outside the managed mod folder"), err)
 		}
 	}
 	for _, game := range games {
 		logicalRoot, resolveErr := filepath.Abs(game.ModFolderPath)
 		if statErr != nil && resolveErr == nil && sameOrChildPath(logicalRoot, resolvedTarget) {
-			return contractError("Destination path does not exist")
+			return infra.WithCause(contractError("Destination path does not exist"), statErr)
 		}
 		resolvedRoot, resolveErr := filepath.EvalSymlinks(game.ModFolderPath)
 		if resolveErr == nil && sameOrChildPath(resolvedRoot, resolvedTarget) {
@@ -689,7 +692,7 @@ func (t *Tools) wuwaGetCachedLatestRelease(ctx context.Context) (*wuwaLatestRele
 		return nil, err
 	}
 	var release wuwaLatestReleaseCache
-	_ = json.Unmarshal([]byte(*raw), &release)
+	t.reportWuwaRecovery(json.Unmarshal([]byte(*raw), &release), "decode-release-cache")
 	if release.Version == "" || release.Asset.Name == "" || release.Asset.BrowserDownloadURL == "" {
 		return nil, nil
 	}
@@ -702,7 +705,7 @@ func (t *Tools) wuwaGetRateState(ctx context.Context) (*GitHubRateState, error) 
 		return nil, err
 	}
 	var state GitHubRateState
-	_ = json.Unmarshal([]byte(*raw), &state)
+	t.reportWuwaRecovery(json.Unmarshal([]byte(*raw), &state), "decode-rate-cache")
 	if state.Limit == 0 && state.Remaining == 0 && state.Reset == 0 && state.Used == 0 && state.Resource == "" {
 		return nil, nil
 	}
@@ -717,12 +720,17 @@ func (t *Tools) wuwaRefreshRateState(ctx context.Context) *GitHubRateState {
 		}
 	}
 	if err != nil {
+		t.reportWuwaRecovery(err, "refresh-rate")
 		return nil
 	}
 	var payload struct {
 		Rate *GitHubRateState `json:"rate"`
 	}
-	if json.Unmarshal(body, &payload) != nil || payload.Rate == nil {
+	if decodeErr := json.Unmarshal(body, &payload); decodeErr != nil || payload.Rate == nil {
+		if decodeErr == nil {
+			decodeErr = errors.New("missing GitHub rate response fields")
+		}
+		t.reportWuwaRecovery(decodeErr, "decode-rate-response")
 		return nil
 	}
 	payload.Rate.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -730,7 +738,7 @@ func (t *Tools) wuwaRefreshRateState(ctx context.Context) *GitHubRateState {
 		payload.Rate.Resource = "core"
 	}
 	raw, _ := json.Marshal(payload.Rate)
-	_ = t.setAppState(ctx, githubCoreRateKey, string(raw))
+	t.reportWuwaRecovery(t.setAppState(ctx, githubCoreRateKey, string(raw)), "save-rate-cache")
 	return payload.Rate
 }
 
@@ -859,7 +867,7 @@ func collectWuwaBackupGroups(root string) ([]WuwaBackupGroup, error) {
 	return groups, nil
 }
 
-func copyRegularFile(source, target string) error {
+func copyRegularFile(source, target string) (returnErr error) {
 	input, err := os.Open(source)
 	if err != nil {
 		return err
@@ -867,7 +875,7 @@ func copyRegularFile(source, target string) error {
 	defer func() { _ = input.Close() }()
 	info, err := input.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return errors.New("backup is not a regular file")
+		return infra.WithCause(errors.New("backup is not a regular file"), err)
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
@@ -877,7 +885,12 @@ func copyRegularFile(source, target string) error {
 		return err
 	}
 	tempPath := temp.Name()
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() {
+		cleanupErr := os.Remove(tempPath)
+		if !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
+		}
+	}()
 	if _, err = io.Copy(temp, input); err == nil {
 		err = temp.Sync()
 	}
@@ -958,3 +971,7 @@ func parseRFC3339(value string) time.Time {
 }
 
 func mustRFC3339(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
+
+func (t *Tools) reportWuwaRecovery(err error, stage string) {
+	t.wuwaDiagnostic.Report(t.log, err, "Tools", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "wuwa-cache", Stage: stage})
+}

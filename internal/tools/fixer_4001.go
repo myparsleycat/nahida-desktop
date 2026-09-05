@@ -332,7 +332,7 @@ func (t *Tools) FourThousandOneFixerBuildDll(ctx context.Context, input Fixer400
 	}
 	tempDir := filepath.Join(os.TempDir(), d3dBuildTempDirName, buildID)
 	defer func() {
-		_ = os.RemoveAll(tempDir)
+		t.reportCleanup(os.RemoveAll(tempDir), "FourThousandOneFixerBuildDll")
 		if client, clientErr := t.requireClient(); clientErr == nil {
 			_ = client.AppState.Delete(context.Background(), d3dBuildStatePrefix+buildID)
 		}
@@ -407,11 +407,11 @@ func (t *Tools) FourThousandOneFixerDiversifyDllPadding(ctx context.Context, inp
 	}
 	tempPath := tempFile.Name()
 	if err := tempFile.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		t.reportCleanup(os.Remove(tempPath), "FourThousandOneFixerDiversifyDllPadding")
 		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", err)
 	}
-	_ = os.Remove(tempPath)
-	defer func() { _ = os.Remove(tempPath) }()
+	t.reportCleanup(os.Remove(tempPath), "FourThousandOneFixerDiversifyDllPadding")
+	defer func() { t.reportCleanup(os.Remove(tempPath), "FourThousandOneFixerDiversifyDllPadding") }()
 	t.update4001Progress("XXMI_OBFUSCATING", "")
 	report, err := t.runPEDiversifier(ctx, target, tempPath)
 	if err != nil {
@@ -747,7 +747,7 @@ func (t *Tools) CleanupStaleD3DBuilds(ctx context.Context) error {
 	for _, state := range states {
 		id := strings.TrimPrefix(state.Key, d3dBuildStatePrefix)
 		if d3dBuildIDRE.MatchString(id) {
-			_ = os.RemoveAll(filepath.Join(root, id))
+			t.reportCleanup(os.RemoveAll(filepath.Join(root, id)), "CleanupStaleD3DBuilds")
 		}
 		if err := client.AppState.Delete(ctx, state.Key); err != nil {
 			return err
@@ -777,13 +777,13 @@ func (t *Tools) findDiversifierBackup(importerPath string) (*string, error) {
 		candidate := filepath.Join(importerPath, name)
 		match := backupHashRE.FindStringSubmatch(name)
 		if match == nil {
-			_ = os.Remove(candidate)
+			t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
 			continue
 		}
 		if !hasCurrentHash || strings.HasPrefix(currentHash, match[1]) {
 			return stringPointer(candidate), nil
 		}
-		_ = os.Remove(candidate)
+		t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
 	}
 	return nil, nil
 }

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"unicode/utf16"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func reconcileNteJunction(targetPath, linkPath string) error {
@@ -113,16 +115,17 @@ func runNteMutation(script, elevationError string, contractErrors map[int]string
 		return nil
 	}
 	if message, ok := contractErrors[code]; ok {
-		return errors.New(message)
+		return infra.AnnotateError(infra.WithCause(errors.New(message), err), infra.Diagnostic{Operation: "nte-mutation", Stage: "execute", Fields: map[string]any{"exitCode": code, "elevated": false}})
 	}
+	initialErr := err
 	code, err = executeNtePowerShell(script, true)
 	if err == nil {
 		return nil
 	}
 	if message, ok := contractErrors[code]; ok {
-		return errors.New(message)
+		return infra.AnnotateError(infra.WithCause(errors.New(message), errors.Join(initialErr, err)), infra.Diagnostic{Operation: "nte-mutation", Stage: "execute", Fields: map[string]any{"exitCode": code, "elevated": true}})
 	}
-	return fmt.Errorf("%s: %w", elevationError, err)
+	return infra.WithCause(fmt.Errorf("%s: %w", elevationError, err), initialErr)
 }
 
 func executeNtePowerShell(script string, elevated bool) (int, error) {

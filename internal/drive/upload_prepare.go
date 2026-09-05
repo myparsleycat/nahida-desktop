@@ -16,6 +16,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type UploadFile struct {
@@ -131,10 +133,10 @@ func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflict
 func ensureUploadSourceReadable(path string) error {
 	handle, err := os.Open(path)
 	if err != nil {
-		return errors.New("Path is not readable") //nolint:staticcheck // Electron contract text.
+		return infra.WithCause(errors.New("Path is not readable"), err) //nolint:staticcheck // Electron contract text.
 	}
 	if err := handle.Close(); err != nil {
-		return errors.New("Path is not readable") //nolint:staticcheck // Electron contract text.
+		return infra.WithCause(errors.New("Path is not readable"), err) //nolint:staticcheck // Electron contract text.
 	}
 	return nil
 }

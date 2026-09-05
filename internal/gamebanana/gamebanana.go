@@ -488,7 +488,7 @@ func (g *GameBanana) getJSON(ctx context.Context, method, path string, query url
 	defer func() { _ = response.Body.Close() }()
 	var value any
 	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
-		return nil, err
+		return nil, infra.AnnotateError(err, infra.HTTPDiagnostic(method, rawURL, "decode", response))
 	}
 	if record, ok := value.(map[string]any); ok && record["_sErrorCode"] == "LOGIN_REQUIRED" {
 		return nil, ErrAuthRequired
@@ -529,7 +529,9 @@ type requestPolicy struct {
 	SkipAuthRetry           bool
 }
 
-func (g *GameBanana) request(ctx context.Context, method, rawURL string, header http.Header, policy requestPolicy) (*http.Response, error) {
+func (g *GameBanana) request(ctx context.Context, method, rawURL string, header http.Header, policy requestPolicy) (result *http.Response, err error) {
+	diagnostic := infra.HTTPDiagnostic(method, rawURL, "request", nil)
+	defer func() { err = infra.AnnotateError(err, diagnostic) }()
 	if g.http == nil {
 		return nil, errors.New("GameBanana HTTP client is not configured")
 	}
@@ -554,6 +556,7 @@ func (g *GameBanana) request(ctx context.Context, method, rawURL string, header 
 	if err != nil {
 		return nil, err
 	}
+	diagnostic = infra.HTTPDiagnostic(method, rawURL, "response", response)
 	mergedCookie := cookie
 	if policy.PersistResponseCookies {
 		if merged := mergeSetCookies(cookie, response.Header.Values("Set-Cookie")); merged != "" && merged != cookie {
@@ -572,7 +575,7 @@ func (g *GameBanana) request(ctx context.Context, method, rawURL string, header 
 				return g.retryAuthenticatedRequest(ctx, method, rawURL, header, policy, cookie, mergedCookie)
 			}
 			if policy.ClearStoredCookieOnAuth {
-				_ = g.removeCookie(ctx)
+				g.reportRecovery(g.removeCookie(ctx), "remove-cookie")
 			}
 			return nil, ErrAuthFailed
 		}
@@ -590,7 +593,7 @@ func (g *GameBanana) request(ctx context.Context, method, rawURL string, header 
 				return g.retryAuthenticatedRequest(ctx, method, rawURL, header, policy, cookie, mergedCookie)
 			}
 			if policy.ClearStoredCookieOnAuth {
-				_ = g.removeCookie(ctx)
+				g.reportRecovery(g.removeCookie(ctx), "remove-cookie")
 			}
 			return nil, ErrAuthFailed
 		}
@@ -649,6 +652,7 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 	defer func() { _ = response.Body.Close() }()
 	var value map[string]any
 	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
+		g.reportRecovery(err, "validate-cookie-response")
 		return false, "", nil
 	}
 	if value["_sErrorCode"] == "LOGIN_REQUIRED" {
@@ -657,6 +661,7 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 	_, usernameOK := value["_sUsername"].(string)
 	_, profileOK := value["_sProfileUrl"].(string)
 	if !usernameOK || !profileOK {
+		g.reportRecovery(errors.New("invalid cookie validation response: expected username and profile URL strings"), "validate-cookie-schema")
 		return false, "", nil
 	}
 	return true, mergeSetCookies(cookie, response.Header.Values("Set-Cookie")), nil
@@ -679,9 +684,9 @@ func (g *GameBanana) getCookie(ctx context.Context) (string, error) {
 	if err != nil || value == nil || *value == "" {
 		return "", err
 	}
-	decrypted, decryptedOK := decryptStoredCookie(crypto, *value)
-	if !decryptedOK {
-		_ = g.removeCookie(ctx)
+	decrypted, decryptErr := crypto.DecryptString(*value)
+	if decryptErr != nil {
+		g.reportRecovery(infra.WithCause(decryptErr, g.removeCookie(ctx)), "restore-cookie")
 		return "", nil
 	}
 	g.mu.Lock()
@@ -690,18 +695,19 @@ func (g *GameBanana) getCookie(ctx context.Context) (string, error) {
 	return decrypted, nil
 }
 
-func decryptStoredCookie(crypto Crypto, value string) (string, bool) {
-	decrypted, err := crypto.DecryptString(value)
-	return decrypted, err == nil
-}
-
 func normalizedRMCCookie(input string) (string, bool) {
 	cookie, err := normalizeRMCCookie(input)
 	return cookie, err == nil
 }
 
 func (g *GameBanana) persistManualCookie(ctx context.Context, cookie string) bool {
-	return g.saveCookie(ctx, cookie) == nil
+	err := g.saveCookie(ctx, cookie)
+	g.reportRecovery(err, "save-manual-cookie")
+	return err == nil
+}
+
+func (g *GameBanana) reportRecovery(err error, stage string) {
+	_ = infra.ReportError(g.log, err, "GameBanana", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "authentication", Stage: stage})
 }
 
 func (g *GameBanana) saveCookie(ctx context.Context, cookie string) error {

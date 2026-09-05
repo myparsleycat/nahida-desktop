@@ -205,12 +205,14 @@ func (p *Protocol) serveLocalFile(w http.ResponseWriter, request *http.Request, 
 			http.NotFound(w, request)
 			return
 		}
+		p.reportProtocolFailure(err, request, "open-local-file", map[string]any{"path": path})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
+		p.reportProtocolFailure(err, request, "stat-local-file", map[string]any{"path": path})
 		http.NotFound(w, request)
 		return
 	}
@@ -299,6 +301,11 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 
 	data, err := io.ReadAll(io.LimitReader(request.Body, expected+1))
 	if err != nil || int64(len(data)) != expected {
+		failure := err
+		if failure == nil {
+			failure = errors.New("memory upload length mismatch")
+		}
+		p.reportProtocolFailure(failure, request, "read-memory-upload", map[string]any{"expectedBytes": expected, "receivedBytes": len(data)})
 		p.mu.Lock()
 		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
 			delete(current.uploads, uploadID)
@@ -330,25 +337,30 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 	client := p.http
 	p.mu.RUnlock()
 	if client == nil {
+		p.reportProtocolFailure(errors.New("http service unavailable"), request, "prepare-web-image", nil)
 		http.Error(w, "http service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	response, err := client.Fetch(request.Context(), rawURL, FetchOptions{DisableHTTPErrors: true})
 	if err != nil {
+		p.reportProtocolFailure(err, request, "fetch-web-image", map[string]any{"endpoint": SanitizeLogURL(rawURL)})
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		p.reportProtocolFailure(&HTTPError{Status: response.StatusCode}, request, "web-image-response", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode})
 		http.Error(w, "upstream image error", response.StatusCode)
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, maxProtocolWebResponse+1))
 	if err != nil {
+		p.reportProtocolFailure(err, request, "read-web-image", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode})
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	if len(raw) > maxProtocolWebResponse {
+		p.reportProtocolFailure(errors.New("upstream image is too large"), request, "validate-web-image-size", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode, "limitBytes": maxProtocolWebResponse})
 		http.Error(w, "upstream image is too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -357,6 +369,7 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 		contentType = http.DetectContentType(raw)
 	}
 	if !strings.HasPrefix(contentType, "image/") {
+		p.reportProtocolFailure(errors.New("upstream response is not an image"), request, "validate-web-image-type", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode, "contentType": contentType})
 		http.Error(w, "upstream response is not an image", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -365,6 +378,17 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Length", fmt.Sprint(len(raw)))
 	_, _ = w.Write(raw)
+}
+
+func (p *Protocol) reportProtocolFailure(err error, request *http.Request, stage string, fields map[string]any) {
+	p.mu.RLock()
+	log := p.log
+	p.mu.RUnlock()
+	if fields == nil {
+		fields = make(map[string]any)
+	}
+	fields["method"] = request.Method
+	_ = ReportError(log, err, "Protocol", Diagnostic{Operation: "serve-resource", Stage: stage, Fields: fields})
 }
 
 func contentTypeForFile(path string, file *os.File) string {

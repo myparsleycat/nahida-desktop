@@ -594,8 +594,13 @@ func (d *Drive) doRequest(ctx context.Context, method, path string, query url.Va
 		return nil, nil, nil, err
 	}
 	resp.Body = io.NopCloser(strings.NewReader(""))
-	decoded, ok := decodeAPIBody(resp.Header.Get("Content-Type"), raw)
-	if !ok && isCborContentType(resp.Header.Get("Content-Type")) && query.Get("res") != "json" {
+	decoded, decodeErr := decodeAPIBodyWithError(resp.Header.Get("Content-Type"), raw)
+	if decodeErr != nil {
+		diagnostic := infra.HTTPDiagnostic(method, rawURL, "decode-response", resp)
+		diagnostic.Severity = infra.DiagnosticWarn
+		_ = infra.ReportError(d.log, decodeErr, "Drive", diagnostic)
+	}
+	if decodeErr != nil && isCborContentType(resp.Header.Get("Content-Type")) && query.Get("res") != "json" {
 		retryQuery := cloneValues(query)
 		retryQuery.Set("res", "json")
 		return d.doRequest(ctx, method, path, retryQuery, extra, body)

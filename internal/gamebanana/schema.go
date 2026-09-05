@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type responseSchema struct {
@@ -47,7 +49,7 @@ var (
 		}
 		number, err := strconv.ParseFloat(strings.TrimSpace(str), 64)
 		if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
-			return errors.New("expected number")
+			return infra.WithCause(errors.New("expected number"), err)
 		}
 		return nil
 	})
@@ -58,7 +60,7 @@ var (
 		}
 		parsed, err := url.Parse(str)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			return errors.New("expected HTTP URL")
+			return infra.WithCause(errors.New("expected HTTP URL"), err)
 		}
 		return nil
 	})

@@ -651,7 +651,7 @@ func (d *Drive) createImportTransfer(operationID, destinationID string, sourceNa
 	})
 	if err != nil {
 		if d.log != nil {
-			d.log.Warn(map[string]any{"operationId": operationID, "error": err.Error()}, "Drive:CopyFromUrl:TransferCreateSkipped")
+			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:TransferCreateSkipped", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"operationId": operationID}})
 		}
 		return false
 	}
@@ -660,7 +660,7 @@ func (d *Drive) createImportTransfer(operationID, destinationID string, sourceNa
 	d.mu.Unlock()
 	if op != nil {
 		if err := d.transfer.AttachCancel(operationID, op.cancel); err != nil && d.log != nil {
-			d.log.Warn(map[string]any{"operationId": operationID, "error": err.Error()}, "Drive:CopyFromUrl:TransferCancelAttachFailed")
+			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:TransferCancelAttachFailed", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"operationId": operationID}})
 		}
 	}
 	return true
@@ -707,8 +707,8 @@ func (d *Drive) consumeImportSSE(ctx context.Context, method, path string, query
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
-		raw, _ := io.ReadAll(resp.Body)
-		return CreateDriveAPIError(decodeAPIValue(resp.Header.Get("Content-Type"), raw), stream.Operation, resp.StatusCode)
+		raw, readErr := io.ReadAll(resp.Body)
+		return infra.WithCause(CreateDriveAPIError(decodeAPIValue(resp.Header.Get("Content-Type"), raw), stream.Operation, resp.StatusCode), infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", resp)))
 	}
 	if resp.Body == nil {
 		return newDriveAPIError(codeImportInvalidResponse, "The server import stream was empty.", 0, nil)
@@ -922,7 +922,7 @@ func (d *Drive) listDestinationChildIDs(ctx context.Context, destinationID strin
 	item, err := d.GetItem(ctx, destinationID)
 	if err != nil {
 		if d.log != nil {
-			d.log.Warn(map[string]any{"destinationId": destinationID, "error": err.Error()}, "Drive:CopyFromUrl:ListDestinationChildrenFailed")
+			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:ListDestinationChildrenFailed", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"destinationId": destinationID}})
 		}
 		return ids
 	}

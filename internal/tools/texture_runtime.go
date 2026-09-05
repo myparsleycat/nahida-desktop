@@ -143,7 +143,7 @@ func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSp
 	if err != nil {
 		return TextureUpscaleRuntimeStatus{}, fmt.Errorf("create texture runtime staging directory: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(installRoot) }()
+	defer func() { t.reportTextureCleanup(os.RemoveAll(installRoot), installRoot) }()
 	archivePath := filepath.Join(installRoot, spec.dirName+".zip")
 	err = t.downloadTextureRuntimeArchive(
 		ctx,
@@ -170,11 +170,11 @@ func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSp
 	}
 	stageRoot := filepath.Join(toolsRoot, "."+spec.dirName+"-ready-"+filepath.Base(installRoot))
 	if err := copyTextureRuntimeLayout(layoutRoot, stageRoot, spec); err != nil {
-		_ = os.RemoveAll(stageRoot)
+		t.reportTextureCleanup(os.RemoveAll(stageRoot), stageRoot)
 		return TextureUpscaleRuntimeStatus{}, err
 	}
-	defer func() { _ = os.RemoveAll(stageRoot) }()
-	if err := promoteTextureRuntime(stageRoot, filepath.Join(toolsRoot, spec.dirName)); err != nil {
+	defer func() { t.reportTextureCleanup(os.RemoveAll(stageRoot), stageRoot) }()
+	if err := promoteTextureRuntime(stageRoot, filepath.Join(toolsRoot, spec.dirName), t.reportTextureCleanup); err != nil {
 		return TextureUpscaleRuntimeStatus{}, err
 	}
 	client, err := t.requireClient()
@@ -440,10 +440,14 @@ func copyTextureRuntimeTree(source, target string) error {
 	})
 }
 
-func promoteTextureRuntime(stageRoot, targetRoot string) error {
+func promoteTextureRuntime(stageRoot, targetRoot string, reports ...func(error, string)) error {
 	parent := filepath.Dir(targetRoot)
 	backupRoot := filepath.Join(parent, "."+filepath.Base(targetRoot)+"-previous")
-	_ = os.RemoveAll(backupRoot)
+	if err := os.RemoveAll(backupRoot); err != nil {
+		for _, report := range reports {
+			report(err, backupRoot)
+		}
+	}
 	hadTarget := pathExists(targetRoot)
 	if hadTarget {
 		if err := os.Rename(targetRoot, backupRoot); err != nil {
@@ -451,13 +455,18 @@ func promoteTextureRuntime(stageRoot, targetRoot string) error {
 		}
 	}
 	if err := os.Rename(stageRoot, targetRoot); err != nil {
+		var rollbackErr error
 		if hadTarget {
-			_ = os.Rename(backupRoot, targetRoot)
+			rollbackErr = os.Rename(backupRoot, targetRoot)
 		}
-		return fmt.Errorf("promote texture runtime: %w", err)
+		return infra.WithCause(fmt.Errorf("promote texture runtime: %w", err), infra.AnnotateError(rollbackErr, infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": targetRoot, "backupPath": backupRoot}}))
 	}
 	if hadTarget {
-		_ = os.RemoveAll(backupRoot)
+		if err := os.RemoveAll(backupRoot); err != nil {
+			for _, report := range reports {
+				report(err, backupRoot)
+			}
+		}
 	}
 	return nil
 }
@@ -491,4 +500,8 @@ func pathExists(path string) bool { _, err := os.Stat(path); return err == nil }
 func regularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
+}
+
+func (t *Tools) reportTextureCleanup(err error, path string) {
+	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: "install-texture-runtime", Stage: "cleanup", Fields: map[string]any{"path": path}})
 }

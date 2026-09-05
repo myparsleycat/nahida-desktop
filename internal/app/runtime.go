@@ -68,13 +68,22 @@ func newRuntime() *runtime {
 	httpClient := infra.NewClient()
 	httpClient.UseLog(log)
 	shell := platform.NewShell()
+	shell.UseDiagnostic(func(err error, stage string, fields map[string]any) {
+		_ = infra.ReportError(log, err, "Shell", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "open-external", Stage: stage, Fields: fields})
+	})
 	fs := platform.NewFS()
+	fs.UseDiagnostic(func(err error, stage string, fields map[string]any) {
+		_ = infra.ReportError(log, err, "FS", infra.Diagnostic{Operation: "write-access", Stage: stage, Fields: fields})
+	})
 	native := platform.NewNative()
 	window := NewWindow()
 	notifier := notifications.New()
 	eventEmit := emitAppEvent
 	transferService := transfer.NewWithOptions(transfer.Options{
-		Log:               log,
+		Log: log,
+		ReportFailure: func(err error, fields map[string]any) error {
+			return infra.ReportError(log, err, "Transfer", infra.Diagnostic{Fields: fields})
+		},
 		EventEmit:         eventEmit,
 		PreventSuspension: native.PreventAppSuspension,
 		SyncWindowProgress: func(progress *transfer.WindowProgress) {
@@ -89,6 +98,7 @@ func newRuntime() *runtime {
 	settings := setting.NewWithOptions(nil, setting.Options{Locale: platform.SystemLocale()})
 	download := infra.NewDownload()
 	archive := infra.NewArchive()
+	archive.UseLog(log)
 	protocolService := infra.NewProtocol()
 	protocolService.Configure(httpClient, log)
 	githubRate := infra.NewGitHubRateCoordinator()
@@ -227,7 +237,7 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 				return
 			}
 			if err := transfers.RefreshPowerSaveBlock(context.Background()); err != nil {
-				log.Error(err.Error(), "setting.powerSaveBlockInTransfer")
+				_ = infra.ReportError(log, err, "setting.powerSaveBlockInTransfer", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "setting.powerSaveBlockInTransfer", Stage: "background"})
 			}
 		},
 		AfterBandwidthLimitChanged: transfers.SetDownloadBandwidthLimitMibps,
@@ -242,7 +252,7 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 			}
 			if enabled {
 				if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
-					log.Error(err.Error(), "Setting.xxmi.persistToggles")
+					_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Setting.xxmi.persistToggles", Stage: "background"})
 				}
 				return
 			}
@@ -310,7 +320,7 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 		return err
 	}
 	if rt.store != nil {
-		_ = rt.store.Close()
+		_ = infra.ReportError(rt.log, rt.store.Close(), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "close-previous-store"})
 	}
 	rt.store = store
 	if rt.updater != nil && store.DB != nil {
@@ -333,23 +343,27 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 		rt.transfer.UseSettings(rt.setting)
 	}
 	if err := rt.setting.MigrateElectronStorage(ctx); err != nil {
-		_ = rt.Close()
+		cleanupErr := rt.Close()
+		_ = infra.ReportError(rt.log, infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "migrate-settings"})
 		return err
 	}
 	if _, err := rt.setting.Get(ctx, setting.KeyGeneralLanguage); err != nil {
-		_ = rt.Close()
+		cleanupErr := rt.Close()
+		_ = infra.ReportError(rt.log, infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "read-language"})
 		return err
 	}
 	level, err := rt.setting.Get(ctx, setting.KeyGeneralLogLevel)
 	if err != nil {
-		_ = rt.Close()
+		cleanupErr := rt.Close()
+		_ = infra.ReportError(rt.log, infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "read-log-level"})
 		return err
 	}
 	s, _ := level.(string)
 	rt.log.SetLevel(s)
 	if rt.transfer != nil {
 		if err := rt.transfer.ApplyBandwidthLimitsFromSettings(ctx); err != nil {
-			_ = rt.Close()
+			cleanupErr := rt.Close()
+			_ = infra.ReportError(rt.log, infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "bandwidth-settings"})
 			return err
 		}
 	}
@@ -366,7 +380,7 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 		rt.mod.UseClient(store.DB)
 		rt.mod.UseSettings(rt.setting)
 		if err := rt.mod.StartCompression(ctx); err != nil {
-			rt.log.Error(err.Error(), "Mod:compression:start")
+			_ = infra.ReportError(rt.log, err, "Mod:compression:start", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:compression:start", Stage: "background"})
 		}
 	}
 	if rt.native != nil {
@@ -375,18 +389,18 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	if rt.tools != nil {
 		rt.tools.UseClient(store.DB)
 		if err := rt.tools.CleanupStaleModelViewerDirs(); err != nil {
-			rt.log.Warn(err.Error(), "StaticGlb.cleanupStaleViewerTempDirs")
+			_ = infra.ReportError(rt.log, err, "StaticGlb.cleanupStaleViewerTempDirs", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "StaticGlb.cleanupStaleViewerTempDirs", Stage: "background"})
 		}
 		if err := rt.tools.CleanupStaleD3DBuilds(ctx); err != nil {
-			rt.log.Warn(err.Error(), "4001Fixer:cleanupStaleBuildDirs")
+			_ = infra.ReportError(rt.log, err, "4001Fixer:cleanupStaleBuildDirs", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "4001Fixer:cleanupStaleBuildDirs", Stage: "background"})
 		}
 		rt.tools.Start4001ReleasePrefetch()
 		if err := rt.tools.RecoverBisects(ctx); err != nil {
-			rt.log.Error(err.Error(), "ModBisect")
+			_ = infra.ReportError(rt.log, err, "ModBisect", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "ModBisect", Stage: "background"})
 		}
 		rt.tools.StartWuwaAutoUpdateCheck()
 		if err := rt.tools.StartPersistWatcher(ctx); err != nil {
-			rt.log.Error(err.Error(), "TogglePersist")
+			_ = infra.ReportError(rt.log, err, "TogglePersist", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "TogglePersist", Stage: "background"})
 		}
 	}
 	return nil
@@ -400,41 +414,47 @@ func (rt *runtime) Close() error {
 		rt.gameBananaLogin.Close()
 	}
 	if rt.gamebanana != nil {
-		_ = rt.gamebanana.ServiceShutdown()
+		_ = infra.ReportError(rt.log, rt.gamebanana.ServiceShutdown(), "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"})
 	}
 	var err error
 	if rt.localHTTP != nil {
-		err = errors.Join(err, rt.localHTTP.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.localHTTP.ServiceShutdown(), infra.Diagnostic{Stage: "localHTTP"}))
 	}
 	if rt.updater != nil {
-		err = errors.Join(err, rt.updater.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
 	}
 	if rt.protocol != nil {
-		err = errors.Join(err, rt.protocol.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.protocol.ServiceShutdown(), infra.Diagnostic{Stage: "protocol"}))
 	}
 	if rt.transfer != nil {
-		err = errors.Join(err, rt.transfer.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.transfer.ServiceShutdown(), infra.Diagnostic{Stage: "transfer"}))
 	}
 	if rt.window != nil {
 		rt.window.CloseTaskbar()
 	}
 	if rt.auth != nil {
-		err = errors.Join(err, rt.auth.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
 	}
 	if rt.mod != nil {
-		err = errors.Join(err, rt.mod.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
 	}
 	if rt.tools != nil {
-		err = errors.Join(err, rt.tools.ServiceShutdown())
+		err = errors.Join(err, infra.AnnotateError(rt.tools.ServiceShutdown(), infra.Diagnostic{Stage: "tools"}))
 	}
 	if rt.native != nil {
-		err = errors.Join(err, rt.native.Close())
+		err = errors.Join(err, infra.AnnotateError(rt.native.Close(), infra.Diagnostic{Stage: "native"}))
 	}
+	err = infra.ReportError(rt.log, err, "Runtime", infra.Diagnostic{Operation: "shutdown"})
 	if rt.log != nil {
 		err = errors.Join(err, rt.log.Close())
 	}
 	if rt.store != nil {
-		err = errors.Join(err, rt.store.Close())
+		storeErr := rt.store.Close()
+		_ = infra.ReportError(rt.log, storeErr, "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "store"})
+		err = errors.Join(err, storeErr)
+		if storeErr != nil && rt.log != nil {
+			err = errors.Join(err, rt.log.Close())
+		}
 	}
 	return err
 }

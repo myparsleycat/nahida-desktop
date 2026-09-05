@@ -132,18 +132,19 @@ type ClientOptions struct {
 
 // Client is the Electron DesktopHttpService port.
 type Client struct {
-	mu             sync.Mutex
-	version        string
-	token          TokenLookup
-	refreshSession SessionRefresh
-	log            *Log
-	http           *http.Client
-	retryLimit     int
-	retryWait      time.Duration
-	probeFn        func()
-	onStatus       func(BackendStatus)
-	backendURL     string
-	backend        BackendStatus
+	mu              sync.Mutex
+	version         string
+	token           TokenLookup
+	refreshSession  SessionRefresh
+	log             *Log
+	http            *http.Client
+	retryLimit      int
+	retryWait       time.Duration
+	probeFn         func()
+	onStatus        func(BackendStatus)
+	backendURL      string
+	backend         BackendStatus
+	probeDiagnostic DiagnosticThrottle
 }
 
 func NewClient() *Client {
@@ -321,7 +322,18 @@ func (c *Client) GetHeaders(rawURL string) (http.Header, error) {
 	return h, nil
 }
 
-func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*http.Response, error) {
+func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (response *http.Response, returnErr error) {
+	var diagnosticResponse *http.Response
+	attemptsMade := 0
+	stage := "prepare"
+	defer func() {
+		diagnostic := HTTPDiagnostic(opts.Method, rawURL, stage, diagnosticResponse)
+		if opts.Method == "" {
+			diagnostic.Fields["method"] = http.MethodGet
+		}
+		diagnostic.Fields["attempts"] = attemptsMade
+		returnErr = AnnotateError(returnErr, diagnostic)
+	}()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -381,7 +393,10 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*
 		}
 		req.Header = header.Clone()
 
+		stage = "request"
+		attemptsMade++
 		resp, err = c.http.Do(req)
+		diagnosticResponse = resp
 		if err != nil {
 			if attempt+1 < attempts && isUnreachable(err) {
 				continue
@@ -401,7 +416,8 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*
 	if resp == nil {
 		return nil, errors.New("http: empty response")
 	}
-	resp = rewriteCloudflareTimeout(resp)
+	stage = "response"
+	resp = c.rewriteTimeout(resp)
 	if nhd {
 		if err := normalizeAPIResponse(resp); err != nil {
 			c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, err)
@@ -418,7 +434,10 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*
 				return nil, requestErr
 			}
 			request.Header = header.Clone()
+			stage = "fallback-request"
+			attemptsMade++
 			resp, requestErr = c.http.Do(request)
+			diagnosticResponse = resp
 			if requestErr != nil {
 				if isUnreachable(requestErr) {
 					c.SetOffline()
@@ -426,7 +445,7 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (*
 				return nil, requestErr
 			}
 			rawURL = fallbackURL
-			resp = rewriteCloudflareTimeout(resp)
+			resp = c.rewriteTimeout(resp)
 			if normalizeErr := normalizeAPIResponse(resp); normalizeErr != nil {
 				c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, normalizeErr)
 				return nil, normalizeErr
@@ -487,7 +506,7 @@ func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.
 		}
 		return nil, err
 	}
-	response = rewriteCloudflareTimeout(response)
+	response = c.rewriteTimeout(response)
 	if nhd {
 		if err := normalizeAPIResponse(response); err != nil {
 			c.logAPIResponseDecodeFailure(rawURL, response.StatusCode, err)
@@ -515,6 +534,7 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 	endpoint := strings.TrimRight(c.backendURL, "/") + "/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		c.reportProbe(err, endpoint, "prepare", nil)
 		c.SetOffline()
 		return c.GetStatus()
 	}
@@ -522,12 +542,13 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		c.reportProbe(err, endpoint, "request", nil)
 		c.SetOffline()
 		return c.GetStatus()
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if err := normalizeAPIResponse(resp); err != nil {
-		c.logAPIResponseDecodeFailure(endpoint, resp.StatusCode, err)
+		c.reportProbe(err, endpoint, "decode", resp)
 		c.SetOffline()
 		return c.GetStatus()
 	}
@@ -535,7 +556,14 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 	var payload struct {
 		Status string `json:"status"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&payload)
+	decodeErr := json.NewDecoder(resp.Body).Decode(&payload)
+	if decodeErr != nil {
+		c.reportProbe(decodeErr, endpoint, "decode", resp)
+	} else if resp.StatusCode >= 400 {
+		c.reportProbe(&HTTPError{Status: resp.StatusCode}, endpoint, "response", resp)
+	} else {
+		c.probeDiagnostic.Report(c.log, nil, "HTTP", Diagnostic{})
+	}
 
 	switch payload.Status {
 	case "maintenance":
@@ -583,6 +611,9 @@ func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.
 	}
 	body, err := peekBody(resp)
 	if err != nil {
+		diagnostic := HTTPDiagnostic("", rawURL, "read-unauthorized-response", resp)
+		diagnostic.Severity = DiagnosticWarn
+		_ = ReportError(c.log, err, "HTTP", diagnostic)
 		body = ""
 	}
 	normalized := normalizeAuthBody(body)
@@ -599,7 +630,7 @@ func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.
 	}
 	if err := refresh(); err != nil && log != nil {
 		log.Warn(map[string]any{
-			"url":    rawURL,
+			"url":    SanitizeLogURL(rawURL),
 			"status": resp.StatusCode,
 			"stage":  "refresh-session",
 			"error":  err.Error(),

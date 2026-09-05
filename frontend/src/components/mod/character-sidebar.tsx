@@ -43,6 +43,7 @@ import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useGames } from "@renderer/hooks/use-mod-data";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
+import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
@@ -301,7 +302,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           return invalidatePreviewQueries(group.path);
         })
         .catch((error) => {
-          console.error(error);
+          Logger.capture("components/mod/character-sidebar.tsx", error);
         });
     },
     [invalidatePreviewQueries, t],

@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -195,7 +197,7 @@ func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput)
 	}
 	info, err := os.Stat(sourceRoot)
 	if err != nil || !info.IsDir() {
-		return result, contractError(fmt.Sprintf("Mod path does not exist: %s", sourceRoot))
+		return result, infra.WithCause(contractError(fmt.Sprintf("Mod path does not exist: %s", sourceRoot)), err)
 	}
 	if t.mod == nil {
 		return result, errors.New("tools service has no mod service")
@@ -465,7 +467,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 		return BodyShapeLoadResult{}, err
 	}
 	if _, err := os.Stat(resolved); err != nil {
-		return BodyShapeLoadResult{}, contractError(fmt.Sprintf("Path does not exist: %s", resolved))
+		return BodyShapeLoadResult{}, infra.WithCause(contractError(fmt.Sprintf("Path does not exist: %s", resolved)), err)
 	}
 	iniPath, sections, err := loadModINIBundle(resolved)
 	if err != nil {
@@ -578,7 +580,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 	}
 	original, err := os.ReadFile(positionPath)
 	if err != nil {
-		return BodyShapeExportResult{}, contractError(fmt.Sprintf("Position buffer not found: %s", positionPath))
+		return BodyShapeExportResult{}, infra.WithCause(contractError(fmt.Sprintf("Position buffer not found: %s", positionPath)), err)
 	}
 	expected := len(input.Positions) / 3
 	if len(input.Positions)%3 != 0 {
@@ -843,7 +845,7 @@ func resolveBodyShapeResource(root, relative string) (string, error) {
 	}
 	path, err := filepath.Abs(filepath.Join(rootAbs, filepath.FromSlash(relative)))
 	if err != nil || !sameOrChildPath(rootAbs, path) || samePathFold(rootAbs, path) {
-		return "", errors.New("resource path is outside mod root")
+		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
 	realRoot, err := filepath.EvalSymlinks(rootAbs)
 	if err != nil {
@@ -851,11 +853,11 @@ func resolveBodyShapeResource(root, relative string) (string, error) {
 	}
 	realPath, err := filepath.EvalSymlinks(path)
 	if err != nil || !sameOrChildPath(realRoot, realPath) || samePathFold(realRoot, realPath) {
-		return "", errors.New("resource path is outside mod root")
+		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
 	info, err := os.Stat(realPath)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("resource is not a regular file")
+		return "", infra.WithCause(errors.New("resource is not a regular file"), err)
 	}
 	return realPath, nil
 }
@@ -884,7 +886,7 @@ func remapBodyShapePathWithResolver(
 	}
 	relative, err := filepath.Rel(comparisonRoot, comparisonPath)
 	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return "", contractError(fmt.Sprintf("Path is outside mod root: %s", path))
+		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
 	}
 	return filepath.Join(targetRoot, relative), nil
 }
@@ -919,7 +921,7 @@ func copyBodyShapeTree(ctx context.Context, source, target string) error {
 		}
 		info, err := entry.Info()
 		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("unsupported mod entry: %s", path)
+			return infra.WithCause(fmt.Errorf("unsupported mod entry: %s", path), err)
 		}
 		return copyBodyShapeFile(path, destination, info.Mode().Perm())
 	})
@@ -940,24 +942,26 @@ func copyBodyShapeFile(source, target string, mode os.FileMode) error {
 	return errors.Join(copyErr, closeErr)
 }
 
-func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) error {
+func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) (returnErr error) {
 	temp, err := os.CreateTemp(filepath.Dir(target), ".body-shape-*")
 	if err != nil {
 		return err
 	}
 	tempPath := temp.Name()
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() {
+		cleanupErr := os.Remove(tempPath)
+		if !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
+		}
+	}()
 	if err := temp.Chmod(mode); err != nil {
-		_ = temp.Close()
-		return err
+		return infra.WithCause(err, temp.Close())
 	}
 	if _, err := temp.Write(data); err != nil {
-		_ = temp.Close()
-		return err
+		return infra.WithCause(err, temp.Close())
 	}
 	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		return err
+		return infra.WithCause(err, temp.Close())
 	}
 	if err := temp.Close(); err != nil {
 		return err

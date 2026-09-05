@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const maxLiteralDepth = 64
@@ -363,7 +365,7 @@ func (p *literalParser) parseString() (string, error) {
 			}
 			value, err := strconv.ParseUint(p.source[p.pos:p.pos+digits], 16, 32)
 			if err != nil || !utf8.ValidRune(rune(value)) {
-				return "", errors.New("invalid Unicode escape")
+				return "", infra.WithCause(errors.New("invalid Unicode escape"), err)
 			}
 			result.WriteRune(rune(value))
 			p.pos += digits

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/watcher"
 )
 
@@ -50,7 +51,8 @@ type CompressionState struct {
 }
 
 type compressionCoordinator struct {
-	owner *Mod
+	owner      *Mod
+	diagnostic infra.DiagnosticThrottle
 
 	requestMu            sync.Mutex
 	mu                   sync.Mutex
@@ -548,11 +550,11 @@ func (c *compressionCoordinator) replaceWatcher(ctx context.Context) error {
 		return err
 	}
 	if c.watcher != nil {
-		_ = c.watcher.Close()
+		c.logError(c.watcher.Close(), "close-watcher", "", "")
 		c.watcher = nil
 	}
 	if c.configWatcher != nil {
-		_ = c.configWatcher.Close()
+		c.logError(c.configWatcher.Close(), "close-config-watcher", "", "")
 		c.configWatcher = nil
 	}
 	if len(roots) > 0 {
@@ -848,7 +850,7 @@ func (c *compressionCoordinator) logError(err error, stage, method, path string)
 	if err == nil || c.owner.log == nil {
 		return
 	}
-	c.owner.log.Error(fmt.Sprintf("method=%s stage=%s path=%q cleanup=pending error=%v", method, stage, path, err), "Mod:compression")
+	c.diagnostic.Report(c.owner.log, err, "Mod:compression", infra.Diagnostic{Operation: "compression", Stage: stage, Fields: map[string]any{"method": method, "path": path, "cleanup": "pending"}})
 }
 
 func (c *compressionCoordinator) snapshot() CompressionState {

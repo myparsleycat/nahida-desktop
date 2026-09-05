@@ -4,6 +4,7 @@ import {
   type ZZMIFixerPrepareResult,
   type ZZMIFixerRestoreConflict,
 } from "@bindings/tools";
+import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import { getFixToolPresets, getFixToolScripts } from "@renderer/wails/fix-tools";
 import {
@@ -162,7 +163,7 @@ export function useModFixRunner() {
         await Tools.RunPreset(id, modPath);
       }
     } catch (error) {
-      console.error(error);
+      Logger.capture("hooks/use-mod-fix-runner.tsx", error);
     } finally {
       setIsRunning(false);
       runInProgressRef.current = false;
@@ -261,7 +262,7 @@ export function useModFixRunner() {
     try {
       await Tools.WuwaFixerRun(activeModPath, wuwaOptions);
     } catch (error) {
-      console.error(error);
+      Logger.capture("hooks/use-mod-fix-runner.tsx", error);
     } finally {
       setIsRunning(false);
     }
@@ -340,7 +341,7 @@ export function useModFixRunner() {
         );
       }
     } catch (error) {
-      console.error(error);
+      Logger.capture("hooks/use-mod-fix-runner.tsx", error);
       toast.error((error as Error).message);
     } finally {
       setIsRunning(false);

@@ -67,8 +67,8 @@ func (d *Drive) fetchDirectoryDownloadMetadata(ctx context.Context, itemID strin
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		raw, _ := io.ReadAll(response.Body)
-		return DownloadMetadata{}, CreateDriveAPIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), "download metadata", response.StatusCode)
+		raw, readErr := io.ReadAll(response.Body)
+		return DownloadMetadata{}, infra.WithCause(CreateDriveAPIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), "download metadata", response.StatusCode), infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", response)))
 	}
 	metadata := DownloadMetadata{Files: []transfer.DownloadFile{}, Dirs: []transfer.Directory{}}
 	hasRoot := false

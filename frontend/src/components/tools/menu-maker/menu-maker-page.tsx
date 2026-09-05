@@ -178,10 +178,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         );
         const blobs = draft
           ? await loadDraftBlobs(draft.id).catch((error) => {
-              Logger.error(
-                { error: String(error), draftId: draft.id },
-                "MenuMakerPage:loadDraftBlobs",
-              );
+              Logger.error({ error, draftId: draft.id }, "MenuMakerPage:loadDraftBlobs");
               return undefined;
             })
           : undefined;
@@ -199,7 +196,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
           draft ? t("page.tools.menu_maker.draft_restored") : t("page.tools.menu_maker.loaded"),
         );
       } catch (error) {
-        Logger.error({ error: String(error), filePath }, "MenuMakerPage:loadSource");
+        Logger.error({ error, filePath }, "MenuMakerPage:loadSource");
         toast.error(
           String(error).includes("MENU_MAKER_NO_KEY_SECTIONS")
             ? t("page.tools.menu_maker.no_keys")
@@ -220,7 +217,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         dispatch({ type: "scan", value: result });
         if (result.files?.length === 1) await loadSource(result.files[0].path);
       } catch (error) {
-        Logger.error({ error: String(error), root, includeTXT }, "MenuMakerPage:scanFolder");
+        Logger.error({ error, root, includeTXT }, "MenuMakerPage:scanFolder");
         toast.error(t("page.tools.menu_maker.scan_failed"));
       } finally {
         dispatch({ type: "busy", value: false });
@@ -269,15 +266,15 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         ),
       ]);
     } catch (error) {
-      Logger.error({ error: String(error), draftId: id }, "MenuMakerPage:saveDraftMetadata");
+      Logger.error({ error, draftId: id }, "MenuMakerPage:saveDraftMetadata");
     }
     for (const draft of superseded) {
       void deleteDraftBlobs(draft.id).catch((error) =>
-        Logger.error({ error: String(error), draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
+        Logger.error({ error, draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
       );
     }
     void saveDraftBlobs(id, { originalText: source.text, ...detached.blobs }).catch((error) =>
-      Logger.error({ error: String(error), draftId: id }, "MenuMakerPage:saveDraftBlobs"),
+      Logger.error({ error, draftId: id }, "MenuMakerPage:saveDraftBlobs"),
     );
   }, [state.document, state.settings, state.slots, state.source]);
 
@@ -315,10 +312,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
       })
       .catch((error) => {
         if (cancelled) return;
-        Logger.error(
-          { error: String(error), sourcePath: state.source?.path },
-          "MenuMakerPage:generate",
-        );
+        Logger.error({ error, sourcePath: state.source?.path }, "MenuMakerPage:generate");
         setPreview(undefined);
       });
     return () => {
@@ -357,10 +351,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
       setPreview(result);
       return result;
     } catch (error) {
-      Logger.error(
-        { error: String(error), sourcePath: state.source.path },
-        "MenuMakerPage:generate",
-      );
+      Logger.error({ error, sourcePath: state.source.path }, "MenuMakerPage:generate");
       toast.error(t("page.tools.menu_maker.load_failed"));
       return null;
     }
@@ -375,10 +366,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         generated.slotStates,
       );
     } catch (error) {
-      Logger.error(
-        { error: String(error), sourcePath: state.source?.path },
-        "MenuMakerPage:renderAssets",
-      );
+      Logger.error({ error, sourcePath: state.source?.path }, "MenuMakerPage:renderAssets");
       toast.error(t("page.tools.menu_maker.font_failed"));
       return null;
     }
@@ -416,7 +404,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
       }
     } catch (error) {
       Logger.error(
-        { error: String(error), sourcePath: state.source.path, outputName },
+        { error, sourcePath: state.source.path, outputName },
         "MenuMakerPage:applyBundle",
       );
       toast.error(
@@ -450,7 +438,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
       toast.success(t("page.tools.menu_maker.saved"));
     } catch (error) {
       Logger.error(
-        { error: String(error), destinationPath: selection.filePath, outputName },
+        { error, destinationPath: selection.filePath, outputName },
         "MenuMakerPage:saveINI",
       );
       toast.error(t("page.tools.menu_maker.save_failed"));
@@ -486,7 +474,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
       toast.success(t("page.tools.menu_maker.saved"));
     } catch (error) {
       Logger.error(
-        { error: String(error), destinationPath: selection.filePath, outputName },
+        { error, destinationPath: selection.filePath, outputName },
         "MenuMakerPage:saveZIP",
       );
       toast.error(t("page.tools.menu_maker.save_failed"));
@@ -980,10 +968,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
               setDialog(null);
               toast.success(t("page.tools.menu_maker.draft_restored"));
             } catch (error) {
-              Logger.error(
-                { error: String(error), draftId: draft.id },
-                "MenuMakerPage:restoreDraft",
-              );
+              Logger.error({ error, draftId: draft.id }, "MenuMakerPage:restoreDraft");
               toast.error(t("page.tools.menu_maker.draft_restore_failed"));
             }
           }}
@@ -1472,7 +1457,8 @@ function IconPicker({
         setResults([...searchLucideIcons(query), ...iconify]);
         setCache(await getIconifyCacheStats());
       }
-    } catch {
+    } catch (error) {
+      Logger.capture("menu-maker:icon-search", error);
       setResults([...searchLucideIcons(query), ...(await searchCachedIconifyIcons(query))]);
       toast.error(t("page.tools.menu_maker.icon_offline"));
     } finally {
@@ -1645,7 +1631,7 @@ function CropDialog({
         if (!cancelled) setImage(next);
       },
       (error: unknown) => {
-        if (!cancelled) Logger.error({ error: String(error) }, "MenuMakerPage:cropDecode");
+        if (!cancelled) Logger.error({ error }, "MenuMakerPage:cropDecode");
       },
     );
     return () => {
@@ -1754,10 +1740,7 @@ function DraftDialog({
               variant="ghost"
               onClick={() => {
                 void deleteDraftBlobs(draft.id).catch((error) =>
-                  Logger.error(
-                    { error: String(error), draftId: draft.id },
-                    "MenuMakerPage:deleteDraftBlobs",
-                  ),
+                  Logger.error({ error, draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
                 );
                 setDrafts(saveDraftMetadata(drafts.filter((item) => item.id !== draft.id)));
               }}
@@ -1773,7 +1756,7 @@ function DraftDialog({
           variant="destructive"
           onClick={() => {
             void Promise.all(drafts.map((draft) => deleteDraftBlobs(draft.id))).catch((error) =>
-              Logger.error({ error: String(error) }, "MenuMakerPage:clearDraftBlobs"),
+              Logger.error({ error }, "MenuMakerPage:clearDraftBlobs"),
             );
             setDrafts(saveDraftMetadata([]));
           }}
@@ -1981,7 +1964,8 @@ function loadStoredSettings(): MenuMakerSettings {
       columns: stored.columns || DEFAULT_MENU_MAKER_SETTINGS.columns,
       palette: { ...DEFAULT_MENU_MAKER_SETTINGS.palette, ...stored.palette },
     };
-  } catch {
+  } catch (error) {
+    Logger.capture("menu-maker:read-settings", error);
     return DEFAULT_MENU_MAKER_SETTINGS;
   }
 }
