@@ -1,3 +1,4 @@
+import { Dialog } from "@bindings/platform";
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -22,7 +23,7 @@ import {
   useViewStore,
 } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
-import { formatDate, formatSize, getRandInt } from "@shared/utils";
+import { formatDate, formatSize, getRandInt, toErrorMessage } from "@shared/utils";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -44,7 +45,7 @@ import {
   UploadIcon,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -182,7 +183,13 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 }
 
-export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
+export function AkashaHeadButtons({
+  currentId,
+  onUploadPaths,
+}: {
+  currentId?: string;
+  onUploadPaths: (paths: string[]) => Promise<void>;
+}) {
   const { t } = useTranslation();
   const dialog = useDialogStore();
   const { selectedItems } = useSelectionStore();
@@ -197,6 +204,37 @@ export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   const setIncludeSubdirs = useViewStore((s) => s.setIncludeSubdirs);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
+
+  const uploadPendingRef = useRef(false);
+  const [uploadPending, setUploadPending] = useState(false);
+  const canUpload = !!currentId && currentId !== "share" && currentId !== "root";
+
+  const handleUploadClick = async (directory: boolean) => {
+    if (!canUpload || uploadPendingRef.current) return;
+
+    uploadPendingRef.current = true;
+    setUploadPending(true);
+    try {
+      const selected = await Dialog.ShowOpenDialog({
+        title: t(
+          directory
+            ? "page.drive.head_buttons.dropdown_menu.make_new.upload_dir"
+            : "page.drive.head_buttons.dropdown_menu.make_new.upload_file",
+        ),
+        defaultPath: "",
+        filters: [],
+        properties: [directory ? "openDirectory" : "openFile", "multiSelections"],
+      });
+      if (selected.canceled || !selected.filePaths?.length) return;
+
+      await onUploadPaths(selected.filePaths);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      uploadPendingRef.current = false;
+      setUploadPending(false);
+    }
+  };
 
   const canSearchSubdirs = !!currentId && currentId !== "share";
   const searchPlaceholder =
@@ -311,11 +349,23 @@ export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem className="cursor-pointer gap-3">
+              <DropdownMenuItem
+                className="cursor-pointer gap-3"
+                disabled={!canUpload || uploadPending}
+                onClick={() => {
+                  void handleUploadClick(true);
+                }}
+              >
                 <UploadIcon size={20} />
                 {t("page.drive.head_buttons.dropdown_menu.make_new.upload_dir")}
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer gap-3">
+              <DropdownMenuItem
+                className="cursor-pointer gap-3"
+                disabled={!canUpload || uploadPending}
+                onClick={() => {
+                  void handleUploadClick(false);
+                }}
+              >
                 <UploadIcon size={20} />
                 {t("page.drive.head_buttons.dropdown_menu.make_new.upload_file")}
               </DropdownMenuItem>

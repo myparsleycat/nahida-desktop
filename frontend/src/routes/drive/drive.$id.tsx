@@ -143,7 +143,7 @@ function RouteComponent() {
 
   const displayContents = isDescendantSearch ? searchContents : isSearching ? [] : localContents;
 
-  const handleDroppedPaths = async (paths: string[]) => {
+  const handleUploadPaths = async (paths: string[]) => {
     try {
       await uploadPaths(paths, effectiveId);
     } catch (error) {
@@ -168,7 +168,7 @@ function RouteComponent() {
   useWindowFileDrop(({ paths, target }) => {
     if (target.id === FileDropTargetID.driveContent) {
       clearDragging();
-      void handleDroppedPaths(paths);
+      void handleUploadPaths(paths);
     }
   });
 
@@ -197,7 +197,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            <AkashaHeadButtons currentId={effectiveId} />
+            <AkashaHeadButtons currentId={effectiveId} onUploadPaths={handleUploadPaths} />
           </div>
 
           <div
