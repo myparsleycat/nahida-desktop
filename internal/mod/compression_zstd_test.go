@@ -36,8 +36,8 @@ func TestCompressionRootsNormalizeDeduplicateAndSkipMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(roots) != 1 || roots[0] != mods {
-		t.Fatalf("roots = %v, want [%s]", roots, mods)
+	if len(roots) != 1 || !sameFileIdentity(t, roots[0], mods) {
+		t.Fatalf("roots = %v, want [%s]", roots, canonicalPath(t, mods))
 	}
 }
 
@@ -72,8 +72,8 @@ func TestCompressionRootsResolveConfiguredSymlinkAndSkipNestedLinks(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(roots) != 1 || !samePath(roots[0], target) {
-		t.Fatalf("roots = %v, want resolved target %s", roots, target)
+	if len(roots) != 1 || !sameFileIdentity(t, roots[0], target) {
+		t.Fatalf("roots = %v, want resolved target %s", roots, canonicalPath(t, target))
 	}
 
 	files, err := walkCompressionFiles(roots, func(string, os.FileInfo) bool { return true })
@@ -438,3 +438,29 @@ func TestEnableContinuesAfterIndividualZstdRestoreFailure(t *testing.T) {
 }
 
 func ignoreCompressionFileErrors(string, error) {}
+
+func sameFileIdentity(t *testing.T, got, want string) bool {
+	t.Helper()
+	gotInfo, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("stat got %q: %v", got, err)
+	}
+	wantInfo, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("stat want %q: %v", want, err)
+	}
+	return os.SameFile(gotInfo, wantInfo)
+}
+
+func canonicalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	absolute, err := filepath.Abs(resolved)
+	if err != nil {
+		return filepath.Clean(resolved)
+	}
+	return filepath.Clean(absolute)
+}
