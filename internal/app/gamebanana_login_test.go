@@ -19,6 +19,8 @@ import (
 type fakeLoginWindow struct {
 	mu                 sync.Mutex
 	cookies            []application.WebviewCookie
+	getErr             error
+	deleteErr          error
 	gets               atomic.Int32
 	inFlight           atomic.Int32
 	maxFlight          atomic.Int32
@@ -82,6 +84,9 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]applica
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.getErr != nil {
+		return nil, w.getErr
+	}
 	if w.cookieScopeURI != "" && uri != w.cookieScopeURI {
 		return nil, nil
 	}
@@ -90,6 +95,9 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]applica
 func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.deleteErr != nil {
+		return w.deleteErr
+	}
 	if w.cookieScopeURI != "" && uri != w.cookieScopeURI {
 		return nil
 	}

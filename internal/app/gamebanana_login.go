@@ -44,12 +44,13 @@ type gameBananaLogin struct {
 	parent *Window
 	log    *infra.Log
 
-	factory       loginWindowFactory
-	logoutFactory loginWindowFactory
-	pollWait      time.Duration
-	profile       loginWindow
-	window        loginWindow
-	cancel        context.CancelFunc
+	factory        loginWindowFactory
+	logoutFactory  loginWindowFactory
+	pollWait       time.Duration
+	pollDiagnostic infra.DiagnosticThrottle
+	profile        loginWindow
+	window         loginWindow
+	cancel         context.CancelFunc
 
 	pollInFlight   bool
 	opening        bool
@@ -147,13 +148,9 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 			l.mu.Lock()
 			l.opening = false
 			l.mu.Unlock()
-			if l.log != nil {
-				l.log.Warn(map[string]any{
-					"stage": "logout-shared-webview-profile",
-					"error": err.Error(),
-				}, "GameBananaLogin.Open")
-			}
-			return "", classifyLoginWindowError(err)
+			return "", infra.ReportError(l.log, classifyLoginWindowError(err), "GameBananaLogin.Open", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "login", Stage: "logout-shared-webview-profile",
+			})
 		}
 
 		window, err := factory()
@@ -161,7 +158,9 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 			l.mu.Lock()
 			l.opening = false
 			l.mu.Unlock()
-			return "", classifyLoginWindowError(err)
+			return "", infra.AnnotateError(classifyLoginWindowError(err), infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "login", Stage: "create-login-window",
+			})
 		}
 		if window == nil {
 			l.mu.Lock()
@@ -182,6 +181,7 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.ready = false
 		l.pollInFlight = false
 		l.lastCandidates = nil
+		l.pollDiagnostic.Report(l.log, nil, "GameBananaLogin", infra.Diagnostic{})
 		l.result = ""
 		l.err = nil
 		l.opening = false
@@ -470,18 +470,17 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 	}
 	l.mu.Unlock()
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) {
 			return false
 		}
 		if errors.Is(err, application.ErrWebviewCookiesUnsupported) {
-			l.settle("", gamebanana.ErrAutoLoginUnsupported)
+			l.settle("", infra.AnnotateError(classifyLoginWindowError(err), l.cookieDiagnostic(ctx, "poll-cookies")))
 			return false
 		}
-		if l.log != nil {
-			l.log.Warn("gamebanana cookie poll failed", "GameBananaLogin")
-		}
-		return true
+		l.pollDiagnostic.Report(l.log, err, "GameBananaLogin", l.cookieDiagnostic(ctx, "poll-cookies"))
+		return !errors.Is(err, context.DeadlineExceeded)
 	}
+	l.pollDiagnostic.Report(l.log, nil, "GameBananaLogin", infra.Diagnostic{})
 
 	candidates := make([]string, 0, len(cookies))
 	unique := make(map[string]struct{}, len(cookies))
@@ -532,7 +531,10 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 			if errors.Is(verr, context.Canceled) {
 				return false
 			}
-			l.settle("", gamebanana.ClassifyLoginError(verr))
+			l.settle("", infra.AnnotateError(
+				infra.WithCause(gamebanana.ClassifyLoginError(verr), verr),
+				l.cookieDiagnostic(ctx, "validate-cookie"),
+			))
 			return false
 		}
 		if valid {
@@ -544,10 +546,26 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 		l.mu.Lock()
 		l.lastCandidates = nil
 		l.mu.Unlock()
-	} else if l.log != nil {
-		l.log.Warn("gamebanana invalid cookie cleanup failed", "GameBananaLogin")
+	} else if !errors.Is(err, context.Canceled) {
+		diagnostic := l.cookieDiagnostic(ctx, "delete-invalid-cookie")
+		diagnostic.Fields["cleanupFailed"] = true
+		diagnostic.Fields["candidateCount"] = len(untried)
+		_ = infra.ReportError(l.log, err, "GameBananaLogin", diagnostic)
 	}
 	return true
+}
+
+func (l *gameBananaLogin) cookieDiagnostic(ctx context.Context, stage string) infra.Diagnostic {
+	l.mu.Lock()
+	fields := map[string]any{
+		"uri": gameBananaCookieURI, "cookieName": "rmc",
+		"windowClosed": l.closed, "settled": l.settled,
+	}
+	l.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		fields["contextError"] = err.Error()
+	}
+	return infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: stage, Fields: fields}
 }
 
 func (l *gameBananaLogin) pollInterval() time.Duration {
@@ -646,7 +664,7 @@ func classifyLoginWindowError(err error) error {
 		return nil
 	}
 	if errors.Is(err, application.ErrWebviewCookiesUnsupported) {
-		return gamebanana.ErrAutoLoginUnsupported
+		return infra.WithCause(gamebanana.ErrAutoLoginUnsupported, err)
 	}
-	return gamebanana.ClassifyLoginError(err)
+	return infra.WithCause(gamebanana.ClassifyLoginError(err), err)
 }
