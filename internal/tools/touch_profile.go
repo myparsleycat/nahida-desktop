@@ -250,7 +250,7 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 			delete(t.touchSessions, input.SessionID)
 			t.touchMu.Unlock()
 			t.protocol.CleanupMemorySession(session.ProtocolID)
-			_ = os.RemoveAll(session.Dir)
+			t.reportCleanup(os.RemoveAll(session.Dir), "TouchProfileAnalyzeComponents")
 		}
 	}()
 	for index, component := range selectedComponents {
@@ -522,7 +522,7 @@ func (t *Tools) TouchProfileDiscardDraft(_ context.Context, sessionID string) (T
 	t.touchMu.Unlock()
 	if session != nil {
 		t.protocol.CleanupMemorySession(session.ProtocolID)
-		_ = os.RemoveAll(session.Dir)
+		t.reportCleanup(os.RemoveAll(session.Dir), "TouchProfileDiscardDraft")
 	}
 	return TouchProfileOK{OK: true}, nil
 }
@@ -579,13 +579,13 @@ func (t *Tools) TouchProfileApply(ctx context.Context, input TouchProfileApplyIn
 	defer func() { session.Operation = "" }()
 	validation, err := t.generateTouchOutput(ctx, session, sourceRoot, targetRoot, "apply")
 	if err != nil {
-		_ = os.RemoveAll(targetRoot)
+		t.reportCleanup(os.RemoveAll(targetRoot), "TouchProfileApply")
 		return TouchApplyResult{}, err
 	}
 	reenable := !touchDisabledPrefixRE.MatchString(filepath.Base(sourceRoot))
 	disabledSource, err := t.mod.Disable(ctx, sourceRoot)
 	if err != nil {
-		_ = os.RemoveAll(targetRoot)
+		t.reportCleanup(os.RemoveAll(targetRoot), "TouchProfileApply")
 		return TouchApplyResult{}, err
 	}
 	session.Applied = &touchAppliedProfile{OutputRoot: targetRoot, SourceRoot: disabledSource, Reenable: reenable}
@@ -619,7 +619,7 @@ func (t *Tools) TouchProfileRegenerate(ctx context.Context, input TouchProfileAp
 		id = id[:8]
 	}
 	staging := filepath.Join(filepath.Dir(outputRoot), "."+filepath.Base(outputRoot)+".regenerating-"+id)
-	defer func() { _ = os.RemoveAll(staging) }()
+	defer func() { t.reportCleanup(os.RemoveAll(staging), "TouchProfileRegenerate") }()
 	if !pathIsDirectory(sourceRoot) {
 		return TouchApplyResult{}, contractError(fmt.Sprintf("Touch source mod not found: %s", sourceRoot))
 	}
@@ -961,7 +961,7 @@ func resolveTouchRelative(root, relative string) (string, error) {
 	root, _ = filepath.Abs(root)
 	absolute, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(relative)))
 	if err != nil || samePathFold(root, absolute) || !sameOrChildPath(root, absolute) {
-		return "", contractError(fmt.Sprintf("Path is outside mod root: %s", relative))
+		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", relative)), err)
 	}
 	return absolute, nil
 }
@@ -969,7 +969,7 @@ func remapTouchPath(path, sourceRoot, targetRoot string) (string, error) {
 	absolute, _ := filepath.Abs(path)
 	relative, err := filepath.Rel(sourceRoot, absolute)
 	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return "", contractError(fmt.Sprintf("Path is outside mod root: %s", path))
+		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
 	}
 	return filepath.Join(targetRoot, relative), nil
 }
@@ -1037,7 +1037,9 @@ func replaceTouchOutput(staging, output string) (err error) {
 	}
 	backup := output + ".backup-" + id
 	oldMoved, newMoved := false, false
-	defer func() { _ = os.RemoveAll(staging) }()
+	defer func() {
+		err = infra.WithCause(err, infra.AnnotateError(os.RemoveAll(staging), infra.Diagnostic{Stage: "cleanup"}))
+	}()
 	if err = os.Rename(output, backup); err != nil {
 		return err
 	}
@@ -1051,7 +1053,7 @@ func replaceTouchOutput(staging, output string) (err error) {
 	newMoved = true
 	if err = os.RemoveAll(backup); err != nil {
 		if newMoved {
-			_ = os.RemoveAll(output)
+			err = infra.WithCause(err, infra.AnnotateError(os.RemoveAll(output), infra.Diagnostic{Stage: "rollback-remove"}))
 		}
 		if oldMoved {
 			if restoreErr := os.Rename(backup, output); restoreErr != nil {
@@ -1084,7 +1086,7 @@ func copyTouchRuntimeShaders(outputRoot string) error {
 	for _, name := range touchShaderFiles {
 		raw, err := touchRuntimeShaders.ReadFile("touch_runtime/" + name)
 		if err != nil {
-			return contractError(fmt.Sprintf("Bundled touch runtime shader missing: %s", name))
+			return infra.WithCause(contractError(fmt.Sprintf("Bundled touch runtime shader missing: %s", name)), err)
 		}
 		if err = os.WriteFile(filepath.Join(target, name), raw, 0600); err != nil {
 			return err

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 // stagedMove is fse.move({ overwrite: true }). Tests replace it the same way
@@ -153,7 +155,7 @@ func finalizeStagedDownload(stagingPath, destinationDir string) (stagedDownloadH
 	backups := make([]stagedBackup, 0, len(entries))
 
 	rollbackPartial := func(err error) error {
-		restoreErrors := []string{}
+		restoreErrors := []error{}
 		for _, entry := range backups {
 			wasMoved := false
 			for _, path := range destinationPaths {
@@ -165,19 +167,19 @@ func finalizeStagedDownload(stagingPath, destinationDir string) (stagedDownloadH
 			isFailedEntry := !wasMoved && entry.backupPath != ""
 			if wasMoved || isFailedEntry {
 				if removeErr := os.RemoveAll(entry.destinationPath); removeErr != nil && !os.IsNotExist(removeErr) {
-					restoreErrors = append(restoreErrors, removeErr.Error())
+					restoreErrors = append(restoreErrors, infra.AnnotateError(removeErr, infra.Diagnostic{Stage: "rollback-remove"}))
 				}
 			}
 			if entry.backupPath != "" {
 				if _, statErr := os.Stat(entry.backupPath); statErr == nil {
 					if moveErr := stagedMove(entry.backupPath, entry.destinationPath); moveErr != nil {
-						restoreErrors = append(restoreErrors, moveErr.Error())
+						restoreErrors = append(restoreErrors, infra.AnnotateError(moveErr, infra.Diagnostic{Stage: "rollback-restore"}))
 					}
 				}
 			}
 		}
 		if len(restoreErrors) > 0 {
-			return fmt.Errorf("%w", err)
+			return infra.WithCause(fmt.Errorf("%w", err), errors.Join(restoreErrors...))
 		}
 		return err
 	}
@@ -206,12 +208,13 @@ func finalizeStagedDownload(stagingPath, destinationDir string) (stagedDownloadH
 		DestinationPaths: destinationPaths,
 		commit: func() error {
 			committed = true
+			var cleanupErrors []error
 			for _, entry := range backups {
 				if entry.backupPath != "" {
-					_ = os.RemoveAll(entry.backupPath)
+					cleanupErrors = append(cleanupErrors, infra.AnnotateError(os.RemoveAll(entry.backupPath), infra.Diagnostic{Stage: "commit-cleanup", Fields: map[string]any{"backupPath": entry.backupPath}}))
 				}
 			}
-			return nil
+			return errors.Join(cleanupErrors...)
 		},
 		restore: func() error {
 			if committed {

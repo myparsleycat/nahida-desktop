@@ -1,4 +1,5 @@
 import { Mod, type CompressionState } from "@bindings/mod";
+import { Logger } from "@renderer/lib/logger";
 import { Events } from "@wailsio/runtime";
 import { useEffect, useState } from "react";
 
@@ -19,7 +20,11 @@ export function useModCompressionState() {
                 if (!disposed && !hasLiveEvent) setState(initialState);
             })
             .catch((error) => {
-                console.error("mod:getCompressionState failed", error);
+                Logger.capture(
+                    "hooks/use-mod-compression-state.ts",
+                    "mod:getCompressionState failed",
+                    error,
+                );
             });
 
         return () => {

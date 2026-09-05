@@ -4,6 +4,7 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
+import { Logger } from "@renderer/lib/logger";
 import { FileDropTargetID, useWindowFileDrop } from "@renderer/wails/file-drop";
 import { getFixToolScripts } from "@renderer/wails/fix-tools";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,7 +86,11 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
       try {
         await Tools.SaveScript(filePath);
       } catch (error) {
-        console.error(`Failed to save script: ${filePath}`, error);
+        Logger.capture(
+          "components/fix-tool-manager/fix-tool-list.tsx",
+          `Failed to save script: ${filePath}`,
+          error,
+        );
         throw error;
       }
     });

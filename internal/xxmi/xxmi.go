@@ -147,7 +147,7 @@ func (x *XXMI) SaveXXMIPath(ctx context.Context, inputPath string) error {
 	config, parsed, err := readAndValidateConfig(filepath.Join(absolute, xxmiConfigName))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("XXMI Launcher Config.json not found")
+			return infra.WithCause(errors.New("XXMI Launcher Config.json not found"), err)
 		}
 		return fmt.Errorf("XXMI Launcher Config.json is invalid: %w", err)
 	}
@@ -186,7 +186,9 @@ func (x *XXMI) FindXXMIPath(ctx context.Context) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := findFileAcrossRoots(ctx, roots, xxmiConfigName, map[string]struct{}{"Backups": {}})
+	var diagnostics infra.DiagnosticBatch
+	defer diagnostics.Report(x.log, "XXMI", "find-config")
+	result, err := findFileAcrossRoots(ctx, roots, xxmiConfigName, map[string]struct{}{"Backups": {}}, diagnostics.Add)
 	if err != nil || result == nil {
 		return nil, err
 	}
@@ -332,7 +334,7 @@ func (x *XXMI) load(ctx context.Context) error {
 	config, parsed, err := readAndValidateConfig(filepath.Join(*path, xxmiConfigName))
 	if err != nil {
 		if x.log != nil {
-			x.log.Error(fmt.Sprintf("Failed to initialize XXMI: %v", err), "XXMI.initialize")
+			_ = infra.ReportError(x.log, err, "XXMI.initialize", infra.Diagnostic{Operation: "initialize", Stage: "background"})
 		}
 		x.mu.Lock()
 		x.path = cloneString(path)
@@ -422,4 +424,11 @@ func cloneString(value *string) *string {
 	}
 	cloned := *value
 	return &cloned
+}
+
+func (x *XXMI) reportCleanup(err error, operation string) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	_ = infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }

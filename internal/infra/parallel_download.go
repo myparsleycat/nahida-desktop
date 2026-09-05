@@ -60,6 +60,7 @@ type ParallelDownloadOptions struct {
 }
 
 type ParallelDownloader struct {
+	log        *Log
 	GetHeaders func(string) (map[string]string, error)
 	Client     *http.Client
 	Remove     func(string) error
@@ -69,6 +70,13 @@ type ParallelDownloader struct {
 	cache    map[string]rangeCacheEntry
 	requests chan struct{}
 	probes   chan struct{}
+}
+
+//wails:ignore
+func (d *ParallelDownloader) UseLog(log *Log) { d.log = log }
+
+func (d *ParallelDownloader) reportCleanup(err error, path string) {
+	_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "parallel-download", Stage: "cleanup", Fields: map[string]any{"path": path}})
 }
 
 func NewParallelDownloader() *ParallelDownloader {
@@ -160,6 +168,7 @@ func (d *ParallelDownloader) CheckRangeSupportWithHeader(ctx context.Context, ra
 		if ctx.Err() != nil {
 			return false, err
 		}
+		_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "range-probe", Stage: "fallback", Fields: map[string]any{"endpoint": SanitizeLogURL(rawURL)}})
 		return false, nil
 	}
 	if supported {
@@ -395,12 +404,15 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 
 	chunkMetaPath := options.SavePath + ".chunk-meta.json"
 	expected := chunkMeta{Resource: SafeURLResource(options.URL), FileSize: float64(options.FileSize)}
-	existing := readChunkMeta(chunkMetaPath)
+	existing := readChunkMeta(chunkMetaPath, func(err error) {
+		_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "parallel-download", Stage: "read-chunk-metadata", Fields: map[string]any{"path": chunkMetaPath}})
+	})
 	if existing == nil || existing.Resource != expected.Resource || existing.FileSize != expected.FileSize {
-		_ = d.removeChunkArtifacts(options.SavePath)
+		cleanupErr := d.removeChunkArtifacts(options.SavePath)
 		if len(listChunkFiles(options.SavePath)) > 0 {
-			return errors.New("failed to discard leftover download chunks")
+			return WithCause(errors.New("failed to discard leftover download chunks"), cleanupErr)
 		}
+		d.reportCleanup(cleanupErr, options.SavePath)
 	}
 	raw, err := json.Marshal(expected)
 	if err != nil {
@@ -413,9 +425,14 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 	targetPath := options.SavePath + ".ntmp"
 	defer func() {
 		if returnErr != nil {
-			_ = d.removeChunkArtifacts(options.SavePath)
+			returnErr = WithCause(returnErr, AnnotateError(d.removeChunkArtifacts(options.SavePath), Diagnostic{Stage: "cleanup-chunks", Fields: map[string]any{"path": options.SavePath}}))
 		}
-		_ = d.removePath(targetPath)
+		cleanupErr := d.removePath(targetPath)
+		if returnErr != nil {
+			returnErr = WithCause(returnErr, AnnotateError(cleanupErr, Diagnostic{Stage: "cleanup-temporary", Fields: map[string]any{"path": targetPath}}))
+		} else {
+			d.reportCleanup(cleanupErr, targetPath)
+		}
 	}()
 
 	var progressMu sync.Mutex
@@ -498,7 +515,7 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 	if err := replaceFile(targetPath, options.SavePath); err != nil {
 		return err
 	}
-	_ = d.removeChunkArtifacts(options.SavePath)
+	d.reportCleanup(d.removeChunkArtifacts(options.SavePath), options.SavePath)
 	return nil
 }
 
@@ -545,7 +562,7 @@ func (d *ParallelDownloader) downloadSegment(
 		}
 		ignoreStored = false
 		if stored > chunkSize {
-			_ = d.removePath(segment.chunkPath)
+			d.reportCleanup(d.removePath(segment.chunkPath), segment.chunkPath)
 		}
 		if delta := resumeBytes - reported; delta != 0 {
 			reportProgress(delta)
@@ -763,12 +780,17 @@ func (d *ParallelDownloader) downloadChunk(ctx context.Context, args downloadChu
 
 func (d *ParallelDownloader) removeChunkArtifacts(savePath string) error {
 	var first error
+	var additional DiagnosticBatch
 	for _, path := range listChunkArtifacts(savePath) {
-		if err := d.removePath(path); err != nil && first == nil {
-			first = err
+		if err := d.removePath(path); err != nil {
+			if first == nil {
+				first = err
+			} else {
+				additional.Add(err)
+			}
 		}
 	}
-	return first
+	return WithCause(first, errors.Join(additional.causes...))
 }
 
 func isExpectedContentRange(value string, start, end, fileSize int64) bool {
@@ -798,22 +820,33 @@ func SafeURLResource(rawURL string) string {
 	return parsed.Scheme + "://" + parsed.Host + parsed.Path
 }
 
-func readChunkMeta(path string) *chunkMeta {
+func readChunkMeta(path string, reports ...func(error)) *chunkMeta {
+	report := func(err error) {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			for _, callback := range reports {
+				callback(err)
+			}
+		}
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		report(err)
 		return nil
 	}
 	var parsed any
-	if json.Unmarshal(raw, &parsed) != nil {
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		report(err)
 		return nil
 	}
 	record, ok := parsed.(map[string]any)
 	if !ok {
+		report(errors.New("chunk metadata must be an object"))
 		return nil
 	}
 	resource, _ := record["resource"].(string)
 	size, sizeOK := record["fileSize"].(float64)
 	if resource == "" || !sizeOK {
+		report(errors.New("chunk metadata requires resource string and fileSize number"))
 		return nil
 	}
 	return &chunkMeta{Resource: resource, FileSize: size}

@@ -1,6 +1,7 @@
 import { Tools } from "@bindings/tools";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { Logger } from "@renderer/lib/logger";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -25,7 +26,11 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
         setDraft(saved);
       })
       .catch((loadError) => {
-        console.error("tools:4001FixerGetBuildToolsPath failed", loadError);
+        Logger.capture(
+          "components/tools/4001-fixer-build-tools-path.tsx",
+          "tools:4001FixerGetBuildToolsPath failed",
+          loadError,
+        );
         if (cancelled) return;
         setError(toErrorMessage(loadError));
       });
@@ -53,7 +58,7 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
       }
       setError(t("page.tools.4001_fixer.build_tools_path_not_found"));
     } catch (saveError) {
-      console.error(saveError);
+      Logger.capture("components/tools/4001-fixer-build-tools-path.tsx", saveError);
       setError(toErrorMessage(saveError));
     } finally {
       setBusy(false);
@@ -71,7 +76,7 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
       setSavedPath("");
       setDraft("");
     } catch (clearError) {
-      console.error(clearError);
+      Logger.capture("components/tools/4001-fixer-build-tools-path.tsx", clearError);
       setError(toErrorMessage(clearError));
     } finally {
       setBusy(false);

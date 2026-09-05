@@ -36,10 +36,11 @@ type GitHubRateCheckOptions struct {
 }
 
 type GitHubRateCoordinator struct {
-	mu    sync.Mutex
-	store githubRateStore
-	http  *Client
-	log   *Log
+	mu         sync.Mutex
+	store      githubRateStore
+	http       *Client
+	log        *Log
+	diagnostic DiagnosticThrottle
 }
 
 func NewGitHubRateCoordinator() *GitHubRateCoordinator {
@@ -78,7 +79,7 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 		return nil, nil
 	}
 	c.mu.Lock()
-	store := c.store
+	store, log := c.store, c.log
 	c.mu.Unlock()
 	if store == nil {
 		return nil, nil
@@ -87,12 +88,15 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 	if err != nil || raw == nil {
 		return nil, err
 	}
-	return decodeGitHubRateState(*raw), nil
+	return decodeGitHubRateState(*raw, func(err error) { c.warnRefresh(log, err) }), nil
 }
 
-func decodeGitHubRateState(raw string) *GitHubRateState {
+func decodeGitHubRateState(raw string, reports ...func(error)) *GitHubRateState {
 	var state GitHubRateState
-	if json.Unmarshal([]byte(raw), &state) != nil {
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		for _, report := range reports {
+			report(err)
+		}
 		return nil
 	}
 	return &state
@@ -125,7 +129,8 @@ func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRat
 	httpClient, log := c.http, c.log
 	c.mu.Unlock()
 	if httpClient == nil {
-		state, _ := c.GetRateState(ctx)
+		state, cacheErr := c.GetRateState(ctx)
+		c.warnRefresh(log, cacheErr)
 		return state
 	}
 	response, err := httpClient.Fetch(ctx, githubRateLimitURL, FetchOptions{
@@ -134,7 +139,8 @@ func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRat
 	})
 	if err != nil {
 		c.warnRefresh(log, err)
-		state, _ := c.GetRateState(ctx)
+		state, cacheErr := c.GetRateState(ctx)
+		c.warnRefresh(log, cacheErr)
 		return state
 	}
 	defer func() { _ = response.Body.Close() }()
@@ -146,13 +152,24 @@ func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRat
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, githubRateMaxBody+1))
 	if err != nil || len(body) > githubRateMaxBody {
+		if err == nil {
+			err = fmt.Errorf("GitHub rate response exceeds %d bytes", githubRateMaxBody)
+		}
 		c.warnRefresh(log, err)
-		state, _ := c.GetRateState(ctx)
+		state, cacheErr := c.GetRateState(ctx)
+		c.warnRefresh(log, cacheErr)
 		return state
 	}
 	state := normalizeGitHubRateState(body)
 	if state == nil {
-		state, _ := c.GetRateState(ctx)
+		var value any
+		decodeErr := json.Unmarshal(body, &value)
+		if decodeErr == nil {
+			decodeErr = fmt.Errorf("invalid GitHub rate response fields")
+		}
+		c.warnRefresh(log, decodeErr)
+		state, cacheErr := c.GetRateState(ctx)
+		c.warnRefresh(log, cacheErr)
 		return state
 	}
 	if saveErr := c.saveRateState(ctx, state); saveErr != nil {
@@ -197,7 +214,7 @@ func (c *GitHubRateCoordinator) warnRefresh(log *Log, err error) {
 	if log == nil || err == nil {
 		return
 	}
-	log.Warn(fmt.Sprintf("Failed to refresh GitHub rate state: %v", err), "GitHubRateCoordinator")
+	c.diagnostic.Report(log, err, "GitHubRateCoordinator", Diagnostic{Severity: DiagnosticWarn, Operation: "github-rate", Stage: "refresh"})
 }
 
 func extractGitHubRateState(header http.Header) *GitHubRateState {

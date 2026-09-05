@@ -126,9 +126,9 @@ func readModelViewerINI(iniPath string) (modelViewerParsedINI, error) {
 	return parseModelViewerINI(string(raw), iniPath), nil
 }
 
-func discoverModelViewerActiveINIs(folder string) ([]string, error) {
+func discoverModelViewerActiveINIs(folder string, reports ...func(error)) ([]string, error) {
 	less := platform.NewLocaleLess()
-	paths := activeModelViewerINIs(folder, less)
+	paths := activeModelViewerINIs(folder, less, reports...)
 	if len(paths) >= maxModelViewerINIFiles {
 		return paths, nil
 	}
@@ -139,6 +139,9 @@ func discoverModelViewerActiveINIs(folder string) ([]string, error) {
 		}
 		entries, err := os.ReadDir(current)
 		if err != nil {
+			for _, report := range reports {
+				report(err)
+			}
 			return
 		}
 		var dirs []os.DirEntry
@@ -149,7 +152,7 @@ func discoverModelViewerActiveINIs(folder string) ([]string, error) {
 		}
 		sort.SliceStable(dirs, func(i, j int) bool { return less(dirs[i].Name(), dirs[j].Name()) })
 		if depth > 0 {
-			for _, iniPath := range activeModelViewerINIs(current, less) {
+			for _, iniPath := range activeModelViewerINIs(current, less, reports...) {
 				paths = append(paths, iniPath)
 				if len(paths) >= maxModelViewerINIFiles {
 					return
@@ -170,9 +173,12 @@ func discoverModelViewerActiveINIs(folder string) ([]string, error) {
 	return paths, nil
 }
 
-func activeModelViewerINIs(folder string, less func(string, string) bool) []string {
+func activeModelViewerINIs(folder string, less func(string, string) bool, reports ...func(error)) []string {
 	entries, err := os.ReadDir(folder)
 	if err != nil {
+		for _, report := range reports {
+			report(err)
+		}
 		return nil
 	}
 	var paths []string

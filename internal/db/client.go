@@ -92,7 +92,10 @@ func (c *Client) withImmediate(ctx context.Context, fn func(queryExec) error) er
 		return fmt.Errorf("begin immediate: %w", err)
 	}
 	if err := fn(conn); err != nil {
-		_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		_, rollbackErr := conn.ExecContext(ctx, "ROLLBACK")
+		if rollbackErr != nil {
+			return preserveRecovery(err, fmt.Errorf("rollback immediate transaction: %w", rollbackErr))
+		}
 		return err
 	}
 	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {

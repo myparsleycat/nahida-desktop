@@ -26,6 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@renderer/components/ui/tooltip";
+import { Logger } from "@renderer/lib/logger";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -173,7 +174,11 @@ export function ModelViewerDialog({
         setToonShadows(storedToonShadows === true);
       })
       .catch((error) => {
-        console.error("Failed to load model viewer rendering settings", error);
+        Logger.capture(
+          "components/tools/model-viewer/model-viewer-dialog.tsx",
+          "Failed to load model viewer rendering settings",
+          error,
+        );
       });
 
     return () => {
@@ -216,7 +221,11 @@ export function ModelViewerDialog({
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
     void setSetting("modelViewer.toneMapping", value).catch((error) => {
-      console.error("Failed to persist model viewer tone mapping", error);
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "Failed to persist model viewer tone mapping",
+        error,
+      );
       toast.error("Failed to save tone mapping setting.");
     });
   };
@@ -224,7 +233,11 @@ export function ModelViewerDialog({
   const updateThreeEnvironment = (value: ModelViewerThreeEnvironment) => {
     setThreeEnvironment(value);
     void setSetting("modelViewer.environment", value).catch((error) => {
-      console.error("Failed to persist model viewer environment", error);
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "Failed to persist model viewer environment",
+        error,
+      );
       toast.error("Failed to save environment setting.");
     });
   };
@@ -233,7 +246,11 @@ export function ModelViewerDialog({
     const nextValue = clampThreeExposure(value);
     setThreeExposure(nextValue);
     void setSetting("modelViewer.exposure", nextValue).catch((error) => {
-      console.error("Failed to persist model viewer exposure", error);
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "Failed to persist model viewer exposure",
+        error,
+      );
       toast.error("Failed to save exposure setting.");
     });
   };
@@ -241,7 +258,11 @@ export function ModelViewerDialog({
   const updateToonShadows = (value: boolean) => {
     setToonShadows(value);
     void setSetting("modelViewer.toonShadows", value).catch((error) => {
-      console.error("Failed to persist model viewer toon shadows", error);
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "Failed to persist model viewer toon shadows",
+        error,
+      );
       toast.error("Failed to save toon shadow setting.");
     });
   };
@@ -290,6 +311,7 @@ export function ModelViewerDialog({
 
       toast.warning(t("page.tools.model_viewer.toast.save_to_ini_no_changes"));
     } catch (error) {
+      Logger.capture("model-viewer:save", error);
       toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"), {
         description: toErrorMessage(error),
       });
@@ -383,7 +405,11 @@ export function ModelViewerDialog({
 
   const handleViewerError = useCallback((error: unknown) => {
     setIsViewerReady(false);
-    console.error("Failed to load model viewer source", error);
+    Logger.capture(
+      "components/tools/model-viewer/model-viewer-dialog.tsx",
+      "Failed to load model viewer source",
+      error,
+    );
   }, []);
 
   const captureAndSavePreview = async () => {
@@ -420,6 +446,7 @@ export function ModelViewerDialog({
       await captureAndSavePreview();
       toast.success(t("page.tools.model_viewer.toast.capture_preview_success"));
     } catch (error) {
+      Logger.capture("model-viewer:save", error);
       toast.error(t("page.tools.model_viewer.toast.capture_preview_error"), {
         description: toErrorMessage(error),
       });

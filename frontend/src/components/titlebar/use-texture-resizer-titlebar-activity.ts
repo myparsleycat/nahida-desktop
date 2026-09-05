@@ -1,5 +1,6 @@
 import { Tools } from "@bindings/tools";
 import { buildTextureResizerTitlebarActivity } from "@renderer/components/titlebar/titlebar-activity";
+import { Logger } from "@renderer/lib/logger";
 import { titlebarActivityStore } from "@renderer/store/titlebar-activity";
 import type { TextureResizeProgressEvent } from "@shared/types";
 import { Events } from "@wailsio/runtime";
@@ -30,7 +31,11 @@ export function useTextureResizerTitlebarActivity() {
                 sync(state as Parameters<typeof sync>[0]);
             })
             .catch((error) => {
-                console.error("tools:getTextureResizeState failed for titlebar activity", error);
+                Logger.capture(
+                    "components/titlebar/use-texture-resizer-titlebar-activity.ts",
+                    "tools:getTextureResizeState failed for titlebar activity",
+                    error,
+                );
             });
 
         const off = Events.On("tools:textureResizeProgress", (event) => {

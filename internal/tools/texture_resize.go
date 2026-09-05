@@ -256,7 +256,7 @@ func (t *Tools) upscaleTextureFile(ctx context.Context, path string, settings Te
 	if err != nil {
 		return TextureResizeResult{}, err
 	}
-	defer func() { _ = os.RemoveAll(workDir) }()
+	defer func() { t.reportCleanup(os.RemoveAll(workDir), "upscaleTextureFile") }()
 	inputPNG, outputPNG := filepath.Join(workDir, "input.png"), filepath.Join(workDir, "output.png")
 	t.emitTextureUpscaleProgress("decode", nil, stringPointer("Decoding DDS texture"), path)
 	decoded, err := decodeDDSToPng(path, inputPNG)

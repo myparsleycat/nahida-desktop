@@ -76,7 +76,7 @@ func (t *Tools) startD3dxGuardLocked(ctx context.Context, game db.GamePathRow) e
 	if err != nil {
 		cancel()
 		<-guard.restoreDone
-		_ = os.Remove(backupPath)
+		t.reportCleanup(os.Remove(backupPath), "startD3dxGuardLocked")
 		return err
 	}
 	guard.watcher = service

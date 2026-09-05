@@ -2,12 +2,13 @@ package xxmi
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"path/filepath"
 	"sync"
 )
 
-func findFileAcrossRoots(ctx context.Context, roots []string, targetName string, excludedDirs map[string]struct{}) (*string, error) {
+func findFileAcrossRoots(ctx context.Context, roots []string, targetName string, excludedDirs map[string]struct{}, reports ...func(error)) (*string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -29,6 +30,11 @@ func findFileAcrossRoots(ctx context.Context, roots []string, targetName string,
 					return fs.SkipAll
 				}
 				if walkErr != nil {
+					if !errors.Is(walkErr, fs.ErrNotExist) {
+						for _, report := range reports {
+							report(walkErr)
+						}
+					}
 					if entry != nil && entry.IsDir() {
 						return fs.SkipDir
 					}

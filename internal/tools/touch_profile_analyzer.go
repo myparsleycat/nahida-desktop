@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type touchMeshBuffers struct {
@@ -42,7 +44,7 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		return TouchModAnalysis{}, err
 	}
 	if _, err = os.Stat(resolved); err != nil {
-		return TouchModAnalysis{}, contractError(fmt.Sprintf("Path does not exist: %s", resolved))
+		return TouchModAnalysis{}, infra.WithCause(contractError(fmt.Sprintf("Path does not exist: %s", resolved)), err)
 	}
 	// Windows CI and some installations expose temporary or mod directories
 	// through junctions. Keep the analysis root and the resource paths in the

@@ -173,6 +173,7 @@ type Logger interface {
 type Options struct {
 	Settings           Settings
 	Log                Logger
+	ReportFailure      func(error, map[string]any) error
 	EventEmit          func(name string, data ...any)
 	PreventSuspension  func(bool) error
 	SyncWindowProgress func(*WindowProgress)
@@ -234,6 +235,7 @@ type Transfer struct {
 	queueSequence      uint64
 	settings           Settings
 	log                Logger
+	reportFailure      func(error, map[string]any) error
 	eventEmit          func(string, ...any)
 	preventSuspension  func(bool) error
 	syncWindowProgress func(*WindowProgress)
@@ -266,6 +268,7 @@ func NewWithOptions(opts Options) *Transfer {
 		entries:            make(map[string]*entry),
 		settings:           opts.Settings,
 		log:                opts.Log,
+		reportFailure:      opts.ReportFailure,
 		eventEmit:          opts.EventEmit,
 		preventSuspension:  opts.PreventSuspension,
 		syncWindowProgress: opts.SyncWindowProgress,
@@ -740,13 +743,19 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	}
 	item.cancel = nil
 	if item.record.Status == StatusPaused || item.record.Status == StatusCanceled {
+		snapshot := item.record.Snapshot
 		shouldEmit := t.scheduleEmitLocked(true, t.now())
 		t.mu.Unlock()
 		t.destinationMu.Unlock()
 		if shouldEmit {
 			t.emit()
 		}
-		_ = t.RefreshPowerSaveBlock(context.Background())
+		if t.reportFailure != nil {
+			_ = t.reportFailure(runErr, map[string]any{"operation": "run", "stage": "finish", "pid": pid, "name": snapshot.Name, "path": snapshot.Path, "type": snapshot.Type, "currentId": snapshot.CurrentID})
+		}
+		if err := t.RefreshPowerSaveBlock(context.Background()); err != nil && !isReportedRunnerError(err) {
+			t.logRecord(map[string]any{"operation": "finish", "stage": "power-save", "pid": pid, "error": err.Error()}, "Transfer")
+		}
 		return
 	}
 	if runErr != nil && !isTerminal(item.record.Status) {
@@ -760,7 +769,9 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	if shouldEmit {
 		t.emit()
 	}
-	if runErr != nil && !isNormalRunnerCancellation(runErr) && !isReportedRunnerError(runErr) {
+	if t.reportFailure != nil {
+		_ = t.reportFailure(runErr, map[string]any{"operation": "run", "stage": "finish", "pid": pid, "name": snapshot.Name, "path": snapshot.Path, "type": snapshot.Type, "currentId": snapshot.CurrentID})
+	} else if runErr != nil && !isNormalRunnerCancellation(runErr) && !isReportedRunnerError(runErr) {
 		t.logRecord(map[string]any{
 			"operation":        "run",
 			"stage":            "finish",
@@ -776,7 +787,7 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 			"error":            runErr.Error(),
 		}, "Transfer")
 	}
-	if err := t.RefreshPowerSaveBlock(context.Background()); err != nil {
+	if err := t.RefreshPowerSaveBlock(context.Background()); err != nil && !isReportedRunnerError(err) {
 		t.logRecord(map[string]any{"operation": "finish", "stage": "power-save", "pid": pid, "error": err.Error()}, "Transfer")
 	}
 }
@@ -1021,7 +1032,12 @@ func (t *Transfer) IsFileCompleted(pid, fileID string) bool {
 }
 
 //wails:ignore
-func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) error {
+func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) (returnErr error) {
+	defer func() {
+		if returnErr != nil && t.reportFailure != nil {
+			returnErr = t.reportFailure(returnErr, map[string]any{"operation": "refresh-power-save", "stage": "power-state"})
+		}
+	}()
 	t.mu.RLock()
 	settings := t.settings
 	hasActive := false
@@ -1324,6 +1340,10 @@ func (t *Transfer) flushProgressEmit(generation uint64) {
 
 func (t *Transfer) logError(err error, where string) {
 	if err == nil || t.log == nil {
+		return
+	}
+	if t.reportFailure != nil {
+		_ = t.reportFailure(err, map[string]any{"operation": where, "stage": "background"})
 		return
 	}
 	t.log.Error(err.Error(), where)

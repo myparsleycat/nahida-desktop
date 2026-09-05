@@ -182,7 +182,7 @@ func (m *Mod) CopyFolderToGroup(
 		}
 	}
 	if err := copyDirectory(source, target); err != nil {
-		_ = os.RemoveAll(target)
+		m.reportCleanup(os.RemoveAll(target), "CopyFolderToGroup")
 		return "", err
 	}
 	if move {
@@ -217,7 +217,9 @@ func (m *Mod) PastePreview(
 	filePath := filepath.Join(modPath, "preview"+extension)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := atomicWriteFile(filePath, content, 0o644); err != nil {
+	if err := atomicWriteFile(filePath, content, 0o644, func(err error) {
+		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{Operation: "paste-preview", Stage: "cleanup", Fields: map[string]any{"path": filePath}})
+	}); err != nil {
 		return "", err
 	}
 	entries, err := os.ReadDir(modPath)
@@ -361,40 +363,43 @@ func safePreviewExtension(value string) string {
 	return ".png"
 }
 
-func atomicWriteFile(path string, content []byte, mode os.FileMode) error {
+func atomicWriteFile(path string, content []byte, mode os.FileMode, reports ...func(error)) error {
+	report := func(err error) {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			for _, callback := range reports {
+				callback(err)
+			}
+		}
+	}
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".nhd-write-*")
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer func() { _ = os.Remove(temporaryPath) }()
+	defer func() { report(os.Remove(temporaryPath)) }()
 	if _, err := temporary.Write(content); err != nil {
-		_ = temporary.Close()
-		return err
+		return infra.WithCause(err, temporary.Close())
 	}
 	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
+		return infra.WithCause(err, temporary.Close())
 	}
 	if err := temporary.Chmod(mode); err != nil {
-		_ = temporary.Close()
-		return err
+		return infra.WithCause(err, temporary.Close())
 	}
 	if err := temporary.Close(); err != nil {
 		return err
 	}
 	backup := path + ".nhd-backup"
-	_ = os.Remove(backup)
+	report(os.Remove(backup))
 	if _, err := os.Stat(path); err == nil {
 		if err := os.Rename(path, backup); err != nil {
 			return err
 		}
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		_ = os.Rename(backup, path)
-		return err
+		return infra.WithCause(err, infra.AnnotateError(os.Rename(backup, path), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path, "backupPath": backup}}))
 	}
-	_ = os.Remove(backup)
+	report(os.Remove(backup))
 	return nil
 }
 
@@ -438,4 +443,11 @@ func copyDirectory(source, target string) error {
 		}
 		return closeErr
 	})
+}
+
+func (m *Mod) reportCleanup(err error, operation string) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }

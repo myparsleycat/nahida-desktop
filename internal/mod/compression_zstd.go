@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -323,8 +325,7 @@ func compressZstdFile(ctx context.Context, sourcePath string, mark compressionMu
 		return err
 	}
 	if err := streamCompressZstd(ctx, sourcePath, tempPath); err != nil {
-		_ = os.Remove(tempPath)
-		return fmt.Errorf("compress %q: %w", sourcePath, err)
+		return infra.WithCause(fmt.Errorf("compress %q: %w", sourcePath, err), os.Remove(tempPath))
 	}
 	tempInfo, err := os.Stat(tempPath)
 	if err != nil {
@@ -373,26 +374,22 @@ func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark c
 		return err
 	}
 	if err := streamRestoreZstdWithLimit(ctx, targetPath, tempPath, limit); err != nil {
-		_ = os.Remove(tempPath)
-		return err
+		return infra.WithCause(err, os.Remove(tempPath))
 	}
 	if err := os.Chmod(tempPath, targetInfo.Mode()); err != nil {
-		_ = os.Remove(tempPath)
-		return err
+		return infra.WithCause(err, os.Remove(tempPath))
 	}
 	if err := os.Chtimes(tempPath, targetInfo.ModTime(), targetInfo.ModTime()); err != nil {
-		_ = os.Remove(tempPath)
-		return err
+		return infra.WithCause(err, os.Remove(tempPath))
 	}
 	mark(sourcePath, targetPath)
 	if err := os.Rename(tempPath, sourcePath); err != nil {
-		_ = os.Remove(tempPath)
-		return err
+		return infra.WithCause(err, os.Remove(tempPath))
 	}
 	return os.Remove(targetPath)
 }
 
-func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) error {
+func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (returnErr error) {
 	source, err := os.Open(sourcePath)
 	if err != nil {
 		return err
@@ -406,7 +403,7 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) error 
 	defer func() {
 		_ = temp.Close()
 		if remove {
-			_ = os.Remove(tempPath)
+			returnErr = infra.WithCause(returnErr, os.Remove(tempPath))
 		}
 	}()
 	encoder, err := zstd.NewWriter(temp, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderConcurrency(1), zstd.WithEncoderCRC(true))
@@ -446,12 +443,10 @@ func streamRestoreZstdWithLimit(ctx context.Context, sourcePath, tempPath string
 	decoded := io.LimitReader(&contextReader{ctx: ctx, reader: decoder}, limit+1)
 	written, copyErr := io.Copy(temp, decoded)
 	if copyErr != nil {
-		_ = temp.Close()
-		return copyErr
+		return infra.WithCause(copyErr, temp.Close())
 	}
 	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		return err
+		return infra.WithCause(err, temp.Close())
 	}
 	if err := temp.Close(); err != nil {
 		return err

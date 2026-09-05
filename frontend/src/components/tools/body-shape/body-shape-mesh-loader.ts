@@ -25,18 +25,20 @@ export class BodyShapeMeshWorkerClient {
         this.worker.onmessage = (event) => {
             const message = event.data as
                 | { type: "processed"; id: number; result: BodyShapeMeshProcessResult }
-                | { type: "error"; id: number; message: string };
+                | { type: "error"; id: number; message: string; diagnostic?: unknown };
             const request = this.pending.get(message.id);
             if (!request) return;
             this.pending.delete(message.id);
             request.removeAbortListener?.();
             if (message.type === "processed") request.resolve(message.result);
-            else request.reject(new Error(message.message));
+            else request.reject(new Error(message.message, { cause: message.diagnostic }));
         };
         this.worker.onerror = (event) => {
             if (this.disposed) return;
             this.disposed = true;
-            this.rejectAll(new Error(event.message || "Body shape mesh worker failed"));
+            this.rejectAll(
+                new Error(event.message || "Body shape mesh worker failed", { cause: event.error }),
+            );
             this.worker.terminate();
         };
     }

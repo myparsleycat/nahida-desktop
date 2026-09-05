@@ -12,10 +12,18 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/watcher"
 )
 
 const watcherSettleDelay = 800 * time.Millisecond
+
+func (m *Mod) watcherReporter(path string) func(error) {
+	throttle := &infra.DiagnosticThrottle{}
+	return func(err error) {
+		throttle.Report(m.log, err, "Mod", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "watch", Stage: "read", Fields: map[string]any{"path": path}})
+	}
+}
 
 const (
 	watcherReadyInterval = 200 * time.Millisecond
@@ -32,6 +40,7 @@ type managedWatcher struct {
 	wg        sync.WaitGroup
 	eventName string
 	emit      func(string, ...any)
+	report    func(error)
 }
 
 func (m *Mod) WatchGame(ctx context.Context, game string) error {
@@ -42,7 +51,7 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 	if path == nil {
 		return nil
 	}
-	watcher, err := newManagedWatcher(*path, 1, "mod:update-game", m.emitEvent)
+	watcher, err := newManagedWatcher(*path, 1, "mod:update-game", m.emitEvent, m.watcherReporter(*path))
 	if err != nil {
 		return err
 	}
@@ -53,7 +62,7 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	if _, err := m.ownedPath(ctx, characterPath); err != nil {
 		return err
 	}
-	watcher, err := newManagedWatcher(characterPath, 1, "mod:update-mods", m.emitEvent)
+	watcher, err := newManagedWatcher(characterPath, 1, "mod:update-mods", m.emitEvent, m.watcherReporter(characterPath))
 	if err != nil {
 		return err
 	}
@@ -102,15 +111,24 @@ func newManagedWatcher(
 	depth int,
 	eventName string,
 	emit func(string, ...any),
+	reports ...func(error),
 ) (*managedWatcher, error) {
 	root, err := validDirectory(root)
 	if err != nil {
 		return nil, err
 	}
 	managed := &managedWatcher{eventName: eventName, emit: emit}
+	managed.report = func(err error) {
+		for _, report := range reports {
+			if err != nil {
+				report(err)
+			}
+		}
+	}
 	service, err := watcher.WatchTree([]string{root}, watcher.TreeConfig{
-		Depth: depth,
-		Ops:   watcher.All,
+		Depth:   depth,
+		Ops:     watcher.All,
+		OnError: managed.report,
 	}, func(event watcher.Event) {
 		managed.schedule(event)
 	})
@@ -153,6 +171,7 @@ func (m *managedWatcher) schedule(event watcher.Event) {
 			watcherReadyAttempts,
 			getWatchedPathSnapshot,
 			time.Sleep,
+			m.report,
 		)
 		if m.isCurrent(token) {
 			m.emit(m.eventName)
@@ -204,15 +223,26 @@ func waitForWatchedPath(
 	attempts int,
 	snapshot func(string) (*watchedPathSnapshot, error),
 	sleep func(time.Duration),
+	reports ...func(error),
 ) {
 	if event.Op == watcher.Remove {
 		return
 	}
+	var lastErr error
+	defer func() {
+		for _, report := range reports {
+			if report != nil && lastErr != nil && !errors.Is(lastErr, fs.ErrNotExist) {
+				report(lastErr)
+			}
+		}
+	}()
 	for range attempts {
 		if !isCurrent() {
+			lastErr = nil
 			return
 		}
 		current, err := snapshot(event.Path)
+		lastErr = err
 		if err != nil {
 			if !isTransientWatcherError(err) {
 				return
@@ -226,9 +256,11 @@ func waitForWatchedPath(
 
 		sleep(interval)
 		if !isCurrent() {
+			lastErr = nil
 			return
 		}
 		next, err := snapshot(event.Path)
+		lastErr = err
 		if err == nil && next != nil && *current == *next {
 			return
 		}

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type modINISection struct {
@@ -259,7 +261,7 @@ func resolveMergedINIRef(baseDir, entry string) (string, error) {
 		resolved, err = filepath.Abs(filepath.Join(base, candidate))
 	}
 	if err != nil || !sameOrChildPath(base, resolved) || samePathFold(base, resolved) {
-		return "", errors.New("merged INI path is outside mod root")
+		return "", infra.WithCause(errors.New("merged INI path is outside mod root"), err)
 	}
 	// EvalSymlinks can fail on Windows temp junctions even for in-tree files.
 	// Keep the logical path when evaluation fails; successful evaluation still
@@ -274,7 +276,7 @@ func resolveMergedINIRef(baseDir, entry string) (string, error) {
 	}
 	info, err := os.Stat(resolved)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("merged INI is not a regular file")
+		return "", infra.WithCause(errors.New("merged INI is not a regular file"), err)
 	}
 	return filepath.Clean(resolved), nil
 }

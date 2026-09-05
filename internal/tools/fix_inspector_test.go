@@ -145,18 +145,35 @@ filename = hair.buf
 		t.Fatal("inspection modified the file on disk! Dry-run invariant violated")
 	}
 
-	var outdatedHash string
-	for hash, cmds := range pack.HashCommands {
-		for _, cmd := range cmds {
-			if cmd.Op == "update_hash" {
-				outdatedHash = hash
+	// Use a terminal, unconditional hash replacement. Arbitrary map entries can
+	// require additional sections/buffers or resolve back to the same hash.
+	var candidates []string
+	for hash, commands := range pack.HashCommands {
+		eligible, replaces := true, false
+		for _, command := range commands {
+			if command.Op == "log" {
+				continue
+			}
+			if command.Op != "update_hash" || len(command.Args) != 1 {
+				eligible = false
 				break
 			}
+			target, ok := command.Args[0].(string)
+			if !ok || target == hash || len(pack.HashCommands[target]) != 0 {
+				eligible = false
+				break
+			}
+			replaces = true
 		}
-		if outdatedHash != "" {
-			break
+		if eligible && replaces {
+			candidates = append(candidates, hash)
 		}
 	}
+	slices.Sort(candidates)
+	if len(candidates) == 0 {
+		t.Fatal("embedded rules have no terminal hash replacement fixture")
+	}
+	outdatedHash := candidates[0]
 	if outdatedHash != "" {
 		hashTarget := filepath.Join(root, "OutdatedHashMod")
 		if err := os.Mkdir(hashTarget, 0o755); err != nil {

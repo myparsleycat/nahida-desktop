@@ -15,6 +15,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const launcherImageName = "XXMI Launcher.exe"
@@ -83,10 +85,10 @@ func ensureLauncherClosedWith(
 			return nil
 		}
 		if err := kill(pid); err != nil {
-			return errors.New("failed to close XXMI Launcher")
+			return infra.AnnotateError(infra.WithCause(errors.New("failed to close XXMI Launcher"), err), infra.Diagnostic{Operation: "close-launcher", Stage: "terminate", Fields: map[string]any{"pid": pid, "executable": launcherImageName}})
 		}
 		if time.Now().After(deadline) {
-			return errors.New("XXMI Launcher is still running")
+			return infra.AnnotateError(errors.New("XXMI Launcher is still running"), infra.Diagnostic{Operation: "close-launcher", Stage: "wait", Fields: map[string]any{"pid": pid, "executable": launcherImageName}})
 		}
 		timer := time.NewTimer(pollInterval)
 		select {

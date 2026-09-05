@@ -352,25 +352,30 @@ func decodeAPIValue(contentType string, raw []byte) any {
 }
 
 func decodeAPIBody(contentType string, raw []byte) (any, bool) {
+	value, err := decodeAPIBodyWithError(contentType, raw)
+	return value, err == nil
+}
+
+func decodeAPIBodyWithError(contentType string, raw []byte) (any, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil, true
+		return nil, nil
 	}
 	if isCborContentType(contentType) {
 		mode, err := (cbor.DecOptions{DefaultMapType: reflect.TypeOf(map[string]any(nil))}).DecMode()
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
 		var value any
 		if err := mode.Unmarshal(raw, &value); err != nil {
-			return nil, false
+			return nil, err
 		}
-		return value, true
+		return value, nil
 	}
 	var value any
 	if json.Unmarshal(raw, &value) == nil {
-		return value, true
+		return value, nil
 	}
-	return strings.TrimSpace(string(raw)), true
+	return strings.TrimSpace(string(raw)), nil
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {

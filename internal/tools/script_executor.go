@@ -12,15 +12,17 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 var ansiEscapeRE = regexp.MustCompile(`[\x1B\x9B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]`)
 
 type scriptExecutor struct {
-	mu    sync.Mutex
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	onLog func(string, bool)
+	mu      sync.Mutex
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	onLog   func(string, bool)
+	onError func(error)
 }
 
 func newScriptExecutor(onLog func(string, bool)) *scriptExecutor {
@@ -72,7 +74,9 @@ func (e *scriptExecutor) execute(ctx context.Context, filePath string, scriptTyp
 	go func() {
 		select {
 		case <-ctx.Done():
-			killProcessTree(cmd)
+			if err := killProcessTree(cmd); err != nil && e.onError != nil {
+				e.onError(err)
+			}
 		case <-killDone:
 		}
 	}()
@@ -92,7 +96,7 @@ func (e *scriptExecutor) execute(ctx context.Context, filePath string, scriptTyp
 	if waitErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
-			return fmt.Errorf("process exited with code %d", exitErr.ExitCode())
+			return infra.AnnotateError(infra.WithCause(fmt.Errorf("process exited with code %d", exitErr.ExitCode()), waitErr), infra.Diagnostic{Operation: "execute-script", Stage: "wait", Fields: map[string]any{"executable": cmd.Path, "path": filePath, "pid": cmd.Process.Pid, "exitCode": exitErr.ExitCode()}})
 		}
 		return waitErr
 	}
@@ -127,6 +131,9 @@ func (e *scriptExecutor) consume(reader io.Reader) {
 		}
 	}
 	if readErr != nil {
+		if e.onError != nil {
+			e.onError(readErr)
+		}
 		e.emit("Output read error: "+readErr.Error(), false)
 	}
 }

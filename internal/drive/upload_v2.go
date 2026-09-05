@@ -217,9 +217,9 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 			return UploadPlan{}, errors.New("upload plan failed: empty response stream")
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			raw, _ := io.ReadAll(response.Body)
+			raw, readErr := io.ReadAll(response.Body)
 			_ = response.Body.Close()
-			return UploadPlan{}, uploadV2APIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), response.StatusCode)
+			return UploadPlan{}, infra.AnnotateError(infra.WithCause(uploadV2APIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), response.StatusCode), readErr), infra.HTTPDiagnostic(http.MethodPost, rawURL, "read-upload-plan-error", response))
 		}
 		completed := false
 		parseErr := parseSSE(response.Body, func(event, data string) error {

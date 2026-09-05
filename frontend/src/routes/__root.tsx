@@ -22,6 +22,7 @@ import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useModFixInspectionTitlebarActivity } from "@renderer/hooks/use-mod-fix-inspection";
 import { useTitleBarOverlay } from "@renderer/hooks/use-title-bar-overlay";
+import { Logger } from "@renderer/lib/logger";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
@@ -131,12 +132,16 @@ function RootComponent() {
       .then((language) => {
         if (language) {
           void i18n.changeLanguage(language).catch((error) => {
-            console.error("Failed to change language from getSetting(general.language)", error);
+            Logger.capture(
+              "routes/__root.tsx",
+              "Failed to change language from getSetting(general.language)",
+              error,
+            );
           });
         }
       })
       .catch((error) => {
-        console.error("Failed to read getSetting(general.language)", error);
+        Logger.capture("routes/__root.tsx", "Failed to read getSetting(general.language)", error);
       });
 
     return () => {

@@ -23,10 +23,16 @@ type AppStatus struct {
 }
 
 type Shell struct {
-	version   string
-	openURL   func(string) error
-	openPath  func(string) error
-	trashItem func(string) error
+	version    string
+	openURL    func(string) error
+	openPath   func(string) error
+	trashItem  func(string) error
+	diagnostic func(error, string, map[string]any)
+}
+
+//wails:ignore
+func (s *Shell) UseDiagnostic(report func(error, string, map[string]any)) {
+	s.diagnostic = report
 }
 
 func NewShell() *Shell {
@@ -53,6 +59,8 @@ func (s *Shell) OpenExternal(str string) error {
 	if target, ok := parseExternalURL(str); ok {
 		if err := s.openURL(target); err == nil {
 			return nil
+		} else if s.diagnostic != nil {
+			s.diagnostic(err, "open-url-fallback", map[string]any{"fallback": "open-path"})
 		}
 	}
 	return s.openPath(str)

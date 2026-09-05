@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type manualSubGroups map[string][]string
@@ -14,7 +16,7 @@ type manualSubGroups map[string][]string
 func (m *Mod) SetManualSubGroup(ctx context.Context, modPath string, enabled bool) error {
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
-		return errors.New("INVALID_MANUAL_SUBGROUP_PATH")
+		return infra.WithCause(errors.New("INVALID_MANUAL_SUBGROUP_PATH"), err)
 	}
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, modPath))
 	if relative == "" {
@@ -22,7 +24,7 @@ func (m *Mod) SetManualSubGroup(ctx context.Context, modPath string, enabled boo
 	}
 	info, err := os.Stat(modPath)
 	if err != nil || !info.IsDir() {
-		return errors.New("INVALID_MANUAL_SUBGROUP_PATH")
+		return infra.WithCause(errors.New("INVALID_MANUAL_SUBGROUP_PATH"), err)
 	}
 
 	m.mu.Lock()
@@ -58,6 +60,9 @@ func (m *Mod) GetManualSubGroups(
 	folderPath string,
 	searchModPreview *bool,
 ) ([]FolderGroup, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "GetManualSubGroups")
+
 	game, err := m.ownedPath(ctx, folderPath)
 	if err != nil {
 		return nil, err
@@ -71,7 +76,7 @@ func (m *Mod) GetManualSubGroups(
 	if err != nil || len(children) == 0 {
 		return []FolderGroup{}, err
 	}
-	groups := listGroups(folderPath, search)
+	groups := listGroups(folderPath, search, diagnostics.Add)
 	result := make([]FolderGroup, 0, len(groups))
 	for _, group := range groups {
 		relative := joinManualPath(parentRelative, filepath.Base(group.Path))
@@ -90,6 +95,7 @@ func (m *Mod) decorateGroups(
 ) []FolderGroup {
 	games, err := m.GetGames(ctx)
 	if err != nil {
+		m.logShaderError(err, "manual-subgroups:games")
 		return groups
 	}
 	var game *GameConfig
@@ -102,11 +108,13 @@ func (m *Mod) decorateGroups(
 	if game == nil {
 		return groups
 	}
-	children, _ := m.manualChildPaths(ctx, *game, parentRelative)
+	children, childErr := m.manualChildPaths(ctx, *game, parentRelative)
+	m.logShaderError(childErr, "manual-subgroups:read")
 	for i := range groups {
 		relative := joinManualPath(parentRelative, filepath.Base(groups[i].Path))
 		_, groups[i].IsManualSubGroup = children[relative]
-		ownChildren, _ := m.manualChildPaths(ctx, *game, relative)
+		ownChildren, childErr := m.manualChildPaths(ctx, *game, relative)
+		m.logShaderError(childErr, "manual-subgroups:read")
 		groups[i].HasManualSubGroups = len(ownChildren) > 0
 		for manualPath := range ownChildren {
 			for _, diskPath := range resolveManualDiskPaths(game.ModFolderPath, manualPath) {
@@ -132,7 +140,8 @@ func (m *Mod) filterManualMods(
 	group FolderGroup,
 ) FolderGroup {
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, groupPath))
-	children, _ := m.manualChildPaths(ctx, game, relative)
+	children, childErr := m.manualChildPaths(ctx, game, relative)
+	m.logShaderError(childErr, "manual-subgroups:read")
 	group.HasManualSubGroups = len(children) > 0
 	if len(children) == 0 {
 		return group

@@ -45,6 +45,7 @@ type parallelDownloadRequest struct {
 }
 
 type customDownloadFileOptions struct {
+	ReportCleanup    func(error)
 	URL              string
 	SavePath         string
 	FileSize         *int64
@@ -142,7 +143,9 @@ func downloadCustomFileRegular(ctx context.Context, opts customDownloadFileOptio
 		if err == nil {
 			return nil
 		}
-		_ = os.Remove(opts.SavePath)
+		if cleanupErr := os.Remove(opts.SavePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) && opts.ReportCleanup != nil {
+			opts.ReportCleanup(cleanupErr)
+		}
 		if attemptBytes > 0 && opts.OnProgress != nil {
 			opts.OnProgress(-attemptBytes)
 		}

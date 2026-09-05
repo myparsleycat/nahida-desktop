@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type fileCopy struct {
@@ -42,7 +44,7 @@ func installFileCopies(copies []fileCopy, elevated bool) error {
 	return nil
 }
 
-func copyFileOverwrite(source, target string) error {
+func copyFileOverwrite(source, target string) (returnErr error) {
 	input, err := os.Open(source)
 	if err != nil {
 		return err
@@ -56,7 +58,12 @@ func copyFileOverwrite(source, target string) error {
 		return err
 	}
 	tempPath := output.Name()
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() {
+		cleanupErr := os.Remove(tempPath)
+		if !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
+		}
+	}()
 	_, copyErr := io.Copy(output, input)
 	if copyErr == nil {
 		copyErr = output.Sync()

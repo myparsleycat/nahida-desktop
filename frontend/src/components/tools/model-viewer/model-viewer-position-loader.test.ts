@@ -81,4 +81,23 @@ describe("ModelViewerPositionLoader", () => {
         );
         expect(worker.terminate).toHaveBeenCalledOnce();
     });
+    it("retains worker diagnostics without changing its display message", async () => {
+        const worker = new FakeWorker();
+        const client = new ModelViewerPositionLoader(worker);
+        const pending = client.load(descriptor, undefined, 2);
+        const diagnostic = {
+            stage: "decode",
+            error: { name: "TypeError", message: "invalid buffer", stack: "worker stack" },
+        };
+        worker.onmessage?.(
+            new MessageEvent("message", {
+                data: { type: "error", id: 1, message: "decode failed", diagnostic },
+            }),
+        );
+        await expect(pending).rejects.toMatchObject({
+            message: "decode failed",
+            cause: diagnostic,
+        });
+        client.dispose();
+    });
 });

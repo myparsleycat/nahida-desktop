@@ -1,12 +1,15 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type modelViewerExpressionToken struct {
@@ -290,7 +293,7 @@ func (p *modelViewerExpressionParser) additive() (any, error) {
 				a, aErr := modelViewerNumber(left)
 				b, bErr := modelViewerNumber(right)
 				if aErr != nil || bErr != nil {
-					return nil, fmt.Errorf("expression value is not numeric")
+					return nil, infra.WithCause(fmt.Errorf("expression value is not numeric"), errors.Join(aErr, bErr))
 				}
 				left = a + b
 			}
@@ -304,7 +307,7 @@ func (p *modelViewerExpressionParser) additive() (any, error) {
 			a, aErr := modelViewerNumber(left)
 			b, bErr := modelViewerNumber(right)
 			if aErr != nil || bErr != nil {
-				return nil, fmt.Errorf("expression value is not numeric")
+				return nil, infra.WithCause(fmt.Errorf("expression value is not numeric"), errors.Join(aErr, bErr))
 			}
 			left = a - b
 			continue
@@ -334,7 +337,7 @@ func (p *modelViewerExpressionParser) multiplicative() (any, error) {
 		a, aErr := modelViewerNumber(left)
 		b, bErr := modelViewerNumber(right)
 		if aErr != nil || bErr != nil {
-			return nil, fmt.Errorf("expression value is not numeric")
+			return nil, infra.WithCause(fmt.Errorf("expression value is not numeric"), errors.Join(aErr, bErr))
 		}
 		switch operator {
 		case "*":

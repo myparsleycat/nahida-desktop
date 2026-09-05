@@ -3,7 +3,6 @@ package drive
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -66,13 +65,13 @@ func (d *Drive) downloadDriveFile(
 					return nil
 				}
 				if ctx.Err() != nil {
-					return ctx.Err()
+					return infra.WithCause(ctx.Err(), err)
 				}
 				if parallelProgress != 0 && onProgress != nil {
 					onProgress(-parallelProgress)
 				}
 				if d.log != nil {
-					d.log.Warn(fmt.Sprintf("Parallel download failed for %s; falling back to regular download: %v", file.Name, err), "Drive:Download:parallel-fallback")
+					_ = infra.ReportError(d.log, err, "Drive:Download:parallel-fallback", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "download", Stage: "parallel-fallback", Fields: map[string]any{"name": file.Name, "fileId": file.ID, "path": destination}})
 				}
 			}
 		}
@@ -139,7 +138,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 		}
 
 		if file.CompAlg != nil {
-			_ = os.Remove(partialPath)
+			d.reportCleanup(os.Remove(partialPath), "downloadDriveFileWithSlowRetry")
 			if reported != 0 && onProgress != nil {
 				onProgress(-reported)
 			}
@@ -234,4 +233,11 @@ func localFileSize(path string) int64 {
 		return 0
 	}
 	return info.Size()
+}
+
+func (d *Drive) reportCleanup(err error, operation string) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }

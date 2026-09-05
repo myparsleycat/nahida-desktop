@@ -29,6 +29,7 @@ import {
 } from "@renderer/hooks/use-mod-events";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { Logger } from "@renderer/lib/logger";
 import { modStore, useModStore } from "@renderer/store/mod";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
@@ -191,7 +192,7 @@ function ModRouteContent() {
           }
         }
       } catch (error) {
-        console.error("Failed to initialize game selection", error);
+        Logger.capture("routes/mod/index.tsx", "Failed to initialize game selection", error);
       }
     };
 
@@ -313,7 +314,7 @@ function ModRouteContent() {
     };
 
     void resolveTarget().catch((error) => {
-      console.error("Failed to resolve download target", error);
+      Logger.capture("routes/mod/index.tsx", "Failed to resolve download target", error);
     });
 
     return () => {

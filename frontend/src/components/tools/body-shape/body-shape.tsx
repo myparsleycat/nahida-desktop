@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { Logger } from "@renderer/lib/logger";
 import { isAbortError, uploadTypedArray } from "@renderer/wails/binary-memory";
 import {
   applyBrushStroke,
@@ -630,6 +631,7 @@ export default function BodyShapeTool({
         value?.sessionId === current.sessionId ? { ...value, cache: current.cache } : value,
       );
     } catch (error) {
+      Logger.capture("body-shape:browser-operation", error);
       if (!isAbortError(error)) throw error;
     } finally {
       if (meshLoadRef.current.generation === generation) setLoading(false);
@@ -677,6 +679,7 @@ export default function BodyShapeTool({
       setShowWeights(true);
       if (next.meshes[0]) await loadMeshById(next, next.meshes[0].id);
     } catch (error) {
+      Logger.capture("body-shape:browser-operation", error);
       if (isAbortError(error)) return;
       toast.error(t("page.tools.body_shape.toast.load_failed"), {
         description: toErrorMessage(error),
@@ -860,6 +863,7 @@ export default function BodyShapeTool({
       });
       onExported?.(result as never);
     } catch (error) {
+      Logger.capture("body-shape:browser-operation", error);
       toast.error(t("page.tools.body_shape.toast.export_failed"), {
         description: toErrorMessage(error),
       });

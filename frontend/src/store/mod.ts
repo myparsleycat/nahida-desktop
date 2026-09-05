@@ -1,4 +1,5 @@
 import { Mod } from "@bindings/mod";
+import { Logger } from "@renderer/lib/logger";
 import type { DownloadSource } from "@shared/mod";
 import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
@@ -268,7 +269,7 @@ export const modStore = createStore<ModState>((set) => ({
                 }));
             }
         } catch (error) {
-            console.error("Failed to initialize expanded groups", error);
+            Logger.capture("store/mod.ts", "Failed to initialize expanded groups", error);
         }
     },
 }));

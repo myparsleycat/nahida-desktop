@@ -60,12 +60,17 @@ func (m *MenuMaker) ScanFolder(ctx context.Context, rootPath string, includeTXT 
 	if err != nil {
 		return MenuMakerScanResult{}, err
 	}
+	var diagnostics infra.DiagnosticBatch
+	defer diagnostics.Report(m.log, "MenuMaker", "scan-folder")
 	result := MenuMakerScanResult{RootPath: root, Files: []MenuMakerScanFile{}}
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if walkErr != nil {
+			if !errors.Is(walkErr, os.ErrNotExist) {
+				diagnostics.Add(walkErr)
+			}
 			result.Stats.Errors++
 			if entry != nil && entry.IsDir() {
 				return filepath.SkipDir
@@ -264,7 +269,7 @@ func (m *MenuMaker) applyGenerated(
 	if err != nil {
 		return result, fmt.Errorf("create menu maker staging directory: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(stageDir) }()
+	defer func() { m.reportCleanup(os.RemoveAll(stageDir)) }()
 
 	*stage = "stage-output"
 	staged := make(map[string]string, len(assets)+1)
@@ -288,8 +293,7 @@ func (m *MenuMaker) applyGenerated(
 			return result, fmt.Errorf("write menu maker source backup: %w", err)
 		}
 		if backup, readErr := os.ReadFile(backupPath); readErr != nil || sha256Hex(backup) != sha256Hex(req.original) {
-			_ = os.Remove(backupPath)
-			return result, errors.New("menu maker source backup verification failed")
+			return result, infra.WithCause(errors.New("menu maker source backup verification failed"), errors.Join(readErr, infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"})))
 		}
 		result.BackupPath = backupPath
 	}
@@ -379,25 +383,25 @@ func (m *MenuMaker) SaveINI(_ context.Context, req MenuMakerSaveINIRequest) (Men
 		return MenuMakerWriteResult{}, err
 	}
 	generated := generatePreview(req.SourceText, req.Slots, req.Settings)
-	return saveINIBytes(destination, generated.INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline})
+	return saveINIBytes(destination, generated.INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}, m.reportCleanup)
 }
 
 func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (MenuMakerWriteResult, error) {
-	return saveZIPBytes(req.DestinationPath, req.OutputININame, generatePreview(req.SourceText, req.Slots, req.Settings).INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}, req.Assets)
+	return saveZIPBytes(req.DestinationPath, req.OutputININame, generatePreview(req.SourceText, req.Slots, req.Settings).INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}, req.Assets, m.reportCleanup)
 }
 
-func saveINIBytes(destination, iniText string, encoding textEncoding) (MenuMakerWriteResult, error) {
+func saveINIBytes(destination, iniText string, encoding textEncoding, reports ...func(error)) (MenuMakerWriteResult, error) {
 	data, err := encodeText(iniText, encoding)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
-	if err := writeAtomic(destination, data); err != nil {
+	if err := writeAtomic(destination, data, reports...); err != nil {
 		return MenuMakerWriteResult{}, err
 	}
 	return MenuMakerWriteResult{OutputINIPath: destination, ResourcePaths: []string{}}, nil
 }
 
-func saveZIPBytes(destination, outputININame, iniText string, encoding textEncoding, assets []MenuMakerGeneratedAsset) (MenuMakerWriteResult, error) {
+func saveZIPBytes(destination, outputININame, iniText string, encoding textEncoding, assets []MenuMakerGeneratedAsset, reports ...func(error)) (MenuMakerWriteResult, error) {
 	resolved, err := requireSavePath(destination, ".zip")
 	if err != nil {
 		return MenuMakerWriteResult{}, err
@@ -432,7 +436,7 @@ func saveZIPBytes(destination, outputININame, iniText string, encoding textEncod
 	if err := writer.Close(); err != nil {
 		return MenuMakerWriteResult{}, err
 	}
-	if err := writeAtomic(resolved, buffer.Bytes()); err != nil {
+	if err := writeAtomic(resolved, buffer.Bytes(), reports...); err != nil {
 		return MenuMakerWriteResult{}, err
 	}
 	return MenuMakerWriteResult{ArchivePath: resolved, ResourcePaths: []string{}}, nil
@@ -609,7 +613,14 @@ func writeExclusive(path string, data []byte) error {
 	return errors.Join(err, file.Close())
 }
 
-func writeAtomic(path string, data []byte) error {
+func writeAtomic(path string, data []byte, reports ...func(error)) error {
+	report := func(err error) {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			for _, callback := range reports {
+				callback(err)
+			}
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -618,7 +629,7 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	tempPath := temp.Name()
-	defer func() { _ = os.Remove(tempPath) }()
+	defer func() { report(os.Remove(tempPath)) }()
 	if _, err = temp.Write(data); err == nil {
 		err = temp.Sync()
 	}
@@ -640,12 +651,12 @@ func writeAtomic(path string, data []byte) error {
 	}
 	if err = os.Rename(tempPath, path); err != nil {
 		if existed {
-			_ = os.Rename(rollback, path)
+			err = infra.WithCause(err, infra.AnnotateError(os.Rename(rollback, path), infra.Diagnostic{Stage: "rollback"}))
 		}
 		return err
 	}
 	if existed {
-		_ = os.Remove(rollback)
+		report(os.Remove(rollback))
 	}
 	return nil
 }
@@ -657,4 +668,11 @@ func sha256Hex(data []byte) string {
 
 func samePath(left, right string) bool {
 	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+}
+
+func (m *MenuMaker) reportCleanup(err error) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	_ = infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "write-output", Stage: "cleanup"})
 }

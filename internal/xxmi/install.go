@@ -61,7 +61,7 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(workDir) }()
+	defer func() { x.reportCleanup(os.RemoveAll(workDir), "InstallDLLVersion") }()
 	escaped := url.PathEscape(version)
 	header := make(http.Header)
 	header.Set("User-Agent", "nahida-desktop")

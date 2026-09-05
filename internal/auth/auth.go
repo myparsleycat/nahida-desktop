@@ -97,14 +97,15 @@ type sessionCall struct {
 type Auth struct {
 	mu sync.Mutex
 
-	store      tokenStore
-	crypto     cryptor
-	http       *infra.Client
-	log        *infra.Log
-	openURL    func(string) error
-	emit       func(string, any)
-	afterLogin func()
-	doFn       func(*http.Request) (*http.Response, error)
+	store             tokenStore
+	crypto            cryptor
+	http              *infra.Client
+	log               *infra.Log
+	sessionDiagnostic infra.DiagnosticThrottle
+	openURL           func(string) error
+	emit              func(string, any)
+	afterLogin        func()
+	doFn              func(*http.Request) (*http.Response, error)
 
 	generation      int
 	mutateDone      chan struct{}
@@ -248,7 +249,14 @@ func (a *Auth) getToken(ctx context.Context) (string, error) {
 	if decryptErr == nil {
 		return plain, nil
 	}
-	_ = a.removeToken(ctx)
+	cleanupErr := a.removeToken(ctx)
+	severity := infra.DiagnosticWarn
+	if cleanupErr != nil {
+		severity = infra.DiagnosticError
+	}
+	_ = infra.ReportError(a.log, infra.WithCause(decryptErr, cleanupErr), "Auth", infra.Diagnostic{
+		Severity: severity, Operation: "restore-token", Stage: "decrypt", Fields: map[string]any{"cleanupFailed": cleanupErr != nil},
+	})
 	return "", nil
 }
 
@@ -438,6 +446,9 @@ func (a *Auth) fetchSession(ctx context.Context) (*Session, error) {
 		return a.fetchSession(ctx)
 	}
 	if resp.StatusCode != http.StatusOK {
+		diagnostic := infra.HTTPDiagnostic(http.MethodGet, url, "session-response", resp)
+		diagnostic.Severity = infra.DiagnosticWarn
+		a.sessionDiagnostic.Report(a.log, &infra.HTTPError{Status: resp.StatusCode}, "Auth", diagnostic)
 		if resp.StatusCode == http.StatusUnauthorized {
 			if err := a.startLogout(ctx, &captured); err != nil {
 				return nil, err

@@ -1,3 +1,5 @@
+import { serializeDiagnostic } from "@shared/diagnostic";
+
 import { decodeModelViewerPositions, ModelViewerByteLRU } from "./model-viewer-position-codec";
 
 type DecodeRequest = {
@@ -75,6 +77,12 @@ async function decodeRequest(request: DecodeRequest): Promise<void> {
                 type: "error",
                 id: request.id,
                 message: error instanceof Error ? error.message : String(error),
+                diagnostic: serializeDiagnostic({
+                    error,
+                    stage: "decode-position",
+                    sourceUrl: request.sourceUrl,
+                    sourceIndicesUrl: request.sourceIndicesUrl,
+                }),
             });
         }
     } finally {

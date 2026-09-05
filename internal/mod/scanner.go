@@ -2,6 +2,7 @@ package mod
 
 import (
 	"bufio"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 var mediaExtensions = map[string]bool{
@@ -32,9 +35,10 @@ type walkedMod struct {
 	iniPaths []string
 }
 
-func listGroups(root string, fallback bool) []FolderGroup {
+func listGroups(root string, fallback bool, reports ...func(error)) []FolderGroup {
 	entries, err := os.ReadDir(root)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return []FolderGroup{}
 	}
 	groups := make([]FolderGroup, 0, len(entries))
@@ -43,9 +47,9 @@ func listGroups(root string, fallback bool) []FolderGroup {
 			continue
 		}
 		path := filepath.Join(root, entry.Name())
-		count, enabled := countChildMods(path)
+		count, enabled := countChildMods(path, reports...)
 		groups = append(groups, FolderGroup{
-			Name: entry.Name(), Path: path, Mods: []ModInfo{}, Preview: findPreview(path, fallback),
+			Name: entry.Name(), Path: path, Mods: []ModInfo{}, Preview: findPreview(path, fallback, reports...),
 			ModCount: count, EnabledModCount: enabled,
 		})
 	}
@@ -53,14 +57,15 @@ func listGroups(root string, fallback bool) []FolderGroup {
 	return groups
 }
 
-func countChildMods(root string) (int, int) {
+func countChildMods(root string, reports ...func(error)) (int, int) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return 0, 0
 	}
 	total, enabled := 0, 0
 	for _, entry := range entries {
-		if !entry.IsDir() || !hasAnyFile(filepath.Join(root, entry.Name())) {
+		if !entry.IsDir() || !hasAnyFile(filepath.Join(root, entry.Name()), reports...) {
 			continue
 		}
 		total++
@@ -71,10 +76,11 @@ func countChildMods(root string) (int, int) {
 	return total, enabled
 }
 
-func hasAnyFile(root string) bool {
+func hasAnyFile(root string, reports ...func(error)) bool {
 	found := false
 	_ = filepath.WalkDir(root, func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			reportScanFailure(err, reports)
 			return err
 		}
 		if entry.Type().IsRegular() {
@@ -122,13 +128,14 @@ func mapParallel[T, R any](items []T, fn func(T) R) []R {
 	return out
 }
 
-func scanGroup(groupPath string) FolderGroup {
+func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 	groupPath = filepath.Clean(groupPath)
 	result := FolderGroup{
 		Name: filepath.Base(groupPath), Path: groupPath, Mods: []ModInfo{},
 	}
 	entries, err := os.ReadDir(groupPath)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return result
 	}
 	modDirs := make([]string, 0, len(entries))
@@ -144,18 +151,18 @@ func scanGroup(groupPath string) FolderGroup {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		preview = findScannerGroupPreview(groupPath, previewSearchDepth)
+		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
 	}()
 	go func() {
 		defer wg.Done()
 		walked = mapParallel(modDirs, func(modPath string) *walkedMod {
-			return walkMod(groupPath, modPath)
+			return walkMod(groupPath, modPath, reports...)
 		})
 	}()
 	wg.Wait()
 
 	result.Preview = preview
-	result.Mods = collectWalkedMods(walked)
+	result.Mods = collectWalkedMods(walked, reports...)
 	result.ModCount = len(result.Mods)
 	for _, info := range result.Mods {
 		if info.IsEnabled {
@@ -165,13 +172,14 @@ func scanGroup(groupPath string) FolderGroup {
 	return result
 }
 
-func scanGroupLight(groupPath string) FolderGroup {
+func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 	groupPath = filepath.Clean(groupPath)
 	result := FolderGroup{
 		Name: filepath.Base(groupPath), Path: groupPath, Mods: []ModInfo{},
 	}
 	entries, err := os.ReadDir(groupPath)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return result
 	}
 	modDirs := make([]string, 0, len(entries))
@@ -187,12 +195,12 @@ func scanGroupLight(groupPath string) FolderGroup {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		preview = findScannerGroupPreview(groupPath, previewSearchDepth)
+		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
 	}()
 	go func() {
 		defer wg.Done()
 		scanned := mapParallel(modDirs, func(modPath string) *ModInfo {
-			return scanModLight(groupPath, modPath)
+			return scanModLight(groupPath, modPath, reports...)
 		})
 		mods = make([]ModInfo, 0, len(scanned))
 		for _, info := range scanned {
@@ -217,12 +225,12 @@ func scanGroupLight(groupPath string) FolderGroup {
 	return result
 }
 
-func scanModLight(groupPath, modPath string) *ModInfo {
-	if !hasAnyFile(modPath) {
+func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
+	if !hasAnyFile(modPath, reports...) {
 		return nil
 	}
 	name := filepath.Base(modPath)
-	preview := findScannerPreviewWalk(modPath, previewSearchDepth)
+	preview := findScannerPreviewWalk(modPath, previewSearchDepth, reports...)
 	info := &ModInfo{
 		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
 		IsEnabled: !isDisabled(name), Inis: []IniResult{},
@@ -233,7 +241,7 @@ func scanModLight(groupPath, modPath string) *ModInfo {
 	return info
 }
 
-func walkMod(groupPath, modPath string) *walkedMod {
+func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 	name := filepath.Base(modPath)
 	info := &ModInfo{
 		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
@@ -244,6 +252,7 @@ func walkMod(groupPath, modPath string) *walkedMod {
 	var buckets previewBuckets
 	_ = filepath.WalkDir(modPath, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			reportScanFailure(err, reports)
 			return fs.SkipDir
 		}
 		if !entry.Type().IsRegular() {
@@ -251,6 +260,7 @@ func walkMod(groupPath, modPath string) *walkedMod {
 		}
 		found = true
 		metadata, statErr := entry.Info()
+		reportScanFailure(statErr, reports)
 		if statErr == nil {
 			info.Size += float64(metadata.Size())
 			if mtime := fileMtimeMS(metadata); mtime > info.Mtime {
@@ -277,16 +287,16 @@ func walkMod(groupPath, modPath string) *walkedMod {
 	return &walkedMod{info: info, iniPaths: iniPaths}
 }
 
-func scanMod(groupPath, modPath string) *ModInfo {
-	walked := walkMod(groupPath, modPath)
+func scanMod(groupPath, modPath string, reports ...func(error)) *ModInfo {
+	walked := walkMod(groupPath, modPath, reports...)
 	if walked == nil {
 		return nil
 	}
-	walked.info.Inis = parseAndSortINIs(walked.iniPaths)
+	walked.info.Inis = parseAndSortINIs(walked.iniPaths, reports...)
 	return walked.info
 }
 
-func collectWalkedMods(walked []*walkedMod) []ModInfo {
+func collectWalkedMods(walked []*walkedMod, reports ...func(error)) []ModInfo {
 	items := make([]*walkedMod, 0, len(walked))
 	for _, item := range walked {
 		if item == nil || item.info == nil {
@@ -295,7 +305,7 @@ func collectWalkedMods(walked []*walkedMod) []ModInfo {
 		items = append(items, item)
 	}
 	parsed := mapParallel(items, func(item *walkedMod) *ModInfo {
-		item.info.Inis = parseAndSortINIs(item.iniPaths)
+		item.info.Inis = parseAndSortINIs(item.iniPaths, reports...)
 		return item.info
 	})
 	mods := make([]ModInfo, 0, len(parsed))
@@ -310,10 +320,10 @@ func collectWalkedMods(walked []*walkedMod) []ModInfo {
 	return mods
 }
 
-func parseAndSortINIs(paths []string) []IniResult {
+func parseAndSortINIs(paths []string, reports ...func(error)) []IniResult {
 	inis := make([]IniResult, len(paths))
 	for i, path := range paths {
-		inis[i] = parseINI(path)
+		inis[i] = parseINI(path, reports...)
 	}
 	return sortINIs(inis)
 }
@@ -328,10 +338,11 @@ func sortINIs(inis []IniResult) []IniResult {
 	return inis
 }
 
-func parseINI(path string) IniResult {
+func parseINI(path string, reports ...func(error)) IniResult {
 	result := IniResult{Name: filepath.Base(path), Path: path, ToggleKeys: []ToggleKey{}}
 	file, err := os.Open(path)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return result
 	}
 	defer func() { _ = file.Close() }()
@@ -370,6 +381,7 @@ func parseINI(path string) IniResult {
 			}
 		}
 	}
+	reportScanFailure(infra.AnnotateError(scanner.Err(), infra.Diagnostic{Stage: "read-ini", Fields: map[string]any{"path": path}}), reports)
 	flush()
 	sort.SliceStable(result.ToggleKeys, func(i, j int) bool {
 		return result.ToggleKeys[i].Key != nil && result.ToggleKeys[j].Key == nil
@@ -417,4 +429,15 @@ func optionalMapValue(data map[string]string, key string) *string {
 		return nil
 	}
 	return stringPointer(value)
+}
+
+func reportScanFailure(err error, reports []func(error)) {
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	for _, report := range reports {
+		if report != nil {
+			report(err)
+		}
+	}
 }

@@ -75,7 +75,7 @@ func (m *Mod) resolveNteBootstrapExecutablePath(
 func (m *Mod) ensureNteBootstrapFiles(ctx context.Context, executablePath string) (install *nteBootstrapInstall, returnErr error) {
 	targetDir := filepath.Dir(executablePath)
 	if info, err := os.Stat(targetDir); err != nil || !info.IsDir() {
-		return nil, errors.New("NTE_BOOTSTRAP_INVALID_TARGET_DIR")
+		return nil, infra.WithCause(errors.New("NTE_BOOTSTRAP_INVALID_TARGET_DIR"), err)
 	}
 	if runtime.GOARCH != "amd64" {
 		err := fmt.Errorf("NTE_BOOTSTRAP_UNSUPPORTED_ARCH: %s", runtime.GOARCH)
@@ -97,7 +97,7 @@ func (m *Mod) ensureNteBootstrapFiles(ctx context.Context, executablePath string
 		m.emitNteBootstrapProgress("failed", nil, "", err.Error())
 		return nil, err
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	defer func() { m.reportCleanup(os.RemoveAll(tempDir), "ensureNteBootstrapFiles") }()
 
 	defer func() {
 		if returnErr == nil {
@@ -244,12 +244,10 @@ func prepareNteBootstrapInstall(copies []nteBootstrapFileCopy) (*nteBootstrapIns
 		if info, err := os.Stat(file.targetPath); err == nil && info.Mode().IsRegular() {
 			snapshot.existed = true
 			if err := copyNteBootstrapFile(file.targetPath, snapshot.backupPath); err != nil {
-				_ = os.RemoveAll(rollbackDir)
-				return nil, err
+				return nil, infra.WithCause(err, os.RemoveAll(rollbackDir))
 			}
 		} else if err != nil && !os.IsNotExist(err) {
-			_ = os.RemoveAll(rollbackDir)
-			return nil, err
+			return nil, infra.WithCause(err, os.RemoveAll(rollbackDir))
 		}
 		install.snapshots = append(install.snapshots, snapshot)
 	}

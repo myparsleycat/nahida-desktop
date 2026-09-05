@@ -1,5 +1,6 @@
 import { Tools } from "@bindings/tools";
 import { buildModBisectTitlebarActivity } from "@renderer/components/titlebar/titlebar-activity";
+import { Logger } from "@renderer/lib/logger";
 import { titlebarActivityStore } from "@renderer/store/titlebar-activity";
 import type { BisectSnapshot } from "@shared/types";
 import { Events } from "@wailsio/runtime";
@@ -30,7 +31,11 @@ export function useModBisectTitlebarActivity() {
                 sync(snapshot as Parameters<typeof sync>[0]);
             })
             .catch((error) => {
-                console.error("tools:bisectGetState failed for titlebar activity", error);
+                Logger.capture(
+                    "components/titlebar/use-mod-bisect-titlebar-activity.ts",
+                    "tools:bisectGetState failed for titlebar activity",
+                    error,
+                );
             });
 
         const off = Events.On("tools:bisectState", (event) => {

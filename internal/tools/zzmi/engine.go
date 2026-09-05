@@ -21,6 +21,8 @@ import (
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 var (
@@ -67,7 +69,7 @@ func Run(ctx context.Context, target, tool string, pack *RulePack, log Logger) (
 	}
 	info, err := os.Stat(root)
 	if err != nil || !info.IsDir() {
-		return Result{}, errors.New("ZZMI target is not a directory")
+		return Result{}, infra.WithCause(errors.New("ZZMI target is not a directory"), err)
 	}
 	if tool != ToolHash && tool != ToolJane && tool != ToolDialyn {
 		return Result{}, fmt.Errorf("unsupported ZZMI fixer tool %q", tool)
@@ -234,13 +236,13 @@ func (e *engine) executeCommand(filename, content, activeHash string, known map[
 	case "update_hash":
 		newHash, err := stringArg(command.Args, 0)
 		if err != nil || !isHash(newHash) {
-			return content, nil, errors.New("invalid update_hash arguments")
+			return content, nil, infra.WithCause(errors.New("invalid update_hash arguments"), err)
 		}
 		return replaceHashLines(content, activeHash, strings.ToLower(newHash)), []string{newHash}, nil
 	case "add_section_if_missing", "multiply_section_if_missing":
 		hashes, err := hashArgs(command.Args, 0)
 		if err != nil || len(hashes) == 0 {
-			return content, nil, errors.New("invalid equivalent hashes")
+			return content, nil, infra.WithCause(errors.New("invalid equivalent hashes"), err)
 		}
 		for _, hash := range hashes {
 			if known[strings.ToLower(hash)] {
@@ -333,7 +335,7 @@ func transferIndexed(content, hash string, kwargs map[string]any) (string, error
 	}
 	target, err := stringSlice(kwargs["trg_indices"])
 	if err != nil || len(source) != len(target) {
-		return content, errors.New("invalid transfer indices")
+		return content, infra.WithCause(errors.New("invalid transfer indices"), err)
 	}
 	sections := parseSections(content)
 	matched := []section{}
@@ -429,7 +431,7 @@ func (e *engine) updateBlendBuffers(filename, content string, args []any) error 
 	}
 	newValues, err := uintSlice(args[2])
 	if err != nil || len(oldValues) != len(newValues) {
-		return errors.New("invalid blend index mapping")
+		return infra.WithCause(errors.New("invalid blend index mapping"), err)
 	}
 	mapping := make(map[uint32]uint32, len(oldValues))
 	for i := range oldValues {
@@ -501,7 +503,7 @@ func (e *engine) remapTexcoord(filename, content, hash string, args []any) (stri
 	}
 	newFormat, err := stringSlice(args[2])
 	if err != nil || len(oldFormat) != len(newFormat) {
-		return content, errors.New("invalid texcoord formats")
+		return content, infra.WithCause(errors.New("invalid texcoord formats"), err)
 	}
 	oldStride, err := formatStride(oldFormat)
 	if err != nil {
@@ -667,7 +669,7 @@ func (e *engine) resourceFile(iniPath, content, name string) (string, int, error
 		}
 		stride, err := strconv.Atoi(assignmentValue(item.body, "stride"))
 		if err != nil || stride <= 0 {
-			return "", 0, errors.New("resource has invalid stride")
+			return "", 0, infra.WithCause(errors.New("resource has invalid stride"), err)
 		}
 		filename := strings.TrimSpace(assignmentValue(item.body, "filename"))
 		if filename == "" {
@@ -686,7 +688,7 @@ func (e *engine) securePath(candidate string) (string, error) {
 	}
 	logicalRelative, err := filepath.Rel(e.root, abs)
 	if err != nil || logicalRelative == ".." || strings.HasPrefix(logicalRelative, ".."+string(filepath.Separator)) || filepath.IsAbs(logicalRelative) {
-		return "", errors.New("path escapes the selected ZZMI target")
+		return "", infra.WithCause(errors.New("path escapes the selected ZZMI target"), err)
 	}
 	current := e.root
 	for _, part := range strings.Split(logicalRelative, string(filepath.Separator)) {
@@ -708,7 +710,7 @@ func (e *engine) securePath(candidate string) (string, error) {
 	}
 	relative, err := filepath.Rel(e.root, resolved)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return "", errors.New("path escapes the selected ZZMI target")
+		return "", infra.WithCause(errors.New("path escapes the selected ZZMI target"), err)
 	}
 	return resolved, nil
 }
@@ -789,7 +791,7 @@ func decodeINI(data []byte) (string, textEncoding, error) {
 	}
 	decoded, err := ioReadAll(transform.NewReader(bytes.NewReader(data), simplifiedchinese.GBK.NewDecoder()))
 	if err != nil {
-		return "", encoding, errors.New("INI is neither UTF-8 nor GBK")
+		return "", encoding, infra.WithCause(errors.New("INI is neither UTF-8 nor GBK"), err)
 	}
 	encoding.name = "gbk"
 	return string(decoded), encoding, nil

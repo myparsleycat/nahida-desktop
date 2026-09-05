@@ -682,6 +682,7 @@ func (s *ShaderFixes) getShaderFixesOwnerTargetKey(globalShaderPath, targetPath 
 func (s *ShaderFixes) validateShaderFixesModManifest(raw []byte) *shaderFixesModManifest {
 	var manifest shaderFixesModManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
+		s.log(err, "Mod:decodeShaderFixesManifest")
 		return nil
 	}
 	if manifest.Version != shaderFixesModMarkerVersion || manifest.ModKey == "" {
@@ -723,6 +724,7 @@ func (s *ShaderFixes) validateShaderFixesOwnerIndex(raw []byte) *shaderFixesOwne
 		Targets map[string]json.RawMessage `json:"targets"`
 	}
 	if err := json.Unmarshal(raw, &candidate); err != nil {
+		s.log(err, "Mod:decodeShaderFixesOwnerIndex")
 		return nil
 	}
 	if candidate.Version != shaderFixesOwnerIndexVersion || candidate.Targets == nil {
@@ -732,6 +734,9 @@ func (s *ShaderFixes) validateShaderFixesOwnerIndex(raw []byte) *shaderFixesOwne
 	for targetKey, rawTarget := range candidate.Targets {
 		var target shaderFixesOwnerIndexTarget
 		if err := json.Unmarshal(rawTarget, &target); err != nil || target.Hash == "" || target.Owners == nil {
+			if err != nil {
+				s.log(err, "Mod:decodeShaderFixesOwnerTarget")
+			}
 			return nil
 		}
 		normalized := s.normalizeShaderFixesOwnerTargetKey(targetKey)

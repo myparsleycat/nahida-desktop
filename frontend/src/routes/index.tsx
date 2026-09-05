@@ -1,4 +1,5 @@
 import { Shell } from "@bindings/platform";
+import { Logger } from "@renderer/lib/logger";
 import { getSetting } from "@renderer/lib/settings";
 import { isStartPageSessionReady, resolveStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
@@ -45,7 +46,7 @@ function RouteComponent() {
       })
       .catch((error) => {
         if (cancelled) return;
-        console.error("Failed to resolve startup navigation", error);
+        Logger.capture("routes/index.tsx", "Failed to resolve startup navigation", error);
         void navi({
           to: resolveStartPage(undefined, {
             isLoggedIn: false,

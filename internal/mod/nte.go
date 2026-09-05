@@ -12,6 +12,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -145,11 +146,12 @@ func nteRelative(roots nteRoots, target string) string {
 	return ""
 }
 
-func nteListGroups(roots nteRoots, groupPath string, searchPreview bool) []FolderGroup {
+func nteListGroups(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) []FolderGroup {
 	relative := nteRelative(roots, groupPath)
 	groupDir := filepath.Join(roots.modRoot, relative)
 	entries, err := os.ReadDir(groupDir)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return []FolderGroup{}
 	}
 	result := []FolderGroup{}
@@ -158,19 +160,19 @@ func nteListGroups(roots nteRoots, groupPath string, searchPreview bool) []Folde
 			continue
 		}
 		path := filepath.Join(groupDir, entry.Name())
-		if hasDirectPak(path) || isNtePakWrapper(roots, path) {
+		if hasDirectPak(path, reports...) || isNtePakWrapper(roots, path, reports...) {
 			continue
 		}
-		mods := collectNteModEntries(roots, path)
+		mods := collectNteModEntries(roots, path, reports...)
 		enabled := 0
 		for _, info := range mods {
-			if isNteModEnabled(info.path) {
+			if isNteModEnabled(info.path, reports...) {
 				enabled++
 			}
 		}
 		result = append(result, FolderGroup{
-			Name: entry.Name(), Path: path, Mods: []ModInfo{}, Preview: findPreview(path, searchPreview),
-			ModCount: len(mods), EnabledModCount: enabled, HasSubGroups: hasNteSubGroups(roots, path),
+			Name: entry.Name(), Path: path, Mods: []ModInfo{}, Preview: findPreview(path, searchPreview, reports...),
+			ModCount: len(mods), EnabledModCount: enabled, HasSubGroups: hasNteSubGroups(roots, path, reports...),
 		})
 	}
 	less := newLocaleLess()
@@ -178,28 +180,28 @@ func nteListGroups(roots nteRoots, groupPath string, searchPreview bool) []Folde
 	return result
 }
 
-func nteScanGroup(roots nteRoots, groupPath string, searchPreview bool) FolderGroup {
-	return nteScanGroupWith(roots, groupPath, searchPreview, nteModInfo)
+func nteScanGroup(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) FolderGroup {
+	return nteScanGroupWith(roots, groupPath, searchPreview, func(entry nteModEntry) ModInfo { return nteModInfo(entry, reports...) }, reports...)
 }
 
-func nteScanGroupLight(roots nteRoots, groupPath string, searchPreview bool) FolderGroup {
-	return nteScanGroupWith(roots, groupPath, searchPreview, nteModInfoLight)
+func nteScanGroupLight(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) FolderGroup {
+	return nteScanGroupWith(roots, groupPath, searchPreview, func(entry nteModEntry) ModInfo { return nteModInfoLight(entry, reports...) }, reports...)
 }
 
-func nteScanGroupWith(roots nteRoots, groupPath string, searchPreview bool, scan func(nteModEntry) ModInfo) FolderGroup {
+func nteScanGroupWith(roots nteRoots, groupPath string, searchPreview bool, scan func(nteModEntry) ModInfo, reports ...func(error)) FolderGroup {
 	relative := nteRelative(roots, groupPath)
 	groupDir := filepath.Join(roots.modRoot, relative)
 	result := FolderGroup{
 		Name: filepath.Base(groupPath), Path: groupDir, Mods: []ModInfo{},
 	}
-	entries := collectNteModEntries(roots, groupDir)
+	entries := collectNteModEntries(roots, groupDir, reports...)
 	var preview *string
 	var mods []ModInfo
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		preview = findPreview(groupDir, searchPreview)
+		preview = findPreview(groupDir, searchPreview, reports...)
 	}()
 	go func() {
 		defer wg.Done()
@@ -219,20 +221,22 @@ func nteScanGroupWith(roots nteRoots, groupPath string, searchPreview bool, scan
 	return result
 }
 
-func nteModInfo(entry nteModEntry) ModInfo {
+func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 	info := ModInfo{
 		ID: entry.path, Name: entry.name, Path: entry.path,
-		IsEnabled: isNteModEnabled(entry.path), Inis: []IniResult{},
+		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
 	}
 	var buckets previewBuckets
 	_ = filepath.WalkDir(entry.path, func(path string, dirEntry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			reportScanFailure(walkErr, reports)
 			return fs.SkipDir
 		}
 		if !dirEntry.Type().IsRegular() {
 			return nil
 		}
 		metadata, err := dirEntry.Info()
+		reportScanFailure(err, reports)
 		if err == nil {
 			info.Size += float64(metadata.Size())
 			if mtime := fileMtimeMS(metadata); mtime > info.Mtime {
@@ -244,21 +248,21 @@ func nteModInfo(entry nteModEntry) ModInfo {
 	})
 	info.Preview = buckets.bestPath()
 	if info.Preview == nil && entry.previewFallback != "" {
-		info.Preview = findPreview(entry.previewFallback, false)
+		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
 	return info
 }
 
-func nteModInfoLight(entry nteModEntry) ModInfo {
+func nteModInfoLight(entry nteModEntry, reports ...func(error)) ModInfo {
 	info := ModInfo{
 		ID: entry.path, Name: entry.name, Path: entry.path,
-		IsEnabled: isNteModEnabled(entry.path), Inis: []IniResult{},
+		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
 	}
-	if preview := findPreviewWalk(entry.path, previewSearchDepth); preview != nil {
+	if preview := findPreviewWalk(entry.path, previewSearchDepth, reports...); preview != nil {
 		info.Preview = stringPointer(preview.path)
 	}
 	if info.Preview == nil && entry.previewFallback != "" {
-		info.Preview = findPreview(entry.previewFallback, false)
+		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
 	return info
 }
@@ -280,9 +284,10 @@ func nteListingGroupPath(roots nteRoots, modPath string) string {
 	return parent
 }
 
-func collectNteModEntries(roots nteRoots, groupDir string) []nteModEntry {
+func collectNteModEntries(roots nteRoots, groupDir string, reports ...func(error)) []nteModEntry {
 	entries, err := os.ReadDir(groupDir)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return nil
 	}
 	result := []nteModEntry{}
@@ -291,17 +296,18 @@ func collectNteModEntries(roots nteRoots, groupDir string) []nteModEntry {
 			continue
 		}
 		child := filepath.Join(groupDir, entry.Name())
-		if hasDirectPak(child) {
+		if hasDirectPak(child, reports...) {
 			result = append(result, nteModEntry{path: child, name: entry.Name()})
 			continue
 		}
-		if !isNtePakWrapper(roots, child) {
+		if !isNtePakWrapper(roots, child, reports...) {
 			continue
 		}
-		inner, _ := os.ReadDir(child)
+		inner, readErr := os.ReadDir(child)
+		reportScanFailure(readErr, reports)
 		for _, item := range inner {
 			innerPath := filepath.Join(child, item.Name())
-			if item.IsDir() && hasDirectPak(innerPath) {
+			if item.IsDir() && hasDirectPak(innerPath, reports...) {
 				result = append(result, nteModEntry{
 					path: innerPath, name: entry.Name() + " / " + item.Name(), previewFallback: child,
 				})
@@ -311,31 +317,33 @@ func collectNteModEntries(roots nteRoots, groupDir string) []nteModEntry {
 	return result
 }
 
-func hasNteSubGroups(roots nteRoots, groupDir string) bool {
-	entries, _ := os.ReadDir(groupDir)
+func hasNteSubGroups(roots nteRoots, groupDir string, reports ...func(error)) bool {
+	entries, readErr := os.ReadDir(groupDir)
+	reportScanFailure(readErr, reports)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		path := filepath.Join(groupDir, entry.Name())
-		if !hasDirectPak(path) && !isNtePakWrapper(roots, path) {
+		if !hasDirectPak(path, reports...) && !isNtePakWrapper(roots, path, reports...) {
 			return true
 		}
 	}
 	return false
 }
 
-func isNtePakWrapper(roots nteRoots, path string) bool {
+func isNtePakWrapper(roots nteRoots, path string, reports ...func(error)) bool {
 	relative := nteRelative(roots, path)
 	segments := strings.FieldsFunc(filepath.ToSlash(relative), func(r rune) bool { return r == '/' })
 	if len(segments) == 1 || (len(segments) == 2 && strings.EqualFold(segments[0], "Character")) {
 		return false
 	}
-	if hasDirectPak(path) {
+	if hasDirectPak(path, reports...) {
 		return false
 	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return false
 	}
 	anyPak := false
@@ -344,21 +352,22 @@ func isNtePakWrapper(roots nteRoots, path string) bool {
 			continue
 		}
 		child := filepath.Join(path, entry.Name())
-		pak := hasDirectPak(child)
+		pak := hasDirectPak(child, reports...)
 		anyPak = anyPak || pak
-		if !pak && hasChildDirectory(child) {
+		if !pak && hasChildDirectory(child, reports...) {
 			return false
 		}
 	}
 	return anyPak
 }
 
-func isNteModEnabled(path string) bool {
+func isNteModEnabled(path string, reports ...func(error)) bool {
 	if isDisabled(filepath.Base(path)) {
 		return false
 	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return false
 	}
 	foundPak := false
@@ -383,10 +392,12 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 	}
 	type renamePair struct{ from, to string }
 	renamed := []renamePair{}
-	rollback := func() {
+	rollback := func() error {
+		var failures []error
 		for i := len(renamed) - 1; i >= 0; i-- {
-			_ = os.Rename(renamed[i].to, renamed[i].from)
+			failures = append(failures, os.Rename(renamed[i].to, renamed[i].from))
 		}
+		return infra.AnnotateError(errors.Join(failures...), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}})
 	}
 	for _, entry := range entries {
 		if !entry.Type().IsRegular() || !isPakModFile(entry.Name()) {
@@ -401,8 +412,7 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 		}
 		if to != from {
 			if err := os.Rename(from, to); err != nil {
-				rollback()
-				return "", m.lockedFolderError(err, path)
+				return "", infra.WithCause(m.lockedFolderError(err, path), rollback())
 			}
 			renamed = append(renamed, renamePair{from: from, to: to})
 		}
@@ -414,15 +424,15 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 		result, err = m.disable(ctx, path)
 	}
 	if err != nil {
-		rollback()
-		return "", err
+		return "", infra.WithCause(err, rollback())
 	}
 	return result, nil
 }
 
-func hasDirectPak(path string) bool {
+func hasDirectPak(path string, reports ...func(error)) bool {
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		reportScanFailure(err, reports)
 		return false
 	}
 	for _, entry := range entries {
@@ -438,8 +448,9 @@ func isPakModFile(name string) bool {
 	return strings.HasSuffix(name, ".pak")
 }
 
-func hasChildDirectory(path string) bool {
-	entries, _ := os.ReadDir(path)
+func hasChildDirectory(path string, reports ...func(error)) bool {
+	entries, err := os.ReadDir(path)
+	reportScanFailure(err, reports)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			return true

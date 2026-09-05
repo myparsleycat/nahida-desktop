@@ -52,10 +52,12 @@ var (
 
 // DriveAPIError matches Electron DriveApiError.
 type DriveAPIError struct {
-	Code    string
-	Message string
-	Status  int
-	Cause   error
+	Code               string
+	Message            string
+	Status             int
+	Cause              error
+	diagnosticSource   error
+	diagnosticIdentity *DriveAPIError
 }
 
 //wails:ignore
@@ -86,6 +88,23 @@ func (e *DriveAPIError) Error() string {
 	return e.Code + ": " + e.Message
 }
 
+// DiagnosticSource retains wrapper context without altering the public cause.
+//
+//wails:ignore
+func (e *DriveAPIError) DiagnosticSource() error {
+	if e == nil {
+		return nil
+	}
+	return e.diagnosticSource
+}
+
+// Is preserves matching the original domain error after diagnostic-only cloning.
+//
+//wails:ignore
+func (e *DriveAPIError) Is(target error) bool {
+	return e != nil && e.diagnosticIdentity != nil && errors.Is(e.diagnosticIdentity, target)
+}
+
 func (e *DriveAPIError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -106,6 +125,12 @@ func IsBackendUnavailableStatus(status int) bool {
 func CreateDriveAPIError(err any, operation string, status int) *DriveAPIError {
 	var existing *DriveAPIError
 	if asDriveAPIError(err, &existing) {
+		if original, ok := err.(error); ok && original != existing { //nolint:errorlint // Preserve only wrappers; errors.Is also matches the unwrapped value.
+			copy := *existing
+			copy.diagnosticSource = original
+			copy.diagnosticIdentity = existing
+			return &copy
+		}
 		return existing
 	}
 
@@ -135,7 +160,7 @@ func CreateDriveAPIError(err any, operation string, status int) *DriveAPIError {
 
 func normalizeDriveBoundaryError(err *error, operation string) {
 	if err != nil && *err != nil {
-		*err = CreateDriveAPIError(*err, operation, 0)
+		*err = infra.AnnotateError(CreateDriveAPIError(*err, operation, 0), infra.Diagnostic{Operation: operation})
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 const fixToolLogEvent = "ftm:log"
@@ -54,7 +55,7 @@ func (t *Tools) SaveScript(ctx context.Context, inputPath string) error {
 	}
 	info, err := os.Stat(inputPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return contractError("File does not exist")
+		return infra.WithCause(contractError("File does not exist"), err)
 	}
 	if err != nil {
 		return fmt.Errorf("stat script: %w", err)
@@ -336,7 +337,7 @@ func (t *Tools) reportRunError(err error) error {
 func (t *Tools) validateRunDestination(destPath string) error {
 	info, err := os.Stat(destPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return contractError("Destination path does not exist")
+		return infra.WithCause(contractError("Destination path does not exist"), err)
 	}
 	if err != nil {
 		return fmt.Errorf("stat destination path: %w", err)

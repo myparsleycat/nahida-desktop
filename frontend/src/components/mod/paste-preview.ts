@@ -1,6 +1,7 @@
 import { Mod } from "@bindings/mod";
 import { Shell } from "@bindings/platform";
 import i18n from "@renderer/lib/i18n";
+import { Logger } from "@renderer/lib/logger";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -99,7 +100,7 @@ export async function pasteModPreview({
                         });
                     })
                     .catch((error) => {
-                        console.error(error);
+                        Logger.capture("components/mod/paste-preview.ts", error);
                     });
                 return;
             }
@@ -120,7 +121,7 @@ export async function pasteModPreview({
                     });
                 })
                 .catch((error) => {
-                    console.error(error);
+                    Logger.capture("components/mod/paste-preview.ts", error);
                 });
             return;
         }
@@ -136,13 +137,16 @@ export async function pasteModPreview({
                 const blob = await item.getType(type);
                 const reader = new FileReader();
                 reader.onerror = () => {
-                    console.error(reader.error);
+                    Logger.capture("components/mod/paste-preview.ts", reader.error);
                     toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
                 };
                 reader.onloadend = () => {
                     const base64data = reader.result;
                     if (typeof base64data !== "string") {
-                        console.error("Failed to read clipboard image as data URL");
+                        Logger.capture(
+                            "components/mod/paste-preview.ts",
+                            "Failed to read clipboard image as data URL",
+                        );
                         toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
                         return;
                     }
@@ -160,7 +164,7 @@ export async function pasteModPreview({
                             });
                         })
                         .catch((error) => {
-                            console.error(error);
+                            Logger.capture("components/mod/paste-preview.ts", error);
                         });
                 };
                 reader.readAsDataURL(blob);
@@ -170,7 +174,7 @@ export async function pasteModPreview({
 
         toast.warning(i18n.t("page.mod.toast.paste-preview.no-image"));
     } catch (error) {
-        console.error(error);
+        Logger.capture("components/mod/paste-preview.ts", error);
         toast.error(i18n.t("page.mod.toast.paste-preview.clipboard-error"));
     }
 }

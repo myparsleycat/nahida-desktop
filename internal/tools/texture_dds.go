@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 
 	"github.com/myparsleycat/ddsutil"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const textureDefaultResizePercent = 50
@@ -34,7 +36,13 @@ var textureTempCounter atomic.Uint64
 // textureError wraps the former sidecar's user-facing message text so the
 // exact capitalisation and punctuation survive the port.
 func textureError(format string, args ...any) error {
-	return contractError(fmt.Sprintf(format, args...))
+	var err error = contractError(fmt.Sprintf(format, args...))
+	for _, arg := range args {
+		if cause, ok := arg.(error); ok {
+			err = infra.WithCause(err, cause)
+		}
+	}
+	return err
 }
 
 type textureResizeRequest struct {
@@ -79,7 +87,7 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	}
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || (!info.IsDir() && !info.Mode().IsRegular()) {
-		return TextureResizeResult{}, contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved))
+		return TextureResizeResult{}, infra.WithCause(contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved)), statErr)
 	}
 	var files []string
 	if info.IsDir() {
@@ -644,8 +652,7 @@ func writeDDSAtomically(path string, dds *ddsutil.Dds) error {
 		return nil
 	}()
 	if writeErr != nil {
-		_ = os.Remove(tempPath)
-		return writeErr
+		return infra.WithCause(writeErr, os.Remove(tempPath))
 	}
 	return nil
 }
@@ -685,8 +692,7 @@ func createBackupIfMissing(path string) (bool, error) {
 		copyErr = closeErr
 	}
 	if copyErr != nil {
-		_ = os.Remove(backupPath)
-		return false, textureError("Failed to create backup file '%s': %s", backupPath, copyErr)
+		return false, infra.WithCause(textureError("Failed to create backup file '%s': %s", backupPath, copyErr), os.Remove(backupPath))
 	}
 	return true, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -186,10 +187,10 @@ func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []str
 	batchSize := chooseBisectBatchSize(len(candidates))
 	batch := slices.Clone(candidates[:batchSize])
 	if err := disableINIs(batch); err != nil {
-		_ = enableINIs(batch)
-		_ = t.stopD3dxGuardLocked(game)
+		rollbackErr := enableINIs(batch)
+		guardErr := t.stopD3dxGuardLocked(game)
 		t.bisect = nil
-		return BisectSnapshot{}, err
+		return BisectSnapshot{}, infra.WithCause(err, infra.AnnotateError(errors.Join(rollbackErr, guardErr), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"game": game}}))
 	}
 	session.candidates = candidates
 	session.round = 1
@@ -563,13 +564,13 @@ func resolveBisectExclude(root, input string) (string, error) {
 	}
 	relative, err := filepath.Rel(rootAbs, inputAbs)
 	if err != nil || pathEscapes(relative) {
-		return "", contractError(bisectExcludeOutside)
+		return "", infra.WithCause(contractError(bisectExcludeOutside), err)
 	}
 	if relative == "." {
 		return "", contractError(bisectExcludeRoot)
 	}
 	if _, err := os.Stat(inputAbs); errors.Is(err, os.ErrNotExist) {
-		return "", contractError(bisectExcludeMissing)
+		return "", infra.WithCause(contractError(bisectExcludeMissing), err)
 	} else if err != nil {
 		return "", err
 	}
@@ -583,7 +584,7 @@ func resolveBisectExclude(root, input string) (string, error) {
 	}
 	canonicalRel, err := filepath.Rel(canonicalRoot, canonicalInput)
 	if err != nil || pathEscapes(canonicalRel) {
-		return "", contractError(bisectExcludeOutside)
+		return "", infra.WithCause(contractError(bisectExcludeOutside), err)
 	}
 	return filepath.ToSlash(relative), nil
 }
@@ -648,9 +649,9 @@ func switchBisectBatch(oldBatch, newBatch []string) error {
 	disabled := make([]string, 0, len(newBatch))
 	for _, path := range newBatch {
 		if err := renameINIDisable(path); err != nil {
-			_ = enableINIs(disabled)
-			_ = disableINIs(oldBatch)
-			return err
+			rollbackErr := enableINIs(disabled)
+			restoreErr := disableINIs(oldBatch)
+			return infra.WithCause(err, infra.AnnotateError(errors.Join(rollbackErr, restoreErr), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}}))
 		}
 		disabled = append(disabled, path)
 	}

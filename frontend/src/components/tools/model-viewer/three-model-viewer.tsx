@@ -1,6 +1,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { createThreeRenderer } from "@renderer/components/tools/three-renderer";
+import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import { evaluateViewerState } from "@shared/mod-viewer/eval";
@@ -1778,7 +1779,8 @@ async function captureSquareCanvasPngDataUrl(
   try {
     context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
     return canvas.toDataURL("image/png");
-  } catch {
+  } catch (error) {
+    Logger.capture("model-viewer:capture-preview", error);
     return null;
   }
 }
