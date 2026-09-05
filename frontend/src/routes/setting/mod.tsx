@@ -180,7 +180,6 @@ function ModSettingsRouteContent() {
   return (
     <div className="space-y-6 p-4">
       <div className="space-y-6">
-        <ModCompressionCard />
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium">
@@ -539,6 +538,8 @@ function ModSettingsRouteContent() {
             </FieldGroup>
           </CardContent>
         </Card>
+
+        <ModCompressionCard />
       </div>
     </div>
   );

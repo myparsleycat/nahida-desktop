@@ -1664,9 +1664,11 @@
           "title": "모드 압축",
           "method": "압축 방식",
           "methods": {
-            "zstd": { "description": "비활성 모드의 큰 파일을 .nzst 파일로 압축합니다." },
+            "zstd": {
+              "description": "꺼 둔 모드의 큰 파일만 더 작게 압축합니다. 모드를 켜면 먼저 원래 파일로 되돌립니다."
+            },
             "xpress4k": {
-              "description": "Windows XPRESS4K로 모든 모드 파일을 투명하게 압축합니다."
+              "description": "Windows 파일 압축으로 모든 모드 파일을 줄입니다. 압축된 상태에서도 모드를 바로 쓸 수 있습니다."
             }
           },
           "threshold": "압축 크기 기준",

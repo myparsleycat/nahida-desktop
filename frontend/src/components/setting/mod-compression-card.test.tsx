@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { Mod, type CompressionState } from "@bindings/mod";
+import { TooltipProvider } from "@renderer/components/ui/tooltip";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +32,19 @@ vi.mock("react-i18next", () => ({
 
 import { ModCompressionCard } from "./mod-compression-card";
 
+function renderCard() {
+  return render(
+    <TooltipProvider delay={0}>
+      <ModCompressionCard />
+    </TooltipProvider>,
+  );
+}
+
+function hoverOption(option: HTMLElement) {
+  fireEvent.pointerMove(option, { pointerType: "mouse" });
+  fireEvent.mouseEnter(option);
+}
+
 function state(partial: Partial<CompressionState> = {}): CompressionState {
   return {
     enabled: false,
@@ -55,14 +69,14 @@ afterEach(() => {
 describe("ModCompressionCard", () => {
   it("uses XPRESS4K state without showing a threshold input", () => {
     currentState = state();
-    render(<ModCompressionCard />);
+    renderCard();
     expect(screen.getByText("XPRESS4K")).toBeTruthy();
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
   it("shows a bounded threshold only for Zstd", () => {
     currentState = state({ method: "zstd", thresholdMiB: 4 });
-    render(<ModCompressionCard />);
+    renderCard();
     expect(
       screen.getByRole("combobox", { name: "page.setting.mod.compression.method" }),
     ).toBeTruthy();
@@ -80,7 +94,7 @@ describe("ModCompressionCard", () => {
     ["65", 64],
   ])("clamps a blurred Zstd threshold of %s to %i", async (value, expected) => {
     currentState = state({ method: "zstd", thresholdMiB: 4 });
-    render(<ModCompressionCard />);
+    renderCard();
     const input = screen.getByRole("spinbutton", {
       name: "page.setting.mod.compression.threshold",
     });
@@ -103,7 +117,7 @@ describe("ModCompressionCard", () => {
       canToggle: true,
       canConfigure: false,
     });
-    render(<ModCompressionCard />);
+    renderCard();
     const toggle = screen.getByRole("switch");
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.hasAttribute("data-disabled")).toBe(false);
@@ -118,7 +132,7 @@ describe("ModCompressionCard", () => {
       canConfigure: false,
     });
     vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new Promise(() => {}));
-    render(<ModCompressionCard />);
+    renderCard();
 
     const toggle = screen.getByRole("switch");
     fireEvent.click(toggle);
@@ -137,7 +151,7 @@ describe("ModCompressionCard", () => {
       canToggle: false,
       canConfigure: false,
     });
-    render(<ModCompressionCard />);
+    renderCard();
 
     const toggle = screen.getByRole("switch");
     expect(toggle.getAttribute("aria-checked")).toBe("false");
@@ -147,7 +161,7 @@ describe("ModCompressionCard", () => {
   it("locks immediately and suppresses duplicate toggle requests", () => {
     currentState = state();
     vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new Promise(() => {}));
-    render(<ModCompressionCard />);
+    renderCard();
 
     const toggle = screen.getByRole("switch");
     fireEvent.click(toggle);
@@ -160,9 +174,36 @@ describe("ModCompressionCard", () => {
 
   it("shows only the task-level error message", () => {
     currentState = state({ status: "error", error: "MOD_COMPRESSION_FAILED" });
-    render(<ModCompressionCard />);
+    renderCard();
 
     expect(screen.getByText("page.setting.mod.compression.error")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("shows each method description when its option is hovered", async () => {
+    currentState = state();
+    renderCard();
+
+    fireEvent.click(screen.getByRole("combobox", { name: "page.setting.mod.compression.method" }));
+
+    const zstdOption = await screen.findByRole("option", { name: "Zstd" });
+
+    hoverOption(zstdOption);
+
+    expect(
+      await screen.findByText("page.setting.mod.compression.methods.zstd.description", {
+        selector: "[data-slot='tooltip-content']",
+      }),
+    ).toBeTruthy();
+
+    const xpressOption = screen.getByRole("option", { name: "XPRESS4K" });
+
+    hoverOption(xpressOption);
+
+    expect(
+      await screen.findByText("page.setting.mod.compression.methods.xpress4k.description", {
+        selector: "[data-slot='tooltip-content']",
+      }),
+    ).toBeTruthy();
   });
 });

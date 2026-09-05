@@ -1645,8 +1645,12 @@
           "title": "模组压缩",
           "method": "压缩方式",
           "methods": {
-            "zstd": { "description": "将已禁用模组中的大文件压缩为 .nzst 文件。" },
-            "xpress4k": { "description": "使用 Windows XPRESS4K 透明压缩所有模组文件。" }
+            "zstd": {
+              "description": "只压缩已禁用模组中的大文件，更省空间。启用模组时会先还原原文件。"
+            },
+            "xpress4k": {
+              "description": "用 Windows 文件压缩缩小所有模组文件。压缩后仍可直接使用模组。"
+            }
           },
           "threshold": "压缩大小阈值",
           "thresholdDescription": "仅对不小于此大小的文件尝试 Zstd 压缩。范围：1–64 MiB。",

@@ -1646,9 +1646,11 @@
           "title": "MOD圧縮",
           "method": "圧縮方式",
           "methods": {
-            "zstd": { "description": "無効なMODの大きなファイルを.nzstに圧縮します。" },
+            "zstd": {
+              "description": "無効化したMODの大きなファイルだけを小さく圧縮します。MODを有効にすると、先に元のファイルへ戻します。"
+            },
             "xpress4k": {
-              "description": "Windows XPRESS4KですべてのMODファイルを透過的に圧縮します。"
+              "description": "Windowsのファイル圧縮ですべてのMODファイルを小さくします。圧縮したままでもMODはそのまま使えます。"
             }
           },
           "threshold": "圧縮サイズのしきい値",

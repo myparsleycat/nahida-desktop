@@ -1678,9 +1678,11 @@
           "title": "Mod compression",
           "method": "Compression method",
           "methods": {
-            "zstd": { "description": "Compresses large files in disabled mods into .nzst files." },
+            "zstd": {
+              "description": "Saves more space by compressing large files in disabled mods. Enable a mod and it is restored first."
+            },
             "xpress4k": {
-              "description": "Transparently compresses every mod file with Windows XPRESS4K."
+              "description": "Uses Windows file compression on all mod files. Mods stay usable while compressed."
             }
           },
           "threshold": "Compression size threshold",

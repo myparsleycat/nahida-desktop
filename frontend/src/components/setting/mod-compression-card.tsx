@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useModCompressionState } from "@renderer/hooks/use-mod-compression-state";
 import { Logger } from "@renderer/lib/logger";
 import { formatSize } from "@shared/utils";
@@ -19,6 +20,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const activeStatuses = new Set(["checking", "compressing", "decompressing"]);
+
+const compressionMethods = [
+  { value: "zstd", label: "Zstd" },
+  { value: "xpress4k", label: "XPRESS4K" },
+] as const;
 
 function compressionProgress(state: CompressionState) {
   if (state.totalBytes > 0) return Math.min(100, (state.processedBytes / state.totalBytes) * 100);
@@ -99,12 +105,25 @@ export function ModCompressionCard() {
             }}
           >
             <SelectTrigger className="w-40" aria-label={t("page.setting.mod.compression.method")}>
-              <SelectValue>{state.method === "zstd" ? "Zstd" : "XPRESS4K"}</SelectValue>
+              <SelectValue>
+                {compressionMethods.find((method) => method.value === state.method)?.label}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="zstd">Zstd</SelectItem>
-                <SelectItem value="xpress4k">XPRESS4K</SelectItem>
+                {compressionMethods.map((method) => (
+                  <Tooltip key={method.value}>
+                    <TooltipTrigger
+                      closeOnClick={false}
+                      render={<SelectItem value={method.value} />}
+                    >
+                      {method.label}
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-64 text-left">
+                      {t(`page.setting.mod.compression.methods.${method.value}.description`)}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
