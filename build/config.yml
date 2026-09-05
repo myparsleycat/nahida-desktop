@@ -11,7 +11,7 @@ info:
   description: "Nahida Desktop" # The application description
   copyright: "© 2026, nahida.live" # Copyright text
   comments: "Nahida Desktop" # Comments
-  version: "3.4.0" # The application version
+  version: "3.5.0" # The application version
 
 # Dev mode configuration
 dev_mode:
