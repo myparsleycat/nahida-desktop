@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -41,18 +43,12 @@ func compressDisabledZstd(
 			return err
 		}
 	}
+	files = uniqueZstdFiles(files)
 	setCompressionTotals(files, setTotals)
-	for _, file := range files {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		err := compressZstdFile(ctx, file.path, mark)
-		progress(file.path, file.size, false)
-		if err != nil {
-			onError(file.path, err)
-		}
-	}
-	return nil
+	mark = serialZstdMarker(mark)
+	return runZstdWorkers(ctx, files, runtime.GOMAXPROCS(0), func(file compressionFile) error {
+		return compressZstdFile(ctx, file.path, mark)
+	}, progress, onError)
 }
 
 func restoreAllZstd(
@@ -94,21 +90,108 @@ func restoreZstdFiles(
 	if err != nil {
 		return err
 	}
+	archives = uniqueZstdFiles(archives)
 	setCompressionTotals(archives, setTotals)
-	for _, archive := range archives {
-		if err := ctx.Err(); err != nil {
-			return err
+	mark = serialZstdMarker(mark)
+	return runZstdWorkers(ctx, archives, zstdRestoreWorkerCount(archives, runtime.GOMAXPROCS(0)), func(file compressionFile) error {
+		return restoreZstdFile(ctx, file.path, maxZstdRestoreSize, mark)
+	}, progress, onError)
+}
+
+func uniqueZstdFiles(files []compressionFile) []compressionFile {
+	seen := make(map[string]struct{}, len(files))
+	result := files[:0]
+	for _, file := range files {
+		key := strings.ToLower(filepath.Clean(file.path))
+		if _, exists := seen[key]; exists {
+			continue
 		}
-		err := restoreZstdFile(ctx, archive.path, maxZstdRestoreSize, mark)
-		progress(archive.path, archive.size, false)
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		if err != nil {
-			onError(archive.path, err)
+		seen[key] = struct{}{}
+		result = append(result, file)
+	}
+	return result
+}
+
+func zstdRestoreWorkerCount(files []compressionFile, workers int) int {
+	inputs := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		inputs[strings.ToLower(filepath.Clean(file.path))] = struct{}{}
+	}
+	for path := range inputs {
+		// Nested archive names can make one restore overwrite another input.
+		if _, overlaps := inputs[strings.TrimSuffix(path, managedZstdExtension)]; overlaps {
+			return 1
 		}
 	}
-	return nil
+	return workers
+}
+
+func serialZstdMarker(mark compressionMutationMarker) compressionMutationMarker {
+	var mu sync.Mutex
+	return func(paths ...string) {
+		mu.Lock()
+		defer mu.Unlock()
+		mark(paths...)
+	}
+}
+
+func runZstdWorkers(
+	ctx context.Context,
+	files []compressionFile,
+	workers int,
+	process func(compressionFile) error,
+	progress func(string, int64, bool),
+	onError func(string, error),
+) error {
+	if len(files) == 0 || ctx.Err() != nil {
+		return ctx.Err()
+	}
+	workers = min(len(files), max(1, workers))
+	type result struct {
+		file compressionFile
+		err  error
+	}
+	jobs := make(chan compressionFile)
+	results := make(chan result, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for file := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				results <- result{file: file, err: process(file)}
+			}
+		})
+	}
+	go func() {
+		defer func() {
+			close(jobs)
+			wg.Wait()
+			close(results)
+		}()
+		for _, file := range files {
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case jobs <- file:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	// Drain even after cancellation so no worker outlives the operation lock.
+	for result := range results {
+		if err := ctx.Err(); err != nil && errors.Is(result.err, err) {
+			continue
+		}
+		progress(result.file.path, result.file.size, false)
+		if result.err != nil && onError != nil {
+			onError(result.file.path, result.err)
+		}
+	}
+	return ctx.Err()
 }
 
 func restoreZstdFolder(

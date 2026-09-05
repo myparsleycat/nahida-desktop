@@ -4,17 +4,192 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/xxmi"
 )
+
+func TestZstdCoordinatorParallelCompressionAndRestore(t *testing.T) {
+	base := t.TempDir()
+	importer := filepath.Join(base, "Importer")
+	root := filepath.Join(importer, "Mods")
+	want := bytes.Repeat([]byte("coordinator-parallel"), 64*1024)
+	var paths []string
+	for _, name := range []string{"Enabled", "DISABLED Parallel"} {
+		folder := filepath.Join(root, name)
+		if err := os.MkdirAll(folder, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 8 {
+			path := filepath.Join(folder, fmt.Sprintf("%d.bin", i))
+			if err := os.WriteFile(path, want, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if name == "Enabled" {
+				if err := compressZstdFile(t.Context(), path, ignoreCompressionMutations); err != nil {
+					t.Fatal(err)
+				}
+			}
+			paths = append(paths, path)
+		}
+	}
+	settings, err := setting.Open(t.Context(), filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(t.Context(), "zstd", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionEnabled(t.Context(), true); err != nil {
+		t.Fatal(err)
+	}
+	var checks atomic.Int32
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+		EventEmit: func(name string, data ...any) {
+			if name == compressionEvent && data[0].(CompressionState).Status == "checking" {
+				checks.Add(1)
+			}
+		},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() { _ = m.ServiceShutdown(); _ = settings.Close() })
+	if err := m.StartCompression(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	for i, path := range paths {
+		if i >= 8 {
+			path += managedZstdExtension
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("reconcile output: %v", err)
+		}
+	}
+	before := checks.Load()
+	time.Sleep(compressionWatchDebounce + 300*time.Millisecond)
+	if checks.Load() != before {
+		t.Fatal("self changes restarted compression")
+	}
+	if _, err := m.SetCompressionEnabled(t.Context(), false); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	for _, path := range paths {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("restored %s: %v", path, err)
+		}
+	}
+	before = checks.Load()
+	time.Sleep(compressionWatchDebounce + 300*time.Millisecond)
+	if checks.Load() != before {
+		t.Fatal("self changes restarted restore")
+	}
+	if state := m.compression.snapshot(); state.Status != "idle" || state.Enabled || state.Error != "" {
+		t.Fatalf("state = %+v", state)
+	}
+}
+
+func TestZstdActivationRestoresEveryFileBeforeRename(t *testing.T) {
+	root := t.TempDir()
+	folder := filepath.Join(root, "DISABLED Parallel")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := bytes.Repeat([]byte("activate-parallel"), 16384)
+	for i := range 12 {
+		path := filepath.Join(folder, fmt.Sprintf("%d.bin", i))
+		if err := os.WriteFile(path, want, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := compressZstdFile(t.Context(), path, ignoreCompressionMutations); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := New()
+	m.compression.state = CompressionState{Enabled: true, Method: "zstd", ThresholdMiB: 1, Status: "idle"}
+	t.Cleanup(func() { _ = m.ServiceShutdown() })
+	if _, err := m.enableWithShaders(t.Context(), folder); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 12 {
+		path := filepath.Join(root, "Parallel", fmt.Sprintf("%d.bin", i))
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("activation output %s: %v", path, err)
+		}
+		if _, err := os.Stat(path + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("archive remains: %v", err)
+		}
+	}
+}
+
+func TestZstdCoordinatorWaitsForCanceledWorkers(t *testing.T) {
+	for _, shutdown := range []bool{false, true} {
+		t.Run(fmt.Sprintf("shutdown=%t", shutdown), func(t *testing.T) {
+			m := New()
+			c := m.compression
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			c.state = CompressionState{Enabled: true, Method: "zstd", Status: "compressing"}
+			c.cancel, c.done = cancel, make(chan struct{})
+			started, canceled := make(chan struct{}, 2), make(chan struct{}, 2)
+			release := make(chan struct{})
+			var once sync.Once
+			defer once.Do(func() { close(release) })
+			folder := t.TempDir()
+			go func() {
+				defer close(c.done)
+				c.opMu.Lock()
+				defer c.opMu.Unlock()
+				_ = runZstdWorkers(ctx, []compressionFile{{}, {}}, 2, func(compressionFile) error {
+					started <- struct{}{}
+					<-ctx.Done()
+					canceled <- struct{}{}
+					<-release
+					return ctx.Err()
+				}, func(string, int64, bool) {}, ignoreCompressionFileErrors)
+			}()
+			for range 2 {
+				awaitZstdSignal(t, started)
+			}
+			done := make(chan error, 1)
+			go func() {
+				if shutdown {
+					done <- c.stop()
+				} else {
+					done <- c.restoreBeforeEnable(t.Context(), folder)
+				}
+			}()
+			for range 2 {
+				awaitZstdSignal(t, canceled)
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("returned before workers: %v", err)
+			default:
+			}
+			once.Do(func() { close(release) })
+			if err := awaitZstdResult(t, done); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.stop(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
 type blockingCompressionSettings struct {
 	*setting.Setting
