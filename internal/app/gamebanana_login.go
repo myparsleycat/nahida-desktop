@@ -546,7 +546,7 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 		l.mu.Lock()
 		l.lastCandidates = nil
 		l.mu.Unlock()
-	} else {
+	} else if !errors.Is(err, context.Canceled) {
 		diagnostic := l.cookieDiagnostic(ctx, "delete-invalid-cookie")
 		diagnostic.Fields["cleanupFailed"] = true
 		diagnostic.Fields["candidateCount"] = len(untried)
