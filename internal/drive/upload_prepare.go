@@ -90,9 +90,9 @@ func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflict
 	if err != nil {
 		return UploadConflictsResult{}, err
 	}
-	collected, err := collectUploadPaths(params.Paths, rules, nil, false)
+	collected, err := collectUploadPathsContext(ctx, params.Paths, rules, nil, false)
 	if err != nil {
-		return UploadConflictsResult{}, err
+		return UploadConflictsResult{}, d.reportUploadSourceFailure(params.DestID, "inspect", err)
 	}
 	files := collected.Files
 	directories := collected.Directories
@@ -141,13 +141,17 @@ func ensureUploadSourceReadable(path string) error {
 
 //wails:ignore
 func PrepareUpload(paths []string, existingNames []string, strategy UploadConflictStrategy, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
+	return prepareUpload(context.Background(), paths, existingNames, strategy, rules, additionalExtensions, allowAllFiles)
+}
+
+func prepareUpload(ctx context.Context, paths []string, existingNames []string, strategy UploadConflictStrategy, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
 	if strategy == "" {
 		strategy = UploadConflictSuffix
 	}
 	if strategy != UploadConflictSuffix && strategy != UploadConflictSkip {
 		return UploadPreparation{}, fmt.Errorf("unsupported upload conflict strategy %q", strategy)
 	}
-	collected, err := collectUploadPaths(paths, rules, additionalExtensions, allowAllFiles)
+	collected, err := collectUploadPathsContext(ctx, paths, rules, additionalExtensions, allowAllFiles)
 	if err != nil {
 		return UploadPreparation{}, err
 	}
@@ -234,6 +238,10 @@ func PrepareUpload(paths []string, existingNames []string, strategy UploadConfli
 }
 
 func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (collectedUploadPaths, error) {
+	return collectUploadPathsContext(context.Background(), paths, rules, additionalExtensions, allowAllFiles)
+}
+
+func collectUploadPathsContext(ctx context.Context, paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (collectedUploadPaths, error) {
 	allowed := extensionMaxSizes(rules, additionalExtensions)
 	files := make([]UploadFile, 0)
 	directories := make([]UploadDirectory, 0)
@@ -255,6 +263,9 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 		}
 	}
 	for _, rawPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return collectedUploadPaths{}, err
+		}
 		absolute, err := filepath.EvalSymlinks(rawPath)
 		if err != nil {
 			continue
@@ -268,15 +279,10 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			continue
 		}
 		if info.Mode().IsRegular() {
-			if considerFile(info.Name(), info.Size()) {
-				files = append(files, UploadFile{
-					Path:       info.Name(),
-					Name:       info.Name(),
-					Size:       info.Size(),
-					ParentPath: "",
-					FullPath:   filepath.ToSlash(absolute),
-				})
-			}
+			files = append(files, UploadFile{
+				Path: info.Name(), Name: info.Name(), Size: info.Size(),
+				FullPath: filepath.ToSlash(absolute),
+			})
 			continue
 		}
 		if !info.IsDir() {
@@ -284,6 +290,9 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 		}
 		rootParent := filepath.Dir(absolute)
 		walkErr := filepath.WalkDir(absolute, func(path string, entry fs.DirEntry, walkErr error) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				return walkErr
 			}
@@ -310,7 +319,7 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			if infoErr != nil {
 				return infoErr
 			}
-			if !entryInfo.Mode().IsRegular() || !considerFile(entry.Name(), entryInfo.Size()) {
+			if !entryInfo.Mode().IsRegular() {
 				return nil
 			}
 			files = append(files, UploadFile{
@@ -326,6 +335,42 @@ func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions 
 			return collectedUploadPaths{}, walkErr
 		}
 	}
+	// Resolve local originals before filtering so traversal order cannot make an
+	// archive supersede an existing original (or decode a stale, corrupt copy).
+	sources := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		sources[strings.ToLower(filepath.Clean(file.FullPath))] = struct{}{}
+	}
+	accepted := files[:0]
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return collectedUploadPaths{}, err
+		}
+		if isUploadNZST(file.FullPath) {
+			original := file.FullPath[:len(file.FullPath)-len(uploadNZSTExtension)]
+			if _, exists := sources[strings.ToLower(filepath.Clean(original))]; exists {
+				continue
+			}
+			file.Name = file.Name[:len(file.Name)-len(uploadNZSTExtension)]
+			file.Path = file.Path[:len(file.Path)-len(uploadNZSTExtension)]
+			if file.Name == "" || isSystemFile(file.Name) || !considerFile(file.Name, 0) {
+				continue
+			}
+			limit := uploadNZSTLimit(file.Name, allowed, rules.MaxFileSize)
+			size, err := copyUploadNZST(ctx, file.FullPath, io.Discard, limit)
+			if err != nil {
+				return collectedUploadPaths{}, &uploadSourceError{File: file, Err: err}
+			}
+			if size > limit {
+				continue
+			}
+			file.Size = size
+		}
+		if considerFile(file.Name, file.Size) {
+			accepted = append(accepted, file)
+		}
+	}
+	files = accepted
 	assignStableUploadFileIDs(files)
 	return collectedUploadPaths{
 		Files:             files,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -134,9 +135,9 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 	if err != nil {
 		return StartUploadResult{}, err
 	}
-	preparation, err := PrepareUpload(params.Paths, slices.Collect(stringsMapKeys(childNames(item))), params.ConflictStrategy, rules, params.AdditionalExtensions, params.AllowAllFiles)
+	preparation, err := prepareUpload(ctx, params.Paths, slices.Collect(stringsMapKeys(childNames(item))), params.ConflictStrategy, rules, params.AdditionalExtensions, params.AllowAllFiles)
 	if err != nil {
-		return StartUploadResult{}, err
+		return StartUploadResult{}, d.reportUploadSourceFailure(params.DestID, "inspect", err)
 	}
 	if len(preparation.Files) == 0 {
 		return StartUploadResult{}, errors.New("NO_UPLOADABLE_FILES")
@@ -190,14 +191,40 @@ type uploadRunnerState struct {
 
 func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid string, restart *uploadRestartData, state *uploadRunnerState) (returnErr error) {
 	preparation := restart.Preparation
+	var uploadedBytes int64
+	uploadedFiles := 0
+	pendingFiles := make([]UploadFile, 0, len(preparation.Files))
+	for _, file := range preparation.Files {
+		if transfers.IsFileCompleted(pid, file.FID) {
+			uploadedBytes += file.Size
+			uploadedFiles++
+			continue
+		}
+		pendingFiles = append(pendingFiles, file)
+	}
 	status := transfer.StatusPreparing
-	zero := 0
-	if err := transfers.Update(pid, transfer.Updates{Status: &status, TransferredFiles: &zero, ClearError: true, ClearErrorCode: true}); err != nil {
+	if err := transfers.Update(pid, transfer.Updates{Status: &status, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles, ClearError: true, ClearErrorCode: true}); err != nil {
 		return d.reportUploadFailure(transfers, pid, "prepare", err)
+	}
+	tempDir := ""
+	defer func() {
+		if tempDir == "" {
+			return
+		}
+		if err := os.RemoveAll(tempDir); err != nil {
+			_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
+				Operation: "upload", Stage: "cleanup-sources",
+				Fields: map[string]any{"pid": pid, "destinationId": restart.Params.DestID, "inputPaths": restart.Params.Paths, "tempPath": tempDir, "cleanupCompleted": false},
+			})
+		}
+	}()
+	parentFiles, restoredNZST, restoreErr := restoreUploadSources(ctx, pendingFiles, &tempDir)
+	if restoreErr != nil {
+		return d.failUploadTransfer(transfers, pid, "restore-sources", restoreErr)
 	}
 	created := []CreatedUploadDirectory{}
 	var err error
-	if len(preparation.Directories) > 0 {
+	if len(parentFiles) > 0 && len(preparation.Directories) > 0 {
 		created, err = d.CreateDirs(ctx, restart.Params.DestID, preparation.Directories)
 		if err != nil {
 			return d.failUploadTransfer(transfers, pid, "create-dirs", err)
@@ -207,14 +234,13 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 	for _, directory := range created {
 		parentIDs[directory.Path] = directory.ID
 	}
-	parentFiles := make([]UploadFile, len(preparation.Files))
-	copy(parentFiles, preparation.Files)
 
 	state.mu.Lock()
 	hashes := state.hashes
 	state.mu.Unlock()
-	if len(hashes) != len(parentFiles) {
+	if restoredNZST || len(hashes) != len(parentFiles) {
 		hashed, hashErr := HashUploadFiles(ctx, parentFiles, uploadHashConcurrency(), func(count int) {
+			count += uploadedFiles
 			_ = transfers.Update(pid, transfer.Updates{TransferredFiles: &count})
 		})
 		if hashErr != nil {
@@ -228,7 +254,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 		state.hashes = hashes
 		state.mu.Unlock()
 	}
-	finalFiles := make([]FinalUploadFile, len(parentFiles))
+	incomplete := make([]FinalUploadFile, len(parentFiles))
 	for index, file := range parentFiles {
 		parentID := restart.Params.DestID
 		if file.ParentPath != "" {
@@ -242,20 +268,9 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 		if sha256 == "" {
 			return d.failUploadTransfer(transfers, pid, "hash", fmt.Errorf("hash missing for file %s", file.Name))
 		}
-		finalFiles[index] = FinalUploadFile{UploadFile: file, ParentID: parentID, SHA256: sha256}
+		incomplete[index] = FinalUploadFile{UploadFile: file, ParentID: parentID, SHA256: sha256}
 	}
 
-	var uploadedBytes int64
-	uploadedFiles := 0
-	incomplete := make([]FinalUploadFile, 0, len(finalFiles))
-	for _, file := range finalFiles {
-		if transfers.IsFileCompleted(pid, file.FID) {
-			uploadedBytes += file.Size
-			uploadedFiles++
-			continue
-		}
-		incomplete = append(incomplete, file)
-	}
 	progressStatus := transfer.StatusProgress
 	if err := transfers.Update(pid, transfer.Updates{Status: &progressStatus, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles}); err != nil {
 		return d.reportUploadFailure(transfers, pid, "prepare", err)
@@ -298,7 +313,7 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 	if err := transfers.Update(pid, transfer.Updates{
 		Status:            &completed,
 		TransferredSize:   &total,
-		TransferredFiles:  ptrInt(len(finalFiles)),
+		TransferredFiles:  ptrInt(len(preparation.Files)),
 		Progress:          &hundred,
 		ClearPlanPhase:    true,
 		ClearPlanProgress: true,
@@ -369,10 +384,18 @@ func (d *Drive) reportUploadFailure(transfers *transfer.Transfer, pid, stage str
 	if errors.As(failure, &uploadErr) {
 		code = uploadErr.Code
 	}
+	fields := driveTransferFields(transfers, pid, code)
+	var sourceErr *uploadSourceError
+	if errors.As(failure, &sourceErr) {
+		fields["name"] = sourceErr.File.Name
+		fields["inputPath"] = sourceErr.File.FullPath
+		fields["tempPath"] = sourceErr.TempPath
+		fields["cleanupRegistered"] = sourceErr.TempPath != ""
+	}
 	return infra.ReportError(d.log, failure, "Drive", infra.Diagnostic{
 		Operation: "upload",
 		Stage:     stage,
-		Fields:    driveTransferFields(transfers, pid, code),
+		Fields:    fields,
 	})
 }
 
