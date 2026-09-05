@@ -34,6 +34,11 @@ func TestPrepareUploadNZSTUsesOriginalNamesAndSizes(t *testing.T) {
 	writeUploadFile(t, filepath.Join(root, "Character", "mod.ini"), "ini")
 	writeUploadFile(t, filepath.Join(root, "desktop.ini.nzst"), "invalid but excluded")
 	writeUploadFile(t, filepath.Join(root, "notes.exe.nzst"), "invalid but denied")
+	// Collection resolves paths, which can expand Windows short names or fix casing.
+	resolvedArchive, err := filepath.EvalSymlinks(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
 	collected, err := collectUploadPaths([]string{root}, testUploadRules(), nil, false)
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +47,7 @@ func TestPrepareUploadNZSTUsesOriginalNamesAndSizes(t *testing.T) {
 		t.Fatalf("collected = %+v", collected)
 	}
 	for _, file := range collected.Files {
-		if file.Name == "texture.dds" && (file.Size != int64(len(content)) || strings.HasSuffix(file.Path, ".NZST") || file.FullPath != filepath.ToSlash(archive)) {
+		if file.Name == "texture.dds" && (file.Size != int64(len(content)) || strings.HasSuffix(file.Path, ".NZST") || file.FullPath != filepath.ToSlash(resolvedArchive)) {
 			t.Fatalf("file = %+v", file)
 		}
 	}
@@ -67,12 +72,16 @@ func TestUploadNZSTOriginalWinsRegardlessOfOrder(t *testing.T) {
 	archive := filepath.Join(root, "texture.dds.nzst")
 	writeUploadFile(t, original, "original")
 	writeUploadFile(t, archive, "corrupt stale archive")
+	resolvedOriginal, err := filepath.EvalSymlinks(original)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, paths := range [][]string{{archive, original}, {original, archive}, {root}} {
 		prepared, err := PrepareUpload(paths, nil, UploadConflictSuffix, testUploadRules(), nil, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(prepared.Files) != 1 || prepared.Files[0].FullPath != filepath.ToSlash(original) {
+		if len(prepared.Files) != 1 || prepared.Files[0].FullPath != filepath.ToSlash(resolvedOriginal) {
 			t.Fatalf("prepared = %+v", prepared)
 		}
 	}
