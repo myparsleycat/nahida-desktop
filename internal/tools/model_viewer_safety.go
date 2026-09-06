@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -123,6 +124,15 @@ func sanitizeModelViewerResourcePaths(sections []modINISection, root, baseDir st
 		}
 	}
 	return skipped
+}
+
+func sanitizeModelViewerLogValue(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, value)
 }
 
 func resolveModelViewerResourcePath(root, baseDir, relative string) (string, error) {

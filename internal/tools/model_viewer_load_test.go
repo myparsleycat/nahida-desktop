@@ -3,10 +3,12 @@ package tools
 import (
 	"context"
 	"errors"
+	"image/color"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
@@ -69,6 +71,37 @@ func TestModelViewerCanceledTextureJobs(t *testing.T) {
 		if len(output[0]) != 0 || stats.Decodes != 0 || stats.Encodes != 0 {
 			t.Fatalf("canceled texture work ran: %+v", stats)
 		}
+	}
+}
+
+func TestModelViewerTextureJobsCancelDuringActiveHash(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "body.png")
+	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	entered := make(chan struct{})
+	var once sync.Once
+	modelViewerTextureIOHook = func() {
+		once.Do(func() {
+			close(entered)
+			cancel()
+		})
+	}
+	t.Cleanup(func() { modelViewerTextureIOHook = nil })
+	output, stats, err := runModelViewerTextureJobs(ctx, modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	select {
+	case <-entered:
+	default:
+		t.Fatal("canceled before hashing started")
+	}
+	if len(output[0]) != 0 || stats.Decodes != 0 || stats.Encodes != 0 {
+		t.Fatalf("canceled texture work ran: %+v", stats)
 	}
 }
 

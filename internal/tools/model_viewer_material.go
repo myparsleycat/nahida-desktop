@@ -271,7 +271,7 @@ func prepareModelViewerTexture(ctx context.Context, path, resourceName, format s
 	if err != nil {
 		return nil, err
 	}
-	return encodeModelViewerPreparedTexture(decoded, path, resourceName, modelViewerTextureTransformPassthrough, format, quality)
+	return encodeModelViewerPreparedTexture(ctx, decoded, path, resourceName, modelViewerTextureTransformPassthrough, format, quality)
 }
 
 func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
@@ -288,7 +288,10 @@ func modelViewerTextureFormatFor(materialProfile, role, requested string) string
 	return normalizeModelViewerFormat(requested)
 }
 
-func modelViewerTextureFileHash(path string) (string, int64, error) {
+func modelViewerTextureFileHash(ctx context.Context, path string) (string, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return "", 0, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", 0, err
@@ -302,10 +305,49 @@ func modelViewerTextureFileHash(path string) (string, int64, error) {
 	}
 	defer func() { _ = file.Close() }()
 	hash := sha256.New()
-	if _, err = io.Copy(hash, io.LimitReader(file, info.Size())); err != nil {
+	if err := ctx.Err(); err != nil {
+		return "", 0, err
+	}
+	if _, err = io.Copy(hash, io.LimitReader(modelViewerContextReader{ctx: ctx, reader: file}, info.Size())); err != nil {
+		return "", 0, err
+	}
+	if err := ctx.Err(); err != nil {
 		return "", 0, err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), info.Size(), nil
+}
+
+var modelViewerTextureIOHook func()
+
+func modelViewerTextureContextErr(ctx context.Context) error {
+	if hook := modelViewerTextureIOHook; hook != nil {
+		hook()
+	}
+	return ctx.Err()
+}
+
+type modelViewerContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r modelViewerContextReader) Read(buffer []byte) (int, error) {
+	if err := modelViewerTextureContextErr(r.ctx); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(buffer)
+}
+
+type modelViewerContextWriter struct {
+	ctx context.Context
+	w   io.Writer
+}
+
+func (w modelViewerContextWriter) Write(buffer []byte) (int, error) {
+	if err := modelViewerTextureContextErr(w.ctx); err != nil {
+		return 0, err
+	}
+	return w.w.Write(buffer)
 }
 
 func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelViewerDecodedTexture, error) {
@@ -388,19 +430,28 @@ func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
 	return cloned
 }
 
-func reconstructModelViewerNormalZ(rgba *image.NRGBA) {
+func reconstructModelViewerNormalZ(ctx context.Context, rgba *image.NRGBA) error {
 	if rgba == nil {
-		return
+		return ctx.Err()
 	}
 	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
+		if offset&0xffff == 0 {
+			if err := modelViewerTextureContextErr(ctx); err != nil {
+				return err
+			}
+		}
 		x := float64(rgba.Pix[offset])/127.5 - 1
 		y := float64(rgba.Pix[offset+1])/127.5 - 1
 		z := math.Sqrt(math.Max(0, 1-x*x-y*y))
 		rgba.Pix[offset+2] = uint8(math.Round((z*0.5 + 0.5) * 255))
 	}
+	return ctx.Err()
 }
 
-func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, resourceName string, transform modelViewerTextureTransform, format string, quality int) (*modelViewerPreparedTexture, error) {
+func encodeModelViewerPreparedTexture(ctx context.Context, decoded *modelViewerDecodedTexture, path, resourceName string, transform modelViewerTextureTransform, format string, quality int) (*modelViewerPreparedTexture, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if decoded == nil || decoded.rgba == nil {
 		return nil, fmt.Errorf("viewer texture decode produced an invalid image")
 	}
@@ -409,15 +460,28 @@ func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, 
 	invertAlpha := modelViewerTextureShouldInvertAlpha(resourceName, decoded)
 	if transform != modelViewerTextureTransformPassthrough || invertAlpha {
 		rgba = cloneModelViewerNRGBA(rgba)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 	if transform == modelViewerTextureTransformNormalXYReconstruct {
-		reconstructModelViewerNormalZ(rgba)
+		if err := reconstructModelViewerNormalZ(ctx, rgba); err != nil {
+			return nil, err
+		}
 	}
 	if invertAlpha {
 		for offset := 3; offset < len(rgba.Pix); offset += 4 {
+			if offset&0xffff == 3 {
+				if err := modelViewerTextureContextErr(ctx); err != nil {
+					return nil, err
+				}
+			}
 			rgba.Pix[offset] = 255 - rgba.Pix[offset]
 		}
 		lowRatio, highRatio = highRatio, lowRatio
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	cutout := lowRatio >= .005 && highRatio >= .5 && partialRatio <= .02
 	usesAlpha := cutout || partialRatio > 0 || lowRatio >= .005
@@ -427,14 +491,15 @@ func encodeModelViewerPreparedTexture(decoded *modelViewerDecodedTexture, path, 
 		mimeType = "image/jpeg"
 	}
 	var output bytes.Buffer
+	writer := modelViewerContextWriter{ctx: ctx, w: &output}
 	if mimeType == "image/jpeg" {
 		background := image.NewRGBA(rgba.Bounds())
 		draw.Draw(background, background.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
 		draw.Draw(background, background.Bounds(), rgba, rgba.Bounds().Min, draw.Over)
-		if err := jpeg.Encode(&output, background, &jpeg.Options{Quality: normalizeJPEGQuality(quality)}); err != nil {
+		if err := jpeg.Encode(writer, background, &jpeg.Options{Quality: normalizeJPEGQuality(quality)}); err != nil {
 			return nil, err
 		}
-	} else if err := png.Encode(&output, rgba); err != nil {
+	} else if err := png.Encode(writer, rgba); err != nil {
 		return nil, err
 	}
 	prepared := &modelViewerPreparedTexture{bytes: output.Bytes(), mimeType: mimeType, name: filepath.Base(path), score: modelViewerTextureNamePriority(resourceName) + 20}

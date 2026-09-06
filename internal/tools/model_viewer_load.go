@@ -195,7 +195,7 @@ func (t *Tools) prepareModelViewerGeometry(ctx context.Context, folder string, i
 		rebaseModelViewerResources(sections, iniPath, folder)
 		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder) {
 			if t.log != nil {
-				t.log.Warn("Skipped unsafe Model Viewer resource path: "+resource, "StaticGlb.loadForViewer")
+				t.log.Warn("Skipped unsafe Model Viewer resource path: "+sanitizeModelViewerLogValue(resource), "StaticGlb.loadForViewer")
 			}
 		}
 		resources := collectModelViewerResources(sections)

@@ -236,7 +236,9 @@ func TestReconstructModelViewerNormalZ(t *testing.T) {
 	input.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 17, A: 77})
 	input.SetNRGBA(1, 0, color.NRGBA{R: 255, G: 128, B: 231, A: 19})
 
-	reconstructModelViewerNormalZ(input)
+	if err := reconstructModelViewerNormalZ(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
 
 	center := input.NRGBAAt(0, 0)
 	if center != (color.NRGBA{R: 128, G: 128, B: 255, A: 77}) {

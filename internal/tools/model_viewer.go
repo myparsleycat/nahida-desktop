@@ -1116,7 +1116,7 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 					group.contentKey = "path:" + group.key
 					continue
 				}
-				hash, size, err := modelViewerTextureFileHash(group.path)
+				hash, size, err := modelViewerTextureFileHash(ctx, group.path)
 				if err != nil {
 					group.contentKey = "path:" + group.key
 					continue
@@ -1137,7 +1137,7 @@ hashDispatch:
 	close(hashWork)
 	hashGroup.Wait()
 	if err := ctx.Err(); err != nil {
-		return nil, stats, err
+		return outputs, stats, err
 	}
 	stats.HashWallMs = time.Since(hashStartedAt).Milliseconds()
 	for _, group := range pathGroups {
@@ -1213,9 +1213,12 @@ hashDispatch:
 					texture, exists := variants[variant]
 					if !exists {
 						group.encodes++
-						texture, err = encodeModelViewerPreparedTexture(decoded, job.path, job.resourceName, variant.transform, variant.format, variant.quality)
+						texture, err = encodeModelViewerPreparedTexture(ctx, decoded, job.path, job.resourceName, variant.transform, variant.format, variant.quality)
 						if err != nil {
 							texture = nil
+						}
+						if ctx.Err() != nil {
+							break
 						}
 						variants[variant] = texture
 					}
@@ -1237,7 +1240,7 @@ prepareDispatch:
 	close(prepareWork)
 	prepareGroup.Wait()
 	if err := ctx.Err(); err != nil {
-		return nil, stats, err
+		return outputs, stats, err
 	}
 	stats.PrepareWallMs = time.Since(prepareStartedAt).Milliseconds()
 	for _, group := range contentGroups {
