@@ -249,6 +249,7 @@ func TestReadModelViewerComputeShaderRejectsOversizedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = file.Close() }()
 	if err := file.Truncate(maxModelViewerComputeShaderBytes + 1); err != nil {
 		t.Fatal(err)
 	}
