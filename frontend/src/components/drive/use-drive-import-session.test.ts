@@ -281,4 +281,116 @@ describe("drive import session", () => {
         expect(result.current.selected.size).toBe(0);
         expect(mocks.resolve).toHaveBeenCalledTimes(1);
     });
+
+    it("keeps the password prompt mounted while a manual password is submitted", async () => {
+        const pending = deferred<ReturnType<typeof mod>>();
+        mocks.resolve
+            .mockRejectedValueOnce(new Error("DRIVE_LINK_PASSWORD_REQUIRED"))
+            .mockReturnValueOnce(pending.promise);
+        const { result } = renderHook(() => useDriveImportSession(url("source")));
+        await act(() => result.current.handleResolve());
+        expect(result.current.requiresPassword).toBe(true);
+        act(() => result.current.setPassword("secret"));
+        let request!: Promise<void>;
+        act(() => {
+            request = result.current.handleResolve();
+        });
+        expect(result.current.requiresPassword).toBe(true);
+        expect(result.current.resolving).toBe(true);
+        await act(async () => {
+            pending.resolve(mod("source", []));
+            await request;
+        });
+        expect(result.current.password).toBe("secret");
+        expect(result.current.step).toBe(3);
+        expect(result.current.requiresPassword).toBe(false);
+        expect(mocks.resolve).toHaveBeenLastCalledWith({
+            url: url("source"),
+            password: "secret",
+        });
+    });
+
+    it.each([false, true])(
+        "stores the winning auto password when a later candidate succeeds (reverse=%s)",
+        async (reverse) => {
+            mocks.settings.mockResolvedValue({
+                "drive.autoTryPasswords": true,
+                "drive.passwordList": ["alpha", "bravo"],
+            });
+            const alpha = deferred<ReturnType<typeof mod>>();
+            const bravo = deferred<ReturnType<typeof mod>>();
+            mocks.resolve.mockImplementation((input: { password?: string }) => {
+                if (!input.password)
+                    return Promise.reject(new Error("DRIVE_LINK_PASSWORD_REQUIRED"));
+                return input.password === "alpha" ? alpha.promise : bravo.promise;
+            });
+            const { result } = renderHook(() => useDriveImportSession(url("source")));
+            let request!: Promise<void>;
+            act(() => {
+                request = result.current.handleResolve();
+            });
+            await act(async () => {
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            expect(mocks.resolve).toHaveBeenCalledTimes(3);
+            const [loser, winner, winnerPassword] = reverse
+                ? ([bravo, alpha, "alpha"] as const)
+                : ([alpha, bravo, "bravo"] as const);
+            await act(async () => {
+                loser.reject(new Error("DRIVE_LINK_INVALID_PASSWORD"));
+            });
+            expect(result.current.sourceInfo).toBeNull();
+            expect(result.current.step).toBe(1);
+            await act(async () => {
+                winner.resolve(mod("source", []));
+                await request;
+            });
+            expect(result.current.password).toBe(winnerPassword);
+            expect(result.current.step).toBe(3);
+            expect(result.current.requiresPassword).toBe(false);
+            expect(result.current.sourceInfo).toMatchObject({ modId: "source" });
+        },
+    );
+
+    it.each([false, true])(
+        "sets requiresPassword when every auto password is rejected (reverse=%s)",
+        async (reverse) => {
+            mocks.settings.mockResolvedValue({
+                "drive.autoTryPasswords": true,
+                "drive.passwordList": ["alpha", "bravo"],
+            });
+            const alpha = deferred<ReturnType<typeof mod>>();
+            const bravo = deferred<ReturnType<typeof mod>>();
+            mocks.resolve.mockImplementation((input: { password?: string }) => {
+                if (!input.password)
+                    return Promise.reject(new Error("DRIVE_LINK_PASSWORD_REQUIRED"));
+                return input.password === "alpha" ? alpha.promise : bravo.promise;
+            });
+            const { result } = renderHook(() => useDriveImportSession(url("source")));
+            let request!: Promise<void>;
+            act(() => {
+                request = result.current.handleResolve();
+            });
+            await act(async () => {
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            expect(mocks.resolve).toHaveBeenCalledTimes(3);
+            const [first, second] = reverse ? ([bravo, alpha] as const) : ([alpha, bravo] as const);
+            await act(async () => {
+                first.reject(new Error("DRIVE_LINK_INVALID_PASSWORD"));
+            });
+            expect(result.current.requiresPassword).toBe(false);
+            expect(result.current.sourceInfo).toBeNull();
+            await act(async () => {
+                second.reject(new Error("DRIVE_LINK_INVALID_PASSWORD"));
+                await request;
+            });
+            expect(result.current.requiresPassword).toBe(true);
+            expect(result.current.sourceInfo).toBeNull();
+            expect(result.current.step).toBe(1);
+            expect(result.current.password).toBe("");
+        },
+    );
 });

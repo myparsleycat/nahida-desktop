@@ -354,12 +354,15 @@ export function useDriveImportSession(initialUrl: string) {
                 }
                 return;
             }
+            const keepPasswordPrompt = requiresPassword;
             if (seqArg === undefined) resetSession();
             const seq = seqArg ?? loadSeqRef.current;
             if (seq !== loadSeqRef.current) return;
             setResolving(true);
-            setRequiresPassword(false);
-            setPasswordInvalid(false);
+            setRequiresPassword(keepPasswordPrompt);
+            if (!keepPasswordPrompt) {
+                setPasswordInvalid(false);
+            }
             try {
                 const resolved = (await Drive.ResolveImportSource({
                     url: trimmed,
@@ -422,6 +425,7 @@ export function useDriveImportSession(initialUrl: string) {
             applyResolvedResult,
             tryAutoPasswords,
             resetSession,
+            requiresPassword,
         ],
     );
     const handleResolveRef = useRef(handleResolve);
