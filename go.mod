@@ -12,14 +12,14 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/myparsleycat/ddsutil v0.2.0
 	github.com/rodrigocfd/windigo v0.2.6
-	github.com/wailsapp/wails/v3 v3.0.0-beta.16
+	github.com/wailsapp/wails/v3 v3.0.0-beta.17
 	golang.org/x/arch v0.30.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0
 	modernc.org/sqlite v1.57.0
 )
 
-replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.16-nahida.4
+replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.17-nahida.1
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
