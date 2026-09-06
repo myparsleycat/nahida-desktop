@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -11,7 +12,10 @@ import (
 	"strings"
 )
 
-const modelViewerGIMIShapePoseKind = "gimi_shape_pose_v1"
+const (
+	modelViewerGIMIShapePoseKind     = "gimi_shape_pose_v1"
+	maxModelViewerComputeShaderBytes = 1 << 20
+)
 
 var (
 	modelViewerComputeBindingRE  = regexp.MustCompile(`(?i)^(?:post\s+)?(cs-[tu]\d+|cs|x8[89]|dispatch|resource[\w.]+)\s*=\s*(.+)$`)
@@ -45,8 +49,11 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 	outputRaw, outputRawOK := rawResources[modelViewerNormalizeKey(posePass.outputName)]
 	outputEffective, outputEffectiveOK := effective[modelViewerNormalizeKey(posePass.outputName)]
 	boneCountValue, boneCountOK := resolveModelViewerNumericToken(posePass.x89, defaults)
+	if !boneCountOK || math.IsNaN(boneCountValue) || math.IsInf(boneCountValue, 0) || boneCountValue != math.Trunc(boneCountValue) || boneCountValue <= 0 || boneCountValue > float64(math.MaxInt/56) {
+		return shapeOnly()
+	}
 	boneCount := int(boneCountValue)
-	if !baseOK || !blendOK || !poseOK || !outputRawOK || !outputEffectiveOK || outputRaw.Filename != "" || !samePathFold(outputEffective.Filename, base.Filename) || !boneCountOK || boneCount <= 0 || base.Stride != 40 || blend.Stride != 32 || pose.Stride != 56 {
+	if !baseOK || !blendOK || !poseOK || !outputRawOK || !outputEffectiveOK || outputRaw.Filename != "" || !samePathFold(outputEffective.Filename, base.Filename) || base.Stride != 40 || blend.Stride != 32 || pose.Stride != 56 {
 		return shapeOnly()
 	}
 	baseSource, baseOK := modelViewerComputeSource(root, base)
@@ -339,8 +346,16 @@ func readModelViewerComputeShader(root, baseDir, relative string) (string, bool)
 	if err != nil || !modelViewerPathWithin(root, path) {
 		return "", false
 	}
-	raw, err := os.ReadFile(path)
-	return string(raw), err == nil
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = file.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(file, maxModelViewerComputeShaderBytes+1))
+	if err != nil || len(raw) > maxModelViewerComputeShaderBytes {
+		return "", false
+	}
+	return string(raw), true
 }
 
 func compactModelViewerShader(shader string) string {

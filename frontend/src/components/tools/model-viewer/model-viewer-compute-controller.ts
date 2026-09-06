@@ -193,16 +193,25 @@ export class ModelViewerComputeController {
     private restoreBaselines(): void {
         for (const baseline of this.baselines.values()) {
             setAttribute(baseline.mesh, "position", baseline.positions, 3);
-            if (baseline.normals) {
-                setAttribute(baseline.mesh, "normal", baseline.normals, 3);
-            }
-            if (baseline.tangents) {
-                setAttribute(baseline.mesh, "tangent", baseline.tangents, 4);
-            }
+            restoreOptionalAttribute(baseline.mesh, "normal", baseline.normals, 3);
+            restoreOptionalAttribute(baseline.mesh, "tangent", baseline.tangents, 4);
             baseline.mesh.frustumCulled = baseline.frustumCulled;
         }
         this.invalidate();
     }
+}
+
+function restoreOptionalAttribute(
+    mesh: Mesh,
+    name: string,
+    values: Float32Array | undefined,
+    itemSize: number,
+): void {
+    if (values) {
+        setAttribute(mesh, name, values, itemSize);
+        return;
+    }
+    mesh.geometry.deleteAttribute(name);
 }
 
 function setAttribute(mesh: Mesh, name: string, values: Float32Array, itemSize: number): void {

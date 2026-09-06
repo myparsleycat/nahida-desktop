@@ -44,6 +44,50 @@ func TestModelViewerResourceGrouping(t *testing.T) {
 	}
 }
 
+func TestCollectModelViewerMihoyoGroupsSkipsInterleaveValidationErrors(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string][]byte{
+		"bad-pos.buf":   make([]byte, 41),
+		"bad-blend.buf": make([]byte, 32),
+		"bad-uv.buf":    make([]byte, 20),
+		"pos.buf":       {1, 2, 3, 4},
+		"blend.buf":     {5, 6},
+		"uv.buf":        {7, 8, 9, 10},
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resources := []modelViewerResource{
+		{Name: "HairPosition", Filename: "bad-pos.buf", Stride: 40},
+		{Name: "HairBlend", Filename: "bad-blend.buf", Stride: 32},
+		{Name: "HairTexcoord", Filename: "bad-uv.buf", Stride: 20},
+		{Name: "BodyPosition", Filename: "pos.buf", Stride: 2},
+		{Name: "BodyBlend", Filename: "blend.buf", Stride: 1},
+		{Name: "BodyTexcoord", Filename: "uv.buf", Stride: 2},
+	}
+	groups, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].Key != "Body" {
+		t.Fatalf("groups = %#v", groups)
+	}
+}
+
+func TestCollectModelViewerMihoyoGroupsPropagatesReadErrors(t *testing.T) {
+	dir := t.TempDir()
+	resources := []modelViewerResource{
+		{Name: "BodyPosition", Filename: "missing-pos.buf", Stride: 40},
+		{Name: "BodyBlend", Filename: "missing-blend.buf", Stride: 32},
+		{Name: "BodyTexcoord", Filename: "missing-uv.buf", Stride: 20},
+	}
+	if _, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil); err == nil {
+		t.Fatal("missing vertex buffers succeeded")
+	}
+}
+
 func TestInferModelViewerWWMILayoutUsesInterleaveOrder(t *testing.T) {
 	resources := []modelViewerResource{
 		{Name: "ColorBuffer", Stride: 4, Format: "DXGI_FORMAT_R8G8B8A8_UNORM"},

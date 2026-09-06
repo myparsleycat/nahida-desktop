@@ -179,6 +179,87 @@ filename = pose.buf
 	}
 }
 
+func TestDetectModelViewerComputeRejectsInvalidBoneCount(t *testing.T) {
+	dir := t.TempDir()
+	for name, size := range map[string]int{"base.buf": 40, "blend.buf": 32, "pose.buf": 56} {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, size), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	boneShader := `
+	struct VertexAttributes { float3 position; float3 normal; float4 tangent; };
+	struct BlendAttributes { float4 weights; int4 indicies; };
+	struct PoseAttributes { float3 S; float3 T; float4 QR; float4 QD; };
+RWStructuredBuffer<VertexAttributes> outbuf : register(u5);
+StructuredBuffer<VertexAttributes> base : register(t50);
+	StructuredBuffer<BlendAttributes> blend : register(t51);
+	StructuredBuffer<PoseAttributes> pose : register(t52);
+	void main(uint3 id) {
+	 int frame=0, vg_count=2; BlendAttributes b=blend[id.x]; float4 weights=b.weights;
+	 int4 idx_prev=frame*vg_count+b.indicies;
+	 int4 idx_next=(frame+1)*vg_count+b.indicies;
+	 PoseAttributes p0_prev=pose[idx_prev.x], p1_prev=pose[idx_prev.y], p0_next=pose[idx_next.x];
+	 float3 scale=p0_prev.S*weights.x; float3 bias=p0_prev.T*weights.x;
+	 float4 pos=float4(base[id.x].position,1); pos.xyz=pos.xyz*scale+bias;
+	 float4 qr=p0_prev.QR*weights.x; float4 qd=p0_prev.QD*weights.x;
+	 qr+=p1_prev.QR*weights.y*sign(dot(p0_prev.QR,p1_prev.QR));
+	 float qr_len=length(qr); qr/=qr_len; qd/=qr_len;
+	 float qx=qr.x,qy=qr.y,qz=qr.z,qw=qr.w,qdx=qd.x,qdy=qd.y,qdz=qd.z,qdw=qd.w;
+	 float m00=1-2*qy*qy-2*qz*qz,m01=2*(qx*qy-qw*qz),m02=2*(qx*qz+qw*qy);
+	 float t0=2*(-qdw*qx+qdx*qw-qdy*qz+qdz*qy);
+	 float4 normal=float4(base[id.x].normal,0),pos_result,normal_result;
+	 pos_result.x=m00*pos.x+m01*pos.y+m02*pos.z+t0*pos.w;
+	 normal_result.x=m00*normal.x+m01*normal.y+m02*normal.z;
+	 outbuf[id.x].position=float3(pos_result.x,pos_result.y,pos_result.z);
+	 outbuf[id.x].normal=normalize(float3(normal_result.x,normal_result.y,normal_result.z));
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "bone.hlsl"), []byte(boneShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Present]
+run = CustomShaderPose
+[CustomShaderPose]
+x88 = $frame
+x89 = 1.5
+cs-t50 = ResourcePosition
+cs-t51 = ResourceBlend
+cs-t52 = ResourcePose
+cs = bone.hlsl
+cs-u5 = ResourcePosition
+ResourcePositionOut = ref cs-u5
+Dispatch = 1,1,1
+[ResourcePosition]
+stride = 40
+filename = base.buf
+[ResourceBlend]
+stride = 32
+filename = blend.buf
+[ResourcePose]
+stride = 56
+filename = pose.buf`, filepath.Join(dir, "mod.ini"))
+	if deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", parsed.Sections, collectModelViewerResources(parsed.Sections), []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 1}}}, nil); deformer != nil && deformer.Pose != nil {
+		t.Fatal("non-integral bone count must not enable pose animation")
+	}
+}
+
+func TestReadModelViewerComputeShaderRejectsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "huge.hlsl")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxModelViewerComputeShaderBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := readModelViewerComputeShader(dir, dir, "huge.hlsl"); ok {
+		t.Fatal("oversized compute shader was accepted")
+	}
+}
+
 func TestDetectModelViewerComputeRejectsShaderNameWithoutSignature(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "anim_bone.hlsl"), []byte("void main() {}"), 0o600); err != nil {

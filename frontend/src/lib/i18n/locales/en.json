@@ -1191,6 +1191,7 @@
         "convert_first": "Convert a mod to GLB first, then open it here.",
         "generating_selected_state": "Generating selected state",
         "model_data_unavailable": "Model data is not available.",
+        "animation_clip": "Animation clip",
         "menu": {
           "model": "Model",
           "texture": "Texture",
@@ -1215,7 +1216,8 @@
           "save_to_ini_no_changes": "No matching persist variables were found to save",
           "save_to_ini_error": "Failed to save toggle values to INI",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
-          "capture_preview_error": "Failed to save the current viewer capture as preview.png"
+          "capture_preview_error": "Failed to save the current viewer capture as preview.png",
+          "load_error": "Failed to load the model"
         },
         "rotate_actions": {
           "Left 90°": "Left 90°",

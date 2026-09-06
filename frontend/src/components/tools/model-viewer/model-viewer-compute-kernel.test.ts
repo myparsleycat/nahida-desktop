@@ -107,6 +107,10 @@ describe("GIMI shape/pose compute kernel", () => {
         expect(frame.normals[0]).toBeCloseTo(0);
         expect(frame.normals[1]).toBeCloseTo(1);
         expect(Math.hypot(...frame.normals)).toBeCloseTo(1);
+        expect(frame.tangents[0]).toBeCloseTo(0);
+        expect(frame.tangents[1]).toBeCloseTo(1);
+        expect(frame.tangents[2]).toBeCloseTo(0);
+        expect(frame.tangents[3]).toBe(1);
     });
 
     it("rejects invalid bone indices and source-index mappings", () => {

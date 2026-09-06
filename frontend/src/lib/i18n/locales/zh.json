@@ -1158,6 +1158,7 @@
         "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
         "generating_selected_state": "正在生成所选状态",
         "model_data_unavailable": "模型数据不可用。",
+        "animation_clip": "动画片段",
         "menu": {
           "model": "模型",
           "texture": "纹理",
@@ -1182,7 +1183,8 @@
           "save_to_ini_no_changes": "没有找到可保存的 persist 变量",
           "save_to_ini_error": "保存到 INI 失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
-          "capture_preview_error": "无法将当前查看器截图保存为 preview.png"
+          "capture_preview_error": "无法将当前查看器截图保存为 preview.png",
+          "load_error": "无法加载模型"
         },
         "rotate_actions": {
           "Left 90°": "向左旋转 90°",

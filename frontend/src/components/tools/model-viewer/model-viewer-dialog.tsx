@@ -403,16 +403,21 @@ export function ModelViewerDialog({
     })();
   }, []);
 
-  const handleViewerError = useCallback((error: unknown) => {
-    setAnimationPlaying(false);
-    setIsViewerReady(false);
-    Logger.capture(
-      "components/tools/model-viewer/model-viewer-dialog.tsx",
-      "Failed to load model viewer source",
-      error,
-    );
-    toast.error(toErrorMessage(error));
-  }, []);
+  const handleViewerError = useCallback(
+    (error: unknown) => {
+      setAnimationPlaying(false);
+      setIsViewerReady(false);
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "Failed to load model viewer source",
+        error,
+      );
+      toast.error(t("page.tools.model_viewer.toast.load_error"), {
+        description: toErrorMessage(error),
+      });
+    },
+    [t],
+  );
 
   const captureAndSavePreview = async () => {
     if (!source?.modPath) {
@@ -749,7 +754,10 @@ export function ModelViewerDialog({
               <div className="w-36 min-w-0">
                 {animationClips.length > 1 ? (
                   <Select value={activeAnimation.id} onValueChange={setActiveAnimationId}>
-                    <SelectTrigger className="h-8 w-full">
+                    <SelectTrigger
+                      className="h-8 w-full"
+                      aria-label={t("page.tools.model_viewer.animation_clip")}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

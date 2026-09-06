@@ -122,6 +122,7 @@ export function computeGIMIShapePoseFrame(
     applyGIMIShapePose(
         positions,
         normals,
+        tangents,
         new DataView(buffers.blend),
         new Float32Array(buffers.pose),
         frame,
@@ -167,6 +168,7 @@ function validateSource(
 function applyGIMIShapePose(
     positions: Float32Array,
     normals: Float32Array,
+    tangents: Float32Array,
     blend: DataView,
     pose: Float32Array,
     frame: number,
@@ -293,6 +295,13 @@ function applyGIMIShapePose(
         normals[offset] = transformedNormalX / divisor;
         normals[offset + 1] = transformedNormalY / divisor;
         normals[offset + 2] = transformedNormalZ / divisor;
+        const tangentOffset = vertex * 4;
+        const tangentX = tangents[tangentOffset]!;
+        const tangentY = tangents[tangentOffset + 1]!;
+        const tangentZ = tangents[tangentOffset + 2]!;
+        tangents[tangentOffset] = m00 * tangentX + m01 * tangentY + m02 * tangentZ;
+        tangents[tangentOffset + 1] = m10 * tangentX + m11 * tangentY + m12 * tangentZ;
+        tangents[tangentOffset + 2] = m20 * tangentX + m21 * tangentY + m22 * tangentZ;
     }
 }
 

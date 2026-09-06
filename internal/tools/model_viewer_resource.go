@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -164,6 +165,9 @@ func collectModelViewerMihoyoGroups(modDir string, resources []modelViewerResour
 			return vb, stride, nil
 		})
 		if err != nil {
+			if isModelViewerInterleaveValidationError(err) {
+				continue
+			}
 			return nil, err
 		}
 		groups = append(groups, modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles})
@@ -263,6 +267,19 @@ func readModelViewerResourceSet(modDir string, resources []*modelViewerResource,
 	return parts, nil
 }
 
+type modelViewerInterleaveValidationError struct {
+	msg string
+}
+
+func (e *modelViewerInterleaveValidationError) Error() string {
+	return e.msg
+}
+
+func isModelViewerInterleaveValidationError(err error) bool {
+	var target *modelViewerInterleaveValidationError
+	return errors.As(err, &target)
+}
+
 func interleaveModelViewerBuffers(parts [][]byte, strides []int) ([]byte, int, int, error) {
 	if len(parts) == 0 || len(parts) != len(strides) {
 		return nil, 0, 0, fmt.Errorf("invalid vertex buffer set")
@@ -273,12 +290,16 @@ func interleaveModelViewerBuffers(parts [][]byte, strides []int) ([]byte, int, i
 			return nil, 0, 0, fmt.Errorf("vertex buffer stride must be greater than zero")
 		}
 		if len(parts[i])%partStride != 0 {
-			return nil, 0, 0, fmt.Errorf("vertex buffer length %d is not divisible by stride %d", len(parts[i]), partStride)
+			return nil, 0, 0, &modelViewerInterleaveValidationError{
+				msg: fmt.Sprintf("vertex buffer length %d is not divisible by stride %d", len(parts[i]), partStride),
+			}
 		}
 		stride += partStride
 		count := len(parts[i]) / partStride
 		if vertexCount >= 0 && count != vertexCount {
-			return nil, 0, 0, fmt.Errorf("vertex buffer count mismatch: %d != %d", count, vertexCount)
+			return nil, 0, 0, &modelViewerInterleaveValidationError{
+				msg: fmt.Sprintf("vertex buffer count mismatch: %d != %d", count, vertexCount),
+			}
 		}
 		vertexCount = count
 	}

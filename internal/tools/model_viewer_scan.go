@@ -433,7 +433,10 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		} else {
 			buffers, buffersErr := cache.paired(filepath.Join(modDir, filepath.FromSlash(position.Filename)), posStride, filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)), tcStride)
 			if buffersErr != nil {
-				continue
+				if isModelViewerInterleaveValidationError(buffersErr) {
+					continue
+				}
+				return nil, buffersErr
 			}
 			combined, stride, uvOffset, uvFormat = buffers.combined, buffers.stride, buffers.uvOffset, buffers.uvFormat
 			hasFrame = buffers.hasFrame
