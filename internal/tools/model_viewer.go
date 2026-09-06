@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"nahida.live/desktop/internal/infra"
 )
 
 type ModelViewerDNFClause struct {
@@ -193,253 +191,6 @@ type modelViewerMeshPayload struct {
 }
 
 var modelViewerFreeOSMemory = debug.FreeOSMemory
-
-func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport ModelViewerTransport, err error) {
-	startedAt := time.Now()
-	if t.log != nil {
-		t.log.Info("Starting model viewer load", "StaticGlb.loadForViewer")
-	}
-	defer func() {
-		if t.log == nil {
-			return
-		}
-		if err != nil {
-			err = infra.ReportError(t.log, err, "StaticGlb.loadForViewer", infra.Diagnostic{Operation: "load-model-viewer", Fields: map[string]any{"message": fmt.Sprintf("Model viewer load failed after %dms", time.Since(startedAt).Milliseconds()), "elapsedMs": time.Since(startedAt).Milliseconds(), "path": modPath}})
-			return
-		}
-		t.log.Info(fmt.Sprintf("Completed model viewer load in %dms (meshes=%d)", time.Since(startedAt).Milliseconds(), len(transport.Meshes)), "StaticGlb.loadForViewer")
-	}()
-	if t.protocol == nil {
-		return ModelViewerTransport{}, fmt.Errorf("protocol service is unavailable")
-	}
-	requestedPath := modPath
-	folder, absErr := filepath.Abs(requestedPath)
-	if absErr != nil {
-		return ModelViewerTransport{}, absErr
-	}
-	discoveryStartedAt := time.Now()
-	diagnostics := &infra.DiagnosticBatch{}
-	defer diagnostics.Report(t.log, "Tools", "model-viewer-discovery")
-	iniPaths, discoverErr := discoverModelViewerActiveINIs(folder, diagnostics.Add)
-	if discoverErr != nil {
-		return ModelViewerTransport{}, discoverErr
-	}
-	if t.log != nil {
-		t.log.Info(fmt.Sprintf("INI discovery completed in %dms (inis=%d)", time.Since(discoveryStartedAt).Milliseconds(), len(iniPaths)), "StaticGlb.loadForViewer")
-	}
-	if len(iniPaths) == 0 {
-		return ModelViewerTransport{}, contractError("No active .ini files found in this folder.")
-	}
-	budget, budgetErr := newModelViewerLoadBudget(folder)
-	if budgetErr != nil {
-		return ModelViewerTransport{}, budgetErr
-	}
-	const assetPath = ""
-	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85}
-	sessionID := t.protocol.CreateMemorySession()
-	keep := false
-	defer func() {
-		if !keep {
-			t.protocol.CleanupMemorySession(sessionID)
-		}
-	}()
-	transport = ModelViewerTransport{
-		MemorySessionID: sessionID,
-		INIPath:         iniPaths[0],
-		ModPath:         requestedPath,
-		Name:            filepath.Base(strings.TrimRight(requestedPath, `\/`)),
-		Meshes:          []ModelViewerMeshTransport{},
-		Textures:        make(map[string]ModelViewerTextureTransport),
-		Variables:       []ModelViewerVariable{},
-		DefaultState:    make(map[string]any),
-		StateRules:      []ModelViewerStateRule{},
-		UIAssets:        ModelViewerUIAssets{},
-		Animations:      []ModelViewerAnimationClip{},
-	}
-	if requestedPath == "" {
-		transport.Name = ""
-	}
-	var allSections []modINISection
-	var allShapeKeys []modelViewerShapeKey
-	bufferCache := newModelViewerBufferCache()
-	variableNames := make(map[string]modelViewerVariableName)
-	meshPayloads := make([]modelViewerMeshPayload, 0)
-	texturePayloads := make(map[string]modelViewerTexturePayload)
-	type iniGeometryScan struct {
-		sections  []modINISection
-		resources []modelViewerResource
-	}
-	var iniGeometryScans []iniGeometryScan
-	var iniParseMs, iniValidateMs, iniReferencedMs, meshBuildMs, meshPayloadMs, postProcessMs, payloadWriteMs int64
-	meshTiming := &modelViewerMeshBuildTiming{}
-	var stageStartedAt time.Time
-	var textureWorks []modelViewerINITextureWork
-	multi := len(iniPaths) > 1
-	for iniIndex, iniPath := range iniPaths {
-		parsed, readErr := readModelViewerINI(iniPath)
-		if readErr != nil {
-			return ModelViewerTransport{}, readErr
-		}
-		prefix, _ := modelViewerINIScope(iniPath, folder, multi)
-		sections, scopedNames := scopeModelViewerSections(parsed.Sections, iniIndex, prefix)
-		for key, value := range scopedNames {
-			variableNames[key] = value
-		}
-		rebaseModelViewerResources(sections, iniPath, folder)
-		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder) {
-			if t.log != nil {
-				t.log.Warn("Skipped unsafe Model Viewer resource path: "+resource, "StaticGlb.loadForViewer")
-			}
-		}
-		resources := collectModelViewerResources(sections)
-		iniGeometryScans = append(iniGeometryScans, iniGeometryScan{sections: sections, resources: resources})
-		stageStartedAt = time.Now()
-		referenced := collectModelViewerReferencedResources(sections)
-		iniReferencedMs += time.Since(stageStartedAt).Milliseconds()
-		stageStartedAt = time.Now()
-		if validationErr := budget.validateReferencedResources(folder, resources, referenced); validationErr != nil {
-			return ModelViewerTransport{}, validationErr
-		}
-		iniValidateMs += time.Since(stageStartedAt).Milliseconds()
-		allSections = append(allSections, sections...)
-		iniParseMs += time.Since(stageStartedAt).Milliseconds()
-		stageStartedAt = time.Now()
-		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesAt(iniPath, folder, assetPath, sections, bufferCache, meshTiming)
-		if buildErr != nil {
-			return ModelViewerTransport{}, buildErr
-		}
-		allShapeKeys = append(allShapeKeys, shapeKeys...)
-		meshBuildMs += time.Since(stageStartedAt).Milliseconds()
-		textureWorks = append(textureWorks, modelViewerINITextureWork{
-			meshes:   meshes,
-			bindings: textureBindings,
-			shapes:   shapeKeys,
-			jobs:     collectModelViewerTextureJobs(len(textureWorks), folder, resources, textureBindings, meshes),
-		})
-	}
-	// Mesh payloads own the extracted attributes from this point onward. Drop
-	// interleaved vertex buffers and geometry caches before texture encoding so
-	// the two peak-memory phases do not overlap.
-	bufferCache.releaseGeometryScratch()
-	runtime.GC()
-	textureJobs := make([]modelViewerTextureJob, 0)
-	for _, work := range textureWorks {
-		textureJobs = append(textureJobs, work.jobs...)
-	}
-	transport.MaterialProfile = detectModelViewerMaterialProfile(allSections)
-	settings.MaterialProfile = transport.MaterialProfile
-	texturesByBatch, textureStats := runModelViewerTextureJobs(ctx, settings, len(textureWorks), textureJobs)
-	stageStartedAt = time.Now()
-	for batchIndex, work := range textureWorks {
-		textures := texturesByBatch[batchIndex]
-		for _, value := range textures {
-			if value.Key != "" {
-				texturePayloads[value.Key] = value
-			}
-		}
-		for _, mesh := range work.meshes {
-			item, payload := buildModelViewerDirectMeshPayload(mesh, work.bindings, textures, work.shapes, bufferCache)
-			transport.Meshes = append(transport.Meshes, item)
-			meshPayloads = append(meshPayloads, payload)
-		}
-	}
-	bufferCache.releaseAll()
-	runtime.GC()
-	meshPayloadMs = time.Since(stageStartedAt).Milliseconds()
-	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Texture encoding completed in %dms (textures=%d)", textureStats.TotalWallMs, textureStats.LogicalTextures), "StaticGlb.loadForViewer")
-		t.log.Info(fmt.Sprintf("Texture preparation detail: jobs=%d paths=%d contents=%d decodes=%d encodes=%d hashBytes=%d hash=%dms prepare=%dms", textureStats.Jobs, textureStats.UniquePaths, textureStats.UniqueContents, textureStats.Decodes, textureStats.Encodes, textureStats.HashBytes, textureStats.HashWallMs, textureStats.PrepareWallMs), "StaticGlb.loadForViewer")
-		t.log.Info(fmt.Sprintf("INI parse detail: referenced=%dms validate=%dms (total %dms)", iniReferencedMs, iniValidateMs, iniParseMs), "StaticGlb.loadForViewer")
-		t.log.Info(fmt.Sprintf("Mesh build detail: scan=%dms(%d recs) setup=%dms geometry=%dms(%d) overrides=%dms attach=%dms normalize=%dms legacy=%dms(groups=%dms condScan=%dms prepare=%dms extract=%dms)", meshTiming.ScanMs, meshTiming.Records, meshTiming.SetupMs, meshTiming.GeometryMs, meshTiming.Geometries, meshTiming.OverridesMs, meshTiming.AttachMs, meshTiming.NormalizeMs, meshTiming.LegacyMs, meshTiming.GroupsMs, meshTiming.LegacyScanMs, meshTiming.LegacyPrepareMs, meshTiming.LegacyExtractMs), "StaticGlb.loadForViewer")
-	}
-	if len(transport.Meshes) == 0 {
-		hasGeometryGroups := false
-		for _, scan := range iniGeometryScans {
-			if modelViewerHasGeometryGroup(scan.sections, scan.resources) {
-				hasGeometryGroups = true
-				break
-			}
-		}
-		if !hasGeometryGroups {
-			return ModelViewerTransport{}, contractError(fmt.Sprintf("No mesh geometry found across %d ini file(s).", len(iniPaths)))
-		}
-		return ModelViewerTransport{}, contractError("No mesh data could be extracted (buffer files missing?).")
-	}
-	stageStartedAt = time.Now()
-	defaults := collectModelViewerDefaultVariables(allSections)
-	bindings := collectModelViewerSlotBindings(allSections, defaults)
-	animations := detectModelViewerPresentAnimations(allSections, defaults, bindings)
-	stateRules := extractModelViewerDirectStateRules(allSections, defaults)
-	variables := prependModelViewerShapeVariables(buildModelViewerDirectVariables(allSections, bindings, defaults), allShapeKeys, defaults)
-	tracked := make(map[string]bool)
-	for _, variable := range variables {
-		tracked[modelViewerNormalizeKey(variable.ID)] = true
-		for _, effect := range variable.Effects {
-			tracked[modelViewerNormalizeKey(effect.Var)] = true
-		}
-	}
-	for _, rule := range stateRules {
-		tracked[modelViewerNormalizeKey(rule.Var)] = true
-	}
-	for _, clip := range animations {
-		for _, id := range clip.VariableIDs {
-			tracked[modelViewerNormalizeKey(id)] = true
-		}
-	}
-	normalizeModelViewerTransportConditions(&transport, tracked)
-	gating := modelViewerDirectGatingVariables(transport.Meshes, stateRules)
-	animationVars := make(map[string]bool)
-	for _, clip := range animations {
-		for _, id := range clip.VariableIDs {
-			animationVars[id] = true
-		}
-	}
-	for _, variable := range variables {
-		if !animationVars[variable.ID] && (variable.alwaysVisible || modelViewerVariableIsGating(variable, gating)) {
-			transport.Variables = append(transport.Variables, variable)
-		}
-		transport.DefaultState[variable.ID] = variable.DefaultValue
-	}
-	for key, value := range defaults {
-		transport.DefaultState[key] = value
-	}
-	for _, prepared := range animations {
-		clip := ModelViewerAnimationClip{ID: prepared.ID, Label: prepared.Label, VariableIDs: prepared.VariableIDs, FPS: normalizeModelViewerAnimationFPS(prepared.FPS), FrameStart: prepared.FrameStart, FrameEnd: prepared.FrameEnd, Loop: prepared.Loop}
-		for _, frame := range prepared.Frames {
-			clip.Frames = append(clip.Frames, ModelViewerAnimationFrame(frame))
-		}
-		transport.Animations = append(transport.Animations, clip)
-		for _, id := range clip.VariableIDs {
-			if _, ok := transport.DefaultState[id]; !ok {
-				transport.DefaultState[id] = float64(clip.FrameStart)
-			}
-		}
-	}
-	for _, rule := range stateRules {
-		if !animationVars[rule.Var] {
-			transport.StateRules = append(transport.StateRules, rule)
-			if _, ok := transport.DefaultState[rule.Var]; !ok {
-				transport.DefaultState[rule.Var] = rule.Value
-			}
-		}
-	}
-	remapModelViewerTransportVariables(&transport, variableNames)
-	normalizeModelViewerTransportValueTypes(&transport)
-	postProcessMs = time.Since(stageStartedAt).Milliseconds()
-	stageStartedAt = time.Now()
-	if writeErr := writeModelViewerPayload(t, sessionID, &transport, meshPayloads, texturePayloads); writeErr != nil {
-		return ModelViewerTransport{}, writeErr
-	}
-	t.modelViewerMu.Lock()
-	t.modelViewerSessions[sessionID] = &modelViewerSession{modPath: requestedPath}
-	t.modelViewerMu.Unlock()
-	keep = true
-	payloadWriteMs = time.Since(stageStartedAt).Milliseconds()
-	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Load stages: iniParse=%dms meshBuild=%dms meshPayload=%dms post=%dms payloadWrite=%dms", iniParseMs, meshBuildMs, meshPayloadMs, postProcessMs, payloadWriteMs), "StaticGlb.loadForViewer")
-	}
-	return transport, nil
-}
 
 func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tracked map[string]bool) {
 	if transport == nil {
@@ -1039,7 +790,10 @@ func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []mo
 	return item, payload
 }
 
-func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerTransport, meshes []modelViewerMeshPayload, textures map[string]modelViewerTexturePayload) error {
+func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, transport *ModelViewerTransport, meshes []modelViewerMeshPayload, textures map[string]modelViewerTexturePayload) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if t == nil || t.protocol == nil || transport == nil {
 		return fmt.Errorf("protocol service is unavailable")
 	}
@@ -1049,6 +803,9 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 	}
 	sort.Strings(textureKeys)
 	for _, key := range textureKeys {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		texture := textures[key]
 		url, err := t.protocol.StoreMemoryBuffer(sessionID, "tex:"+key, texture.Bytes, texture.MIMEType)
 		if err != nil {
@@ -1060,7 +817,13 @@ func writeModelViewerPayload(t *Tools, sessionID string, transport *ModelViewerT
 		return fmt.Errorf("model viewer payload mesh count mismatch")
 	}
 	writeMesh := func(mesh *ModelViewerMeshTransport, payload modelViewerMeshPayload) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		write := func(suffix string, data []byte) (string, error) {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
 			return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
 		}
 		var err error
@@ -1306,14 +1069,14 @@ func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []mo
 	return jobs
 }
 
-func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, batchCount int, jobs []modelViewerTextureJob) ([]map[string]modelViewerTexturePayload, modelViewerTextureRunStats) {
+func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, batchCount int, jobs []modelViewerTextureJob) ([]map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
 	outputs := make([]map[string]modelViewerTexturePayload, batchCount)
 	for index := range outputs {
 		outputs[index] = make(map[string]modelViewerTexturePayload)
 	}
 	stats := modelViewerTextureRunStats{Jobs: len(jobs)}
-	if len(jobs) == 0 {
-		return outputs, stats
+	if ctx.Err() != nil || len(jobs) == 0 {
+		return outputs, stats, ctx.Err()
 	}
 	startedAt := time.Now()
 	type pathGroup struct {
@@ -1363,11 +1126,19 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 			}
 		}()
 	}
+hashDispatch:
 	for index := range pathGroups {
-		hashWork <- index
+		select {
+		case hashWork <- index:
+		case <-ctx.Done():
+			break hashDispatch
+		}
 	}
 	close(hashWork)
 	hashGroup.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, stats, err
+	}
 	stats.HashWallMs = time.Since(hashStartedAt).Milliseconds()
 	for _, group := range pathGroups {
 		stats.HashBytes += group.hashedBytes
@@ -1428,6 +1199,9 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 				}
 				variants := make(map[encodeVariant]*modelViewerPreparedTexture, 2)
 				for _, job := range group.jobs {
+					if ctx.Err() != nil {
+						break
+					}
 					variant := encodeVariant{
 						invert:    modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
 						transform: modelViewerTextureTransformFor(settings.MaterialProfile, job.role),
@@ -1452,11 +1226,19 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 			}
 		}()
 	}
+prepareDispatch:
 	for index := range contentGroups {
-		prepareWork <- index
+		select {
+		case prepareWork <- index:
+		case <-ctx.Done():
+			break prepareDispatch
+		}
 	}
 	close(prepareWork)
 	prepareGroup.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, stats, err
+	}
 	stats.PrepareWallMs = time.Since(prepareStartedAt).Milliseconds()
 	for _, group := range contentGroups {
 		stats.Decodes += group.decodes
@@ -1483,7 +1265,7 @@ func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureS
 		}
 	}
 	stats.TotalWallMs = time.Since(startedAt).Milliseconds()
-	return outputs, stats
+	return outputs, stats, ctx.Err()
 }
 
 func modelViewerAssignmentTextureKey(assignment modelViewerDirectTextureAssignment) string {

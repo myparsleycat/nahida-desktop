@@ -1,5 +1,5 @@
 import { Dialog } from "@bindings/platform";
-import { Tools, type BodyShapeMeshDescriptor, type BodyShapeMeshSummary } from "@bindings/tools";
+import { Tools } from "@bindings/tools";
 import {
   BodyShapeViewport,
   type BodyShapeViewportHandle,
@@ -42,7 +42,7 @@ import {
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { Logger } from "@renderer/lib/logger";
-import { isAbortError, uploadTypedArray } from "@renderer/wails/binary-memory";
+import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import {
   applyBrushStroke,
   applyGeodesicBrush,
@@ -50,8 +50,6 @@ import {
   composeDisplayWeights,
   computeMeshBounds,
   computeRegionPivot,
-  createGeodesicBrushWorkspace,
-  DEFAULT_BLEND_STRIDE,
   extractBoneWeights,
   growSelectionWeights,
   mirrorWeightsAcrossX,
@@ -59,9 +57,6 @@ import {
   shrinkSelectionWeights,
   smoothSelectionWeights,
   type ActiveRegionDeform,
-  type BlendBoneInfo,
-  type GeodesicBrushWorkspace,
-  type VertexAdjacency,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
 import {
@@ -73,18 +68,18 @@ import {
   SaveIcon,
   Undo2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ScrollArea } from "../../ui/scroll-area";
-import { BodyShapeMeshWorkerClient } from "./body-shape-mesh-loader";
 import {
   applySelectionHistoryValues,
   createSelectionHistoryEntry,
   pushSelectionHistory,
   type SelectionHistoryEntry,
 } from "./selection-history";
+import { useBodyShapeSession, type LoadedMesh } from "./use-body-shape-session";
 const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
 type WeightSource = { kind: "bone"; boneId: number };
@@ -103,34 +98,6 @@ const DEFAULT_UNIFIED_CONTROL: DeformControl = {
   axisScale: [...DEFAULT_AXIS_SCALE],
   translation: [0, 0, 0],
   taperFactor: 0.5,
-};
-
-type LoadedMesh = {
-  id: string;
-  name: string;
-  vertexCount: number;
-  originalPositions: Float32Array;
-  previewPositions: Float32Array;
-  indices?: Uint32Array;
-  blendBytes?: Uint8Array;
-  blendStride: number;
-  bones: BlendBoneInfo[];
-  weightCache: Map<string, Float32Array>;
-  selectionWeights: Float32Array;
-  adjacency?: VertexAdjacency;
-  originalNormals?: Float32Array;
-  componentIds?: Uint32Array;
-  symmetryMap?: Int32Array;
-  boundsCenter: [number, number, number];
-  geodesicWorkspace: GeodesicBrushWorkspace;
-};
-
-type LoadResult = {
-  sessionId: string;
-  modRoot: string;
-  iniPath: string;
-  meshes: BodyShapeMeshSummary[];
-  cache: Map<string, LoadedMesh>;
 };
 
 function nearestVertexToPoint(
@@ -208,62 +175,6 @@ function buildHighlightRegions(
   ];
 }
 
-async function loadBodyShapeMesh(
-  worker: BodyShapeMeshWorkerClient,
-  sessionId: string,
-  summary: BodyShapeMeshSummary,
-  descriptor: BodyShapeMeshDescriptor,
-  signal: AbortSignal,
-): Promise<LoadedMesh> {
-  if (descriptor.sessionId !== sessionId || descriptor.meshId !== summary.id) {
-    throw new Error("Body shape mesh descriptor does not match the active session");
-  }
-  const result = await worker.process(
-    {
-      sessionId,
-      meshId: summary.id,
-      vertexCount: summary.vertexCount,
-      positionsUrl: descriptor.positionsUrl,
-      positionsCount: descriptor.positionsCount,
-      indicesUrl: descriptor.indicesUrl ?? undefined,
-      indexCount: descriptor.indexCount,
-      blendUrl: descriptor.blendUrl ?? undefined,
-      blendBytes: descriptor.blendBytes,
-      blendStride: descriptor.blendStride ?? DEFAULT_BLEND_STRIDE,
-    },
-    signal,
-  );
-  const originalPositions = new Float32Array(result.originalPositions);
-  const indices = result.indices ? new Uint32Array(result.indices) : undefined;
-  const blendBytes = result.blendBytes ? new Uint8Array(result.blendBytes) : undefined;
-  const adjacency =
-    result.adjacencyOffsets && result.adjacencyNeighbors
-      ? {
-          offsets: new Uint32Array(result.adjacencyOffsets),
-          neighbors: new Uint32Array(result.adjacencyNeighbors),
-        }
-      : undefined;
-  return {
-    id: summary.id,
-    name: summary.name,
-    vertexCount: summary.vertexCount,
-    originalPositions,
-    previewPositions: new Float32Array(originalPositions),
-    indices,
-    blendBytes,
-    blendStride: descriptor.blendStride ?? DEFAULT_BLEND_STRIDE,
-    bones: descriptor.bones ?? [],
-    weightCache: new Map(),
-    selectionWeights: new Float32Array(summary.vertexCount),
-    adjacency,
-    originalNormals: result.originalNormals ? new Float32Array(result.originalNormals) : undefined,
-    componentIds: result.componentIds ? new Uint32Array(result.componentIds) : undefined,
-    symmetryMap: result.symmetryMap ? new Int32Array(result.symmetryMap) : undefined,
-    boundsCenter: result.boundingCenter,
-    geodesicWorkspace: createGeodesicBrushWorkspace(summary.vertexCount),
-  };
-}
-
 export default function BodyShapeTool({
   fixedTargetPath,
   modName,
@@ -275,11 +186,7 @@ export default function BodyShapeTool({
 } = {}) {
   const { t } = useTranslation();
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
-  const [prevFixedTargetPath, setPrevFixedTargetPath] = useState(fixedTargetPath);
-  const [loading, setLoading] = useState(Boolean(fixedTargetPath));
   const [exporting, setExporting] = useState(false);
-  const [loaded, setLoaded] = useState<LoadResult | null>(null);
-  const [selectedMeshId, setSelectedMeshId] = useState<string>("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [unifiedControl, setUnifiedControl] = useState<DeformControl>(DEFAULT_UNIFIED_CONTROL);
   const [deformOperation, setDeformOperation] = useState<DeformOperation>("scale");
@@ -287,7 +194,6 @@ export default function BodyShapeTool({
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
-  const [meshWorker] = useState(() => new BodyShapeMeshWorkerClient());
 
   /* Brush state */
   const [brushEnabled, setBrushEnabled] = useState(false);
@@ -302,13 +208,6 @@ export default function BodyShapeTool({
   const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
   const previewKeyRef = useRef<string | null>(null);
   const selectionStrokeBeforeRef = useRef<Float32Array | null>(null);
-  const activeSessionRef = useRef<string | null>(null);
-  const loadGenerationRef = useRef(0);
-  const meshLoadRef = useRef<{
-    generation: number;
-    request?: { cancel(): void };
-    controller?: AbortController;
-  }>({ generation: 0 });
   const selectionHistoryRef = useRef<{
     undo: SelectionHistoryEntry[];
     redo: SelectionHistoryEntry[];
@@ -318,13 +217,32 @@ export default function BodyShapeTool({
     canRedoSelection: false,
   });
 
-  if (fixedTargetPath !== prevFixedTargetPath) {
-    setPrevFixedTargetPath(fixedTargetPath);
-    if (fixedTargetPath) {
-      setLoading(true);
-      setLoaded(null);
-    }
-  }
+  const updateHistoryState = () => {
+    setHistoryState({
+      canUndoSelection: selectionHistoryRef.current.undo.length > 0,
+      canRedoSelection: selectionHistoryRef.current.redo.length > 0,
+    });
+  };
+
+  const resetSelectionHistory = () => {
+    selectionHistoryRef.current = { undo: [], redo: [] };
+    selectionStrokeBeforeRef.current = null;
+    updateHistoryState();
+  };
+
+  const { loaded, selectedMeshId, loading, loadMod, loadMeshById } = useBodyShapeSession(
+    fixedTargetPath,
+    () => {
+      setSelectedKeys([]);
+      resetSelectionHistory();
+      previewKeyRef.current = null;
+      setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+      setDeformOperation("scale");
+      setWeightVersion((v) => v + 1);
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+      setShowWeights(true);
+    },
+  );
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
@@ -376,19 +294,6 @@ export default function BodyShapeTool({
       },
     ];
   }, [selectedMesh, hasSelection, unifiedControl, deformOperation, weightVersion]);
-
-  const updateHistoryState = () => {
-    setHistoryState({
-      canUndoSelection: selectionHistoryRef.current.undo.length > 0,
-      canRedoSelection: selectionHistoryRef.current.redo.length > 0,
-    });
-  };
-
-  const resetSelectionHistory = () => {
-    selectionHistoryRef.current = { undo: [], redo: [] };
-    selectionStrokeBeforeRef.current = null;
-    updateHistoryState();
-  };
 
   const commitSelectionHistory = (before: Float32Array) => {
     if (!selectedMesh) return;
@@ -582,62 +487,6 @@ export default function BodyShapeTool({
     });
   }, [selectedMesh, activeRegions, showOriginal, weightVersion]);
 
-  const cancelMeshLoad = () => {
-    meshLoadRef.current.request?.cancel();
-    meshLoadRef.current.controller?.abort();
-    meshLoadRef.current = { generation: meshLoadRef.current.generation + 1 };
-  };
-
-  const closeActiveSession = async () => {
-    cancelMeshLoad();
-    const sessionId = activeSessionRef.current;
-    activeSessionRef.current = null;
-    if (sessionId) await Tools.BodyShapeCloseSession(sessionId);
-  };
-
-  const loadMeshById = async (current: LoadResult, meshId: string) => {
-    const cached = current.cache.get(meshId);
-    if (cached) {
-      setSelectedMeshId(meshId);
-      setLoaded((value) => (value?.sessionId === current.sessionId ? { ...value } : value));
-      return;
-    }
-    const summary = current.meshes.find((mesh) => mesh.id === meshId);
-    if (!summary) return;
-    cancelMeshLoad();
-    const generation = meshLoadRef.current.generation;
-    const controller = new AbortController();
-    const request = Tools.BodyShapeGetMesh({ sessionId: current.sessionId, meshId });
-    meshLoadRef.current = { generation, request, controller };
-    setLoading(true);
-    try {
-      const descriptor = await request;
-      const mesh = await loadBodyShapeMesh(
-        meshWorker,
-        current.sessionId,
-        summary,
-        descriptor,
-        controller.signal,
-      );
-      if (
-        meshLoadRef.current.generation !== generation ||
-        activeSessionRef.current !== current.sessionId
-      ) {
-        return;
-      }
-      current.cache.set(meshId, mesh);
-      setSelectedMeshId(meshId);
-      setLoaded((value) =>
-        value?.sessionId === current.sessionId ? { ...value, cache: current.cache } : value,
-      );
-    } catch (error) {
-      Logger.capture("body-shape:browser-operation", error);
-      if (!isAbortError(error)) throw error;
-    } finally {
-      if (meshLoadRef.current.generation === generation) setLoading(false);
-    }
-  };
-
   const selectFolder = async () => {
     const selected = await Dialog.ShowOpenDialog({
       title: "",
@@ -648,79 +497,6 @@ export default function BodyShapeTool({
     if (selected.canceled || !selected.filePaths?.[0]) return;
     setModPath(selected.filePaths[0]);
   };
-
-  const loadModFromPath = async (path: string) => {
-    const generation = ++loadGenerationRef.current;
-    try {
-      await closeActiveSession();
-      setLoaded(null);
-      const result = await Tools.BodyShapeLoadMod(path);
-      if (generation !== loadGenerationRef.current) {
-        await Tools.BodyShapeCloseSession(result.sessionId);
-        return;
-      }
-      activeSessionRef.current = result.sessionId;
-      const next: LoadResult = {
-        sessionId: result.sessionId,
-        modRoot: result.modRoot,
-        iniPath: result.iniPath,
-        meshes: result.meshes ?? [],
-        cache: new Map(),
-      };
-      setLoaded(next);
-      setSelectedMeshId(next.meshes[0]?.id ?? "");
-      setSelectedKeys([]);
-      resetSelectionHistory();
-      previewKeyRef.current = null;
-      setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
-      setDeformOperation("scale");
-      setWeightVersion((v) => v + 1);
-      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-      setShowWeights(true);
-      if (next.meshes[0]) await loadMeshById(next, next.meshes[0].id);
-    } catch (error) {
-      Logger.capture("body-shape:browser-operation", error);
-      if (isAbortError(error)) return;
-      toast.error(t("page.tools.body_shape.toast.load_failed"), {
-        description: toErrorMessage(error),
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMod = async (path = modPath) => {
-    if (!path || loading) return;
-    setModPath(path);
-    setLoading(true);
-    await loadModFromPath(path);
-  };
-
-  useEffect(() => {
-    if (!fixedTargetPath) return;
-    let active = true;
-    const loadInitial = async () => {
-      await loadModFromPath(fixedTargetPath);
-      if (!active) await closeActiveSession();
-    };
-    void loadInitial();
-    return () => {
-      active = false;
-      loadGenerationRef.current++;
-    };
-  }, [fixedTargetPath]);
-
-  useEffect(
-    () => () => {
-      loadGenerationRef.current++;
-      cancelMeshLoad();
-      meshWorker.dispose();
-      const sessionId = activeSessionRef.current;
-      activeSessionRef.current = null;
-      if (sessionId) void Tools.BodyShapeCloseSession(sessionId);
-    },
-    [meshWorker],
-  );
 
   const applySelectedKeys = (nextKeys: string[]) => {
     setSelectedKeys(nextKeys);
@@ -977,7 +753,7 @@ export default function BodyShapeTool({
 
                   <Button
                     type="button"
-                    onClick={() => void loadMod()}
+                    onClick={() => void loadMod(modPath)}
                     disabled={!modPath || loading}
                   >
                     {loading ? <Loader2Icon className="size-4 animate-spin" /> : null}

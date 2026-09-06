@@ -331,7 +331,7 @@ func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{0, 1, 2}},
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{7, 3, 11}},
 	}
-	if err := writeModelViewerPayload(service, sessionID, &transport, payloads, nil); err != nil {
+	if err := writeModelViewerPayload(context.Background(), service, sessionID, &transport, payloads, nil); err != nil {
 		t.Fatal(err)
 	}
 	if transport.Meshes[0].SourceIndicesURL != "" {

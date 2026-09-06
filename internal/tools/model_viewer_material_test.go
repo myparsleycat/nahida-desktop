@@ -313,10 +313,13 @@ func TestRunModelViewerTextureJobsDeduplicatesIdenticalFilesAcrossBatches(t *tes
 	if err := os.WriteFile(second, mustReadFile(t, first), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
 		{batchIndex: 0, path: first, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
 		{batchIndex: 1, path: second, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(output) != 2 || !bytes.Equal(output[0]["body"].Bytes, output[1]["body-copy"].Bytes) || len(output[0]["body"].Bytes) == 0 {
 		t.Fatalf("deduped outputs = %#v", output)
 	}
@@ -332,10 +335,13 @@ func TestRunModelViewerTextureJobsHashesSamePathOnce(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "body.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
-	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
 		{path: path, resourceName: "BodyDiffuseCopy", keys: []string{"body-copy"}, role: "diffuse", canonicalKey: "body-copy"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.UniquePaths != 1 || stats.UniqueContents != 1 || stats.Decodes != 1 || stats.Encodes != 1 || stats.LogicalTextures != 2 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -351,10 +357,13 @@ func TestRunModelViewerTextureJobsKeepsInvertAlphaVariant(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mask.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, A: 255})
-	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
 		{path: path, resourceName: "BodyDiffuseInvertAlpha", keys: []string{"body-invert"}, role: "diffuse", canonicalKey: "body-invert"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.Decodes != 1 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -368,10 +377,13 @@ func TestRunModelViewerTextureJobsKeepsZZMINormalTransformVariant(t *testing.T) 
 	path := filepath.Join(dir, "packed-normal.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
 	settings := modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, MaterialProfile: "zzmi"}
-	output, stats := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "BodyNormalMap", keys: []string{"normal"}, role: "normal_map", canonicalKey: "normal"},
 		{path: path, resourceName: "BodyDiffuse", keys: []string{"diffuse"}, role: "diffuse", canonicalKey: "diffuse"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.Decodes != 1 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -406,11 +418,14 @@ func TestRunModelViewerTextureJobsUsesLosslessRabbitFXPackedMaps(t *testing.T) {
 	}
 
 	settings := modelViewerTextureSettings{TextureFormat: "jpeg-force", JPEGQuality: 85, MaterialProfile: "wuwa:rabbitfx"}
-	output, stats := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "Texture15", keys: []string{"diffuse"}, role: "diffuse", canonicalKey: "diffuse"},
 		{path: path, resourceName: "Texture17", keys: []string{"normal"}, role: "normal_map", canonicalKey: "normal"},
 		{path: path, resourceName: "Texture16", keys: []string{"light"}, role: "light_map", canonicalKey: "light"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.Decodes != 1 || stats.Encodes != 3 || stats.LogicalTextures != 3 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -427,10 +442,13 @@ func TestRunModelViewerTextureJobsDeduplicatesZZMINormalTransform(t *testing.T) 
 	path := filepath.Join(dir, "packed-normal.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
 	settings := modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, MaterialProfile: "zzmi"}
-	output, stats := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
 		{path: path, resourceName: "BodyNormalMap", keys: []string{"normal"}, role: "normal_map", canonicalKey: "normal"},
 		{path: path, resourceName: "BodyNormalMapCopy", keys: []string{"normal-copy"}, role: "normal_map", canonicalKey: "normal-copy"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.Decodes != 1 || stats.Encodes != 1 || stats.LogicalTextures != 2 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -463,7 +481,10 @@ func TestRunModelViewerTextureJobsScopesZZMINormalTransform(t *testing.T) {
 				jobs = append(jobs, modelViewerTextureJob{path: path, resourceName: role, keys: []string{role}, role: role, canonicalKey: role})
 			}
 			settings := modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, MaterialProfile: test.profile}
-			output, stats := runModelViewerTextureJobs(context.Background(), settings, 1, jobs)
+			output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, jobs)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if stats.Decodes != 1 || stats.Encodes != test.encodes || stats.LogicalTextures != len(test.roles) {
 				t.Fatalf("stats = %#v", stats)
 			}
@@ -482,10 +503,13 @@ func TestRunModelViewerTextureJobsKeepsDistinctContentsAndBatchScopes(t *testing
 	second := filepath.Join(dir, "second.png")
 	writeModelViewerTestPNG(t, first, color.NRGBA{R: 255, A: 255})
 	writeModelViewerTestPNG(t, second, color.NRGBA{B: 255, A: 255})
-	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 2, []modelViewerTextureJob{
 		{batchIndex: 0, path: first, resourceName: "SharedResource", keys: []string{"shared"}, role: "diffuse", canonicalKey: "first"},
 		{batchIndex: 1, path: second, resourceName: "SharedResource", keys: []string{"shared"}, role: "diffuse", canonicalKey: "second"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if stats.UniqueContents != 2 || stats.Decodes != 2 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
 		t.Fatalf("stats = %#v", stats)
 	}
@@ -499,10 +523,13 @@ func TestRunModelViewerTextureJobsIsolatesFailedContent(t *testing.T) {
 	good := filepath.Join(dir, "good.png")
 	writeModelViewerTestPNG(t, good, color.NRGBA{R: 255, A: 255})
 	missing := filepath.Join(dir, "missing.png")
-	output, stats := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
+	output, stats, err := runModelViewerTextureJobs(context.Background(), modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
 		{path: missing, resourceName: "Missing", keys: []string{"missing"}, role: "diffuse", canonicalKey: "missing"},
 		{path: good, resourceName: "Good", keys: []string{"good"}, role: "diffuse", canonicalKey: "good"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := output[0]["missing"]; ok {
 		t.Fatalf("missing texture was prepared: %#v", output)
 	}
