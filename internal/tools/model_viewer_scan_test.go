@@ -140,6 +140,91 @@ stride = 16`
 	}
 }
 
+func TestModelViewerScannedMeshesSkipInterleaveValidationErrors(t *testing.T) {
+	dir := t.TempDir()
+	iniText := `[TextureOverrideBody]
+ib = ResourceIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceIB]
+filename = index.buf
+format = DXGI_FORMAT_R32_UINT
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20`
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{
+		"index.buf": modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		"pos.buf":   make([]byte, 41),
+		"tc.buf":    make([]byte, 20),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(iniText)
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		iniPath,
+		dir,
+		sections,
+		collectModelViewerDefaultVariables(sections),
+		newModelViewerBufferCache(),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 0 {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+}
+
+func TestModelViewerScannedMeshesPropagatePairedReadErrors(t *testing.T) {
+	dir := t.TempDir()
+	iniText := `[TextureOverrideBody]
+ib = ResourceIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceIB]
+filename = index.buf
+format = DXGI_FORMAT_R32_UINT
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20`
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.buf"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tc.buf"), make([]byte, 20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(iniText)
+	if _, err := buildModelViewerDirectScannedMeshesAt(
+		iniPath,
+		dir,
+		sections,
+		collectModelViewerDefaultVariables(sections),
+		newModelViewerBufferCache(),
+		nil,
+	); err == nil {
+		t.Fatal("missing position buffer succeeded")
+	}
+}
+
 func TestModelViewerScannerKeepsReachableElseBuffersAfterIf0(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $swap = 0

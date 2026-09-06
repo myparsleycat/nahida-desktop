@@ -1177,6 +1177,7 @@
         "convert_first": "먼저 모드를 GLB로 변환한 뒤 여기에서 여세요.",
         "generating_selected_state": "선택한 상태 생성 중",
         "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",
+        "animation_clip": "애니메이션 클립",
         "menu": {
           "model": "모델",
           "texture": "텍스처",
@@ -1201,7 +1202,8 @@
           "save_to_ini_no_changes": "저장할 persist 변수를 찾지 못했습니다.",
           "save_to_ini_error": "INI 저장에 실패했습니다.",
           "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
-          "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다."
+          "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다.",
+          "load_error": "모델을 불러오지 못했습니다."
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",

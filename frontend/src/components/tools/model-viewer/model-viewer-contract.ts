@@ -47,6 +47,7 @@ export type ModelViewerAnimationSharedBuffer = {
 export type ModelViewerAnimationClip = {
     id: string;
     label: string;
+    deformerId?: string;
     variableIds: string[];
     fps: number;
     frameStart: number;

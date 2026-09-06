@@ -1159,6 +1159,7 @@
         "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
         "generating_selected_state": "選択した状態を生成中",
         "model_data_unavailable": "モデルデータを利用できません。",
+        "animation_clip": "アニメーションクリップ",
         "menu": {
           "model": "モデル",
           "texture": "テクスチャ",
@@ -1183,7 +1184,8 @@
           "save_to_ini_no_changes": "保存できる persist 変数がありません",
           "save_to_ini_error": "INI への保存に失敗しました",
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
-          "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした"
+          "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",
+          "load_error": "モデルの読み込みに失敗しました"
         },
         "rotate_actions": {
           "Left 90°": "左に 90°",

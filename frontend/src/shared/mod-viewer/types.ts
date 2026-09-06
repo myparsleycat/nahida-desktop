@@ -112,12 +112,44 @@ export type ViewerAnimationFrame = {
 export type ViewerAnimationClip = {
     id: string;
     label: string;
+    deformerId?: string;
     variableIds: string[];
     fps: number;
     frameStart: number;
     frameEnd: number;
     loop: boolean;
     frames: ViewerAnimationFrame[];
+};
+
+export type ViewerComputeBinarySource = {
+    url: string;
+    byteLength: number;
+    stride: number;
+};
+
+export type ViewerComputeShapePass = {
+    target: ViewerComputeBinarySource;
+    phaseRate: number;
+    wrapAt?: number;
+    phaseOffset: number;
+    angularScale: number;
+    amplitude: number;
+    bias: number;
+};
+
+export type ViewerComputeDeformer = {
+    kind: "gimi_shape_pose_v1";
+    id: string;
+    meshIds: string[];
+    vertexCount: number;
+    base: ViewerComputeBinarySource;
+    shapePasses: ViewerComputeShapePass[];
+    pose?: {
+        blend: ViewerComputeBinarySource;
+        frames: ViewerComputeBinarySource;
+        boneCount: number;
+        frameCount: number;
+    };
 };
 
 export type ModViewerPayload = {
@@ -202,4 +234,5 @@ export type ModViewerTransport = {
     stateRules: ViewerStateRule[];
     uiAssets: ViewerUiAssets;
     animations: ViewerAnimationClip[];
+    computeDeformers: ViewerComputeDeformer[];
 };
