@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -69,17 +70,18 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		}
 	}()
 	transport = ModelViewerTransport{
-		MemorySessionID: sessionID,
-		INIPath:         iniPaths[0],
-		ModPath:         requestedPath,
-		Name:            filepath.Base(strings.TrimRight(requestedPath, `\/`)),
-		Meshes:          []ModelViewerMeshTransport{},
-		Textures:        make(map[string]ModelViewerTextureTransport),
-		Variables:       []ModelViewerVariable{},
-		DefaultState:    make(map[string]any),
-		StateRules:      []ModelViewerStateRule{},
-		UIAssets:        ModelViewerUIAssets{},
-		Animations:      []ModelViewerAnimationClip{},
+		MemorySessionID:  sessionID,
+		INIPath:          iniPaths[0],
+		ModPath:          requestedPath,
+		Name:             filepath.Base(strings.TrimRight(requestedPath, `\/`)),
+		Meshes:           []ModelViewerMeshTransport{},
+		Textures:         make(map[string]ModelViewerTextureTransport),
+		Variables:        []ModelViewerVariable{},
+		DefaultState:     make(map[string]any),
+		StateRules:       []ModelViewerStateRule{},
+		UIAssets:         ModelViewerUIAssets{},
+		Animations:       []ModelViewerAnimationClip{},
+		ComputeDeformers: []ModelViewerComputeDeformerTransport{},
 	}
 	if requestedPath == "" {
 		transport.Name = ""
@@ -114,6 +116,9 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		t.log.Info(fmt.Sprintf("Mesh build detail: scan=%dms(%d recs) setup=%dms geometry=%dms(%d) overrides=%dms attach=%dms normalize=%dms legacy=%dms(groups=%dms condScan=%dms prepare=%dms extract=%dms)", prepared.timing.ScanMs, prepared.timing.Records, prepared.timing.SetupMs, prepared.timing.GeometryMs, prepared.timing.Geometries, prepared.timing.OverridesMs, prepared.timing.AttachMs, prepared.timing.NormalizeMs, prepared.timing.LegacyMs, prepared.timing.GroupsMs, prepared.timing.LegacyScanMs, prepared.timing.LegacyPrepareMs, prepared.timing.LegacyExtractMs), "StaticGlb.loadForViewer")
 	}
 	if len(transport.Meshes) == 0 {
+		if resource := firstUnresolvedModelViewerPositionResource(prepared.scans); resource != "" {
+			return ModelViewerTransport{}, contractError(fmt.Sprintf("Position resource Resource%s has no resolvable file-backed source.", resource))
+		}
 		hasGeometryGroups := false
 		for _, scan := range prepared.scans {
 			if modelViewerHasGeometryGroup(scan.sections, scan.resources) {
@@ -131,7 +136,8 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	}
 	stage = "configure-state"
 	stageStartedAt = time.Now()
-	configureModelViewerState(&transport, prepared.sections, prepared.shapeKeys, prepared.variableNames)
+	transport.ComputeDeformers = prepared.computeDeformers
+	configureModelViewerState(&transport, prepared.sections, prepared.shapeKeys, prepared.variableNames, prepared.computeAnimations)
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
 	stage = "write-payload"
@@ -153,6 +159,39 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	return transport, nil
 }
 
+func firstUnresolvedModelViewerPositionResource(scans []modelViewerGeometryScan) string {
+	var unresolved []string
+	for _, scan := range scans {
+		resources := modelViewerResourceMap(scan.resources)
+		for _, section := range scan.sections {
+			if !strings.EqualFold(section.Header, "TextureOverride") {
+				continue
+			}
+			for _, raw := range section.Lines {
+				left, right, ok := strings.Cut(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]), "=")
+				if !ok || !strings.EqualFold(strings.TrimSpace(left), "vb0") {
+					continue
+				}
+				name := modelViewerResourceToken(right)
+				resource, exists := resources[modelViewerNormalizeKey(name)]
+				if !exists || resource.Filename != "" {
+					continue
+				}
+				typed := parseModelViewerMihoyoResourceName(resource.Name)
+				if typed == nil || typed.Kind != "position" {
+					continue
+				}
+				unresolved = append(unresolved, resource.Name)
+			}
+		}
+	}
+	if len(unresolved) == 0 {
+		return ""
+	}
+	sort.Strings(unresolved)
+	return unresolved[0]
+}
+
 type modelViewerGeometryScan struct {
 	sections  []modINISection
 	resources []modelViewerResource
@@ -164,6 +203,8 @@ type modelViewerPreparedGeometry struct {
 	variableNames                              map[string]modelViewerVariableName
 	scans                                      []modelViewerGeometryScan
 	textures                                   []modelViewerINITextureWork
+	computeDeformers                           []ModelViewerComputeDeformerTransport
+	computeAnimations                          []modelViewerPreparedAnimationClip
 	parseMs, validateMs, referencedMs, buildMs int64
 	timing                                     *modelViewerMeshBuildTiming
 }
@@ -198,7 +239,7 @@ func (t *Tools) prepareModelViewerGeometry(ctx context.Context, folder string, i
 				t.log.Warn("Skipped unsafe Model Viewer resource path: "+sanitizeModelViewerLogValue(resource), "StaticGlb.loadForViewer")
 			}
 		}
-		resources := collectModelViewerResources(sections)
+		resources := resolveModelViewerEffectiveResourcesAt(folder, folder, sections, collectModelViewerResources(sections))
 		prepared.scans = append(prepared.scans, modelViewerGeometryScan{sections: sections, resources: resources})
 		stageStartedAt = time.Now()
 		referenced := collectModelViewerReferencedResources(sections)
@@ -214,6 +255,14 @@ func (t *Tools) prepareModelViewerGeometry(ctx context.Context, folder string, i
 		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesAt(iniPath, folder, "", sections, prepared.cache, prepared.timing)
 		if buildErr != nil {
 			return nil, buildErr
+		}
+		computeScopeID := ""
+		if multi {
+			computeScopeID = modelViewerString(iniIndex)
+		}
+		if deformer, clips := detectModelViewerComputeAnimation(folder, filepath.Dir(iniPath), computeScopeID, sections, resources, meshes, scopedNames); deformer != nil {
+			prepared.computeDeformers = append(prepared.computeDeformers, *deformer)
+			prepared.computeAnimations = append(prepared.computeAnimations, clips...)
 		}
 		prepared.shapeKeys = append(prepared.shapeKeys, shapeKeys...)
 		prepared.buildMs += time.Since(stageStartedAt).Milliseconds()

@@ -110,6 +110,7 @@ type ModelViewerAnimationFrame struct {
 type ModelViewerAnimationClip struct {
 	ID          string                      `json:"id"`
 	Label       string                      `json:"label"`
+	DeformerID  string                      `json:"deformerId,omitempty"`
 	VariableIDs []string                    `json:"variableIds"`
 	FPS         float64                     `json:"fps"`
 	FrameStart  int                         `json:"frameStart"`
@@ -118,19 +119,54 @@ type ModelViewerAnimationClip struct {
 	Frames      []ModelViewerAnimationFrame `json:"frames"`
 }
 
+type ModelViewerComputeBinarySource struct {
+	URL        string `json:"url"`
+	ByteLength int64  `json:"byteLength"`
+	Stride     int    `json:"stride"`
+	sourcePath string
+}
+
+type ModelViewerComputeShapePass struct {
+	Target       ModelViewerComputeBinarySource `json:"target"`
+	PhaseRate    float64                        `json:"phaseRate"`
+	WrapAt       float64                        `json:"wrapAt,omitempty"`
+	PhaseOffset  float64                        `json:"phaseOffset"`
+	AngularScale float64                        `json:"angularScale"`
+	Amplitude    float64                        `json:"amplitude"`
+	Bias         float64                        `json:"bias"`
+}
+
+type ModelViewerComputePoseSource struct {
+	Blend      ModelViewerComputeBinarySource `json:"blend"`
+	Frames     ModelViewerComputeBinarySource `json:"frames"`
+	BoneCount  int                            `json:"boneCount"`
+	FrameCount int                            `json:"frameCount"`
+}
+
+type ModelViewerComputeDeformerTransport struct {
+	Kind        string                         `json:"kind"`
+	ID          string                         `json:"id"`
+	MeshIDs     []string                       `json:"meshIds"`
+	VertexCount int                            `json:"vertexCount"`
+	Base        ModelViewerComputeBinarySource `json:"base"`
+	ShapePasses []ModelViewerComputeShapePass  `json:"shapePasses"`
+	Pose        *ModelViewerComputePoseSource  `json:"pose,omitempty"`
+}
+
 type ModelViewerTransport struct {
-	MemorySessionID string                                 `json:"memorySessionId"`
-	INIPath         string                                 `json:"iniPath"`
-	ModPath         string                                 `json:"modPath"`
-	Name            string                                 `json:"name"`
-	MaterialProfile string                                 `json:"materialProfile,omitempty"`
-	Meshes          []ModelViewerMeshTransport             `json:"meshes"`
-	Textures        map[string]ModelViewerTextureTransport `json:"textures"`
-	Variables       []ModelViewerVariable                  `json:"variables"`
-	DefaultState    map[string]any                         `json:"defaultState"`
-	StateRules      []ModelViewerStateRule                 `json:"stateRules"`
-	UIAssets        ModelViewerUIAssets                    `json:"uiAssets"`
-	Animations      []ModelViewerAnimationClip             `json:"animations"`
+	MemorySessionID  string                                 `json:"memorySessionId"`
+	INIPath          string                                 `json:"iniPath"`
+	ModPath          string                                 `json:"modPath"`
+	Name             string                                 `json:"name"`
+	MaterialProfile  string                                 `json:"materialProfile,omitempty"`
+	Meshes           []ModelViewerMeshTransport             `json:"meshes"`
+	Textures         map[string]ModelViewerTextureTransport `json:"textures"`
+	Variables        []ModelViewerVariable                  `json:"variables"`
+	DefaultState     map[string]any                         `json:"defaultState"`
+	StateRules       []ModelViewerStateRule                 `json:"stateRules"`
+	UIAssets         ModelViewerUIAssets                    `json:"uiAssets"`
+	Animations       []ModelViewerAnimationClip             `json:"animations"`
+	ComputeDeformers []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
 }
 
 type modelViewerDirectMesh struct {
@@ -291,7 +327,7 @@ func buildModelViewerDirectMeshes(iniPath, assetPath string, sections []modINISe
 }
 
 func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections []modINISection, cache *modelViewerBufferCache, timing *modelViewerMeshBuildTiming) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
-	resources := collectModelViewerResources(sections)
+	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
 	variables := collectModelViewerDefaultVariables(sections)
 	textures := collectModelViewerTextureBindings(sections, variables)
 	scanned, scanErr := buildModelViewerDirectScannedMeshesAt(iniPath, modDir, sections, variables, cache, timing)
@@ -812,6 +848,18 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 			return err
 		}
 		transport.Textures[key] = ModelViewerTextureTransport{URL: url, Role: texture.Role}
+	}
+	for deformerIndex := range transport.ComputeDeformers {
+		deformer := &transport.ComputeDeformers[deformerIndex]
+		deformer.Base.URL = t.protocol.LocalFileURL(deformer.Base.sourcePath, true)
+		for passIndex := range deformer.ShapePasses {
+			pass := &deformer.ShapePasses[passIndex]
+			pass.Target.URL = t.protocol.LocalFileURL(pass.Target.sourcePath, true)
+		}
+		if deformer.Pose != nil {
+			deformer.Pose.Blend.URL = t.protocol.LocalFileURL(deformer.Pose.Blend.sourcePath, true)
+			deformer.Pose.Frames.URL = t.protocol.LocalFileURL(deformer.Pose.Frames.sourcePath, true)
+		}
 	}
 	if len(meshes) != len(transport.Meshes) {
 		return fmt.Errorf("model viewer payload mesh count mismatch")

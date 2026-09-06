@@ -267,13 +267,20 @@ func interleaveModelViewerBuffers(parts [][]byte, strides []int) ([]byte, int, i
 	if len(parts) == 0 || len(parts) != len(strides) {
 		return nil, 0, 0, fmt.Errorf("invalid vertex buffer set")
 	}
-	stride, vertexCount := 0, int(^uint(0)>>1)
+	stride, vertexCount := 0, -1
 	for i, partStride := range strides {
 		if partStride <= 0 {
 			return nil, 0, 0, fmt.Errorf("vertex buffer stride must be greater than zero")
 		}
+		if len(parts[i])%partStride != 0 {
+			return nil, 0, 0, fmt.Errorf("vertex buffer length %d is not divisible by stride %d", len(parts[i]), partStride)
+		}
 		stride += partStride
-		vertexCount = min(vertexCount, len(parts[i])/partStride)
+		count := len(parts[i]) / partStride
+		if vertexCount >= 0 && count != vertexCount {
+			return nil, 0, 0, fmt.Errorf("vertex buffer count mismatch: %d != %d", count, vertexCount)
+		}
+		vertexCount = count
 	}
 	out := make([]byte, vertexCount*stride)
 	for vertex := range vertexCount {

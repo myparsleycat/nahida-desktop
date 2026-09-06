@@ -144,7 +144,7 @@ export function ModelViewerDialog({
   useEffect(() => {
     animationFrameIndexRef.current = animationFrameIndex;
     viewerRef.current?.setAnimationFrame(animationFrameIndex);
-  }, [animationFrameIndex]);
+  }, [activeAnimationId, animationFrameIndex]);
 
   useEffect(() => {
     doubleSidedEnabledRef.current = doubleSidedEnabled;
@@ -404,12 +404,14 @@ export function ModelViewerDialog({
   }, []);
 
   const handleViewerError = useCallback((error: unknown) => {
+    setAnimationPlaying(false);
     setIsViewerReady(false);
     Logger.capture(
       "components/tools/model-viewer/model-viewer-dialog.tsx",
       "Failed to load model viewer source",
       error,
     );
+    toast.error(toErrorMessage(error));
   }, []);
 
   const captureAndSavePreview = async () => {
@@ -745,7 +747,24 @@ export function ModelViewerDialog({
           {activeAnimation ? (
             <div className="flex items-center gap-2 px-2">
               <div className="w-36 min-w-0">
-                <div className="text-sm font-medium">{activeAnimation.label}</div>
+                {animationClips.length > 1 ? (
+                  <Select value={activeAnimation.id} onValueChange={setActiveAnimationId}>
+                    <SelectTrigger className="h-8 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {animationClips.map((clip) => (
+                          <SelectItem key={clip.id} value={clip.id}>
+                            {clip.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-sm font-medium">{activeAnimation.label}</div>
+                )}
                 <div className="text-xs whitespace-nowrap text-muted-foreground">
                   {activeAnimation.fps} FPS · Frame{" "}
                   {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}

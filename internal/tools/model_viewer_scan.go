@@ -290,7 +290,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		return nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", len(records), maxModelViewerDraws))
 	}
 	stageStartedAt = time.Now()
-	resources := collectModelViewerResources(sections)
+	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
 	layoutName := detectModelViewerLayout(sections, resources)
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {

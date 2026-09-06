@@ -61,6 +61,7 @@ describe("normalizeModelViewerTransport", () => {
                     ],
                 },
             ],
+            computeDeformers: null,
         };
 
         const result = normalizeModelViewerTransport(input);
@@ -82,6 +83,7 @@ describe("normalizeModelViewerTransport", () => {
         expect(result.animations[0]?.variableIds).toEqual([]);
         expect(result.animations[0]?.fps).toBe(120);
         expect(result.animations[0]?.frames[0]?.values).toEqual({});
+        expect(result.computeDeformers).toEqual([]);
     });
 
     it("turns a missing animation list into an empty list", () => {
@@ -97,6 +99,7 @@ describe("normalizeModelViewerTransport", () => {
             stateRules: null,
             uiAssets: {},
             animations: null,
+            computeDeformers: null,
         };
 
         expect(normalizeModelViewerTransport(input).animations).toEqual([]);
@@ -115,6 +118,7 @@ describe("normalizeModelViewerTransport", () => {
             stateRules: null,
             uiAssets: {},
             animations: null,
+            computeDeformers: null,
         } satisfies WailsModelViewerTransport;
 
         expect(
@@ -124,5 +128,37 @@ describe("normalizeModelViewerTransport", () => {
         expect(
             normalizeModelViewerTransport({ ...base, materialProfile: "unknown" }).materialProfile,
         ).toBeUndefined();
+    });
+
+    it("normalizes a known GIMI shape/pose compute descriptor", () => {
+        const source = { url: "/source", byteLength: 40, stride: 40 };
+        const input = {
+            memorySessionId: "session",
+            iniPath: "mod.ini",
+            modPath: "mod",
+            name: "Example",
+            meshes: null,
+            textures: null,
+            variables: null,
+            defaultState: null,
+            stateRules: null,
+            uiAssets: {},
+            animations: null,
+            computeDeformers: [
+                {
+                    kind: "gimi_shape_pose_v1",
+                    id: "cloth",
+                    meshIds: ["mesh"],
+                    vertexCount: 1,
+                    base: source,
+                    shapePasses: null,
+                    pose: null,
+                },
+            ],
+        } satisfies WailsModelViewerTransport;
+
+        expect(normalizeModelViewerTransport(input).computeDeformers).toEqual([
+            expect.objectContaining({ kind: "gimi_shape_pose_v1", id: "cloth" }),
+        ]);
     });
 });

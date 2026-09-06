@@ -57,6 +57,13 @@ function normalizeMaterialProfile(value?: string): ViewerMaterialProfile | undef
     return value === "zzmi" || value === "wuwa:rabbitfx" ? value : undefined;
 }
 
+function normalizeComputeSource(source: { url: string; byteLength: number; stride: number }) {
+    if (!source.url || source.byteLength <= 0 || source.stride <= 0) {
+        throw new TypeError("Invalid model viewer compute source.");
+    }
+    return { url: source.url, byteLength: source.byteLength, stride: source.stride };
+}
+
 export function normalizeModelViewerTransport(
     value: WailsModelViewerTransport,
 ): ModViewerTransport {
@@ -153,6 +160,7 @@ export function normalizeModelViewerTransport(
         animations: (value.animations ?? []).map((clip) => ({
             id: clip.id,
             label: clip.label,
+            deformerId: clip.deformerId,
             variableIds: clip.variableIds ?? [],
             fps: normalizeAnimationFPS(clip.fps),
             frameStart: clip.frameStart,
@@ -164,5 +172,36 @@ export function normalizeModelViewerTransport(
                 values: normalizeState(frame.values),
             })),
         })),
+        computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
+            if (deformer.kind !== "gimi_shape_pose_v1") {
+                return [];
+            }
+            return [
+                {
+                    kind: deformer.kind,
+                    id: deformer.id,
+                    meshIds: deformer.meshIds ?? [],
+                    vertexCount: deformer.vertexCount,
+                    base: normalizeComputeSource(deformer.base),
+                    shapePasses: (deformer.shapePasses ?? []).map((pass) => ({
+                        target: normalizeComputeSource(pass.target),
+                        phaseRate: pass.phaseRate,
+                        wrapAt: pass.wrapAt,
+                        phaseOffset: pass.phaseOffset,
+                        angularScale: pass.angularScale,
+                        amplitude: pass.amplitude,
+                        bias: pass.bias,
+                    })),
+                    pose: deformer.pose
+                        ? {
+                              blend: normalizeComputeSource(deformer.pose.blend),
+                              frames: normalizeComputeSource(deformer.pose.frames),
+                              boneCount: deformer.pose.boneCount,
+                              frameCount: deformer.pose.frameCount,
+                          }
+                        : undefined,
+                },
+            ];
+        }),
     };
 }

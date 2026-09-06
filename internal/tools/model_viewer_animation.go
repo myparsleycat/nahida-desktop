@@ -18,6 +18,7 @@ type modelViewerPreparedAnimationFrame struct {
 type modelViewerPreparedAnimationClip struct {
 	ID          string
 	Label       string
+	DeformerID  string
 	VariableIDs []string
 	FPS         float64
 	FrameStart  int

@@ -53,6 +53,7 @@ import type {
   ModelViewerSurfaceProps,
 } from "./model-viewer-contract";
 
+import { ModelViewerComputeController } from "./model-viewer-compute-controller";
 import { parseOrientation } from "./model-viewer-contract";
 import {
   buildPayloadModel,
@@ -258,6 +259,7 @@ function ThreeModelScene({
   const modelRootRef = useRef<Object3D | null>(null);
   const applyPayloadVisualsRef = useRef(() => {});
   const positionLoaderRef = useRef<ModelViewerPositionLoader | null>(null);
+  const computeControllerRef = useRef<ModelViewerComputeController | null>(null);
   const payloadEvalAbortRef = useRef<AbortController | null>(null);
   const payloadEvalGenerationRef = useRef(0);
   const animationFrameIndexRef = useRef<number | null>(null);
@@ -423,6 +425,8 @@ function ThreeModelScene({
     preparedAnimationRingRef.current = [];
     positionLoaderRef.current?.dispose();
     positionLoaderRef.current = null;
+    computeControllerRef.current?.dispose(false);
+    computeControllerRef.current = null;
 
     if (activeObjectRef.current) {
       disposeObjectTree(activeObjectRef.current);
@@ -524,6 +528,49 @@ function ThreeModelScene({
       disposed = true;
     };
   }, [payloadTransport, src]);
+
+  useEffect(() => {
+    computeControllerRef.current?.dispose();
+    computeControllerRef.current = null;
+    const deformer = payloadTransport?.computeDeformers.find(
+      (candidate) => candidate.id === animationClip?.deformerId,
+    );
+    if (!modelRoot || !payloadTransport || !deformer || !animationClip) {
+      return;
+    }
+    const controller = new ModelViewerComputeController(
+      modelRoot,
+      deformer,
+      payloadTransport.meshes,
+      invalidate,
+      (error) => onErrorRef.current?.(error),
+    );
+    computeControllerRef.current = controller;
+    const frameIndex = Math.min(
+      Math.max(animationFrameIndexRef.current ?? animationFrame ?? 0, 0),
+      Math.max(animationClip.frames.length - 1, 0),
+    );
+    controller.request({ clip: animationClip, frameIndex });
+    return () => {
+      if (computeControllerRef.current === controller) {
+        computeControllerRef.current = null;
+      }
+      controller.dispose();
+    };
+  }, [animationClip?.id, modelRoot, payloadTransport, invalidate]);
+
+  useEffect(() => {
+    if (!animationClip?.deformerId) {
+      return;
+    }
+    computeControllerRef.current?.request({
+      clip: animationClip,
+      frameIndex: Math.min(
+        Math.max(animationFrame ?? 0, 0),
+        Math.max(animationClip.frames.length - 1, 0),
+      ),
+    });
+  }, [animationClip, animationFrame]);
 
   useEffect(() => {
     toonShadowsRef.current = toonShadows;
@@ -629,6 +676,9 @@ function ThreeModelScene({
           const frame = clip.frames[frameIndex];
           animationValuesRef.current = frame?.values ?? {};
           animationFrameIndexRef.current = frameIndex;
+          if (clip.deformerId) {
+            computeControllerRef.current?.request({ clip, frameIndex });
+          }
         }
         applyPayloadVisualsRef.current();
       },
@@ -727,6 +777,8 @@ function ThreeModelScene({
       payloadEvalAbortRef.current = null;
       positionLoaderRef.current?.dispose();
       positionLoaderRef.current = null;
+      computeControllerRef.current?.dispose(false);
+      computeControllerRef.current = null;
       preparedAnimationRingRef.current = [];
       floatBufferCacheRef.current.clear();
       uint32BufferCacheRef.current.clear();
