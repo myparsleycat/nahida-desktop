@@ -236,7 +236,7 @@
           "action_suffix": "重命名"
         },
         "unsupported_extensions": {
-          "title": "无法上传的文件过多。",
+          "title": "有无法上传的文件。",
           "description": "以下扩展名当前无法上传。你可以排除这些文件后继续，或取消上传。",
           "none": "无扩展名",
           "action_proceed": "排除后继续"

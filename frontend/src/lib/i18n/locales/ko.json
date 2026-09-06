@@ -236,7 +236,7 @@
           "action_suffix": "이름 변경"
         },
         "unsupported_extensions": {
-          "title": "업로드 할 수 없는 파일이 너무 많습니다.",
+          "title": "업로드 할 수 없는 파일이 있습니다.",
           "description": "아래 확장자들은 현재 업로드 할 수 없는 파일 형식입니다. 이 파일들을 제외하고 업로드 진행하거나 업로드 취소할 수 있습니다.",
           "none": "확장자 없음",
           "action_proceed": "제외하고 진행"
