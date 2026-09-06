@@ -24,6 +24,13 @@ func TestModelViewerSafetyAllowsOneParentAndRejectsFurtherEscape(t *testing.T) {
 	}
 }
 
+func TestSanitizeModelViewerLogValueStripsControlCharacters(t *testing.T) {
+	got := sanitizeModelViewerLogValue("Body" + string(rune(10)) + "Diffuse" + string(rune(27)) + "[31m")
+	if strings.ContainsRune(got, 10) || strings.ContainsRune(got, 27) || got != "BodyDiffuse[31m" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestModelViewerSafetySanitizesUnsafeResourcesInsteadOfFailingLoad(t *testing.T) {
 	dir := t.TempDir()
 	abs := filepath.ToSlash(filepath.Join(filepath.Dir(dir), "outside.dds"))
