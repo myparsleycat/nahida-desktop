@@ -100,12 +100,19 @@ func restoreWOF(
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
+	if ownership.empty() {
+		return ctx.Err()
+	}
 	files, err := walkCompressionFiles(roots, func(string, fs.FileInfo) bool { return true })
 	if err != nil {
 		return err
 	}
-	setCompressionTotals(files, setTotals)
-	return runXpressWorkers(ctx, files, progress, onError, func(file compressionFile) error {
+	work, err := ownedWofRestoreFiles(ctx, files, ownership, onError)
+	if err != nil {
+		return err
+	}
+	setCompressionTotals(work, setTotals)
+	return runXpressWorkers(ctx, work, progress, onError, func(file compressionFile) error {
 		external, provider, _, err := wofStateCall(file.path)
 		if err != nil {
 			return fmt.Errorf("inspect WOF state: %w", err)
@@ -132,6 +139,53 @@ func restoreWOF(
 		ownership.remove(id)
 		return nil
 	})
+}
+
+func ownedWofRestoreFiles(
+	ctx context.Context,
+	files []compressionFile,
+	ownership *compressionFileOwnership,
+	onError func(string, error),
+) ([]compressionFile, error) {
+	if len(files) == 0 {
+		return nil, ctx.Err()
+	}
+	var mu sync.Mutex
+	work := make([]compressionFile, 0, len(files))
+	err := runXpressWorkers(ctx, files, func(string, int64, bool) {}, onError, func(file compressionFile) error {
+		owned, err := isOwnedWofRestoreFile(file.path, ownership)
+		if err != nil {
+			return err
+		}
+		if !owned {
+			return nil
+		}
+		mu.Lock()
+		work = append(work, file)
+		mu.Unlock()
+		return nil
+	})
+	return work, err
+}
+
+func isOwnedWofRestoreFile(path string, ownership *compressionFileOwnership) (bool, error) {
+	external, provider, _, err := wofStateCall(path)
+	if err != nil {
+		return false, fmt.Errorf("inspect WOF state: %w", err)
+	}
+	if !external || provider != wofProviderFile {
+		return false, nil
+	}
+	handle, err := openXpressFile(path)
+	if err != nil {
+		return false, fmt.Errorf("open: %w", err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	id, err := fileIdentityCall(handle)
+	if err != nil {
+		return false, fmt.Errorf("identify: %w", err)
+	}
+	return ownership.contains(id), nil
 }
 
 func xpressCompressionFiles(roots []string) ([]compressionFile, error) {

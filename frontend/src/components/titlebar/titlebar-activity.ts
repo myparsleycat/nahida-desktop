@@ -177,6 +177,8 @@ export function buildModCompressionTitlebarActivity(
     t: Translate,
 ): TitlebarActivity | null {
     if (!state || state.status === "idle") return null;
+    const hasWork = state.totalFiles > 0 || state.totalBytes > 0;
+    if (state.status !== "error" && !hasWork) return null;
 
     const progress =
         state.totalBytes > 0

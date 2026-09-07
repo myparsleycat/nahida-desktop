@@ -128,6 +128,20 @@ describe("buildModCompressionTitlebarActivity", () => {
         expect(buildModCompressionTitlebarActivity(null, t)).toBeNull();
     });
 
+    it("hides checking while scanning for work", () => {
+        expect(buildModCompressionTitlebarActivity(state({ status: "checking" }), t)).toBeNull();
+    });
+
+    it("hides decompressing until restore work exists", () => {
+        expect(
+            buildModCompressionTitlebarActivity(state({ status: "decompressing" }), t),
+        ).toBeNull();
+    });
+
+    it("hides compressing until compression work exists", () => {
+        expect(buildModCompressionTitlebarActivity(state({ status: "compressing" }), t)).toBeNull();
+    });
+
     it("shows byte progress without the current file while compressing", () => {
         const activity = buildModCompressionTitlebarActivity(
             state({
@@ -172,13 +186,30 @@ describe("buildModCompressionTitlebarActivity", () => {
     });
 
     it.each([
-        ["error", "error", "titlebar.activity.modCompression.error"],
-        ["decompressing", "running", "titlebar.activity.modCompression.decompressing"],
-    ] as const)("maps %s to its titlebar status and label", (compressionStatus, status, label) => {
-        expect(
-            buildModCompressionTitlebarActivity(state({ status: compressionStatus }), t),
-        ).toMatchObject({ status, label });
-    });
+        ["error", "error", "titlebar.activity.modCompression.error", {}],
+        [
+            "decompressing",
+            "running",
+            "titlebar.activity.modCompression.decompressing",
+            { totalFiles: 2, totalBytes: 40 },
+        ],
+        [
+            "compressing",
+            "running",
+            "titlebar.activity.modCompression.compressing",
+            { totalFiles: 2, totalBytes: 40 },
+        ],
+    ] as const)(
+        "maps %s to its titlebar status and label",
+        (compressionStatus, status, label, extra) => {
+            expect(
+                buildModCompressionTitlebarActivity(
+                    state({ status: compressionStatus, ...extra }),
+                    t,
+                ),
+            ).toMatchObject({ status, label });
+        },
+    );
 });
 
 describe("buildModFixTitlebarActivity", () => {

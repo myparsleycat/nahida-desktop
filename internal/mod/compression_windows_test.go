@@ -260,8 +260,42 @@ func TestRestoreWOFInspectsEveryRegularFileAndDeletesOnlyOwnedBacking(t *testing
 	}, &ownership, ignoreCompressionMutations, func(string, error) {}); err != nil {
 		t.Fatal(err)
 	}
-	if inspected.Load() != 4 || total.Load() != 4 || processed.Load() != 4 || deleted.Load() != 1 {
+	if inspected.Load() != 5 || total.Load() != 1 || processed.Load() != 1 || deleted.Load() != 1 {
 		t.Fatalf("inspected=%d total=%d processed=%d deleted=%d", inspected.Load(), total.Load(), processed.Load(), deleted.Load())
+	}
+}
+
+func TestRestoreWOFReinspectsBeforeDelete(t *testing.T) {
+	root := t.TempDir()
+	path := writeCompressionTestFileAt(t, root, "xpress.bin", []byte("payload"))
+	previousState := wofStateCall
+	previousDelete := deleteExternalBackingCall
+	t.Cleanup(func() {
+		wofStateCall = previousState
+		deleteExternalBackingCall = previousDelete
+	})
+	var inspected atomic.Int32
+	wofStateCall = func(string) (bool, uint32, uint32, error) {
+		if inspected.Add(1) == 1 {
+			return true, wofProviderFile, fileProviderCompressionXpress4K, nil
+		}
+		return false, 0, 0, nil
+	}
+	var deleted atomic.Int32
+	deleteExternalBackingCall = func(windows.Handle) error {
+		deleted.Add(1)
+		return nil
+	}
+	ownership := compressionFileOwnership{}
+	addTestWofOwnership(t, &ownership, path)
+	if err := restoreWOF(
+		context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {},
+		&ownership, ignoreCompressionMutations, func(string, error) {},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if inspected.Load() != 2 || deleted.Load() != 0 {
+		t.Fatalf("inspected=%d deleted=%d, want 2 inspections and no delete", inspected.Load(), deleted.Load())
 	}
 }
 
@@ -300,8 +334,33 @@ func TestRestoreWOFContinuesAfterInspectionAndDeleteErrors(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if processed.Load() != 3 || fileErrors.Load() != 2 || deleted.Load() != 2 {
+	if processed.Load() != 2 || fileErrors.Load() != 2 || deleted.Load() != 2 {
 		t.Fatalf("processed=%d errors=%d delete attempts=%d", processed.Load(), fileErrors.Load(), deleted.Load())
+	}
+}
+
+func TestRestoreWOFSkipsScanWhenOwnershipIsEmpty(t *testing.T) {
+	root := t.TempDir()
+	writeCompressionTestFileAt(t, root, "plain.bin", []byte("payload"))
+	previousState := wofStateCall
+	t.Cleanup(func() { wofStateCall = previousState })
+	var inspected atomic.Int32
+	wofStateCall = func(string) (bool, uint32, uint32, error) {
+		inspected.Add(1)
+		return true, wofProviderFile, fileProviderCompressionXpress4K, nil
+	}
+	var total atomic.Int32
+	if err := restoreWOF(context.Background(), []string{root}, func(files int, _ int64) {
+		total.Store(int32(files))
+	}, func(string, int64, bool) {
+		t.Fatal("empty ownership should not report restore progress")
+	}, &compressionFileOwnership{}, ignoreCompressionMutations, func(string, error) {
+		t.Fatal("empty ownership should not inspect files")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if inspected.Load() != 0 || total.Load() != 0 {
+		t.Fatalf("inspected=%d total=%d", inspected.Load(), total.Load())
 	}
 }
 

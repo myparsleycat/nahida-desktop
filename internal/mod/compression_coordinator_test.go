@@ -553,6 +553,158 @@ func TestStartCompressionPublishesLoadFailure(t *testing.T) {
 	}
 }
 
+func TestStartCompressionOmitsBusyStatusWithoutWork(t *testing.T) {
+	tests := []struct {
+		name      string
+		enabled   bool
+		forbidden string
+	}{
+		{name: "disabled restore", enabled: false, forbidden: "decompressing"},
+		{name: "enabled compress", enabled: true, forbidden: "compressing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			settings, err := setting.Open(ctx, filepath.Join(t.TempDir(), "compression.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "Mods"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if test.enabled {
+				if err := settings.SetCompressionEnabled(ctx, true); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var mu sync.Mutex
+			var statuses []string
+			m := NewWithOptions(Options{
+				Settings: settings,
+				XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: root}},
+				EventEmit: func(name string, data ...any) {
+					if name == compressionEvent {
+						mu.Lock()
+						statuses = append(statuses, data[0].(CompressionState).Status)
+						mu.Unlock()
+					}
+				},
+			})
+			m.UseClient(settings.Client())
+			t.Cleanup(func() {
+				_ = m.ServiceShutdown()
+				_ = settings.Close()
+			})
+			if err := m.StartCompression(ctx); err != nil {
+				t.Fatal(err)
+			}
+			waitForCompression(t, m.compression)
+			mu.Lock()
+			defer mu.Unlock()
+			for _, status := range statuses {
+				if status == test.forbidden {
+					t.Fatalf("published statuses = %v", statuses)
+				}
+			}
+			if state := m.compression.snapshot(); state.Status != "idle" || state.Enabled != test.enabled {
+				t.Fatalf("state = %+v", state)
+			}
+		})
+	}
+}
+
+func TestStartCompressionPublishesDecompressingForLeftoverZstd(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	importer := filepath.Join(base, "Importer")
+	root := filepath.Join(importer, "Mods")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := bytes.Repeat([]byte("leftover-zstd-restore"), 32*1024)
+	path := filepath.Join(root, "payload.bin")
+	if err := os.WriteFile(path, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressZstdFile(ctx, path, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(ctx, "zstd", 1); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var statuses []string
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+		EventEmit: func(name string, data ...any) {
+			if name == compressionEvent {
+				mu.Lock()
+				statuses = append(statuses, data[0].(CompressionState).Status)
+				mu.Unlock()
+			}
+		},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	mu.Lock()
+	found := false
+	for _, status := range statuses {
+		if status == "decompressing" {
+			found = true
+			break
+		}
+	}
+	mu.Unlock()
+	if !found {
+		t.Fatalf("published statuses = %v, want decompressing", statuses)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("restored %s: %v", path, err)
+	}
+	if _, err := os.Stat(path + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("archive remains")
+	}
+}
+
+func TestAddWorkTotalsSetsBusyStatusOnlyWhenWorkExists(t *testing.T) {
+	tests := []struct {
+		name   string
+		add    func(*compressionCoordinator, int, int64)
+		status string
+	}{
+		{name: "compress", add: (*compressionCoordinator).addCompressTotals, status: "compressing"},
+		{name: "restore", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			coordinator := newCompressionCoordinator(New())
+			coordinator.state.Status = "checking"
+			test.add(coordinator, 0, 0)
+			if state := coordinator.snapshot(); state.Status != "checking" || state.TotalFiles != 0 {
+				t.Fatalf("empty totals = %+v", state)
+			}
+			test.add(coordinator, 2, 40)
+			if state := coordinator.snapshot(); state.Status != test.status || state.TotalFiles != 2 || state.TotalBytes != 40 {
+				t.Fatalf("work totals = %+v", state)
+			}
+		})
+	}
+}
+
 func TestCompressionProgressThrottlesEventsWithoutDroppingCounters(t *testing.T) {
 	var published []CompressionState
 	m := NewWithOptions(Options{EventEmit: func(name string, data ...any) {
