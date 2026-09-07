@@ -2,10 +2,14 @@ package tools
 
 import (
 	"encoding/binary"
+	"image"
 	"image/color"
+	"image/draw"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/myparsleycat/ddsutil"
 )
 
 func TestPickWwmiDumpDiffusePrefersSRGBThenLarger(t *testing.T) {
@@ -80,6 +84,127 @@ func TestInspectWwmiTextureHintDecodesInBudgetDDS(t *testing.T) {
 	}
 }
 
+func TestWwmiHintMipmap(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		width, height uint32
+		mipmaps       uint32
+		wantMip       uint32
+		wantW, wantH  int
+	}{
+		{4096, 4096, 14, 4, 256, 256},
+		{4096, 4096, 1, 0, 256, 256},
+		{4096, 4096, 2, 1, 256, 256},
+		{128, 128, 8, 0, 128, 128},
+	}
+	for _, test := range cases {
+		mip, width, height := wwmiHintMipmap(test.width, test.height, test.mipmaps)
+		if mip != test.wantMip || width != test.wantW || height != test.wantH {
+			t.Fatalf("wwmiHintMipmap(%d, %d, %d) = (%d, %d, %d), want (%d, %d, %d)",
+				test.width, test.height, test.mipmaps, mip, width, height, test.wantMip, test.wantW, test.wantH)
+		}
+	}
+}
+
+func TestInspectWwmiTextureHintKeepsHeaderAreaAfterDownsample(t *testing.T) {
+	root := t.TempDir()
+	const dim = 512
+	flatPixels := make([]color.NRGBA, dim*dim)
+	for index := range flatPixels {
+		flatPixels[index] = color.NRGBA{R: 128, G: 64, B: 32, A: 255}
+	}
+	flatPath := filepath.Join(root, "flat.dds")
+	if err := os.WriteFile(flatPath, encodeWwmiUncompressedDDS(dim, dim, flatPixels), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	flatInfo, err := os.Stat(flatPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flatDecoded, err := decodeModelViewerDDSHint(flatPath, flatInfo.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flatDecoded.Bounds().Dx() != 256 || flatDecoded.Bounds().Dy() != 256 {
+		t.Fatalf("flat decode size = %dx%d, want 256x256", flatDecoded.Bounds().Dx(), flatDecoded.Bounds().Dy())
+	}
+	flat := inspectWwmiTextureHint(flatPath)
+	if flat == nil || flat.Area != dim*dim || !flat.IsLikelyFlat || isLikelyWwmiDiffuse(*flat) {
+		t.Fatalf("flat DDS hint = %#v", flat)
+	}
+
+	diffusePixels := make([]color.NRGBA, dim*dim)
+	for y := range dim {
+		for x := range dim {
+			diffusePixels[y*dim+x] = color.NRGBA{R: uint8(x * 255 / (dim - 1)), G: uint8(y * 255 / (dim - 1)), B: 90, A: 255}
+		}
+	}
+	diffusePath := filepath.Join(root, "diffuse.dds")
+	if err := os.WriteFile(diffusePath, encodeWwmiUncompressedDDS(dim, dim, diffusePixels), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diffuse := inspectWwmiTextureHint(diffusePath)
+	if diffuse == nil || diffuse.Area != dim*dim || diffuse.IsLikelyFlat || !isLikelyWwmiDiffuse(*diffuse) {
+		t.Fatalf("diffuse DDS hint = %#v", diffuse)
+	}
+}
+
+func TestAnalyzeRGBAImagePremultipliesNRGBA(t *testing.T) {
+	t.Parallel()
+	src := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	src.SetNRGBA(0, 0, color.NRGBA{R: 100, G: 0, B: 0, A: 128})
+	premul := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	draw.Draw(premul, premul.Bounds(), src, image.Point{}, draw.Src)
+	got := analyzeRGBAImage(src)
+	want := analyzeRGBA(premul.Pix, 1, 1)
+	if got != want {
+		t.Fatalf("analyzeRGBAImage = %#v, want premultiplied %#v", got, want)
+	}
+}
+
+func TestInspectWwmiTextureHintDecodesCompressedMipChain(t *testing.T) {
+	root := t.TempDir()
+	const dim = 512
+	flatPixels := make([]color.NRGBA, dim*dim)
+	for index := range flatPixels {
+		flatPixels[index] = color.NRGBA{R: 128, G: 64, B: 32, A: 255}
+	}
+	flatPath := filepath.Join(root, "flat.dds")
+	if err := os.WriteFile(flatPath, encodeWwmiBC1MipDDS(t, dim, dim, flatPixels), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	flatInfo, err := os.Stat(flatPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flatDecoded, err := decodeModelViewerDDSHint(flatPath, flatInfo.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flatDecoded.Bounds().Dx() != 256 || flatDecoded.Bounds().Dy() != 256 {
+		t.Fatalf("flat compressed decode size = %dx%d, want 256x256", flatDecoded.Bounds().Dx(), flatDecoded.Bounds().Dy())
+	}
+	flat := inspectWwmiTextureHint(flatPath)
+	if flat == nil || flat.Area != dim*dim || !flat.IsLikelyFlat || isLikelyWwmiDiffuse(*flat) {
+		t.Fatalf("flat compressed DDS hint = %#v", flat)
+	}
+
+	diffusePixels := make([]color.NRGBA, dim*dim)
+	for y := range dim {
+		for x := range dim {
+			diffusePixels[y*dim+x] = color.NRGBA{R: uint8(x * 255 / (dim - 1)), G: uint8(y * 255 / (dim - 1)), B: 90, A: 255}
+		}
+	}
+	diffusePath := filepath.Join(root, "diffuse.dds")
+	if err := os.WriteFile(diffusePath, encodeWwmiBC1MipDDS(t, dim, dim, diffusePixels), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diffuse := inspectWwmiTextureHint(diffusePath)
+	if diffuse == nil || diffuse.Area != dim*dim || diffuse.IsLikelyFlat || !isLikelyWwmiDiffuse(*diffuse) {
+		t.Fatalf("diffuse compressed DDS hint = %#v", diffuse)
+	}
+}
+
 func TestKeepLikelyDiffuseAssignmentsPreservesRelativeOrder(t *testing.T) {
 	assignments := []modelViewerDirectTextureAssignment{
 		{role: "diffuse", file: "first"},
@@ -140,6 +265,31 @@ func encodeWwmiUncompressedDDS(width, height uint32, pixels []color.NRGBA) []byt
 	raw = append(raw, header...)
 	for _, pixel := range pixels {
 		raw = append(raw, pixel.B, pixel.G, pixel.R, pixel.A)
+	}
+	return raw
+}
+
+func encodeWwmiBC1MipDDS(t *testing.T, width, height int, pixels []color.NRGBA) []byte {
+	t.Helper()
+	if len(pixels) != width*height {
+		t.Fatalf("pixel count = %d, want %d", len(pixels), width*height)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := range height {
+		for x := range width {
+			img.Set(x, y, pixels[y*width+x])
+		}
+	}
+	encoded, err := ddsutil.DdsFromImage(img, ddsutil.BC1RgbaUnormSrgb, ddsutil.QualityFast, ddsutil.MipmapsGeneratedAutomatic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded.GetNumMipmapLevels() < 2 {
+		t.Fatalf("mipmaps = %d, want at least 2", encoded.GetNumMipmapLevels())
+	}
+	raw, err := encoded.Bytes()
+	if err != nil {
+		t.Fatal(err)
 	}
 	return raw
 }

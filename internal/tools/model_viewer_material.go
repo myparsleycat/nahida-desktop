@@ -549,6 +549,27 @@ func decodeModelViewerDDSFile(path string, size int64) (*image.NRGBA, error) {
 	return decodeModelViewerDDSMip(reader, mipmap, uint32(targetWidth), uint32(targetHeight))
 }
 
+func decodeModelViewerDDSHint(path string, size int64) (*image.NRGBA, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	reader, err := ddsutil.NewDdsReader(file, size)
+	if err != nil {
+		return nil, err
+	}
+	metadata := reader.Metadata()
+	if int64(metadata.Width)*int64(metadata.Height) > maxModelViewerTextureInputPixels {
+		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", metadata.Width, metadata.Height)
+	}
+	if metadata.Depth != 1 {
+		return nil, fmt.Errorf("viewer texture must be two-dimensional: depth=%d", metadata.Depth)
+	}
+	mipmap, targetWidth, targetHeight := wwmiHintMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
+	return decodeModelViewerDDSMip(reader, mipmap, uint32(targetWidth), uint32(targetHeight))
+}
+
 func modelViewerPreviewMipmap(width, height, mipmaps uint32) (uint32, int, int) {
 	targetWidth, targetHeight := viewerPreviewTextureSize(int(width), int(height))
 	mipmap := uint32(0)
@@ -634,6 +655,29 @@ func viewerPreviewTextureSize(width, height int) (int, int) {
 		height = max(1, height/2)
 	}
 	return width, height
+}
+
+func wwmiHintAnalyzeSize(width, height int) (int, int) {
+	for int64(width)*int64(height) > maxHintAnalyzePixels && (width > 1 || height > 1) {
+		width = max(1, width/2)
+		height = max(1, height/2)
+	}
+	return width, height
+}
+
+func wwmiHintMipmap(width, height, mipmaps uint32) (uint32, int, int) {
+	mipmap := uint32(0)
+	mipWidth, mipHeight := int(width), int(height)
+	for mipmap+1 < max(uint32(1), mipmaps) {
+		if int64(mipWidth)*int64(mipHeight) <= maxHintAnalyzePixels {
+			break
+		}
+		mipmap++
+		mipWidth = int(ddsutil.MipDimension(width, mipmap))
+		mipHeight = int(ddsutil.MipDimension(height, mipmap))
+	}
+	targetWidth, targetHeight := wwmiHintAnalyzeSize(mipWidth, mipHeight)
+	return mipmap, targetWidth, targetHeight
 }
 
 func downscaleModelViewerTexture(source *image.NRGBA, maxPixels int64) *image.NRGBA {

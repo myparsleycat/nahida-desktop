@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	maxHintDecodeBytes = 32 * 1024 * 1024
-	maxHintDecodeArea  = 4096 * 4096
+	maxHintDecodeBytes   = 32 * 1024 * 1024
+	maxHintDecodeArea    = 4096 * 4096
+	maxHintAnalyzePixels = int64(256 * 256)
 )
 
 var (
@@ -265,8 +266,10 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 		if decodeErr != nil {
 			return nil
 		}
-		analysis := analyzeRGBAImage(decoded)
-		return hintFromAnalysis(analysis, "srgb", decoded.Bounds().Dx()*decoded.Bounds().Dy(), size)
+		if area == 0 {
+			area = decoded.Bounds().Dx() * decoded.Bounds().Dy()
+		}
+		return hintFromAnalysis(analyzeRGBAImage(decoded), "srgb", area, size)
 	}
 	if ext == ".jpg" || ext == ".jpeg" {
 		return &wwmiTextureHint{SRGB: true, ColorSpace: "srgb", Area: 0, Bytes: size}
@@ -298,15 +301,11 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 	if colorSpace == "linear" || packedFormat || area > maxHintDecodeArea || size > maxHintDecodeBytes {
 		return &wwmiTextureHint{SRGB: colorSpace == "srgb", ColorSpace: colorSpace, Area: area, Bytes: size, IsLikelyNormal: packedFormat, IsLikelyPacked: packedFormat}
 	}
-	raw, readErr := os.ReadFile(filePath)
-	if readErr != nil {
-		return nil
-	}
-	decoded, decodeErr := decodeModelViewerDDS(raw)
+	decoded, decodeErr := decodeModelViewerDDSHint(filePath, size)
 	if decodeErr != nil {
 		return nil
 	}
-	return hintFromAnalysis(analyzeRGBAImage(decoded), colorSpace, area, size)
+	return hintFromAnalysis(analyzeNRGBA(decoded), colorSpace, area, size)
 }
 
 func parseDdsSrgbState(header []byte) *bool {
@@ -371,6 +370,17 @@ func hintFromAnalysis(analysis wwmiRGBAAnalysis, colorSpace string, area int, si
 			analysis.luminanceStdDev <= 0.12,
 		IsLikelyPacked: packed,
 	}
+}
+
+func analyzeNRGBA(img *image.NRGBA) wwmiRGBAAnalysis {
+	if img == nil {
+		return wwmiRGBAAnalysis{}
+	}
+	width, height := img.Bounds().Dx(), img.Bounds().Dy()
+	if img.Rect.Min == image.Pt(0, 0) && img.Stride == width*4 {
+		return analyzeRGBA(img.Pix, width, height)
+	}
+	return analyzeRGBAImage(img)
 }
 
 func analyzeRGBAImage(img image.Image) wwmiRGBAAnalysis {
