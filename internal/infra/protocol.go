@@ -289,9 +289,17 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		http.Error(w, "memory upload already used", http.StatusConflict)
 		return
 	}
-	if request.ContentLength != upload.expected {
+	received := int64(len(upload.data))
+	remaining := upload.expected - received
+	// WebView2 often omits Content-Length on intercepted PUT bodies, and the
+	// frontend splits large buffers into chunks under the ~2MB delivery cap.
+	// Reject only a declared length that cannot fit in the remaining slot.
+	if request.ContentLength > remaining {
 		delete(session.uploads, uploadID)
+		expected := upload.expected
+		contentLength := request.ContentLength
 		p.mu.Unlock()
+		p.reportProtocolFailure(errors.New("memory upload content length exceeds remaining slot"), request, "validate-memory-upload-length", map[string]any{"expectedBytes": expected, "receivedBytes": received, "contentLength": contentLength})
 		http.Error(w, "content length does not match upload slot", http.StatusBadRequest)
 		return
 	}
@@ -299,13 +307,13 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 	expected := upload.expected
 	p.mu.Unlock()
 
-	data, err := io.ReadAll(io.LimitReader(request.Body, expected+1))
-	if err != nil || int64(len(data)) != expected {
+	data, err := io.ReadAll(io.LimitReader(request.Body, remaining+1))
+	if err != nil || int64(len(data)) > remaining {
 		failure := err
 		if failure == nil {
 			failure = errors.New("memory upload length mismatch")
 		}
-		p.reportProtocolFailure(failure, request, "read-memory-upload", map[string]any{"expectedBytes": expected, "receivedBytes": len(data)})
+		p.reportProtocolFailure(failure, request, "read-memory-upload", map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": len(data)})
 		p.mu.Lock()
 		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
 			delete(current.uploads, uploadID)
@@ -321,7 +329,11 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		http.NotFound(w, request)
 		return
 	}
-	upload.data, upload.uploading, upload.ready = data, false, true
+	if upload.data == nil && expected > 0 {
+		upload.data = make([]byte, 0, expected)
+	}
+	upload.data = append(upload.data, data...)
+	upload.uploading, upload.ready = false, int64(len(upload.data)) == expected
 	p.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }

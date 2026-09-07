@@ -137,11 +137,26 @@ func TestProtocolRejectsInvalidMemoryUploads(t *testing.T) {
 	shortRequest.Header.Set("Content-Type", "application/octet-stream")
 	short := httptest.NewRecorder()
 	service.ServeHTTP(short, shortRequest)
-	if short.Code != http.StatusBadRequest {
+	if short.Code != http.StatusNoContent {
 		t.Fatalf("short upload = %d", short.Code)
 	}
 	if _, err = service.TakeMemoryUpload(session, "short"); err == nil {
 		t.Fatal("short upload remained consumable")
+	}
+
+	oversizeURL, err := service.CreateMemoryUpload(session, "oversize", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oversizeRequest := httptest.NewRequest(http.MethodPut, oversizeURL, strings.NewReader("toolong"))
+	oversizeRequest.Header.Set("Content-Type", "application/octet-stream")
+	oversize := httptest.NewRecorder()
+	service.ServeHTTP(oversize, oversizeRequest)
+	if oversize.Code != http.StatusBadRequest {
+		t.Fatalf("oversize upload = %d", oversize.Code)
+	}
+	if _, err = service.TakeMemoryUpload(session, "oversize"); err == nil {
+		t.Fatal("oversize upload remained consumable")
 	}
 
 	duplicateURL, err := service.CreateMemoryUpload(session, "duplicate", 4)
@@ -175,6 +190,60 @@ func TestProtocolRejectsInvalidMemoryUploads(t *testing.T) {
 	service.ServeHTTP(afterCleanup, request)
 	if afterCleanup.Code != http.StatusNotFound {
 		t.Fatalf("after cleanup = %d", afterCleanup.Code)
+	}
+}
+
+func TestProtocolMemoryUploadAcceptsMissingContentLengthAndChunks(t *testing.T) {
+	t.Parallel()
+	service := NewProtocol()
+	session := service.CreateMemorySession()
+	uploadURL, err := service.CreateMemoryUpload(session, "positions", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first := httptest.NewRequest(http.MethodPut, uploadURL, strings.NewReader("mesh"))
+	first.Header.Set("Content-Type", "application/octet-stream")
+	first.ContentLength = -1
+	first.Header.Del("Content-Length")
+	firstRecorder := httptest.NewRecorder()
+	service.ServeHTTP(firstRecorder, first)
+	if firstRecorder.Code != http.StatusNoContent {
+		t.Fatalf("first chunk = %d %s", firstRecorder.Code, firstRecorder.Body.String())
+	}
+	if _, err := service.TakeMemoryUpload(session, "positions"); err == nil {
+		t.Fatal("partial upload was consumable")
+	}
+
+	second := httptest.NewRequest(http.MethodPut, uploadURL, strings.NewReader("data"))
+	second.Header.Set("Content-Type", "application/octet-stream")
+	second.ContentLength = -1
+	second.Header.Del("Content-Length")
+	secondRecorder := httptest.NewRecorder()
+	service.ServeHTTP(secondRecorder, second)
+	if secondRecorder.Code != http.StatusNoContent {
+		t.Fatalf("second chunk = %d %s", secondRecorder.Code, secondRecorder.Body.String())
+	}
+	got, err := service.TakeMemoryUpload(session, "positions")
+	if err != nil || string(got) != "meshdata" {
+		t.Fatalf("TakeMemoryUpload = %q, %v", got, err)
+	}
+
+	overflowURL, err := service.CreateMemoryUpload(session, "overflow", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overflow := httptest.NewRequest(http.MethodPut, overflowURL, strings.NewReader("meshdata!"))
+	overflow.Header.Set("Content-Type", "application/octet-stream")
+	overflow.ContentLength = -1
+	overflow.Header.Del("Content-Length")
+	overflowRecorder := httptest.NewRecorder()
+	service.ServeHTTP(overflowRecorder, overflow)
+	if overflowRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("overflow chunk = %d %s", overflowRecorder.Code, overflowRecorder.Body.String())
+	}
+	if _, err := service.TakeMemoryUpload(session, "overflow"); err == nil {
+		t.Fatal("overflow upload remained consumable")
 	}
 }
 

@@ -69,24 +69,33 @@ export async function fetchUint32(
     return new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 }
 
+// WebView2 delivers at most ~2MB per intercepted request body. Stay well under
+// that cap and copy each slice so fetch cannot send the backing ArrayBuffer.
+export const binaryUploadChunkBytes = 512 * 1024;
+
 export async function uploadTypedArray(
     url: string,
     value: ArrayBufferView<ArrayBufferLike>,
     signal?: AbortSignal,
 ): Promise<void> {
     const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    const response = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: bytes as unknown as BodyInit,
-        signal,
-    });
-    if (!response.ok) {
-        throw new BinaryTransportError(
-            `Failed to upload binary buffer: ${url} (${response.status})`,
-            response.status,
-        );
-    }
+    let offset = 0;
+    do {
+        const chunk = bytes.slice(offset, offset + binaryUploadChunkBytes);
+        const response = await fetch(url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: chunk as unknown as BodyInit,
+            signal,
+        });
+        if (!response.ok) {
+            throw new BinaryTransportError(
+                `Failed to upload binary buffer: ${url} (${response.status})`,
+                response.status,
+            );
+        }
+        offset += chunk.byteLength;
+    } while (offset < bytes.byteLength);
 }
 
 export function isAbortError(error: unknown): boolean {
