@@ -84,11 +84,18 @@ type WuwaFixerStatus struct {
 	Installed        bool             `json:"installed"`
 	InstalledVersion *string          `json:"installedVersion"`
 	LatestVersion    *string          `json:"latestVersion"`
+	ConfigVersion    *string          `json:"configVersion"`
 	BinaryPath       *string          `json:"binaryPath"`
 	UpdateAvailable  bool             `json:"updateAvailable"`
 	RateState        *GitHubRateState `json:"rateState"`
 	RateLimited      bool             `json:"rateLimited"`
 	NextCheckAt      *string          `json:"nextCheckAt"`
+}
+
+type wuwaConfigMeta struct {
+	Version struct {
+		CurrentVersion string `json:"current_version"`
+	} `json:"version"`
 }
 
 type WuwaFixerPrepareResult struct {
@@ -151,8 +158,8 @@ func (t *Tools) WuwaFixerGetStatus(ctx context.Context, importer *string) (WuwaF
 	}
 	status := WuwaFixerStatus{
 		Supported: t.wuwaSupportedImporter(importer), Installed: installed.Exists,
-		InstalledVersion: installed.Version, BinaryPath: installed.BinaryPath,
-		RateState: rate, RateLimited: wuwaRateLimited(rate),
+		InstalledVersion: installed.Version, ConfigVersion: t.wuwaLocalConfigVersion(),
+		BinaryPath: installed.BinaryPath, RateState: rate, RateLimited: wuwaRateLimited(rate),
 	}
 	if latest != nil {
 		status.LatestVersion = &latest.Version
@@ -172,6 +179,7 @@ func (t *Tools) WuwaFixerPrepareRun(ctx context.Context, importer *string) (Wuwa
 	if !base.Supported {
 		return result, nil
 	}
+	result.ConfigVersion = t.wuwaRefreshConfigVersion(ctx)
 	refresh, err := t.wuwaRefreshLatestRelease(ctx, false)
 	if err != nil {
 		if !base.Installed {
@@ -549,18 +557,17 @@ func (t *Tools) wuwaLatestReleaseForInstall(ctx context.Context) (*wuwaLatestRel
 }
 
 func (t *Tools) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
-	toolDir, err := t.wuwaToolDir()
+	configPath, err := t.wuwaConfigPath()
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(toolDir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		return "", err
 	}
 	body, _, err := t.wuwaFetchBytes(ctx, wuwaConfigURL, nil, 8<<20)
 	if err != nil {
 		return "", fmt.Errorf("Failed to download Wuwa Mod Fixer config: %w", err) //nolint:staticcheck // Electron contract text.
 	}
-	configPath := filepath.Join(toolDir, "config.json")
 	tempPath := configPath + ".download"
 	defer func() { t.reportCleanup(os.Remove(tempPath), "wuwaEnsureLatestConfig") }()
 	if err := os.WriteFile(tempPath, body, 0o600); err != nil {
@@ -570,6 +577,33 @@ func (t *Tools) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return configPath, nil
+}
+
+func (t *Tools) wuwaRefreshConfigVersion(ctx context.Context) *string {
+	if _, err := t.wuwaEnsureLatestConfig(ctx); err != nil {
+		t.logError(err, "WuwaModFixer:prepareConfig")
+	}
+	return t.wuwaLocalConfigVersion()
+}
+
+func (t *Tools) wuwaLocalConfigVersion() *string {
+	configPath, err := t.wuwaConfigPath()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil
+	}
+	return parseWuwaConfigVersion(data)
+}
+
+func (t *Tools) wuwaConfigPath() (string, error) {
+	toolDir, err := t.wuwaToolDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(toolDir, "config.json"), nil
 }
 
 func (t *Tools) wuwaGetInstalledBinaryInfo(ctx context.Context) (wuwaInstalledInfo, error) {
@@ -917,6 +951,18 @@ func verifyWuwaDigest(data []byte, digest *string) error {
 		return contractError("Wuwa Mod Fixer download digest mismatch")
 	}
 	return nil
+}
+
+func parseWuwaConfigVersion(data []byte) *string {
+	var meta wuwaConfigMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil
+	}
+	version := strings.TrimSpace(meta.Version.CurrentVersion)
+	if version == "" {
+		return nil
+	}
+	return &version
 }
 
 func extractWuwaVersion(name string) *string {

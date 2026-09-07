@@ -99,6 +99,7 @@ export interface WuwaFixerStatus {
     installed: boolean;
     installedVersion: string | null;
     latestVersion: string | null;
+    configVersion: string | null;
     binaryPath: string | null;
     updateAvailable: boolean;
     rateState: GitHubRateState | null;

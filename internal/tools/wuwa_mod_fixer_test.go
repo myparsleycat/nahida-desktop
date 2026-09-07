@@ -298,6 +298,112 @@ func TestWuwaAutomaticUpdateNotificationHonorsSettingAndUsesNativeNotification(t
 	}
 }
 
+func TestParseWuwaConfigVersion(t *testing.T) {
+	version := parseWuwaConfigVersion([]byte(`{"version":{"current_version":"3.4.4","min_required_version":"3.3.3"},"characters":{"Rover":{}}}`))
+	if version == nil || *version != "3.4.4" {
+		t.Fatalf("version = %v", version)
+	}
+	if parseWuwaConfigVersion([]byte(`{`)) != nil {
+		t.Fatal("malformed config should return nil")
+	}
+	if parseWuwaConfigVersion([]byte(`{"version":{}}`)) != nil {
+		t.Fatal("missing current_version should return nil")
+	}
+	if parseWuwaConfigVersion([]byte(`{"version":{"current_version":"  "}}`)) != nil {
+		t.Fatal("blank current_version should return nil")
+	}
+}
+
+func TestWuwaGetStatusReadsLocalConfigVersion(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	service := New()
+	service.UseClient(client)
+	userData := useToolsTestAppData(t, service, t.TempDir())
+	toolDir := filepath.Join(userData, "tools", wuwaFixerDirName)
+	if err := os.MkdirAll(toolDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolDir, "config.json"), []byte(`{"version":{"current_version":"3.4.4"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	importer := "WWMI"
+	status, err := service.WuwaFixerGetStatus(ctx, &importer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ConfigVersion == nil || *status.ConfigVersion != "3.4.4" {
+		t.Fatalf("configVersion = %v", status.ConfigVersion)
+	}
+}
+
+func TestWuwaPrepareRunRefreshesConfigVersion(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	transport := wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == wuwaConfigURL {
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader(`{"version":{"current_version":"3.4.4"}}`)),
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("unavailable")),
+		}, nil
+	})
+	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service.UseClient(client)
+	userData := useToolsTestAppData(t, service, t.TempDir())
+	if err := writeWuwaInstalledTestFiles(userData, `{"version":{"current_version":"3.0.0"}}`); err != nil {
+		t.Fatal(err)
+	}
+	importer := "WWMI"
+	result, err := service.WuwaFixerPrepareRun(ctx, &importer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ConfigVersion == nil || *result.ConfigVersion != "3.4.4" {
+		t.Fatalf("configVersion = %v", result.ConfigVersion)
+	}
+}
+
+func TestWuwaPrepareRunKeepsLocalConfigWhenRemoteFails(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	transport := wuwaRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("unavailable")),
+		}, nil
+	})
+	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service.UseClient(client)
+	userData := useToolsTestAppData(t, service, t.TempDir())
+	if err := writeWuwaInstalledTestFiles(userData, `{"version":{"current_version":"3.0.0"}}`); err != nil {
+		t.Fatal(err)
+	}
+	importer := "WWMI"
+	result, err := service.WuwaFixerPrepareRun(ctx, &importer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ConfigVersion == nil || *result.ConfigVersion != "3.0.0" {
+		t.Fatalf("configVersion = %v", result.ConfigVersion)
+	}
+}
+
+func writeWuwaInstalledTestFiles(userData, config string) error {
+	toolDir := filepath.Join(userData, "tools", wuwaFixerDirName)
+	if err := os.MkdirAll(toolDir, 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(toolDir, "Wuwa_Mod_Fixer_v1.0.0.exe"), []byte("exe"), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(toolDir, "config.json"), []byte(config), 0o600)
+}
+
 func TestWuwaConfigDownloadErrorMatchesElectronMessage(t *testing.T) {
 	transport := wuwaRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Service Unavailable", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("unavailable"))}, nil

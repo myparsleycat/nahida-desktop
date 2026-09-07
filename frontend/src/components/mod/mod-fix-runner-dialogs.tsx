@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -132,6 +133,18 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
         >
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{t(`${translationKey}.options.title`)}</DialogTitle>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="secondary">
+                {t(`${translationKey}.options.tool_version`, {
+                  version: runner.prepareResult?.installedVersion ?? t("g.unknown"),
+                })}
+              </Badge>
+              <span className="text-muted-foreground">
+                {t(`${translationKey}.options.config_version`, {
+                  version: runner.prepareResult?.configVersion ?? t("g.unknown"),
+                })}
+              </span>
+            </div>
           </DialogHeader>
 
           <Tabs
