@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BinaryTransportError, fetchFloat32, fetchUint32, uploadTypedArray } from "./binary-memory";
+import {
+    BinaryTransportError,
+    binaryUploadChunkBytes,
+    fetchFloat32,
+    fetchUint32,
+    uploadTypedArray,
+} from "./binary-memory";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -46,5 +52,18 @@ describe("binary memory transport", () => {
 
         await uploadTypedArray("/upload", bytes.subarray(1, 3));
         expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("splits large uploads into WebView-safe chunks", async () => {
+        const bodies: number[] = [];
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+            bodies.push((init?.body as Uint8Array).byteLength);
+            return new Response(null, { status: 204 });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const payload = new Uint8Array(binaryUploadChunkBytes + 16);
+
+        await uploadTypedArray("/upload", payload);
+        expect(bodies).toEqual([binaryUploadChunkBytes, 16]);
     });
 });
