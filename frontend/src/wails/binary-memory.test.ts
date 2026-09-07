@@ -66,4 +66,35 @@ describe("binary memory transport", () => {
         await uploadTypedArray("/upload", payload);
         expect(bodies).toEqual([binaryUploadChunkBytes, 16]);
     });
+
+    it("rejects a failed chunk and does not start later chunks", async () => {
+        const fetchMock = vi.fn(async () => {
+            if (fetchMock.mock.calls.length === 1) {
+                return new Response(null, { status: 204 });
+            }
+            return new Response(null, { status: 400 });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const payload = new Uint8Array(binaryUploadChunkBytes * 2 + 16);
+
+        await expect(uploadTypedArray("/upload", payload)).rejects.toMatchObject({
+            status: 400,
+        } satisfies Partial<BinaryTransportError>);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects an aborted chunk and does not start later chunks", async () => {
+        const abortError = new DOMException("Aborted", "AbortError");
+        const fetchMock = vi.fn(async () => {
+            if (fetchMock.mock.calls.length === 1) {
+                return new Response(null, { status: 204 });
+            }
+            throw abortError;
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const payload = new Uint8Array(binaryUploadChunkBytes * 2 + 16);
+
+        await expect(uploadTypedArray("/upload", payload)).rejects.toBe(abortError);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
 });

@@ -228,6 +228,23 @@ func TestProtocolMemoryUploadAcceptsMissingContentLengthAndChunks(t *testing.T) 
 	if err != nil || string(got) != "meshdata" {
 		t.Fatalf("TakeMemoryUpload = %q, %v", got, err)
 	}
+
+	overflowURL, err := service.CreateMemoryUpload(session, "overflow", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overflow := httptest.NewRequest(http.MethodPut, overflowURL, strings.NewReader("meshdata!"))
+	overflow.Header.Set("Content-Type", "application/octet-stream")
+	overflow.ContentLength = -1
+	overflow.Header.Del("Content-Length")
+	overflowRecorder := httptest.NewRecorder()
+	service.ServeHTTP(overflowRecorder, overflow)
+	if overflowRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("overflow chunk = %d %s", overflowRecorder.Code, overflowRecorder.Body.String())
+	}
+	if _, err := service.TakeMemoryUpload(session, "overflow"); err == nil {
+		t.Fatal("overflow upload remained consumable")
+	}
 }
 
 func TestProtocolRejectsOversizedMemoryUploadSlot(t *testing.T) {
