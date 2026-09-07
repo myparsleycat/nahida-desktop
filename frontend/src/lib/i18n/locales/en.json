@@ -555,6 +555,8 @@
           },
           "options": {
             "title": "Wuwa Mod Fixer",
+            "tool_version": "Tool {{version}}",
+            "config_version": "Config {{version}}",
             "derived_hashes": {
               "label": "Add Derived Hashes",
               "description": "Add missing texture state hashes (e.g. LOD Bias High/Medium, Cantarella wet, Chisa Enhanced E, Aemeath Charged) so character mod textures display correctly (some characters are not included)."

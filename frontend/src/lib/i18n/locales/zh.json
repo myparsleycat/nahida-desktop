@@ -536,6 +536,8 @@
           },
           "options": {
             "title": "Wuwa Mod Fixer",
+            "tool_version": "工具 {{version}}",
+            "config_version": "配置 {{version}}",
             "derived_hashes": {
               "label": "添加 Derived Hash",
               "description": "添加缺失的纹理状态哈希（例如：LOD Bias High/Medium、坎特蕾拉 wet、千咲 Enhanced E、爱弥斯 Charged），让角色模组纹理能够正确显示。部分角色可能尚未包含在内。"

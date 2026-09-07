@@ -537,6 +537,8 @@
           },
           "options": {
             "title": "Wuwa Mod Fixer",
+            "tool_version": "ツール {{version}}",
+            "config_version": "設定 {{version}}",
             "derived_hashes": {
               "label": "Derived Hash を追加",
               "description": "不足しているテクスチャ状態ハッシュ（例: LOD Bias High/Medium、カンタレラ wet、千咲 Enhanced E、エイメス Charged）を追加し、キャラクター MOD のテクスチャが正しく表示されるようにします。一部のキャラクターはまだ含まれていない場合があります。"
