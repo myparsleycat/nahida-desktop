@@ -769,6 +769,10 @@
         "cancelled_description": "GameBanana のデータを読み込むにはログインを完了してください。",
         "unsupported_title": "GameBanana の自動ログインは利用できません",
         "unsupported_description": "この環境では GameBanana のログインウィンドウを開けません。rmc Cookie を入力してください。",
+        "init_failed_title": "GameBanana ログインの準備に失敗しました",
+        "init_failed_description": "ログイン画面を準備できませんでした。しばらくしてから再試行してください。",
+        "check_failed_title": "GameBanana の認証を確認できませんでした",
+        "check_failed_description": "サーバーの応答からログイン状態を確認できませんでした。しばらくしてから再試行してください。",
         "unreachable_title": "GameBanana に接続できません",
         "unreachable_description": "GameBanana に到達できませんでした。接続を確認してから再試行してください。",
         "retry": "再ログイン",
@@ -779,6 +783,8 @@
           "empty": "rmc 値を入力してください。",
           "GAMEBANANA_INVALID_RMC": "無効な rmc トークンです。",
           "GAMEBANANA_SERVER_UNREACHABLE": "サーバーが応答していません。",
+          "GAMEBANANA_AUTH_CHECK_FAILED": "サーバーの応答からログイン状態を確認できませんでした。しばらくしてから再試行してください。",
+          "GAMEBANANA_LOGIN_INIT_FAILED": "ログイン画面を準備できませんでした。しばらくしてから再試行してください。",
           "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc トークンの保存に失敗しました。"
         }
       },

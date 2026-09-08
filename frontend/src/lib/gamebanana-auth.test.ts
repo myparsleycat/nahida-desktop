@@ -6,8 +6,32 @@ import {
     isManualRmcPrimaryAction,
     runGameBananaEnsureSession,
 } from "./gamebanana-auth";
+import en from "./i18n/locales/en.json";
+import ja from "./i18n/locales/ja.json";
+import ko from "./i18n/locales/ko.json";
+import zh from "./i18n/locales/zh.json";
 
 describe("getGameBananaAuthErrorCode", () => {
+    it.each(["GAMEBANANA_LOGIN_INIT_FAILED", "GAMEBANANA_AUTH_CHECK_FAILED"])(
+        "preserves %s and provides localized retry guidance",
+        async (code) => {
+            expect(getGameBananaAuthErrorCode(new Error(code))).toBe(code);
+            expect(isManualRmcPrimaryAction(code)).toBe(false);
+            expect(await runGameBananaEnsureSession(() => Promise.reject(new Error(code)))).toEqual(
+                { ok: false, code },
+            );
+            const copy = gameBananaAuthCopyKey(code);
+            for (const locale of [en, ja, ko, zh]) {
+                const title = copy.title.split(".").at(-1);
+                const description = copy.description.split(".").at(-1);
+                expect(title && Object.hasOwn(locale.page.gamebanana.auth, title)).toBe(true);
+                expect(description && Object.hasOwn(locale.page.gamebanana.auth, description)).toBe(
+                    true,
+                );
+                expect(Object.hasOwn(locale.page.gamebanana.auth.manual_rmc, code)).toBe(true);
+            }
+        },
+    );
     it("classifies cancelled, unsupported, unreachable, and generic failures", () => {
         expect(getGameBananaAuthErrorCode(new Error("GAMEBANANA_LOGIN_CANCELLED"))).toBe(
             "GAMEBANANA_LOGIN_CANCELLED",

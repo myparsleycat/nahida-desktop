@@ -374,6 +374,8 @@ function RouteComponent() {
                 "GAMEBANANA_INVALID_RMC",
                 "GAMEBANANA_SERVER_UNREACHABLE",
                 "GAMEBANANA_MANUAL_RMC_SAVE_FAILED",
+                "GAMEBANANA_AUTH_CHECK_FAILED",
+                "GAMEBANANA_LOGIN_INIT_FAILED",
               ].includes(error.message)
               ? `page.gamebanana.auth.manual_rmc.${error.message}`
               : "page.gamebanana.auth.manual_rmc.GAMEBANANA_MANUAL_RMC_SAVE_FAILED",

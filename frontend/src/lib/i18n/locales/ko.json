@@ -774,6 +774,10 @@
         "cancelled_description": "로그인을 완료해야 GameBanana 데이터를 불러올 수 있습니다.",
         "unsupported_title": "GameBanana 자동 로그인을 사용할 수 없습니다",
         "unsupported_description": "이 환경에서는 GameBanana 로그인 창을 열 수 없습니다. rmc 쿠키를 직접 입력해 주세요.",
+        "init_failed_title": "GameBanana 로그인 준비에 실패했습니다",
+        "init_failed_description": "로그인 창을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        "check_failed_title": "GameBanana 인증을 확인하지 못했습니다",
+        "check_failed_description": "서버 응답으로 로그인 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
         "unreachable_title": "GameBanana 서버에 연결할 수 없습니다",
         "unreachable_description": "GameBanana에 연결하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
         "retry": "다시 로그인",
@@ -784,6 +788,8 @@
           "empty": "rmc 값을 입력해 주세요.",
           "GAMEBANANA_INVALID_RMC": "잘못된 rmc 토큰입니다.",
           "GAMEBANANA_SERVER_UNREACHABLE": "서버가 응답하지 않습니다.",
+          "GAMEBANANA_AUTH_CHECK_FAILED": "서버 응답으로 로그인 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+          "GAMEBANANA_LOGIN_INIT_FAILED": "로그인 창을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
           "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc 토큰 저장에 실패했습니다."
         }
       },

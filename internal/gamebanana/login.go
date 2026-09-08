@@ -35,9 +35,9 @@ func (g *GameBanana) openAuthenticatedSession(ctx context.Context) (string, erro
 	}
 
 	g.loginMu.Lock()
-	if g.openLogin == nil {
+	if g.loggingOut || g.shuttingDown {
 		g.loginMu.Unlock()
-		return "", ErrAutoLoginUnsupported
+		return "", ErrLoginCancelled
 	}
 	if call := g.login; call != nil {
 		g.loginMu.Unlock()
@@ -65,6 +65,56 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		g.loginMu.Unlock()
 		close(call.done)
 	}()
+	var revision uint64
+	for {
+		if err := ctx.Err(); err != nil {
+			call.err = err
+			return
+		}
+		stored, current, err := g.cookieSnapshot(ctx)
+		if err != nil {
+			call.err = err
+			return
+		}
+		revision = current
+		if stored == "" {
+			break
+		}
+		valid, merged, err := g.validateStoredRMCCookie(ctx, stored)
+		_, latest, snapshotErr := g.cookieSnapshot(ctx)
+		if snapshotErr != nil {
+			call.err = snapshotErr
+			return
+		}
+		if latest != revision {
+			continue
+		}
+		if err != nil {
+			call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "validate-stored-cookie"})
+			return
+		}
+		if !valid {
+			merged = ""
+		}
+		applied, err := g.updateCookie(ctx, revision, merged)
+		if err != nil {
+			g.reportRecovery(err, "persist-validated-cookie")
+			call.err = err
+			return
+		}
+		if !applied {
+			continue
+		}
+		if valid {
+			call.cookie = merged
+			return
+		}
+		// Read the new revision before opening; another accepted session wins.
+	}
+	if openLogin == nil {
+		call.err = ErrAutoLoginUnsupported
+		return
+	}
 
 	var validatedMu sync.Mutex
 	validatedCookies := make(map[string]string)
@@ -95,8 +145,19 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		call.err = ErrAuthFailed
 		return
 	}
-	if err := g.saveCookie(ctx, merged); err != nil {
+	applied, err := g.updateCookie(ctx, revision, merged)
+	if err != nil {
 		call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "persist-cookie"})
+		return
+	}
+	if !applied {
+		// A concurrently accepted manual session satisfies the waiting callers.
+		// An empty session means logout won, and must never reopen login.
+		current, _, snapshotErr := g.cookieSnapshot(ctx)
+		call.cookie, call.err = current, snapshotErr
+		if snapshotErr == nil && current == "" {
+			call.err = ErrLoginCancelled
+		}
 		return
 	}
 	call.cookie = merged
@@ -128,6 +189,7 @@ func (g *GameBanana) cancelLogin() {
 	}
 	g.loginMu.Lock()
 	call := g.login
+	g.login = nil
 	g.loginMu.Unlock()
 	if call != nil && call.cancel != nil {
 		call.cancel()
@@ -136,6 +198,9 @@ func (g *GameBanana) cancelLogin() {
 
 // ServiceShutdown cancels any in-flight login session.
 func (g *GameBanana) ServiceShutdown() error {
+	g.loginMu.Lock()
+	g.shuttingDown = true
+	g.loginMu.Unlock()
 	g.cancelLogin()
 	return nil
 }
@@ -159,11 +224,16 @@ func classifyLoginError(err error) error {
 	if errors.Is(err, ErrServerUnreachable) || errorCode(err) == errCodeServerUnreachable {
 		return ErrServerUnreachable
 	}
+	for _, classified := range []error{ErrLoginInitFailed, ErrAuthCheckFailed} {
+		if errors.Is(err, classified) || errorCode(err) == classified.Error() {
+			return classified
+		}
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return ErrAuthFailed
+		return ErrServerUnreachable
 	}
 	var httpErr *gameBananaHTTPError
-	if errors.As(err, &httpErr) && httpErr.Status >= 500 {
+	if errors.As(err, &httpErr) && (httpErr.Status >= 500 || httpErr.Status == 429) {
 		return ErrServerUnreachable
 	}
 	if isUnreachable(err) {

@@ -121,8 +121,8 @@ func TestGameBananaCookiePollDeadlineDiagnostic(t *testing.T) {
 	if login.pollOnce(ctx, nil) {
 		t.Fatal("deadline did not stop polling")
 	}
-	if !strings.Contains(output.String(), `"contextError":"context deadline exceeded"`) {
-		t.Fatalf("deadline context missing: %s", output.String())
+	if win.gets.Load() != 0 {
+		t.Fatal("expired polling context reached WebView")
 	}
 }
 
@@ -150,6 +150,7 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 				login.factory = func() (loginWindow, error) { return nil, cause }
 				_, err = login.Open(context.Background(), nil)
 			case "logout-shared-webview-profile":
+				wantCode = gamebanana.ErrLoginInitFailed
 				login.factory = func() (loginWindow, error) { return newFakeLoginWindow(), nil }
 				login.logoutFactory = func() (loginWindow, error) { return nil, cause }
 				_, err = login.Open(context.Background(), nil)

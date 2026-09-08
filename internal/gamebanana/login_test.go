@@ -150,14 +150,16 @@ func TestEnsureSessionPersistsRotatedRMCWithoutRevalidatingOldCookie(t *testing.
 	}
 }
 
-func TestEnsureSessionDoesNotPersistRotatedStoredCookie(t *testing.T) {
+func TestEnsureSessionPersistsRotatedStoredCookie(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("Cookie") != "rmc=initial" {
-			t.Fatalf("cookie = %q, want stored cookie", request.Header.Get("Cookie"))
+		if requests.Add(1) == 1 {
+			w.Header().Add("Set-Cookie", "rmc=rotated; Path=/; HttpOnly")
+			w.Header().Add("Set-Cookie", "sess=live; Path=/; HttpOnly")
+		} else if cookieValue(request.Header.Get("Cookie"), "rmc") != "rotated" {
+			_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+			return
 		}
-		requests.Add(1)
-		w.Header().Add("Set-Cookie", "rmc=rotated; Path=/; HttpOnly")
 		_, _ = io.WriteString(w, validMemberJSON)
 	}))
 	t.Cleanup(server.Close)
@@ -165,19 +167,23 @@ func TestEnsureSessionDoesNotPersistRotatedStoredCookie(t *testing.T) {
 	if err := service.saveCookie(context.Background(), "rmc=initial"); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := service.EnsureSession(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.EnsureSession(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 2 {
-		t.Fatalf("requests = %d, want 2", requests.Load())
+	for range 2 {
+		if err := service.EnsureSession(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 	}
 	stored, err := client.Settings.GetValue(context.Background(), cookieSettingKey)
-	if err != nil || stored == nil || *stored != "rmc=initial" {
-		t.Fatalf("stored = %v, error = %v", stored, err)
+	if err != nil || stored == nil || *stored != "rmc=rotated" {
+		t.Fatalf("stored cookie was not rotated: %v", err)
+	}
+	cookie, err := service.getCookie(context.Background())
+	if err != nil || cookieValue(cookie, "sess") != "live" {
+		t.Fatal("session cookie missing from memory")
+	}
+	restored := NewWithOptions(Options{HTTP: service.http, Crypto: service.crypto, BaseURL: service.baseURL})
+	restored.UseClient(client)
+	if err := restored.EnsureSession(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -278,7 +284,7 @@ func TestEnsureSessionTreatsUnauthorizedStoredCookieAsInvalidThenLogsIn(t *testi
 	}
 }
 
-func TestEnsureSessionTreatsBadProfileAsInvalidThenLogsIn(t *testing.T) {
+func TestEnsureSessionPreservesCookieOnBadProfile(t *testing.T) {
 	var opens atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Cookie") == "rmc=stale" {
@@ -303,14 +309,14 @@ func TestEnsureSessionTreatsBadProfileAsInvalidThenLogsIn(t *testing.T) {
 		}
 		return "rmc=fresh", nil
 	}
-	if err := service.EnsureSession(context.Background()); err != nil {
+	if err := service.EnsureSession(context.Background()); !errors.Is(err, ErrAuthCheckFailed) {
 		t.Fatal(err)
 	}
-	if opens.Load() != 1 {
+	if opens.Load() != 0 {
 		t.Fatalf("opens = %d", opens.Load())
 	}
 	stored, err := client.Settings.GetValue(context.Background(), cookieSettingKey)
-	if err != nil || stored == nil || *stored != "rmc=fresh" {
+	if err != nil || stored == nil || *stored != "rmc=stale" {
 		t.Fatalf("stored = %v, error = %v", stored, err)
 	}
 }
