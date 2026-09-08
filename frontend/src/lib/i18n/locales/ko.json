@@ -1547,8 +1547,46 @@
       }
     },
     "setting": {
+      "network": {
+        "title": "프록시",
+        "description": "앱 내부의 모든 외부 요청에 적용됩니다. 변경 사항은 앱 재시작 후 적용됩니다. 외부 브라우저·게임·스크립트는 제외됩니다.",
+        "enabled": "프록시 사용",
+        "type": "유형",
+        "host": "호스트 (스킴 제외)",
+        "port": "포트",
+        "username": "사용자 이름 (선택)",
+        "password": "비밀번호 (선택)",
+        "dns": "SOCKS5는 목적지 DNS를 로컬에서, SOCKS5h는 프록시에서 조회합니다.",
+        "passwordSaved": "저장된 비밀번호 유지",
+        "clearPassword": "비밀번호 삭제",
+        "keepPassword": "저장된 비밀번호 유지",
+        "passwordWillClear": "저장하면 비밀번호가 삭제됩니다.",
+        "save": "저장",
+        "saving": "저장 중…",
+        "restart": "저장한 프록시 설정을 적용하려면 앱을 재시작하세요.",
+        "restartDialog": {
+          "title": "다시 시작이 필요합니다",
+          "action": "다시 시작",
+          "failed": "앱을 다시 시작하지 못했습니다."
+        },
+        "invalid": "저장된 프록시 설정을 읽을 수 없어 외부 요청이 차단되었습니다. 설정을 수정하거나 프록시를 끄고 저장한 뒤 앱을 재시작하세요.",
+        "loading": "불러오는 중…",
+        "loadFailed": "네트워크 설정을 불러오지 못했습니다.",
+        "retry": "다시 시도",
+        "errors": {
+          "host": "스킴·경로·포트를 제외한 올바른 호스트를 입력하세요.",
+          "port": "1~65535 사이의 정수 포트를 입력하세요.",
+          "username": "프록시에 사용할 올바른 사용자 이름을 입력하세요.",
+          "credentials": "SOCKS 사용자 이름과 비밀번호는 각각 1~255바이트여야 합니다.",
+          "passwordResetRequired": "저장된 비밀번호를 읽을 수 없습니다. 삭제하거나 새로 입력하세요.",
+          "passwordAction": "올바른 비밀번호 저장 방식을 선택하세요.",
+          "type": "HTTP, SOCKS5, SOCKS5h 중 하나를 선택하세요.",
+          "saveFailed": "프록시 설정을 저장하지 못했습니다."
+        }
+      },
       "title": "설정",
       "tabs": {
+        "network": "네트워크",
         "general": "일반",
         "mod": "모드",
         "account": "계정",

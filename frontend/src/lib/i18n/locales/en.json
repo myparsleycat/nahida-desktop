@@ -1561,8 +1561,46 @@
       }
     },
     "setting": {
+      "network": {
+        "title": "Proxy",
+        "description": "Route all in-app external requests through this proxy. Changes apply after restarting the app. External browsers, games and scripts are excluded.",
+        "enabled": "Enable proxy",
+        "type": "Type",
+        "host": "Host (without scheme)",
+        "port": "Port",
+        "username": "Username (optional)",
+        "password": "Password (optional)",
+        "dns": "SOCKS5 resolves destination names locally. SOCKS5h resolves them at the proxy.",
+        "passwordSaved": "Saved password will be kept",
+        "clearPassword": "Remove password",
+        "keepPassword": "Keep saved password",
+        "passwordWillClear": "The password will be removed when saved.",
+        "save": "Save",
+        "saving": "Saving…",
+        "restart": "Restart the app to apply the saved proxy settings.",
+        "restartDialog": {
+          "title": "Restart required",
+          "action": "Restart",
+          "failed": "Unable to restart the app."
+        },
+        "invalid": "The saved proxy configuration cannot be read. External requests are blocked. Enter a valid configuration or disable the proxy, save, then restart.",
+        "loading": "Loading…",
+        "loadFailed": "Unable to load network settings.",
+        "retry": "Retry",
+        "errors": {
+          "host": "Enter a valid host without a scheme, path or port.",
+          "port": "Enter an integer port from 1 to 65535.",
+          "username": "Enter a valid username for this proxy.",
+          "credentials": "SOCKS credentials must be 1–255 bytes each.",
+          "passwordResetRequired": "The saved password cannot be read. Remove or replace it.",
+          "passwordAction": "Choose a valid password action.",
+          "type": "Choose HTTP, SOCKS5 or SOCKS5h.",
+          "saveFailed": "Unable to save proxy settings."
+        }
+      },
       "title": "Settings",
       "tabs": {
+        "network": "Network",
         "general": "General",
         "transfer": "Transfer",
         "mod": "Mod",

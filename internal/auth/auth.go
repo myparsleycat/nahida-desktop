@@ -582,7 +582,11 @@ func (a *Auth) do(req *http.Request) (*http.Response, error) {
 	if a.doFn != nil {
 		return a.doFn(req)
 	}
-	return http.DefaultClient.Do(req)
+	if a.http == nil {
+		return nil, errors.New("auth HTTP client is not configured")
+	}
+	// SSE owns its lifetime through the request context, not the API timeout.
+	return (&http.Client{Transport: a.http.HTTPClient().Transport}).Do(req)
 }
 
 func (a *Auth) broadcast(name string, data any) {

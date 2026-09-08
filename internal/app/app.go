@@ -14,6 +14,7 @@ import (
 )
 
 func Run(assets embed.FS, icon []byte) (runErr error) {
+	waitPendingRelaunch()
 	rt := newRuntime()
 	route := nahidaDeepLinkRoute(os.Args)
 	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "")
@@ -50,7 +51,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if err != nil {
 		return err
 	}
-	if _, err := bootRuntime(context.Background(), rt, in); err != nil {
+	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
 	}
 	defer func() {

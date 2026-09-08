@@ -1528,8 +1528,46 @@
       }
     },
     "setting": {
+      "network": {
+        "title": "代理",
+        "description": "应用内的所有外部请求均使用此代理。更改将在重启应用后生效。不包括外部浏览器、游戏和脚本。",
+        "enabled": "启用代理",
+        "type": "类型",
+        "host": "主机（不含协议）",
+        "port": "端口",
+        "username": "用户名（可选）",
+        "password": "密码（可选）",
+        "dns": "SOCKS5 在本地解析目标域名，SOCKS5h 在代理服务器解析。",
+        "passwordSaved": "保留已保存的密码",
+        "clearPassword": "删除密码",
+        "keepPassword": "保留已保存的密码",
+        "passwordWillClear": "保存时将删除密码。",
+        "save": "保存",
+        "saving": "正在保存…",
+        "restart": "请重启应用以应用已保存的代理设置。",
+        "restartDialog": {
+          "title": "需要重启",
+          "action": "重启",
+          "failed": "无法重启应用。"
+        },
+        "invalid": "无法读取已保存的代理设置，已阻止外部请求。请修复设置或关闭代理，保存后重启应用。",
+        "loading": "正在加载…",
+        "loadFailed": "无法加载网络设置。",
+        "retry": "重试",
+        "errors": {
+          "host": "请输入不含协议、路径或端口的有效主机。",
+          "port": "请输入1至65535之间的整数端口。",
+          "username": "请输入有效的代理用户名。",
+          "credentials": "SOCKS 用户名和密码必须各为1至255字节。",
+          "passwordResetRequired": "无法读取已保存的密码。请删除或替换。",
+          "passwordAction": "请选择有效的密码操作。",
+          "type": "请选择 HTTP、SOCKS5 或 SOCKS5h。",
+          "saveFailed": "无法保存代理设置。"
+        }
+      },
       "title": "设置",
       "tabs": {
+        "network": "网络",
         "general": "常规",
         "mod": "模组",
         "account": "账户",

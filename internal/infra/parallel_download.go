@@ -91,7 +91,7 @@ func (d *ParallelDownloader) client() *http.Client {
 	if d != nil && d.Client != nil {
 		return d.Client
 	}
-	return http.DefaultClient
+	return &http.Client{Transport: unconfiguredHTTPTransport{}}
 }
 
 func (d *ParallelDownloader) nowFn() time.Time {

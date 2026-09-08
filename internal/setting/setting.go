@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -19,9 +20,12 @@ type Options struct {
 // Setting is the Go port of Electron desktop/src/main/setting.ts.
 // It reads and writes typed settings through the shipped db.Client.
 type Setting struct {
-	client *db.Client
-	opts   Options
-	specs  map[string]spec
+	proxyMu      sync.Mutex
+	activeProxy  infra.ProxyConfig
+	proxyInvalid bool
+	client       *db.Client
+	opts         Options
+	specs        map[string]spec
 }
 
 func New(client *db.Client) *Setting {
@@ -252,6 +256,9 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 	}
 	out := make([]AdvancedRow, 0, len(rows))
 	for _, row := range rows {
+		if row.Key == proxyStorageKey {
+			continue
+		}
 		out = append(out, AdvancedRow{
 			Key:   row.Key,
 			Value: maskSensitiveValue(row.Key, row.Value),
@@ -261,6 +268,9 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 }
 
 func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
+	if key == proxyStorageKey {
+		return settingError(fmt.Errorf("use network settings to change proxy configuration"), "advanced-set", "validate-key", key, infra.DiagnosticWarn)
+	}
 	existing, err := s.client.Settings.Get(ctx, key)
 	if err != nil {
 		return settingError(err, "advanced-set", "read", key, infra.DiagnosticError)

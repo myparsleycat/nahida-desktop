@@ -212,9 +212,25 @@ func (c *Client) BackendURL() string {
 //wails:ignore
 func (c *Client) HTTPClient() *http.Client {
 	if c == nil || c.http == nil {
-		return http.DefaultClient
+		return &http.Client{Transport: unconfiguredHTTPTransport{}}
 	}
 	return c.http
+}
+
+// UseTransport must run during startup, before requests or background workers.
+//
+//wails:ignore
+func (c *Client) UseTransport(transport http.RoundTripper) {
+	if c == nil || c.http == nil {
+		return
+	}
+	c.http.Transport = transport
+}
+
+type unconfiguredHTTPTransport struct{}
+
+func (unconfiguredHTTPTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("HTTP client is not configured")
 }
 
 func (c *Client) UseToken(fn TokenLookup) {

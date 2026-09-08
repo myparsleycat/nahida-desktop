@@ -283,7 +283,7 @@ func (d *Download) fetch(ctx context.Context, request DownloadRequest, resumeFro
 	}
 	client := d.client
 	if client == nil {
-		client = NewClient()
+		return nil, errors.New("download HTTP client is not configured")
 	}
 	noRetries := 0
 	return client.Fetch(ctx, request.URL, FetchOptions{
