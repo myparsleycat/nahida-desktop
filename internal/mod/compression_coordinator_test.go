@@ -620,6 +620,96 @@ func TestStartCompressionOmitsBusyStatusWithoutWork(t *testing.T) {
 	}
 }
 
+func TestStartCompressionPublishesTargetRestoreBeforeCompress(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	importer := filepath.Join(base, "Importer")
+	enabled := filepath.Join(importer, "Mods", "Sample")
+	disabled := filepath.Join(importer, "Mods", "DISABLED Sample")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(disabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	restorePath := filepath.Join(enabled, "restore.bin")
+	compressPath := filepath.Join(disabled, "compress.bin")
+	restoreData := bytes.Repeat([]byte("restore-me"), 1024)
+	if err := os.WriteFile(restorePath, restoreData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	compressData := bytes.Repeat([]byte("compress-me"), 4096)
+	if err := os.WriteFile(compressPath, bytes.Repeat([]byte("compress-me"), 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressZstdFile(ctx, restorePath, ignoreCompressionMutations); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(ctx, "zstd", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var statuses []string
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+		EventEmit: func(name string, data ...any) {
+			if name == compressionEvent {
+				mu.Lock()
+				statuses = append(statuses, data[0].(CompressionState).Status)
+				mu.Unlock()
+			}
+		},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	mu.Lock()
+	defer mu.Unlock()
+	restoreIndex, compressIndex := -1, -1
+	for index, status := range statuses {
+		if restoreIndex < 0 && status == "decompressing" {
+			restoreIndex = index
+		}
+		if status == "compressing" {
+			compressIndex = index
+		}
+		if restoreIndex >= 0 && compressIndex >= 0 {
+			break
+		}
+	}
+	if restoreIndex < 0 || compressIndex >= 0 {
+		t.Fatalf("published statuses = %v", statuses)
+	}
+	got, err := os.ReadFile(restorePath)
+	if err != nil || !bytes.Equal(got, restoreData) {
+		t.Fatalf("restored %s: %v", restorePath, err)
+	}
+	if _, err := os.Stat(restorePath + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("archive remains")
+	}
+	restoredCompress, err := os.ReadFile(compressPath)
+	if err != nil || !bytes.Equal(restoredCompress, compressData) {
+		t.Fatalf("compress input changed: %v", err)
+	}
+	if _, err := os.Stat(compressPath + managedZstdExtension); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("compress input was archived unexpectedly")
+	}
+}
+
 func TestStartCompressionPublishesDecompressingForLeftoverZstd(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
@@ -691,9 +781,13 @@ func TestAddWorkTotalsSetsBusyStatusOnlyWhenWorkExists(t *testing.T) {
 		name   string
 		add    func(*compressionCoordinator, int, int64)
 		status string
+		files  int
+		bytes  int64
 	}{
-		{name: "compress", add: (*compressionCoordinator).addCompressTotals, status: "compressing"},
-		{name: "restore", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing"},
+		{name: "compress files", add: (*compressionCoordinator).addCompressTotals, status: "compressing", files: 2, bytes: 40},
+		{name: "compress bytes only", add: (*compressionCoordinator).addCompressTotals, status: "compressing"},
+		{name: "restore files", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing", files: 2, bytes: 40},
+		{name: "restore bytes only", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -703,8 +797,12 @@ func TestAddWorkTotalsSetsBusyStatusOnlyWhenWorkExists(t *testing.T) {
 			if state := coordinator.snapshot(); state.Status != "checking" || state.TotalFiles != 0 {
 				t.Fatalf("empty totals = %+v", state)
 			}
-			test.add(coordinator, 2, 40)
-			if state := coordinator.snapshot(); state.Status != test.status || state.TotalFiles != 2 || state.TotalBytes != 40 {
+			files, bytes := test.files, test.bytes
+			if files == 0 && bytes == 0 {
+				bytes = 40
+			}
+			test.add(coordinator, files, bytes)
+			if state := coordinator.snapshot(); state.Status != test.status || state.TotalFiles != files || state.TotalBytes != bytes {
 				t.Fatalf("work totals = %+v", state)
 			}
 		})

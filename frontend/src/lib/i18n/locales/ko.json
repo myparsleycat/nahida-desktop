@@ -1932,7 +1932,6 @@
         "upscaling_and_converting": "텍스처 업스케일 및 변환 중"
       },
       "modCompression": {
-        "checking": "모드 압축 확인 중",
         "compressing": "모드 압축 중",
         "decompressing": "모드 복원 중",
         "error": "모드 압축 오류"

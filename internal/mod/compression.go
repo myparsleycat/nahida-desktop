@@ -434,7 +434,7 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 	if target {
 		if method == "zstd" {
 			err = errors.Join(
-				restoreEnabledZstd(ctx, workRoots, c.addCompressTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
+				restoreEnabledZstd(ctx, workRoots, c.addRestoreTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
 				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.addCompressTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
 			)
 		} else {
@@ -801,18 +801,31 @@ func (c *compressionCoordinator) isSelfChange(path string) bool {
 	return ok && expires.After(now)
 }
 
+type compressionWorkKind bool
+
+const (
+	compressWork compressionWorkKind = true
+	restoreWork  compressionWorkKind = false
+)
+
+// addTotals reports discovered work. Only calls carrying files or bytes
+// may flip the busy status, so empty scans keep the checking state.
 func (c *compressionCoordinator) addCompressTotals(files int, bytes int64) {
-	c.addWorkTotals("compressing", files, bytes)
+	c.addWorkTotals(compressWork, files, bytes)
 }
 
 func (c *compressionCoordinator) addRestoreTotals(files int, bytes int64) {
-	c.addWorkTotals("decompressing", files, bytes)
+	c.addWorkTotals(restoreWork, files, bytes)
 }
 
-func (c *compressionCoordinator) addWorkTotals(status string, files int, bytes int64) {
+func (c *compressionCoordinator) addWorkTotals(kind compressionWorkKind, files int, bytes int64) {
 	c.mu.Lock()
-	if files > 0 {
-		c.state.Status = status
+	if files > 0 || bytes > 0 {
+		if kind == compressWork {
+			c.state.Status = "compressing"
+		} else {
+			c.state.Status = "decompressing"
+		}
 	}
 	c.state.TotalFiles += files
 	c.state.TotalBytes += bytes

@@ -1913,7 +1913,6 @@
         "upscaling_and_converting": "正在放大纹理并转换"
       },
       "modCompression": {
-        "checking": "正在检查模组压缩",
         "compressing": "正在压缩模组",
         "decompressing": "正在还原模组",
         "error": "模组压缩错误"

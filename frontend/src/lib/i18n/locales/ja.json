@@ -1914,7 +1914,6 @@
         "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
       },
       "modCompression": {
-        "checking": "MOD圧縮を確認中",
         "compressing": "MODを圧縮中",
         "decompressing": "MODを復元中",
         "error": "MOD圧縮エラー"
