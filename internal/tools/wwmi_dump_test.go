@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,12 +91,14 @@ func TestWwmiHintMipmap(t *testing.T) {
 		width, height uint32
 		mipmaps       uint32
 		wantMip       uint32
-		wantW, wantH  int
+		wantW, wantH  uint32
 	}{
 		{4096, 4096, 14, 4, 256, 256},
 		{4096, 4096, 1, 0, 256, 256},
 		{4096, 4096, 2, 1, 256, 256},
 		{128, 128, 8, 0, 128, 128},
+		{math.MaxUint32, math.MaxUint32, 1, 0, 255, 255},
+		{math.MaxUint32, math.MaxUint32, 32, 24, 255, 255},
 	}
 	for _, test := range cases {
 		mip, width, height := wwmiHintMipmap(test.width, test.height, test.mipmaps)
@@ -103,6 +106,46 @@ func TestWwmiHintMipmap(t *testing.T) {
 			t.Fatalf("wwmiHintMipmap(%d, %d, %d) = (%d, %d, %d), want (%d, %d, %d)",
 				test.width, test.height, test.mipmaps, mip, width, height, test.wantMip, test.wantW, test.wantH)
 		}
+	}
+}
+
+func TestTextureAreaClampsUint32Overflow(t *testing.T) {
+	t.Parallel()
+	if got := textureArea(math.MaxUint32, math.MaxUint32); got != math.MaxInt {
+		t.Fatalf("textureArea(MaxUint32, MaxUint32) = %d, want MaxInt", got)
+	}
+	header := make([]byte, 24)
+	copy(header, pngSignature)
+	copy(header[12:16], "IHDR")
+	binary.BigEndian.PutUint32(header[16:20], math.MaxUint32)
+	binary.BigEndian.PutUint32(header[20:24], math.MaxUint32)
+	if got := pngIhdrArea(header); got != math.MaxInt {
+		t.Fatalf("pngIhdrArea = %d, want MaxInt", got)
+	}
+}
+
+func TestInspectWwmiTextureHintKeepsOversizedHeaderWithoutDecode(t *testing.T) {
+	ddsPath := filepath.Join(t.TempDir(), "huge.dds")
+	if err := os.WriteFile(ddsPath, encodeUncompressedDDSHeader(math.MaxUint32, math.MaxUint32), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ddsHint := inspectWwmiTextureHint(ddsPath)
+	if ddsHint == nil || ddsHint.Area != math.MaxInt || ddsHint.ColorSpace != "unknown" {
+		t.Fatalf("dds hint = %#v", ddsHint)
+	}
+
+	pngHeader := make([]byte, 24)
+	copy(pngHeader, pngSignature)
+	copy(pngHeader[12:16], "IHDR")
+	binary.BigEndian.PutUint32(pngHeader[16:20], math.MaxUint32)
+	binary.BigEndian.PutUint32(pngHeader[20:24], math.MaxUint32)
+	pngPath := filepath.Join(t.TempDir(), "huge.png")
+	if err := os.WriteFile(pngPath, pngHeader, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pngHint := inspectWwmiTextureHint(pngPath)
+	if pngHint == nil || pngHint.Area != math.MaxInt || !pngHint.SRGB {
+		t.Fatalf("png hint = %#v", pngHint)
 	}
 }
 

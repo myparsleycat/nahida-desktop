@@ -369,11 +369,7 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 		var raw []byte
 		raw, err = os.ReadFile(path)
 		if err == nil {
-			var width, height int
-			width, height, err = modelViewerTextureDimensions(raw, extension)
-			if err == nil && int64(width)*int64(height) > maxModelViewerTextureInputPixels {
-				err = fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", width, height)
-			}
+			_, _, err = modelViewerTextureDimensions(raw, extension)
 		}
 		if err == nil {
 			rgba, err = decodeModelViewerImage(raw, extension)
@@ -529,27 +525,14 @@ func decodeModelViewerDDS(raw []byte) (*image.NRGBA, error) {
 }
 
 func decodeModelViewerDDSFile(path string, size int64) (*image.NRGBA, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-	reader, err := ddsutil.NewDdsReader(file, size)
-	if err != nil {
-		return nil, err
-	}
-	metadata := reader.Metadata()
-	if int64(metadata.Width)*int64(metadata.Height) > maxModelViewerTextureInputPixels {
-		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", metadata.Width, metadata.Height)
-	}
-	if metadata.Depth != 1 {
-		return nil, fmt.Errorf("viewer texture must be two-dimensional: depth=%d", metadata.Depth)
-	}
-	mipmap, targetWidth, targetHeight := modelViewerPreviewMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
-	return decodeModelViewerDDSMip(reader, mipmap, uint32(targetWidth), uint32(targetHeight))
+	return decodeModelViewerDDSWithMip(path, size, modelViewerPreviewMipmap)
 }
 
 func decodeModelViewerDDSHint(path string, size int64) (*image.NRGBA, error) {
+	return decodeModelViewerDDSWithMip(path, size, wwmiHintMipmap)
+}
+
+func decodeModelViewerDDSWithMip(path string, size int64, selectMip func(width, height, mipmaps uint32) (uint32, uint32, uint32)) (*image.NRGBA, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -560,28 +543,14 @@ func decodeModelViewerDDSHint(path string, size int64) (*image.NRGBA, error) {
 		return nil, err
 	}
 	metadata := reader.Metadata()
-	if int64(metadata.Width)*int64(metadata.Height) > maxModelViewerTextureInputPixels {
+	if texturePixelCount(metadata.Width, metadata.Height) > uint64(maxModelViewerTextureInputPixels) {
 		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", metadata.Width, metadata.Height)
 	}
 	if metadata.Depth != 1 {
 		return nil, fmt.Errorf("viewer texture must be two-dimensional: depth=%d", metadata.Depth)
 	}
-	mipmap, targetWidth, targetHeight := wwmiHintMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
-	return decodeModelViewerDDSMip(reader, mipmap, uint32(targetWidth), uint32(targetHeight))
-}
-
-func modelViewerPreviewMipmap(width, height, mipmaps uint32) (uint32, int, int) {
-	targetWidth, targetHeight := viewerPreviewTextureSize(int(width), int(height))
-	mipmap := uint32(0)
-	for mipmap+1 < max(uint32(1), mipmaps) {
-		mipWidth := ddsutil.MipDimension(width, mipmap)
-		mipHeight := ddsutil.MipDimension(height, mipmap)
-		if int64(mipWidth)*int64(mipHeight) <= maxModelViewerTextureOutputPixels {
-			break
-		}
-		mipmap++
-	}
-	return mipmap, targetWidth, targetHeight
+	mipmap, targetWidth, targetHeight := selectMip(metadata.Width, metadata.Height, metadata.Mipmaps)
+	return decodeModelViewerDDSMip(reader, mipmap, targetWidth, targetHeight)
 }
 
 func decodeModelViewerDDSMip(reader *ddsutil.DdsReader, mipmap, targetWidth, targetHeight uint32) (*image.NRGBA, error) {
@@ -618,77 +587,105 @@ func imageToNRGBA(src image.Image) *image.NRGBA {
 	return dst
 }
 
+func texturePixelCount(width, height uint32) uint64 {
+	return uint64(width) * uint64(height)
+}
+
+func textureArea(width, height uint32) int {
+	count := texturePixelCount(width, height)
+	if count > uint64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(count)
+}
+
+func fitTextureSize(width, height uint32, maxPixels uint64) (uint32, uint32) {
+	for texturePixelCount(width, height) > maxPixels && (width > 1 || height > 1) {
+		width = max(uint32(1), width/2)
+		height = max(uint32(1), height/2)
+	}
+	return width, height
+}
+
+func selectMipForPixelBudget(width, height, mipmaps uint32, maxPixels uint64) (mipmap, mipWidth, mipHeight uint32) {
+	mipWidth, mipHeight = width, height
+	for mipmap+1 < max(uint32(1), mipmaps) {
+		if texturePixelCount(mipWidth, mipHeight) <= maxPixels {
+			break
+		}
+		mipmap++
+		mipWidth = ddsutil.MipDimension(width, mipmap)
+		mipHeight = ddsutil.MipDimension(height, mipmap)
+	}
+	return mipmap, mipWidth, mipHeight
+}
+
+func modelViewerPreviewMipmap(width, height, mipmaps uint32) (uint32, uint32, uint32) {
+	mipmap, _, _ := selectMipForPixelBudget(width, height, mipmaps, uint64(maxModelViewerTextureOutputPixels))
+	targetWidth, targetHeight := fitTextureSize(width, height, uint64(maxModelViewerTextureOutputPixels))
+	return mipmap, targetWidth, targetHeight
+}
+
+func wwmiHintMipmap(width, height, mipmaps uint32) (uint32, uint32, uint32) {
+	mipmap, mipWidth, mipHeight := selectMipForPixelBudget(width, height, mipmaps, uint64(maxHintAnalyzePixels))
+	targetWidth, targetHeight := fitTextureSize(mipWidth, mipHeight, uint64(maxHintAnalyzePixels))
+	return mipmap, targetWidth, targetHeight
+}
+
 func modelViewerTextureDimensions(raw []byte, extension string) (int, int, error) {
 	switch strings.ToLower(extension) {
 	case ".dds":
 		if len(raw) < 20 || string(raw[:4]) != "DDS " {
 			return 0, 0, fmt.Errorf("invalid DDS texture header")
 		}
-		width := int(binary.LittleEndian.Uint32(raw[16:20]))
-		height := int(binary.LittleEndian.Uint32(raw[12:16]))
-		if width <= 0 || height <= 0 {
+		width := binary.LittleEndian.Uint32(raw[16:20])
+		height := binary.LittleEndian.Uint32(raw[12:16])
+		if width == 0 || height == 0 {
 			return 0, 0, fmt.Errorf("invalid DDS texture dimensions")
 		}
-		return width, height, nil
+		if texturePixelCount(width, height) > uint64(maxModelViewerTextureInputPixels) {
+			return 0, 0, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", width, height)
+		}
+		return int(width), int(height), nil
 	case ".png":
 		if len(raw) < 24 || !bytes.Equal(raw[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
 			return 0, 0, fmt.Errorf("invalid PNG texture header")
 		}
-		width := int(binary.BigEndian.Uint32(raw[16:20]))
-		height := int(binary.BigEndian.Uint32(raw[20:24]))
-		if width <= 0 || height <= 0 {
+		width := binary.BigEndian.Uint32(raw[16:20])
+		height := binary.BigEndian.Uint32(raw[20:24])
+		if width == 0 || height == 0 {
 			return 0, 0, fmt.Errorf("invalid PNG texture dimensions")
 		}
-		return width, height, nil
+		if texturePixelCount(width, height) > uint64(maxModelViewerTextureInputPixels) {
+			return 0, 0, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", width, height)
+		}
+		return int(width), int(height), nil
 	default:
 		configuration, _, err := image.DecodeConfig(bytes.NewReader(raw))
 		if err != nil {
 			return 0, 0, err
 		}
+		if configuration.Width <= 0 || configuration.Height <= 0 {
+			return 0, 0, fmt.Errorf("invalid texture dimensions")
+		}
+		if uint64(configuration.Width)*uint64(configuration.Height) > uint64(maxModelViewerTextureInputPixels) {
+			return 0, 0, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", configuration.Width, configuration.Height)
+		}
 		return configuration.Width, configuration.Height, nil
 	}
-}
-
-func viewerPreviewTextureSize(width, height int) (int, int) {
-	for int64(width)*int64(height) > maxModelViewerTextureOutputPixels && (width > 1 || height > 1) {
-		width = max(1, width/2)
-		height = max(1, height/2)
-	}
-	return width, height
-}
-
-func wwmiHintAnalyzeSize(width, height int) (int, int) {
-	for int64(width)*int64(height) > maxHintAnalyzePixels && (width > 1 || height > 1) {
-		width = max(1, width/2)
-		height = max(1, height/2)
-	}
-	return width, height
-}
-
-func wwmiHintMipmap(width, height, mipmaps uint32) (uint32, int, int) {
-	mipmap := uint32(0)
-	mipWidth, mipHeight := int(width), int(height)
-	for mipmap+1 < max(uint32(1), mipmaps) {
-		if int64(mipWidth)*int64(mipHeight) <= maxHintAnalyzePixels {
-			break
-		}
-		mipmap++
-		mipWidth = int(ddsutil.MipDimension(width, mipmap))
-		mipHeight = int(ddsutil.MipDimension(height, mipmap))
-	}
-	targetWidth, targetHeight := wwmiHintAnalyzeSize(mipWidth, mipHeight)
-	return mipmap, targetWidth, targetHeight
 }
 
 func downscaleModelViewerTexture(source *image.NRGBA, maxPixels int64) *image.NRGBA {
 	if source == nil || maxPixels <= 0 {
 		return source
 	}
-	for int64(source.Bounds().Dx())*int64(source.Bounds().Dy()) > maxPixels {
-		width, height := max(1, source.Bounds().Dx()/2), max(1, source.Bounds().Dy()/2)
-		source = downsampleModelViewerTextureHalf(source, width, height)
+	for {
+		width, height := source.Bounds().Dx(), source.Bounds().Dy()
+		if width <= 0 || height <= 0 || uint64(width)*uint64(height) <= uint64(maxPixels) {
+			return source
+		}
+		source = downsampleModelViewerTextureHalf(source, max(1, width/2), max(1, height/2))
 	}
-	return source
 }
 
 func downsampleModelViewerTextureHalf(source *image.NRGBA, width, height int) *image.NRGBA {

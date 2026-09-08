@@ -282,7 +282,9 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 	if len(header) < 128 {
 		return &wwmiTextureHint{ColorSpace: "unknown", Bytes: size}
 	}
-	area := int(binary.LittleEndian.Uint32(header[16:20]) * binary.LittleEndian.Uint32(header[12:16]))
+	width := binary.LittleEndian.Uint32(header[16:20])
+	height := binary.LittleEndian.Uint32(header[12:16])
+	area := textureArea(width, height)
 	fourcc := string(header[84:88])
 	dxgi := uint32(0xFFFFFFFF)
 	if fourcc == "DX10" && len(header) >= 132 {
@@ -298,7 +300,7 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 		}
 	}
 	packedFormat := ddsPackedFourCC[fourcc] || ddsPackedDXGI[dxgi]
-	if colorSpace == "linear" || packedFormat || area > maxHintDecodeArea || size > maxHintDecodeBytes {
+	if colorSpace == "linear" || packedFormat || texturePixelCount(width, height) > uint64(maxHintDecodeArea) || size > maxHintDecodeBytes {
 		return &wwmiTextureHint{SRGB: colorSpace == "srgb", ColorSpace: colorSpace, Area: area, Bytes: size, IsLikelyNormal: packedFormat, IsLikelyPacked: packedFormat}
 	}
 	decoded, decodeErr := decodeModelViewerDDSHint(filePath, size)
@@ -337,7 +339,7 @@ func pngIhdrArea(header []byte) int {
 	if width == 0 || height == 0 {
 		return 0
 	}
-	return int(width * height)
+	return textureArea(width, height)
 }
 
 func hintFromAnalysis(analysis wwmiRGBAAnalysis, colorSpace string, area int, size int64) *wwmiTextureHint {
