@@ -173,6 +173,21 @@ func TestDiagnosticServiceBoundaryIgnoresReportedMetadata(t *testing.T) {
 	}
 }
 
+func TestReportErrorHonorsDebugSeverity(t *testing.T) {
+	var output bytes.Buffer
+	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
+	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	if output.Len() != 0 {
+		t.Fatalf("debug leaked at default warn: %s", output.String())
+	}
+	log.SetLevel("debug")
+	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	got := output.String()
+	if !strings.Contains(got, " DEBUG ") || strings.Contains(got, " ERROR ") || strings.Contains(got, " WARN ") {
+		t.Fatalf("wrong level: %s", got)
+	}
+}
+
 func TestDiagnosticSeverityPreservesActivePolicies(t *testing.T) {
 	for _, test := range []struct {
 		name       string
