@@ -51,7 +51,7 @@ func scanModelViewerSymbolicRoot(sections []modINISection, section modINISection
 	return state, variables, nil
 }
 
-func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults map[string]any) ([]modelViewerDirectDrawRecord, error) {
+func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults map[string]any) ([]modelViewerDirectDrawRecord, []modelViewerSymbolicAssignment, error) {
 	lookup := make(map[string]modINISection)
 	for _, section := range sections {
 		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
@@ -61,6 +61,8 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 		variables: modelViewerDirectConditionVariables(sections, defaults),
 	}
 	var output []modelViewerDirectDrawRecord
+	var fallback []modelViewerSymbolicAssignment
+	seenFallback := map[string]bool{}
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") {
 			continue
@@ -74,21 +76,24 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 			textures: make(map[string][]modelViewerSymbolicAssignment),
 		}
 		if err := ctx.scan(section.Lines, state, nil, map[string]bool{modelViewerNormalizeKey(section.Header + section.Name): true}); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !state.explicitDraw && !sectionHandlingSkip(section) {
 			records := ctx.implicitRecords(state)
 			if len(records) > 0 {
 				ctx.draws += len(records)
 				if ctx.draws > maxModelViewerDraws {
-					return nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", ctx.draws, maxModelViewerDraws))
+					return nil, nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", ctx.draws, maxModelViewerDraws))
 				}
 				state.draws = append(state.draws, records...)
 			}
 		}
+		if len(effectiveModelViewerSymbolicAssignments(state.buffers["ib"])) == 0 {
+			fallback = appendModelViewerFallbackVertexBuffers(fallback, seenFallback, effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]))
+		}
 		output = append(output, state.draws...)
 	}
-	return dedupeModelViewerDirectDrawRecords(keepModelViewerPreviewLODRecords(output)), nil
+	return dedupeModelViewerDirectDrawRecords(keepModelViewerPreviewLODRecords(output)), fallback, nil
 }
 
 // modelViewerNestedSectionName returns a section to scan as a nested draw
@@ -175,7 +180,7 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 		switch strings.ToLower(key) {
 		case "ib", "vb0", "vb1", "vb2":
 			resource := modelViewerTrimResourcePrefix(value)
-			if resource != "" {
+			if resource != "" && !strings.EqualFold(resource, "null") {
 				state.buffers[strings.ToLower(key)] = append(state.buffers[strings.ToLower(key)], modelViewerSymbolicAssignment{resource: resource, conditions: cloneModelViewerDNF(conditions), sequence: sequence})
 			}
 		case "drawindexed", "drawindexedinstanced":
@@ -268,6 +273,101 @@ func (c *modelViewerSymbolicScanContext) implicitRecords(state *modelViewerSymbo
 		return nil
 	}
 	return c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue())
+}
+
+func appendModelViewerFallbackVertexBuffers(fallback []modelViewerSymbolicAssignment, seen map[string]bool, assignments []modelViewerSymbolicAssignment) []modelViewerSymbolicAssignment {
+	for _, assignment := range assignments {
+		if assignment.resource == "" {
+			continue
+		}
+		key := modelViewerNormalizeKey(assignment.resource) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		fallback = append(fallback, assignment)
+	}
+	return fallback
+}
+
+func applyModelViewerFallbackVertexBuffers(state modelViewerDirectBufferState, conditions ModelViewerDNF, fallback []modelViewerSymbolicAssignment) []modelViewerSymbolicBufferVariant {
+	base := modelViewerSymbolicBufferVariant{state: state, conditions: conditions}
+	if state.vb0 != "" || state.ib == "" || len(fallback) == 0 {
+		return []modelViewerSymbolicBufferVariant{base}
+	}
+	var hits []modelViewerSymbolicAssignment
+	for _, assignment := range fallback {
+		if modelViewerDNFIsTrue(assignment.conditions) || modelViewerDNFIntersects(conditions, assignment.conditions) {
+			hits = append(hits, assignment)
+		}
+	}
+	hits = preferModelViewerFallbackVertexBuffers(hits, state.ib)
+	if len(hits) == 0 {
+		return []modelViewerSymbolicBufferVariant{base}
+	}
+	if resource := uniqueModelViewerFallbackResource(hits); resource != "" {
+		base.state.vb0 = resource
+		return []modelViewerSymbolicBufferVariant{base}
+	}
+	var expanded []modelViewerSymbolicBufferVariant
+	for _, hit := range hits {
+		nextConditions := modelViewerDNFAnd(conditions, hit.conditions)
+		if len(nextConditions) == 0 {
+			continue
+		}
+		next := state
+		next.vb0 = hit.resource
+		expanded = append(expanded, modelViewerSymbolicBufferVariant{state: next, conditions: nextConditions})
+	}
+	if len(expanded) == 0 {
+		return []modelViewerSymbolicBufferVariant{base}
+	}
+	return expanded
+}
+
+func preferModelViewerFallbackVertexBuffers(hits []modelViewerSymbolicAssignment, ibName string) []modelViewerSymbolicAssignment {
+	if len(hits) <= 1 {
+		return hits
+	}
+	var matched []modelViewerSymbolicAssignment
+	for _, hit := range hits {
+		if modelViewerKeyMatches(hit.resource, ibName, false) {
+			matched = append(matched, hit)
+		}
+	}
+	if len(matched) > 0 {
+		hits = matched
+	}
+	if len(hits) <= 1 {
+		return hits
+	}
+	suffix, ok := modelViewerNumericSuffix(ibName)
+	if !ok {
+		return hits
+	}
+	var sameSuffix []modelViewerSymbolicAssignment
+	for _, hit := range hits {
+		if value, has := modelViewerNumericSuffix(hit.resource); has && value == suffix {
+			sameSuffix = append(sameSuffix, hit)
+		}
+	}
+	if len(sameSuffix) > 0 {
+		return sameSuffix
+	}
+	return hits
+}
+
+func uniqueModelViewerFallbackResource(hits []modelViewerSymbolicAssignment) string {
+	if len(hits) == 0 {
+		return ""
+	}
+	resource := hits[0].resource
+	for _, hit := range hits[1:] {
+		if modelViewerNormalizeKey(hit.resource) != modelViewerNormalizeKey(resource) {
+			return ""
+		}
+	}
+	return resource
 }
 
 func effectiveModelViewerSymbolicAssignments(input []modelViewerSymbolicAssignment) []modelViewerSymbolicAssignment {

@@ -48,6 +48,7 @@ function descriptor(shapeTargets = 0, withPose = true): ViewerComputeDeformer {
             amplitude: 0,
             bias: 0.5,
         })),
+        shapeStages: [],
         pose: withPose
             ? {
                   blend: source(32, 32),
@@ -134,5 +135,11 @@ describe("GIMI shape/pose compute kernel", () => {
                 new Uint32Array([1]),
             ),
         ).toThrow("source index 1");
+        expect(
+            compactGIMIShapePoseFrame(
+                { positions: new Float32Array([1, 2, 3]), normals: new Float32Array([0, 0, 1]) },
+                new Uint32Array([0]),
+            ).tangents,
+        ).toBeUndefined();
     });
 });

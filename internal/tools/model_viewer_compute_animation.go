@@ -31,15 +31,36 @@ type modelViewerComputePass struct {
 	shader, outputName string
 }
 
+type modelViewerKnownBoneKernel struct {
+	kind        string
+	baseStride  int
+	blendStride int
+	poseStride  int
+	shapePasses bool
+}
+
+func modelViewerKnownBoneKernelForShader(shader string) (modelViewerKnownBoneKernel, bool) {
+	switch {
+	case isKnownModelViewerGIMIShapePoseBoneShader(shader):
+		return modelViewerKnownBoneKernel{kind: modelViewerGIMIShapePoseKind, baseStride: 40, blendStride: 32, poseStride: 56, shapePasses: true}, true
+	case isKnownModelViewerGIMICyclicPackedBoneShader(shader):
+		return modelViewerKnownBoneKernel{kind: modelViewerPackedObjectKind, baseStride: modelViewerPackedObjectStride, blendStride: 32, poseStride: 48}, true
+	}
+	return modelViewerKnownBoneKernel{}, false
+}
+
 func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sections []modINISection, effectiveResources []modelViewerResource, meshes []modelViewerDirectMesh, names map[string]modelViewerVariableName) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
 	rawResources := modelViewerResourceMap(collectModelViewerResources(sections))
 	effective := modelViewerResourceMap(effectiveResources)
 	defaults := collectModelViewerDefaultVariables(sections)
 	reachable := collectModelViewerReachableComputeSections(sections)
 	shapeOnly := func() (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
-		return detectModelViewerShapeOnlyAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes)
+		if deformer, clips := detectModelViewerShapeOnlyAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes); deformer != nil {
+			return deformer, clips
+		}
+		return detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes)
 	}
-	posePass, poseSection, ok := detectModelViewerKnownBonePass(root, shaderBaseDir, sections, reachable)
+	posePass, poseSection, kernel, ok := detectModelViewerKnownBonePass(root, shaderBaseDir, sections, reachable)
 	if !ok {
 		return shapeOnly()
 	}
@@ -49,31 +70,31 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 	outputRaw, outputRawOK := rawResources[modelViewerNormalizeKey(posePass.outputName)]
 	outputEffective, outputEffectiveOK := effective[modelViewerNormalizeKey(posePass.outputName)]
 	boneCountValue, boneCountOK := resolveModelViewerNumericToken(posePass.x89, defaults)
-	if !boneCountOK || math.IsNaN(boneCountValue) || math.IsInf(boneCountValue, 0) || boneCountValue != math.Trunc(boneCountValue) || boneCountValue <= 0 || boneCountValue > float64(math.MaxInt/56) {
+	if !boneCountOK || math.IsNaN(boneCountValue) || math.IsInf(boneCountValue, 0) || boneCountValue != math.Trunc(boneCountValue) || boneCountValue <= 0 || boneCountValue > float64(math.MaxInt/kernel.poseStride) {
 		return shapeOnly()
 	}
 	boneCount := int(boneCountValue)
-	if !baseOK || !blendOK || !poseOK || !outputRawOK || !outputEffectiveOK || outputRaw.Filename != "" || !samePathFold(outputEffective.Filename, base.Filename) || base.Stride != 40 || blend.Stride != 32 || pose.Stride != 56 {
+	if !baseOK || !blendOK || !poseOK || !outputRawOK || !outputEffectiveOK || outputRaw.Filename != "" || !samePathFold(outputEffective.Filename, base.Filename) || base.Stride != kernel.baseStride || blend.Stride != kernel.blendStride || pose.Stride != kernel.poseStride {
 		return shapeOnly()
 	}
 	baseSource, baseOK := modelViewerComputeSource(root, base)
 	blendSource, blendOK := modelViewerComputeSource(root, blend)
 	poseSource, poseOK := modelViewerComputeSource(root, pose)
-	if !baseOK || !blendOK || !poseOK || baseSource.ByteLength%40 != 0 {
+	if !baseOK || !blendOK || !poseOK || baseSource.ByteLength%int64(kernel.baseStride) != 0 {
 		return shapeOnly()
 	}
-	vertexCount := int(baseSource.ByteLength / 40)
-	if vertexCount == 0 || blendSource.ByteLength != int64(vertexCount*32) || poseSource.ByteLength%int64(boneCount*56) != 0 {
+	vertexCount := int(baseSource.ByteLength / int64(kernel.baseStride))
+	if vertexCount == 0 || blendSource.ByteLength != int64(vertexCount*kernel.blendStride) || poseSource.ByteLength%int64(boneCount*kernel.poseStride) != 0 {
 		return shapeOnly()
 	}
-	frameCount := int(poseSource.ByteLength / int64(boneCount*56))
+	frameCount := int(poseSource.ByteLength / int64(boneCount*kernel.poseStride))
 	meshIDs := modelViewerComputeMeshIDs(meshes, base.Filename)
 	if len(meshIDs) == 0 || frameCount < 2 {
 		return shapeOnly()
 	}
 	deformerID := modelViewerComputeDeformerID(scopeID, firstModelViewerString(posePass.outputName, base.Name))
 	deformer := &ModelViewerComputeDeformerTransport{
-		Kind:        modelViewerGIMIShapePoseKind,
+		Kind:        kernel.kind,
 		ID:          deformerID,
 		MeshIDs:     meshIDs,
 		VertexCount: vertexCount,
@@ -82,10 +103,16 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 			Blend: blendSource, Frames: poseSource, BoneCount: boneCount, FrameCount: frameCount,
 		},
 	}
-	deformer.ShapePasses = detectModelViewerKnownShapePasses(root, shaderBaseDir, sections, reachable, effective, defaults, base, vertexCount)
+	if kernel.shapePasses {
+		deformer.ShapePasses = detectModelViewerKnownShapePasses(root, shaderBaseDir, sections, reachable, effective, defaults, base, vertexCount)
+	}
 	clips := detectModelViewerGIMIShapePoseClips(sections, poseSection, posePass.x88, defaults, names, deformerID, frameCount)
 	if len(clips) == 0 {
-		clips = []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Pose Animation", frameCount, 30)}
+		fps := 30.0
+		if rate, ok := modelViewerComputePoseFPS(poseSection, posePass.x88, defaults); ok {
+			fps = rate
+		}
+		clips = []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Pose Animation", frameCount, fps)}
 	}
 	return deformer, clips
 }
@@ -188,7 +215,7 @@ func modelViewerComputeMeshIDs(meshes []modelViewerDirectMesh, filename string) 
 	return output
 }
 
-func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool) (modelViewerComputePass, modINISection, bool) {
+func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool) (modelViewerComputePass, modINISection, modelViewerKnownBoneKernel, bool) {
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CustomShader") || !reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
 			continue
@@ -198,12 +225,15 @@ func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modIN
 				continue
 			}
 			shader, ok := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
-			if ok && isKnownModelViewerGIMIShapePoseBoneShader(shader) {
-				return pass, section, true
+			if !ok {
+				continue
+			}
+			if kernel, known := modelViewerKnownBoneKernelForShader(shader); known {
+				return pass, section, kernel, true
 			}
 		}
 	}
-	return modelViewerComputePass{}, modINISection{}, false
+	return modelViewerComputePass{}, modINISection{}, modelViewerKnownBoneKernel{}, false
 }
 
 func detectModelViewerKnownShapePasses(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool, resources map[string]modelViewerResource, defaults map[string]any, base modelViewerResource, vertexCount int) []ModelViewerComputeShapePass {
@@ -405,6 +435,10 @@ func knownModelViewerShapeShaderParameters(shader string) (float64, float64, flo
 			return 0, 0, 0, false
 		}
 	}
+	return parseModelViewerShapeWeight(compact)
+}
+
+func parseModelViewerShapeWeight(compact string) (float64, float64, float64, bool) {
 	match := modelViewerShapeWeightRE.FindStringSubmatch(compact)
 	if match == nil {
 		return 0, 0, 0, false
@@ -438,28 +472,54 @@ func parseModelViewerPhaseExpression(expression string) (string, float64, bool) 
 }
 
 func findModelViewerAccumulatorRate(sections []modINISection, variable string, defaults map[string]any) (float64, bool) {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`, regexp.QuoteMeta(variable), regexp.QuoteMeta(variable)))
 	for _, section := range sections {
-		for _, raw := range section.Lines {
-			if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-				return resolveModelViewerNumericToken(match[1], defaults)
-			}
+		if rate, ok := findModelViewerAccumulatorRateInLines(section.Lines, variable, defaults); ok {
+			return rate, true
+		}
+	}
+	return 0, false
+}
+
+func findModelViewerAccumulatorRateInLines(lines []string, variable string, defaults map[string]any) (float64, bool) {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`, regexp.QuoteMeta(variable), regexp.QuoteMeta(variable)))
+	for _, raw := range lines {
+		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
+			return resolveModelViewerNumericToken(match[1], defaults)
 		}
 	}
 	return 0, false
 }
 
 func findModelViewerAccumulatorWrap(sections []modINISection, variable string, defaults map[string]any) float64 {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
 	for _, section := range sections {
-		for _, raw := range section.Lines {
-			if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-				value, _ := resolveModelViewerNumericToken(match[1], defaults)
-				return value
-			}
+		if value := findModelViewerAccumulatorWrapInLines(section.Lines, variable, defaults); value != 0 {
+			return value
 		}
 	}
 	return 0
+}
+
+func findModelViewerAccumulatorWrapInLines(lines []string, variable string, defaults map[string]any) float64 {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
+	for _, raw := range lines {
+		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
+			value, _ := resolveModelViewerNumericToken(match[1], defaults)
+			return value
+		}
+	}
+	return 0
+}
+
+func modelViewerComputePoseFPS(section modINISection, frameExpression string, defaults map[string]any) (float64, bool) {
+	variable, _, ok := parseModelViewerPhaseExpression(frameExpression)
+	if !ok {
+		return 0, false
+	}
+	fps, ok := findModelViewerAccumulatorRate([]modINISection{section}, variable, defaults)
+	if !ok || fps <= 0 {
+		return 0, false
+	}
+	return fps, true
 }
 
 func detectModelViewerGIMIShapePoseClips(sections []modINISection, poseSection modINISection, frameExpression string, defaults map[string]any, names map[string]modelViewerVariableName, deformerID string, frameCount int) []modelViewerPreparedAnimationClip {
@@ -467,8 +527,8 @@ func detectModelViewerGIMIShapePoseClips(sections []modINISection, poseSection m
 	if !ok {
 		return nil
 	}
-	fps, ok := findModelViewerAccumulatorRate([]modINISection{poseSection}, frameVariable, defaults)
-	if !ok || fps <= 0 {
+	fps, ok := modelViewerComputePoseFPS(poseSection, frameExpression, defaults)
+	if !ok {
 		return nil
 	}
 	endVariable := ""
@@ -600,6 +660,11 @@ func sortedModelViewerStateRangeKeys(ranges map[string]modelViewerStateRange) []
 	for key := range ranges {
 		keys = append(keys, key)
 	}
+	sortModelViewerNumericStrings(keys)
+	return keys
+}
+
+func sortModelViewerNumericStrings(keys []string) {
 	sort.Slice(keys, func(i, j int) bool {
 		left, leftErr := strconv.ParseFloat(keys[i], 64)
 		right, rightErr := strconv.ParseFloat(keys[j], 64)
@@ -608,5 +673,4 @@ func sortedModelViewerStateRangeKeys(ranges map[string]modelViewerStateRange) []
 		}
 		return keys[i] < keys[j]
 	})
-	return keys
 }

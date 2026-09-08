@@ -10,7 +10,7 @@ export type GIMIShapePoseBuffers = {
 export type GIMIShapePoseFrame = {
     positions: Float32Array;
     normals: Float32Array;
-    tangents: Float32Array;
+    tangents?: Float32Array;
 };
 
 export function validateGIMIShapePoseBuffers(
@@ -137,14 +137,16 @@ export function compactGIMIShapePoseFrame(
 ): GIMIShapePoseFrame {
     const positions = new Float32Array(sourceIndices.length * 3);
     const normals = new Float32Array(sourceIndices.length * 3);
-    const tangents = new Float32Array(sourceIndices.length * 4);
+    const tangents = frame.tangents ? new Float32Array(sourceIndices.length * 4) : undefined;
     sourceIndices.forEach((source, target) => {
         if (source * 3 + 2 >= frame.positions.length) {
             throw new Error(`GIMI shape/pose source index ${source} is outside the vertex buffer.`);
         }
         positions.set(frame.positions.subarray(source * 3, source * 3 + 3), target * 3);
         normals.set(frame.normals.subarray(source * 3, source * 3 + 3), target * 3);
-        tangents.set(frame.tangents.subarray(source * 4, source * 4 + 4), target * 4);
+        if (tangents && frame.tangents) {
+            tangents.set(frame.tangents.subarray(source * 4, source * 4 + 4), target * 4);
+        }
     });
     return { positions, normals, tangents };
 }

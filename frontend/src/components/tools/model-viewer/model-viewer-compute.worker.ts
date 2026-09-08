@@ -1,12 +1,22 @@
 import { serializeDiagnostic } from "@shared/diagnostic";
-import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
+import type { ViewerComputeBinarySource, ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
+import {
+    computeCyclicPackedFrame,
+    validateCyclicPackedBuffers,
+} from "./model-viewer-compute-cyclic";
 import {
     compactGIMIShapePoseFrame,
     computeGIMIShapePoseFrame,
     type GIMIShapePoseBuffers,
+    type GIMIShapePoseFrame,
     validateGIMIShapePoseBuffers,
 } from "./model-viewer-compute-kernel";
+import {
+    computePackedShapeFrame,
+    type PackedShapeStageBuffers,
+    validatePackedShapeBuffers,
+} from "./model-viewer-compute-packed-shape";
 
 type ComputeMesh = {
     id: string;
@@ -38,9 +48,8 @@ const scope = self as unknown as WorkerScope;
 let active:
     | {
           generation: number;
-          deformer: ViewerComputeDeformer;
-          buffers: GIMIShapePoseBuffers;
           meshes: Array<ComputeMesh & { sourceIndices: Uint32Array }>;
+          compute: (poseFrame: number, phaseSeconds: number) => GIMIShapePoseFrame;
       }
     | undefined;
 
@@ -56,36 +65,14 @@ scope.onmessage = (event) => {
 async function initialize(request: InitRequest): Promise<void> {
     const generation = request.generation;
     try {
-        const [base, shapeTargets, blend, pose, meshes] = await Promise.all([
-            fetchSource(request.deformer.base.url, request.deformer.base.byteLength),
-            Promise.all(
-                request.deformer.shapePasses.map((pass) =>
-                    fetchSource(pass.target.url, pass.target.byteLength),
-                ),
-            ),
-            request.deformer.pose
-                ? fetchSource(
-                      request.deformer.pose.blend.url,
-                      request.deformer.pose.blend.byteLength,
-                  )
-                : undefined,
-            request.deformer.pose
-                ? fetchSource(
-                      request.deformer.pose.frames.url,
-                      request.deformer.pose.frames.byteLength,
-                  )
-                : undefined,
-            Promise.all(
-                request.meshes.map(async (mesh) => ({
-                    ...mesh,
-                    sourceIndices: mesh.sourceIndicesUrl
-                        ? new Uint32Array(await fetchSource(mesh.sourceIndicesUrl))
-                        : Uint32Array.from({ length: mesh.vertexCount }, (_, index) => index),
-                })),
-            ),
-        ]);
-        const buffers = { base, shapeTargets, blend, pose };
-        validateGIMIShapePoseBuffers(request.deformer, buffers);
+        const meshes = await Promise.all(
+            request.meshes.map(async (mesh) => ({
+                ...mesh,
+                sourceIndices: mesh.sourceIndicesUrl
+                    ? new Uint32Array(await fetchSource(mesh.sourceIndicesUrl))
+                    : Uint32Array.from({ length: mesh.vertexCount }, (_, index) => index),
+            })),
+        );
         for (const mesh of meshes) {
             if (mesh.sourceIndices.length !== mesh.vertexCount) {
                 throw new Error(
@@ -93,7 +80,8 @@ async function initialize(request: InitRequest): Promise<void> {
                 );
             }
         }
-        active = { generation, deformer: request.deformer, buffers, meshes };
+        const compute = await bindDeformerCompute(request.deformer);
+        active = { generation, meshes, compute };
         scope.postMessage({ type: "ready", generation });
     } catch (error) {
         postError(generation, undefined, "initialize", error, request.deformer.base.url);
@@ -106,28 +94,92 @@ function computeFrame(request: FrameRequest): void {
         return;
     }
     try {
-        const frame = computeGIMIShapePoseFrame(
-            current.deformer,
-            current.buffers,
-            request.poseFrame,
-            request.phaseSeconds,
-        );
+        const frame = current.compute(request.poseFrame, request.phaseSeconds);
         const meshes = current.meshes.map((mesh) => {
             const compact = compactGIMIShapePoseFrame(frame, mesh.sourceIndices);
             return {
                 meshId: mesh.id,
                 positions: compact.positions.buffer,
                 normals: compact.normals.buffer,
-                tangents: compact.tangents.buffer,
+                tangents: compact.tangents?.buffer,
             };
         });
         scope.postMessage(
             { type: "frame", generation: request.generation, id: request.id, meshes },
-            meshes.flatMap((mesh) => [mesh.positions, mesh.normals, mesh.tangents]),
+            meshes.flatMap((mesh) =>
+                mesh.tangents
+                    ? [mesh.positions, mesh.normals, mesh.tangents]
+                    : [mesh.positions, mesh.normals],
+            ),
         );
     } catch (error) {
         postError(request.generation, request.id, "compute-frame", error);
     }
+}
+
+async function bindDeformerCompute(
+    deformer: ViewerComputeDeformer,
+): Promise<(poseFrame: number, phaseSeconds: number) => GIMIShapePoseFrame> {
+    switch (deformer.kind) {
+        case "gimi_cyclic_packed_shape_v1": {
+            const stages = await loadPackedShapeStages(deformer);
+            validatePackedShapeBuffers(deformer, stages);
+            return (_poseFrame, phaseSeconds) =>
+                computePackedShapeFrame(deformer, stages, phaseSeconds);
+        }
+        case "gimi_cyclic_packed_v1": {
+            const buffers = await loadShapePoseBuffers(deformer);
+            validateCyclicPackedBuffers(deformer, buffers);
+            return (poseFrame) => computeCyclicPackedFrame(deformer, buffers, poseFrame);
+        }
+        case "gimi_shape_pose_v1": {
+            const buffers = await loadShapePoseBuffers(deformer);
+            validateGIMIShapePoseBuffers(deformer, buffers);
+            return (poseFrame, phaseSeconds) =>
+                computeGIMIShapePoseFrame(deformer, buffers, poseFrame, phaseSeconds);
+        }
+    }
+}
+
+async function loadShapePoseBuffers(
+    deformer: ViewerComputeDeformer,
+): Promise<GIMIShapePoseBuffers> {
+    const [base, shapeTargets, blend, pose] = await Promise.all([
+        fetchSource(deformer.base.url, deformer.base.byteLength),
+        Promise.all(
+            deformer.shapePasses.map((pass) =>
+                fetchSource(pass.target.url, pass.target.byteLength),
+            ),
+        ),
+        deformer.pose
+            ? fetchSource(deformer.pose.blend.url, deformer.pose.blend.byteLength)
+            : undefined,
+        deformer.pose
+            ? fetchSource(deformer.pose.frames.url, deformer.pose.frames.byteLength)
+            : undefined,
+    ]);
+    return { base, shapeTargets, blend, pose };
+}
+
+async function loadPackedShapeStages(
+    deformer: ViewerComputeDeformer,
+): Promise<PackedShapeStageBuffers> {
+    const cache = new Map<string, Promise<ArrayBuffer>>();
+    const load = (source: ViewerComputeBinarySource) => {
+        const hit = cache.get(source.url);
+        if (hit) {
+            return hit;
+        }
+        const pending = fetchSource(source.url, source.byteLength);
+        cache.set(source.url, pending);
+        return pending;
+    };
+    return Promise.all(
+        deformer.shapeStages.map(async (stage) => ({
+            base: await load(stage.base),
+            target: await load(stage.target),
+        })),
+    );
 }
 
 async function fetchSource(url: string, expectedBytes?: number): Promise<ArrayBuffer> {

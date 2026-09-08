@@ -136,6 +136,19 @@ type ModelViewerComputeShapePass struct {
 	Bias         float64                        `json:"bias"`
 }
 
+type ModelViewerComputeShapeStage struct {
+	Base         ModelViewerComputeBinarySource `json:"base"`
+	Target       ModelViewerComputeBinarySource `json:"target"`
+	PhaseRate    float64                        `json:"phaseRate"`
+	WrapAt       float64                        `json:"wrapAt,omitempty"`
+	PhaseStart   float64                        `json:"phaseStart"`
+	PhaseOffset  float64                        `json:"phaseOffset"`
+	AngularScale float64                        `json:"angularScale"`
+	Amplitude    float64                        `json:"amplitude"`
+	Bias         float64                        `json:"bias"`
+	Duration     float64                        `json:"duration"`
+}
+
 type ModelViewerComputePoseSource struct {
 	Blend      ModelViewerComputeBinarySource `json:"blend"`
 	Frames     ModelViewerComputeBinarySource `json:"frames"`
@@ -150,6 +163,7 @@ type ModelViewerComputeDeformerTransport struct {
 	VertexCount int                            `json:"vertexCount"`
 	Base        ModelViewerComputeBinarySource `json:"base"`
 	ShapePasses []ModelViewerComputeShapePass  `json:"shapePasses"`
+	ShapeStages []ModelViewerComputeShapeStage `json:"shapeStages,omitempty"`
 	Pose        *ModelViewerComputePoseSource  `json:"pose,omitempty"`
 }
 
@@ -647,6 +661,9 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 		if positionStride == 0 {
 			positionStride = group.Stride
 		}
+		if texcoordStride == 0 && isModelViewerPackedObjectStride(group.Stride) && modelViewerPositionLooksPackedObject(group.VB, group.Stride) {
+			return modelViewerPackedObjectLayout(indexFormat, group.Stride), nil
+		}
 		layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"})
 		if positionStride >= 40 && detectModelViewerPositionFrame(group.VB, group.Stride) {
 			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
@@ -855,6 +872,11 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 		for passIndex := range deformer.ShapePasses {
 			pass := &deformer.ShapePasses[passIndex]
 			pass.Target.URL = t.protocol.LocalFileURL(pass.Target.sourcePath, true)
+		}
+		for stageIndex := range deformer.ShapeStages {
+			stage := &deformer.ShapeStages[stageIndex]
+			stage.Base.URL = t.protocol.LocalFileURL(stage.Base.sourcePath, true)
+			stage.Target.URL = t.protocol.LocalFileURL(stage.Target.sourcePath, true)
 		}
 		if deformer.Pose != nil {
 			deformer.Pose.Blend.URL = t.protocol.LocalFileURL(deformer.Pose.Blend.sourcePath, true)

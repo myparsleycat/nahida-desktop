@@ -37,7 +37,8 @@ type modelViewerDirectConditionalBranch struct {
 }
 
 func collectModelViewerDirectDrawRecords(sections []modINISection, variables map[string]any) ([]modelViewerDirectDrawRecord, error) {
-	return collectModelViewerSymbolicDrawRecords(sections, variables)
+	records, _, err := collectModelViewerSymbolicDrawRecords(sections, variables)
+	return records, err
 }
 
 func splitModelViewerDirectConditional(lines []string, start int) ([]modelViewerDirectConditionalBranch, int, bool) {
@@ -245,6 +246,75 @@ type modelViewerMeshBuildTiming struct {
 	LegacyScanMs    int64
 	LegacyPrepareMs int64
 	LegacyExtractMs int64
+	// SkippedMissingTexcoord is a scan diagnosis flag, not a timing. It is
+	// set when a draw had ib+position but no texcoord or packed layout.
+	SkippedMissingTexcoord bool
+}
+
+func completeModelViewerDrawBufferState(state modelViewerDirectBufferState, sectionName, layoutName string, hashPositions, hashTexcoords, componentPositions, componentTexcoords map[string]string, global modelViewerDirectBufferState) modelViewerDirectBufferState {
+	if state.ib == "" {
+		state.ib = global.ib
+	}
+	if state.vb0 != "" && state.vb1 != "" && (layoutName != "wwmi" || state.vb2 != "") {
+		return state
+	}
+	hash := extractSectionHash(sectionName)
+	if hash == "" {
+		hash = extractSectionHash(state.ib)
+	}
+	if state.vb0 == "" {
+		state.vb0 = hashPositions[hash]
+	}
+	if state.vb1 == "" {
+		state.vb1 = hashTexcoords[hash]
+	}
+	if state.vb0 == "" || state.vb1 == "" {
+		component := modelViewerComponentFromIB(state.ib)
+		if state.vb0 == "" {
+			state.vb0 = lookupModelViewerComponentValue(componentPositions, component)
+		}
+		if state.vb1 == "" {
+			state.vb1 = lookupModelViewerComponentValue(componentTexcoords, component)
+		}
+	}
+	if (state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "") && global.vb0 != "" && global.vb1 != "" {
+		state.vb0 = global.vb0
+		state.vb1 = global.vb1
+		state.vb2 = global.vb2
+	}
+	return state
+}
+
+type modelViewerResolvedDraw struct {
+	record     modelViewerDirectDrawRecord
+	state      modelViewerDirectBufferState
+	conditions ModelViewerDNF
+}
+
+func completeModelViewerResolvedDraws(
+	records []modelViewerDirectDrawRecord,
+	layoutName string,
+	hashPositions, hashTexcoords, componentPositions, componentTexcoords map[string]string,
+	global modelViewerDirectBufferState,
+	fallback []modelViewerSymbolicAssignment,
+	conditionVariables map[string]any,
+) []modelViewerResolvedDraw {
+	output := make([]modelViewerResolvedDraw, 0, len(records))
+	for _, record := range records {
+		conditions := cloneModelViewerDNF(record.conditions)
+		if conditions == nil {
+			conditions = modelViewerConditionsToDNF(record.draw.Conditions, conditionVariables)
+		}
+		state := completeModelViewerDrawBufferState(record.state, record.sectionName, layoutName, hashPositions, hashTexcoords, componentPositions, componentTexcoords, global)
+		variants := []modelViewerSymbolicBufferVariant{{state: state, conditions: conditions}}
+		if layoutName != "wwmi" {
+			variants = applyModelViewerFallbackVertexBuffers(state, conditions, fallback)
+		}
+		for _, variant := range variants {
+			output = append(output, modelViewerResolvedDraw{record: record, state: variant.state, conditions: variant.conditions})
+		}
+	}
+	return output
 }
 
 func modelViewerHasGeometryGroup(sections []modINISection, resources []modelViewerResource) bool {
@@ -275,7 +345,7 @@ func modelViewerHasGeometryGroup(sections []modINISection, resources []modelView
 
 func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []modINISection, variables map[string]any, cache *modelViewerBufferCache, timing *modelViewerMeshBuildTiming) ([]modelViewerDirectMesh, error) {
 	stageStartedAt := time.Now()
-	records, err := collectModelViewerDirectDrawRecords(sections, variables)
+	records, fallbackVB0, err := collectModelViewerSymbolicDrawRecords(sections, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -300,69 +370,30 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
+	var packedResources map[string]bool
+	if layoutName != "wwmi" {
+		packedResources = collectModelViewerPackedObjectResources(modDir, filepath.Dir(iniPath), sections)
+	}
+	draws := completeModelViewerResolvedDraws(records, layoutName, hashPositions, hashTexcoords, componentPositions, componentTexcoords, globalBuffers, fallbackVB0, conditionVariables)
 	if timing != nil {
 		timing.SetupMs += time.Since(stageStartedAt).Milliseconds()
 	}
 	var output []modelViewerDirectMesh
 	geometryIndexes := make(map[string]int)
-	for _, record := range records {
-		conditions := cloneModelViewerDNF(record.conditions)
-		if conditions == nil {
-			conditions = modelViewerConditionsToDNF(record.draw.Conditions, conditionVariables)
-		}
-		state := record.state
-		if state.ib == "" {
-			state.ib = globalBuffers.ib
-		}
-		if state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "" {
-			hash := extractSectionHash(record.sectionName)
-			if hash == "" {
-				hash = extractSectionHash(state.ib)
+	for _, draw := range draws {
+		record := draw.record
+		source := resolveModelViewerDrawVertexSource(modDir, layoutName, draw.state, resourceMap, resources, cache, packedResources)
+		if source.kind == "" {
+			if source.missingTexcoord && timing != nil {
+				timing.SkippedMissingTexcoord = true
 			}
-			if state.vb0 == "" {
-				state.vb0 = hashPositions[hash]
-			}
-			if state.vb1 == "" {
-				state.vb1 = hashTexcoords[hash]
-			}
-			// Electron resolveComponentBuffers parity: mods generated by XXMI bind
-			// vertex buffers in separate Blend/Texcoord/Position TextureOverrides
-			// whose link is the component family, not a hash embedded in the name.
-			if state.vb0 == "" || state.vb1 == "" {
-				component := modelViewerComponentFromIB(state.ib)
-				if state.vb0 == "" {
-					state.vb0 = lookupModelViewerComponentValue(componentPositions, component)
-				}
-				if state.vb1 == "" {
-					state.vb1 = lookupModelViewerComponentValue(componentTexcoords, component)
-				}
-			}
-			if (state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "") && globalBuffers.vb0 != "" && globalBuffers.vb1 != "" {
-				state.vb0 = globalBuffers.vb0
-				state.vb1 = globalBuffers.vb1
-				state.vb2 = globalBuffers.vb2
-			}
-		}
-		ib, ibOK := resourceMap[modelViewerNormalizeKey(state.ib)]
-		position, posOK := resourceMap[modelViewerNormalizeKey(state.vb0)]
-		if !ibOK || !posOK || ib.Filename == "" || position.Filename == "" {
 			continue
 		}
-		vectorName := ""
-		texcoordName := state.vb1
-		if layoutName == "wwmi" {
-			vectorName = state.vb1
-			texcoordName = state.vb2
-		}
-		vector, vectorOK := resourceMap[modelViewerNormalizeKey(vectorName)]
-		texcoord, tcOK := resourceMap[modelViewerNormalizeKey(texcoordName)]
-		if !tcOK || texcoord.Filename == "" || layoutName == "wwmi" && (!vectorOK || vector.Filename == "") {
-			continue
-		}
-		geometryKey := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%t", record.sectionName, ib.Filename, position.Filename, vector.Filename, texcoord.Filename, record.draw.IndexCount, record.draw.StartIndex, record.auto)
+		ib, position := source.ib, source.position
+		geometryKey := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%t", record.sectionName, ib.Filename, position.Filename, source.vector.Filename, source.texcoord.Filename, record.draw.IndexCount, record.draw.StartIndex, record.auto)
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
-			mesh.conditions = modelViewerDNFOr(mesh.conditions, conditions)
+			mesh.conditions = modelViewerDNFOr(mesh.conditions, draw.conditions)
 			mesh.textureAuthored = mesh.textureAuthored || record.authoredDiffuse
 			mesh.nonDiffuseTextureFiles = unionSlashPaths(mesh.nonDiffuseTextureFiles, resourceFilenames(resourceMap, record.nonDiffuse))
 			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
@@ -388,68 +419,24 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		for _, index := range indices[record.draw.StartIndex:end] {
 			active = append(active, index+uint32(record.draw.BaseVertex))
 		}
-		if layoutName == "wwmi" {
+		if len(active) < 3 {
+			continue
+		}
+		if source.kind == modelViewerDrawVertexWWMI {
 			reverseModelViewerTriangleWinding(active)
 		}
-		posStride := position.Stride
-		if posStride <= 0 {
-			posStride = 40
+		buffers, loaded, loadErr := loadModelViewerDrawVertexBuffers(modDir, source, cache)
+		if loadErr != nil {
+			return nil, loadErr
 		}
-		tcStride := texcoord.Stride
-		if tcStride <= 0 {
-			tcStride = 20
+		if !loaded {
+			continue
 		}
-		var combined []byte
-		var stride, uvOffset int
-		var uvFormat string
-		hasFrame := false
-		layout := modelViewerFmtLayout{Topology: "trianglelist", IndexFormat: ib.Format}
-		if layoutName == "wwmi" {
-			vectorStride := vector.Stride
-			if vectorStride <= 0 {
-				vectorStride = 8
-			}
-			parts, readErr := readModelViewerResourceSet(modDir, []*modelViewerResource{&position, &vector, &texcoord}, cache)
-			if readErr != nil {
-				continue
-			}
-			strides := []int{posStride, vectorStride, tcStride}
-			key := strings.ToLower(strings.Join([]string{position.Filename, vector.Filename, texcoord.Filename}, "|")) + "#" + fmt.Sprint(strides)
-			var buffersErr error
-			combined, stride, buffersErr = cache.interleavedBuffers(key, func() ([]byte, int, error) {
-				bytes, combinedStride, _, combineErr := interleaveModelViewerBuffers(parts, strides)
-				return bytes, combinedStride, combineErr
-			})
-			if buffersErr != nil {
-				continue
-			}
-			uvOffset, uvFormat = detectModelViewerUVBest(combined, stride, posStride+vectorStride, tcStride)
-			vectorFormat := firstModelViewerString(vector.Format, "DXGI_FORMAT_R8G8B8A8_SNORM")
-			layout = modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: ib.Format, Elements: []modelViewerFmtElement{
-				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
-				{SemanticName: "NORMAL", Format: vectorFormat, AlignedByteOffset: posStride, InputSlotClass: "per-vertex"},
-				{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"},
-			}}
-		} else {
-			buffers, buffersErr := cache.paired(filepath.Join(modDir, filepath.FromSlash(position.Filename)), posStride, filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)), tcStride)
-			if buffersErr != nil {
-				if isModelViewerInterleaveValidationError(buffersErr) {
-					continue
-				}
-				return nil, buffersErr
-			}
-			combined, stride, uvOffset, uvFormat = buffers.combined, buffers.stride, buffers.uvOffset, buffers.uvFormat
-			hasFrame = buffers.hasFrame
-			layout = modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: ib.Format, Elements: []modelViewerFmtElement{
-				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
-				{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"},
-			}}
-		}
-		if posStride >= 40 && hasFrame {
-			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
+		if buffers.posStride >= 40 && buffers.hasFrame {
+			buffers.layout.Elements = append(buffers.layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
 		}
 		stageStartedAt = time.Now()
-		geometry, geometryErr := extractModelViewerGeometry(combined, stride, layout, active, true, false, true, nil)
+		geometry, geometryErr := extractModelViewerGeometry(buffers.combined, buffers.stride, buffers.layout, active, true, false, true, nil)
 		if timing != nil {
 			timing.GeometryMs += time.Since(stageStartedAt).Milliseconds()
 		}
@@ -458,6 +445,9 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		}
 		if geometry == nil {
 			continue
+		}
+		if source.kind == modelViewerDrawVertexPacked {
+			normalizeModelViewerPackedObjectNormals(geometry.Normal)
 		}
 		if timing != nil {
 			timing.Geometries++
@@ -474,7 +464,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 		if record.auto {
 			indexCount = len(active) * recordDrawCopies(record)
 		}
-		mesh := modelViewerDirectMesh{id: id, component: component, sectionName: record.sectionName, ibName: state.ib, positionFile: position.Filename, geometry: geometry, conditions: conditions, textureAuthored: record.authoredDiffuse, nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse), indexCount: indexCount}
+		mesh := modelViewerDirectMesh{id: id, component: component, sectionName: record.sectionName, ibName: draw.state.ib, positionFile: position.Filename, geometry: geometry, conditions: draw.conditions, textureAuthored: record.authoredDiffuse, nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse), indexCount: indexCount}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		geometryIndexes[geometryKey] = len(output)
 		output = append(output, mesh)

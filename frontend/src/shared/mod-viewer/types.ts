@@ -137,13 +137,32 @@ export type ViewerComputeShapePass = {
     bias: number;
 };
 
+export type ViewerComputeShapeStage = {
+    base: ViewerComputeBinarySource;
+    target: ViewerComputeBinarySource;
+    phaseRate: number;
+    wrapAt?: number;
+    phaseStart: number;
+    phaseOffset: number;
+    angularScale: number;
+    amplitude: number;
+    bias: number;
+    duration: number;
+};
+
+export type ViewerComputeDeformerKind =
+    | "gimi_shape_pose_v1"
+    | "gimi_cyclic_packed_v1"
+    | "gimi_cyclic_packed_shape_v1";
+
 export type ViewerComputeDeformer = {
-    kind: "gimi_shape_pose_v1";
+    kind: ViewerComputeDeformerKind;
     id: string;
     meshIds: string[];
     vertexCount: number;
     base: ViewerComputeBinarySource;
     shapePasses: ViewerComputeShapePass[];
+    shapeStages: ViewerComputeShapeStage[];
     pose?: {
         blend: ViewerComputeBinarySource;
         frames: ViewerComputeBinarySource;
