@@ -134,5 +134,11 @@ describe("GIMI shape/pose compute kernel", () => {
                 new Uint32Array([1]),
             ),
         ).toThrow("source index 1");
+        expect(
+            compactGIMIShapePoseFrame(
+                { positions: new Float32Array([1, 2, 3]), normals: new Float32Array([0, 0, 1]) },
+                new Uint32Array([0]),
+            ).tangents,
+        ).toBeUndefined();
     });
 });

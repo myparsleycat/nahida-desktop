@@ -2,6 +2,10 @@ import { serializeDiagnostic } from "@shared/diagnostic";
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
 import {
+    computeCyclicPackedFrame,
+    validateCyclicPackedBuffers,
+} from "./model-viewer-compute-cyclic";
+import {
     compactGIMIShapePoseFrame,
     computeGIMIShapePoseFrame,
     type GIMIShapePoseBuffers,
@@ -85,7 +89,7 @@ async function initialize(request: InitRequest): Promise<void> {
             ),
         ]);
         const buffers = { base, shapeTargets, blend, pose };
-        validateGIMIShapePoseBuffers(request.deformer, buffers);
+        validateDeformerBuffers(request.deformer, buffers);
         for (const mesh of meshes) {
             if (mesh.sourceIndices.length !== mesh.vertexCount) {
                 throw new Error(
@@ -106,7 +110,7 @@ function computeFrame(request: FrameRequest): void {
         return;
     }
     try {
-        const frame = computeGIMIShapePoseFrame(
+        const frame = computeDeformerFrame(
             current.deformer,
             current.buffers,
             request.poseFrame,
@@ -118,15 +122,47 @@ function computeFrame(request: FrameRequest): void {
                 meshId: mesh.id,
                 positions: compact.positions.buffer,
                 normals: compact.normals.buffer,
-                tangents: compact.tangents.buffer,
+                tangents: compact.tangents?.buffer,
             };
         });
         scope.postMessage(
             { type: "frame", generation: request.generation, id: request.id, meshes },
-            meshes.flatMap((mesh) => [mesh.positions, mesh.normals, mesh.tangents]),
+            meshes.flatMap((mesh) =>
+                mesh.tangents
+                    ? [mesh.positions, mesh.normals, mesh.tangents]
+                    : [mesh.positions, mesh.normals],
+            ),
         );
     } catch (error) {
         postError(request.generation, request.id, "compute-frame", error);
+    }
+}
+
+function validateDeformerBuffers(
+    deformer: ViewerComputeDeformer,
+    buffers: GIMIShapePoseBuffers,
+): void {
+    switch (deformer.kind) {
+        case "gimi_cyclic_packed_v1":
+            validateCyclicPackedBuffers(deformer, buffers);
+            return;
+        case "gimi_shape_pose_v1":
+            validateGIMIShapePoseBuffers(deformer, buffers);
+            return;
+    }
+}
+
+function computeDeformerFrame(
+    deformer: ViewerComputeDeformer,
+    buffers: GIMIShapePoseBuffers,
+    poseFrame: number,
+    phaseSeconds: number,
+) {
+    switch (deformer.kind) {
+        case "gimi_cyclic_packed_v1":
+            return computeCyclicPackedFrame(deformer, buffers, poseFrame);
+        case "gimi_shape_pose_v1":
+            return computeGIMIShapePoseFrame(deformer, buffers, poseFrame, phaseSeconds);
     }
 }
 

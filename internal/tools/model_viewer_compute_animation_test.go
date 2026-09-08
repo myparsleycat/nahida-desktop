@@ -308,3 +308,60 @@ void main() {
 		t.Fatal("comment-only shader signature was accepted")
 	}
 }
+
+func TestDetectModelViewerCyclicPackedComputeAnimation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "base.buf"), make([]byte, 3*20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "blend.buf"), make([]byte, 3*32), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pose.buf"), make([]byte, 2*2*48), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedObjectAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $VG_count = 2
+global $Freq = 0
+global $dt
+post ResourceClosetPosition = copy_desc ResourceClosetPosition.1
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+$Freq = $Freq + 24 * $dt
+x88 = $Freq
+x89 = $VG_count
+cs-t50 = copy ResourceClosetPosition.1
+cs-t51 = copy ResourceClosetBlend
+cs-t52 = copy ResourceClosetPose
+cs = anim.hlsl
+cs-u5 = copy ResourceClosetPosition.1
+ResourceClosetPosition = ref cs-u5
+Dispatch = 3, 1, 1
+[ResourceClosetPosition]
+[ResourceClosetPosition.1]
+stride = 20
+filename = base.buf
+[ResourceClosetBlend]
+stride = 32
+filename = blend.buf
+[ResourceClosetPose]
+stride = 48
+filename = pose.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || deformer.Kind != modelViewerPackedObjectKind {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 2 || len(deformer.ShapePasses) != 0 {
+		t.Fatalf("unexpected cyclic descriptor: %+v", deformer)
+	}
+	if len(clips) == 0 || clips[0].DeformerID != deformer.ID {
+		t.Fatalf("clips = %+v", clips)
+	}
+}

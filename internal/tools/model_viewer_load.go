@@ -129,6 +129,9 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		if !hasGeometryGroups {
 			return ModelViewerTransport{}, contractError(fmt.Sprintf("No mesh geometry found across %d ini file(s).", len(iniPaths)))
 		}
+		if prepared.timing != nil && prepared.timing.SkippedMissingTexcoord {
+			return ModelViewerTransport{}, contractError("Draw sections are missing a texcoord buffer (vb1).")
+		}
 		return ModelViewerTransport{}, contractError("No mesh data could be extracted (buffer files missing?).")
 	}
 	if err := ctx.Err(); err != nil {

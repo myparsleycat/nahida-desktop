@@ -137,8 +137,10 @@ export type ViewerComputeShapePass = {
     bias: number;
 };
 
+export type ViewerComputeDeformerKind = "gimi_shape_pose_v1" | "gimi_cyclic_packed_v1";
+
 export type ViewerComputeDeformer = {
-    kind: "gimi_shape_pose_v1";
+    kind: ViewerComputeDeformerKind;
     id: string;
     meshIds: string[];
     vertexCount: number;

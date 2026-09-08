@@ -159,7 +159,9 @@ export class ModelViewerComputeController {
             }
             setAttribute(baseline.mesh, "position", new Float32Array(result.positions), 3);
             setAttribute(baseline.mesh, "normal", new Float32Array(result.normals), 3);
-            setAttribute(baseline.mesh, "tangent", new Float32Array(result.tangents), 4);
+            if (result.tangents && result.tangents.byteLength > 0) {
+                setAttribute(baseline.mesh, "tangent", new Float32Array(result.tangents), 4);
+            }
         }
         this.inFlight = false;
         this.activeRequest = undefined;
@@ -234,7 +236,7 @@ type ComputeMessage =
               meshId: string;
               positions: ArrayBuffer;
               normals: ArrayBuffer;
-              tangents: ArrayBuffer;
+              tangents?: ArrayBuffer;
           }>;
       };
 
