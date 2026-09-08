@@ -801,31 +801,20 @@ func (c *compressionCoordinator) isSelfChange(path string) bool {
 	return ok && expires.After(now)
 }
 
-type compressionWorkKind bool
-
-const (
-	compressWork compressionWorkKind = true
-	restoreWork  compressionWorkKind = false
-)
-
-// addTotals reports discovered work. Only calls carrying files or bytes
+// addWorkTotals reports discovered work. Only calls carrying files or bytes
 // may flip the busy status, so empty scans keep the checking state.
 func (c *compressionCoordinator) addCompressTotals(files int, bytes int64) {
-	c.addWorkTotals(compressWork, files, bytes)
+	c.addWorkTotals("compressing", files, bytes)
 }
 
 func (c *compressionCoordinator) addRestoreTotals(files int, bytes int64) {
-	c.addWorkTotals(restoreWork, files, bytes)
+	c.addWorkTotals("decompressing", files, bytes)
 }
 
-func (c *compressionCoordinator) addWorkTotals(kind compressionWorkKind, files int, bytes int64) {
+func (c *compressionCoordinator) addWorkTotals(status string, files int, bytes int64) {
 	c.mu.Lock()
 	if files > 0 || bytes > 0 {
-		if kind == compressWork {
-			c.state.Status = "compressing"
-		} else {
-			c.state.Status = "decompressing"
-		}
+		c.state.Status = status
 	}
 	c.state.TotalFiles += files
 	c.state.TotalBytes += bytes

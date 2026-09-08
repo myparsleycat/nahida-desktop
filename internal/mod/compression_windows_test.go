@@ -269,10 +269,9 @@ func TestRestoreWOFInspectsEveryRegularFileAndDeletesOnlyOwnedBacking(t *testing
 
 func TestRestoreWOFContinuesAfterInspectionAndDeleteErrors(t *testing.T) {
 	root := t.TempDir()
-	var paths []string
-	for _, name := range []string{"inspect-error.bin", "delete-error.bin", "success.bin"} {
-		paths = append(paths, writeCompressionTestFileAt(t, root, name, []byte("payload")))
-	}
+	writeCompressionTestFileAt(t, root, "inspect-error.bin", []byte("payload"))
+	deletePath := writeCompressionTestFileAt(t, root, "delete-error.bin", []byte("payload"))
+	successPath := writeCompressionTestFileAt(t, root, "success.bin", []byte("payload"))
 	previousState := wofStateCall
 	previousDelete := deleteExternalBackingCall
 	t.Cleanup(func() {
@@ -294,34 +293,9 @@ func TestRestoreWOFContinuesAfterInspectionAndDeleteErrors(t *testing.T) {
 	}
 	var processed, fileErrors atomic.Int32
 	ownership := compressionFileOwnership{}
-	restorePaths := paths[1:]
-	addTestWofOwnership(t, &ownership, restorePaths...)
-	previousIdentity := fileIdentityCall
-	t.Cleanup(func() { fileIdentityCall = previousIdentity })
-	var identified atomic.Int32
-	identityByPath := map[string]string{}
-	for _, path := range restorePaths {
-		handle, err := openXpressFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		id, err := previousIdentity(handle)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := windows.CloseHandle(handle); err != nil {
-			t.Fatal(err)
-		}
-		identityByPath[path] = id
-	}
-	fileIdentityCall = func(handle windows.Handle) (string, error) {
-		identified.Add(1)
-		return previousIdentity(handle)
-	}
-	seenIdentities := map[string]string{}
-	for _, path := range restorePaths {
-		seenIdentities[identityByPath[path]] = path
-	}
+	addTestWofOwnership(t, &ownership, deletePath, successPath)
+	deleteID := testFileIdentity(t, deletePath)
+	successID := testFileIdentity(t, successPath)
 	if err := restoreWOF(context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {
 		processed.Add(1)
 	}, &ownership, ignoreCompressionMutations, func(string, error) {
@@ -332,12 +306,73 @@ func TestRestoreWOFContinuesAfterInspectionAndDeleteErrors(t *testing.T) {
 	if processed.Load() != 2 || fileErrors.Load() != 2 || deleted.Load() != 2 {
 		t.Fatalf("processed=%d errors=%d delete attempts=%d", processed.Load(), fileErrors.Load(), deleted.Load())
 	}
-	// Scan identifies the two WOF candidates; the restore path reuses the scan result.
-	if identified.Load() != int32(len(restorePaths)) {
-		t.Fatalf("identified=%d", identified.Load())
+	if !ownership.contains(deleteID) {
+		t.Fatal("delete-error identity was removed")
 	}
-	if len(seenIdentities) != len(restorePaths) {
-		t.Fatalf("identities=%d", len(seenIdentities))
+	if ownership.contains(successID) {
+		t.Fatal("success identity remains")
+	}
+}
+
+func TestRestoreWOFRejectsChangedIdentity(t *testing.T) {
+	root := t.TempDir()
+	keptPath := writeCompressionTestFileAt(t, root, "kept.bin", []byte("payload"))
+	replacedPath := writeCompressionTestFileAt(t, root, "replaced.bin", []byte("payload"))
+	previousState := wofStateCall
+	previousDelete := deleteExternalBackingCall
+	previousIdentity := fileIdentityCall
+	t.Cleanup(func() {
+		wofStateCall = previousState
+		deleteExternalBackingCall = previousDelete
+		fileIdentityCall = previousIdentity
+	})
+	wofStateCall = func(string) (bool, uint32, uint32, error) {
+		return true, wofProviderFile, 0, nil
+	}
+	ownership := compressionFileOwnership{}
+	addTestWofOwnership(t, &ownership, keptPath, replacedPath)
+	keptID := testFileIdentity(t, keptPath)
+	replacedID := testFileIdentity(t, replacedPath)
+	var replacedIdentifies atomic.Int32
+	fileIdentityCall = func(handle windows.Handle) (string, error) {
+		id, err := previousIdentity(handle)
+		if err != nil {
+			return "", err
+		}
+		if id == replacedID && replacedIdentifies.Add(1) > 1 {
+			return id + "-replaced", nil
+		}
+		return id, nil
+	}
+	var deleted atomic.Int32
+	deleteExternalBackingCall = func(windows.Handle) error {
+		deleted.Add(1)
+		return nil
+	}
+	var marked []string
+	var processed, fileErrors atomic.Int32
+	if err := restoreWOF(context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {
+		processed.Add(1)
+	}, &ownership, func(paths ...string) {
+		marked = append(marked, paths...)
+	}, func(string, error) {
+		fileErrors.Add(1)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if processed.Load() != 2 || fileErrors.Load() != 1 || deleted.Load() != 1 {
+		t.Fatalf("processed=%d errors=%d deleted=%d", processed.Load(), fileErrors.Load(), deleted.Load())
+	}
+	if !ownership.contains(replacedID) {
+		t.Fatal("replaced identity was removed")
+	}
+	if ownership.contains(keptID) {
+		t.Fatal("unchanged identity remains")
+	}
+	for _, path := range marked {
+		if filepath.Base(path) == filepath.Base(replacedPath) {
+			t.Fatal("replaced file was marked")
+		}
 	}
 }
 
@@ -441,20 +476,25 @@ func TestWofCompressionSucceedsWithReadOnlyHandleWhenSupported(t *testing.T) {
 func addTestWofOwnership(t *testing.T, ownership *compressionFileOwnership, paths ...string) {
 	t.Helper()
 	for _, path := range paths {
-		handle, err := openXpressFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		id, identityErr := fileIdentityCall(handle)
-		closeErr := windows.CloseHandle(handle)
-		if identityErr != nil {
-			t.Fatal(identityErr)
-		}
-		if closeErr != nil {
-			t.Fatal(closeErr)
-		}
-		ownership.add(id)
+		ownership.add(testFileIdentity(t, path))
 	}
+}
+
+func testFileIdentity(t *testing.T, path string) string {
+	t.Helper()
+	handle, err := openXpressFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, identityErr := fileIdentityCall(handle)
+	closeErr := windows.CloseHandle(handle)
+	if identityErr != nil {
+		t.Fatal(identityErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	return id
 }
 
 func writeCompressionTestFile(t *testing.T, name string, data []byte) string {

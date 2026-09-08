@@ -112,17 +112,21 @@ func restoreWOF(
 	if err != nil {
 		return err
 	}
-	workFiles := make([]compressionFile, 0, len(work))
+	var totalBytes int64
 	for _, item := range work {
-		workFiles = append(workFiles, item.file)
+		totalBytes += item.file.size
 	}
-	setCompressionTotals(workFiles, setTotals)
-	return runXpressJobsWithWorkers(ctx, sortedWofRestoreWork(work), 1, func(item wofRestoreWork) {
+	setTotals(len(work), totalBytes)
+	for _, item := range work {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := restoreOwnedWofFile(item, ownership, mark); err != nil && onError != nil {
 			onError(item.file.path, err)
 		}
 		progress(item.file.path, item.file.size, false)
-	})
+	}
+	return ctx.Err()
 }
 
 type wofRestoreWork struct {
@@ -156,14 +160,13 @@ func ownedWofRestoreFiles(
 		work = append(work, wofRestoreWork{file: file, id: id})
 		mu.Unlock()
 	})
-	return work, err
-}
-
-func sortedWofRestoreWork(work []wofRestoreWork) []wofRestoreWork {
+	if err != nil {
+		return work, err
+	}
 	slices.SortFunc(work, func(a, b wofRestoreWork) int {
 		return strings.Compare(strings.ToLower(a.file.path), strings.ToLower(b.file.path))
 	})
-	return work
+	return work, nil
 }
 
 func restoreOwnedWofFile(work wofRestoreWork, ownership *compressionFileOwnership, mark compressionMutationMarker) error {
@@ -172,6 +175,13 @@ func restoreOwnedWofFile(work wofRestoreWork, ownership *compressionFileOwnershi
 		return fmt.Errorf("open: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
+	id, err := fileIdentityCall(handle)
+	if err != nil {
+		return fmt.Errorf("identify: %w", err)
+	}
+	if id != work.id {
+		return fmt.Errorf("identify: identity changed")
+	}
 	mark(work.file.path)
 	if err := deleteExternalBackingCall(handle); err != nil {
 		return fmt.Errorf("remove WOF backing: %w", err)
