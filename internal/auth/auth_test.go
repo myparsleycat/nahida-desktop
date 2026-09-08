@@ -634,8 +634,10 @@ func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	var events []string
 	var signedOut string
 	mux := http.NewServeMux()
+	var signedOutAgent string
 	mux.HandleFunc("/api/auth/sign-out", func(w http.ResponseWriter, r *http.Request) {
 		signedOut = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		signedOutAgent = r.Header.Get("User-Agent")
 		w.WriteHeader(204)
 	})
 	srv := httptest.NewServer(mux)
@@ -643,6 +645,7 @@ func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	zero := 0
 	none := time.Duration(0)
 	httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+		Version:    "sign-out-version",
 		BackendURL: srv.URL,
 		HTTPClient: srv.Client(),
 		RetryLimit: &zero,
@@ -666,6 +669,9 @@ func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	}
 	if signedOut != "bye-token" {
 		t.Fatalf("sign-out token %q", signedOut)
+	}
+	if signedOutAgent != httpClient.UserAgent() {
+		t.Fatalf("sign-out User-Agent = %q, want %q", signedOutAgent, httpClient.UserAgent())
 	}
 	if len(events) != 1 || events[0] != "auth:update" {
 		t.Fatalf("events = %v", events)
