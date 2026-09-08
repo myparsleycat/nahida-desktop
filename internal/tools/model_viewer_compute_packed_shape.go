@@ -44,6 +44,7 @@ func detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID string, 
 	if len(meshIDs) == 0 {
 		return nil, nil
 	}
+	incomingStarts := collectModelViewerPackedShapeIncomingStarts(selected, stateVariable)
 	stages := make([]ModelViewerComputeShapeStage, 0, len(selected))
 	duration := 0.0
 	for _, item := range selected {
@@ -52,22 +53,24 @@ func detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID string, 
 		}
 		phaseVariable, _, _ := parseModelViewerPhaseExpression(item.pass.x88)
 		branchLines := item.section.Lines
+		stateValue := ""
 		if stateVariable != "" {
 			value, hasValue := modelViewerComputeEqualityValue(item.equalities, stateVariable)
 			if !hasValue {
 				return nil, nil
 			}
+			stateValue = value
 			branchLines = modelViewerComputeBranchLines(item.section, stateVariable, value)
 		}
 		rate, rateOK := findModelViewerAccumulatorRateInLines(branchLines, phaseVariable, defaults)
 		if !rateOK || rate <= 0 {
 			return nil, nil
 		}
-		reset, _ := findModelViewerAccumulatorResetInLines(branchLines, phaseVariable)
 		stage := ModelViewerComputeShapeStage{
 			Base: item.baseSource, Target: item.targetSource, PhaseRate: rate,
-			WrapAt:     findModelViewerAccumulatorWrapInLines(branchLines, phaseVariable, defaults),
-			PhaseStart: reset, PhaseOffset: item.phaseOffset, AngularScale: item.angularScale,
+			WrapAt:      findModelViewerAccumulatorWrapInLines(branchLines, phaseVariable, defaults),
+			PhaseStart:  modelViewerPackedShapePhaseStart(incomingStarts, stateVariable, stateValue, phaseVariable, branchLines, defaults),
+			PhaseOffset: item.phaseOffset, AngularScale: item.angularScale,
 			Amplitude: item.amplitude, Bias: item.bias,
 		}
 		stage.Duration = modelViewerPackedShapeStageDuration(stage)
@@ -320,17 +323,63 @@ func modelViewerPackedShapeStageDuration(stage ModelViewerComputeShapeStage) flo
 	return 1
 }
 
-func findModelViewerAccumulatorResetInLines(lines []string, variable string) (float64, bool) {
+func collectModelViewerPackedShapeIncomingStarts(selected []modelViewerPackedShapeCandidate, stateVariable string) map[string]float64 {
+	incoming := map[string]float64{}
+	if stateVariable == "" {
+		return incoming
+	}
+	for _, item := range selected {
+		value, hasValue := modelViewerComputeEqualityValue(item.equalities, stateVariable)
+		phaseVariable, _, expressionOK := parseModelViewerPhaseExpression(item.pass.x88)
+		if !hasValue || !expressionOK {
+			continue
+		}
+		lines := modelViewerComputeBranchLines(item.section, stateVariable, value)
+		reset, hasReset := findModelViewerAccumulatorResetInLines(lines, phaseVariable)
+		next, hasNext := findModelViewerNumericAssignmentInLines(lines, stateVariable)
+		if !hasReset || !hasNext {
+			continue
+		}
+		incoming[next] = reset
+	}
+	return incoming
+}
+
+func modelViewerPackedShapePhaseStart(incoming map[string]float64, stateVariable, stateValue, phaseVariable string, branchLines []string, defaults map[string]any) float64 {
+	if start, ok := incoming[stateValue]; ok {
+		return start
+	}
+	if stateVariable == "" {
+		if reset, ok := findModelViewerAccumulatorResetInLines(branchLines, phaseVariable); ok {
+			return reset
+		}
+	}
+	if defaultStart, ok := resolveModelViewerNumericToken(phaseVariable, defaults); ok {
+		return defaultStart
+	}
+	return 0
+}
+
+func findModelViewerNumericAssignmentInLines(lines []string, variable string) (string, bool) {
 	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(-?\d+(?:\.\d+)?)\s*$`, regexp.QuoteMeta(variable)))
 	for _, raw := range lines {
 		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-			value, err := strconv.ParseFloat(match[1], 64)
-			if err == nil {
-				return value, true
-			}
+			return match[1], true
 		}
 	}
-	return 0, false
+	return "", false
+}
+
+func findModelViewerAccumulatorResetInLines(lines []string, variable string) (float64, bool) {
+	text, ok := findModelViewerNumericAssignmentInLines(lines, variable)
+	if !ok {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
 }
 
 func isKnownModelViewerPackedShapeShader(shader string) bool {

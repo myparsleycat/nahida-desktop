@@ -108,7 +108,11 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 	}
 	clips := detectModelViewerGIMIShapePoseClips(sections, poseSection, posePass.x88, defaults, names, deformerID, frameCount)
 	if len(clips) == 0 {
-		clips = []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Pose Animation", frameCount, 30)}
+		fps := 30.0
+		if rate, ok := modelViewerComputePoseFPS(poseSection, posePass.x88, defaults); ok {
+			fps = rate
+		}
+		clips = []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Pose Animation", frameCount, fps)}
 	}
 	return deformer, clips
 }
@@ -506,13 +510,25 @@ func findModelViewerAccumulatorWrapInLines(lines []string, variable string, defa
 	return 0
 }
 
+func modelViewerComputePoseFPS(section modINISection, frameExpression string, defaults map[string]any) (float64, bool) {
+	variable, _, ok := parseModelViewerPhaseExpression(frameExpression)
+	if !ok {
+		return 0, false
+	}
+	fps, ok := findModelViewerAccumulatorRate([]modINISection{section}, variable, defaults)
+	if !ok || fps <= 0 {
+		return 0, false
+	}
+	return fps, true
+}
+
 func detectModelViewerGIMIShapePoseClips(sections []modINISection, poseSection modINISection, frameExpression string, defaults map[string]any, names map[string]modelViewerVariableName, deformerID string, frameCount int) []modelViewerPreparedAnimationClip {
 	frameVariable, _, ok := parseModelViewerPhaseExpression(frameExpression)
 	if !ok {
 		return nil
 	}
-	fps, ok := findModelViewerAccumulatorRate([]modINISection{poseSection}, frameVariable, defaults)
-	if !ok || fps <= 0 {
+	fps, ok := modelViewerComputePoseFPS(poseSection, frameExpression, defaults)
+	if !ok {
 		return nil
 	}
 	endVariable := ""

@@ -361,7 +361,7 @@ filename = pose.buf
 	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 2 || len(deformer.ShapePasses) != 0 {
 		t.Fatalf("unexpected cyclic descriptor: %+v", deformer)
 	}
-	if len(clips) == 0 || clips[0].DeformerID != deformer.ID {
+	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FPS != 24 {
 		t.Fatalf("clips = %+v", clips)
 	}
 }
@@ -445,7 +445,6 @@ else if $anime_state == 1
     cs-u5 = copy ResourceKimono.1
     ResourceKimono = ref cs-u5
     Dispatch = 3, 1, 1
-endif
 else if $anime_state == 2
     if $pause == 0
         $Freq = $Freq + 5 * $dt
@@ -461,7 +460,6 @@ else if $anime_state == 2
     cs-u5 = copy ResourceKimono.3
     ResourceKimono = ref cs-u5
     Dispatch = 3, 1, 1
-endif
 else if $anime_state == 3
     if $pause == 0
         $Freq = $Freq + 0.1 * $dt
@@ -505,6 +503,9 @@ filename = Kimono4.buf
 	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 10 || deformer.ShapeStages[0].PhaseStart != -0.05236 {
 		t.Fatalf("stage0 = %+v", deformer.ShapeStages[0])
 	}
+	if deformer.ShapeStages[1].PhaseStart != -0.05236 || deformer.ShapeStages[2].PhaseStart != -0.05236 || deformer.ShapeStages[3].PhaseStart != -0.05236 {
+		t.Fatalf("incoming phase starts = %+v", deformer.ShapeStages)
+	}
 	if !samePathFold(deformer.ShapeStages[0].Base.sourcePath, deformer.Base.sourcePath) {
 		t.Fatalf("stage0 base = %+v deformer base = %+v", deformer.ShapeStages[0].Base, deformer.Base)
 	}
@@ -516,6 +517,69 @@ filename = Kimono4.buf
 	}
 	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FrameEnd < 2 {
 		t.Fatalf("clips = %+v", clips)
+	}
+}
+
+func TestDetectModelViewerPackedShapeIncomingPhaseStart(t *testing.T) {
+	dir := t.TempDir()
+	writePackedShapeBuffer(t, dir, "base.buf")
+	writePackedShapeBuffer(t, dir, "key.buf")
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $Freq = 0
+global $dt
+global $anime_state = 0
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+if $anime_state == 0
+    $Freq = $Freq + 1 * $dt
+    if $Freq > 10
+        $Freq = 3
+        $anime_state = 1
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.1
+    cs-t51 = copy ResourceKimono.2
+    cs = anim.hlsl
+    cs-u5 = copy ResourceKimono.1
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+else if $anime_state == 1
+    $Freq = $Freq + 1 * $dt
+    if $Freq > 9
+        $Freq = 1
+        $anime_state = 0
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.2
+    cs-t51 = copy ResourceKimono.1
+    cs = anim.hlsl
+    cs-u5 = copy ResourceKimono.2
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+endif
+[ResourceKimono.1]
+stride = 20
+filename = base.buf
+[ResourceKimono.2]
+stride = 20
+filename = key.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || len(deformer.ShapeStages) != 2 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	stage0, stage1 := deformer.ShapeStages[0], deformer.ShapeStages[1]
+	if stage0.PhaseStart != 1 || stage0.WrapAt != 10 || stage0.Duration != 9 {
+		t.Fatalf("stage0 should start from the previous transition reset: %+v", stage0)
+	}
+	if stage1.PhaseStart != 3 || stage1.WrapAt != 9 || stage1.Duration != 6 {
+		t.Fatalf("stage1 should start from the previous transition reset: %+v", stage1)
 	}
 }
 
