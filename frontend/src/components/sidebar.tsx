@@ -69,7 +69,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isToolsPage = pathname.startsWith("/tools");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
-  const isTestPage = pathname.startsWith("/test");
+  const isDevelopmentPage = pathname.startsWith("/development");
   const documentationUrl = getDocumentationUrl(i18n.language);
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
@@ -371,18 +371,18 @@ export function Sidebar({ className }: { className?: string }) {
                   <Button
                     variant="ghost"
                     size="icon-lg"
-                    className={getNavButtonClassName(isTestPage)}
-                    aria-current={isTestPage ? "page" : undefined}
+                    className={getNavButtonClassName(isDevelopmentPage)}
+                    aria-current={isDevelopmentPage ? "page" : undefined}
                     onPointerDown={handlePointerDown}
                     onClick={() => {
-                      void navi({ to: "/test" });
+                      void navi({ to: "/development" });
                     }}
                   />
                 }
               >
                 <BugPlayIcon className={cn(iconSize)} />
               </TooltipTrigger>
-              <TooltipContent side="right">{t("page.setting.title")}</TooltipContent>
+              <TooltipContent side="right">Development</TooltipContent>
             </Tooltip>
           )}
         </div>
