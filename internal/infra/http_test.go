@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 func testClient(t *testing.T, opts ClientOptions) *Client {
@@ -436,6 +438,28 @@ func TestFetchSkips401RefreshForCBORPasswordRequired(t *testing.T) {
 	closeBody(t, response)
 	if refreshed != 0 {
 		t.Fatalf("refresh called %d times", refreshed)
+	}
+}
+
+func TestClientUserAgentUsesInjectedVersion(t *testing.T) {
+	t.Parallel()
+	c := NewClientWithOptions(ClientOptions{Version: "pinned"})
+	if got := c.UserAgent(); got != "Nahida Desktop/pinned" {
+		t.Fatalf("UserAgent() = %q", got)
+	}
+}
+
+func TestNewClientDefaultUserAgentFollowsBuildMode(t *testing.T) {
+	t.Setenv("NAHIDA_DEV", "1")
+	unpackaged := NewClient()
+	if got := unpackaged.UserAgent(); got != platform.UserAgent() {
+		t.Fatalf("unpackaged User-Agent = %q, want %q", got, platform.UserAgent())
+	}
+
+	t.Setenv("NAHIDA_DEV", "")
+	packaged := NewClient()
+	if got := packaged.UserAgent(); got != platform.UserAgent() {
+		t.Fatalf("packaged User-Agent = %q, want %q", got, platform.UserAgent())
 	}
 }
 

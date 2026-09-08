@@ -152,10 +152,6 @@ func NewClient() *Client {
 }
 
 func NewClientWithOptions(opts ClientOptions) *Client {
-	version := opts.Version
-	if version == "" {
-		version = platform.AppVersion
-	}
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = defaultHTTPTimeout
@@ -184,7 +180,7 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 		}
 	}
 	return &Client{
-		version:        version,
+		version:        opts.Version,
 		token:          opts.Token,
 		refreshSession: opts.RefreshSession,
 		log:            opts.Log,
@@ -296,13 +292,18 @@ func (c *Client) SetStatus(next BackendStatus) {
 	}
 }
 
-func (c *Client) userAgent() string {
+// UserAgent is the product identity for this client's outbound requests.
+// An empty Version uses the process default, including the unpackaged -dev suffix.
+func (c *Client) UserAgent() string {
+	if c.version == "" {
+		return platform.UserAgent()
+	}
 	return "Nahida Desktop/" + c.version
 }
 
 func (c *Client) GetHeaders(rawURL string) (http.Header, error) {
 	h := make(http.Header)
-	h.Set("User-Agent", c.userAgent())
+	h.Set("User-Agent", c.UserAgent())
 	if !isNHD(rawURL) {
 		return h, nil
 	}
@@ -538,7 +539,7 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 		c.SetOffline()
 		return c.GetStatus()
 	}
-	req.Header.Set("User-Agent", c.userAgent())
+	req.Header.Set("User-Agent", c.UserAgent())
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -587,7 +588,7 @@ func (c *Client) resolveHeaders(rawURL string, caller http.Header) (http.Header,
 	}
 	if hasAuthorization(out) {
 		if out.Get("User-Agent") == "" {
-			out.Set("User-Agent", c.userAgent())
+			out.Set("User-Agent", c.UserAgent())
 		}
 		return out, nil
 	}

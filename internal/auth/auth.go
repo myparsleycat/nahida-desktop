@@ -568,7 +568,7 @@ func (a *Auth) signOut(ctx context.Context, token string) {
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "Nahida Desktop/"+platform.AppVersion)
+	req.Header.Set("User-Agent", a.http.UserAgent())
 	resp, err := a.do(req)
 	if err != nil {
 		a.reportBackgroundError(err, "sign-out", "request", signOutPath)
