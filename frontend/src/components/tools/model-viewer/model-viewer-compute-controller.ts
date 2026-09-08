@@ -161,6 +161,8 @@ export class ModelViewerComputeController {
             setAttribute(baseline.mesh, "normal", new Float32Array(result.normals), 3);
             if (result.tangents && result.tangents.byteLength > 0) {
                 setAttribute(baseline.mesh, "tangent", new Float32Array(result.tangents), 4);
+            } else {
+                baseline.mesh.geometry.deleteAttribute("tangent");
             }
         }
         this.inFlight = false;

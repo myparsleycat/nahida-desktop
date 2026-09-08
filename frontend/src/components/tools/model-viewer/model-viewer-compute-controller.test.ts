@@ -220,6 +220,45 @@ describe("ModelViewerComputeController", () => {
         controller.dispose();
     });
 
+    it("removes an existing tangent attribute when the kernel omits tangents", () => {
+        const root = fixtureRoot();
+        const mesh = root.children[0] as Mesh;
+        const worker = new FakeWorker();
+        const controller = new ModelViewerComputeController(
+            root,
+            { ...deformer, kind: "gimi_cyclic_packed_v1" },
+            [],
+            vi.fn(),
+            vi.fn(),
+            worker,
+        );
+        const init = worker.messages[0] as { generation: number };
+        worker.onmessage?.(
+            new MessageEvent("message", {
+                data: { type: "ready", generation: init.generation },
+            }),
+        );
+        controller.request({ clip, frameIndex: 0 });
+        expect(mesh.geometry.getAttribute("tangent")).toBeDefined();
+        worker.onmessage?.(
+            new MessageEvent("message", {
+                data: {
+                    type: "frame",
+                    generation: init.generation,
+                    meshes: [
+                        {
+                            meshId: "mesh",
+                            positions: new Float32Array([9, 9, 9]).buffer,
+                            normals: new Float32Array([0, 0, 1]).buffer,
+                        },
+                    ],
+                },
+            }),
+        );
+        expect(mesh.geometry.getAttribute("tangent")).toBeUndefined();
+        controller.dispose();
+    });
+
     it("reports a deformer whose mesh IDs do not match the rendered model", () => {
         const worker = new FakeWorker();
         const onError = vi.fn();
