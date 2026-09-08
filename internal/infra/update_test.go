@@ -100,9 +100,18 @@ func TestConfigureDefaultGitHubChecksumAsset(t *testing.T) {
 	if !ok {
 		t.Fatalf("provider type = %T, want *github.Provider", engine.cfg.Providers[0])
 	}
-	got := reflect.ValueOf(provider).Elem().FieldByName("cfg").FieldByName("ChecksumAsset").String()
+	value := reflect.ValueOf(provider).Elem()
+	got := value.FieldByName("cfg").FieldByName("ChecksumAsset").String()
 	if got != updaterChecksumAsset {
 		t.Fatalf("ChecksumAsset = %q, want %q", got, updaterChecksumAsset)
+	}
+	client := value.FieldByName("client")
+	if client.IsNil() {
+		t.Fatal("default GitHub provider is missing an HTTP client")
+	}
+	transport := client.Elem().FieldByName("Transport")
+	if !transport.IsNil() && transport.Elem().Type() == reflect.TypeOf(unconfiguredHTTPTransport{}) {
+		t.Fatal("default GitHub provider used unconfigured transport")
 	}
 }
 

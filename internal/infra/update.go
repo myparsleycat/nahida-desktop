@@ -142,11 +142,13 @@ func (u *Updater) Configure(opts UpdaterOptions) error {
 	}
 	provider := opts.Provider
 	if provider == nil {
-		var err error
 		config := githubProviderConfig(version)
-		// Preserve the provider timeout while routing release metadata, checksums,
-		// redirects and artifacts through the application's network policy.
-		config.HTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: opts.HTTP.HTTPClient().Transport}
+		if opts.HTTP != nil {
+			// Preserve the provider timeout while routing release metadata, checksums,
+			// redirects and artifacts through the application's network policy.
+			config.HTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: opts.HTTP.HTTPClient().Transport}
+		}
+		var err error
 		provider, err = githubprovider.New(config)
 		if err != nil {
 			return err
