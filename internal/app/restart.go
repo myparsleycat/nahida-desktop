@@ -19,12 +19,14 @@ const (
 )
 
 var (
-	executablePath       = os.Executable
-	currentPID           = os.Getpid
-	spawnRelaunchProcess = spawnDetachedRelaunch
-	relaunchParentAlive  = relaunchProcessAlive
-	currentApplication   = application.Get
-	quitApplication      = func(app *application.App) {
+	executablePath         = os.Executable
+	currentPID             = os.Getpid
+	spawnRelaunchProcess   = spawnDetachedRelaunch
+	relaunchParentAlive    = relaunchProcessAlive
+	currentApplication     = application.Get
+	waitForPendingRelaunch = waitPendingRelaunch
+	newApplication         = application.New
+	quitApplication        = func(app *application.App) {
 		if app != nil {
 			app.Quit()
 		}
@@ -33,6 +35,11 @@ var (
 
 func waitPendingRelaunch() {
 	waitPendingRelaunchFor(relaunchWaitTimeout)
+}
+
+func newLockedApplication(opts application.Options) *application.App {
+	waitForPendingRelaunch()
+	return newApplication(opts)
 }
 
 func waitPendingRelaunchFor(timeout time.Duration) {

@@ -73,6 +73,18 @@ func TestProxyValidationPreservesStoredConfig(t *testing.T) {
 	if err := s.AdvancedSet(ctx, proxyStorageKey, "{}"); err == nil {
 		t.Fatal("advanced settings bypassed validation")
 	}
+	if err := s.SetProxySettings(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.AdvancedGetAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.Key == proxyStorageKey {
+			t.Fatal("proxy credential blob listed in advanced settings")
+		}
+	}
 }
 
 func TestDamagedProxyRemainsRepairable(t *testing.T) {

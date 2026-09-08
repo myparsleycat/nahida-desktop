@@ -127,6 +127,19 @@ func socksTestServer(t *testing.T, target, user, password string) (string, <-cha
 	return listener.Addr().String(), destinations
 }
 
+func receiveDestination(t *testing.T, destinations <-chan string) string {
+	t.Helper()
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case destination := <-destinations:
+		return destination
+	case <-timer.C:
+		t.Fatal("no SOCKS destination")
+		return ""
+	}
+}
+
 func proxyConfigFor(address, kind string) ProxyConfig {
 	host, port, _ := net.SplitHostPort(address)
 	number, _ := strconv.Atoi(port)
@@ -199,7 +212,7 @@ func TestSOCKSDNSAndAuthentication(t *testing.T) {
 				if err != nil || string(body) != "proxied" {
 					t.Fatalf("body=%s err=%v", body, err)
 				}
-				destination := <-destinations
+				destination := receiveDestination(t, destinations)
 				if kind == "socks5" && (destination != "127.0.0.2:80" || lookups.Load() != 1) {
 					t.Fatalf("local DNS: %s lookups=%d", destination, lookups.Load())
 				}
@@ -413,7 +426,7 @@ func TestProxyIPv6AndTLSName(t *testing.T) {
 	}
 	body, _ := io.ReadAll(response.Body)
 	_ = response.Body.Close()
-	if string(body) != "example.com" || <-destinations != "[::1]:443" {
+	if string(body) != "example.com" || receiveDestination(t, destinations) != "[::1]:443" {
 		t.Fatal("lost TLS SNI or IPv6 SOCKS target")
 	}
 }

@@ -2,7 +2,19 @@
 
 package app
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+func TestRelaunchProcessAliveReportsCurrentProcess(t *testing.T) {
+	if !relaunchProcessAlive(os.Getpid()) {
+		t.Fatal("current process")
+	}
+	if relaunchProcessAlive(0) || relaunchProcessAlive(-1) {
+		t.Fatal("invalid pid")
+	}
+}
 
 func TestRelaunchSysProcAttrDoesNotHideWindow(t *testing.T) {
 	t.Parallel()

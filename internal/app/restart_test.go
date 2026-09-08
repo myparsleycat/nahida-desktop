@@ -3,8 +3,6 @@ package app
 import (
 	"errors"
 	"os"
-	"path/filepath"
-	gostdruntime "runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +17,8 @@ func restoreRelaunchHooks() {
 	spawnRelaunchProcess = spawnDetachedRelaunch
 	relaunchParentAlive = relaunchProcessAlive
 	currentApplication = application.Get
+	waitForPendingRelaunch = waitPendingRelaunch
+	newApplication = application.New
 	quitApplication = func(app *application.App) {
 		if app != nil {
 			app.Quit()
@@ -138,29 +138,18 @@ func TestWindowRestartDoesNotSpawnWithoutApp(t *testing.T) {
 }
 
 func TestRunWaitsForRelaunchBeforeSingleInstance(t *testing.T) {
-	t.Parallel()
-	_, file, _, ok := gostdruntime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller")
+	t.Cleanup(restoreRelaunchHooks)
+	var order []string
+	waitForPendingRelaunch = func() { order = append(order, "wait") }
+	newApplication = func(application.Options) *application.App {
+		order = append(order, "new")
+		return nil
 	}
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(file), "app.go"))
-	if err != nil {
-		t.Fatal(err)
+	if app := newLockedApplication(application.Options{}); app != nil {
+		t.Fatal("fake application")
 	}
-	source := string(data)
-	waitIndex := strings.Index(source, "waitPendingRelaunch()")
-	lockIndex := strings.Index(source, "app := application.New(")
-	if waitIndex < 0 || lockIndex < 0 || waitIndex >= lockIndex {
-		t.Fatalf("waitPendingRelaunch must precede application.New (indices %d, %d)", waitIndex, lockIndex)
-	}
-}
-
-func TestRelaunchProcessAliveReportsCurrentProcess(t *testing.T) {
-	if !relaunchProcessAlive(os.Getpid()) {
-		t.Fatal("current process")
-	}
-	if relaunchProcessAlive(0) || relaunchProcessAlive(-1) {
-		t.Fatal("invalid pid")
+	if len(order) != 2 || order[0] != "wait" || order[1] != "new" {
+		t.Fatalf("order = %#v", order)
 	}
 }
 

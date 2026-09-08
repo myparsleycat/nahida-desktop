@@ -113,8 +113,13 @@ func TestProxyNativeWebView(t *testing.T) {
 	var proxyHits atomic.Int32
 	var destinations <-chan string
 	if kind == "http" {
-		direct, _ := NewProxyNetwork(ProxyConfig{Type: "http"})
-		upstream, err := StartProxyRelay(direct, nil)
+		var direct *ProxyNetwork
+		direct, err = NewProxyNetwork(ProxyConfig{Type: "http"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var upstream *ProxyRelay
+		upstream, err = StartProxyRelay(direct, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -177,9 +182,32 @@ func TestProxyNativeWebView(t *testing.T) {
 	}
 	if destinations != nil {
 		_, expectedPort, _ := net.SplitHostPort(strings.TrimPrefix(originURL, "http://"))
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+		var collected []string
+		matched := false
+		for !matched {
+			select {
+			case dest := <-destinations:
+				collected = append(collected, dest)
+				_, port, _ := net.SplitHostPort(dest)
+				matched = port == expectedPort
+			case <-timer.C:
+				t.Fatal("WebView bypassed SOCKS proxy")
+			}
+		}
+	drain:
+		for {
+			select {
+			case dest := <-destinations:
+				collected = append(collected, dest)
+			default:
+				break drain
+			}
+		}
 		proxied := 0
-		for len(destinations) > 0 {
-			host, port, _ := net.SplitHostPort(<-destinations)
+		for _, dest := range collected {
+			host, port, _ := net.SplitHostPort(dest)
 			if port != expectedPort {
 				continue
 			}

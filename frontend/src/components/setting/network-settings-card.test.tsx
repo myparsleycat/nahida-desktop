@@ -177,6 +177,24 @@ it("keeps the form on backend validation failure and shows a field error", async
   expect(screen.getByLabelText("page.setting.network.host")).toHaveProperty("value", "localhost");
 });
 
+it("retries after GetProxySettings fails once", async () => {
+  vi.mocked(Setting.GetProxySettings)
+    .mockRejectedValueOnce(new Error("load failed"))
+    .mockResolvedValue(initial);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <NetworkSettingsCard />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole("alert")).toHaveProperty(
+    "textContent",
+    expect.stringContaining("page.setting.network.loadFailed"),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.network.retry" }));
+  await screen.findByLabelText("page.setting.network.host");
+});
+
 it("allows clearing a damaged configuration", async () => {
   vi.mocked(Setting.GetProxySettings).mockResolvedValue({
     ...initial,
