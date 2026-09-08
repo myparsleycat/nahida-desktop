@@ -647,6 +647,9 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 		if positionStride == 0 {
 			positionStride = group.Stride
 		}
+		if texcoordStride == 0 && isModelViewerPackedObjectStride(group.Stride) && modelViewerPositionLooksPackedObject(group.VB, group.Stride) {
+			return modelViewerPackedObjectLayout(indexFormat, group.Stride), nil
+		}
 		layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"})
 		if positionStride >= 40 && detectModelViewerPositionFrame(group.VB, group.Stride) {
 			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
