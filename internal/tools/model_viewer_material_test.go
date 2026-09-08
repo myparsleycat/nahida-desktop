@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,12 +149,16 @@ func TestPrepareModelViewerTextureDecodesUncompressedDDS(t *testing.T) {
 }
 
 func encodeUncompressedDDS(pixel color.NRGBA) []byte {
+	return append(encodeUncompressedDDSHeader(1, 1), pixel.B, pixel.G, pixel.R, pixel.A)
+}
+
+func encodeUncompressedDDSHeader(width, height uint32) []byte {
 	header := make([]byte, 128)
 	copy(header[:4], "DDS ")
 	binary.LittleEndian.PutUint32(header[4:8], 124)
 	binary.LittleEndian.PutUint32(header[8:12], 0x100f)
-	binary.LittleEndian.PutUint32(header[12:16], 1)
-	binary.LittleEndian.PutUint32(header[16:20], 1)
+	binary.LittleEndian.PutUint32(header[12:16], height)
+	binary.LittleEndian.PutUint32(header[16:20], width)
 	binary.LittleEndian.PutUint32(header[20:24], 4)
 	binary.LittleEndian.PutUint32(header[76:80], 32)
 	binary.LittleEndian.PutUint32(header[80:84], 0x41)
@@ -163,7 +168,7 @@ func encodeUncompressedDDS(pixel color.NRGBA) []byte {
 	binary.LittleEndian.PutUint32(header[100:104], 0x000000ff)
 	binary.LittleEndian.PutUint32(header[104:108], 0xff000000)
 	binary.LittleEndian.PutUint32(header[108:112], 0x1000)
-	return append(header, pixel.B, pixel.G, pixel.R, pixel.A)
+	return header
 }
 
 func TestModelViewerTextureRejectsDeclaredOversizedPNG(t *testing.T) {
@@ -182,21 +187,69 @@ func TestModelViewerTextureRejectsDeclaredOversizedPNG(t *testing.T) {
 	}
 }
 
-func TestViewerPreviewTextureSize(t *testing.T) {
+func TestModelViewerTextureRejectsMaxUint32Dimensions(t *testing.T) {
+	t.Parallel()
+	pngHeader := make([]byte, 24)
+	copy(pngHeader, []byte{137, 80, 78, 71, 13, 10, 26, 10})
+	copy(pngHeader[12:16], "IHDR")
+	binary.BigEndian.PutUint32(pngHeader[16:20], math.MaxUint32)
+	binary.BigEndian.PutUint32(pngHeader[20:24], math.MaxUint32)
+	if _, _, err := modelViewerTextureDimensions(pngHeader, ".png"); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("png dimensions err = %v", err)
+	}
+
+	pngPath := filepath.Join(t.TempDir(), "maxuint32.png")
+	if err := os.WriteFile(pngPath, pngHeader, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareModelViewerTexture(context.Background(), pngPath, "Diffuse", "png", 85); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("prepare png err = %v", err)
+	}
+
+	ddsHeader := encodeUncompressedDDSHeader(math.MaxUint32, math.MaxUint32)
+	if _, _, err := modelViewerTextureDimensions(ddsHeader, ".dds"); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("dds dimensions err = %v", err)
+	}
+
+	ddsPath := filepath.Join(t.TempDir(), "maxuint32.dds")
+	if err := os.WriteFile(ddsPath, ddsHeader, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeModelViewerDDS(ddsHeader); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS in-memory decode err = %v", err)
+	}
+	if _, err := decodeModelViewerDDSFile(ddsPath, int64(len(ddsHeader))); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS decode err = %v", err)
+	}
+	if _, err := decodeModelViewerDDSHint(ddsPath, int64(len(ddsHeader))); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS hint decode err = %v", err)
+	}
+	if _, err := prepareModelViewerTexture(context.Background(), ddsPath, "Diffuse", "png", 85); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS prepare err = %v", err)
+	}
+}
+
+func TestFitTextureSize(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		width, height, wantW, wantH int
+		width, height, wantW, wantH uint32
+		maxPixels                   uint64
 	}{
-		{8192, 8192, 2048, 2048},
-		{2048, 8192, 1024, 4096},
-		{4096, 4096, 2048, 2048},
-		{2048, 2048, 2048, 2048},
+		{8192, 8192, 2048, 2048, uint64(maxModelViewerTextureOutputPixels)},
+		{2048, 8192, 1024, 4096, uint64(maxModelViewerTextureOutputPixels)},
+		{4096, 4096, 2048, 2048, uint64(maxModelViewerTextureOutputPixels)},
+		{2048, 2048, 2048, 2048, uint64(maxModelViewerTextureOutputPixels)},
+		{math.MaxUint32, math.MaxUint32, 2047, 2047, uint64(maxModelViewerTextureOutputPixels)},
+		{4096, 4096, 256, 256, uint64(maxHintAnalyzePixels)},
+		{256, 256, 256, 256, uint64(maxHintAnalyzePixels)},
+		{128, 128, 128, 128, uint64(maxHintAnalyzePixels)},
+		{math.MaxUint32, math.MaxUint32, 255, 255, uint64(maxHintAnalyzePixels)},
 	}
 	for _, test := range cases {
-		gotW, gotH := viewerPreviewTextureSize(test.width, test.height)
+		gotW, gotH := fitTextureSize(test.width, test.height, test.maxPixels)
 		if gotW != test.wantW || gotH != test.wantH {
-			t.Fatalf("viewerPreviewTextureSize(%d, %d) = %d×%d, want %d×%d",
-				test.width, test.height, gotW, gotH, test.wantW, test.wantH)
+			t.Fatalf("fitTextureSize(%d, %d, %d) = %d×%d, want %d×%d",
+				test.width, test.height, test.maxPixels, gotW, gotH, test.wantW, test.wantH)
 		}
 	}
 }
@@ -207,7 +260,7 @@ func TestModelViewerPreviewMipmap(t *testing.T) {
 		width, height uint32
 		mipmaps       uint32
 		wantMip       uint32
-		wantW, wantH  int
+		wantW, wantH  uint32
 	}{
 		{8192, 8192, 14, 2, 2048, 2048},
 		{2048, 8192, 14, 1, 1024, 4096},
@@ -215,6 +268,8 @@ func TestModelViewerPreviewMipmap(t *testing.T) {
 		{8192, 8192, 2, 1, 2048, 2048},
 		{4096, 4096, 2, 1, 2048, 2048},
 		{2048, 2048, 1, 0, 2048, 2048},
+		{math.MaxUint32, math.MaxUint32, 1, 0, 2047, 2047},
+		{math.MaxUint32, math.MaxUint32, 32, 21, 2047, 2047},
 	}
 	for _, test := range cases {
 		mip, width, height := modelViewerPreviewMipmap(test.width, test.height, test.mipmaps)
