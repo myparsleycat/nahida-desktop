@@ -3,6 +3,7 @@ package infra
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -766,22 +767,32 @@ func canRetryMethod(method string) bool {
 	}
 }
 
+// isUnreachable reports transport-level unreachability. Application failures
+// such as TLS certificate validation are excluded first; *url.Error implements
+// net.Error, so that check must not run before the exclusion.
 func isUnreachable(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
 		return true
 	}
-	var urlErr *url.Error
-	return errors.As(err, &urlErr)
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
+func isNonReachabilityURLCause(err error) bool {
+	return err != nil && (errors.Is(err, http.ErrSchemeMismatch) ||
+		errors.As(err, new(x509.UnknownAuthorityError)) ||
+		errors.As(err, new(x509.HostnameError)) ||
+		errors.As(err, new(x509.CertificateInvalidError)) ||
+		errors.As(err, new(x509.SystemRootsError)) ||
+		errors.As(err, new(url.EscapeError)) ||
+		errors.As(err, new(url.InvalidHostError)))
 }
 
 func rewriteCloudflareTimeout(resp *http.Response) *http.Response {

@@ -203,6 +203,12 @@ func TestDiagnosticSeverityPreservesActivePolicies(t *testing.T) {
 		{name: "mixed-branches", failure: func(*Log) error {
 			return errors.Join(AnnotateError(errors.New("validation"), Diagnostic{Severity: DiagnosticWarn}), AnnotateError(errors.New("rollback failed"), Diagnostic{Severity: DiagnosticError}))
 		}, level: "ERROR"},
+		{name: "debug-then-warn", failure: func(*Log) error {
+			return errors.Join(AnnotateError(errors.New("debug"), Diagnostic{Severity: DiagnosticDebug}), AnnotateError(errors.New("warning"), Diagnostic{Severity: DiagnosticWarn}))
+		}, level: "WARN"},
+		{name: "warn-then-debug", failure: func(*Log) error {
+			return errors.Join(AnnotateError(errors.New("warning"), Diagnostic{Severity: DiagnosticWarn}), AnnotateError(errors.New("debug"), Diagnostic{Severity: DiagnosticDebug}))
+		}, level: "WARN"},
 		{name: "error-owner", failure: func(*Log) error { return AnnotateError(errors.New("validation"), Diagnostic{Severity: DiagnosticWarn}) }, diagnostic: Diagnostic{Severity: DiagnosticError}, level: "ERROR"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

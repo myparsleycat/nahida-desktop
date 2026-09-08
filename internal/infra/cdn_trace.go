@@ -54,10 +54,11 @@ func (t *CDNTrace) Get(ctx context.Context) (raw string, returnErr error) {
 	if err != nil {
 		return "", err
 	}
-	defer drainClose(resp.Body)
+	defer func() { _ = resp.Body.Close() }()
 
 	stage = "response"
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return "", &HTTPError{Response: resp, Status: resp.StatusCode}
 	}
 

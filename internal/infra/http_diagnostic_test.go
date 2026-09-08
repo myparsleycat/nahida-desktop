@@ -3,9 +3,11 @@ package infra
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +70,38 @@ func TestProbeTransportFailureIsDebug(t *testing.T) {
 	got := output.String()
 	if !strings.Contains(got, " DEBUG ") || !strings.Contains(got, `"operation":"probe"`) || strings.Contains(got, " WARN ") || strings.Contains(got, " ERROR ") {
 		t.Fatalf("record = %s", got)
+	}
+}
+
+func TestProbeNonReachabilityURLErrorIsWarn(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{name: "certificate", err: x509.UnknownAuthorityError{}},
+		{name: "scheme-mismatch", err: http.ErrSchemeMismatch},
+		{name: "invalid-host", err: url.InvalidHostError("example")},
+		{name: "escape", err: url.EscapeError("%")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
+			log.SetLevel("debug")
+			client := testClient(t, ClientOptions{
+				Log:        log,
+				BackendURL: "https://api.nahida.live",
+				HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, test.err
+				})},
+			})
+			if status := client.Probe(context.Background()); status != BackendOffline {
+				t.Fatalf("status = %s", status)
+			}
+			got := output.String()
+			if !strings.Contains(got, " WARN ") || !strings.Contains(got, `"operation":"probe"`) || strings.Contains(got, " DEBUG ") || strings.Contains(got, " ERROR ") {
+				t.Fatalf("record = %s", got)
+			}
+		})
 	}
 }
 

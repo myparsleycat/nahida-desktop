@@ -55,6 +55,7 @@ function CDNTraceCard() {
     queryKey: ["development:cdn-cgi-trace"],
     queryFn: () => CDNTrace.Get(),
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   return (

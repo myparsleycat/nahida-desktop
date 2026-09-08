@@ -161,6 +161,33 @@ func TestCDNTraceGetClosesResponseBody(t *testing.T) {
 	}
 }
 
+func TestCDNTraceGetClosesOversizedBodyWithoutDraining(t *testing.T) {
+	t.Parallel()
+
+	trailing := &unreadTrailingReader{}
+	body := &closeTrackingBody{Reader: io.MultiReader(
+		strings.NewReader(strings.Repeat("x", cdnTraceMaxBody+1)),
+		trailing,
+	)}
+	c := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			resp := textResp(r, http.StatusOK, "")
+			resp.Body = body
+			return resp, nil
+		}),
+	})
+	_, err := NewCDNTrace(c).Get(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("error = %v", err)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
+	}
+	if trailing.reads != 0 {
+		t.Fatalf("trailing reads = %d", trailing.reads)
+	}
+}
+
 type closeTrackingBody struct {
 	io.Reader
 	closed bool
@@ -169,4 +196,13 @@ type closeTrackingBody struct {
 func (b *closeTrackingBody) Close() error {
 	b.closed = true
 	return nil
+}
+
+type unreadTrailingReader struct {
+	reads int
+}
+
+func (r *unreadTrailingReader) Read([]byte) (int, error) {
+	r.reads++
+	return 0, errors.New("trailing data was drained")
 }
