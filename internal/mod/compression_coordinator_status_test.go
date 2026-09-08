@@ -127,7 +127,7 @@ func TestStartCompressionPublishesTargetRestoreBeforeCompress(t *testing.T) {
 		if restoreIndex < 0 && status == "decompressing" {
 			restoreIndex = index
 		}
-		if status == "compressing" {
+		if compressIndex < 0 && status == "compressing" {
 			compressIndex = index
 		}
 		if restoreIndex >= 0 && compressIndex >= 0 {
