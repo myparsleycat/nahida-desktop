@@ -517,6 +517,9 @@ func decodeModelViewerImage(raw []byte, extension string) (*image.NRGBA, error) 
 }
 
 func decodeModelViewerDDS(raw []byte) (*image.NRGBA, error) {
+	if _, _, err := modelViewerTextureDimensions(raw, ".dds"); err != nil {
+		return nil, err
+	}
 	reader, err := ddsutil.NewDdsReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, err
@@ -538,14 +541,18 @@ func decodeModelViewerDDSWithMip(path string, size int64, selectMip func(width, 
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
+	// NewDdsReader can fail first with an unrelated format error for huge headers.
+	header := make([]byte, 20)
+	if n, headerErr := file.ReadAt(header, 0); headerErr == nil && n == 20 {
+		if _, _, err := modelViewerTextureDimensions(header, ".dds"); err != nil {
+			return nil, err
+		}
+	}
 	reader, err := ddsutil.NewDdsReader(file, size)
 	if err != nil {
 		return nil, err
 	}
 	metadata := reader.Metadata()
-	if texturePixelCount(metadata.Width, metadata.Height) > uint64(maxModelViewerTextureInputPixels) {
-		return nil, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", metadata.Width, metadata.Height)
-	}
 	if metadata.Depth != 1 {
 		return nil, fmt.Errorf("viewer texture must be two-dimensional: depth=%d", metadata.Depth)
 	}

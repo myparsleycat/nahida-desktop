@@ -215,14 +215,17 @@ func TestModelViewerTextureRejectsMaxUint32Dimensions(t *testing.T) {
 	if err := os.WriteFile(ddsPath, ddsHeader, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := decodeModelViewerDDSFile(ddsPath, int64(len(ddsHeader))); err == nil {
-		t.Fatal("oversized DDS decoded")
+	if _, err := decodeModelViewerDDS(ddsHeader); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS in-memory decode err = %v", err)
 	}
-	if _, err := decodeModelViewerDDSHint(ddsPath, int64(len(ddsHeader))); err == nil {
-		t.Fatal("oversized DDS hint decoded")
+	if _, err := decodeModelViewerDDSFile(ddsPath, int64(len(ddsHeader))); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS decode err = %v", err)
 	}
-	if _, err := prepareModelViewerTexture(context.Background(), ddsPath, "Diffuse", "png", 85); err == nil {
-		t.Fatal("oversized DDS prepared")
+	if _, err := decodeModelViewerDDSHint(ddsPath, int64(len(ddsHeader))); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS hint decode err = %v", err)
+	}
+	if _, err := prepareModelViewerTexture(context.Background(), ddsPath, "Diffuse", "png", 85); err == nil || !strings.Contains(err.Error(), "input safety limit") {
+		t.Fatalf("oversized DDS prepare err = %v", err)
 	}
 }
 
