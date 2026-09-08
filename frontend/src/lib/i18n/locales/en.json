@@ -790,6 +790,10 @@
         "cancelled_description": "Complete login to load GameBanana data.",
         "unsupported_title": "Automatic GameBanana login is unavailable",
         "unsupported_description": "This platform cannot open the GameBanana login window. Enter an rmc cookie to continue.",
+        "init_failed_title": "Could not prepare GameBanana login",
+        "init_failed_description": "The login window could not be prepared. Please try again shortly.",
+        "check_failed_title": "Could not verify GameBanana authentication",
+        "check_failed_description": "The server response could not confirm your login status. Please try again shortly.",
         "unreachable_title": "GameBanana is unreachable",
         "unreachable_description": "Could not reach GameBanana. Check your connection and try again.",
         "retry": "Sign In Again",
@@ -800,6 +804,8 @@
           "empty": "Enter an rmc value.",
           "GAMEBANANA_INVALID_RMC": "The rmc token is invalid.",
           "GAMEBANANA_SERVER_UNREACHABLE": "The server is not responding.",
+          "GAMEBANANA_AUTH_CHECK_FAILED": "The server response could not confirm your login status. Please try again shortly.",
+          "GAMEBANANA_LOGIN_INIT_FAILED": "The login window could not be prepared. Please try again shortly.",
           "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "Failed to save the rmc token."
         }
       },

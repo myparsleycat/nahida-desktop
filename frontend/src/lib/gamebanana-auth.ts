@@ -1,4 +1,6 @@
 export type GameBananaAuthErrorCode =
+    | "GAMEBANANA_LOGIN_INIT_FAILED"
+    | "GAMEBANANA_AUTH_CHECK_FAILED"
     | "GAMEBANANA_AUTH_FAILED"
     | "GAMEBANANA_LOGIN_CANCELLED"
     | "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED"
@@ -10,6 +12,8 @@ export function getGameBananaAuthErrorCode(error: unknown): GameBananaAuthErrorC
     }
 
     switch (error.message) {
+        case "GAMEBANANA_LOGIN_INIT_FAILED":
+        case "GAMEBANANA_AUTH_CHECK_FAILED":
         case "GAMEBANANA_LOGIN_CANCELLED":
         case "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED":
         case "GAMEBANANA_SERVER_UNREACHABLE":
@@ -19,7 +23,7 @@ export function getGameBananaAuthErrorCode(error: unknown): GameBananaAuthErrorC
     }
 }
 
-export function isManualRmcPrimaryAction(code: GameBananaAuthErrorCode | string | null): boolean {
+export function isManualRmcPrimaryAction(code: string | null): boolean {
     return code === "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED";
 }
 

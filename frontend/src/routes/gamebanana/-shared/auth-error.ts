@@ -9,6 +9,16 @@ export function gameBananaAuthCopyKey(code: string | null): {
     description: string;
 } {
     switch (code) {
+        case "GAMEBANANA_LOGIN_INIT_FAILED":
+            return {
+                title: "page.gamebanana.auth.init_failed_title",
+                description: "page.gamebanana.auth.init_failed_description",
+            };
+        case "GAMEBANANA_AUTH_CHECK_FAILED":
+            return {
+                title: "page.gamebanana.auth.check_failed_title",
+                description: "page.gamebanana.auth.check_failed_description",
+            };
         case "GAMEBANANA_LOGIN_CANCELLED":
             return {
                 title: "page.gamebanana.auth.cancelled_title",

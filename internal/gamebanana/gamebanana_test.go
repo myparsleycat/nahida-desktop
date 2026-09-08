@@ -395,14 +395,14 @@ func TestToggleModLikeReauthenticatesLoginRequiredBody(t *testing.T) {
 	}
 }
 
-func TestRequestReauthenticatesAndRetriesForbidden(t *testing.T) {
+func TestRequestReauthenticatesAndRetriesUnauthorized(t *testing.T) {
 	var subfeedCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/apiv13/Game/8552/Subfeed":
 			subfeedCalls++
 			if request.Header.Get("Cookie") != "rmc=fresh" {
-				w.WriteHeader(http.StatusForbidden)
+				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			_, _ = io.WriteString(w, `{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`)
@@ -411,7 +411,7 @@ func TestRequestReauthenticatesAndRetriesForbidden(t *testing.T) {
 				_, _ = io.WriteString(w, validMemberJSON)
 				return
 			}
-			w.WriteHeader(http.StatusForbidden)
+			w.WriteHeader(http.StatusUnauthorized)
 		default:
 			http.NotFound(w, request)
 		}

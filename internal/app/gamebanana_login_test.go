@@ -35,6 +35,8 @@ type fakeLoginWindow struct {
 	cookieScopeURI     string
 	suppressCloseEvent bool
 	autoReady          bool
+	waitCloseErr       error
+	runHook            func()
 }
 
 func newFakeLoginWindow(cookies ...application.WebviewCookie) *fakeLoginWindow {
@@ -45,6 +47,25 @@ func newFakeLoginWindow(cookies ...application.WebviewCookie) *fakeLoginWindow {
 	}
 }
 
+func (w *fakeLoginWindow) Run() {
+	if w.runHook != nil {
+		w.runHook()
+	}
+	if w.autoReady {
+		w.emit(events.Windows.WebViewNavigationCompleted)
+	}
+}
+func (w *fakeLoginWindow) ID() uint { return 1 }
+func (w *fakeLoginWindow) WaitClosed(ctx context.Context) error {
+	if w.waitCloseErr != nil {
+		return w.waitCloseErr
+	}
+	if w.closed.Load() {
+		return nil
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
 func (w *fakeLoginWindow) Show() application.Window {
 	w.shows.Add(1)
 	return nil
@@ -126,14 +147,7 @@ func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...
 func (w *fakeLoginWindow) OnWindowEvent(eventType events.WindowEventType, callback func(*application.WindowEvent)) func() {
 	w.mu.Lock()
 	w.listeners[eventType] = append(w.listeners[eventType], callback)
-	autoReady := w.autoReady && eventType == events.Windows.WebViewNavigationCompleted
 	w.mu.Unlock()
-	if autoReady {
-		go func() {
-			time.Sleep(time.Millisecond)
-			w.emit(events.Windows.WebViewNavigationCompleted)
-		}()
-	}
 	return func() {}
 }
 func (w *fakeLoginWindow) emit(eventType events.WindowEventType) {
@@ -547,7 +561,7 @@ func TestGameBananaLoginDoesNotCreateWindowWhenSharedSessionLogoutFails(t *testi
 	_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
 		return true, nil
 	})
-	if !errors.Is(err, gamebanana.ErrAuthFailed) {
+	if !errors.Is(err, gamebanana.ErrLoginInitFailed) {
 		t.Fatalf("err = %v", err)
 	}
 	if created.Load() != 0 {

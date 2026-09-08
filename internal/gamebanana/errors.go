@@ -9,6 +9,8 @@ const (
 	errCodeAutoLoginUnsupported = "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED"
 	errCodeServerUnreachable    = "GAMEBANANA_SERVER_UNREACHABLE"
 	errCodeInvalidRMC           = "GAMEBANANA_INVALID_RMC"
+	errCodeLoginInitFailed      = "GAMEBANANA_LOGIN_INIT_FAILED"
+	errCodeAuthCheckFailed      = "GAMEBANANA_AUTH_CHECK_FAILED"
 )
 
 var (
@@ -18,4 +20,6 @@ var (
 	ErrAutoLoginUnsupported = errors.New(errCodeAutoLoginUnsupported)
 	ErrServerUnreachable    = errors.New(errCodeServerUnreachable)
 	ErrInvalidRMC           = errors.New(errCodeInvalidRMC)
+	ErrLoginInitFailed      = errors.New(errCodeLoginInitFailed)
+	ErrAuthCheckFailed      = errors.New(errCodeAuthCheckFailed)
 )

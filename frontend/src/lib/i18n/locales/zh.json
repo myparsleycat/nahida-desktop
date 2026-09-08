@@ -768,6 +768,10 @@
         "cancelled_description": "需要完成登录后才能加载 GameBanana 数据。",
         "unsupported_title": "无法使用 GameBanana 自动登录",
         "unsupported_description": "当前环境无法打开 GameBanana 登录窗口。请手动输入 rmc Cookie 后继续。",
+        "init_failed_title": "无法准备 GameBanana 登录",
+        "init_failed_description": "无法准备登录窗口。请稍后重试。",
+        "check_failed_title": "无法验证 GameBanana 身份验证",
+        "check_failed_description": "无法根据服务器响应确认登录状态。请稍后重试。",
         "unreachable_title": "无法连接 GameBanana",
         "unreachable_description": "无法访问 GameBanana。请检查网络后重试。",
         "retry": "重新登录",
@@ -778,6 +782,8 @@
           "empty": "请输入 rmc 值。",
           "GAMEBANANA_INVALID_RMC": "rmc token 无效。",
           "GAMEBANANA_SERVER_UNREACHABLE": "服务器没有响应。",
+          "GAMEBANANA_AUTH_CHECK_FAILED": "无法根据服务器响应确认登录状态。请稍后重试。",
+          "GAMEBANANA_LOGIN_INIT_FAILED": "无法准备登录窗口。请稍后重试。",
           "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "保存 rmc token 失败。"
         }
       },
