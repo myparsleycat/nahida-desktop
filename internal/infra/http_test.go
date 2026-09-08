@@ -1044,15 +1044,16 @@ func TestFetchRetriesThenSucceeds(t *testing.T) {
 func TestFetchRetryLimitOverrideMakesOneShotRequest(t *testing.T) {
 	t.Parallel()
 
-	var requests atomic.Int32
+	var apiRequests atomic.Int32
 	clientLimit := 2
 	requestLimit := 0
+	transport, probed := onlineStatusProbe(func(r *http.Request) (*http.Response, error) {
+		apiRequests.Add(1)
+		return textResp(r, http.StatusServiceUnavailable, "unavailable"), nil
+	})
 	c := testClient(t, ClientOptions{
 		RetryLimit: &clientLimit,
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			requests.Add(1)
-			return textResp(r, http.StatusServiceUnavailable, "unavailable"), nil
-		}),
+		Transport:  transport,
 	})
 
 	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{
@@ -1066,9 +1067,10 @@ func TestFetchRetryLimitOverrideMakesOneShotRequest(t *testing.T) {
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
-	if requests.Load() != 1 {
-		t.Fatalf("requests = %d, want 1", requests.Load())
+	if apiRequests.Load() != 1 {
+		t.Fatalf("requests = %d, want 1", apiRequests.Load())
 	}
+	waitClosed(t, probed)
 }
 
 func TestProbeSetsMaintenanceFromBody(t *testing.T) {

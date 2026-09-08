@@ -302,7 +302,10 @@ func (a *Auth) GetBackendStatus() string {
 	return string(a.http.GetStatus())
 }
 
-func (a *Auth) probe(ctx context.Context) string {
+// Probe is the renderer-facing health check. GetSession returns immediately
+// when no token is stored, so guest Retry has to call this instead of relying
+// on Fetch recovery.
+func (a *Auth) Probe(ctx context.Context) string {
 	if a == nil || a.http == nil {
 		return string(infra.BackendUnknown)
 	}
@@ -326,7 +329,7 @@ func (a *Auth) start(ctx context.Context) {
 	}
 	a.cancelProbe = cancel
 	a.mu.Unlock()
-	go a.probe(ctx)
+	go a.Probe(ctx)
 }
 
 func (a *Auth) stop() {

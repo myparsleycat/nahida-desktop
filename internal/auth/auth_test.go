@@ -672,6 +672,37 @@ func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	}
 }
 
+func TestGetSessionDoesNotProbeWhenTokenless(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		hits.Add(1)
+		return textResp(r, 200, `{"status":"online"}`), nil
+	}))
+	httpClient.SetStatus(infra.BackendOffline)
+	a := NewWithOptions(Options{
+		Store:  &memStore{},
+		Crypto: passCrypto{},
+		HTTP:   httpClient,
+		Emit:   func(string, any) {},
+	})
+
+	session, err := a.GetSession(context.Background())
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session != nil {
+		t.Fatalf("session = %#v", session)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("hits = %d", hits.Load())
+	}
+	if got := a.GetBackendStatus(); got != "offline" {
+		t.Fatalf("status = %q", got)
+	}
+}
+
 func TestGetBackendStatus(t *testing.T) {
 	t.Parallel()
 	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -699,7 +730,7 @@ func TestProbeUsesHTTP(t *testing.T) {
 			events = append(events, name+":"+data.(string))
 		},
 	})
-	if got := a.probe(context.Background()); got != "maintenance" {
+	if got := a.Probe(context.Background()); got != "maintenance" {
 		t.Fatalf("probe = %q", got)
 	}
 	if len(events) != 1 || events[0] != "backend:status:maintenance" {
