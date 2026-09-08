@@ -559,7 +559,7 @@ func TestStartCompressionOmitsBusyStatusWithoutWork(t *testing.T) {
 		enabled   bool
 		forbidden string
 	}{
-		{name: "disabled restore", enabled: false, forbidden: "decompressing"},
+		{name: "disabled restore with unowned files", enabled: false, forbidden: "decompressing"},
 		{name: "enabled compress", enabled: true, forbidden: "compressing"},
 	}
 	for _, test := range tests {
@@ -570,8 +570,14 @@ func TestStartCompressionOmitsBusyStatusWithoutWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			root := t.TempDir()
-			if err := os.MkdirAll(filepath.Join(root, "Mods"), 0o755); err != nil {
+			mods := filepath.Join(root, "Mods")
+			if err := os.MkdirAll(mods, 0o755); err != nil {
 				t.Fatal(err)
+			}
+			if !test.enabled {
+				if err := os.WriteFile(filepath.Join(mods, "payload.bin"), []byte("unowned"), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if test.enabled {
 				if err := settings.SetCompressionEnabled(ctx, true); err != nil {

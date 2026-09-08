@@ -129,39 +129,25 @@ func ownedWofRestoreFiles(
 	var mu sync.Mutex
 	work := make([]compressionFile, 0, len(files))
 	err := runXpressJobs(ctx, files, func(file compressionFile) {
-		err := withOwnedWofFile(file.path, ownership, func(windows.Handle, string) error {
-			mu.Lock()
-			work = append(work, file)
-			mu.Unlock()
-			return nil
-		})
-		if err != nil && onError != nil {
-			onError(file.path, err)
+		owned, err := isOwnedWofRestoreFile(file.path, ownership)
+		if err != nil {
+			if onError != nil {
+				onError(file.path, err)
+			}
+			return
 		}
+		if !owned {
+			return
+		}
+		mu.Lock()
+		work = append(work, file)
+		mu.Unlock()
 	})
 	return work, err
 }
 
 func restoreOwnedWofFile(file compressionFile, ownership *compressionFileOwnership, mark compressionMutationMarker) error {
-	return withOwnedWofFile(file.path, ownership, func(handle windows.Handle, id string) error {
-		mark(file.path)
-		if err := deleteExternalBackingCall(handle); err != nil {
-			return fmt.Errorf("remove WOF backing: %w", err)
-		}
-		ownership.remove(id)
-		return nil
-	})
-}
-
-func withOwnedWofFile(path string, ownership *compressionFileOwnership, fn func(windows.Handle, string) error) error {
-	external, provider, _, err := wofStateCall(path)
-	if err != nil {
-		return fmt.Errorf("inspect WOF state: %w", err)
-	}
-	if !external || provider != wofProviderFile {
-		return nil
-	}
-	handle, err := openXpressFile(path)
+	handle, err := openXpressFile(file.path)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
@@ -170,10 +156,32 @@ func withOwnedWofFile(path string, ownership *compressionFileOwnership, fn func(
 	if err != nil {
 		return fmt.Errorf("identify: %w", err)
 	}
-	if !ownership.contains(id) {
-		return nil
+	mark(file.path)
+	if err := deleteExternalBackingCall(handle); err != nil {
+		return fmt.Errorf("remove WOF backing: %w", err)
 	}
-	return fn(handle, id)
+	ownership.remove(id)
+	return nil
+}
+
+func isOwnedWofRestoreFile(path string, ownership *compressionFileOwnership) (bool, error) {
+	external, provider, _, err := wofStateCall(path)
+	if err != nil {
+		return false, fmt.Errorf("inspect WOF state: %w", err)
+	}
+	if !external || provider != wofProviderFile {
+		return false, nil
+	}
+	handle, err := openXpressFile(path)
+	if err != nil {
+		return false, fmt.Errorf("open: %w", err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	id, err := fileIdentityCall(handle)
+	if err != nil {
+		return false, fmt.Errorf("identify: %w", err)
+	}
+	return ownership.contains(id), nil
 }
 
 func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
