@@ -365,3 +365,252 @@ filename = pose.buf
 		t.Fatalf("clips = %+v", clips)
 	}
 }
+
+const packedShapeAnimShader = `
+struct VertexAttributes {
+    uint2 position;
+    uint normal;
+    uint texcoord;
+    uint tangent;
+};
+RWStructuredBuffer<VertexAttributes> rw_buffer : register(u5);
+StructuredBuffer<VertexAttributes> base : register(t50);
+StructuredBuffer<VertexAttributes> shapekey : register(t51);
+#define FREQ IniParams[88].x
+void main(uint3 threadID : SV_DispatchThreadID) {
+    uint i = threadID.x;
+    float4 t1, t2;
+    t1.x = f16tof32(shapekey[i].position.x >> 16) - f16tof32(base[i].position.x >> 16);
+    t2 += t1 * (0.5*(sin(FREQ*30)+1));
+    rw_buffer[i].position.x = (uint)f32tof16(t2.x)<<16 | (uint)f32tof16(t2.y);
+}
+`
+
+func writePackedShapeBuffer(t *testing.T, dir, name string) {
+	t.Helper()
+	buf := make([]byte, 3*modelViewerPackedObjectStride)
+	writePackedObjectVertex(buf, 0, 1, 2, 3, 0, 0, 0, 0, 127)
+	writePackedObjectVertex(buf, 20, 4, 5, 6, 0, 0, 0, 0, 127)
+	writePackedObjectVertex(buf, 40, 7, 8, 9, 0, 0, 0, 0, 127)
+	if err := os.WriteFile(filepath.Join(dir, name), buf, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDetectModelViewerPackedShapeComputeAnimation(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"Kimono1.buf", "Kimono2.buf", "Kimono3.buf", "Kimono4.buf"} {
+		writePackedShapeBuffer(t, dir, name)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $active
+global persist $Speed = 0.5
+global $Freq = 0
+global $dt
+global $anime_state = 0
+post ResourceKimono = copy_desc ResourceKimono.1
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+$dt = time - $ts
+if $anime_state == 0
+    if $pause == 0
+        $Freq = $Freq + $Speed * $dt
+    endif
+    if $Freq > 10
+        $Freq = -0.05236
+        $anime_state = 1
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.1
+    cs-t51 = copy ResourceKimono.2
+    cs = ./anim.hlsl
+    cs-u5 = copy ResourceKimono.1
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+else if $anime_state == 1
+    if $pause == 0
+        $Freq = $Freq + $Speed * $dt
+    endif
+    if $Freq > 0.05236
+        $Freq = -0.05236
+        $anime_state = 2
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.1
+    cs-t51 = copy ResourceKimono.3
+    cs = ./anim.hlsl
+    cs-u5 = copy ResourceKimono.1
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+endif
+else if $anime_state == 2
+    if $pause == 0
+        $Freq = $Freq + 5 * $dt
+    endif
+    if $Freq > 12
+        $Freq = -0.05236
+        $anime_state = 3
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.3
+    cs-t51 = copy ResourceKimono.4
+    cs = ./anim.hlsl
+    cs-u5 = copy ResourceKimono.3
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+endif
+else if $anime_state == 3
+    if $pause == 0
+        $Freq = $Freq + 0.1 * $dt
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.3
+    cs-t51 = copy ResourceKimono.1
+    cs = ./anim.hlsl
+    cs-u5 = copy ResourceKimono.3
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+    if $Freq > 0.05236
+        $Freq = -0.05236
+        $anime_state = 0
+    endif
+endif
+[ResourceKimono]
+[ResourceKimono.1]
+stride = 20
+filename = Kimono1.buf
+[ResourceKimono.2]
+stride = 20
+filename = Kimono2.buf
+[ResourceKimono.3]
+stride = 20
+filename = Kimono3.buf
+[ResourceKimono.4]
+stride = 20
+filename = Kimono4.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "Kimono1.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || deformer.Kind != modelViewerPackedShapeKind {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	if deformer.VertexCount != 3 || deformer.Pose != nil || len(deformer.ShapePasses) != 0 || len(deformer.ShapeStages) != 4 {
+		t.Fatalf("unexpected packed shape descriptor: %+v", deformer)
+	}
+	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 10 || deformer.ShapeStages[0].PhaseStart != -0.05236 {
+		t.Fatalf("stage0 = %+v", deformer.ShapeStages[0])
+	}
+	if !samePathFold(deformer.ShapeStages[0].Base.sourcePath, deformer.Base.sourcePath) {
+		t.Fatalf("stage0 base = %+v deformer base = %+v", deformer.ShapeStages[0].Base, deformer.Base)
+	}
+	if deformer.ShapeStages[2].PhaseRate != 5 || deformer.ShapeStages[2].WrapAt != 12 || samePathFold(deformer.ShapeStages[2].Base.sourcePath, deformer.Base.sourcePath) {
+		t.Fatalf("stage2 = %+v", deformer.ShapeStages[2])
+	}
+	if deformer.ShapeStages[3].PhaseRate != 0.1 || deformer.ShapeStages[3].WrapAt != 0.05236 || deformer.ShapeStages[0].Duration <= 0 {
+		t.Fatalf("stage3 = %+v", deformer.ShapeStages[3])
+	}
+	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FrameEnd < 2 {
+		t.Fatalf("clips = %+v", clips)
+	}
+}
+
+func TestDetectModelViewerPackedShapeSinglePass(t *testing.T) {
+	dir := t.TempDir()
+	writePackedShapeBuffer(t, dir, "base.buf")
+	writePackedShapeBuffer(t, dir, "key.buf")
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $Freq = 0
+global $dt
+global $speed = 0.5
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+$Freq = $Freq + $speed * $dt
+if $Freq > 6.283
+    $Freq = 0
+endif
+x88 = $Freq
+cs-t50 = copy ResourceKimono.1
+cs-t51 = copy ResourceKimono.2
+cs = anim.hlsl
+cs-u5 = copy ResourceKimono.1
+ResourceKimono = ref cs-u5
+Dispatch = 3, 1, 1
+[ResourceKimono.1]
+stride = 20
+filename = base.buf
+[ResourceKimono.2]
+stride = 20
+filename = key.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || deformer.Kind != modelViewerPackedShapeKind || len(deformer.ShapePasses) != 0 || len(deformer.ShapeStages) != 1 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 6.283 || deformer.ShapeStages[0].Duration <= 0 || len(clips) != 1 {
+		t.Fatalf("stage=%+v clips=%+v", deformer.ShapeStages[0], clips)
+	}
+}
+
+func TestDetectModelViewerPackedShapeRejectsUnsequencedPasses(t *testing.T) {
+	dir := t.TempDir()
+	writePackedShapeBuffer(t, dir, "base.buf")
+	writePackedShapeBuffer(t, dir, "key.buf")
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $Freq = 0
+global $dt
+global $speed = 0.5
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+$Freq = $Freq + $speed * $dt
+x88 = $Freq
+cs-t50 = copy ResourceKimono.1
+cs-t51 = copy ResourceKimono.2
+cs = anim.hlsl
+cs-u5 = copy ResourceKimono.1
+ResourceKimono = ref cs-u5
+Dispatch = 3, 1, 1
+x88 = $Freq
+cs-t50 = copy ResourceKimono.1
+cs-t51 = copy ResourceKimono.2
+cs = anim.hlsl
+cs-u5 = copy ResourceKimono.1
+ResourceKimono = ref cs-u5
+Dispatch = 3, 1, 1
+[ResourceKimono.1]
+stride = 20
+filename = base.buf
+[ResourceKimono.2]
+stride = 20
+filename = key.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer != nil || clips != nil {
+		t.Fatalf("unsequenced packed shape passes should fail closed: deformer=%+v clips=%+v", deformer, clips)
+	}
+}
+
+func TestPackedShapeShaderRejectsBoneKernel(t *testing.T) {
+	if isKnownModelViewerPackedShapeShader(packedObjectAnimShader) {
+		t.Fatal("packed bone shader must not be classified as packed shapekey")
+	}
+	if !isKnownModelViewerPackedShapeShader(packedShapeAnimShader) {
+		t.Fatal("packed shapekey shader was rejected")
+	}
+}

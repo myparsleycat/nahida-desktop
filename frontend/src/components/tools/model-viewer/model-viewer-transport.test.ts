@@ -198,4 +198,61 @@ describe("normalizeModelViewerTransport", () => {
             expect.objectContaining({ kind: "gimi_cyclic_packed_v1", id: "closet" }),
         ]);
     });
+
+    it("keeps a packed shapekey compute descriptor", () => {
+        const source = { url: "/source", byteLength: 20, stride: 20 };
+        const input = {
+            memorySessionId: "session",
+            iniPath: "mod.ini",
+            modPath: "mod",
+            name: "Example",
+            meshes: null,
+            textures: null,
+            variables: null,
+            defaultState: null,
+            stateRules: null,
+            uiAssets: {},
+            animations: null,
+            computeDeformers: [
+                {
+                    kind: "gimi_cyclic_packed_shape_v1",
+                    id: "kimono",
+                    meshIds: ["mesh"],
+                    vertexCount: 1,
+                    base: source,
+                    shapePasses: null,
+                    shapeStages: [
+                        {
+                            base: { url: "/other", byteLength: 20, stride: 20 },
+                            target: source,
+                            phaseRate: 0.5,
+                            wrapAt: 10,
+                            phaseStart: -0.05236,
+                            phaseOffset: 0,
+                            angularScale: 30,
+                            amplitude: 0.5,
+                            bias: 0.5,
+                            duration: 20.10472,
+                        },
+                    ],
+                    pose: null,
+                },
+            ],
+        } satisfies WailsModelViewerTransport;
+
+        expect(normalizeModelViewerTransport(input).computeDeformers).toEqual([
+            expect.objectContaining({
+                kind: "gimi_cyclic_packed_shape_v1",
+                id: "kimono",
+                shapePasses: [],
+                shapeStages: [
+                    expect.objectContaining({
+                        base: { url: "/other", byteLength: 20, stride: 20 },
+                        phaseStart: -0.05236,
+                        duration: 20.10472,
+                    }),
+                ],
+            }),
+        ]);
+    });
 });

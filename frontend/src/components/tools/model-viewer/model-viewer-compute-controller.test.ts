@@ -22,6 +22,7 @@ const deformer: ViewerComputeDeformer = {
     vertexCount: 1,
     base: { url: "/base", byteLength: 40, stride: 40 },
     shapePasses: [],
+    shapeStages: [],
 };
 
 const clip: ViewerAnimationClip = {

@@ -55,7 +55,10 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 	defaults := collectModelViewerDefaultVariables(sections)
 	reachable := collectModelViewerReachableComputeSections(sections)
 	shapeOnly := func() (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
-		return detectModelViewerShapeOnlyAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes)
+		if deformer, clips := detectModelViewerShapeOnlyAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes); deformer != nil {
+			return deformer, clips
+		}
+		return detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes)
 	}
 	posePass, poseSection, kernel, ok := detectModelViewerKnownBonePass(root, shaderBaseDir, sections, reachable)
 	if !ok {
@@ -428,6 +431,10 @@ func knownModelViewerShapeShaderParameters(shader string) (float64, float64, flo
 			return 0, 0, 0, false
 		}
 	}
+	return parseModelViewerShapeWeight(compact)
+}
+
+func parseModelViewerShapeWeight(compact string) (float64, float64, float64, bool) {
 	match := modelViewerShapeWeightRE.FindStringSubmatch(compact)
 	if match == nil {
 		return 0, 0, 0, false
@@ -461,25 +468,39 @@ func parseModelViewerPhaseExpression(expression string) (string, float64, bool) 
 }
 
 func findModelViewerAccumulatorRate(sections []modINISection, variable string, defaults map[string]any) (float64, bool) {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`, regexp.QuoteMeta(variable), regexp.QuoteMeta(variable)))
 	for _, section := range sections {
-		for _, raw := range section.Lines {
-			if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-				return resolveModelViewerNumericToken(match[1], defaults)
-			}
+		if rate, ok := findModelViewerAccumulatorRateInLines(section.Lines, variable, defaults); ok {
+			return rate, true
+		}
+	}
+	return 0, false
+}
+
+func findModelViewerAccumulatorRateInLines(lines []string, variable string, defaults map[string]any) (float64, bool) {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`, regexp.QuoteMeta(variable), regexp.QuoteMeta(variable)))
+	for _, raw := range lines {
+		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
+			return resolveModelViewerNumericToken(match[1], defaults)
 		}
 	}
 	return 0, false
 }
 
 func findModelViewerAccumulatorWrap(sections []modINISection, variable string, defaults map[string]any) float64 {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
 	for _, section := range sections {
-		for _, raw := range section.Lines {
-			if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-				value, _ := resolveModelViewerNumericToken(match[1], defaults)
-				return value
-			}
+		if value := findModelViewerAccumulatorWrapInLines(section.Lines, variable, defaults); value != 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func findModelViewerAccumulatorWrapInLines(lines []string, variable string, defaults map[string]any) float64 {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
+	for _, raw := range lines {
+		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
+			value, _ := resolveModelViewerNumericToken(match[1], defaults)
+			return value
 		}
 	}
 	return 0
@@ -623,6 +644,11 @@ func sortedModelViewerStateRangeKeys(ranges map[string]modelViewerStateRange) []
 	for key := range ranges {
 		keys = append(keys, key)
 	}
+	sortModelViewerNumericStrings(keys)
+	return keys
+}
+
+func sortModelViewerNumericStrings(keys []string) {
 	sort.Slice(keys, func(i, j int) bool {
 		left, leftErr := strconv.ParseFloat(keys[i], 64)
 		right, rightErr := strconv.ParseFloat(keys[j], 64)
@@ -631,5 +657,4 @@ func sortedModelViewerStateRangeKeys(ranges map[string]modelViewerStateRange) []
 		}
 		return keys[i] < keys[j]
 	})
-	return keys
 }

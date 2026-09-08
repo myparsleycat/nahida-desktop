@@ -48,6 +48,7 @@ function descriptor(shapeTargets = 0, withPose = true): ViewerComputeDeformer {
             amplitude: 0,
             bias: 0.5,
         })),
+        shapeStages: [],
         pose: withPose
             ? {
                   blend: source(32, 32),

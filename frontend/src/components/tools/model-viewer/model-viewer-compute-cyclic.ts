@@ -2,7 +2,14 @@ import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
 import type { GIMIShapePoseBuffers, GIMIShapePoseFrame } from "./model-viewer-compute-kernel";
 
-const PACKED_STRIDE = 20;
+import {
+    PACKED_VERTEX_STRIDE,
+    normalizePackedVectors,
+    packedHalfToFloat,
+    validatePackedBuffer,
+} from "./model-viewer-packed-vertex";
+
+const PACKED_STRIDE = PACKED_VERTEX_STRIDE;
 const BLEND_STRIDE = 32;
 const POSE_STRIDE = 48;
 
@@ -13,7 +20,12 @@ export function validateCyclicPackedBuffers(
     if (deformer.kind !== "gimi_cyclic_packed_v1") {
         throw new Error("Cyclic packed deformer kind is invalid.");
     }
-    validateSource("base", deformer.base.byteLength, deformer.base.stride, buffers.base);
+    validatePackedBuffer(
+        "Cyclic packed base",
+        deformer.base.byteLength,
+        deformer.base.stride,
+        buffers.base,
+    );
     if (
         deformer.base.stride !== PACKED_STRIDE ||
         buffers.base.byteLength !== deformer.vertexCount * PACKED_STRIDE
@@ -23,14 +35,14 @@ export function validateCyclicPackedBuffers(
     if (!deformer.pose || !buffers.blend || !buffers.pose) {
         throw new Error("Cyclic packed pose buffers are missing.");
     }
-    validateSource(
-        "pose blend",
+    validatePackedBuffer(
+        "Cyclic packed pose blend",
         deformer.pose.blend.byteLength,
         deformer.pose.blend.stride,
         buffers.blend,
     );
-    validateSource(
-        "pose frames",
+    validatePackedBuffer(
+        "Cyclic packed pose frames",
         deformer.pose.frames.byteLength,
         deformer.pose.frames.stride,
         buffers.pose,
@@ -68,10 +80,10 @@ export function computeCyclicPackedFrame(
     const normals = new Float32Array(deformer.vertexCount * 3);
     for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
         const source = vertex * PACKED_STRIDE;
-        const gameX = halfToFloat(base.getUint16(source, true));
-        const gameY = halfToFloat(base.getUint16(source + 2, true));
-        const gameZ = halfToFloat(base.getUint16(source + 4, true));
-        const gameW = halfToFloat(base.getUint16(source + 6, true));
+        const gameX = packedHalfToFloat(base.getUint16(source, true));
+        const gameY = packedHalfToFloat(base.getUint16(source + 2, true));
+        const gameZ = packedHalfToFloat(base.getUint16(source + 4, true));
+        const gameW = packedHalfToFloat(base.getUint16(source + 6, true));
         const blenderX = gameX;
         const blenderY = gameZ * -1;
         const blenderZ = gameY;
@@ -121,7 +133,7 @@ export function computeCyclicPackedFrame(
         normals[dest + 1] = skinnedNrm[2]!;
         normals[dest + 2] = skinnedNrm[1]! * -1;
     }
-    normalizeVectors(normals);
+    normalizePackedVectors(normals);
     return { positions, normals };
 }
 
@@ -151,46 +163,6 @@ function dot4(row: number[], value: number[]): number {
     return row[0]! * value[0]! + row[1]! * value[1]! + row[2]! * value[2]! + row[3]! * value[3]!;
 }
 
-function validateSource(
-    name: string,
-    byteLength: number,
-    stride: number,
-    buffer: ArrayBuffer,
-): void {
-    if (stride <= 0 || byteLength <= 0 || byteLength % stride !== 0) {
-        throw new Error(`Cyclic packed ${name} descriptor is invalid.`);
-    }
-    if (buffer.byteLength !== byteLength) {
-        throw new Error(
-            `Cyclic packed ${name} size changed: expected ${byteLength}, received ${buffer.byteLength}.`,
-        );
-    }
-}
-
-function halfToFloat(value: number): number {
-    const sign = value & 0x8000 ? -1 : 1;
-    const exponent = (value >> 10) & 0x1f;
-    const fraction = value & 0x03ff;
-    if (exponent === 0) {
-        return sign * 2 ** -14 * (fraction / 1024);
-    }
-    if (exponent === 31) {
-        return fraction === 0 ? sign * Infinity : Number.NaN;
-    }
-    return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
-}
-
 function i8(value: number): number {
     return value > 127 ? value - 256 : value;
-}
-
-function normalizeVectors(vectors: Float32Array): void {
-    for (let offset = 0; offset < vectors.length; offset += 3) {
-        const length = Math.hypot(vectors[offset]!, vectors[offset + 1]!, vectors[offset + 2]!);
-        if (length > 1e-8) {
-            vectors[offset] /= length;
-            vectors[offset + 1] /= length;
-            vectors[offset + 2] /= length;
-        }
-    }
 }

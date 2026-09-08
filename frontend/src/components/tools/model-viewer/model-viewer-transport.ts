@@ -175,7 +175,8 @@ export function normalizeModelViewerTransport(
         computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
             if (
                 deformer.kind !== "gimi_shape_pose_v1" &&
-                deformer.kind !== "gimi_cyclic_packed_v1"
+                deformer.kind !== "gimi_cyclic_packed_v1" &&
+                deformer.kind !== "gimi_cyclic_packed_shape_v1"
             ) {
                 return [];
             }
@@ -194,6 +195,18 @@ export function normalizeModelViewerTransport(
                         angularScale: pass.angularScale,
                         amplitude: pass.amplitude,
                         bias: pass.bias,
+                    })),
+                    shapeStages: (deformer.shapeStages ?? []).map((stage) => ({
+                        base: normalizeComputeSource(stage.base),
+                        target: normalizeComputeSource(stage.target),
+                        phaseRate: stage.phaseRate,
+                        wrapAt: stage.wrapAt,
+                        phaseStart: stage.phaseStart,
+                        phaseOffset: stage.phaseOffset,
+                        angularScale: stage.angularScale,
+                        amplitude: stage.amplitude,
+                        bias: stage.bias,
+                        duration: stage.duration,
                     })),
                     pose: deformer.pose
                         ? {

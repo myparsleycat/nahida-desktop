@@ -72,6 +72,7 @@ function descriptor(frameCount = 2): ViewerComputeDeformer {
         vertexCount: 1,
         base: source(20, 20),
         shapePasses: [],
+        shapeStages: [],
         pose: {
             blend: source(32, 32),
             frames: source(frameCount * 48, 48),
