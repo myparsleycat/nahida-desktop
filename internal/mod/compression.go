@@ -432,21 +432,19 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 	}
 
 	if target {
-		c.setStatus("compressing")
 		if method == "zstd" {
 			err = errors.Join(
-				restoreEnabledZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
-				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.setTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
+				restoreEnabledZstd(ctx, workRoots, c.addRestoreTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
+				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.addCompressTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
 			)
 		} else {
-			err = applyXpress4K(ctx, workRoots, c.setTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("compress-file"))
+			err = applyXpress4K(ctx, workRoots, c.addCompressTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("compress-file"))
 		}
 	} else if work.full {
-		c.setStatus("decompressing")
 		if method == "zstd" {
-			err = restoreAllZstd(ctx, workRoots, c.setTotals, c.progress, c.markSelfChanges, logFileError("restore-file"))
+			err = restoreAllZstd(ctx, workRoots, c.addRestoreTotals, c.progress, c.markSelfChanges, logFileError("restore-file"))
 		} else {
-			err = restoreWOF(ctx, workRoots, c.setTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("decompress-file"))
+			err = restoreWOF(ctx, workRoots, c.addRestoreTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("decompress-file"))
 		}
 	}
 	if errors.Is(err, context.Canceled) {
@@ -803,10 +801,24 @@ func (c *compressionCoordinator) isSelfChange(path string) bool {
 	return ok && expires.After(now)
 }
 
-func (c *compressionCoordinator) setTotals(files int, bytes int64) {
+// addWorkTotals reports discovered work. Only calls carrying files or bytes
+// may flip the busy status, so empty scans keep the checking state.
+func (c *compressionCoordinator) addCompressTotals(files int, bytes int64) {
+	c.addWorkTotals("compressing", files, bytes)
+}
+
+func (c *compressionCoordinator) addRestoreTotals(files int, bytes int64) {
+	c.addWorkTotals("decompressing", files, bytes)
+}
+
+func (c *compressionCoordinator) addWorkTotals(status string, files int, bytes int64) {
 	c.mu.Lock()
+	if files > 0 || bytes > 0 {
+		c.state.Status = status
+	}
 	c.state.TotalFiles += files
 	c.state.TotalBytes += bytes
+	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
 }
@@ -819,14 +831,6 @@ func (c *compressionCoordinator) resetProgress(status string, target bool, metho
 	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
 	c.state.CurrentFileName, c.state.Error = "", ""
 	c.lastProgressEmit = time.Now()
-	c.deriveCapabilitiesLocked()
-	c.mu.Unlock()
-	c.publish()
-}
-
-func (c *compressionCoordinator) setStatus(status string) {
-	c.mu.Lock()
-	c.state.Status = status
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
@@ -936,6 +940,15 @@ func (o *compressionFileOwnership) contains(id string) bool {
 	defer o.mu.Unlock()
 	_, ok := o.files[id]
 	return ok
+}
+
+func (o *compressionFileOwnership) empty() bool {
+	if o == nil {
+		return true
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return len(o.files) == 0
 }
 
 func (o *compressionFileOwnership) remove(id string) {

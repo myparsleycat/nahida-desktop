@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -100,38 +101,113 @@ func restoreWOF(
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
+	if ownership.empty() {
+		return ctx.Err()
+	}
 	files, err := walkCompressionFiles(roots, func(string, fs.FileInfo) bool { return true })
 	if err != nil {
 		return err
 	}
-	setCompressionTotals(files, setTotals)
-	return runXpressWorkers(ctx, files, progress, onError, func(file compressionFile) error {
-		external, provider, _, err := wofStateCall(file.path)
+	work, err := ownedWofRestoreFiles(ctx, files, ownership, onError)
+	if err != nil {
+		return err
+	}
+	var totalBytes int64
+	for _, item := range work {
+		totalBytes += item.file.size
+	}
+	setTotals(len(work), totalBytes)
+	for _, item := range work {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := restoreOwnedWofFile(item, ownership, mark); err != nil && onError != nil {
+			onError(item.file.path, err)
+		}
+		progress(item.file.path, item.file.size, false)
+	}
+	return ctx.Err()
+}
+
+type wofRestoreWork struct {
+	file compressionFile
+	id   string
+}
+
+func ownedWofRestoreFiles(
+	ctx context.Context,
+	files []compressionFile,
+	ownership *compressionFileOwnership,
+	onError func(string, error),
+) ([]wofRestoreWork, error) {
+	if len(files) == 0 {
+		return nil, ctx.Err()
+	}
+	var mu sync.Mutex
+	work := make([]wofRestoreWork, 0, len(files))
+	err := runXpressJobs(ctx, files, func(file compressionFile) {
+		id, owned, err := isOwnedWofRestoreFile(file.path, ownership)
 		if err != nil {
-			return fmt.Errorf("inspect WOF state: %w", err)
+			if onError != nil {
+				onError(file.path, err)
+			}
+			return
 		}
-		if !external || provider != wofProviderFile {
-			return nil
+		if !owned {
+			return
 		}
-		handle, err := openXpressFile(file.path)
-		if err != nil {
-			return fmt.Errorf("open: %w", err)
-		}
-		defer func() { _ = windows.CloseHandle(handle) }()
-		id, err := fileIdentityCall(handle)
-		if err != nil {
-			return fmt.Errorf("identify: %w", err)
-		}
-		if !ownership.contains(id) {
-			return nil
-		}
-		mark(file.path)
-		if err := deleteExternalBackingCall(handle); err != nil {
-			return fmt.Errorf("remove WOF backing: %w", err)
-		}
-		ownership.remove(id)
-		return nil
+		mu.Lock()
+		work = append(work, wofRestoreWork{file: file, id: id})
+		mu.Unlock()
 	})
+	if err != nil {
+		return work, err
+	}
+	slices.SortFunc(work, func(a, b wofRestoreWork) int {
+		return strings.Compare(strings.ToLower(a.file.path), strings.ToLower(b.file.path))
+	})
+	return work, nil
+}
+
+func restoreOwnedWofFile(work wofRestoreWork, ownership *compressionFileOwnership, mark compressionMutationMarker) error {
+	handle, err := openXpressFile(work.file.path)
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	id, err := fileIdentityCall(handle)
+	if err != nil {
+		return fmt.Errorf("identify: %w", err)
+	}
+	if id != work.id {
+		return fmt.Errorf("identify: identity changed")
+	}
+	mark(work.file.path)
+	if err := deleteExternalBackingCall(handle); err != nil {
+		return fmt.Errorf("remove WOF backing: %w", err)
+	}
+	ownership.remove(work.id)
+	return nil
+}
+
+func isOwnedWofRestoreFile(path string, ownership *compressionFileOwnership) (string, bool, error) {
+	external, provider, _, err := wofStateCall(path)
+	if err != nil {
+		return "", false, fmt.Errorf("inspect WOF state: %w", err)
+	}
+	if !external || provider != wofProviderFile {
+		return "", false, nil
+	}
+	handle, err := openXpressFile(path)
+	if err != nil {
+		return "", false, fmt.Errorf("open: %w", err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	id, err := fileIdentityCall(handle)
+	if err != nil {
+		return "", false, fmt.Errorf("identify: %w", err)
+	}
+	return id, ownership.contains(id), nil
 }
 
 func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
@@ -180,12 +256,25 @@ func runXpressWorkers(
 	onError func(string, error),
 	process func(compressionFile) error,
 ) error {
+	return runXpressJobs(ctx, files, func(file compressionFile) {
+		if err := process(file); err != nil && onError != nil {
+			onError(file.path, err)
+		}
+		progress(file.path, file.size, false)
+	})
+}
+
+func runXpressJobs[T any](ctx context.Context, files []T, each func(T)) error {
+	return runXpressJobsWithWorkers[T](ctx, files, xpressWorkerCount(runtime.GOMAXPROCS(0)), each)
+}
+
+func runXpressJobsWithWorkers[T any](ctx context.Context, files []T, workers int, each func(T)) error {
 	if len(files) == 0 {
 		return ctx.Err()
 	}
-	jobs := make(chan compressionFile)
+	jobs := make(chan T)
 	var wg sync.WaitGroup
-	for range min(xpressWorkerCount(runtime.GOMAXPROCS(0)), len(files)) {
+	for range min(max(1, workers), len(files)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -193,10 +282,7 @@ func runXpressWorkers(
 				if ctx.Err() != nil {
 					continue
 				}
-				if err := process(file); err != nil && onError != nil {
-					onError(file.path, err)
-				}
-				progress(file.path, file.size, false)
+				each(file)
 			}
 		}()
 	}

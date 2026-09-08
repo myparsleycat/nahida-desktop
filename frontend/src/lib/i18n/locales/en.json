@@ -1952,7 +1952,6 @@
         "upscaling_and_converting": "Upscaling & converting texture"
       },
       "modCompression": {
-        "checking": "Checking mod compression",
         "compressing": "Compressing mods",
         "decompressing": "Restoring mods",
         "error": "Mod compression error"
