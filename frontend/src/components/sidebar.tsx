@@ -6,6 +6,7 @@ import { viewStore } from "@renderer/store/drive";
 import { gameBananaStore } from "@renderer/store/gamebanana";
 import { useGlobalStore } from "@renderer/store/global";
 import { getAggregateTransferProgress } from "@shared/transfer-progress";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
@@ -41,11 +42,16 @@ function getDocumentationUrl(language: string) {
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { t, i18n } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
   const { session, isBackendOffline } = useAuth();
   const showDriveNav = !!session;
+  const retryDriveQueriesIfNeeded = () => {
+    if (!isBackendOffline) return;
+    void queryClient.invalidateQueries({ queryKey: ["drive"] });
+  };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -227,10 +233,14 @@ export function Sidebar({ className }: { className?: string }) {
                         isBackendOffline && "opacity-50",
                       )}
                       aria-current={isDrivePage ? "page" : undefined}
-                      aria-disabled={isBackendOffline}
+                      aria-label={
+                        isBackendOffline
+                          ? t("page.drive.title_server_error")
+                          : t("page.drive.title")
+                      }
                       onPointerDown={handlePointerDown}
                       onClick={() => {
-                        if (isBackendOffline) return;
+                        retryDriveQueriesIfNeeded();
                         const lastDriveId = viewStore.getState().lastDriveId;
                         void navi({
                           to: "/drive/drive/$id",
@@ -240,7 +250,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
-                        if (isBackendOffline) return;
+                        retryDriveQueriesIfNeeded();
                         void navi({
                           to: "/drive/drive/$id",
                           params: {
@@ -269,10 +279,14 @@ export function Sidebar({ className }: { className?: string }) {
                         isBackendOffline && "opacity-50",
                       )}
                       aria-current={isSharePage ? "page" : undefined}
-                      aria-disabled={isBackendOffline}
+                      aria-label={
+                        isBackendOffline
+                          ? t("page.share_drive.title_server_error")
+                          : t("page.share_drive.title")
+                      }
                       onPointerDown={handlePointerDown}
                       onClick={() => {
-                        if (isBackendOffline) return;
+                        retryDriveQueriesIfNeeded();
                         const lastShareId = viewStore.getState().lastShareId;
                         void navi({
                           to: "/drive/share/$id",
@@ -282,7 +296,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
-                        if (isBackendOffline) return;
+                        retryDriveQueriesIfNeeded();
                         void navi({
                           to: "/drive/share/$id",
                           params: {

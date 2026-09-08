@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -69,6 +70,33 @@ func textResp(req *http.Request, status int, body string) *http.Response {
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    req,
 	}
+}
+
+func jsonResp(req *http.Request, status int, body string) *http.Response {
+	resp := textResp(req, status, body)
+	resp.Header.Set("Content-Type", "application/json")
+	return resp
+}
+
+func waitClosed(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("status probe did not run")
+	}
+}
+
+func onlineStatusProbe(next roundTripFunc) (roundTripFunc, <-chan struct{}) {
+	done := make(chan struct{})
+	var once sync.Once
+	return func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/status" {
+			once.Do(func() { close(done) })
+			return jsonResp(r, 200, `{"status":"online"}`), nil
+		}
+		return next(r)
+	}, done
 }
 
 func closeBody(t *testing.T, resp *http.Response) {
@@ -228,6 +256,48 @@ func TestStreamDoesNotPrebufferBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeBody(t, response)
+}
+
+func TestStreamRecoversWhenOfflineProbeIsOnline(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	c := testClient(t, ClientOptions{
+		Status: BackendOffline,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path == "/status" {
+				return jsonResp(r, 200, `{"status":"online"}`), nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+	resp, err := c.Stream(context.Background(), "https://api.nahida.live/api/drive", http.MethodPut, nil, strings.NewReader("payload"), 7)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	closeBody(t, resp)
+	if len(paths) != 2 || paths[0] != "/status" || paths[1] != "/api/drive" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestStreamProbesOnNHDTimeout(t *testing.T) {
+	t.Parallel()
+
+	transport, probed := onlineStatusProbe(func(*http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+	c := testClient(t, ClientOptions{Transport: transport})
+	resp, err := c.Stream(context.Background(), "https://api.nahida.live/api/drive", http.MethodPut, nil, strings.NewReader("payload"), 7)
+	closeBody(t, resp)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	waitClosed(t, probed)
+	if c.GetStatus() != BackendOnline {
+		t.Fatalf("status = %q", c.GetStatus())
+	}
 }
 
 func TestFetchNormalizesNHDAPIResponseCBORToJSON(t *testing.T) {
@@ -501,7 +571,7 @@ func TestGetHeadersAllowsExactNHDOrigins(t *testing.T) {
 func TestFetchShortCircuitsWhenOffline(t *testing.T) {
 	t.Parallel()
 
-	called := false
+	var paths []string
 	tokenCalls := 0
 	c := testClient(t, ClientOptions{
 		Status: BackendOffline,
@@ -510,8 +580,11 @@ func TestFetchShortCircuitsWhenOffline(t *testing.T) {
 			return "stored-token", nil
 		},
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			called = true
-			return textResp(r, 200, "ok"), nil
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path != "/status" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			return nil, errors.New("backend unreachable")
 		}),
 	})
 
@@ -527,20 +600,20 @@ func TestFetchShortCircuitsWhenOffline(t *testing.T) {
 	if tokenCalls != 0 {
 		t.Fatalf("token lookup called %d times", tokenCalls)
 	}
-	if called {
-		t.Fatal("transport called")
+	if len(paths) != 1 || paths[0] != "/status" {
+		t.Fatalf("paths = %v", paths)
 	}
 }
 
 func TestFetchShortCircuitsWhenMaintenance(t *testing.T) {
 	t.Parallel()
 
-	called := false
+	var paths []string
 	c := testClient(t, ClientOptions{
 		Status: BackendMaintenance,
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			called = true
-			return textResp(r, 200, "ok"), nil
+			paths = append(paths, r.URL.Path)
+			return jsonResp(r, 200, `{"status":"maintenance"}`), nil
 		}),
 	})
 
@@ -549,19 +622,97 @@ func TestFetchShortCircuitsWhenMaintenance(t *testing.T) {
 	if !errors.Is(err, ErrBackendUnavailable) {
 		t.Fatalf("err = %v", err)
 	}
-	if called {
-		t.Fatal("transport called")
+	if len(paths) != 1 || paths[0] != "/status" {
+		t.Fatalf("paths = %v", paths)
 	}
 }
 
-func TestFetchSendsSessionWhenOffline(t *testing.T) {
+func TestFetchRecoversWhenOfflineProbeIsOnline(t *testing.T) {
 	t.Parallel()
 
-	called := 0
+	var paths []string
 	c := testClient(t, ClientOptions{
 		Status: BackendOffline,
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			called++
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path == "/status" {
+				return jsonResp(r, 200, `{"status":"online"}`), nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+
+	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	closeBody(t, resp)
+	if c.GetStatus() != BackendOnline {
+		t.Fatalf("status = %q", c.GetStatus())
+	}
+	if len(paths) != 2 || paths[0] != "/status" || paths[1] != "/api/drive" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestFetchCoalescesRecoveryProbes(t *testing.T) {
+	t.Parallel()
+
+	var statusHits atomic.Int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+	c := testClient(t, ClientOptions{
+		Status: BackendOffline,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path == "/status" {
+				if statusHits.Add(1) == 1 {
+					close(started)
+				}
+				<-release
+				return jsonResp(r, 200, `{"status":"online"}`), nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+
+	errc := make(chan error, 2)
+	for range 2 {
+		go func() {
+			resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+			if resp != nil && resp.Body != nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+			errc <- err
+		}()
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("recovery probe did not start")
+	}
+	close(release)
+	for range 2 {
+		if err := <-errc; err != nil {
+			t.Fatalf("Fetch: %v", err)
+		}
+	}
+	if got := statusHits.Load(); got != 1 {
+		t.Fatalf("status hits = %d", got)
+	}
+}
+
+func TestFetchSessionRecoversWhenOffline(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	c := testClient(t, ClientOptions{
+		Status: BackendOffline,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path == "/status" {
+				return jsonResp(r, 200, `{"status":"online"}`), nil
+			}
 			return textResp(r, 200, "ok"), nil
 		}),
 	})
@@ -571,119 +722,220 @@ func TestFetchSendsSessionWhenOffline(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	closeBody(t, resp)
-	if called != 1 {
-		t.Fatalf("transport called %d times", called)
-	}
-}
-
-func TestFetchProbesOnNHD503(t *testing.T) {
-	t.Parallel()
-
-	probed := 0
-	c := testClient(t, ClientOptions{
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			return textResp(r, 503, "Service Unavailable"), nil
-		}),
-		Probe: func() { probed++ },
-	})
-
-	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{
-		DisableHTTPErrors: true,
-	})
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	closeBody(t, resp)
-
-	if probed != 1 {
-		t.Fatalf("probe called %d times", probed)
+	if len(paths) != 2 || paths[0] != "/status" || paths[1] != "/api/auth/get-session" {
+		t.Fatalf("paths = %v", paths)
 	}
 	if c.GetStatus() != BackendOnline {
-		t.Fatalf("status = %q, want online (503 probes, does not setOffline)", c.GetStatus())
-	}
-}
-
-func TestFetchSetsOfflineOnNHD502(t *testing.T) {
-	t.Parallel()
-
-	probed := 0
-	c := testClient(t, ClientOptions{
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			return textResp(r, 502, "Bad Gateway"), nil
-		}),
-		Probe: func() { probed++ },
-	})
-
-	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{
-		DisableHTTPErrors: true,
-	})
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	closeBody(t, resp)
-
-	if probed != 0 {
-		t.Fatalf("probe called %d times", probed)
-	}
-	if c.GetStatus() != BackendOffline {
 		t.Fatalf("status = %q", c.GetStatus())
 	}
 }
 
-func TestFetchProbesOnRejectedNHD503(t *testing.T) {
+func TestFetchSessionShortCircuitsWhenProbeStaysOffline(t *testing.T) {
 	t.Parallel()
 
-	probed := 0
+	var paths []string
 	c := testClient(t, ClientOptions{
+		Status: BackendOffline,
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			return textResp(r, 503, "Service Unavailable"), nil
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path != "/status" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			return nil, errors.New("backend unreachable")
 		}),
-		Probe: func() { probed++ },
 	})
 
-	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
-	if err == nil {
-		closeBody(t, resp)
-		t.Fatal("expected error")
-	}
-	closeHTTPErr(t, err)
+	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/auth/get-session", FetchOptions{})
 	closeBody(t, resp)
-
-	var he *HTTPError
-	if !errors.As(err, &he) || he.Status != 503 {
+	if !errors.Is(err, ErrBackendUnavailable) {
 		t.Fatalf("err = %v", err)
 	}
-	if probed != 1 {
-		t.Fatalf("probe called %d times", probed)
-	}
-	if c.GetStatus() != BackendOnline {
-		t.Fatalf("status = %q, want online (503 probes, does not setOffline)", c.GetStatus())
+	if len(paths) != 1 || paths[0] != "/status" {
+		t.Fatalf("paths = %v", paths)
 	}
 }
 
-func TestFetchSetsOfflineOnRejectedNHD502(t *testing.T) {
+func TestFetchProbesUnavailableNHDResponses(t *testing.T) {
 	t.Parallel()
 
-	probed := 0
+	cases := []struct {
+		name   string
+		status int
+		throw  bool
+	}{
+		{name: "503", status: 503, throw: false},
+		{name: "502", status: 502, throw: false},
+		{name: "504", status: 504, throw: false},
+		{name: "rejected 503", status: 503, throw: true},
+		{name: "rejected 502", status: 502, throw: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			transport, probed := onlineStatusProbe(func(r *http.Request) (*http.Response, error) {
+				return textResp(r, tc.status, http.StatusText(tc.status)), nil
+			})
+			c := testClient(t, ClientOptions{Transport: transport})
+			resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{
+				DisableHTTPErrors: !tc.throw,
+			})
+			if tc.throw {
+				if err == nil {
+					closeBody(t, resp)
+					t.Fatal("expected error")
+				}
+				closeHTTPErr(t, err)
+				var he *HTTPError
+				if !errors.As(err, &he) || he.Status != tc.status {
+					t.Fatalf("err = %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("Fetch: %v", err)
+			}
+			closeBody(t, resp)
+			waitClosed(t, probed)
+			if c.GetStatus() != BackendOnline {
+				t.Fatalf("status = %q", c.GetStatus())
+			}
+		})
+	}
+}
+
+func TestFetchProbesOnNHDTimeout(t *testing.T) {
+	t.Parallel()
+
+	transport, probed := onlineStatusProbe(func(*http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+	c := testClient(t, ClientOptions{Transport: transport})
+	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+	closeBody(t, resp)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	waitClosed(t, probed)
+	if c.GetStatus() != BackendOnline {
+		t.Fatalf("status = %q", c.GetStatus())
+	}
+}
+
+func TestFetchDoesNotProbeOnNHD500(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
 	c := testClient(t, ClientOptions{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			return textResp(r, 502, "Bad Gateway"), nil
+			paths = append(paths, r.URL.Path)
+			return textResp(r, 500, "Internal Server Error"), nil
 		}),
-		Probe: func() { probed++ },
 	})
 
 	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
-	if err == nil {
-		closeBody(t, resp)
-		t.Fatal("expected error")
-	}
 	closeHTTPErr(t, err)
 	closeBody(t, resp)
-	if probed != 0 {
-		t.Fatalf("probe called %d times", probed)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var he *HTTPError
+	if !errors.As(err, &he) || he.Status != 500 {
+		t.Fatalf("err = %v", err)
+	}
+	if len(paths) != 1 || paths[0] != "/api/drive" {
+		t.Fatalf("paths = %v", paths)
+	}
+	if c.GetStatus() != BackendOnline {
+		t.Fatalf("status = %q", c.GetStatus())
+	}
+}
+
+func TestFetchDoesNotProbeOnNonNHD502(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	c := testClient(t, ClientOptions{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			paths = append(paths, r.URL.Path)
+			return textResp(r, 502, "Bad Gateway"), nil
+		}),
+	})
+
+	resp, err := c.Fetch(context.Background(), "https://example.com/file", FetchOptions{})
+	closeHTTPErr(t, err)
+	closeBody(t, resp)
+	if len(paths) != 1 || paths[0] != "/file" {
+		t.Fatalf("paths = %v", paths)
+	}
+	if c.GetStatus() != BackendOnline {
+		t.Fatalf("status = %q", c.GetStatus())
+	}
+}
+
+func TestFetchRecoveryReturnsContextErrorWhenCanceled(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	c := testClient(t, ClientOptions{
+		Status: BackendOffline,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path == "/status" {
+				close(started)
+				<-release
+				return jsonResp(r, 200, `{"status":"online"}`), nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+
+	leaderErr := make(chan error, 1)
+	go func() {
+		resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
+		leaderErr <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("recovery probe did not start")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	resp, err := c.Fetch(ctx, "https://api.nahida.live/api/drive", FetchOptions{})
+	closeBody(t, resp)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiter err = %v", err)
 	}
 	if c.GetStatus() != BackendOffline {
 		t.Fatalf("status = %q", c.GetStatus())
+	}
+
+	close(release)
+	if err := <-leaderErr; err != nil {
+		t.Fatalf("leader Fetch: %v", err)
+	}
+}
+
+func TestProbeCanceledDoesNotSetOffline(t *testing.T) {
+	t.Parallel()
+
+	c := testClient(t, ClientOptions{
+		Status: BackendOnline,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}),
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	if got := c.Probe(ctx); got != BackendOnline {
+		t.Fatalf("status = %q", got)
 	}
 }
 

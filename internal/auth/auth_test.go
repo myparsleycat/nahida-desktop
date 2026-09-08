@@ -706,3 +706,34 @@ func TestProbeUsesHTTP(t *testing.T) {
 		t.Fatalf("events = %v", events)
 	}
 }
+
+func TestServiceStartupProbesOnce(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	seen := make(chan struct{})
+	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/status" {
+			return textResp(r, 500, r.URL.Path), nil
+		}
+		if hits.Add(1) == 1 {
+			close(seen)
+		}
+		resp := textResp(r, 200, `{"status":"online"}`)
+		resp.Header.Set("Content-Type", "application/json")
+		return resp, nil
+	}))
+	httpClient.SetStatus(infra.BackendUnknown)
+	a := NewWithOptions(Options{HTTP: httpClient, Emit: func(string, any) {}})
+	a.start(context.Background())
+	select {
+	case <-seen:
+	case <-time.After(time.Second):
+		t.Fatal("startup probe did not run")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("status hits = %d", got)
+	}
+	a.stop()
+}

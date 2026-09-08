@@ -1871,6 +1871,7 @@
           "login": "Login"
         },
         "server_unreachable": "Unable to connect to the server.",
+        "retry": "Retry",
         "my_account": "My Account",
         "logout": "Logout"
       },

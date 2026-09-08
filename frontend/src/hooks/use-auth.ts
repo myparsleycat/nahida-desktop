@@ -1,6 +1,7 @@
 import { Auth } from "@bindings/auth";
 import { Logger } from "@renderer/lib/logger";
 import { globalStore, useGlobalStore } from "@renderer/store/global";
+import { isBackendDown } from "@shared/backend";
 import type { Session } from "@shared/schemas/auth";
 import { useEffect } from "react";
 
@@ -75,7 +76,7 @@ export function useAuth() {
         backendStatus,
         hasToken,
         isLoggedIn: !!session,
-        isBackendOffline: backendStatus === "offline" || backendStatus === "maintenance",
+        isBackendOffline: isBackendDown(backendStatus),
         refreshSession: async () => {
             const nextSession = await Auth.GetSession();
             setSession(nextSession);

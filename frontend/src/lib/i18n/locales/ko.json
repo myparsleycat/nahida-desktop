@@ -1805,6 +1805,7 @@
           "login": "로그인"
         },
         "server_unreachable": "서버에 연결할 수 없습니다.",
+        "retry": "다시 시도",
         "my_account": "내 계정",
         "logout": "로그아웃"
       },

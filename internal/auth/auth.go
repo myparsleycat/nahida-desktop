@@ -26,9 +26,6 @@ const (
 	signOutPath  = "/api/auth/sign-out"
 	signOutWait  = 10 * time.Second
 	loginTimeout = 100 * time.Second
-
-	defaultOnlineProbe  = 120 * time.Second
-	defaultOfflineProbe = 30 * time.Second
 )
 
 var errAuthExpired = errors.New("auth state expired")
@@ -75,16 +72,14 @@ type DriveInfo struct {
 
 // Options wire Auth to store, HTTP, and side effects. Tray and window stay out.
 type Options struct {
-	Store        tokenStore
-	Crypto       cryptor
-	HTTP         *infra.Client
-	Log          *infra.Log
-	Shell        *platform.Shell
-	Emit         func(name string, data any)
-	AfterLogin   func()
-	Do           func(*http.Request) (*http.Response, error)
-	OnlineDelay  time.Duration
-	OfflineDelay time.Duration
+	Store      tokenStore
+	Crypto     cryptor
+	HTTP       *infra.Client
+	Log        *infra.Log
+	Shell      *platform.Shell
+	Emit       func(name string, data any)
+	AfterLogin func()
+	Do         func(*http.Request) (*http.Response, error)
 }
 
 type sessionCall struct {
@@ -111,11 +106,7 @@ type Auth struct {
 	mutateDone      chan struct{}
 	sessionInFlight *sessionCall
 
-	probeMu      sync.Mutex
-	probing      bool
-	onlineDelay  time.Duration
-	offlineDelay time.Duration
-	cancelProbe  context.CancelFunc
+	cancelProbe context.CancelFunc
 }
 
 func New() *Auth {
@@ -126,10 +117,8 @@ func NewWithOptions(opts Options) *Auth {
 	done := make(chan struct{})
 	close(done)
 	a := &Auth{
-		mutateDone:   done,
-		emit:         defaultEmit,
-		onlineDelay:  defaultOnlineProbe,
-		offlineDelay: defaultOfflineProbe,
+		mutateDone: done,
+		emit:       defaultEmit,
 	}
 	a.apply(opts)
 	return a
@@ -168,20 +157,11 @@ func (a *Auth) apply(opts Options) {
 	if opts.Do != nil {
 		a.doFn = opts.Do
 	}
-	if opts.OnlineDelay > 0 {
-		a.onlineDelay = opts.OnlineDelay
-	}
-	if opts.OfflineDelay > 0 {
-		a.offlineDelay = opts.OfflineDelay
-	}
 	if a.http != nil {
 		a.http.UseToken(a.tokenLookup())
 		a.http.UseRefreshSession(a.sessionRefresh())
 		a.http.UseOnStatus(func(status infra.BackendStatus) {
 			a.broadcast("backend:status", string(status))
-		})
-		a.http.UseProbe(func() {
-			go a.probe(context.Background())
 		})
 	}
 }
@@ -323,21 +303,7 @@ func (a *Auth) GetBackendStatus() string {
 }
 
 func (a *Auth) probe(ctx context.Context) string {
-	a.probeMu.Lock()
-	if a.probing {
-		a.probeMu.Unlock()
-		return a.GetBackendStatus()
-	}
-	a.probing = true
-	a.probeMu.Unlock()
-
-	defer func() {
-		a.probeMu.Lock()
-		a.probing = false
-		a.probeMu.Unlock()
-	}()
-
-	if a.http == nil {
+	if a == nil || a.http == nil {
 		return string(infra.BackendUnknown)
 	}
 	if ctx == nil {
@@ -360,7 +326,7 @@ func (a *Auth) start(ctx context.Context) {
 	}
 	a.cancelProbe = cancel
 	a.mu.Unlock()
-	go a.probeLoop(ctx)
+	go a.probe(ctx)
 }
 
 func (a *Auth) stop() {
@@ -616,23 +582,4 @@ func (a *Auth) reportBackgroundError(err error, operation, stage, endpoint strin
 	_ = infra.ReportError(a.log, err, "Auth", infra.Diagnostic{
 		Operation: operation, Stage: stage, Fields: fields,
 	})
-}
-
-func (a *Auth) probeLoop(ctx context.Context) {
-	a.probe(ctx)
-	for {
-		delay := a.onlineDelay
-		switch infra.BackendStatus(a.GetBackendStatus()) {
-		case infra.BackendOffline, infra.BackendMaintenance:
-			delay = a.offlineDelay
-		}
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-			a.probe(ctx)
-		}
-	}
 }
