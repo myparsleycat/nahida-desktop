@@ -100,9 +100,43 @@ func TestConfigureDefaultGitHubChecksumAsset(t *testing.T) {
 	if !ok {
 		t.Fatalf("provider type = %T, want *github.Provider", engine.cfg.Providers[0])
 	}
-	got := reflect.ValueOf(provider).Elem().FieldByName("cfg").FieldByName("ChecksumAsset").String()
+	value := reflect.ValueOf(provider).Elem()
+	got := value.FieldByName("cfg").FieldByName("ChecksumAsset").String()
 	if got != updaterChecksumAsset {
 		t.Fatalf("ChecksumAsset = %q, want %q", got, updaterChecksumAsset)
+	}
+	client := value.FieldByName("client")
+	if client.IsNil() {
+		t.Fatal("default GitHub provider is missing an HTTP client")
+	}
+	transport := client.Elem().FieldByName("Transport")
+	if !transport.IsNil() && transport.Elem().Type() == reflect.TypeOf(unconfiguredHTTPTransport{}) {
+		t.Fatal("default GitHub provider used unconfigured transport")
+	}
+}
+
+func TestUpdaterDefaultProviderUsesApplicationTransport(t *testing.T) {
+	var requests []string
+	httpClient := NewClientWithOptions(ClientOptions{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.URL.String())
+		return nil, errors.New("proxy blocked test request")
+	})})
+	engine := &fakeUpdaterEngine{}
+	updater := NewUpdater()
+	if err := updater.Configure(UpdaterOptions{Engine: engine, HTTP: httpClient}); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = updater.ServiceShutdown() }()
+	provider := engine.cfg.Providers[0]
+	if _, err := provider.Check(context.Background(), wailsupdater.CheckRequest{CurrentVersion: "1.0.0"}); err == nil {
+		t.Fatal("release check bypassed transport")
+	}
+	release := &wailsupdater.Release{Metadata: map[string]any{"github.asset.url": "https://artifact.invalid/app.exe"}}
+	if err := provider.Download(context.Background(), release, io.Discard, func(int64, int64) {}); err == nil {
+		t.Fatal("download bypassed transport")
+	}
+	if len(requests) != 2 || requests[1] != "https://artifact.invalid/app.exe" {
+		t.Fatalf("requests=%v", requests)
 	}
 }
 

@@ -112,7 +112,7 @@ func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 	rt := newRuntime()
 	path := filepath.Join(t.TempDir(), "data.db")
 	ctx := context.Background()
-	if err := rt.Init(ctx, path); err != nil {
+	if err := rt.Init(ctx, path, nil); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
 	defer func() { _ = rt.Close() }()
@@ -141,7 +141,7 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 		HomeDir:  home,
 		Cwd:      cwd,
 		Packaged: false,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestBootRuntimePackagedUsesAppDataWithoutLegacyMigration(t *testing.T) {
 		HomeDir:  home,
 		Cwd:      t.TempDir(),
 		Packaged: true,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestBootRuntimeDBOverrideWinsInDevelopment(t *testing.T) {
 	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: "127.0.0.1:0"})
 	paths, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: t.TempDir(), DBOverride: override, Cwd: cwd, Packaged: false,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestBootRuntimeFailsBeforeInjectionWhenHomeIsNotDirectory(t *testing.T) {
 	rt := newRuntime()
 	_, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: home, Cwd: t.TempDir(), Packaged: false,
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("bootRuntime unexpectedly succeeded")
 	}
@@ -305,7 +305,7 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 		HomeDir:  t.TempDir(),
 		Cwd:      t.TempDir(),
 		Packaged: false,
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
 	defer func() { _ = rt.Close() }()
@@ -336,7 +336,7 @@ func TestBootRuntimeFailsWhenLocalHTTPCannotBind(t *testing.T) {
 		HomeDir:  t.TempDir(),
 		Cwd:      t.TempDir(),
 		Packaged: false,
-	})
+	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "listen local HTTP bridge") {
 		t.Fatalf("bootRuntime error = %v", err)
 	}
@@ -348,7 +348,7 @@ func TestRuntimeInitWiresAuthTokenStore(t *testing.T) {
 	rt := newRuntime()
 	path := filepath.Join(t.TempDir(), "data.db")
 	ctx := context.Background()
-	if err := rt.Init(ctx, path); err != nil {
+	if err := rt.Init(ctx, path, nil); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
 	defer func() { _ = rt.Close() }()

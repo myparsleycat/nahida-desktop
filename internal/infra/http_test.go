@@ -92,6 +92,22 @@ func closeHTTPErr(t *testing.T, err error) {
 	}
 }
 
+func TestUseTransportReplacesSharedClientTransport(t *testing.T) {
+	client := NewClient()
+	retained := client.HTTPClient()
+	blocked := BlockedProxyTransport{}
+	client.UseTransport(blocked)
+	if client.HTTPClient() != retained {
+		t.Fatal("client identity changed")
+	}
+	if retained.Transport != blocked {
+		t.Fatal("transport not installed")
+	}
+	var unset *Client
+	unset.UseTransport(blocked)
+	(&Client{}).UseTransport(blocked)
+}
+
 func TestSetStatusNotifiesOnChangeOnly(t *testing.T) {
 	t.Parallel()
 

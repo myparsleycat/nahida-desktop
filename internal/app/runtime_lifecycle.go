@@ -26,7 +26,7 @@ type runtimePaths struct {
 
 // bootRuntime opens the shared app data root, configures the logger,
 // and always opens the store. This is the path app.Run uses.
-func bootRuntime(ctx context.Context, rt *runtime, in runtimePathInput) (runtimePaths, error) {
+func bootRuntime(ctx context.Context, rt *runtime, in runtimePathInput, configureBrowserArguments func([]string) error) (runtimePaths, error) {
 	data, err := appdata.Open(in.HomeDir)
 	if err != nil {
 		return runtimePaths{}, err
@@ -55,7 +55,7 @@ func bootRuntime(ctx context.Context, rt *runtime, in runtimePathInput) (runtime
 		rt.tools.UseAppData(data)
 	}
 	rt.configureLog(paths, in.Packaged)
-	if err := rt.Init(ctx, paths.DB); err != nil {
+	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
 		return paths, err
 	}
 	if rt.localHTTP != nil {
@@ -77,7 +77,7 @@ func (rt *runtime) configureLog(paths runtimePaths, packaged bool) {
 	rt.log.Configure(opts)
 }
 
-func (rt *runtime) Init(ctx context.Context, dbPath string) error {
+func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArguments func([]string) error) error {
 	store, err := infra.OpenStore(ctx, dbPath)
 	if err != nil {
 		return err
@@ -117,6 +117,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	}
 	s, _ := level.(string)
 	rt.log.SetLevel(s)
+	if err := rt.initProxy(ctx, configureBrowserArguments); err != nil {
+		return rt.failInit(err, "proxy")
+	}
 	if rt.transfer != nil {
 		if err := rt.transfer.ApplyBandwidthLimitsFromSettings(ctx); err != nil {
 			return rt.failInit(err, "bandwidth-settings")
@@ -172,6 +175,10 @@ func (rt *runtime) Close() error {
 		_ = infra.ReportError(rt.log, rt.gamebanana.ServiceShutdown(), "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"})
 	}
 	var err error
+	if rt.proxyRelay != nil {
+		err = errors.Join(err, rt.proxyRelay.Close())
+		rt.proxyRelay = nil
+	}
 	if rt.localHTTP != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.localHTTP.ServiceShutdown(), infra.Diagnostic{Stage: "localHTTP"}))
 	}

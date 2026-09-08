@@ -18,7 +18,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	route := nahidaDeepLinkRoute(os.Args)
 	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "")
 	rt.window.SetInitialRoute(route)
-	app := application.New(application.Options{
+	app := newLockedApplication(application.Options{
 		Name:        "nahida-desktop",
 		Description: "Native app for nahida.live",
 		Icon:        icon,
@@ -43,14 +43,15 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		// runInBackground is off.
 		Windows: windowsApplicationOptions(),
 	})
-	// application.New acquires Wails' single-instance lock. Keep all database,
+	// newLockedApplication waits for a relaunch parent, then application.New
+	// acquires Wails' single-instance lock. Keep all database,
 	// local HTTP, watcher, and cleanup startup work after it so a forwarding
 	// second instance exits without booting a second backend.
 	in, err := livePathInput()
 	if err != nil {
 		return err
 	}
-	if _, err := bootRuntime(context.Background(), rt, in); err != nil {
+	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
 	}
 	defer func() {

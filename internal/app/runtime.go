@@ -19,6 +19,7 @@ import (
 )
 
 type runtime struct {
+	proxyRelay      *infra.ProxyRelay
 	appData         *appdata.Store
 	log             *infra.Log
 	store           *infra.Store

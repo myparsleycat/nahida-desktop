@@ -19,9 +19,9 @@ func TestRunAcquiresSingleInstanceBeforeBackendBoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(data)
-	lockIndex := strings.Index(source, "app := application.New(")
-	bootIndex := strings.Index(source, "bootRuntime(context.Background(), rt, in)")
+	lockIndex := strings.Index(source, "app := newLockedApplication(")
+	bootIndex := strings.Index(source, "bootRuntime(context.Background(), rt, in,")
 	if lockIndex < 0 || bootIndex < 0 || lockIndex >= bootIndex {
-		t.Fatalf("single-instance application.New must precede bootRuntime (indices %d, %d)", lockIndex, bootIndex)
+		t.Fatalf("single-instance newLockedApplication must precede bootRuntime (indices %d, %d)", lockIndex, bootIndex)
 	}
 }
