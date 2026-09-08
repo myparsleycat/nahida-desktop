@@ -768,10 +768,11 @@ func canRetryMethod(method string) bool {
 }
 
 // isUnreachable reports transport-level unreachability. Application failures
-// such as TLS certificate validation are excluded first; *url.Error implements
-// net.Error, so that check must not run before the exclusion.
+// such as TLS certificate validation and redirect policy failures are excluded
+// first; *url.Error implements net.Error, so that check must not run before
+// the exclusion.
 func isUnreachable(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) {
+	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) || isRedirectPolicyError(err) {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -793,6 +794,20 @@ func isNonReachabilityURLCause(err error) bool {
 		errors.As(err, new(x509.SystemRootsError)) ||
 		errors.As(err, new(url.EscapeError)) ||
 		errors.As(err, new(url.InvalidHostError)))
+}
+
+// isRedirectPolicyError reports the standard redirect-loop failure.
+// http.Client.Do wraps it in *url.Error, unlike genuine transport failures.
+// A custom CheckRedirect error is arbitrary and cannot be recognized here,
+// so callers must pass through any response CheckRedirect returns alongside
+// its error instead of relying on this classification.
+func isRedirectPolicyError(err error) bool {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) || urlErr == nil || urlErr.Err == nil {
+		return false
+	}
+	msg := strings.ToLower(urlErr.Err.Error())
+	return strings.Contains(msg, "stopped after") && strings.Contains(msg, "redirect")
 }
 
 func rewriteCloudflareTimeout(resp *http.Response) *http.Response {

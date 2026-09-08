@@ -82,6 +82,7 @@ func TestProbeNonReachabilityURLErrorIsWarn(t *testing.T) {
 		{name: "scheme-mismatch", err: http.ErrSchemeMismatch},
 		{name: "invalid-host", err: url.InvalidHostError("example")},
 		{name: "escape", err: url.EscapeError("%")},
+		{name: "redirect-loop", err: &url.Error{Op: "Get", URL: "https://api.nahida.live/status", Err: errors.New("stopped after 10 redirects")}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
