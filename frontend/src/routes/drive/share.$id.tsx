@@ -22,6 +22,7 @@ import { AliceLoader } from "@renderer/components/loaders";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
+import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveDescendantSearch } from "@renderer/hooks/use-drive-descendant-search";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
@@ -29,6 +30,7 @@ import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
 import { FileDropTargetID, useWindowFileDrop } from "@renderer/wails/file-drop";
+import { driveContentsRefetchInterval, driveContentsRetry } from "@shared/backend";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
@@ -45,6 +47,7 @@ export const Route = createFileRoute("/drive/share/$id")({
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { backendStatus } = useAuth();
   const { id } = Route.useParams();
   const location = useLocation();
   const effectiveId = id === "root" ? "share" : id;
@@ -85,12 +88,12 @@ function RouteComponent() {
     enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
-    refetchInterval: () => {
-      if (typeof document !== "undefined" && document.hidden) {
-        return 60000 * 3; // 3분 (백그라운드)
-      }
-      return 30000; // 30초 (포그라운드)
-    },
+    refetchInterval: () =>
+      driveContentsRefetchInterval(
+        backendStatus,
+        typeof document !== "undefined" && document.hidden,
+      ),
+    retry: driveContentsRetry(backendStatus),
     queryFn: async () => {
       const data = await Drive.GetItem(effectiveId);
       return data;

@@ -31,6 +31,7 @@ import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
 import { FileDropTargetID, useWindowFileDrop } from "@renderer/wails/file-drop";
+import { driveContentsRefetchInterval, driveContentsRetry } from "@shared/backend";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/drive/drive/$id")({
 function RouteComponent() {
   const { t } = useTranslation();
   const { id } = Route.useParams();
-  const { session } = useAuth();
+  const { session, backendStatus } = useAuth();
   const location = useLocation();
   const effectiveId = id === "root" ? (session?.drive.rootId ?? id) : id;
 
@@ -88,12 +89,12 @@ function RouteComponent() {
     enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
-    refetchInterval: () => {
-      if (typeof document !== "undefined" && document.hidden) {
-        return 60000 * 3; // 3분 (백그라운드)
-      }
-      return 30000; // 30초 (포그라운드)
-    },
+    refetchInterval: () =>
+      driveContentsRefetchInterval(
+        backendStatus,
+        typeof document !== "undefined" && document.hidden,
+      ),
+    retry: driveContentsRetry(backendStatus),
     queryFn: async () => {
       const data = await Drive.GetItem(effectiveId);
       return data;

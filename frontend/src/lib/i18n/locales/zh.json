@@ -1824,6 +1824,7 @@
           "login": "登录"
         },
         "server_unreachable": "无法连接到服务器。",
+        "retry": "重试",
         "my_account": "我的账户",
         "logout": "登出"
       },

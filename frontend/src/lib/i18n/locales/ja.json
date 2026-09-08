@@ -1825,6 +1825,7 @@
           "login": "ログイン"
         },
         "server_unreachable": "サーバーに接続できません。",
+        "retry": "再試行",
         "my_account": "マイアカウント",
         "logout": "ログアウト"
       },

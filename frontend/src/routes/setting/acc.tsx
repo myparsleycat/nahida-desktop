@@ -12,8 +12,15 @@ export const Route = createFileRoute("/setting/acc")({
 });
 
 function RouteComponent() {
-  const { session, sessionInitialized, hasToken, isBackendOffline, startLogin, startLogout } =
-    useAuth();
+  const {
+    session,
+    sessionInitialized,
+    hasToken,
+    isBackendOffline,
+    startLogin,
+    startLogout,
+    refreshSession,
+  } = useAuth();
   const { t } = useTranslation();
 
   if (!sessionInitialized) {
@@ -28,7 +35,16 @@ function RouteComponent() {
     return (
       <main className="mx-auto flex h-full w-full flex-1 flex-col items-center justify-center space-y-6 p-4 select-none">
         <p className="mb-4 text-muted-foreground">{t("page.setting.acc.server_unreachable")}</p>
-        {hasToken && <Button onClick={() => startLogout()}>{t("page.setting.acc.logout")}</Button>}
+        <div className="flex flex-row items-center gap-2">
+          <Button onClick={() => void refreshSession()}>{t("page.setting.acc.retry")}</Button>
+          {hasToken ? (
+            <Button onClick={() => startLogout()}>{t("page.setting.acc.logout")}</Button>
+          ) : (
+            <Button onClick={() => startLogin()}>
+              {t("page.setting.acc.not_logged_in.login")}
+            </Button>
+          )}
+        </div>
       </main>
     );
   }

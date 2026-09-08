@@ -678,6 +678,37 @@ func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	}
 }
 
+func TestGetSessionDoesNotProbeWhenTokenless(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		hits.Add(1)
+		return textResp(r, 200, `{"status":"online"}`), nil
+	}))
+	httpClient.SetStatus(infra.BackendOffline)
+	a := NewWithOptions(Options{
+		Store:  &memStore{},
+		Crypto: passCrypto{},
+		HTTP:   httpClient,
+		Emit:   func(string, any) {},
+	})
+
+	session, err := a.GetSession(context.Background())
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session != nil {
+		t.Fatalf("session = %#v", session)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("hits = %d", hits.Load())
+	}
+	if got := a.GetBackendStatus(); got != "offline" {
+		t.Fatalf("status = %q", got)
+	}
+}
+
 func TestGetBackendStatus(t *testing.T) {
 	t.Parallel()
 	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -705,10 +736,41 @@ func TestProbeUsesHTTP(t *testing.T) {
 			events = append(events, name+":"+data.(string))
 		},
 	})
-	if got := a.probe(context.Background()); got != "maintenance" {
+	if got := a.Probe(context.Background()); got != "maintenance" {
 		t.Fatalf("probe = %q", got)
 	}
 	if len(events) != 1 || events[0] != "backend:status:maintenance" {
 		t.Fatalf("events = %v", events)
 	}
+}
+
+func TestServiceStartupProbesOnce(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	seen := make(chan struct{})
+	httpClient := testHTTP(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/status" {
+			return textResp(r, 500, r.URL.Path), nil
+		}
+		if hits.Add(1) == 1 {
+			close(seen)
+		}
+		resp := textResp(r, 200, `{"status":"online"}`)
+		resp.Header.Set("Content-Type", "application/json")
+		return resp, nil
+	}))
+	httpClient.SetStatus(infra.BackendUnknown)
+	a := NewWithOptions(Options{HTTP: httpClient, Emit: func(string, any) {}})
+	a.start(context.Background())
+	select {
+	case <-seen:
+	case <-time.After(time.Second):
+		t.Fatal("startup probe did not run")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("status hits = %d", got)
+	}
+	a.stop()
 }

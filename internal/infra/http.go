@@ -125,7 +125,6 @@ type ClientOptions struct {
 	Timeout        time.Duration
 	RetryLimit     *int
 	RetryWait      *time.Duration
-	Probe          func()
 	BackendURL     string
 	Status         BackendStatus
 }
@@ -140,10 +139,10 @@ type Client struct {
 	http            *http.Client
 	retryLimit      int
 	retryWait       time.Duration
-	probeFn         func()
 	onStatus        func(BackendStatus)
 	backendURL      string
 	backend         BackendStatus
+	probeWait       chan struct{}
 	probeDiagnostic DiagnosticThrottle
 }
 
@@ -187,7 +186,6 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 		http:           httpClient,
 		retryLimit:     retryLimit,
 		retryWait:      retryWait,
-		probeFn:        opts.Probe,
 		backendURL:     backendURL,
 		backend:        status,
 	}
@@ -253,15 +251,6 @@ func (c *Client) UseLog(log *Log) {
 	}
 	c.mu.Lock()
 	c.log = log
-	c.mu.Unlock()
-}
-
-func (c *Client) UseProbe(fn func()) {
-	if c == nil {
-		return
-	}
-	c.mu.Lock()
-	c.probeFn = fn
 	c.mu.Unlock()
 }
 
@@ -356,11 +345,8 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (r
 	}
 	nhd := isNHD(rawURL)
 	session := isSessionRequest(rawURL)
-	if nhd && !session {
-		switch c.GetStatus() {
-		case BackendOffline, BackendMaintenance:
-			return nil, cloneAPIError(ErrBackendUnavailable)
-		}
+	if err := c.recoverIfNeeded(ctx, nhd); err != nil {
+		return nil, err
 	}
 
 	header, err := c.resolveHeaders(rawURL, opts.Header)
@@ -419,7 +405,7 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (r
 				continue
 			}
 			if nhd && isUnreachable(err) {
-				c.SetOffline()
+				c.triggerProbe()
 			}
 			return nil, err
 		}
@@ -457,7 +443,7 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (r
 			diagnosticResponse = resp
 			if requestErr != nil {
 				if isUnreachable(requestErr) {
-					c.SetOffline()
+					c.triggerProbe()
 				}
 				return nil, requestErr
 			}
@@ -471,15 +457,11 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (r
 	}
 	c.afterUnauthorized(rawURL, nhd, session, resp)
 
-	if !opts.DisableHTTPErrors && resp.StatusCode >= 400 {
-		httpErr := &HTTPError{Response: resp, Status: resp.StatusCode}
-		if nhd {
-			c.noteBackendFromError(httpErr)
-		}
-		return nil, httpErr
-	}
 	if nhd {
 		c.noteBackendFromResponse(resp)
+	}
+	if !opts.DisableHTTPErrors && resp.StatusCode >= 400 {
+		return nil, &HTTPError{Response: resp, Status: resp.StatusCode}
 	}
 	return resp, nil
 }
@@ -495,11 +477,8 @@ func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.
 	}
 	nhd := isNHD(rawURL)
 	session := isSessionRequest(rawURL)
-	if nhd && !session {
-		switch c.GetStatus() {
-		case BackendOffline, BackendMaintenance:
-			return nil, cloneAPIError(ErrBackendUnavailable)
-		}
+	if err := c.recoverIfNeeded(ctx, nhd); err != nil {
+		return nil, err
 	}
 	resolved, err := c.resolveHeaders(rawURL, header)
 	if err != nil {
@@ -519,7 +498,7 @@ func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.
 	response, err := c.http.Do(request)
 	if err != nil {
 		if nhd && isUnreachable(err) {
-			c.SetOffline()
+			c.triggerProbe()
 		}
 		return nil, err
 	}
@@ -537,7 +516,9 @@ func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.
 	return response, nil
 }
 
-// Probe hits BACKEND_URL/status. Periodic scheduling and IPC stay with auth.
+// Probe hits BACKEND_URL/status and is the only health check that writes
+// offline or maintenance. Auth starts one probe at boot; later probes are
+// on-demand from Fetch/Stream recovery or failure classification.
 func (c *Client) Probe(ctx context.Context) BackendStatus {
 	if c == nil {
 		return BackendUnknown
@@ -545,23 +526,39 @@ func (c *Client) Probe(ctx context.Context) BackendStatus {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	c.mu.Lock()
+	if wait := c.probeWait; wait != nil {
+		c.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+		}
+		return c.GetStatus()
+	}
+	done := make(chan struct{})
+	c.probeWait = done
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.probeWait = nil
+		close(done)
+		c.mu.Unlock()
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
 	endpoint := strings.TrimRight(c.backendURL, "/") + "/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		c.reportProbe(err, endpoint, "prepare", nil)
-		c.SetOffline()
-		return c.GetStatus()
+		return c.finishProbe(err, endpoint, "prepare", nil)
 	}
 	req.Header.Set("User-Agent", c.UserAgent())
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		c.reportProbe(err, endpoint, "request", nil)
-		c.SetOffline()
-		return c.GetStatus()
+		return c.finishProbe(err, endpoint, "request", nil)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if err := normalizeAPIResponse(resp); err != nil {
@@ -655,45 +652,52 @@ func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.
 	}
 }
 
+func (c *Client) recoverIfNeeded(ctx context.Context, nhd bool) error {
+	if c == nil || !nhd {
+		return nil
+	}
+	switch c.GetStatus() {
+	case BackendOffline, BackendMaintenance:
+		_ = c.Probe(ctx)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		switch c.GetStatus() {
+		case BackendOffline, BackendMaintenance:
+			return cloneAPIError(ErrBackendUnavailable)
+		}
+	}
+	return nil
+}
+
 func (c *Client) noteBackendFromResponse(resp *http.Response) {
 	if resp == nil {
 		return
 	}
-	if resp.StatusCode == 503 {
+	if isBackendUnavailable(resp.StatusCode) {
 		c.triggerProbe()
 		return
 	}
-	if isBackendUnavailable(resp.StatusCode) {
-		c.SetOffline()
+	if resp.StatusCode >= 400 {
 		return
 	}
 	c.SetOnline()
 }
 
-func (c *Client) noteBackendFromError(err error) {
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == 503 {
-			c.triggerProbe()
-			return
-		}
-		if isBackendUnavailable(httpErr.Status) {
-			c.SetOffline()
-		}
+func (c *Client) triggerProbe() {
+	if c == nil {
 		return
 	}
-	if isUnreachable(err) {
-		c.SetOffline()
-	}
+	go c.Probe(context.Background())
 }
 
-func (c *Client) triggerProbe() {
-	c.mu.Lock()
-	fn := c.probeFn
-	c.mu.Unlock()
-	if fn != nil {
-		fn()
+func (c *Client) finishProbe(err error, endpoint, stage string, resp *http.Response) BackendStatus {
+	if errors.Is(err, context.Canceled) {
+		return c.GetStatus()
 	}
+	c.reportProbe(err, endpoint, stage, resp)
+	c.SetOffline()
+	return c.GetStatus()
 }
 
 func (c *Client) logAPIResponseDecodeFailure(rawURL string, status int, err error) {
