@@ -132,6 +132,28 @@ describe("buildModCompressionTitlebarActivity", () => {
         expect(buildModCompressionTitlebarActivity(state({ status: "checking" }), t)).toBeNull();
     });
 
+    it("hides checking even when totals are present", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({ status: "checking", totalFiles: 2, totalBytes: 40 }),
+                t,
+            ),
+        ).toBeNull();
+    });
+
+    it("hides unrecognized statuses instead of labeling them as checking", () => {
+        expect(
+            buildModCompressionTitlebarActivity(
+                state({
+                    status: "broken" as CompressionState["status"],
+                    totalFiles: 2,
+                    totalBytes: 40,
+                }),
+                t,
+            ),
+        ).toBeNull();
+    });
+
     it("hides decompressing until restore work exists", () => {
         expect(
             buildModCompressionTitlebarActivity(state({ status: "decompressing" }), t),

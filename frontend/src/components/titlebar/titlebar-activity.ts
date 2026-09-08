@@ -176,16 +176,10 @@ export function buildModCompressionTitlebarActivity(
     state: CompressionState | null,
     t: Translate,
 ): TitlebarActivity | null {
-    if (!state || state.status === "idle") return null;
+    if (!state || state.status === "idle" || state.status === "checking") return null;
     const hasWork = state.totalFiles > 0 || state.totalBytes > 0;
     if (state.status !== "error" && !hasWork) return null;
 
-    const progress =
-        state.totalBytes > 0
-            ? (state.processedBytes / state.totalBytes) * 100
-            : state.totalFiles > 0
-              ? (state.processedFiles / state.totalFiles) * 100
-              : undefined;
     const labelKey =
         state.status === "error"
             ? "titlebar.activity.modCompression.error"
@@ -193,7 +187,15 @@ export function buildModCompressionTitlebarActivity(
               ? "titlebar.activity.modCompression.decompressing"
               : state.status === "compressing"
                 ? "titlebar.activity.modCompression.compressing"
-                : "titlebar.activity.modCompression.checking";
+                : null;
+    if (labelKey == null) return null;
+
+    const progress =
+        state.totalBytes > 0
+            ? (state.processedBytes / state.totalBytes) * 100
+            : state.totalFiles > 0
+              ? (state.processedFiles / state.totalFiles) * 100
+              : undefined;
 
     return {
         id: "mod:compression",

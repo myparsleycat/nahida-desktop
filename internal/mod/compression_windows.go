@@ -113,31 +113,7 @@ func restoreWOF(
 	}
 	setCompressionTotals(work, setTotals)
 	return runXpressWorkers(ctx, work, progress, onError, func(file compressionFile) error {
-		external, provider, _, err := wofStateCall(file.path)
-		if err != nil {
-			return fmt.Errorf("inspect WOF state: %w", err)
-		}
-		if !external || provider != wofProviderFile {
-			return nil
-		}
-		handle, err := openXpressFile(file.path)
-		if err != nil {
-			return fmt.Errorf("open: %w", err)
-		}
-		defer func() { _ = windows.CloseHandle(handle) }()
-		id, err := fileIdentityCall(handle)
-		if err != nil {
-			return fmt.Errorf("identify: %w", err)
-		}
-		if !ownership.contains(id) {
-			return nil
-		}
-		mark(file.path)
-		if err := deleteExternalBackingCall(handle); err != nil {
-			return fmt.Errorf("remove WOF backing: %w", err)
-		}
-		ownership.remove(id)
-		return nil
+		return restoreOwnedWofFile(file, ownership, mark)
 	})
 }
 
@@ -152,40 +128,52 @@ func ownedWofRestoreFiles(
 	}
 	var mu sync.Mutex
 	work := make([]compressionFile, 0, len(files))
-	err := runXpressWorkers(ctx, files, func(string, int64, bool) {}, onError, func(file compressionFile) error {
-		owned, err := isOwnedWofRestoreFile(file.path, ownership)
-		if err != nil {
-			return err
-		}
-		if !owned {
+	err := runXpressJobs(ctx, files, func(file compressionFile) {
+		err := withOwnedWofFile(file.path, ownership, func(windows.Handle, string) error {
+			mu.Lock()
+			work = append(work, file)
+			mu.Unlock()
 			return nil
+		})
+		if err != nil && onError != nil {
+			onError(file.path, err)
 		}
-		mu.Lock()
-		work = append(work, file)
-		mu.Unlock()
-		return nil
 	})
 	return work, err
 }
 
-func isOwnedWofRestoreFile(path string, ownership *compressionFileOwnership) (bool, error) {
+func restoreOwnedWofFile(file compressionFile, ownership *compressionFileOwnership, mark compressionMutationMarker) error {
+	return withOwnedWofFile(file.path, ownership, func(handle windows.Handle, id string) error {
+		mark(file.path)
+		if err := deleteExternalBackingCall(handle); err != nil {
+			return fmt.Errorf("remove WOF backing: %w", err)
+		}
+		ownership.remove(id)
+		return nil
+	})
+}
+
+func withOwnedWofFile(path string, ownership *compressionFileOwnership, fn func(windows.Handle, string) error) error {
 	external, provider, _, err := wofStateCall(path)
 	if err != nil {
-		return false, fmt.Errorf("inspect WOF state: %w", err)
+		return fmt.Errorf("inspect WOF state: %w", err)
 	}
 	if !external || provider != wofProviderFile {
-		return false, nil
+		return nil
 	}
 	handle, err := openXpressFile(path)
 	if err != nil {
-		return false, fmt.Errorf("open: %w", err)
+		return fmt.Errorf("open: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
 	id, err := fileIdentityCall(handle)
 	if err != nil {
-		return false, fmt.Errorf("identify: %w", err)
+		return fmt.Errorf("identify: %w", err)
 	}
-	return ownership.contains(id), nil
+	if !ownership.contains(id) {
+		return nil
+	}
+	return fn(handle, id)
 }
 
 func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
@@ -234,6 +222,15 @@ func runXpressWorkers(
 	onError func(string, error),
 	process func(compressionFile) error,
 ) error {
+	return runXpressJobs(ctx, files, func(file compressionFile) {
+		if err := process(file); err != nil && onError != nil {
+			onError(file.path, err)
+		}
+		progress(file.path, file.size, false)
+	})
+}
+
+func runXpressJobs(ctx context.Context, files []compressionFile, each func(compressionFile)) error {
 	if len(files) == 0 {
 		return ctx.Err()
 	}
@@ -247,10 +244,7 @@ func runXpressWorkers(
 				if ctx.Err() != nil {
 					continue
 				}
-				if err := process(file); err != nil && onError != nil {
-					onError(file.path, err)
-				}
-				progress(file.path, file.size, false)
+				each(file)
 			}
 		}()
 	}
