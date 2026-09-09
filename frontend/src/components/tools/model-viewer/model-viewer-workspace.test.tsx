@@ -155,11 +155,6 @@ it.each(["dialog", "window"])(
     expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].orientation).toContain("90");
     fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
     expect(vi.mocked(useModelViewerAnimationClock).mock.lastCall?.[0].frameIndex).toBe(1);
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect(vi.mocked(useModelViewerAnimationClock).mock.lastCall?.[0]).toMatchObject({
-      frameIndex: 0,
-      playing: false,
-    });
     act(() => menus().onCapturePreviewClick());
     expect(Mod.PastePreview).not.toHaveBeenCalled();
     fireEvent.click(

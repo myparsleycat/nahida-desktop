@@ -1203,6 +1203,9 @@
         "generating_selected_state": "Generating selected state",
         "model_data_unavailable": "Model data is not available.",
         "animation_clip": "Animation clip",
+        "fps_control": "Change playback speed (FPS)",
+        "fps_apply": "Apply",
+        "fps_default": "Default {{fps}} FPS",
         "menu": {
           "model": "Model",
           "texture": "Texture",

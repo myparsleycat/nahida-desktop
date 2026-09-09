@@ -1189,6 +1189,9 @@
         "generating_selected_state": "선택한 상태 생성 중",
         "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",
         "animation_clip": "애니메이션 클립",
+        "fps_control": "재생 속도(FPS) 변경",
+        "fps_apply": "적용",
+        "fps_default": "기본 {{fps}} FPS",
         "menu": {
           "model": "모델",
           "texture": "텍스처",

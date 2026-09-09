@@ -1170,6 +1170,9 @@
         "generating_selected_state": "正在生成所选状态",
         "model_data_unavailable": "模型数据不可用。",
         "animation_clip": "动画片段",
+        "fps_control": "更改播放速度 (FPS)",
+        "fps_apply": "应用",
+        "fps_default": "默认 {{fps}} FPS",
         "menu": {
           "model": "模型",
           "texture": "纹理",

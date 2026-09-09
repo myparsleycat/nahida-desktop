@@ -2,7 +2,7 @@ import { Shell } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
+import { ArrowLeftIcon, FolderOpenIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +12,8 @@ import {
   normalizeAnimationFPS,
   useModelViewerAnimationClock,
 } from "./model-viewer-animation-clock";
+import { ModelViewerFpsControl } from "./model-viewer-fps-control";
+import { useModelViewerScrubPlayback } from "./model-viewer-scrub";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
@@ -34,11 +36,13 @@ export function ModelViewerPage({
   const [prevManifestPath, setPrevManifestPath] = useState(manifestPath);
   const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
   const [animationPlaying, setAnimationPlaying] = useState(false);
+  const [fpsOverride, setFpsOverride] = useState<number | null>(null);
 
   if (prevManifestPath !== manifestPath) {
     setPrevManifestPath(manifestPath);
     setAnimationFrameIndex(0);
     setAnimationPlaying(false);
+    setFpsOverride(null);
   }
 
   const { data: manifest = null } = useQuery({
@@ -68,14 +72,24 @@ export function ModelViewerPage({
     () => (rawAnimation ? { ...rawAnimation, fps: normalizeAnimationFPS(rawAnimation.fps) } : null),
     [rawAnimation],
   );
+  const effectiveAnimation = useMemo(
+    () =>
+      activeAnimation ? { ...activeAnimation, fps: fpsOverride ?? activeAnimation.fps } : null,
+    [activeAnimation, fpsOverride],
+  );
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
 
   useModelViewerAnimationClock({
-    clip: activeAnimation,
+    clip: effectiveAnimation,
     frameIndex: animationFrameIndex,
     playing: animationPlaying,
     onFrame: setAnimationFrameIndex,
     onComplete: () => setAnimationPlaying(false),
+  });
+
+  const scrubPlayback = useModelViewerScrubPlayback({
+    playing: animationPlaying,
+    setPlaying: setAnimationPlaying,
   });
 
   return (
@@ -111,29 +125,22 @@ export function ModelViewerPage({
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{activeAnimation.label}</div>
             <div className="text-xs text-muted-foreground">
-              {activeAnimation.fps} FPS · Frame{" "}
-              {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
+              <ModelViewerFpsControl
+                fps={fpsOverride ?? activeAnimation.fps}
+                defaultFps={activeAnimation.fps}
+                onFpsChange={setFpsOverride}
+              />{" "}
+              · Frame {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
               {activeAnimation.frameEnd}
             </div>
           </div>
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
+            variant="ghost"
+            size="icon"
             onClick={() => setAnimationPlaying((current) => !current)}
+            aria-label={animationPlaying ? "Pause" : "Play"}
           >
-            {animationPlaying ? "Pause" : "Play"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={() => {
-              setAnimationPlaying(false);
-              setAnimationFrameIndex(0);
-            }}
-          >
-            Reset
+            {animationPlaying ? <PauseIcon /> : <PlayIcon />}
           </Button>
           <input
             type="range"
@@ -142,8 +149,8 @@ export function ModelViewerPage({
             step={1}
             value={animationFrameIndex}
             className="min-w-full accent-primary"
+            {...scrubPlayback}
             onChange={(event) => {
-              setAnimationPlaying(false);
               setAnimationFrameIndex(Number(event.currentTarget.value));
             }}
           />
@@ -156,7 +163,7 @@ export function ModelViewerPage({
             className="absolute inset-0 h-full w-full"
             src={modelSrc}
             orientation="0deg 0deg 0deg"
-            animationClip={activeAnimation ?? undefined}
+            animationClip={effectiveAnimation ?? undefined}
             animationFrame={animationFrameIndex}
           />
         ) : (
