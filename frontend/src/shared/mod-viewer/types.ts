@@ -152,6 +152,7 @@ export type ViewerComputeShapeStage = {
 
 export type ViewerComputeDeformerKind =
     | "gimi_shape_pose_v1"
+    | "gimi_packed_dual_quaternion_v1"
     | "gimi_cyclic_packed_v1"
     | "gimi_cyclic_packed_shape_v1";
 

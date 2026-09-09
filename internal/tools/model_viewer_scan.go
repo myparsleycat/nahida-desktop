@@ -370,7 +370,7 @@ func buildModelViewerDirectScannedMeshesAt(iniPath, modDir string, sections []mo
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
-	var packedResources map[string]bool
+	var packedResources map[string]int
 	if layoutName != "wwmi" {
 		packedResources = collectModelViewerPackedObjectResources(modDir, filepath.Dir(iniPath), sections)
 	}

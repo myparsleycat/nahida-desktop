@@ -6,6 +6,10 @@ import {
     validateCyclicPackedBuffers,
 } from "./model-viewer-compute-cyclic";
 import {
+    computePackedDualQuaternionFrame,
+    validatePackedDualQuaternionBuffers,
+} from "./model-viewer-compute-dual-quaternion";
+import {
     compactGIMIShapePoseFrame,
     computeGIMIShapePoseFrame,
     type GIMIShapePoseBuffers,
@@ -131,6 +135,11 @@ async function bindDeformerCompute(
             const buffers = await loadShapePoseBuffers(deformer);
             validateCyclicPackedBuffers(deformer, buffers);
             return (poseFrame) => computeCyclicPackedFrame(deformer, buffers, poseFrame);
+        }
+        case "gimi_packed_dual_quaternion_v1": {
+            const buffers = await loadShapePoseBuffers(deformer);
+            validatePackedDualQuaternionBuffers(deformer, buffers);
+            return (poseFrame) => computePackedDualQuaternionFrame(deformer, buffers, poseFrame);
         }
         case "gimi_shape_pose_v1": {
             const buffers = await loadShapePoseBuffers(deformer);

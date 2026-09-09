@@ -282,7 +282,11 @@ func (t *Tools) prepareModelViewerGeometry(ctx context.Context, folder string, i
 		if multi {
 			computeScopeID = modelViewerString(iniIndex)
 		}
-		if deformer, clips := detectModelViewerComputeAnimation(folder, filepath.Dir(iniPath), computeScopeID, sections, resources, meshes, scopedNames); deformer != nil {
+		if deformer, clips := detectModelViewerComputeAnimation(folder, filepath.Dir(iniPath), computeScopeID, sections, resources, meshes, scopedNames, func(message string) {
+			if t.log != nil {
+				t.log.Warn(fmt.Sprintf("INI=%q %s", iniPath, message), "StaticGlb.loadForViewer")
+			}
+		}); deformer != nil {
 			prepared.computeDeformers = append(prepared.computeDeformers, *deformer)
 			prepared.computeAnimations = append(prepared.computeAnimations, clips...)
 		}

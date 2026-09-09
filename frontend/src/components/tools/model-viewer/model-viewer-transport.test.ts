@@ -164,42 +164,50 @@ describe("normalizeModelViewerTransport", () => {
         ]);
     });
 
-    it("keeps a cyclic packed compute descriptor", () => {
-        const source = { url: "/source", byteLength: 20, stride: 20 };
-        const input = {
-            memorySessionId: "session",
-            iniPath: "mod.ini",
-            modPath: "mod",
-            name: "Example",
-            meshes: null,
-            textures: null,
-            variables: null,
-            defaultState: null,
-            stateRules: null,
-            uiAssets: {},
-            animations: null,
-            computeDeformers: [
-                {
-                    kind: "gimi_cyclic_packed_v1",
-                    id: "closet",
-                    meshIds: ["mesh"],
-                    vertexCount: 1,
-                    base: source,
-                    shapePasses: null,
-                    pose: {
-                        blend: { url: "/blend", byteLength: 32, stride: 32 },
-                        frames: { url: "/pose", byteLength: 96, stride: 48 },
-                        boneCount: 1,
-                        frameCount: 2,
+    it.each(["gimi_cyclic_packed_v1", "gimi_packed_dual_quaternion_v1"] as const)(
+        "keeps a %s compute descriptor",
+        (kind) => {
+            const poseStride = kind === "gimi_packed_dual_quaternion_v1" ? 56 : 48;
+            const source = { url: "/source", byteLength: 20, stride: 20 };
+            const input = {
+                memorySessionId: "session",
+                iniPath: "mod.ini",
+                modPath: "mod",
+                name: "Example",
+                meshes: null,
+                textures: null,
+                variables: null,
+                defaultState: null,
+                stateRules: null,
+                uiAssets: {},
+                animations: null,
+                computeDeformers: [
+                    {
+                        kind,
+                        id: "closet",
+                        meshIds: ["mesh"],
+                        vertexCount: 1,
+                        base: source,
+                        shapePasses: null,
+                        pose: {
+                            blend: { url: "/blend", byteLength: 32, stride: 32 },
+                            frames: {
+                                url: "/pose",
+                                byteLength: 2 * poseStride,
+                                stride: poseStride,
+                            },
+                            boneCount: 1,
+                            frameCount: 2,
+                        },
                     },
-                },
-            ],
-        } satisfies WailsModelViewerTransport;
+                ],
+            } satisfies WailsModelViewerTransport;
 
-        expect(normalizeModelViewerTransport(input).computeDeformers).toEqual([
-            expect.objectContaining({ kind: "gimi_cyclic_packed_v1", id: "closet" }),
-        ]);
-    });
+            expect(normalizeModelViewerTransport(input).computeDeformers).toEqual([
+                expect.objectContaining({ kind, id: "closet" }),
+            ]);
+        },
+    );
 
     it("keeps a packed shapekey compute descriptor", () => {
         const source = { url: "/source", byteLength: 20, stride: 20 };
