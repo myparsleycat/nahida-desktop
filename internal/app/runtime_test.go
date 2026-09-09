@@ -101,8 +101,11 @@ func TestRuntimeRegistersMenuMakerService(t *testing.T) {
 	if rt.menuMaker == nil {
 		t.Fatal("Menu Maker service is not initialized")
 	}
-	if len(rt.services()) != 17 {
-		t.Fatalf("services = %d, want 17 including Menu Maker", len(rt.services()))
+	if rt.cdnTrace == nil {
+		t.Fatal("CDN trace service is not initialized")
+	}
+	if len(rt.services()) != 18 {
+		t.Fatalf("services = %d, want 18 including CDN trace", len(rt.services()))
 	}
 }
 

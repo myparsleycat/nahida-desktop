@@ -89,7 +89,7 @@ func collectDiagnosticCauses(err error, extra Diagnostic, includeReported bool) 
 			if branchSeverity == "" {
 				branchSeverity = ClassifyError(current)
 			}
-			if severity == "" || branchSeverity == DiagnosticError {
+			if diagnosticSeverityRank(branchSeverity) > diagnosticSeverityRank(severity) {
 				severity = branchSeverity
 			}
 		}
@@ -120,6 +120,19 @@ func collectDiagnosticCauses(err error, extra Diagnostic, includeReported bool) 
 		result = []map[string]any{{"error": "diagnostic cause traversal limit reached", "errorType": "diagnostic-limit"}}
 	}
 	return result, truncated, severity
+}
+
+func diagnosticSeverityRank(severity DiagnosticSeverity) int {
+	switch severity {
+	case DiagnosticError:
+		return 3
+	case DiagnosticWarn:
+		return 2
+	case DiagnosticDebug:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func limitDiagnosticText(value string, limit int) string {
