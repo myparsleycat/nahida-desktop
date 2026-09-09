@@ -281,7 +281,8 @@ func TestProtocolUnconfiguredWebImagePreservesUnavailableResponse(t *testing.T) 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/nahida/image-web?url=https://example.com/image.png", nil)
 	service.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusServiceUnavailable || strings.TrimSpace(recorder.Body.String()) != "http service unavailable" {
+	if recorder.Code != http.StatusServiceUnavailable ||
+		strings.TrimSpace(recorder.Body.String()) != "http service unavailable" {
 		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
 	}
 	for _, want := range []string{"http service unavailable", "prepare-web-image", `"method":"GET"`} {

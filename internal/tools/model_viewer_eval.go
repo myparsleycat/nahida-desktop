@@ -145,7 +145,8 @@ func evaluateViewerTransport(payload ModelViewerTransport, state map[string]any)
 	evaluated := viewerEvalState{State: resolved, Meshes: make([]viewerEvalMesh, len(payload.Meshes))}
 	for index, mesh := range payload.Meshes {
 		positionIndex := viewerEvalResolvePositionIndex(mesh.PositionVariants, resolved)
-		visible := viewerEvalDNFSatisfied(mesh.Conditions, resolved) && (len(mesh.PositionVariants) == 0 || positionIndex != nil)
+		visible := viewerEvalDNFSatisfied(mesh.Conditions, resolved) &&
+			(len(mesh.PositionVariants) == 0 || positionIndex != nil)
 		evaluated.Meshes[index] = viewerEvalMesh{
 			ID:                   mesh.ID,
 			Visible:              visible,
@@ -175,7 +176,11 @@ func viewerEvalStatesDiffer(left, right viewerEvalState) bool {
 			left.Meshes[index].NormalMapKey != right.Meshes[index].NormalMapKey ||
 			left.Meshes[index].LightMapKey != right.Meshes[index].LightMapKey ||
 			left.Meshes[index].MaterialMapKey != right.Meshes[index].MaterialMapKey ||
-			viewerEvalIndexValue(left.Meshes[index].PositionVariantIndex) != viewerEvalIndexValue(right.Meshes[index].PositionVariantIndex) {
+			viewerEvalIndexValue(
+				left.Meshes[index].PositionVariantIndex,
+			) != viewerEvalIndexValue(
+				right.Meshes[index].PositionVariantIndex,
+			) {
 			return true
 		}
 	}

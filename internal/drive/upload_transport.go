@@ -44,7 +44,12 @@ func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
 	return read, err
 }
 
-func (d *Drive) uploadIntent(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, onProgress func(int64)) error {
+func (d *Drive) uploadIntent(
+	ctx context.Context,
+	upload UploadPlanEntry,
+	file FinalUploadFile,
+	onProgress func(int64),
+) error {
 	rules, err := d.UploadRules(ctx)
 	if err != nil {
 		return err
@@ -59,7 +64,14 @@ func (d *Drive) uploadIntent(ctx context.Context, upload UploadPlanEntry, file F
 	return d.uploadPreparedDirect(ctx, upload, file, data, compression, onProgress)
 }
 
-func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, data []byte, compression string, onProgress func(int64)) error {
+func (d *Drive) uploadPreparedDirect(
+	ctx context.Context,
+	upload UploadPlanEntry,
+	file FinalUploadFile,
+	data []byte,
+	compression string,
+	onProgress func(int64),
+) error {
 	fields := directUploadFields(upload, compression)
 	for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -67,17 +79,26 @@ func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry
 		}
 		uploadedPayload := int64(0)
 		reportedLogical := int64(0)
-		result, sendErr := d.sendMultipart(ctx, upload.URL, http.MethodPost, fields, bytes.NewReader(data), int64(len(data)), file.Name, func(bytes int64) {
-			uploadedPayload += bytes
-			target := file.Size
-			if len(data) > 0 {
-				target = min(file.Size, uploadedPayload*file.Size/int64(len(data)))
-			}
-			if onProgress != nil && target != reportedLogical {
-				onProgress(target - reportedLogical)
-			}
-			reportedLogical = target
-		})
+		result, sendErr := d.sendMultipart(
+			ctx,
+			upload.URL,
+			http.MethodPost,
+			fields,
+			bytes.NewReader(data),
+			int64(len(data)),
+			file.Name,
+			func(bytes int64) {
+				uploadedPayload += bytes
+				target := file.Size
+				if len(data) > 0 {
+					target = min(file.Size, uploadedPayload*file.Size/int64(len(data)))
+				}
+				if onProgress != nil && target != reportedLogical {
+					onProgress(target - reportedLogical)
+				}
+				reportedLogical = target
+			},
+		)
 		if sendErr != nil {
 			if reportedLogical > 0 && onProgress != nil {
 				onProgress(-reportedLogical)
@@ -109,7 +130,13 @@ func (d *Drive) uploadPreparedDirect(ctx context.Context, upload UploadPlanEntry
 	return errors.New("direct upload exhausted retries")
 }
 
-func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file FinalUploadFile, rules UploadRules, onProgress func(int64)) (returnErr error) {
+func (d *Drive) uploadParts(
+	ctx context.Context,
+	upload UploadPlanEntry,
+	file FinalUploadFile,
+	rules UploadRules,
+	onProgress func(int64),
+) (returnErr error) {
 	handle, err := os.Open(filepath.FromSlash(file.FullPath))
 	if err != nil {
 		return fmt.Errorf("open upload file %q: %w", file.Name, err)
@@ -200,7 +227,11 @@ func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file Fi
 	started := d.now()
 	resetAfterMissingManifest := false
 	for attempt := 0; d.now().Sub(started) < uploadCompleteLimit; attempt++ {
-		result, sendErr := d.sendJSON(ctx, strings.TrimRight(upload.URL, "/")+"/complete", map[string]any{"token": upload.Form.Token})
+		result, sendErr := d.sendJSON(
+			ctx,
+			strings.TrimRight(upload.URL, "/")+"/complete",
+			map[string]any{"token": upload.Form.Token},
+		)
 		if sendErr != nil {
 			if ctx.Err() != nil {
 				return sendErr
@@ -213,7 +244,8 @@ func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file Fi
 			}
 			return nil
 		}
-		if !resetAfterMissingManifest && (result.reason == "chunk_manifest_not_found" || result.reason == "chunks_incomplete") {
+		if !resetAfterMissingManifest &&
+			(result.reason == "chunk_manifest_not_found" || result.reason == "chunks_incomplete") {
 			resetAfterMissingManifest = true
 			if reported > 0 {
 				report(-reported)
@@ -237,11 +269,27 @@ func (d *Drive) uploadParts(ctx context.Context, upload UploadPlanEntry, file Fi
 	return &UploadV2Error{Code: "complete_timeout"}
 }
 
-func (d *Drive) sendMultipart(ctx context.Context, rawURL, method string, fields [][2]string, file io.Reader, fileSize int64, filename string, onProgress func(int64)) (uploadHTTPResult, error) {
+func (d *Drive) sendMultipart(
+	ctx context.Context,
+	rawURL, method string,
+	fields [][2]string,
+	file io.Reader,
+	fileSize int64,
+	filename string,
+	onProgress func(int64),
+) (uploadHTTPResult, error) {
 	return d.sendMultipartField(ctx, rawURL, method, fields, file, fileSize, filename, "file", onProgress)
 }
 
-func (d *Drive) sendMultipartField(ctx context.Context, rawURL, method string, fields [][2]string, file io.Reader, fileSize int64, filename, fieldName string, onProgress func(int64)) (uploadHTTPResult, error) {
+func (d *Drive) sendMultipartField(
+	ctx context.Context,
+	rawURL, method string,
+	fields [][2]string,
+	file io.Reader,
+	fileSize int64,
+	filename, fieldName string,
+	onProgress func(int64),
+) (uploadHTTPResult, error) {
 	if d == nil || d.http == nil {
 		return uploadHTTPResult{}, errDriveHTTPUnconfigured
 	}
@@ -314,7 +362,13 @@ func directUploadFields(upload UploadPlanEntry, compression string) [][2]string 
 	return fields
 }
 
-func directUploadExceedsMaxBody(file FinalUploadFile, data []byte, compression string, upload UploadPlanEntry, maxBody int64) bool {
+func directUploadExceedsMaxBody(
+	file FinalUploadFile,
+	data []byte,
+	compression string,
+	upload UploadPlanEntry,
+	maxBody int64,
+) bool {
 	if maxBody <= 0 {
 		return true
 	}
@@ -412,7 +466,22 @@ func isPreviewUploadFile(data []byte, name string) bool {
 	}
 	extension := strings.ToLower(filepath.Ext(name))
 	switch extension {
-	case ".gif", ".jpg", ".jpeg", ".tif", ".tiff", ".png", ".webp", ".bmp", ".ico", ".mp4", ".webm", ".ogg", ".mov", ".avi", ".flv", ".mkv":
+	case ".gif",
+		".jpg",
+		".jpeg",
+		".tif",
+		".tiff",
+		".png",
+		".webp",
+		".bmp",
+		".ico",
+		".mp4",
+		".webm",
+		".ogg",
+		".mov",
+		".avi",
+		".flv",
+		".mkv":
 		return true
 	default:
 		return false
@@ -440,7 +509,10 @@ func parseUploadHTTPResult(status int, raw []byte) uploadHTTPResult {
 }
 
 func retryableUploadResult(result uploadHTTPResult) bool {
-	return result.status == 0 || result.status == http.StatusAccepted || result.status == http.StatusRequestTimeout || result.status == http.StatusTooManyRequests || result.status == 524 || result.status >= 500
+	return result.status == 0 || result.status == http.StatusAccepted || result.status == http.StatusRequestTimeout ||
+		result.status == http.StatusTooManyRequests ||
+		result.status == 524 ||
+		result.status >= 500
 }
 
 func uploadResultError(result uploadHTTPResult) error {

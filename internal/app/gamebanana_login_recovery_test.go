@@ -129,7 +129,10 @@ func TestGameBananaOldWindowCannotCloseNewLogin(t *testing.T) {
 	second.autoReady = false
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return first, nil }
-	if _, err := login.Open(context.Background(), func(context.Context, string) (bool, error) { return true, nil }); err != nil {
+	if _, err := login.Open(
+		context.Background(),
+		func(context.Context, string) (bool, error) { return true, nil },
+	); err != nil {
 		t.Fatal(err)
 	}
 	started := make(chan struct{})

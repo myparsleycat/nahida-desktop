@@ -17,9 +17,21 @@ import (
 func TestProbeFailureRecordsStatusAndKeepsDecision(t *testing.T) {
 	var output bytes.Buffer
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
-	client := testClient(t, ClientOptions{Log: log, BackendURL: "https://example.com", HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{Request: req, StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("<html>"))}, nil
-	})}})
+	client := testClient(
+		t,
+		ClientOptions{
+			Log:        log,
+			BackendURL: "https://example.com",
+			HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Request:    req,
+					StatusCode: 200,
+					Header:     http.Header{"Content-Type": {"text/html"}},
+					Body:       io.NopCloser(strings.NewReader("<html>")),
+				}, nil
+			})},
+		},
+	)
 	status := client.Probe(context.Background())
 	if status != BackendOnline {
 		t.Fatalf("decision changed: %s", status)
@@ -68,7 +80,9 @@ func TestProbeTransportFailureIsDebug(t *testing.T) {
 		t.Fatalf("status = %s", status)
 	}
 	got := output.String()
-	if !strings.Contains(got, " DEBUG ") || !strings.Contains(got, `"operation":"probe"`) || strings.Contains(got, " WARN ") || strings.Contains(got, " ERROR ") {
+	if !strings.Contains(got, " DEBUG ") || !strings.Contains(got, `"operation":"probe"`) ||
+		strings.Contains(got, " WARN ") ||
+		strings.Contains(got, " ERROR ") {
 		t.Fatalf("record = %s", got)
 	}
 }
@@ -99,7 +113,9 @@ func TestProbeNonReachabilityURLErrorIsWarn(t *testing.T) {
 				t.Fatalf("status = %s", status)
 			}
 			got := output.String()
-			if !strings.Contains(got, " WARN ") || !strings.Contains(got, `"operation":"probe"`) || strings.Contains(got, " DEBUG ") || strings.Contains(got, " ERROR ") {
+			if !strings.Contains(got, " WARN ") || !strings.Contains(got, `"operation":"probe"`) ||
+				strings.Contains(got, " DEBUG ") ||
+				strings.Contains(got, " ERROR ") {
 				t.Fatalf("record = %s", got)
 			}
 		})
@@ -114,7 +130,14 @@ func TestTimeoutRewritePreservesOriginalMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response := client.rewriteTimeout(&http.Response{Request: req, StatusCode: 524, Header: http.Header{"Content-Type": {"text/html"}, "Cf-Ray": {"request-id"}}, Body: io.NopCloser(strings.NewReader("timeout"))})
+	response := client.rewriteTimeout(
+		&http.Response{
+			Request:    req,
+			StatusCode: 524,
+			Header:     http.Header{"Content-Type": {"text/html"}, "Cf-Ray": {"request-id"}},
+			Body:       io.NopCloser(strings.NewReader("timeout")),
+		},
+	)
 	if response.StatusCode != 200 {
 		t.Fatal("rewrite behavior changed")
 	}
@@ -135,7 +158,12 @@ func TestUnauthorizedBodyReadFailureIsRecorded(t *testing.T) {
 	var output bytes.Buffer
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
 	client := testClient(t, ClientOptions{Log: log})
-	client.afterUnauthorized("https://example.com/items", true, false, &http.Response{StatusCode: 401, Header: http.Header{}, Body: io.NopCloser(diagnosticBrokenReader{})})
+	client.afterUnauthorized(
+		"https://example.com/items",
+		true,
+		false,
+		&http.Response{StatusCode: 401, Header: http.Header{}, Body: io.NopCloser(diagnosticBrokenReader{})},
+	)
 	if !strings.Contains(output.String(), "injected response read failure") {
 		t.Fatal(output.String())
 	}

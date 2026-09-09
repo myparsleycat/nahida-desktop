@@ -149,7 +149,11 @@ type importStream struct {
 	VerifyResult  bool
 }
 
-func (d *Drive) createImportTransfer(operationID, destinationID string, sourceNames []string, ctx context.Context) bool {
+func (d *Drive) createImportTransfer(
+	operationID, destinationID string,
+	sourceNames []string,
+	ctx context.Context,
+) bool {
 	if d.transfer == nil || operationID == "" {
 		return false
 	}
@@ -165,7 +169,16 @@ func (d *Drive) createImportTransfer(operationID, destinationID string, sourceNa
 	})
 	if err != nil {
 		if d.log != nil {
-			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:TransferCreateSkipped", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"operationId": operationID}})
+			_ = infra.ReportError(
+				d.log,
+				err,
+				"Drive:CopyFromUrl:TransferCreateSkipped",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "copy-from-url",
+					Fields:    map[string]any{"operationId": operationID},
+				},
+			)
 		}
 		return false
 	}
@@ -174,13 +187,29 @@ func (d *Drive) createImportTransfer(operationID, destinationID string, sourceNa
 	d.mu.Unlock()
 	if op != nil {
 		if err := d.transfer.AttachCancel(operationID, op.cancel); err != nil && d.log != nil {
-			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:TransferCancelAttachFailed", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"operationId": operationID}})
+			_ = infra.ReportError(
+				d.log,
+				err,
+				"Drive:CopyFromUrl:TransferCancelAttachFailed",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "copy-from-url",
+					Fields:    map[string]any{"operationId": operationID},
+				},
+			)
 		}
 	}
 	return true
 }
 
-func (d *Drive) consumeImportSSE(ctx context.Context, method, path string, query url.Values, extra http.Header, body any, stream importStream) error {
+func (d *Drive) consumeImportSSE(
+	ctx context.Context,
+	method, path string,
+	query url.Values,
+	extra http.Header,
+	body any,
+	stream importStream,
+) error {
 	if d == nil || d.http == nil {
 		return errDriveHTTPUnconfigured
 	}
@@ -222,7 +251,14 @@ func (d *Drive) consumeImportSSE(ctx context.Context, method, path string, query
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		raw, readErr := io.ReadAll(resp.Body)
-		return infra.WithCause(CreateDriveAPIError(decodeAPIValue(resp.Header.Get("Content-Type"), raw), stream.Operation, resp.StatusCode), infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", resp)))
+		return infra.WithCause(
+			CreateDriveAPIError(
+				decodeAPIValue(resp.Header.Get("Content-Type"), raw),
+				stream.Operation,
+				resp.StatusCode,
+			),
+			infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", resp)),
+		)
 	}
 	if resp.Body == nil {
 		return newDriveAPIError(codeImportInvalidResponse, "The server import stream was empty.", 0, nil)
@@ -247,12 +283,22 @@ func (d *Drive) consumeImportSSE(ctx context.Context, method, path string, query
 				expectedSize = &size
 				if stream.TransferPID != "" && size > 0 {
 					zero := int64(0)
-					_ = d.transfer.Update(stream.TransferPID, transfer.Updates{TotalSize: &size, TransferredSize: &zero})
+					_ = d.transfer.Update(
+						stream.TransferPID,
+						transfer.Updates{TotalSize: &size, TransferredSize: &zero},
+					)
 				}
 			}
 		case "error":
 			serverMessage := remoteImportErrorMessage(parsed)
-			if stream.VerifyResult && expectedSize != nil && d.hasRemoteImportResult(ctx, stream.DestinationID, *expectedSize, preexistingChildIDs, stream.SourceName) {
+			if stream.VerifyResult && expectedSize != nil &&
+				d.hasRemoteImportResult(
+					ctx,
+					stream.DestinationID,
+					*expectedSize,
+					preexistingChildIDs,
+					stream.SourceName,
+				) {
 				completed = true
 				d.emitCopyProgress(stream.OperationID, DriveCopyProgress{
 					Source: stream.Source, Phase: "copying", Current: stream.ItemIndex + 1,
@@ -308,7 +354,11 @@ func (d *Drive) consumeImportSSE(ctx context.Context, method, path string, query
 		if stream.TransferPID != "" {
 			status := transfer.StatusProgress
 			updates := transfer.Updates{Status: &status, TransferredFiles: &processedFiles}
-			if size, sizeOK := remoteImportNumber(parsed, "currentTotalSize"); sizeOK && size > 0 && expectedSize != nil && *expectedSize > 0 {
+			if size, sizeOK := remoteImportNumber(
+				parsed,
+				"currentTotalSize",
+			); sizeOK && size > 0 && expectedSize != nil &&
+				*expectedSize > 0 {
 				size = min(size, *expectedSize)
 				updates.TransferredSize = &size
 			}

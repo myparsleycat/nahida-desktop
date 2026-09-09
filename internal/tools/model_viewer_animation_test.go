@@ -42,7 +42,8 @@ elif $frame == 1
 drawindexed = 3, 3, 0
 endif`)
 	clips := detectModelViewerPresentAnimations(sections, collectModelViewerDefaultVariables(sections), nil)
-	if len(clips) != 1 || clips[0].FPS != 30 || len(clips[0].Frames) != 2 || clips[0].Frames[1].Values["frame"] != float64(1) {
+	if len(clips) != 1 || clips[0].FPS != 30 || len(clips[0].Frames) != 2 ||
+		clips[0].Frames[1].Values["frame"] != float64(1) {
 		t.Fatalf("clips = %#v", clips)
 	}
 }
@@ -76,7 +77,8 @@ elif $frame == 11
 drawindexed = 3, 3, 0
 endif`)
 	clips := detectModelViewerPresentAnimations(sections, collectModelViewerDefaultVariables(sections), nil)
-	if len(clips) != 1 || clips[0].Frames[0].Time != 0 || clips[0].Frames[1].Time != 0.05 || clips[0].Frames[0].Values["frame"] != float64(10) {
+	if len(clips) != 1 || clips[0].Frames[0].Time != 0 || clips[0].Frames[1].Time != 0.05 ||
+		clips[0].Frames[0].Values["frame"] != float64(10) {
 		t.Fatalf("clips = %#v", clips)
 	}
 }
@@ -100,7 +102,9 @@ elif $frame == 2
 drawindexed = 3, 3, 0
 endif`)
 	clips := detectModelViewerPresentAnimations(sections, collectModelViewerDefaultVariables(sections), nil)
-	if len(clips) != 1 || clips[0].ID != "frame" || clips[0].FPS != 30 || clips[0].FrameStart != 0 || clips[0].FrameEnd != 3 || len(clips[0].Frames) != 4 {
+	if len(clips) != 1 || clips[0].ID != "frame" || clips[0].FPS != 30 || clips[0].FrameStart != 0 ||
+		clips[0].FrameEnd != 3 ||
+		len(clips[0].Frames) != 4 {
 		t.Fatalf("clips = %#v", clips)
 	}
 }
@@ -181,7 +185,8 @@ endif`)
 		t.Fatalf("frame gate DNF = %#v", dnf)
 	}
 	for index, group := range dnf {
-		if len(group) != 1 || group[0].Var != "frame" || group[0].Value != modelViewerString(float64(index)) || group[0].Negate {
+		if len(group) != 1 || group[0].Var != "frame" || group[0].Value != modelViewerString(float64(index)) ||
+			group[0].Negate {
 			t.Fatalf("frame gate DNF[%d] = %#v", index, group)
 		}
 	}

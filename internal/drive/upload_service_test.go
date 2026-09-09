@@ -30,7 +30,11 @@ func TestCreateDirsDecodesCreatedDirectoryPaths(t *testing.T) {
 	}))
 	defer server.Close()
 	drive := uploadServiceTestDrive(server, transfer.New())
-	created, err := drive.CreateDirs(context.Background(), "dest", []UploadDirectory{{Path: "root/sub", Name: "sub", ParentPath: "root"}})
+	created, err := drive.CreateDirs(
+		context.Background(),
+		"dest",
+		[]UploadDirectory{{Path: "root/sub", Name: "sub", ParentPath: "root"}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +64,12 @@ func TestStartUploadRunsThroughTransferQueue(t *testing.T) {
 			}
 			fileID := uploadPlanClientID(raw)
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = fmt.Fprintf(w, "event: complete\ndata: {\"items\":[{\"clientId\":\"%s\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[{\"intentId\":\"intent\",\"url\":%q,\"method\":\"POST\",\"form\":{\"token\":\"token\",\"sha256\":\"hash\"}}]}\n\n", fileID, server.URL+"/v2/uploads/intent")
+			_, _ = fmt.Fprintf(
+				w,
+				"event: complete\ndata: {\"items\":[{\"clientId\":\"%s\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[{\"intentId\":\"intent\",\"url\":%q,\"method\":\"POST\",\"form\":{\"token\":\"token\",\"sha256\":\"hash\"}}]}\n\n",
+				fileID,
+				server.URL+"/v2/uploads/intent",
+			)
 		case "/v2/uploads/intent":
 			if err := request.ParseMultipartForm(1024); err != nil {
 				t.Fatal(err)
@@ -102,7 +111,8 @@ func TestStartUploadRunsThroughTransferQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	record, ok := transfers.Get(result.PID)
-	if !ok || record.Status != transfer.StatusCompleted || record.TransferredSize != int64(len("upload")) || record.TransferredFiles != 1 {
+	if !ok || record.Status != transfer.StatusCompleted || record.TransferredSize != int64(len("upload")) ||
+		record.TransferredFiles != 1 {
 		t.Fatalf("record = %+v, ok = %v", record, ok)
 	}
 	if record.CurrentID != "dest" {
@@ -126,8 +136,14 @@ func TestUploadPlanValidationFailureIsLoggedWithStageAndContext(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(testUploadRules())
 		case "/akasha/v2/sse/drive/files:plan":
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, "event: progress\ndata: {\"phase\":\"file_validation\",\"processed\":1,\"total\":1}\n\n")
-			_, _ = io.WriteString(w, "event: error\ndata: {\"code\":\"upload_file_too_large\",\"message\":\"server rejected file\"}\n\n")
+			_, _ = io.WriteString(
+				w,
+				"event: progress\ndata: {\"phase\":\"file_validation\",\"processed\":1,\"total\":1}\n\n",
+			)
+			_, _ = io.WriteString(
+				w,
+				"event: error\ndata: {\"code\":\"upload_file_too_large\",\"message\":\"server rejected file\"}\n\n",
+			)
 		default:
 			http.NotFound(w, request)
 		}

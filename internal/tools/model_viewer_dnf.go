@@ -37,7 +37,9 @@ func modelViewerDNFAnd(left, right ModelViewerDNF) ModelViewerDNF {
 	var output ModelViewerDNF
 	for _, leftGroup := range left {
 		for _, rightGroup := range right {
-			merged, possible := simplifyModelViewerDNFGroup(append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...))
+			merged, possible := simplifyModelViewerDNFGroup(
+				append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...),
+			)
 			if possible && !containsModelViewerDNFGroup(output, merged) {
 				output = append(output, merged)
 			}
@@ -56,7 +58,9 @@ func modelViewerDNFIntersects(left, right ModelViewerDNF) bool {
 	}
 	for _, leftGroup := range left {
 		for _, rightGroup := range right {
-			if _, possible := simplifyModelViewerDNFGroup(append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...)); possible {
+			if _, possible := simplifyModelViewerDNFGroup(
+				append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...),
+			); possible {
 				return true
 			}
 		}
@@ -131,7 +135,11 @@ type modelViewerDNFParser struct {
 	variables map[string]any
 }
 
-func parseModelViewerConditionDNF(expression string, aliases map[string]ModelViewerDNF, variables map[string]any) ModelViewerDNF {
+func parseModelViewerConditionDNF(
+	expression string,
+	aliases map[string]ModelViewerDNF,
+	variables map[string]any,
+) ModelViewerDNF {
 	parser := &modelViewerDNFParser{tokens: tokenizeModelViewerDNF(expression), aliases: aliases, variables: variables}
 	return parser.parseOr()
 }
@@ -189,23 +197,29 @@ func (p *modelViewerDNFParser) peek() string {
 func tokenizeModelViewerDNF(expression string) []string {
 	var tokens []string
 	for position := 0; position < len(expression); {
-		if expression[position] == ' ' || expression[position] == '\t' || expression[position] == '\r' || expression[position] == '\n' {
+		if expression[position] == ' ' || expression[position] == '\t' || expression[position] == '\r' ||
+			expression[position] == '\n' {
 			position++
 			continue
 		}
-		if position+1 < len(expression) && (expression[position:position+2] == "&&" || expression[position:position+2] == "||") {
+		if position+1 < len(expression) &&
+			(expression[position:position+2] == "&&" || expression[position:position+2] == "||") {
 			tokens = append(tokens, expression[position:position+2])
 			position += 2
 			continue
 		}
-		if expression[position] == '(' || expression[position] == ')' || expression[position] == '!' && (position+1 >= len(expression) || expression[position+1] != '=') {
+		if expression[position] == '(' || expression[position] == ')' ||
+			expression[position] == '!' && (position+1 >= len(expression) || expression[position+1] != '=') {
 			tokens = append(tokens, expression[position:position+1])
 			position++
 			continue
 		}
 		start := position
 		for position < len(expression) {
-			if expression[position] == '(' || expression[position] == ')' || expression[position] == '!' && (position+1 >= len(expression) || expression[position+1] != '=') || position+1 < len(expression) && (expression[position:position+2] == "&&" || expression[position:position+2] == "||") {
+			if expression[position] == '(' || expression[position] == ')' ||
+				expression[position] == '!' && (position+1 >= len(expression) || expression[position+1] != '=') ||
+				position+1 < len(expression) &&
+					(expression[position:position+2] == "&&" || expression[position:position+2] == "||") {
 				break
 			}
 			position++

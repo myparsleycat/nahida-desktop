@@ -265,7 +265,11 @@ func (t *Tools) RunScript(ctx context.Context, scriptID, destPath string) error 
 		return t.reportRunError(err)
 	}
 	if script.Type == db.ScriptTypePython && !t.IsPythonAvailable(runCtx) {
-		return t.reportRunError(contractError("Python is required to run Python fix tools. Install Python and make sure the python command is available."))
+		return t.reportRunError(
+			contractError(
+				"Python is required to run Python fix tools. Install Python and make sure the python command is available.",
+			),
+		)
 	}
 	_ = t.runScriptSafe(runCtx, run, script, destPath, nil)
 	return nil
@@ -307,7 +311,11 @@ func (t *Tools) RunPreset(ctx context.Context, presetID, destPath string) error 
 		needsPython = needsPython || scripts[i] != nil && scripts[i].Type == db.ScriptTypePython
 	}
 	if needsPython && !t.IsPythonAvailable(runCtx) {
-		return t.reportRunError(contractError("Python is required to run Python fix tools. Install Python and make sure the python command is available."))
+		return t.reportRunError(
+			contractError(
+				"Python is required to run Python fix tools. Install Python and make sure the python command is available.",
+			),
+		)
 	}
 
 	t.emitFixToolLog("Starting Preset: "+preset.Name, false)
@@ -348,7 +356,13 @@ func (t *Tools) validateRunDestination(destPath string) error {
 	return nil
 }
 
-func (t *Tools) runScriptSafe(ctx context.Context, run *toolRun, script *db.ScriptRow, destPath string, args []string) bool {
+func (t *Tools) runScriptSafe(
+	ctx context.Context,
+	run *toolRun,
+	script *db.ScriptRow,
+	destPath string,
+	args []string,
+) bool {
 	ext := "exe"
 	if script.Type == db.ScriptTypePython {
 		ext = "py"
@@ -383,7 +397,13 @@ func (t *Tools) runScriptSafe(ctx context.Context, run *toolRun, script *db.Scri
 			t.emitFixToolLog(fmt.Sprintf("Failed %s: %s", script.Name, err), false)
 			return false
 		}
-		if err := client.Scripts.UpdateCompressedSource(ctx, script.ID, compressed, sha256Hex(compressed), int64(len(compressed))); err != nil {
+		if err := client.Scripts.UpdateCompressedSource(
+			ctx,
+			script.ID,
+			compressed,
+			sha256Hex(compressed),
+			int64(len(compressed)),
+		); err != nil {
 			t.emitFixToolLog(fmt.Sprintf("Failed %s: %s", script.Name, err), false)
 			return false
 		}

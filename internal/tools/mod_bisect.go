@@ -105,7 +105,10 @@ func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []str
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	if t.bisect != nil && t.bisect.finalBadPath == nil {
-		return BisectSnapshot{}, errors.New("A bisect session is already running. Cancel it first.") //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return BisectSnapshot{}, errors.New(
+			"A bisect session is already running. Cancel it first.",
+		)
 	}
 	if t.bisect != nil {
 		completed := t.bisect
@@ -190,7 +193,13 @@ func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []str
 		rollbackErr := enableINIs(batch)
 		guardErr := t.stopD3dxGuardLocked(game)
 		t.bisect = nil
-		return BisectSnapshot{}, infra.WithCause(err, infra.AnnotateError(errors.Join(rollbackErr, guardErr), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"game": game}}))
+		return BisectSnapshot{}, infra.WithCause(
+			err,
+			infra.AnnotateError(
+				errors.Join(rollbackErr, guardErr),
+				infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"game": game}},
+			),
+		)
 	}
 	session.candidates = candidates
 	session.round = 1
@@ -210,7 +219,10 @@ func (t *Tools) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot, 
 		return BisectSnapshot{}, err
 	}
 	if len(session.currentBatch) == 0 {
-		return BisectSnapshot{}, errors.New("No active batch to respond to.") //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return BisectSnapshot{}, errors.New(
+			"No active batch to respond to.",
+		)
 	}
 
 	currentBatch := slices.Clone(session.currentBatch)
@@ -372,7 +384,10 @@ func (t *Tools) BisectRecover(ctx context.Context, game string) (int, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	if t.bisect != nil {
-		return 0, errors.New("Cannot recover while a bisect session is active.") //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return 0, errors.New(
+			"Cannot recover while a bisect session is active.",
+		)
 	}
 	config, err := t.requireBisectGame(ctx, game)
 	if err != nil {
@@ -426,10 +441,17 @@ func (t *Tools) requireBisectGame(ctx context.Context, game string) (db.GamePath
 		return db.GamePathRow{}, fmt.Errorf("Game not found: %s", game) //nolint:staticcheck // Electron contract text.
 	}
 	if row.Importer != nil && *row.Importer == "NTE" {
-		return db.GamePathRow{}, errors.New("NTE modders are not supported yet.") //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return db.GamePathRow{}, errors.New(
+			"NTE modders are not supported yet.",
+		)
 	}
 	if strings.TrimSpace(row.ModFolderPath) == "" {
-		return db.GamePathRow{}, fmt.Errorf("Mod folder path is not configured for %s.", game) //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return db.GamePathRow{}, fmt.Errorf(
+			"Mod folder path is not configured for %s.",
+			game,
+		)
 	}
 	return *row, nil
 }
@@ -651,7 +673,13 @@ func switchBisectBatch(oldBatch, newBatch []string) error {
 		if err := renameINIDisable(path); err != nil {
 			rollbackErr := enableINIs(disabled)
 			restoreErr := disableINIs(oldBatch)
-			return infra.WithCause(err, infra.AnnotateError(errors.Join(rollbackErr, restoreErr), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}}))
+			return infra.WithCause(
+				err,
+				infra.AnnotateError(
+					errors.Join(rollbackErr, restoreErr),
+					infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}},
+				),
+			)
 		}
 		disabled = append(disabled, path)
 	}

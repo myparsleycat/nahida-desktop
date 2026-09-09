@@ -346,11 +346,22 @@ func (p *peImage) protectDataDirectories() {
 		fileRange, err := p.rvaRangeToFileRange(directory.VirtualAddress, directory.Size)
 		var filePtr *addressRange
 		if err != nil {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("%s at RVA 0x%x+0x%x does not map to one contiguous file range", directoryName(index), directory.VirtualAddress, directory.Size))
+			p.Warnings = append(
+				p.Warnings,
+				fmt.Sprintf(
+					"%s at RVA 0x%x+0x%x does not map to one contiguous file range",
+					directoryName(index),
+					directory.VirtualAddress,
+					directory.Size,
+				),
+			)
 		} else {
 			filePtr = &fileRange
 		}
-		p.ProtectedRanges = append(p.ProtectedRanges, protectedRange{RVARange: &rvaRange, FileRange: filePtr, Reason: reason})
+		p.ProtectedRanges = append(
+			p.ProtectedRanges,
+			protectedRange{RVARange: &rvaRange, FileRange: filePtr, Reason: reason},
+		)
 	}
 }
 
@@ -445,7 +456,10 @@ func (p *peImage) parseRelocations() error {
 				width = 4
 			}
 			targetRange := newRange(targetRVA, width)
-			p.Relocations = append(p.Relocations, relocationTarget{RVARange: targetRange, RelocationType: relocationType})
+			p.Relocations = append(
+				p.Relocations,
+				relocationTarget{RVARange: targetRange, RelocationType: relocationType},
+			)
 			p.addProtectedRVARange(targetRange, "relocation target")
 			if relocationType == imageRelBasedDir64 {
 				if fileOffset, err := p.rvaToFileOffset(targetRVA); err == nil && fileOffset+8 <= len(p.Data) {
@@ -490,7 +504,10 @@ func (p *peImage) parseExceptions() error {
 			return err
 		}
 		if begin != 0 && begin < endRVA {
-			p.RuntimeFunctions = append(p.RuntimeFunctions, runtimeFunction{Begin: begin, End: endRVA, UnwindInfoRVA: unwindRVA})
+			p.RuntimeFunctions = append(
+				p.RuntimeFunctions,
+				runtimeFunction{Begin: begin, End: endRVA, UnwindInfoRVA: unwindRVA},
+			)
 		}
 		p.protectUnwindInfo(unwindRVA)
 		offset += 12
@@ -676,7 +693,10 @@ func (p *peImage) addProtectedRVARange(rvaRange addressRange, reason string) {
 	if err == nil {
 		filePtr = &fileRange
 	}
-	p.ProtectedRanges = append(p.ProtectedRanges, protectedRange{RVARange: &rvaRange, FileRange: filePtr, Reason: reason})
+	p.ProtectedRanges = append(
+		p.ProtectedRanges,
+		protectedRange{RVARange: &rvaRange, FileRange: filePtr, Reason: reason},
+	)
 }
 
 func (p peImage) vaToRVA(va uint64) (uint32, bool) {
@@ -900,7 +920,9 @@ func validateSections(data []byte, sections []sectionHeader) error {
 	})
 	for i := 0; i+1 < len(rawRanges); i++ {
 		if rawRanges[i+1].start < rawRanges[i].end {
-			return invalidPE(fmt.Sprintf("sections %s and %s have overlapping raw ranges", rawRanges[i].name, rawRanges[i+1].name))
+			return invalidPE(
+				fmt.Sprintf("sections %s and %s have overlapping raw ranges", rawRanges[i].name, rawRanges[i+1].name),
+			)
 		}
 	}
 	return nil

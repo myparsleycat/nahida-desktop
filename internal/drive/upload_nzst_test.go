@@ -43,16 +43,25 @@ func TestPrepareUploadNZSTUsesOriginalNamesAndSizes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(collected.Files) != 2 || collected.SkippedCount != 1 || !reflect.DeepEqual(collected.SkippedExtensions, []string{".exe"}) {
+	if len(collected.Files) != 2 || collected.SkippedCount != 1 ||
+		!reflect.DeepEqual(collected.SkippedExtensions, []string{".exe"}) {
 		t.Fatalf("collected = %+v", collected)
 	}
 	for _, file := range collected.Files {
-		if file.Name == "texture.dds" && (file.Size != int64(len(content)) || strings.HasSuffix(file.Path, ".NZST") || file.FullPath != filepath.ToSlash(resolvedArchive)) {
+		if file.Name == "texture.dds" &&
+			(file.Size != int64(len(content)) || strings.HasSuffix(file.Path, ".NZST") || file.FullPath != filepath.ToSlash(resolvedArchive)) {
 			t.Fatalf("file = %+v", file)
 		}
 	}
 	for _, strategy := range []UploadConflictStrategy{UploadConflictSkip, UploadConflictSuffix} {
-		prepared, err := PrepareUpload([]string{archive}, []string{"texture.dds"}, strategy, testUploadRules(), nil, false)
+		prepared, err := PrepareUpload(
+			[]string{archive},
+			[]string{"texture.dds"},
+			strategy,
+			testUploadRules(),
+			nil,
+			false,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +136,16 @@ func TestUploadNZSTCorruptionAndCancellation(t *testing.T) {
 	if _, err := copyUploadNZST(ctx, path, writer, uploadNZSTMaxSize); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel error = %v", err)
 	}
-	if _, err := collectUploadPathsContext(ctx, []string{path}, testUploadRules(), nil, false); !errors.Is(err, context.Canceled) {
+	if _, err := collectUploadPathsContext(
+		ctx,
+		[]string{path},
+		testUploadRules(),
+		nil,
+		false,
+	); !errors.Is(
+		err,
+		context.Canceled,
+	) {
 		t.Fatalf("collection error = %v", err)
 	}
 	compressed, err := os.ReadFile(path)
@@ -193,13 +211,19 @@ func TestRestoreUploadNZSTPreservesSourcesAndUsesUniqueTemporaryFiles(t *testing
 	}
 	for index, file := range hashed {
 		content := []byte(filepath.Base(filepath.Dir(prepared.Files[index].FullPath)))
-		if file.SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) || file.Name != "file.ini" || file.FID != prepared.Files[index].FID {
+		if file.SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) || file.Name != "file.ini" ||
+			file.FID != prepared.Files[index].FID {
 			t.Fatalf("hashed = %+v", file)
 		}
 		if _, err := os.Stat(prepared.Files[index].FullPath); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(strings.TrimSuffix(prepared.Files[index].FullPath, ".nzst")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(
+			strings.TrimSuffix(prepared.Files[index].FullPath, ".nzst"),
+		); !errors.Is(
+			err,
+			os.ErrNotExist,
+		) {
 			t.Fatalf("local original created: %v", err)
 		}
 	}
@@ -225,7 +249,8 @@ func TestUploadNZSTDecodesOnlyOneLayer(t *testing.T) {
 	outer := inner + ".nzst"
 	writeUploadNZST(t, outer, compressed)
 	prepared, err := PrepareUpload([]string{outer}, nil, "", testUploadRules(), nil, true)
-	if err != nil || len(prepared.Files) != 1 || prepared.Files[0].Name != "payload.ini.nzst" || prepared.TotalSize != int64(len(compressed)) {
+	if err != nil || len(prepared.Files) != 1 || prepared.Files[0].Name != "payload.ini.nzst" ||
+		prepared.TotalSize != int64(len(compressed)) {
 		t.Fatalf("prepared = %+v, %v", prepared, err)
 	}
 	plain, err := PrepareUpload([]string{inner}, nil, "", testUploadRules(), nil, false)

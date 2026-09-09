@@ -131,7 +131,8 @@ func parseUploadRules(decoded any) (UploadRules, error) {
 	if err := json.Unmarshal(raw, &rules); err != nil {
 		return UploadRules{}, err
 	}
-	if rules.MaxFileSize <= 0 || rules.MaxPlanFiles <= 0 || rules.MaxUploadBodyBytes <= 0 || len(rules.Extensions) == 0 {
+	if rules.MaxFileSize <= 0 || rules.MaxPlanFiles <= 0 || rules.MaxUploadBodyBytes <= 0 ||
+		len(rules.Extensions) == 0 {
 		return UploadRules{}, errors.New("upload_rules_unavailable")
 	}
 	if rules.Pack.PayloadBudget <= 0 || rules.Pack.MemberMax <= 0 || rules.Pack.MaxFiles <= 0 {
@@ -183,7 +184,13 @@ const (
 	uploadFileDenialSize      uploadFileDenial = "file_too_large"
 )
 
-func classifyUploadFile(name string, size int64, allowed map[string]int64, allowAll bool, maxFileSize int64) uploadFileDenial {
+func classifyUploadFile(
+	name string,
+	size int64,
+	allowed map[string]int64,
+	allowAll bool,
+	maxFileSize int64,
+) uploadFileDenial {
 	ext := strings.ToLower(filepath.Ext(name))
 	maxSize, ok := allowed[ext]
 	if !ok {

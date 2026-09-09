@@ -166,7 +166,8 @@ func (t *Tools) WuwaFixerGetStatus(ctx context.Context, importer *string) (WuwaF
 		next := mustRFC3339(parseRFC3339(latest.CheckedAt).Add(wuwaCheckCooldown))
 		status.NextCheckAt = &next
 	}
-	status.UpdateAvailable = installed.Version != nil && status.LatestVersion != nil && compareToolVersions(*status.LatestVersion, *installed.Version) > 0
+	status.UpdateAvailable = installed.Version != nil && status.LatestVersion != nil &&
+		compareToolVersions(*status.LatestVersion, *installed.Version) > 0
 	return status, nil
 }
 
@@ -195,7 +196,8 @@ func (t *Tools) WuwaFixerPrepareRun(ctx context.Context, importer *string) (Wuwa
 	result.RateLimited = refresh.RateLimited
 	result.NextCheckAt = refresh.NextCheckAt
 	result.CheckedRemotely = refresh.CheckedRemotely
-	result.UpdateAvailable = result.InstalledVersion != nil && result.LatestVersion != nil && compareToolVersions(*result.LatestVersion, *result.InstalledVersion) > 0
+	result.UpdateAvailable = result.InstalledVersion != nil && result.LatestVersion != nil &&
+		compareToolVersions(*result.LatestVersion, *result.InstalledVersion) > 0
 	return result, nil
 }
 
@@ -227,7 +229,11 @@ func (t *Tools) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus, 
 		t.reportWuwaRecovery(rateErr, "save-rate")
 	}
 	if err != nil {
-		return WuwaFixerStatus{}, fmt.Errorf("Failed to download Wuwa Mod Fixer: %w", err) //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return WuwaFixerStatus{}, fmt.Errorf(
+			"Failed to download Wuwa Mod Fixer: %w",
+			err,
+		)
 	}
 	if err := verifyWuwaDigest(body, release.Asset.Digest); err != nil {
 		return WuwaFixerStatus{}, err
@@ -445,7 +451,8 @@ func (t *Tools) runWuwaAutomaticUpdateCheck(ctx context.Context) {
 		return
 	}
 	refresh, err := t.wuwaRefreshLatestRelease(ctx, true)
-	if err != nil || refresh.LatestRelease == nil || installed.Version == nil || compareToolVersions(refresh.LatestRelease.Version, *installed.Version) <= 0 {
+	if err != nil || refresh.LatestRelease == nil || installed.Version == nil ||
+		compareToolVersions(refresh.LatestRelease.Version, *installed.Version) <= 0 {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			t.logError(err, "WuwaModFixer:autoUpdate")
 		}
@@ -497,7 +504,12 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 	}
 	if !force && cached != nil && lastCheck != nil && time.Since(parseRFC3339(*lastCheck)) < wuwaCheckCooldown {
 		next := mustRFC3339(parseRFC3339(*lastCheck).Add(wuwaCheckCooldown))
-		return wuwaRefreshResult{LatestRelease: cached, RateState: rate, RateLimited: wuwaRateLimited(rate), NextCheckAt: &next}, nil
+		return wuwaRefreshResult{
+			LatestRelease: cached,
+			RateState:     rate,
+			RateLimited:   wuwaRateLimited(rate),
+			NextCheckAt:   &next,
+		}, nil
 	}
 	if rate == nil {
 		rate = t.wuwaRefreshRateState(ctx)
@@ -515,7 +527,11 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 		t.reportWuwaRecovery(rateErr, "save-rate")
 	}
 	if err != nil {
-		return wuwaRefreshResult{}, fmt.Errorf("Failed to fetch Wuwa Mod Fixer release: %w", err) //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return wuwaRefreshResult{}, fmt.Errorf(
+			"Failed to fetch Wuwa Mod Fixer release: %w",
+			err,
+		)
 	}
 	var payload wuwaReleaseResponse
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -535,7 +551,13 @@ func (t *Tools) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaR
 		return wuwaRefreshResult{}, err
 	}
 	next := now.Add(wuwaCheckCooldown).Format(time.RFC3339Nano)
-	return wuwaRefreshResult{LatestRelease: &latest, RateState: rate, RateLimited: wuwaRateLimited(rate), CheckedRemotely: true, NextCheckAt: &next}, nil
+	return wuwaRefreshResult{
+		LatestRelease:   &latest,
+		RateState:       rate,
+		RateLimited:     wuwaRateLimited(rate),
+		CheckedRemotely: true,
+		NextCheckAt:     &next,
+	}, nil
 }
 
 func (t *Tools) wuwaLatestReleaseForInstall(ctx context.Context) (*wuwaLatestReleaseCache, error) {
@@ -566,7 +588,11 @@ func (t *Tools) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 	}
 	body, _, err := t.wuwaFetchBytes(ctx, wuwaConfigURL, nil, 8<<20)
 	if err != nil {
-		return "", fmt.Errorf("Failed to download Wuwa Mod Fixer config: %w", err) //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return "", fmt.Errorf(
+			"Failed to download Wuwa Mod Fixer config: %w",
+			err,
+		)
 	}
 	tempPath := configPath + ".download"
 	defer func() { t.reportCleanup(os.Remove(tempPath), "wuwaEnsureLatestConfig") }()
@@ -747,7 +773,12 @@ func (t *Tools) wuwaGetRateState(ctx context.Context) (*GitHubRateState, error) 
 }
 
 func (t *Tools) wuwaRefreshRateState(ctx context.Context) *GitHubRateState {
-	body, responseHeader, err := t.wuwaFetchBytes(ctx, "https://api.github.com/rate_limit", http.Header{"Accept": []string{"application/vnd.github+json"}}, 2<<20)
+	body, responseHeader, err := t.wuwaFetchBytes(
+		ctx,
+		"https://api.github.com/rate_limit",
+		http.Header{"Accept": []string{"application/vnd.github+json"}},
+		2<<20,
+	)
 	if responseHeader != nil {
 		if state, captureErr := t.wuwaCaptureRate(ctx, responseHeader); captureErr == nil && state != nil {
 			return state
@@ -796,7 +827,14 @@ func (t *Tools) wuwaCaptureRate(ctx context.Context, header http.Header) (*GitHu
 	if resource == "" {
 		resource = "core"
 	}
-	state := &GitHubRateState{Limit: limit, Remaining: remaining, Reset: reset, Used: used, Resource: resource, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	state := &GitHubRateState{
+		Limit:     limit,
+		Remaining: remaining,
+		Reset:     reset,
+		Used:      used,
+		Resource:  resource,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
 	raw, _ := json.Marshal(state)
 	if err := t.setAppState(ctx, githubCoreRateKey, string(raw)); err != nil {
 		return nil, err
@@ -804,11 +842,20 @@ func (t *Tools) wuwaCaptureRate(ctx context.Context, header http.Header) (*GitHu
 	return state, nil
 }
 
-func (t *Tools) wuwaFetchBytes(ctx context.Context, rawURL string, header http.Header, maxSize int64) ([]byte, http.Header, error) {
+func (t *Tools) wuwaFetchBytes(
+	ctx context.Context,
+	rawURL string,
+	header http.Header,
+	maxSize int64,
+) ([]byte, http.Header, error) {
 	if t.http == nil {
 		return nil, nil, errors.New("tools HTTP client is not configured")
 	}
-	response, err := t.http.Fetch(ctx, rawURL, infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true})
+	response, err := t.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -816,7 +863,11 @@ func (t *Tools) wuwaFetchBytes(ctx context.Context, rawURL string, header http.H
 	responseHeader := response.Header.Clone()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		return nil, responseHeader, fmt.Errorf("HTTP %d", response.StatusCode) //nolint:staticcheck // Electron contract text.
+		//nolint:staticcheck // Electron contract text.
+		return nil, responseHeader, fmt.Errorf(
+			"HTTP %d",
+			response.StatusCode,
+		)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxSize+1))
 	if err != nil {
@@ -834,10 +885,19 @@ func parseWuwaLatestRelease(payload wuwaReleaseResponse) (wuwaLatestReleaseCache
 	}
 	for _, asset := range payload.Assets {
 		if wuwaBinaryRE.MatchString(asset.Name) && asset.BrowserDownloadURL != "" {
-			return wuwaLatestReleaseCache{Version: payload.TagName, Asset: wuwaLatestAsset{Name: asset.Name, BrowserDownloadURL: asset.BrowserDownloadURL, Digest: asset.Digest}}, nil
+			return wuwaLatestReleaseCache{
+				Version: payload.TagName,
+				Asset: wuwaLatestAsset{
+					Name:               asset.Name,
+					BrowserDownloadURL: asset.BrowserDownloadURL,
+					Digest:             asset.Digest,
+				},
+			}, nil
 		}
 	}
-	return wuwaLatestReleaseCache{}, contractError("Latest Wuwa Mod Fixer release is missing a Windows executable asset")
+	return wuwaLatestReleaseCache{}, contractError(
+		"Latest Wuwa Mod Fixer release is missing a Windows executable asset",
+	)
 }
 
 func buildWuwaCLIArgs(modPath, configPath string, options WuwaFixerOptions) ([]string, error) {
@@ -891,7 +951,15 @@ func collectWuwaBackupGroups(root string) ([]WuwaBackupGroup, error) {
 			continue
 		}
 		groupKey := match[2][:16]
-		byGroup[groupKey] = append(byGroup[groupKey], WuwaBackupFile{CurrentPath: bakPath, OriginalPath: filepath.Join(filepath.Dir(bakPath), match[1]), Timestamp: match[2], GroupKey: groupKey})
+		byGroup[groupKey] = append(
+			byGroup[groupKey],
+			WuwaBackupFile{
+				CurrentPath:  bakPath,
+				OriginalPath: filepath.Join(filepath.Dir(bakPath), match[1]),
+				Timestamp:    match[2],
+				GroupKey:     groupKey,
+			},
+		)
 	}
 	groups := make([]WuwaBackupGroup, 0, len(byGroup))
 	for key, files := range byGroup {
@@ -1004,7 +1072,8 @@ func compareToolVersions(left, right string) int {
 
 func sameOrChildPath(root, target string) bool {
 	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
+		!filepath.IsAbs(relative)
 }
 
 func wuwaRateLimited(state *GitHubRateState) bool {
@@ -1019,5 +1088,10 @@ func parseRFC3339(value string) time.Time {
 func mustRFC3339(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
 
 func (t *Tools) reportWuwaRecovery(err error, stage string) {
-	t.wuwaDiagnostic.Report(t.log, err, "Tools", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "wuwa-cache", Stage: stage})
+	t.wuwaDiagnostic.Report(
+		t.log,
+		err,
+		"Tools",
+		infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "wuwa-cache", Stage: stage},
+	)
 }

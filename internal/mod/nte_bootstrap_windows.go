@@ -10,7 +10,12 @@ import (
 func elevatedCopyNteBootstrapFiles(copies []nteBootstrapFileCopy) error {
 	var entries strings.Builder
 	for _, file := range copies {
-		fmt.Fprintf(&entries, "[pscustomobject]@{ SourcePath = %s; TargetPath = %s }\n", ntePSLiteral(file.sourcePath), ntePSLiteral(file.targetPath))
+		fmt.Fprintf(
+			&entries,
+			"[pscustomobject]@{ SourcePath = %s; TargetPath = %s }\n",
+			ntePSLiteral(file.sourcePath),
+			ntePSLiteral(file.targetPath),
+		)
 	}
 	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
 $Copies = @(
@@ -33,7 +38,13 @@ func elevatedRollbackNteBootstrapFiles(snapshots []nteBootstrapSnapshot) error {
 		if snapshot.existed {
 			existed = "$true"
 		}
-		fmt.Fprintf(&entries, "[pscustomobject]@{ TargetPath = %s; BackupPath = %s; Existed = %s }\n", ntePSLiteral(snapshot.targetPath), ntePSLiteral(snapshot.backupPath), existed)
+		fmt.Fprintf(
+			&entries,
+			"[pscustomobject]@{ TargetPath = %s; BackupPath = %s; Existed = %s }\n",
+			ntePSLiteral(snapshot.targetPath),
+			ntePSLiteral(snapshot.backupPath),
+			existed,
+		)
 	}
 	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
 $Snapshots = @(

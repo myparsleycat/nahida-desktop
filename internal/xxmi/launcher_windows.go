@@ -85,10 +85,24 @@ func ensureLauncherClosedWith(
 			return nil
 		}
 		if err := kill(pid); err != nil {
-			return infra.AnnotateError(infra.WithCause(errors.New("failed to close XXMI Launcher"), err), infra.Diagnostic{Operation: "close-launcher", Stage: "terminate", Fields: map[string]any{"pid": pid, "executable": launcherImageName}})
+			return infra.AnnotateError(
+				infra.WithCause(errors.New("failed to close XXMI Launcher"), err),
+				infra.Diagnostic{
+					Operation: "close-launcher",
+					Stage:     "terminate",
+					Fields:    map[string]any{"pid": pid, "executable": launcherImageName},
+				},
+			)
 		}
 		if time.Now().After(deadline) {
-			return infra.AnnotateError(errors.New("XXMI Launcher is still running"), infra.Diagnostic{Operation: "close-launcher", Stage: "wait", Fields: map[string]any{"pid": pid, "executable": launcherImageName}})
+			return infra.AnnotateError(
+				errors.New("XXMI Launcher is still running"),
+				infra.Diagnostic{
+					Operation: "close-launcher",
+					Stage:     "wait",
+					Fields:    map[string]any{"pid": pid, "executable": launcherImageName},
+				},
+			)
 		}
 		timer := time.NewTimer(pollInterval)
 		select {

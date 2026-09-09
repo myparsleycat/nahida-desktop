@@ -60,7 +60,13 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 		switch request.URL.Path {
 		case "/apiv13/Mod/10/ProfilePage":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"_idRow":10,"_sName":"GB Mod","_sProfileUrl":"%s/mods/10","_aSubmitter":{"_sName":"author","_sProfileUrl":"%s/member/1"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Characters"},"_aFiles":[{"_idRow":20,"_sFile":"gb.zip","_tsDateAdded":1,"_nDownloadCount":1,"_sDownloadUrl":"%s/gb.zip","_sMd5Checksum":"abc","_sVersion":"1.0"}]}`, server.URL, server.URL, server.URL)
+			_, _ = fmt.Fprintf(
+				w,
+				`{"_idRow":10,"_sName":"GB Mod","_sProfileUrl":"%s/mods/10","_aSubmitter":{"_sName":"author","_sProfileUrl":"%s/member/1"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Characters"},"_aFiles":[{"_idRow":20,"_sFile":"gb.zip","_tsDateAdded":1,"_nDownloadCount":1,"_sDownloadUrl":"%s/gb.zip","_sMd5Checksum":"abc","_sVersion":"1.0"}]}`,
+				server.URL,
+				server.URL,
+				server.URL,
+			)
 		case "/custom.zip":
 			serveCustomDownloadFixture(w, request, customArchive, "custom.zip", true)
 		case "/gb.zip":
@@ -94,7 +100,10 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 	t.Run("GameBanana", func(t *testing.T) {
 		destination := t.TempDir()
 		service, transfers := customDownloadTestService(t, server, destination, "Selected GB", true)
-		status, err := service.DownloadGameBananaFile(context.Background(), GameBananaDownloadProps{ItemID: 10, FileID: 20})
+		status, err := service.DownloadGameBananaFile(
+			context.Background(),
+			GameBananaDownloadProps{ItemID: 10, FileID: 20},
+		)
 		if err != nil || status != "started" {
 			t.Fatalf("DownloadGameBananaFile = %q, %v", status, err)
 		}
@@ -182,7 +191,13 @@ func TestCanceledCustomDownloadCannotBeResumedOrRetried(t *testing.T) {
 	}
 }
 
-func serveCustomDownloadFixture(w http.ResponseWriter, request *http.Request, payload []byte, name string, knownSize bool) {
+func serveCustomDownloadFixture(
+	w http.ResponseWriter,
+	request *http.Request,
+	payload []byte,
+	name string,
+	knownSize bool,
+) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	if knownSize {
@@ -193,7 +208,12 @@ func serveCustomDownloadFixture(w http.ResponseWriter, request *http.Request, pa
 	}
 }
 
-func customDownloadTestService(t *testing.T, server *httptest.Server, destination, selectedName string, withGameBanana bool) (*Mod, *transfer.Transfer) {
+func customDownloadTestService(
+	t *testing.T,
+	server *httptest.Server,
+	destination, selectedName string,
+	withGameBanana bool,
+) (*Mod, *transfer.Transfer) {
 	t.Helper()
 	httpClient := infra.NewClientWithOptions(infra.ClientOptions{
 		HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
@@ -235,7 +255,8 @@ func processCustomDownloadQueue(t *testing.T, transfers *transfer.Transfer, want
 		t.Fatalf("transfers = %#v", records)
 	}
 	record, ok := transfers.Get(records[0].PID)
-	if !ok || record.Status != transfer.StatusCompleted || record.Progress != 100 || record.TransferredFiles != 1 || record.TransferredSize != wantBytes {
+	if !ok || record.Status != transfer.StatusCompleted || record.Progress != 100 || record.TransferredFiles != 1 ||
+		record.TransferredSize != wantBytes {
 		t.Fatalf("transfer = %#v, exists=%v", record.Snapshot, ok)
 	}
 }

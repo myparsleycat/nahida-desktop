@@ -121,7 +121,10 @@ func decodeFromRoot(
 		}
 		fileOffset, err := pe.rvaToFileOffset(current)
 		if err != nil {
-			result.DecodeErrors = append(result.DecodeErrors, fmt.Sprintf("decode root 0x%x: RVA 0x%x did not map to file data: %v", root, current, err))
+			result.DecodeErrors = append(
+				result.DecodeErrors,
+				fmt.Sprintf("decode root 0x%x: RVA 0x%x did not map to file data: %v", root, current, err),
+			)
 			break
 		}
 		section, ok := pe.sectionByRVA(current)
@@ -141,7 +144,10 @@ func decodeFromRoot(
 		}
 		inst, err := x86asm.Decode(data[fileOffset:limit], 64)
 		if err != nil || inst.Len == 0 {
-			result.DecodeErrors = append(result.DecodeErrors, fmt.Sprintf("decode failed at RVA 0x%x from root 0x%x", current, root))
+			result.DecodeErrors = append(
+				result.DecodeErrors,
+				fmt.Sprintf("decode failed at RVA 0x%x from root 0x%x", current, root),
+			)
 			break
 		}
 		decodedStarts[current] = struct{}{}
@@ -349,7 +355,13 @@ func paddingKind(b byte, allowZero bool) (paddingByteKind, bool) {
 	return "", false
 }
 
-func evaluateCandidates(pe peImage, code codeAnalysis, candidates []paddingCandidate, opts Options, report *Report) ([]approvedCandidate, error) {
+func evaluateCandidates(
+	pe peImage,
+	code codeAnalysis,
+	candidates []paddingCandidate,
+	opts Options,
+	report *Report,
+) ([]approvedCandidate, error) {
 	var approved []approvedCandidate
 	relocationRanges := make([]addressRange, 0, len(pe.Relocations))
 	for _, reloc := range pe.Relocations {

@@ -56,9 +56,12 @@ func TestStartDownloadUsesParallelRangesAndSharedLinkToken(t *testing.T) {
 	transfers := transfer.New()
 	drive := downloadServiceTestDrive(server, transfers)
 	metadata := DownloadMetadata{
-		Root: transfer.Root{ID: "file", Name: "parallel.bin"}, TotalBytes: size,
-		Files: []transfer.DownloadFile{{ID: "file", FileID: "file", Name: "parallel.bin", Size: size, URL: server.URL + "/parallel.bin"}},
-		Dirs:  []transfer.Directory{},
+		Root:       transfer.Root{ID: "file", Name: "parallel.bin"},
+		TotalBytes: size,
+		Files: []transfer.DownloadFile{
+			{ID: "file", FileID: "file", Name: "parallel.bin", Size: size, URL: server.URL + "/parallel.bin"},
+		},
+		Dirs: []transfer.Directory{},
 	}
 	target := t.TempDir()
 	result, err := drive.StartDownload(context.Background(), StartDownloadParams{
@@ -262,7 +265,8 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 		t.Fatalf("downloaded = %q", got)
 	}
 	record, ok := transfers.Get(result.PID)
-	if !ok || record.Status != transfer.StatusCompleted || record.TransferredSize != int64(len(content)) || record.TransferredFiles != 1 {
+	if !ok || record.Status != transfer.StatusCompleted || record.TransferredSize != int64(len(content)) ||
+		record.TransferredFiles != 1 {
 		t.Fatalf("record = %+v, ok = %v", record, ok)
 	}
 	if completedEvent["path"] != target || completedEvent["name"] != "renamed.bin" {
@@ -319,15 +323,33 @@ func TestTransferCancellationDoesNotCreateDriveFailureLog(t *testing.T) {
 	var output bytes.Buffer
 	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
 	transfers := transfer.NewWithOptions(transfer.Options{Log: log})
-	_, err := transfers.Create(transfer.CreateParams{PID: "cancel", Type: "upload", Name: "cancel", InitialStatus: transfer.StatusProgress})
+	_, err := transfers.Create(
+		transfer.CreateParams{PID: "cancel", Type: "upload", Name: "cancel", InitialStatus: transfer.StatusProgress},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	drive := NewWithOptions(Options{Log: log})
-	if got := drive.failUploadTransfer(transfers, "cancel", "execute", context.Canceled); !errors.Is(got, context.Canceled) {
+	if got := drive.failUploadTransfer(
+		transfers,
+		"cancel",
+		"execute",
+		context.Canceled,
+	); !errors.Is(
+		got,
+		context.Canceled,
+	) {
 		t.Fatalf("upload cancellation = %v", got)
 	}
-	if got := drive.failDownloadTransfer(transfers, "cancel", "download", context.Canceled); !errors.Is(got, context.Canceled) {
+	if got := drive.failDownloadTransfer(
+		transfers,
+		"cancel",
+		"download",
+		context.Canceled,
+	); !errors.Is(
+		got,
+		context.Canceled,
+	) {
 		t.Fatalf("download cancellation = %v", got)
 	}
 	if output.Len() != 0 {
@@ -467,8 +489,10 @@ func TestDownloadFallsBackToFreshPresignedURLAfterForbidden(t *testing.T) {
 	metadata := DownloadMetadata{
 		Root:       transfer.Root{ID: "file", Name: "file.bin"},
 		TotalBytes: int64(len(content)),
-		Files:      []transfer.DownloadFile{{ID: "file", Name: "file.bin", Size: int64(len(content)), URL: server.URL + "/stale"}},
-		Dirs:       []transfer.Directory{},
+		Files: []transfer.DownloadFile{
+			{ID: "file", Name: "file.bin", Size: int64(len(content)), URL: server.URL + "/stale"},
+		},
+		Dirs: []transfer.Directory{},
 	}
 	target := t.TempDir()
 	result, err := drive.StartDownload(context.Background(), StartDownloadParams{
@@ -550,8 +574,10 @@ func TestStartDownloadPromptsPathSelectorWhenTargetMissing(t *testing.T) {
 		Data: &DownloadMetadata{
 			Root:       transfer.Root{ID: "file", Name: "original.bin"},
 			TotalBytes: int64(len(content)),
-			Files:      []transfer.DownloadFile{{ID: "file", FileID: "file", Name: "original.bin", Size: int64(len(content)), URL: server.URL}},
-			Dirs:       []transfer.Directory{},
+			Files: []transfer.DownloadFile{
+				{ID: "file", FileID: "file", Name: "original.bin", Size: int64(len(content)), URL: server.URL},
+			},
+			Dirs: []transfer.Directory{},
 		},
 	})
 	if err != nil {
@@ -604,7 +630,8 @@ func TestStartDownloadRequiresPathWhenSelectorMissing(t *testing.T) {
 		Items: []DownloadItem{{ID: "file", Name: "file.bin"}},
 	})
 	var api *DriveAPIError
-	if !errors.As(err, &api) || api.Code != "DRIVE_FN_STARTDOWNLOAD_FAILED" || api.Message != "download target path is required" {
+	if !errors.As(err, &api) || api.Code != "DRIVE_FN_STARTDOWNLOAD_FAILED" ||
+		api.Message != "download target path is required" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -709,10 +736,12 @@ func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) 
 			}
 			dialog := platform.NewDialog()
 			var promptedName string
-			dialog.UseDirectoryConflictResolver(func(opts platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
-				promptedName = opts.Name
-				return test.choice, nil
-			})
+			dialog.UseDirectoryConflictResolver(
+				func(opts platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
+					promptedName = opts.Name
+					return test.choice, nil
+				},
+			)
 			transfers := transfer.New()
 			const pid = "directory-conflict"
 			if _, err := transfers.Create(transfer.CreateParams{
@@ -726,9 +755,15 @@ func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) 
 				Root: transfer.Root{ID: "root", Name: "folder"},
 				Dirs: []transfer.Directory{{ID: "root", Name: "folder"}},
 			}
-			prepared, err := drive.prepareDownloadMetadata(context.Background(), transfers, pid, metadata, StartDownloadParams{
-				Items: []DownloadItem{{ID: "root", Name: "folder", IsDir: true}}, TargetPath: target,
-			})
+			prepared, err := drive.prepareDownloadMetadata(
+				context.Background(),
+				transfers,
+				pid,
+				metadata,
+				StartDownloadParams{
+					Items: []DownloadItem{{ID: "root", Name: "folder", IsDir: true}}, TargetPath: target,
+				},
+			)
 			if promptedName != "Folder" {
 				t.Fatalf("prompted name = %q", promptedName)
 			}
@@ -745,7 +780,8 @@ func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if prepared.Root.Name != test.wantName || len(prepared.Dirs) != 1 || prepared.Dirs[0].Name != test.wantName {
+			if prepared.Root.Name != test.wantName || len(prepared.Dirs) != 1 ||
+				prepared.Dirs[0].Name != test.wantName {
 				t.Fatalf("prepared = %+v", prepared)
 			}
 		})
@@ -760,10 +796,12 @@ func TestPrepareDownloadMetadataUsesUniqueNameWhenConflictIsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	dialog := platform.NewDialog()
-	dialog.UseDirectoryConflictResolver(func(platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
-		t.Fatal("file conflict should not prompt")
-		return "", nil
-	})
+	dialog.UseDirectoryConflictResolver(
+		func(platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
+			t.Fatal("file conflict should not prompt")
+			return "", nil
+		},
+	)
 	drive := NewWithOptions(Options{FS: platform.NewFS(), Dialog: dialog})
 	metadata := DownloadMetadata{
 		Root: transfer.Root{ID: "root", Name: "folder"},
@@ -781,7 +819,9 @@ func TestPrepareDownloadMetadataUsesUniqueNameWhenConflictIsFile(t *testing.T) {
 }
 
 func downloadServiceTestDrive(server *httptest.Server, transfers *transfer.Transfer) *Drive {
-	client := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline})
+	client := infra.NewClientWithOptions(
+		infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline},
+	)
 	download := infra.NewDownload()
 	download.UseClient(client)
 	return NewWithOptions(Options{
@@ -797,7 +837,13 @@ type staticPathSelector struct {
 	fileName string
 }
 
-func (s staticPathSelector) SelectDownloadPath(context.Context, string, string, []string, bool) (*string, *string, error) {
+func (s staticPathSelector) SelectDownloadPath(
+	context.Context,
+	string,
+	string,
+	[]string,
+	bool,
+) (*string, *string, error) {
 	path := s.path
 	var fileName *string
 	if s.fileName != "" {
@@ -808,7 +854,13 @@ func (s staticPathSelector) SelectDownloadPath(context.Context, string, string, 
 
 type cancelPathSelector struct{}
 
-func (cancelPathSelector) SelectDownloadPath(context.Context, string, string, []string, bool) (*string, *string, error) {
+func (cancelPathSelector) SelectDownloadPath(
+	context.Context,
+	string,
+	string,
+	[]string,
+	bool,
+) (*string, *string, error) {
 	return nil, nil, nil
 }
 

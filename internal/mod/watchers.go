@@ -21,7 +21,17 @@ const watcherSettleDelay = 800 * time.Millisecond
 func (m *Mod) watcherReporter(path string) func(error) {
 	throttle := &infra.DiagnosticThrottle{}
 	return func(err error) {
-		throttle.Report(m.log, err, "Mod", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "watch", Stage: "read", Fields: map[string]any{"path": path}})
+		throttle.Report(
+			m.log,
+			err,
+			"Mod",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "watch",
+				Stage:     "read",
+				Fields:    map[string]any{"path": path},
+			},
+		)
 	}
 }
 
@@ -62,7 +72,13 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	if _, err := m.ownedPath(ctx, characterPath); err != nil {
 		return err
 	}
-	watcher, err := newManagedWatcher(characterPath, 1, "mod:update-mods", m.emitEvent, m.watcherReporter(characterPath))
+	watcher, err := newManagedWatcher(
+		characterPath,
+		1,
+		"mod:update-mods",
+		m.emitEvent,
+		m.watcherReporter(characterPath),
+	)
 	if err != nil {
 		return err
 	}

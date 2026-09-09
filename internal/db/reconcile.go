@@ -100,7 +100,12 @@ func (c *Client) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	if err := c.SchemaState.Upsert(ctx, SchemaKeyAppVersion, fmt.Sprintf("%d", AppSchemaVersion), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := c.SchemaState.Upsert(
+		ctx,
+		SchemaKeyAppVersion,
+		fmt.Sprintf("%d", AppSchemaVersion),
+		time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
 		return err
 	}
 
@@ -111,7 +116,10 @@ func (c *Client) Reconcile(ctx context.Context) error {
 }
 
 func (c *Client) listUserTables(ctx context.Context) (map[string]struct{}, error) {
-	rows, err := c.query(ctx, `SELECT "name" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'`)
+	rows, err := c.query(
+		ctx,
+		`SELECT "name" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'`,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list tables: %w", err)
 	}
@@ -128,7 +136,11 @@ func (c *Client) listUserTables(ctx context.Context) (map[string]struct{}, error
 	return names, rows.Err()
 }
 
-func (c *Client) buildReconcileCandidate(ctx context.Context, spec TableSpec, tableNames map[string]struct{}) (reconcileCandidate, error) {
+func (c *Client) buildReconcileCandidate(
+	ctx context.Context,
+	spec TableSpec,
+	tableNames map[string]struct{},
+) (reconcileCandidate, error) {
 	candidates := append([]string{spec.Name}, spec.Aliases...)
 	var actual string
 	for _, name := range candidates {
@@ -217,7 +229,16 @@ func (c *Client) pragmaForeignKeyList(ctx context.Context, tableName string) ([]
 	var out []foreignKeyRow
 	for rows.Next() {
 		var row foreignKeyRow
-		if err := rows.Scan(&row.ID, &row.Seq, &row.Table, &row.From, &row.To, &row.OnUpdate, &row.OnDelete, &row.Match); err != nil {
+		if err := rows.Scan(
+			&row.ID,
+			&row.Seq,
+			&row.Table,
+			&row.From,
+			&row.To,
+			&row.OnUpdate,
+			&row.OnDelete,
+			&row.Match,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -305,7 +326,12 @@ func (c *Client) reconcileTable(ctx context.Context, candidate reconcileCandidat
 		return c.ensureIndexes(ctx, candidate.spec)
 	case "add-columns":
 		for _, column := range action.columns {
-			sql := `ALTER TABLE ` + quoteIdent(candidate.shape.tableName) + ` ADD COLUMN ` + buildColumnDefinition(column, nil)
+			sql := `ALTER TABLE ` + quoteIdent(
+				candidate.shape.tableName,
+			) + ` ADD COLUMN ` + buildColumnDefinition(
+				column,
+				nil,
+			)
 			if err := c.exec(ctx, sql); err != nil {
 				return fmt.Errorf("add column %s.%s: %w", candidate.shape.tableName, column.Name, err)
 			}
@@ -388,7 +414,13 @@ func getReconcileAction(spec TableSpec, shape *existingTableShape) reconcileActi
 				existingPK = append(existingPK, column.Name)
 			}
 		}
-		if strings.Join(sortStrings(existingPK), "\x00") != strings.Join(sortStrings(spec.CompositePrimaryKey), "\x00") {
+		if strings.Join(
+			sortStrings(existingPK),
+			"\x00",
+		) != strings.Join(
+			sortStrings(spec.CompositePrimaryKey),
+			"\x00",
+		) {
 			return reconcileAction{kind: "rebuild"}
 		}
 	}
@@ -431,7 +463,10 @@ func (c *Client) rebuildTable(ctx context.Context, spec TableSpec, shape *existi
 			return err
 		}
 		insertColumns = append(insertColumns, quoteIdent(target.Name))
-		selectExpressions = append(selectExpressions, buildCopyExpression(target, sourceName)+" AS "+quoteIdent(target.Name))
+		selectExpressions = append(
+			selectExpressions,
+			buildCopyExpression(target, sourceName)+" AS "+quoteIdent(target.Name),
+		)
 	}
 
 	return c.withImmediate(ctx, func(tx queryExec) error {
@@ -451,7 +486,10 @@ func (c *Client) rebuildTable(ctx context.Context, spec TableSpec, shape *existi
 		if _, err := tx.ExecContext(ctx, `DROP TABLE `+quoteIdent(shape.tableName)); err != nil {
 			return fmt.Errorf("drop old %s: %w", shape.tableName, err)
 		}
-		if _, err := tx.ExecContext(ctx, `ALTER TABLE `+quoteIdent(tempTableName)+` RENAME TO `+quoteIdent(spec.Name)); err != nil {
+		if _, err := tx.ExecContext(
+			ctx,
+			`ALTER TABLE `+quoteIdent(tempTableName)+` RENAME TO `+quoteIdent(spec.Name),
+		); err != nil {
 			return fmt.Errorf("rename %s: %w", spec.Name, err)
 		}
 		return c.ensureIndexesOn(ctx, tx, spec)
@@ -617,5 +655,10 @@ func (c *Client) dropToggleViewerArtifactTable(ctx context.Context) error {
 		return fmt.Errorf("delete toggle viewer settings: %w", err)
 	}
 
-	return c.SchemaState.Upsert(ctx, SchemaKeyToggleViewerArtifactDropped, "1", time.Now().UTC().Format(time.RFC3339Nano))
+	return c.SchemaState.Upsert(
+		ctx,
+		SchemaKeyToggleViewerArtifactDropped,
+		"1",
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
 }

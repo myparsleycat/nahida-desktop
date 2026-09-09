@@ -35,11 +35,26 @@ func TestBuildWuwaCLIArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"--cli", "--path", `C:\Mods\A`, "--config", `C:\Tools\config.json`, "--derived-hashes", "--aemeath-mech", "--rendering-33", "--aero-fix", "2"}
+	want := []string{
+		"--cli",
+		"--path",
+		`C:\Mods\A`,
+		"--config",
+		`C:\Tools\config.json`,
+		"--derived-hashes",
+		"--aemeath-mech",
+		"--rendering-33",
+		"--aero-fix",
+		"2",
+	}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
-	if _, err := buildWuwaCLIArgs("mods", "config", WuwaFixerOptions{DerivedHashes: true, StableTexture: true}); err == nil {
+	if _, err := buildWuwaCLIArgs(
+		"mods",
+		"config",
+		WuwaFixerOptions{DerivedHashes: true, StableTexture: true},
+	); err == nil {
 		t.Fatal("mutually exclusive texture options were accepted")
 	}
 	if _, err := buildWuwaCLIArgs("mods", "config", WuwaFixerOptions{AeroFix: "3"}); err == nil {
@@ -156,7 +171,11 @@ func TestWuwaBackupOperationsRejectOutsideManagedRoot(t *testing.T) {
 	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "WW", ModFolderPath: managed}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.WuwaFixerScanBackups(ctx, outside); err == nil || err.Error() != "Path is outside the managed mod folder" {
+	if _, err := service.WuwaFixerScanBackups(
+		ctx,
+		outside,
+	); err == nil ||
+		err.Error() != "Path is outside the managed mod folder" {
 		t.Fatalf("outside path error = %v", err)
 	}
 }
@@ -172,16 +191,31 @@ func TestWuwaRequireModPathUsesOnlyPrimaryRootAndElectronErrorPriority(t *testin
 	}
 	service := New()
 	service.UseClient(client)
-	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "WW", ModFolderPath: managed, LinkedModFolderPath: &linked}); err != nil {
+	if err := client.GamePaths.Insert(
+		ctx,
+		db.GamePathRow{Game: "WW", ModFolderPath: managed, LinkedModFolderPath: &linked},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.wuwaRequireModPath(ctx, linkedTarget); err == nil || err.Error() != "Path is outside the managed mod folder" {
+	if err := service.wuwaRequireModPath(
+		ctx,
+		linkedTarget,
+	); err == nil ||
+		err.Error() != "Path is outside the managed mod folder" {
 		t.Fatalf("linked root error = %v", err)
 	}
-	if err := service.wuwaRequireModPath(ctx, filepath.Join(t.TempDir(), "missing")); err == nil || err.Error() != "Path is outside the managed mod folder" {
+	if err := service.wuwaRequireModPath(
+		ctx,
+		filepath.Join(t.TempDir(), "missing"),
+	); err == nil ||
+		err.Error() != "Path is outside the managed mod folder" {
 		t.Fatalf("outside missing error = %v", err)
 	}
-	if err := service.wuwaRequireModPath(ctx, filepath.Join(managed, "missing")); err == nil || err.Error() != "Destination path does not exist" {
+	if err := service.wuwaRequireModPath(
+		ctx,
+		filepath.Join(managed, "missing"),
+	); err == nil ||
+		err.Error() != "Destination path does not exist" {
 		t.Fatalf("inside missing error = %v", err)
 	}
 	file := filepath.Join(managed, "mod.ini")
@@ -299,7 +333,9 @@ func TestWuwaAutomaticUpdateNotificationHonorsSettingAndUsesNativeNotification(t
 }
 
 func TestParseWuwaConfigVersion(t *testing.T) {
-	version := parseWuwaConfigVersion([]byte(`{"version":{"current_version":"3.4.4","min_required_version":"3.3.3"},"characters":{"Rover":{}}}`))
+	version := parseWuwaConfigVersion(
+		[]byte(`{"version":{"current_version":"3.4.4","min_required_version":"3.3.3"},"characters":{"Rover":{}}}`),
+	)
 	if version == nil || *version != "3.4.4" {
 		t.Fatalf("version = %v", version)
 	}
@@ -324,7 +360,11 @@ func TestWuwaGetStatusReadsLocalConfigVersion(t *testing.T) {
 	if err := os.MkdirAll(toolDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(toolDir, "config.json"), []byte(`{"version":{"current_version":"3.4.4"}}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(toolDir, "config.json"),
+		[]byte(`{"version":{"current_version":"3.4.4"}}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	importer := "WWMI"
@@ -352,7 +392,9 @@ func TestWuwaPrepareRunRefreshesConfigVersion(t *testing.T) {
 			Body: io.NopCloser(strings.NewReader("unavailable")),
 		}, nil
 	})
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service := NewWithOptions(
+		Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})},
+	)
 	service.UseClient(client)
 	userData := useToolsTestAppData(t, service, t.TempDir())
 	if err := writeWuwaInstalledTestFiles(userData, `{"version":{"current_version":"3.0.0"}}`); err != nil {
@@ -377,7 +419,9 @@ func TestWuwaPrepareRunKeepsLocalConfigWhenRemoteFails(t *testing.T) {
 			Body: io.NopCloser(strings.NewReader("unavailable")),
 		}, nil
 	})
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service := NewWithOptions(
+		Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})},
+	)
 	service.UseClient(client)
 	userData := useToolsTestAppData(t, service, t.TempDir())
 	if err := writeWuwaInstalledTestFiles(userData, `{"version":{"current_version":"3.0.0"}}`); err != nil {
@@ -406,9 +450,16 @@ func writeWuwaInstalledTestFiles(userData, config string) error {
 
 func TestWuwaConfigDownloadErrorMatchesElectronMessage(t *testing.T) {
 	transport := wuwaRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Service Unavailable", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("unavailable"))}, nil
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Status:     "503 Service Unavailable",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("unavailable")),
+		}, nil
 	})
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service := NewWithOptions(
+		Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})},
+	)
 	useToolsTestAppData(t, service, t.TempDir())
 	_, err := service.wuwaEnsureLatestConfig(context.Background())
 	if err == nil || err.Error() != "Failed to download Wuwa Mod Fixer config: HTTP 503" {
@@ -427,11 +478,21 @@ func TestWuwaRunLetsFileDestinationReachExternalToolLog(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := client.AppState.Upsert(ctx, wuwaBinaryPathKey, binary, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := client.AppState.Upsert(
+		ctx,
+		wuwaBinaryPathKey,
+		binary,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
 		t.Fatal(err)
 	}
 	transport := wuwaRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+		}, nil
 	})
 	var logs []FixToolLogEvent
 	service := NewWithOptions(Options{
@@ -474,9 +535,17 @@ func TestWuwaInstallVerifiesAndPersistsRelease(t *testing.T) {
 	transport := wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.String() {
 		case "https://api.github.com/rate_limit":
-			return response(http.StatusOK, []byte(`{"rate":{"limit":60,"remaining":59,"reset":2000000000,"used":1,"resource":"core"}}`), true), nil
+			return response(
+				http.StatusOK,
+				[]byte(`{"rate":{"limit":60,"remaining":59,"reset":2000000000,"used":1,"resource":"core"}}`),
+				true,
+			), nil
 		case wuwaReleasesLatestURL:
-			payload := fmt.Sprintf(`{"tag_name":"v1.2.3","assets":[{"name":"Wuwa_Mod_Fixer_v1.2.3.exe","browser_download_url":%q,"digest":%q}]}`, assetURL, digest)
+			payload := fmt.Sprintf(
+				`{"tag_name":"v1.2.3","assets":[{"name":"Wuwa_Mod_Fixer_v1.2.3.exe","browser_download_url":%q,"digest":%q}]}`,
+				assetURL,
+				digest,
+			)
 			return response(http.StatusOK, []byte(payload), true), nil
 		case assetURL:
 			return response(http.StatusOK, binary, false), nil
@@ -485,7 +554,9 @@ func TestWuwaInstallVerifiesAndPersistsRelease(t *testing.T) {
 		}
 	})
 	client := openToolsTestDB(t)
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})})
+	service := NewWithOptions(
+		Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})},
+	)
 	service.UseClient(client)
 	userData := useToolsTestAppData(t, service, t.TempDir())
 	toolDir := filepath.Join(userData, "tools", wuwaFixerDirName)
@@ -500,7 +571,8 @@ func TestWuwaInstallVerifiesAndPersistsRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !status.Installed || status.InstalledVersion == nil || *status.InstalledVersion != "v1.2.3" || status.BinaryPath == nil {
+	if !status.Installed || status.InstalledVersion == nil || *status.InstalledVersion != "v1.2.3" ||
+		status.BinaryPath == nil {
 		t.Fatalf("status = %#v", status)
 	}
 	installed, err := os.ReadFile(*status.BinaryPath)

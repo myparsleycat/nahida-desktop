@@ -65,7 +65,10 @@ func TestWriteModDownloadMetadataToDirectoriesBacksUpOnceForDuplicateDirectory(t
 		return nil
 	}
 
-	if err := writeModDownloadMetadataToDirectories([]string{dir, filePath}, map[string]any{"source": "mod"}); err != nil {
+	if err := writeModDownloadMetadataToDirectories(
+		[]string{dir, filePath},
+		map[string]any{"source": "mod"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if hideCalls != 1 {

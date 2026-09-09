@@ -199,11 +199,26 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("list presets: %v %v", listedPresets, err)
 	}
 
-	if err := client.ModPresetItems.InsertMany(ctx, []ModPresetItemRow{{
-		PresetID: "p1", ModKey: "mod-a", RelativePath: "a", GroupRelativePath: "g", FolderName: "A", IsEnabled: true, ItemOrder: 1,
-	}, {
-		PresetID: "p1", ModKey: "mod-b", RelativePath: "b", GroupRelativePath: "g", FolderName: "B", IsEnabled: false, ItemOrder: 2,
-	}}); err != nil {
+	if err := client.ModPresetItems.InsertMany(ctx, []ModPresetItemRow{
+		{
+			PresetID:          "p1",
+			ModKey:            "mod-a",
+			RelativePath:      "a",
+			GroupRelativePath: "g",
+			FolderName:        "A",
+			IsEnabled:         true,
+			ItemOrder:         1,
+		},
+		{
+			PresetID:          "p1",
+			ModKey:            "mod-b",
+			RelativePath:      "b",
+			GroupRelativePath: "g",
+			FolderName:        "B",
+			IsEnabled:         false,
+			ItemOrder:         2,
+		},
+	}); err != nil {
 		t.Fatalf("insert items: %v", err)
 	}
 	items, err := client.ModPresetItems.ListByPresetID(ctx, "p1")
@@ -212,7 +227,10 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 	}
 
 	blob := []byte{0, 1, 2, 3, 255}
-	if err := client.ImageCache.InsertIgnore(ctx, ImageCacheRow{Hash: "abc", Image: blob, Size: int64(len(blob))}); err != nil {
+	if err := client.ImageCache.InsertIgnore(
+		ctx,
+		ImageCacheRow{Hash: "abc", Image: blob, Size: int64(len(blob))},
+	); err != nil {
 		t.Fatalf("image insert: %v", err)
 	}
 	if err := client.ImageCache.InsertIgnore(ctx, ImageCacheRow{Hash: "abc", Image: []byte{9}, Size: 1}); err != nil {
@@ -229,7 +247,10 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("delete images: %v", err)
 	}
 
-	if err := client.TouchProfileVisionCache.Upsert(ctx, TouchProfileVisionCacheRow{CacheKey: "k", Result: "{}", UpdatedAt: "now"}); err != nil {
+	if err := client.TouchProfileVisionCache.Upsert(
+		ctx,
+		TouchProfileVisionCacheRow{CacheKey: "k", Result: "{}", UpdatedAt: "now"},
+	); err != nil {
 		t.Fatalf("touch upsert: %v", err)
 	}
 	if touch, err := client.TouchProfileVisionCache.Get(ctx, "k"); err != nil || touch == nil || touch.Result != "{}" {
@@ -260,12 +281,24 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 
 	src := []byte("print('ok')")
 	if err := client.Scripts.Insert(ctx, ScriptRow{
-		ID: "s1", Name: "hello", Source: src, IsSrcZstd: false, Type: ScriptTypePython, Size: int64(len(src)), SHA256: "deadbeef",
+		ID:        "s1",
+		Name:      "hello",
+		Source:    src,
+		IsSrcZstd: false,
+		Type:      ScriptTypePython,
+		Size:      int64(len(src)),
+		SHA256:    "deadbeef",
 	}); err != nil {
 		t.Fatalf("script insert: %v", err)
 	}
 	compressed := []byte{0x28, 0xb5, 0x2f, 0xfd}
-	if err := client.Scripts.UpdateCompressedSource(ctx, "s1", compressed, "zstdhash", int64(len(compressed))); err != nil {
+	if err := client.Scripts.UpdateCompressedSource(
+		ctx,
+		"s1",
+		compressed,
+		"zstdhash",
+		int64(len(compressed)),
+	); err != nil {
 		t.Fatalf("compress script: %v", err)
 	}
 	script, err := client.Scripts.FindBySHA256OrName(ctx, "deadbeef", "nope")
@@ -279,7 +312,10 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 	if err := client.ScriptPresets.Insert(ctx, ScriptPresetRow{ID: "sp1", Name: "bundle"}); err != nil {
 		t.Fatalf("script preset: %v", err)
 	}
-	if err := client.ScriptPresetItems.InsertMany(ctx, []ScriptPresetItemRow{{PresetID: "sp1", ScriptID: "s1", Order: 1}}); err != nil {
+	if err := client.ScriptPresetItems.InsertMany(
+		ctx,
+		[]ScriptPresetItemRow{{PresetID: "sp1", ScriptID: "s1", Order: 1}},
+	); err != nil {
 		t.Fatalf("script items: %v", err)
 	}
 	withScripts, err := client.ScriptPresets.ListWithScripts(ctx)
@@ -293,7 +329,11 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 	if foundPreset, err := client.ScriptPresets.FindByName(ctx, "bundle"); err != nil || foundPreset == nil {
 		t.Fatalf("find preset name: %v", err)
 	}
-	if with, err := client.ScriptPresets.FindByIDWithScripts(ctx, "sp1"); err != nil || with == nil || len(with.Scripts) != 1 {
+	if with, err := client.ScriptPresets.FindByIDWithScripts(
+		ctx,
+		"sp1",
+	); err != nil || with == nil ||
+		len(with.Scripts) != 1 {
 		t.Fatalf("find with scripts: %v %v", with, err)
 	}
 

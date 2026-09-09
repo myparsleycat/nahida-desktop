@@ -55,7 +55,11 @@ stride = 40`)
 		t.Fatalf("shapes = %#v", shapes)
 	}
 	dimension := shapes[0].Dimensions[0]
-	if shapes[0].BasePath != filepath.Join(modDir, "face.buf") || shapes[0].VertexStride != 40 || dimension.VariableID != "smile" || dimension.Mode != "" || dimension.SmallerPath != "" || dimension.BiggerPath != filepath.Join(modDir, "face-smile.buf") {
+	if shapes[0].BasePath != filepath.Join(modDir, "face.buf") || shapes[0].VertexStride != 40 ||
+		dimension.VariableID != "smile" ||
+		dimension.Mode != "" ||
+		dimension.SmallerPath != "" ||
+		dimension.BiggerPath != filepath.Join(modDir, "face-smile.buf") {
 		t.Fatalf("shape = %#v", shapes[0])
 	}
 }
@@ -87,7 +91,9 @@ stride = 12`)
 	}
 
 	transport, payload := buildModelViewerDirectMeshPayload(mesh, nil, nil, shapes, newModelViewerBufferCache())
-	if len(transport.ShapeTargets) != 1 || transport.ShapeTargets[0].Var != "smile" || len(payload.ShapePositions) != 1 || len(payload.ShapeLowPositions) != 1 {
+	if len(transport.ShapeTargets) != 1 || transport.ShapeTargets[0].Var != "smile" ||
+		len(payload.ShapePositions) != 1 ||
+		len(payload.ShapeLowPositions) != 1 {
 		t.Fatalf("transport = %#v payload = %#v", transport, payload)
 	}
 	if payload.ShapePositions[0][0] != 1 || payload.ShapePositions[0][3] != 2 || payload.ShapeLowPositions[0][3] != 1 {
@@ -164,7 +170,9 @@ stride = 40`)
 	} {
 		shape := byVariable[variable]
 		dimension := shape.Dimensions[0]
-		if shape.BasePath != filepath.Join(modDir, "runtime-face.buf") || dimension.Mode != "midpoint_pair" || dimension.SmallerPath != filepath.Join(modDir, files[0]) || dimension.BiggerPath != filepath.Join(modDir, files[1]) {
+		if shape.BasePath != filepath.Join(modDir, "runtime-face.buf") || dimension.Mode != "midpoint_pair" ||
+			dimension.SmallerPath != filepath.Join(modDir, files[0]) ||
+			dimension.BiggerPath != filepath.Join(modDir, files[1]) {
 			t.Fatalf("%s shape = %#v", variable, shape)
 		}
 	}
@@ -187,7 +195,13 @@ filename = smile.buf
 [ResourceFrown]
 filename = frown.buf`)
 
-	if shapes := collectModelViewerShapeKeys(sections, collectModelViewerResources(sections), t.TempDir()); len(shapes) != 0 {
+	if shapes := collectModelViewerShapeKeys(
+		sections,
+		collectModelViewerResources(sections),
+		t.TempDir(),
+	); len(
+		shapes,
+	) != 0 {
 		t.Fatalf("shapes = %#v", shapes)
 	}
 }
@@ -219,7 +233,14 @@ filename = deltas.buf`)
 		t.Fatalf("shapes = %#v", shapes)
 	}
 	dimension := shapes[0].Dimensions[0]
-	if shapes[0].BasePath != filepath.Join(modDir, "position.buf") || shapes[0].VertexStride != 12 || dimension.VariableID != "jaw" || !dimension.Sparse || dimension.BufferShapeID != 128 || dimension.SparseOffset != 9 || dimension.OffsetPath != filepath.Join(modDir, "offsets.buf") || dimension.VertexIDPath != filepath.Join(modDir, "vertex-ids.buf") || dimension.VertexDeltaPath != filepath.Join(modDir, "deltas.buf") {
+	if shapes[0].BasePath != filepath.Join(modDir, "position.buf") || shapes[0].VertexStride != 12 ||
+		dimension.VariableID != "jaw" ||
+		!dimension.Sparse ||
+		dimension.BufferShapeID != 128 ||
+		dimension.SparseOffset != 9 ||
+		dimension.OffsetPath != filepath.Join(modDir, "offsets.buf") ||
+		dimension.VertexIDPath != filepath.Join(modDir, "vertex-ids.buf") ||
+		dimension.VertexDeltaPath != filepath.Join(modDir, "deltas.buf") {
 		t.Fatalf("shape = %#v", shapes[0])
 	}
 }
@@ -238,7 +259,12 @@ func TestReadModelViewerSparseShapePositionsUsesUncompactedVertexIDs(t *testing.
 		}
 	}
 	geometry := &modelViewerGeometry{Position: []float32{0, 0, 0, 2, 0, 0, 4, 0, 0}, VertexCount: 3}
-	dimension := modelViewerShapeKeyDimension{Sparse: true, OffsetPath: filepath.Join(modDir, "offsets.buf"), VertexIDPath: filepath.Join(modDir, "vertex-ids.buf"), VertexDeltaPath: filepath.Join(modDir, "deltas.buf")}
+	dimension := modelViewerShapeKeyDimension{
+		Sparse:          true,
+		OffsetPath:      filepath.Join(modDir, "offsets.buf"),
+		VertexIDPath:    filepath.Join(modDir, "vertex-ids.buf"),
+		VertexDeltaPath: filepath.Join(modDir, "deltas.buf"),
+	}
 
 	positions, err := readModelViewerSparseShapePositions(newModelViewerBufferCache(), dimension, geometry)
 	if err != nil {
@@ -292,7 +318,11 @@ stride = 40`)
 		}
 		byVariable[shape.Dimensions[0].VariableID] = shape.Dimensions[0]
 	}
-	if len(byVariable) != 2 || byVariable["smile"].Mode != "midpoint_pair" || byVariable["smile"].SmallerPath != filepath.Join(modDir, "smile-low.buf") || byVariable["smile"].BiggerPath != filepath.Join(modDir, "smile-high.buf") || byVariable["frown"].SmallerPath != filepath.Join(modDir, "frown-low.buf") || byVariable["frown"].BiggerPath != filepath.Join(modDir, "frown-high.buf") {
+	if len(byVariable) != 2 || byVariable["smile"].Mode != "midpoint_pair" ||
+		byVariable["smile"].SmallerPath != filepath.Join(modDir, "smile-low.buf") ||
+		byVariable["smile"].BiggerPath != filepath.Join(modDir, "smile-high.buf") ||
+		byVariable["frown"].SmallerPath != filepath.Join(modDir, "frown-low.buf") ||
+		byVariable["frown"].BiggerPath != filepath.Join(modDir, "frown-high.buf") {
 		t.Fatalf("dimensions = %#v", byVariable)
 	}
 }
@@ -358,14 +388,19 @@ stride = 40`
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Meshes) != 1 || len(result.Meshes[0].ShapeTargets) != 1 || result.Meshes[0].ShapeTargets[0].Var != "sliderbody" {
+	if len(result.Meshes) != 1 || len(result.Meshes[0].ShapeTargets) != 1 ||
+		result.Meshes[0].ShapeTargets[0].Var != "sliderbody" {
 		t.Fatalf("shape targets = %#v", result.Meshes)
 	}
 	if len(result.Variables) != 1 {
 		t.Fatalf("variables = %#v", result.Variables)
 	}
 	variable := result.Variables[0]
-	if variable.ID != "sliderbody" || variable.ControlType != "slider" || variable.Slider == nil || variable.Slider.Min != 0 || variable.Slider.Max != 1 || variable.Slider.Step != 0.01 || variable.DefaultValue != "0.5" {
+	if variable.ID != "sliderbody" || variable.ControlType != "slider" || variable.Slider == nil ||
+		variable.Slider.Min != 0 ||
+		variable.Slider.Max != 1 ||
+		variable.Slider.Step != 0.01 ||
+		variable.DefaultValue != "0.5" {
 		t.Fatalf("shape variable = %#v", variable)
 	}
 }

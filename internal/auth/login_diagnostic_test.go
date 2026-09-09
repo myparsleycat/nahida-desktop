@@ -27,9 +27,18 @@ func TestLoginFailureDiagnosticsPreserveMessage(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
 			log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
-			a := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{BackendURL: "https://example.com"}), Do: func(*http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: test.status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(test.body))}, nil
-			}})
+			a := NewWithOptions(
+				Options{
+					HTTP: infra.NewClientWithOptions(infra.ClientOptions{BackendURL: "https://example.com"}),
+					Do: func(*http.Request) (*http.Response, error) {
+						return &http.Response{
+							StatusCode: test.status,
+							Header:     http.Header{"Content-Type": {"application/json"}},
+							Body:       io.NopCloser(strings.NewReader(test.body)),
+						}, nil
+					},
+				},
+			)
 			err := a.StartLogin(context.Background())
 			if !errors.Is(err, errIWantToLogin) || err.Error() != errIWantToLogin.Error() {
 				t.Fatalf("contract changed: %v", err)

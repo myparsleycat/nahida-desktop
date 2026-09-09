@@ -13,7 +13,14 @@ func tailBuildOutput(output string, maxLines int) string {
 		return strings.Join(lines, "\n")
 	}
 	omitted := len(lines) - maxLines
-	return "[showing last " + itoa(maxLines) + " lines, omitted " + itoa(omitted) + " earlier lines]\n" + strings.Join(lines[len(lines)-maxLines:], "\n")
+	return "[showing last " + itoa(
+		maxLines,
+	) + " lines, omitted " + itoa(
+		omitted,
+	) + " earlier lines]\n" + strings.Join(
+		lines[len(lines)-maxLines:],
+		"\n",
+	)
 }
 
 func extractBuildErrorMessage(err error) string {

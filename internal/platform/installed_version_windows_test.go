@@ -55,7 +55,14 @@ func TestSyncInstalledVersionSkipsWhenKeyAbsent(t *testing.T) {
 	if err := syncInstalledVersion(registry.CURRENT_USER, path, "3.8.0"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.OpenKey(registry.CURRENT_USER, path, registry.QUERY_VALUE); !errors.Is(err, registry.ErrNotExist) {
+	if _, err := registry.OpenKey(
+		registry.CURRENT_USER,
+		path,
+		registry.QUERY_VALUE,
+	); !errors.Is(
+		err,
+		registry.ErrNotExist,
+	) {
 		t.Fatalf("missing key must stay absent, error = %v", err)
 	}
 }

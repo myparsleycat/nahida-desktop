@@ -81,7 +81,15 @@ func TestConfigureAndCleanupNteModFolderReconcilesJunction(t *testing.T) {
 	if err != nil || !samePath(resolved, firstTarget) {
 		info, statErr := os.Lstat(linkPath)
 		readTarget, readErr := os.Readlink(linkPath)
-		t.Fatalf("first junction target = %q, %v; lstat=%#v/%v; readlink=%q/%v", resolved, err, info, statErr, readTarget, readErr)
+		t.Fatalf(
+			"first junction target = %q, %v; lstat=%#v/%v; readlink=%q/%v",
+			resolved,
+			err,
+			info,
+			statErr,
+			readTarget,
+			readErr,
+		)
 	}
 	if !fileExists(filepath.Join(firstTarget, "Character", "Existing", "existing.pak")) {
 		t.Fatal("existing game mod was not migrated into the custom folder")
@@ -243,7 +251,10 @@ func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
 	for index, event := range progress {
 		phases[index] = event.Phase
 	}
-	if got := strings.Join(phases, ","); got != "fetching-release,downloading,extracting,fetching-release,downloading,extracting,installing,completed" {
+	if got := strings.Join(
+		phases,
+		",",
+	); got != "fetching-release,downloading,extracting,fetching-release,downloading,extracting,installing,completed" {
 		t.Fatalf("progress phases = %s (%#v)", got, progress)
 	}
 

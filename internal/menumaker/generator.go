@@ -21,13 +21,17 @@ const (
 )
 
 var (
-	generatedSectionRe = regexp.MustCompile(`(?i)^(?:KeyGui(?:Menu|Hold|Click|RightClick)|CommandListGui(?:Dims|Menu|Bg|Slots|Slot|Click|RightClick|ActivateReset)|CustomShaderGuiDraw|ResourceGui(?:Bg|Title|Slot(?:Hover)?(?:On)?\d+(?:S\d+)?))$`)
-	preservedMetaRe    = regexp.MustCompile(`(?i)^(key|condition|type|run|back|wrap|smart|transition|transition_type|delay|release_delay)\s*=`)
-	ifLineRe           = regexp.MustCompile(`(?i)^if\b`)
-	endifLineRe        = regexp.MustCompile(`(?i)^endif\b`)
-	guiMenuRe          = regexp.MustCompile(`(?i)\$gui_menu\b`)
-	activeVarRe        = regexp.MustCompile(`(?i)\$[A-Za-z0-9_]*active[A-Za-z0-9_]*`)
-	legacyVarRe        = func() []*regexp.Regexp {
+	generatedSectionRe = regexp.MustCompile(
+		`(?i)^(?:KeyGui(?:Menu|Hold|Click|RightClick)|CommandListGui(?:Dims|Menu|Bg|Slots|Slot|Click|RightClick|ActivateReset)|CustomShaderGuiDraw|ResourceGui(?:Bg|Title|Slot(?:Hover)?(?:On)?\d+(?:S\d+)?))$`,
+	)
+	preservedMetaRe = regexp.MustCompile(
+		`(?i)^(key|condition|type|run|back|wrap|smart|transition|transition_type|delay|release_delay)\s*=`,
+	)
+	ifLineRe    = regexp.MustCompile(`(?i)^if\b`)
+	endifLineRe = regexp.MustCompile(`(?i)^endif\b`)
+	guiMenuRe   = regexp.MustCompile(`(?i)\$gui_menu\b`)
+	activeVarRe = regexp.MustCompile(`(?i)\$[A-Za-z0-9_]*active[A-Za-z0-9_]*`)
+	legacyVarRe = func() []*regexp.Regexp {
 		out := make([]*regexp.Regexp, 0, 5)
 		for _, name := range []string{"$gui_menu", "$gui_hover", "$gui_slot", "$gui_mx", "$gui_my"} {
 			out = append(out, regexp.MustCompile(`(?i)global(?:\s+persist)?\s+`+regexp.QuoteMeta(name)+`\b`))
@@ -76,13 +80,28 @@ func generateINI(
 	activeVariables = uniqueStrings(activeVariables)
 	sections := stripGeneratedSections(stripMarkedGeneratedBlock(document.Sections), document.Handlers)
 	sections = rewriteKeySections(sections, slots, settings)
-	injected := injectPresent(sections, activeCondition, activeVariables, settings.ResetActiveOnPresent, handlers, settings)
+	injected := injectPresent(
+		sections,
+		activeCondition,
+		activeVariables,
+		settings.ResetActiveOnPresent,
+		handlers,
+		settings,
+	)
 	originalParts := make([]string, 0, len(injected.sections))
 	for _, section := range injected.sections {
 		originalParts = append(originalParts, strings.Join(section.Lines, "\n"))
 	}
 	original := strings.TrimSpace(strings.Join(originalParts, "\n"))
-	return original + "\n\n" + buildGeneratedBlock(slots, handlers, geometry, settings, activeCondition, constants, injected.hasPresent) + "\n"
+	return original + "\n\n" + buildGeneratedBlock(
+		slots,
+		handlers,
+		geometry,
+		settings,
+		activeCondition,
+		constants,
+		injected.hasPresent,
+	) + "\n"
 }
 
 func calculateGeometry(slots []MenuMakerSlot, settings MenuMakerSettings) MenuMakerGeometry {
@@ -152,7 +171,11 @@ func slotActiveCondition(slot MenuMakerSlot, settings MenuMakerSettings, constan
 	return strings.Join(wrapped, " || ")
 }
 
-func slotValueStates(slot MenuMakerSlot, settings MenuMakerSettings, constants map[string]string) []MenuMakerSlotValueState {
+func slotValueStates(
+	slot MenuMakerSlot,
+	settings MenuMakerSettings,
+	constants map[string]string,
+) []MenuMakerSlotValueState {
 	var handler *MenuMakerHandler
 	for index := range slot.Handlers {
 		candidate := &slot.Handlers[index]
@@ -253,7 +276,13 @@ func buildGeneratedBlock(
 	}
 	if !hasPresent {
 		if activeCondition != "" {
-			lines = append(lines, "[Present]", "if $gui_menu && ("+activeCondition+")", "  run = CommandListGuiMenu", "endif")
+			lines = append(
+				lines,
+				"[Present]",
+				"if $gui_menu && ("+activeCondition+")",
+				"  run = CommandListGuiMenu",
+				"endif",
+			)
 		} else {
 			lines = append(lines, "[Present]", "if $gui_menu", "  run = CommandListGuiMenu", "endif")
 		}
@@ -310,7 +339,8 @@ func buildGeneratedBlock(
 	if activeCondition != "" {
 		lines = append(lines, "condition = "+activeCondition)
 	}
-	lines = append(lines,
+	lines = append(
+		lines,
 		"key = "+menuKey,
 		"type = hold",
 		"$gui_menu = 1",
@@ -566,7 +596,11 @@ func handlerActiveCondition(handler MenuMakerHandler, settings MenuMakerSettings
 	return assignment.Variable + " != " + inactive
 }
 
-func rewriteKeySections(sections []MenuMakerSection, slots []MenuMakerSlot, settings MenuMakerSettings) []MenuMakerSection {
+func rewriteKeySections(
+	sections []MenuMakerSection,
+	slots []MenuMakerSlot,
+	settings MenuMakerSettings,
+) []MenuMakerSection {
 	owned := map[int]struct {
 		handler MenuMakerHandler
 		slot    MenuMakerSlot
@@ -607,13 +641,28 @@ func rewriteKeySections(sections []MenuMakerSection, slots []MenuMakerSlot, sett
 		rewritten := rewriteKeySection(section, item.handler, keys, item.handler.CommandName, false)
 		out = append(out, rewritten)
 		if typeName == "cycle" && item.handler.Back != "" && len(item.handler.Assignments) > 0 {
-			out = append(out, rewriteKeySection(section, item.handler, []string{item.handler.Back}, item.handler.BackCommandName, true))
+			out = append(
+				out,
+				rewriteKeySection(
+					section,
+					item.handler,
+					[]string{item.handler.Back},
+					item.handler.BackCommandName,
+					true,
+				),
+			)
 		}
 	}
 	return out
 }
 
-func rewriteKeySection(section MenuMakerSection, handler MenuMakerHandler, keys []string, commandName string, back bool) MenuMakerSection {
+func rewriteKeySection(
+	section MenuMakerSection,
+	handler MenuMakerHandler,
+	keys []string,
+	commandName string,
+	back bool,
+) MenuMakerSection {
 	name := ""
 	if section.Name != nil {
 		name = *section.Name
@@ -843,7 +892,13 @@ func stripGeneratedPresent(lines []string) []string {
 	return output
 }
 
-func emitGUIHandler(lines *[]string, handler MenuMakerHandler, settings MenuMakerSettings, indent string, reverse bool) {
+func emitGUIHandler(
+	lines *[]string,
+	handler MenuMakerHandler,
+	settings MenuMakerSettings,
+	indent string,
+	reverse bool,
+) {
 	typeName := effectiveType(handler, settings)
 	if reverse && !hasReverseCommand(handler, settings) {
 		return
@@ -863,7 +918,12 @@ func emitGUIHandler(lines *[]string, handler MenuMakerHandler, settings MenuMake
 	*lines = append(*lines, indent+"run = "+command)
 }
 
-func emitHandlerCommandLists(lines *[]string, handler MenuMakerHandler, settings MenuMakerSettings, constants map[string]string) {
+func emitHandlerCommandLists(
+	lines *[]string,
+	handler MenuMakerHandler,
+	settings MenuMakerSettings,
+	constants map[string]string,
+) {
 	typeName := effectiveType(handler, settings)
 	if typeName == "activate" {
 		*lines = append(*lines, "["+handler.ActivateCommandName+"]")
@@ -927,7 +987,14 @@ func emitCycle(lines *[]string, handler MenuMakerHandler, typeName string, const
 	*lines = append(*lines, "endif")
 }
 
-func emitStepEntries(lines *[]string, indent string, entries []MenuMakerEntry, step int, typeName string, constants map[string]string) {
+func emitStepEntries(
+	lines *[]string,
+	indent string,
+	entries []MenuMakerEntry,
+	step int,
+	typeName string,
+	constants map[string]string,
+) {
 	for _, entry := range entries {
 		switch entry.Kind {
 		case "assign":
@@ -987,7 +1054,12 @@ func emitActivateEntries(lines *[]string, indent string, entries []MenuMakerEntr
 	}
 }
 
-func emitActivateReset(lines *[]string, handlers []MenuMakerHandler, settings MenuMakerSettings, constants map[string]string) {
+func emitActivateReset(
+	lines *[]string,
+	handlers []MenuMakerHandler,
+	settings MenuMakerSettings,
+	constants map[string]string,
+) {
 	active := []MenuMakerHandler{}
 	for _, handler := range handlers {
 		if effectiveType(handler, settings) == "activate" && len(handler.Assignments) > 0 {

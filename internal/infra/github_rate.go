@@ -106,7 +106,10 @@ func (c *GitHubRateCoordinator) IsRateLimited(state *GitHubRateState) bool {
 	return state != nil && state.Remaining <= 0 && time.Unix(state.Reset, 0).After(time.Now())
 }
 
-func (c *GitHubRateCoordinator) CanUseGitHubAPI(ctx context.Context, opts GitHubRateCheckOptions) (bool, *GitHubRateState, error) {
+func (c *GitHubRateCoordinator) CanUseGitHubAPI(
+	ctx context.Context,
+	opts GitHubRateCheckOptions,
+) (bool, *GitHubRateState, error) {
 	if c == nil {
 		return true, nil, nil
 	}
@@ -214,7 +217,12 @@ func (c *GitHubRateCoordinator) warnRefresh(log *Log, err error) {
 	if log == nil || err == nil {
 		return
 	}
-	c.diagnostic.Report(log, err, "GitHubRateCoordinator", Diagnostic{Severity: DiagnosticWarn, Operation: "github-rate", Stage: "refresh"})
+	c.diagnostic.Report(
+		log,
+		err,
+		"GitHubRateCoordinator",
+		Diagnostic{Severity: DiagnosticWarn, Operation: "github-rate", Stage: "refresh"},
+	)
 }
 
 func extractGitHubRateState(header http.Header) *GitHubRateState {

@@ -36,14 +36,21 @@ type modelViewerSymbolicScanContext struct {
 	sectionName string
 }
 
-func scanModelViewerSymbolicRoot(sections []modINISection, section modINISection, defaults map[string]any) (*modelViewerSymbolicSectionState, map[string]any, error) {
+func scanModelViewerSymbolicRoot(
+	sections []modINISection,
+	section modINISection,
+	defaults map[string]any,
+) (*modelViewerSymbolicSectionState, map[string]any, error) {
 	lookup := make(map[string]modINISection)
 	for _, candidate := range sections {
 		lookup[modelViewerNormalizeKey(candidate.Header+candidate.Name)] = candidate
 	}
 	variables := modelViewerDirectConditionVariables(sections, defaults)
 	ctx := &modelViewerSymbolicScanContext{lookup: lookup, variables: variables, sectionName: section.Name}
-	state := &modelViewerSymbolicSectionState{buffers: make(map[string][]modelViewerSymbolicAssignment), textures: make(map[string][]modelViewerSymbolicAssignment)}
+	state := &modelViewerSymbolicSectionState{
+		buffers:  make(map[string][]modelViewerSymbolicAssignment),
+		textures: make(map[string][]modelViewerSymbolicAssignment),
+	}
 	visiting := map[string]bool{modelViewerNormalizeKey(section.Header + section.Name): true}
 	if err := ctx.scan(section.Lines, state, nil, visiting); err != nil {
 		return nil, nil, err
@@ -51,7 +58,10 @@ func scanModelViewerSymbolicRoot(sections []modINISection, section modINISection
 	return state, variables, nil
 }
 
-func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults map[string]any) ([]modelViewerDirectDrawRecord, []modelViewerSymbolicAssignment, error) {
+func collectModelViewerSymbolicDrawRecords(
+	sections []modINISection,
+	defaults map[string]any,
+) ([]modelViewerDirectDrawRecord, []modelViewerSymbolicAssignment, error) {
 	lookup := make(map[string]modINISection)
 	for _, section := range sections {
 		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
@@ -75,7 +85,12 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 			buffers:  make(map[string][]modelViewerSymbolicAssignment),
 			textures: make(map[string][]modelViewerSymbolicAssignment),
 		}
-		if err := ctx.scan(section.Lines, state, nil, map[string]bool{modelViewerNormalizeKey(section.Header + section.Name): true}); err != nil {
+		if err := ctx.scan(
+			section.Lines,
+			state,
+			nil,
+			map[string]bool{modelViewerNormalizeKey(section.Header + section.Name): true},
+		); err != nil {
 			return nil, nil, err
 		}
 		if !state.explicitDraw && !sectionHandlingSkip(section) {
@@ -83,13 +98,19 @@ func collectModelViewerSymbolicDrawRecords(sections []modINISection, defaults ma
 			if len(records) > 0 {
 				ctx.draws += len(records)
 				if ctx.draws > maxModelViewerDraws {
-					return nil, nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", ctx.draws, maxModelViewerDraws))
+					return nil, nil, contractError(
+						fmt.Sprintf("Mod has too many draws (%d; limit %d).", ctx.draws, maxModelViewerDraws),
+					)
 				}
 				state.draws = append(state.draws, records...)
 			}
 		}
 		if len(effectiveModelViewerSymbolicAssignments(state.buffers["ib"])) == 0 {
-			fallback = appendModelViewerFallbackVertexBuffers(fallback, seenFallback, effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]))
+			fallback = appendModelViewerFallbackVertexBuffers(
+				fallback,
+				seenFallback,
+				effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]),
+			)
 		}
 		output = append(output, state.draws...)
 	}
@@ -113,7 +134,12 @@ func modelViewerNestedSectionName(key, value string) string {
 	return ""
 }
 
-func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewerSymbolicSectionState, stack []modelViewerSymbolicBranchFrame, visiting map[string]bool) error {
+func (c *modelViewerSymbolicScanContext) scan(
+	lines []string,
+	state *modelViewerSymbolicSectionState,
+	stack []modelViewerSymbolicBranchFrame,
+	visiting map[string]bool,
+) error {
 	stack = append([]modelViewerSymbolicBranchFrame(nil), stack...)
 	for _, raw := range lines {
 		line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
@@ -123,7 +149,11 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 		lower := strings.ToLower(line)
 		switch {
 		case strings.HasPrefix(lower, "if "):
-			branch := parseModelViewerConditionDNF(strings.TrimSpace(line[3:]), modelViewerAliases(c.variables), c.variables)
+			branch := parseModelViewerConditionDNF(
+				strings.TrimSpace(line[3:]),
+				modelViewerAliases(c.variables),
+				c.variables,
+			)
 			c.seq++
 			stack = append(stack, modelViewerSymbolicBranchFrame{current: branch, seen: branch, seq: c.seq})
 			continue
@@ -181,7 +211,14 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 		case "ib", "vb0", "vb1", "vb2":
 			resource := modelViewerTrimResourcePrefix(value)
 			if resource != "" && !strings.EqualFold(resource, "null") {
-				state.buffers[strings.ToLower(key)] = append(state.buffers[strings.ToLower(key)], modelViewerSymbolicAssignment{resource: resource, conditions: cloneModelViewerDNF(conditions), sequence: sequence})
+				state.buffers[strings.ToLower(key)] = append(
+					state.buffers[strings.ToLower(key)],
+					modelViewerSymbolicAssignment{
+						resource:   resource,
+						conditions: cloneModelViewerDNF(conditions),
+						sequence:   sequence,
+					},
+				)
 			}
 		case "drawindexed", "drawindexedinstanced":
 			draw, ok := parseModelViewerDrawIndexed(key, value, c.variables)
@@ -191,7 +228,9 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 			state.explicitDraw = true
 			c.draws++
 			if c.draws > maxModelViewerDraws {
-				return contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", c.draws, maxModelViewerDraws))
+				return contractError(
+					fmt.Sprintf("Mod has too many draws (%d; limit %d).", c.draws, maxModelViewerDraws),
+				)
 			}
 			state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
 		default:
@@ -200,20 +239,40 @@ func (c *modelViewerSymbolicScanContext) scan(lines []string, state *modelViewer
 				continue
 			}
 			if modelViewerNormalizeKey(key) == "this" {
-				state.thisHistory = append(state.thisHistory, modelViewerSymbolicAssignment{resource: resource, conditions: cloneModelViewerDNF(conditions), sequence: sequence})
+				state.thisHistory = append(
+					state.thisHistory,
+					modelViewerSymbolicAssignment{
+						resource:   resource,
+						conditions: cloneModelViewerDNF(conditions),
+						sequence:   sequence,
+					},
+				)
 			}
 			if isNonDiffusePsSlot(key, resource) {
 				state.nonDiffuse = appendUniqueModelViewer(state.nonDiffuse, resource)
 			}
 			if role, resource, authored, texture := modelViewerTextureAssignment(key, value, c.sectionName); texture {
-				state.textures[role] = append(state.textures[role], modelViewerSymbolicAssignment{resource: resource, authored: authored, conditions: cloneModelViewerDNF(conditions), sequence: sequence})
+				state.textures[role] = append(
+					state.textures[role],
+					modelViewerSymbolicAssignment{
+						resource:   resource,
+						authored:   authored,
+						conditions: cloneModelViewerDNF(conditions),
+						sequence:   sequence,
+					},
+				)
 			}
 		}
 	}
 	return nil
 }
 
-func (c *modelViewerSymbolicScanContext) snapshotRecords(state *modelViewerSymbolicSectionState, draw modelViewerDrawInstruction, auto bool, drawConditions ModelViewerDNF) []modelViewerDirectDrawRecord {
+func (c *modelViewerSymbolicScanContext) snapshotRecords(
+	state *modelViewerSymbolicSectionState,
+	draw modelViewerDrawInstruction,
+	auto bool,
+	drawConditions ModelViewerDNF,
+) []modelViewerDirectDrawRecord {
 	states := []modelViewerSymbolicBufferVariant{{conditions: cloneModelViewerDNF(drawConditions)}}
 	for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
 		assignments := effectiveModelViewerSymbolicAssignments(state.buffers[slot])
@@ -255,9 +314,15 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(state *modelViewerSymbo
 		recordDraw := draw
 		recordDraw.IBResourceName = variant.state.ib
 		records = append(records, modelViewerDirectDrawRecord{
-			sectionName: c.sectionName, state: variant.state, textureHistory: append([]modelViewerDirectTextureAssignment(nil), textures...),
-			authoredDiffuse: authored, nonDiffuse: append([]string(nil), state.nonDiffuse...), thisFiles: thisFiles,
-			conditions: cloneModelViewerDNF(variant.conditions), draw: recordDraw, auto: auto,
+			sectionName:     c.sectionName,
+			state:           variant.state,
+			textureHistory:  append([]modelViewerDirectTextureAssignment(nil), textures...),
+			authoredDiffuse: authored,
+			nonDiffuse:      append([]string(nil), state.nonDiffuse...),
+			thisFiles:       thisFiles,
+			conditions:      cloneModelViewerDNF(variant.conditions),
+			draw:            recordDraw,
+			auto:            auto,
 		})
 	}
 	return records
@@ -268,14 +333,20 @@ type modelViewerSymbolicBufferVariant struct {
 	conditions ModelViewerDNF
 }
 
-func (c *modelViewerSymbolicScanContext) implicitRecords(state *modelViewerSymbolicSectionState) []modelViewerDirectDrawRecord {
+func (c *modelViewerSymbolicScanContext) implicitRecords(
+	state *modelViewerSymbolicSectionState,
+) []modelViewerDirectDrawRecord {
 	if len(state.buffers["ib"]) == 0 {
 		return nil
 	}
 	return c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue())
 }
 
-func appendModelViewerFallbackVertexBuffers(fallback []modelViewerSymbolicAssignment, seen map[string]bool, assignments []modelViewerSymbolicAssignment) []modelViewerSymbolicAssignment {
+func appendModelViewerFallbackVertexBuffers(
+	fallback []modelViewerSymbolicAssignment,
+	seen map[string]bool,
+	assignments []modelViewerSymbolicAssignment,
+) []modelViewerSymbolicAssignment {
 	for _, assignment := range assignments {
 		if assignment.resource == "" {
 			continue
@@ -290,7 +361,11 @@ func appendModelViewerFallbackVertexBuffers(fallback []modelViewerSymbolicAssign
 	return fallback
 }
 
-func applyModelViewerFallbackVertexBuffers(state modelViewerDirectBufferState, conditions ModelViewerDNF, fallback []modelViewerSymbolicAssignment) []modelViewerSymbolicBufferVariant {
+func applyModelViewerFallbackVertexBuffers(
+	state modelViewerDirectBufferState,
+	conditions ModelViewerDNF,
+	fallback []modelViewerSymbolicAssignment,
+) []modelViewerSymbolicBufferVariant {
 	base := modelViewerSymbolicBufferVariant{state: state, conditions: conditions}
 	if state.vb0 != "" || state.ib == "" || len(fallback) == 0 {
 		return []modelViewerSymbolicBufferVariant{base}
@@ -325,7 +400,10 @@ func applyModelViewerFallbackVertexBuffers(state modelViewerDirectBufferState, c
 	return expanded
 }
 
-func preferModelViewerFallbackVertexBuffers(hits []modelViewerSymbolicAssignment, ibName string) []modelViewerSymbolicAssignment {
+func preferModelViewerFallbackVertexBuffers(
+	hits []modelViewerSymbolicAssignment,
+	ibName string,
+) []modelViewerSymbolicAssignment {
 	if len(hits) <= 1 {
 		return hits
 	}
@@ -398,7 +476,10 @@ func effectiveModelViewerSymbolicAssignments(input []modelViewerSymbolicAssignme
 	return output
 }
 
-func modelViewerSymbolicTextureHistory(state *modelViewerSymbolicSectionState, drawConditions ModelViewerDNF) []modelViewerDirectTextureAssignment {
+func modelViewerSymbolicTextureHistory(
+	state *modelViewerSymbolicSectionState,
+	drawConditions ModelViewerDNF,
+) []modelViewerDirectTextureAssignment {
 	var output []modelViewerDirectTextureAssignment
 	for role, history := range state.textures {
 		for _, assignment := range effectiveModelViewerSymbolicAssignments(history) {
@@ -406,7 +487,15 @@ func modelViewerSymbolicTextureHistory(state *modelViewerSymbolicSectionState, d
 			if len(conditions) == 0 {
 				continue
 			}
-			output = append(output, modelViewerDirectTextureAssignment{role: role, resource: assignment.resource, authored: assignment.authored, conditions: conditions})
+			output = append(
+				output,
+				modelViewerDirectTextureAssignment{
+					role:       role,
+					resource:   assignment.resource,
+					authored:   assignment.authored,
+					conditions: conditions,
+				},
+			)
 		}
 	}
 	return output

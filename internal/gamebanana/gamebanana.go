@@ -222,15 +222,30 @@ func (g *GameBanana) Logout(ctx context.Context) error {
 	}()
 	cookie, err := g.takeCookie(ctx)
 	if err != nil {
-		return infra.ReportError(g.log, err, "GameBananaService.logout", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "invalidate-cookie"})
+		return infra.ReportError(
+			g.log,
+			err,
+			"GameBananaService.logout",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "invalidate-cookie"},
+		)
 	}
 	var clearErr error
 	if g.clearLoginCookies != nil {
 		clearErr = g.clearLoginCookies(ctx)
-		clearErr = infra.ReportError(g.log, clearErr, "GameBananaService.logout", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "webview-logout"})
+		clearErr = infra.ReportError(
+			g.log,
+			clearErr,
+			"GameBananaService.logout",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "webview-logout"},
+		)
 	}
 	if cookie != "" {
-		_ = infra.ReportError(g.log, g.logoutWebSession(ctx, cookie), "GameBananaService.logout", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "backend-logout"})
+		_ = infra.ReportError(
+			g.log,
+			g.logoutWebSession(ctx, cookie),
+			"GameBananaService.logout",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "logout", Stage: "backend-logout"},
+		)
 	}
 	return clearErr
 }
@@ -255,11 +270,25 @@ func (g *GameBanana) GetGameOverview(ctx context.Context, gameID int) (map[strin
 	wait.Add(3)
 	go func() {
 		defer wait.Done()
-		profile, profileErr = g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/Game/%d/ProfilePage", gameID), nil, gameReferer(gameID), gameProfileResponseSchema)
+		profile, profileErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/Game/%d/ProfilePage", gameID),
+			nil,
+			gameReferer(gameID),
+			gameProfileResponseSchema,
+		)
 	}()
 	go func() {
 		defer wait.Done()
-		top, topErr = g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/Game/%d/TopSubs", gameID), nil, gameReferer(gameID), gameTopSubsResponseSchema)
+		top, topErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/Game/%d/TopSubs", gameID),
+			nil,
+			gameReferer(gameID),
+			gameTopSubsResponseSchema,
+		)
 	}()
 	go func() {
 		defer wait.Done()
@@ -286,7 +315,14 @@ func (g *GameBanana) GetGameSubfeed(ctx context.Context, input GameSubfeedInput)
 		input.Page = 1
 	}
 	query := url.Values{"_sSort": []string{input.Sort}, "_nPage": []string{strconv.Itoa(input.Page)}}
-	return g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/Game/%d/Subfeed", input.GameID), query, gameReferer(input.GameID), gameSubfeedResponseSchema)
+	return g.getJSON(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/Game/%d/Subfeed", input.GameID),
+		query,
+		gameReferer(input.GameID),
+		gameSubfeedResponseSchema,
+	)
 }
 
 func (g *GameBanana) GetModIndex(ctx context.Context, input ModIndexInput) (any, error) {
@@ -297,11 +333,26 @@ func (g *GameBanana) GetModIndex(ctx context.Context, input ModIndexInput) (any,
 		"_nPage":                      []string{strconv.Itoa(input.Page)},
 		"_sSort":                      []string{input.Sort},
 	}
-	return g.getJSON(ctx, http.MethodGet, "/Mod/Index", query, categoryReferer(input.CategoryID), modIndexResponseSchema)
+	return g.getJSON(
+		ctx,
+		http.MethodGet,
+		"/Mod/Index",
+		query,
+		categoryReferer(input.CategoryID),
+		modIndexResponseSchema,
+	)
 }
 
-func (g *GameBanana) GetModCategoryOverview(ctx context.Context, input ModCategoryOverviewInput) (map[string]any, error) {
-	indexInput := ModIndexInput{CategoryID: input.CategoryID, PerPage: input.PerPage, Page: input.Page, Sort: input.ModSort}
+func (g *GameBanana) GetModCategoryOverview(
+	ctx context.Context,
+	input ModCategoryOverviewInput,
+) (map[string]any, error) {
+	indexInput := ModIndexInput{
+		CategoryID: input.CategoryID,
+		PerPage:    input.PerPage,
+		Page:       input.Page,
+		Sort:       input.ModSort,
+	}
 	applyModIndexDefaults(&indexInput)
 	if input.Sort == "" {
 		input.Sort = "a_to_z"
@@ -310,14 +361,25 @@ func (g *GameBanana) GetModCategoryOverview(ctx context.Context, input ModCatego
 	if input.ShowEmpty != nil {
 		showEmpty = *input.ShowEmpty
 	}
-	query := url.Values{"_idCategoryRow": []string{strconv.Itoa(input.CategoryID)}, "_sSort": []string{input.Sort}, "_bShowEmpty": []string{strconv.FormatBool(showEmpty)}}
+	query := url.Values{
+		"_idCategoryRow": []string{strconv.Itoa(input.CategoryID)},
+		"_sSort":         []string{input.Sort},
+		"_bShowEmpty":    []string{strconv.FormatBool(showEmpty)},
+	}
 	var profile, index, categories any
 	var profileErr, indexErr, categoriesErr error
 	var wait sync.WaitGroup
 	wait.Add(3)
 	go func() {
 		defer wait.Done()
-		profile, profileErr = g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/ModCategory/%d/ProfilePage", input.CategoryID), nil, categoryReferer(input.CategoryID), modCategoryProfileResponseSchema)
+		profile, profileErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/ModCategory/%d/ProfilePage", input.CategoryID),
+			nil,
+			categoryReferer(input.CategoryID),
+			modCategoryProfileResponseSchema,
+		)
 	}()
 	go func() {
 		defer wait.Done()
@@ -325,7 +387,14 @@ func (g *GameBanana) GetModCategoryOverview(ctx context.Context, input ModCatego
 	}()
 	go func() {
 		defer wait.Done()
-		categories, categoriesErr = g.getJSON(ctx, http.MethodGet, "/Mod/Categories", query, categoryReferer(input.CategoryID), modCategoriesResponseSchema)
+		categories, categoriesErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			"/Mod/Categories",
+			query,
+			categoryReferer(input.CategoryID),
+			modCategoriesResponseSchema,
+		)
 	}()
 	wait.Wait()
 	if profileErr != nil {
@@ -352,11 +421,25 @@ func (g *GameBanana) GetModOverview(ctx context.Context, input ModOverviewInput)
 	wait.Add(2)
 	go func() {
 		defer wait.Done()
-		profileValue, profileErr = g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/%s/%d/ProfilePage", model, input.ItemID), nil, referer, modelResponseSchema(model, "profile", modProfileSchema))
+		profileValue, profileErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/%s/%d/ProfilePage", model, input.ItemID),
+			nil,
+			referer,
+			modelResponseSchema(model, "profile", modProfileSchema),
+		)
 	}()
 	go func() {
 		defer wait.Done()
-		config, configErr = g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/%s/%d/Config", model, input.ItemID), nil, referer, modelResponseSchema(model, "config", modConfigSchema))
+		config, configErr = g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/%s/%d/Config", model, input.ItemID),
+			nil,
+			referer,
+			modelResponseSchema(model, "config", modConfigSchema),
+		)
 	}()
 	wait.Wait()
 	if profileErr != nil {
@@ -419,7 +502,14 @@ func (g *GameBanana) ToggleModLike(ctx context.Context, input ModOverviewInput) 
 	wasLiked, known := profile["_bAccessorHasLiked"].(bool)
 	if !known {
 		stage = "config-fetch"
-		config, getErr := g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/%s/%d/Config", model, input.ItemID), nil, submissionReferer(model, input.ItemID), modelResponseSchema(model, "config", modConfigSchema))
+		config, getErr := g.getJSON(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("/%s/%d/Config", model, input.ItemID),
+			nil,
+			submissionReferer(model, input.ItemID),
+			modelResponseSchema(model, "config", modConfigSchema),
+		)
 		if getErr != nil {
 			return ToggleLikeResult{}, getErr
 		}
@@ -434,10 +524,16 @@ func (g *GameBanana) ToggleModLike(ctx context.Context, input ModOverviewInput) 
 		method = http.MethodDelete
 	}
 	stage = "like-mutation"
-	response, err := g.request(ctx, method, g.baseURL+fmt.Sprintf("/%s/%d/Like", model, input.ItemID), http.Header{"Referer": []string{submissionReferer(model, input.ItemID)}}, requestPolicy{
-		PersistResponseCookies:  true,
-		ClearStoredCookieOnAuth: true,
-	})
+	response, err := g.request(
+		ctx,
+		method,
+		g.baseURL+fmt.Sprintf("/%s/%d/Like", model, input.ItemID),
+		http.Header{"Referer": []string{submissionReferer(model, input.ItemID)}},
+		requestPolicy{
+			PersistResponseCookies:  true,
+			ClearStoredCookieOnAuth: true,
+		},
+	)
 	if err != nil {
 		return ToggleLikeResult{}, err
 	}
@@ -472,11 +568,28 @@ func (g *GameBanana) GetModPosts(ctx context.Context, input ModPostsInput) (any,
 	if input.Sort == "" {
 		input.Sort = "popular"
 	}
-	query := url.Values{"_nPage": []string{strconv.Itoa(input.Page)}, "_nPerpage": []string{strconv.Itoa(input.PerPage)}, "_sSort": []string{input.Sort}}
-	return g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/%s/%d/Posts", model, input.ModID), query, submissionReferer(model, input.ModID), modelResponseSchema(model, "posts", modPostsSchema))
+	query := url.Values{
+		"_nPage":    []string{strconv.Itoa(input.Page)},
+		"_nPerpage": []string{strconv.Itoa(input.PerPage)},
+		"_sSort":    []string{input.Sort},
+	}
+	return g.getJSON(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/%s/%d/Posts", model, input.ModID),
+		query,
+		submissionReferer(model, input.ModID),
+		modelResponseSchema(model, "posts", modPostsSchema),
+	)
 }
 
-func (g *GameBanana) getJSON(ctx context.Context, method, path string, query url.Values, referer string, schema responseSchema) (any, error) {
+func (g *GameBanana) getJSON(
+	ctx context.Context,
+	method, path string,
+	query url.Values,
+	referer string,
+	schema responseSchema,
+) (any, error) {
 	rawURL := g.baseURL + path
 	if len(query) > 0 {
 		rawURL += "?" + query.Encode()
@@ -536,7 +649,12 @@ type requestPolicy struct {
 	SkipAuthRetry           bool
 }
 
-func (g *GameBanana) request(ctx context.Context, method, rawURL string, header http.Header, policy requestPolicy) (result *http.Response, err error) {
+func (g *GameBanana) request(
+	ctx context.Context,
+	method, rawURL string,
+	header http.Header,
+	policy requestPolicy,
+) (result *http.Response, err error) {
 	diagnostic := infra.HTTPDiagnostic(method, rawURL, "request", nil)
 	defer func() { err = infra.AnnotateError(err, diagnostic) }()
 	if g.http == nil {
@@ -559,7 +677,11 @@ func (g *GameBanana) request(ctx context.Context, method, rawURL string, header 
 		header.Set("Cookie", cookie)
 	}
 	header.Set("User-Agent", gameBananaUserAgent)
-	response, err := g.http.Fetch(ctx, rawURL, infra.FetchOptions{Method: method, Header: header, DisableHTTPErrors: true})
+	response, err := g.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: method, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -659,7 +781,13 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 	if policy.Cookie == "" {
 		policy.Cookie = cookie
 	}
-	response, err := g.request(ctx, http.MethodGet, g.baseURL+"/Member/Navigator/Personal", http.Header{"Cookie": []string{cookie}}, policy)
+	response, err := g.request(
+		ctx,
+		http.MethodGet,
+		g.baseURL+"/Member/Navigator/Personal",
+		http.Header{"Cookie": []string{cookie}},
+		policy,
+	)
 	if err != nil {
 		if errors.Is(err, ErrAuthFailed) {
 			return false, "", nil
@@ -667,7 +795,12 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 		return false, "", err
 	}
 	defer func() { _ = response.Body.Close() }()
-	diagnostic := infra.HTTPDiagnostic(http.MethodGet, g.baseURL+"/Member/Navigator/Personal", "validate-cookie-response", response)
+	diagnostic := infra.HTTPDiagnostic(
+		http.MethodGet,
+		g.baseURL+"/Member/Navigator/Personal",
+		"validate-cookie-response",
+		response,
+	)
 	diagnostic.Fields["contentType"] = response.Header.Get("Content-Type")
 	var value map[string]any
 	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
@@ -728,7 +861,12 @@ func normalizedRMCCookie(input string) (string, bool) {
 }
 
 func (g *GameBanana) reportRecovery(err error, stage string) {
-	_ = infra.ReportError(g.log, err, "GameBanana", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "authentication", Stage: stage})
+	_ = infra.ReportError(
+		g.log,
+		err,
+		"GameBanana",
+		infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "authentication", Stage: stage},
+	)
 }
 
 func (g *GameBanana) saveCookie(ctx context.Context, cookie string) error {

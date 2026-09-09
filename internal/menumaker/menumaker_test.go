@@ -28,7 +28,12 @@ func TestScanFolderFiltersDisabledAndTXT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := relativePaths(withoutTXT.Files); !slices.Equal(got, []string{"main.ini", filepath.Join("sub", "extra.ini")}) {
+	if got := relativePaths(
+		withoutTXT.Files,
+	); !slices.Equal(
+		got,
+		[]string{"main.ini", filepath.Join("sub", "extra.ini")},
+	) {
 		t.Fatalf("unexpected files without txt: %v", got)
 	}
 	if withoutTXT.Stats.INI != 2 || withoutTXT.Stats.TXT != 1 || withoutTXT.Stats.Disabled != 2 {
@@ -39,7 +44,12 @@ func TestScanFolderFiltersDisabledAndTXT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := relativePaths(withTXT.Files); !slices.Equal(got, []string{"main.ini", "notes.txt", filepath.Join("sub", "extra.ini")}) {
+	if got := relativePaths(
+		withTXT.Files,
+	); !slices.Equal(
+		got,
+		[]string{"main.ini", "notes.txt", filepath.Join("sub", "extra.ini")},
+	) {
 		t.Fatalf("unexpected files with txt: %v", got)
 	}
 }
@@ -54,8 +64,21 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 		newline  string
 		text     string
 	}{
-		{name: "utf8 lf", data: []byte("[KeySwap]\nkey = 5\n$x = 0\n"), encoding: "utf8", newline: "lf", text: "[KeySwap]\nkey = 5\n$x = 0\n"},
-		{name: "utf8 bom crlf", data: append([]byte{0xef, 0xbb, 0xbf}, []byte("[KeySwap]\r\nkey = 5\r\n$x = 0\r\n")...), encoding: "utf8", bom: true, newline: "crlf", text: "[KeySwap]\r\nkey = 5\r\n$x = 0\r\n"},
+		{
+			name:     "utf8 lf",
+			data:     []byte("[KeySwap]\nkey = 5\n$x = 0\n"),
+			encoding: "utf8",
+			newline:  "lf",
+			text:     "[KeySwap]\nkey = 5\n$x = 0\n",
+		},
+		{
+			name:     "utf8 bom crlf",
+			data:     append([]byte{0xef, 0xbb, 0xbf}, []byte("[KeySwap]\r\nkey = 5\r\n$x = 0\r\n")...),
+			encoding: "utf8",
+			bom:      true,
+			newline:  "crlf",
+			text:     "[KeySwap]\r\nkey = 5\r\n$x = 0\r\n",
+		},
 	}
 	gbkText := "[KeySwap]\r\n; 中文\r\n$x = 0\r\n"
 	gbkData, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte(gbkText))
@@ -79,10 +102,14 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 			if loadErr != nil {
 				t.Fatal(loadErr)
 			}
-			if source.Text != test.text || source.Encoding != test.encoding || source.HasBOM != test.bom || source.Newline != test.newline {
+			if source.Text != test.text || source.Encoding != test.encoding || source.HasBOM != test.bom ||
+				source.Newline != test.newline {
 				t.Fatalf("unexpected source metadata: %+v", source)
 			}
-			encoded, encodeErr := encodeText(source.Text, textEncoding{name: source.Encoding, bom: source.HasBOM, newline: source.Newline})
+			encoded, encodeErr := encodeText(
+				source.Text,
+				textEncoding{name: source.Encoding, bom: source.HasBOM, newline: source.Newline},
+			)
 			if encodeErr != nil {
 				t.Fatal(encodeErr)
 			}
@@ -165,7 +192,8 @@ func TestApplyBundleUsesTimestampedBackupWhenTXTNameExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(filepath.Base(result.BackupPath), "mod.backup-") || !strings.HasSuffix(result.BackupPath, ".txt") {
+	if !strings.HasPrefix(filepath.Base(result.BackupPath), "mod.backup-") ||
+		!strings.HasSuffix(result.BackupPath, ".txt") {
 		t.Fatalf("unexpected collision backup path: %s", result.BackupPath)
 	}
 	assertFile(t, filepath.Join(root, "mod.txt"), []byte("existing"))
@@ -260,8 +288,14 @@ func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.SourceSHA256 == "" || first.SourceSHA256 == sha256Hex(original) || first.SourceSHA256 != sha256Hex(written) {
-		t.Fatalf("unexpected overwrite sha256: got %q original %q file %q", first.SourceSHA256, sha256Hex(original), sha256Hex(written))
+	if first.SourceSHA256 == "" || first.SourceSHA256 == sha256Hex(original) ||
+		first.SourceSHA256 != sha256Hex(written) {
+		t.Fatalf(
+			"unexpected overwrite sha256: got %q original %q file %q",
+			first.SourceSHA256,
+			sha256Hex(original),
+			sha256Hex(written),
+		)
 	}
 	if _, err = svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
 		SourcePath: sourcePath, SourceSHA256: first.SourceSHA256, OutputININame: "mod.ini",
@@ -275,7 +309,13 @@ func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
 func TestSaveZIPUsesUTF8NamesAndContainsBundle(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "menu.zip")
-	_, err := saveZIPBytes(path, "메뉴.ini", "ini", textEncoding{name: "utf8", newline: "lf"}, []MenuMakerGeneratedAsset{{RelativePath: "res_gui/title.png", Data: []byte("png")}})
+	_, err := saveZIPBytes(
+		path,
+		"메뉴.ini",
+		"ini",
+		textEncoding{name: "utf8", newline: "lf"},
+		[]MenuMakerGeneratedAsset{{RelativePath: "res_gui/title.png", Data: []byte("png")}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

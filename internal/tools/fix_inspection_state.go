@@ -237,7 +237,10 @@ func (t *Tools) storeFixInspection(record FixInspectionRecord) (bool, error) {
 			Ops:      watcher.All,
 			Debounce: fixInspectionSettleDelay,
 			OnError: func(err error) {
-				t.logError(fmt.Errorf("watch fix inspection contents %q: %w", record.ModPath, err), "FixInspector.watch")
+				t.logError(
+					fmt.Errorf("watch fix inspection contents %q: %w", record.ModPath, err),
+					"FixInspector.watch",
+				)
 			},
 		},
 		func(watcher.Event) { t.queueFixInspectionRefresh(key) },
@@ -254,7 +257,10 @@ func (t *Tools) storeFixInspection(record FixInspectionRecord) (bool, error) {
 				return watcher.SamePath(event.Path, record.ModPath)
 			},
 			OnError: func(err error) {
-				t.logError(fmt.Errorf("watch fix inspection parent for %q: %w", record.ModPath, err), "FixInspector.watch")
+				t.logError(
+					fmt.Errorf("watch fix inspection parent for %q: %w", record.ModPath, err),
+					"FixInspector.watch",
+				)
 			},
 		},
 		func(watcher.Event) { t.queueFixInspectionRefresh(key) },
@@ -326,7 +332,11 @@ func (t *Tools) refreshAllFixInspectionsLocked(ctx context.Context) (bool, []*tr
 	return changed, stopped
 }
 
-func (t *Tools) refreshFixInspectionLocked(ctx context.Context, key string, inspected *FixInspectionResult) (bool, []*trackedFixInspection) {
+func (t *Tools) refreshFixInspectionLocked(
+	ctx context.Context,
+	key string,
+	inspected *FixInspectionResult,
+) (bool, []*trackedFixInspection) {
 	t.fixInspectionMu.Lock()
 	if t.fixInspectionClosed {
 		t.fixInspectionMu.Unlock()

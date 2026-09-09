@@ -8,7 +8,13 @@ import (
 	"sync"
 )
 
-func findFileAcrossRoots(ctx context.Context, roots []string, targetName string, excludedDirs map[string]struct{}, reports ...func(error)) (*string, error) {
+func findFileAcrossRoots(
+	ctx context.Context,
+	roots []string,
+	targetName string,
+	excludedDirs map[string]struct{},
+	reports ...func(error),
+) (*string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

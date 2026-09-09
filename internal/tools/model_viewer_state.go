@@ -1,11 +1,21 @@
 package tools
 
-func configureModelViewerState(transport *ModelViewerTransport, allSections []modINISection, allShapeKeys []modelViewerShapeKey, variableNames map[string]modelViewerVariableName, computeAnimations []modelViewerPreparedAnimationClip) {
+func configureModelViewerState(
+	transport *ModelViewerTransport,
+	allSections []modINISection,
+	allShapeKeys []modelViewerShapeKey,
+	variableNames map[string]modelViewerVariableName,
+	computeAnimations []modelViewerPreparedAnimationClip,
+) {
 	defaults := collectModelViewerDefaultVariables(allSections)
 	bindings := collectModelViewerSlotBindings(allSections, defaults)
 	animations := append(detectModelViewerPresentAnimations(allSections, defaults, bindings), computeAnimations...)
 	stateRules := extractModelViewerDirectStateRules(allSections, defaults)
-	variables := prependModelViewerShapeVariables(buildModelViewerDirectVariables(allSections, bindings, defaults), allShapeKeys, defaults)
+	variables := prependModelViewerShapeVariables(
+		buildModelViewerDirectVariables(allSections, bindings, defaults),
+		allShapeKeys,
+		defaults,
+	)
 	tracked := make(map[string]bool)
 	for _, variable := range variables {
 		tracked[modelViewerNormalizeKey(variable.ID)] = true
@@ -39,7 +49,16 @@ func configureModelViewerState(transport *ModelViewerTransport, allSections []mo
 		transport.DefaultState[key] = value
 	}
 	for _, prepared := range animations {
-		clip := ModelViewerAnimationClip{ID: prepared.ID, Label: prepared.Label, DeformerID: prepared.DeformerID, VariableIDs: prepared.VariableIDs, FPS: normalizeModelViewerAnimationFPS(prepared.FPS), FrameStart: prepared.FrameStart, FrameEnd: prepared.FrameEnd, Loop: prepared.Loop}
+		clip := ModelViewerAnimationClip{
+			ID:          prepared.ID,
+			Label:       prepared.Label,
+			DeformerID:  prepared.DeformerID,
+			VariableIDs: prepared.VariableIDs,
+			FPS:         normalizeModelViewerAnimationFPS(prepared.FPS),
+			FrameStart:  prepared.FrameStart,
+			FrameEnd:    prepared.FrameEnd,
+			Loop:        prepared.Loop,
+		}
 		for _, frame := range prepared.Frames {
 			clip.Frames = append(clip.Frames, ModelViewerAnimationFrame(frame))
 		}

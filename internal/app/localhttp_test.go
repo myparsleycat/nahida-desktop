@@ -107,6 +107,12 @@ func TestHandleLiveDownloadUsesPathSelectorInsteadOfNativeDialog(t *testing.T) {
 
 type cancelPathSelector struct{}
 
-func (cancelPathSelector) SelectDownloadPath(context.Context, string, string, []string, bool) (*string, *string, error) {
+func (cancelPathSelector) SelectDownloadPath(
+	context.Context,
+	string,
+	string,
+	[]string,
+	bool,
+) (*string, *string, error) {
 	return nil, nil, nil
 }

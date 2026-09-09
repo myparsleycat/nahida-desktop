@@ -177,14 +177,23 @@ stride = 40`)
 func TestResolveModelViewerEffectiveResourcesRejectsMoreThan32Hops(t *testing.T) {
 	var ini strings.Builder
 	for index := range maxModelViewerResourceAliasDepth + 1 {
-		fmt.Fprintf(&ini, "[CustomShader%d]\ncs-u5 = copy ResourceBodyPosition.%d\nResourceBodyPosition.%d = ref cs-u5\n", index, index+1, index)
+		fmt.Fprintf(
+			&ini,
+			"[CustomShader%d]\ncs-u5 = copy ResourceBodyPosition.%d\nResourceBodyPosition.%d = ref cs-u5\n",
+			index,
+			index+1,
+			index,
+		)
 	}
 	fmt.Fprintf(&ini, "[ResourceBodyPosition]\n")
 	for index := 1; index <= maxModelViewerResourceAliasDepth+1; index++ {
 		fmt.Fprintf(&ini, "[ResourceBodyPosition.%d]\n", index)
 	}
 	ini.WriteString("filename = leaf.buf\nstride = 40\n")
-	resources := resolveModelViewerEffectiveResources(parseModINI(ini.String()), collectModelViewerResources(parseModINI(ini.String())))
+	resources := resolveModelViewerEffectiveResources(
+		parseModINI(ini.String()),
+		collectModelViewerResources(parseModINI(ini.String())),
+	)
 	if resources[0].Filename != "" {
 		t.Fatalf("overlong chain resolved unexpectedly: %#v", resources[0])
 	}

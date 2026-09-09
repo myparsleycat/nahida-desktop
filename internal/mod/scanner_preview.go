@@ -126,7 +126,12 @@ func findScannerPreviewWalk(root string, maxDepth int, reports ...func(error)) *
 	return findPreviewWalkWithExtensions(root, maxDepth, scannerMediaExtensions, reports...)
 }
 
-func findPreviewWalkWithExtensions(root string, maxDepth int, extensions map[string]bool, reports ...func(error)) *previewCandidate {
+func findPreviewWalkWithExtensions(
+	root string,
+	maxDepth int,
+	extensions map[string]bool,
+	reports ...func(error),
+) *previewCandidate {
 	var buckets previewBuckets
 	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -200,7 +205,12 @@ func findScannerGroupPreview(root string, searchDepth int, reports ...func(error
 	return findGroupPreviewWithExtensions(root, searchDepth, scannerMediaExtensions, reports...)
 }
 
-func findGroupPreviewWithExtensions(root string, searchDepth int, extensions map[string]bool, reports ...func(error)) *string {
+func findGroupPreviewWithExtensions(
+	root string,
+	searchDepth int,
+	extensions map[string]bool,
+	reports ...func(error),
+) *string {
 	if preview := findPreviewWalkWithExtensions(root, previewRootDepth, extensions, reports...); preview != nil {
 		return stringPointer(preview.path)
 	}

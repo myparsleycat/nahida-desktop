@@ -345,7 +345,9 @@ func TestEncodeLogLineRedactsSecretsAndFlattensMultiline(t *testing.T) {
 func TestRedactSecretsRedactsEntireCookieHeaders(t *testing.T) {
 	t.Parallel()
 
-	got := redactSecrets("request failed\r\nCookie: sid=one; session=two\r\nSet-Cookie: refresh=three; Path=/; HttpOnly\r\nnext")
+	got := redactSecrets(
+		"request failed\r\nCookie: sid=one; session=two\r\nSet-Cookie: refresh=three; Path=/; HttpOnly\r\nnext",
+	)
 	for _, secret := range []string{"sid=one", "session=two", "refresh=three"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("redacted output contains %q: %q", secret, got)
@@ -361,7 +363,9 @@ func TestRedactSecretsRedactsEntireCookieHeaders(t *testing.T) {
 func TestRedactSecretsRedactsEntireAuthorizationHeaders(t *testing.T) {
 	t.Parallel()
 
-	got := redactSecrets("request failed\r\nAuthorization: Basic dXNlcjpwYXNz\r\nProxy-Authorization: Digest username=alice, response=secret\r\nnext")
+	got := redactSecrets(
+		"request failed\r\nAuthorization: Basic dXNlcjpwYXNz\r\nProxy-Authorization: Digest username=alice, response=secret\r\nnext",
+	)
 	for _, secret := range []string{"Basic", "dXNlcjpwYXNz", "Digest", "alice", "secret"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("redacted output contains %q: %q", secret, got)
@@ -432,7 +436,11 @@ func TestDiagnosticWrapperPreservesErrorIdentityAndJSON(t *testing.T) {
 	if !errors.As(wrapped, &asCause) || asCause != cause {
 		t.Fatalf("errors.As = %#v", asCause)
 	}
-	marshaled := NewLogWithOptions(LogOptions{Writer: io.Discard, DisableFile: true}).ServiceErrorMarshaler("Test")(wrapped)
+	marshaled := NewLogWithOptions(
+		LogOptions{Writer: io.Discard, DisableFile: true},
+	).ServiceErrorMarshaler("Test")(
+		wrapped,
+	)
 	want, _ := json.Marshal(&cause)
 	if !bytes.Equal(marshaled, want) {
 		t.Fatalf("marshaled = %s, want %s", marshaled, want)
@@ -480,7 +488,8 @@ func TestServiceErrorMarshalerLogsOnceAndSkipsCancellation(t *testing.T) {
 		t.Fatalf("got %d records, want 1: %q", len(lines), buf.String())
 	}
 	line := string(lines[0])
-	if !strings.Contains(line, " WARN ") || !strings.Contains(line, "plan/file_validation") || !strings.Contains(line, cause.Error()) {
+	if !strings.Contains(line, " WARN ") || !strings.Contains(line, "plan/file_validation") ||
+		!strings.Contains(line, cause.Error()) {
 		t.Fatalf("record = %q", line)
 	}
 }

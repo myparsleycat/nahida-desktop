@@ -92,7 +92,14 @@ func (g *GameBanana) getModProfile(ctx context.Context, itemID int, model string
 		return cloned, nil
 	}
 	g.mu.Unlock()
-	value, err := g.getJSON(ctx, http.MethodGet, fmt.Sprintf("/%s/%d/ProfilePage", model, itemID), nil, submissionReferer(model, itemID), modelResponseSchema(model, "profile", modProfileSchema))
+	value, err := g.getJSON(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/%s/%d/ProfilePage", model, itemID),
+		nil,
+		submissionReferer(model, itemID),
+		modelResponseSchema(model, "profile", modProfileSchema),
+	)
 	if err != nil {
 		return nil, err
 	}

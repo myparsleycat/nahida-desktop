@@ -77,7 +77,9 @@ CREATE TABLE "game_paths" (
 )`); err != nil {
 		t.Fatalf("seed game_paths: %v", err)
 	}
-	if _, err := client.db.Exec(`INSERT INTO "game_paths" ("game", "modFolderPath") VALUES ('GI', 'C:/mods')`); err != nil {
+	if _, err := client.db.Exec(
+		`INSERT INTO "game_paths" ("game", "modFolderPath") VALUES ('GI', 'C:/mods')`,
+	); err != nil {
 		t.Fatalf("seed game row: %v", err)
 	}
 
@@ -136,7 +138,9 @@ func TestSQLiteDistinguishesOmittedAndExplicitNullDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = client.Close() }()
-	if _, err := client.db.Exec(`CREATE TABLE "null_defaults" ("omitted" TEXT, "explicit" TEXT DEFAULT NULL)`); err != nil {
+	if _, err := client.db.Exec(
+		`CREATE TABLE "null_defaults" ("omitted" TEXT, "explicit" TEXT DEFAULT NULL)`,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -214,7 +218,8 @@ func TestReconcileRebuildsAliasesBooleansAndExtraColumns(t *testing.T) {
 	if tableExists(t, client, "fix_tool_preset_item") {
 		t.Fatal("alias table fix_tool_preset_item should have been rebuilt")
 	}
-	if !tableExists(t, client, "script") || !tableExists(t, client, "script_preset") || !tableExists(t, client, "script_preset_item") {
+	if !tableExists(t, client, "script") || !tableExists(t, client, "script_preset") ||
+		!tableExists(t, client, "script_preset_item") {
 		t.Fatal("canonical script tables missing after rebuild")
 	}
 	if columnExists(t, client, "setting", "legacy") {
@@ -273,7 +278,10 @@ func TestReconcileAppliesNTEGamePathsMigrationOnce(t *testing.T) {
 
 	// Clear the one-shot flag and plant NTE rows as an existing file would look
 	// before this migration ran.
-	if _, err := client.db.Exec(`DELETE FROM "_schema_state" WHERE "key" = ?`, SchemaKeyGamePathsNTELauncher); err != nil {
+	if _, err := client.db.Exec(
+		`DELETE FROM "_schema_state" WHERE "key" = ?`,
+		SchemaKeyGamePathsNTELauncher,
+	); err != nil {
 		t.Fatalf("clear flag: %v", err)
 	}
 	if _, err := client.db.Exec(`
@@ -326,7 +334,9 @@ VALUES
 	}
 
 	// Second pass must be one-shot: put a new NTE exe path back and ensure it is left alone.
-	if _, err := client.db.Exec(`UPDATE "game_paths" SET "gameExecutablePath" = 'C:/games/new-launcher.exe', "nteLauncherPath" = NULL WHERE "game" = 'NTE-old'`); err != nil {
+	if _, err := client.db.Exec(
+		`UPDATE "game_paths" SET "gameExecutablePath" = 'C:/games/new-launcher.exe', "nteLauncherPath" = NULL WHERE "game" = 'NTE-old'`,
+	); err != nil {
 		t.Fatalf("reset row: %v", err)
 	}
 	if err := client.Reconcile(context.Background()); err != nil {
@@ -359,7 +369,10 @@ func TestReconcileDropsToggleViewerArtifactTable(t *testing.T) {
 		t.Fatalf("first reconcile: %v", err)
 	}
 
-	if _, err := client.db.Exec(`DELETE FROM "_schema_state" WHERE "key" = ?`, SchemaKeyToggleViewerArtifactDropped); err != nil {
+	if _, err := client.db.Exec(
+		`DELETE FROM "_schema_state" WHERE "key" = ?`,
+		SchemaKeyToggleViewerArtifactDropped,
+	); err != nil {
 		t.Fatalf("clear flag: %v", err)
 	}
 	if _, err := client.db.Exec(`
@@ -371,7 +384,10 @@ CREATE TABLE "toggle_viewer_artifact" (
 	}
 	enabled := "true"
 	hotkey := "ctrl H"
-	if err := client.Settings.Insert(ctx, SettingRow{Key: "xxmi_toggle_viewer_auto_generate", Value: &enabled}); err != nil {
+	if err := client.Settings.Insert(
+		ctx,
+		SettingRow{Key: "xxmi_toggle_viewer_auto_generate", Value: &enabled},
+	); err != nil {
 		t.Fatalf("seed auto generate: %v", err)
 	}
 	if err := client.Settings.Insert(ctx, SettingRow{Key: "xxmi_toggle_viewer_hotkey", Value: &hotkey}); err != nil {
@@ -492,19 +508,27 @@ func TestReconcileRebuildsTypeNullPKAndFKMismatch(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	if _, err := client.db.Exec(`CREATE TABLE "setting" ("key" TEXT PRIMARY KEY NOT NULL, "value" INTEGER)`); err != nil {
+	if _, err := client.db.Exec(
+		`CREATE TABLE "setting" ("key" TEXT PRIMARY KEY NOT NULL, "value" INTEGER)`,
+	); err != nil {
 		t.Fatalf("type mismatch seed: %v", err)
 	}
 	if _, err := client.db.Exec(`INSERT INTO "setting" ("key", "value") VALUES ('n', 7)`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := client.db.Exec(`CREATE TABLE "app_state" ("key" TEXT PRIMARY KEY NOT NULL, "value" TEXT, "updated_at" TEXT NOT NULL)`); err != nil {
+	if _, err := client.db.Exec(
+		`CREATE TABLE "app_state" ("key" TEXT PRIMARY KEY NOT NULL, "value" TEXT, "updated_at" TEXT NOT NULL)`,
+	); err != nil {
 		t.Fatalf("null mismatch seed: %v", err)
 	}
-	if _, err := client.db.Exec(`INSERT INTO "app_state" ("key", "value", "updated_at") VALUES ('k', 'v', 't')`); err != nil {
+	if _, err := client.db.Exec(
+		`INSERT INTO "app_state" ("key", "value", "updated_at") VALUES ('k', 'v', 't')`,
+	); err != nil {
 		t.Fatalf("seed app_state: %v", err)
 	}
-	if _, err := client.db.Exec(`CREATE TABLE "game_paths" ("game" TEXT NOT NULL, "modFolderPath" TEXT NOT NULL, "importer" TEXT, "linkedModFolderPath" TEXT, "gameInstallPath" TEXT, "gameExecutablePath" TEXT, "nteLauncherPath" TEXT, "order" INTEGER NOT NULL DEFAULT 0)`); err != nil {
+	if _, err := client.db.Exec(
+		`CREATE TABLE "game_paths" ("game" TEXT NOT NULL, "modFolderPath" TEXT NOT NULL, "importer" TEXT, "linkedModFolderPath" TEXT, "gameInstallPath" TEXT, "gameExecutablePath" TEXT, "nteLauncherPath" TEXT, "order" INTEGER NOT NULL DEFAULT 0)`,
+	); err != nil {
 		t.Fatalf("pk mismatch seed: %v", err)
 	}
 	if _, err := client.db.Exec(`CREATE TABLE "mod_presets" (
@@ -640,7 +664,9 @@ func assertElectronSchema(t *testing.T, client *Client) {
 
 func userTables(t *testing.T, client *Client) map[string]struct{} {
 	t.Helper()
-	rows, err := client.db.Query(`SELECT "name" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'`)
+	rows, err := client.db.Query(
+		`SELECT "name" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'`,
+	)
 	if err != nil {
 		t.Fatalf("sqlite_schema: %v", err)
 	}
@@ -662,7 +688,8 @@ func userTables(t *testing.T, client *Client) map[string]struct{} {
 func tableSQL(t *testing.T, client *Client, name string) string {
 	t.Helper()
 	var sqlText sql.NullString
-	if err := client.db.QueryRow(`SELECT "sql" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" = ?`, name).Scan(&sqlText); err != nil {
+	if err := client.db.QueryRow(`SELECT "sql" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" = ?`, name).
+		Scan(&sqlText); err != nil {
 		t.Fatalf("table sql %s: %v", name, err)
 	}
 	return sqlText.String
@@ -715,7 +742,16 @@ func foreignKeys(t *testing.T, client *Client, table string) []ForeignKeySpec {
 	var raw []foreignKeyRow
 	for rows.Next() {
 		var row foreignKeyRow
-		if err := rows.Scan(&row.ID, &row.Seq, &row.Table, &row.From, &row.To, &row.OnUpdate, &row.OnDelete, &row.Match); err != nil {
+		if err := rows.Scan(
+			&row.ID,
+			&row.Seq,
+			&row.Table,
+			&row.From,
+			&row.To,
+			&row.OnUpdate,
+			&row.OnDelete,
+			&row.Match,
+		); err != nil {
 			t.Fatalf("scan fk: %v", err)
 		}
 		raw = append(raw, row)

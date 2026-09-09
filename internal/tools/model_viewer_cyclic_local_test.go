@@ -50,5 +50,13 @@ func TestCyclicPackedLocalMod(t *testing.T) {
 			t.Fatalf("frame %d hides every animated mesh", clip.Frames[frameIndex].Index)
 		}
 	}
-	t.Logf("vertices=%d bones=%d poseFrames=%d clip=%d..%d fps=%g", d.VertexCount, d.Pose.BoneCount, d.Pose.FrameCount, clip.FrameStart, clip.FrameEnd, clip.FPS)
+	t.Logf(
+		"vertices=%d bones=%d poseFrames=%d clip=%d..%d fps=%g",
+		d.VertexCount,
+		d.Pose.BoneCount,
+		d.Pose.FrameCount,
+		clip.FrameStart,
+		clip.FrameEnd,
+		clip.FPS,
+	)
 }

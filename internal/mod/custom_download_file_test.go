@@ -47,7 +47,8 @@ func TestDownloadCustomFileReusesTheCallersRangeProbeResult(t *testing.T) {
 	if downloader.checkCalls != 0 {
 		t.Fatalf("CheckRangeSupport calls = %d", downloader.checkCalls)
 	}
-	if len(downloader.downloadCalls) != 1 || downloader.downloadCalls[0].URL != "https://example.test/file.bin" || downloader.downloadCalls[0].FileSize != 1024 {
+	if len(downloader.downloadCalls) != 1 || downloader.downloadCalls[0].URL != "https://example.test/file.bin" ||
+		downloader.downloadCalls[0].FileSize != 1024 {
 		t.Fatalf("download calls = %#v", downloader.downloadCalls)
 	}
 }

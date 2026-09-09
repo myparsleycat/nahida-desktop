@@ -21,7 +21,11 @@ func TestDiagnosticHiddenCausePreservesContract(t *testing.T) {
 		t.Fatal("diagnostic cause changed the public contract")
 	}
 	var message string
-	if decodeErr := json.Unmarshal(log.ServiceErrorMarshaler("Auth")(err), &message); decodeErr != nil || message != public.Error() {
+	if decodeErr := json.Unmarshal(
+		log.ServiceErrorMarshaler("Auth")(err),
+		&message,
+	); decodeErr != nil ||
+		message != public.Error() {
 		t.Fatalf("wire error = %q, %v", message, decodeErr)
 	}
 	for _, expected := range []string{"LOGIN_FAILED", "unexpected EOF", "decode", "causes"} {
@@ -36,12 +40,17 @@ func TestDiagnosticJoinedFailuresDoNotDisappear(t *testing.T) {
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
 	first := ReportError(log, errors.New("already recorded"), "Test", Diagnostic{})
 	output.Reset()
-	err := errors.Join(first, context.Canceled, AnnotateError(errors.New("restore denied"), Diagnostic{Stage: "rollback"}))
+	err := errors.Join(
+		first,
+		context.Canceled,
+		AnnotateError(errors.New("restore denied"), Diagnostic{Stage: "rollback"}),
+	)
 	if IsCancellationError(err) || IsReportedError(err) {
 		t.Fatal("new rollback failure was suppressed")
 	}
 	_ = ReportError(log, err, "Test", Diagnostic{})
-	if !strings.Contains(output.String(), "restore denied") || strings.Contains(output.String(), "already recorded") || strings.Contains(output.String(), "context canceled") {
+	if !strings.Contains(output.String(), "restore denied") || strings.Contains(output.String(), "already recorded") ||
+		strings.Contains(output.String(), "context canceled") {
 		t.Fatalf("unexpected record: %s", output.String())
 	}
 	if !IsCancellationError(errors.Join(context.Canceled, errors.New("DRIVE_COPY_CANCELED"))) {
@@ -52,10 +61,14 @@ func TestDiagnosticJoinedFailuresDoNotDisappear(t *testing.T) {
 func TestDiagnosticSiblingStagesAndLimits(t *testing.T) {
 	err := errors.Join(
 		AnnotateError(errors.New("primary"), Diagnostic{Stage: "write", Fields: map[string]any{"path": "first"}}),
-		AnnotateError(errors.New(strings.Repeat("x", 5000)), Diagnostic{Stage: "rollback", Fields: map[string]any{"path": "second"}}),
+		AnnotateError(
+			errors.New(strings.Repeat("x", 5000)),
+			Diagnostic{Stage: "rollback", Fields: map[string]any{"path": "second"}},
+		),
 	)
 	records, _, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
-	if len(records) != 2 || records[0]["stage"] != "write" || records[1]["stage"] != "rollback" || records[0]["path"] != "first" {
+	if len(records) != 2 || records[0]["stage"] != "write" || records[1]["stage"] != "rollback" ||
+		records[0]["path"] != "first" {
 		t.Fatalf("sibling context lost: %#v", records)
 	}
 	if len(records[1]["error"].(string)) > 4200 {
@@ -77,8 +90,22 @@ func (e *diagnosticCycleError) Unwrap() error { return e.cause }
 func TestDiagnosticRedactsNestedCauses(t *testing.T) {
 	var output bytes.Buffer
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
-	err := WithCause(errors.New("public failure"), errors.New("GET https://user:pass@example.com/login?state=private-state&code=private-code: denied"))
-	_ = ReportError(log, err, "Test", Diagnostic{Fields: map[string]any{"state": "private-state", "cookie": "session=private-cookie", "stack": strings.Repeat("x", 20<<10)}})
+	err := WithCause(
+		errors.New("public failure"),
+		errors.New("GET https://user:pass@example.com/login?state=private-state&code=private-code: denied"),
+	)
+	_ = ReportError(
+		log,
+		err,
+		"Test",
+		Diagnostic{
+			Fields: map[string]any{
+				"state":  "private-state",
+				"cookie": "session=private-cookie",
+				"stack":  strings.Repeat("x", 20<<10),
+			},
+		},
+	)
 	for _, secret := range []string{"user:pass", "private-state", "private-code", "private-cookie"} {
 		if strings.Contains(output.String(), secret) {
 			t.Fatalf("leaked %q", secret)
@@ -98,7 +125,12 @@ func TestDiagnosticQuotedURLPreservesJSON(t *testing.T) {
 			var output bytes.Buffer
 			log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
 			failure := &url.Error{Op: "Get", URL: address, Err: errors.New("network failed")}
-			_ = ReportError(log, WithCause(errors.New("download failed"), failure), "Test", Diagnostic{Stage: "request"})
+			_ = ReportError(
+				log,
+				WithCause(errors.New("download failed"), failure),
+				"Test",
+				Diagnostic{Stage: "request"},
+			)
 			line := output.String()
 			var record struct {
 				Causes []struct {
@@ -124,7 +156,12 @@ func TestDiagnosticRemainingBranchSeverity(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/explicit=%t", wrapper, explicit), func(t *testing.T) {
 				var output bytes.Buffer
 				log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
-				first := ReportError(log, errors.New("expected validation"), "Test", Diagnostic{Severity: DiagnosticWarn})
+				first := ReportError(
+					log,
+					errors.New("expected validation"),
+					"Test",
+					Diagnostic{Severity: DiagnosticWarn},
+				)
 				output.Reset()
 				log.SetLevel("error")
 				diagnostic := Diagnostic{Stage: "rollback"}
@@ -140,7 +177,8 @@ func TestDiagnosticRemainingBranchSeverity(t *testing.T) {
 					err = WithCause(first, cleanup)
 				}
 				reported := ReportError(log, err, "Test", Diagnostic{})
-				if !strings.Contains(output.String(), " ERROR ") || !strings.Contains(output.String(), "rollback I/O failure") {
+				if !strings.Contains(output.String(), " ERROR ") ||
+					!strings.Contains(output.String(), "rollback I/O failure") {
 					t.Fatalf("new failure was suppressed: %s", output.String())
 				}
 				output.Reset()
@@ -156,16 +194,29 @@ func TestDiagnosticRemainingBranchSeverity(t *testing.T) {
 func TestDiagnosticServiceBoundaryIgnoresReportedMetadata(t *testing.T) {
 	var output bytes.Buffer
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
-	first := ReportError(log, errors.New("public failure"), "Test", Diagnostic{Severity: DiagnosticWarn, Stage: "validation"})
+	first := ReportError(
+		log,
+		errors.New("public failure"),
+		"Test",
+		Diagnostic{Severity: DiagnosticWarn, Stage: "validation"},
+	)
 	output.Reset()
 	log.SetLevel("error")
-	err := WithCause(first, AnnotateError(errors.New("rollback failed"), Diagnostic{Severity: DiagnosticError, Stage: "rollback"}))
+	err := WithCause(
+		first,
+		AnnotateError(errors.New("rollback failed"), Diagnostic{Severity: DiagnosticError, Stage: "rollback"}),
+	)
 	var public string
-	if decodeErr := json.Unmarshal(log.ServiceErrorMarshaler("Test")(err), &public); decodeErr != nil || public != "public failure" {
+	if decodeErr := json.Unmarshal(
+		log.ServiceErrorMarshaler("Test")(err),
+		&public,
+	); decodeErr != nil ||
+		public != "public failure" {
 		t.Fatalf("wire contract changed: %q, %v", public, decodeErr)
 	}
 	line := output.String()
-	if !strings.Contains(line, " ERROR ") || !strings.Contains(line, "rollback failed") || !strings.Contains(line, `"stage":"rollback"`) {
+	if !strings.Contains(line, " ERROR ") || !strings.Contains(line, "rollback failed") ||
+		!strings.Contains(line, `"stage":"rollback"`) {
 		t.Fatalf("missing cleanup diagnosis: %s", line)
 	}
 	if strings.Contains(line, "public failure") || strings.Contains(line, "validation") {
@@ -176,12 +227,22 @@ func TestDiagnosticServiceBoundaryIgnoresReportedMetadata(t *testing.T) {
 func TestReportErrorHonorsDebugSeverity(t *testing.T) {
 	var output bytes.Buffer
 	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
-	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	_ = ReportError(
+		log,
+		errors.New("connection reset"),
+		"HTTP",
+		Diagnostic{Severity: DiagnosticDebug, Operation: "probe"},
+	)
 	if output.Len() != 0 {
 		t.Fatalf("debug leaked at default warn: %s", output.String())
 	}
 	log.SetLevel("debug")
-	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	_ = ReportError(
+		log,
+		errors.New("connection reset"),
+		"HTTP",
+		Diagnostic{Severity: DiagnosticDebug, Operation: "probe"},
+	)
 	got := output.String()
 	if !strings.Contains(got, " DEBUG ") || strings.Contains(got, " ERROR ") || strings.Contains(got, " WARN ") {
 		t.Fatalf("wrong level: %s", got)

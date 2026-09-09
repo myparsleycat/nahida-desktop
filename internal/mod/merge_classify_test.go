@@ -39,7 +39,13 @@ func TestClassifyMergePacksMatchesElectronFamilies(t *testing.T) {
 	support := makeOwnedMergePack(t, service, modsRoot, "Support", map[string]string{
 		"ORFix.ini": "run = CommandList\\global\\ORFix\n",
 	})
-	folderDisabled := makeOwnedMergePack(t, service, modsRoot, "DISABLED Ordinary", map[string]string{"CharA.ini": ordinaryIni})
+	folderDisabled := makeOwnedMergePack(
+		t,
+		service,
+		modsRoot,
+		"DISABLED Ordinary",
+		map[string]string{"CharA.ini": ordinaryIni},
+	)
 	fileDisabled := makeOwnedMergePack(t, service, modsRoot, "FileDisabled", map[string]string{
 		"DISABLEDCharA.ini": ordinaryIni,
 		"help.ini":          "[KeyHelp]\n",
@@ -156,10 +162,18 @@ func TestMergeHeaderAndNamespaceGatesMatchElectronRegexes(t *testing.T) {
 	if !hasMergedModHeader(" ;  Merged Mods : child.ini\n[Constants]\n") {
 		t.Fatal("spaced merged-mod header did not match")
 	}
-	if family := detectMergeFamily("mod.ini", "[Constants]\n", `plain\master\swapvar text`); family == "namespace_merge" {
+	if family := detectMergeFamily(
+		"mod.ini",
+		"[Constants]\n",
+		`plain\master\swapvar text`,
+	); family == "namespace_merge" {
 		t.Fatalf("plain text family = %q", family)
 	}
-	if family := detectMergeFamily("mod.ini", "[Constants]\n", `if $\CharA\Master\swapvar0 == 1`); family != "namespace_merge" {
+	if family := detectMergeFamily(
+		"mod.ini",
+		"[Constants]\n",
+		`if $\CharA\Master\swapvar0 == 1`,
+	); family != "namespace_merge" {
 		t.Fatalf("qualified swap ref family = %q", family)
 	}
 }

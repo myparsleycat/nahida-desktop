@@ -108,7 +108,12 @@ func CompileDirectory(root, tag, commit, published string) (*RulePack, error) {
 	return compileFiles(files, tag, commit, published)
 }
 
-func CompileZip(reader io.ReaderAt, size int64, tag, commit, published string, expectedBlobs map[string]string) (*RulePack, error) {
+func CompileZip(
+	reader io.ReaderAt,
+	size int64,
+	tag, commit, published string,
+	expectedBlobs map[string]string,
+) (*RulePack, error) {
 	archive, err := zip.NewReader(reader, size)
 	if err != nil {
 		return nil, fmt.Errorf("open ZZMI rule archive: %w", err)
@@ -250,10 +255,19 @@ func compileJane(source []byte) (RemapperRules, error) {
 	}
 	hairHash, handHash := positions["33a09cfe"], positions["82e7c056"]
 	if !isHash(hairHash) || !isHash(handHash) {
-		return RemapperRules{}, errors.New("Jane remapper is missing the expected hair or hand mapping") //nolint:staticcheck // Product name starts the error.
+		//nolint:staticcheck // Product name starts the error.
+		return RemapperRules{}, errors.New(
+			"Jane remapper is missing the expected hair or hand mapping",
+		)
 	}
 	valid := []string{strings.ToLower(hairHash), strings.ToLower(handHash)}
-	return RemapperRules{Mapping: hair, Secondary: hand, PositionToBlend: positions, ValidHashes: valid, Stride: stride}, nil
+	return RemapperRules{
+		Mapping:         hair,
+		Secondary:       hand,
+		PositionToBlend: positions,
+		ValidHashes:     valid,
+		Stride:          stride,
+	}, nil
 }
 
 func compileDialyn(source []byte) (RemapperRules, error) {
@@ -275,7 +289,10 @@ func compileDialyn(source []byte) (RemapperRules, error) {
 	}
 	validRaw, ok := values["VALID_BLEND_HASHES"].([]any)
 	if !ok {
-		return RemapperRules{}, errors.New("Dialyn VALID_BLEND_HASHES is not a set") //nolint:staticcheck // Product name starts the error.
+		//nolint:staticcheck // Product name starts the error.
+		return RemapperRules{}, errors.New(
+			"Dialyn VALID_BLEND_HASHES is not a set",
+		)
 	}
 	valid := make([]string, 0, len(validRaw))
 	for _, item := range validRaw {

@@ -93,7 +93,10 @@ func TestModelViewerDNFIntersectsBeyondMaterializationLimit(t *testing.T) {
 	if modelViewerDNFIntersects(left, ModelViewerDNF{{{Var: "frame", Value: "999"}}}) {
 		t.Fatal("disjoint expressions must not intersect")
 	}
-	if !modelViewerDNFIntersects(left, ModelViewerDNF{{{Var: "frame", Value: modelViewerString(maxModelViewerDNFGroups)}}}) {
+	if !modelViewerDNFIntersects(
+		left,
+		ModelViewerDNF{{{Var: "frame", Value: modelViewerString(maxModelViewerDNFGroups)}}},
+	) {
 		t.Fatal("matching expression should intersect")
 	}
 }
@@ -117,13 +120,24 @@ func TestNormalizeModelViewerDNFWithTrackedRemovesRuntimeGuards(t *testing.T) {
 		{Var: "outfit", Value: "1"},
 	}}
 	wanted := ModelViewerDNF{{{Var: "outfit", Value: "1"}}}
-	if normalized := normalizeModelViewerDNFWithTracked(dnf, map[string]bool{"outfit": true}); !reflect.DeepEqual(normalized, wanted) {
+	if normalized := normalizeModelViewerDNFWithTracked(
+		dnf,
+		map[string]bool{"outfit": true},
+	); !reflect.DeepEqual(
+		normalized,
+		wanted,
+	) {
 		t.Fatalf("normalized = %#v", normalized)
 	}
 	if normalized := normalizeModelViewerDNFWithTracked(dnf, nil); !modelViewerDNFIsTrue(normalized) {
 		t.Fatalf("runtime-only condition = %#v", normalized)
 	}
-	if normalized := normalizeModelViewerDNFWithTracked(ModelViewerDNF{}, map[string]bool{"outfit": true}); len(normalized) != 0 {
+	if normalized := normalizeModelViewerDNFWithTracked(
+		ModelViewerDNF{},
+		map[string]bool{"outfit": true},
+	); len(
+		normalized,
+	) != 0 {
 		t.Fatalf("false condition = %#v", normalized)
 	}
 }

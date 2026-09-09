@@ -40,12 +40,25 @@ type touchSeedGrid struct {
 	Buckets map[touchSeedCell][]int
 }
 
-func buildTouchVertexMasks(vertexCount int, positions []float32, indices []uint32, component TouchComponentAnalysis, zones []TouchZoneSpec) []float32 {
+func buildTouchVertexMasks(
+	vertexCount int,
+	positions []float32,
+	indices []uint32,
+	component TouchComponentAnalysis,
+	zones []TouchZoneSpec,
+) []float32 {
 	masks, _ := buildTouchVertexMasksContext(context.Background(), vertexCount, positions, indices, component, zones)
 	return masks
 }
 
-func buildTouchVertexMasksContext(ctx context.Context, vertexCount int, positions []float32, indices []uint32, component TouchComponentAnalysis, zones []TouchZoneSpec) ([]float32, error) {
+func buildTouchVertexMasksContext(
+	ctx context.Context,
+	vertexCount int,
+	positions []float32,
+	indices []uint32,
+	component TouchComponentAnalysis,
+	zones []TouchZoneSpec,
+) ([]float32, error) {
 	masks := make([]float32, vertexCount*touchZoneChannels)
 	allowed := touchAllowedVertices(component, indices, vertexCount)
 	minX, maxX := math.Inf(1), math.Inf(-1)
@@ -156,7 +169,11 @@ func buildTouchVertexMasksContext(ctx context.Context, vertexCount int, position
 func buildTouchSeedGrid(positions []float32, seeds []int, size float64) *touchSeedGrid {
 	grid := &touchSeedGrid{Inverse: 1 / size, Buckets: map[touchSeedCell][]int{}}
 	for _, seed := range seeds {
-		cell := touchSeedCell{int(math.Floor(float64(positions[seed*3]) * grid.Inverse)), int(math.Floor(float64(positions[seed*3+1]) * grid.Inverse)), int(math.Floor(float64(positions[seed*3+2]) * grid.Inverse))}
+		cell := touchSeedCell{
+			int(math.Floor(float64(positions[seed*3]) * grid.Inverse)),
+			int(math.Floor(float64(positions[seed*3+1]) * grid.Inverse)),
+			int(math.Floor(float64(positions[seed*3+2]) * grid.Inverse)),
+		}
 		grid.Buckets[cell] = append(grid.Buckets[cell], seed)
 	}
 	return grid
@@ -264,14 +281,28 @@ func extractTouchMaskChannel(masks []float32, vertexCount, channel int) []float3
 	return weights
 }
 
-func writeTouchComponentAssets(outputRoot string, component TouchComponentAnalysis, draft TouchComponentDraft, positions []float32, indices []uint32, prefix string) (TouchGeneratedAssets, error) {
+func writeTouchComponentAssets(
+	outputRoot string,
+	component TouchComponentAnalysis,
+	draft TouchComponentDraft,
+	positions []float32,
+	indices []uint32,
+	prefix string,
+) (TouchGeneratedAssets, error) {
 	relativeDir := filepath.Join("Resources", "IM")
 	absoluteDir := filepath.Join(outputRoot, relativeDir)
 	if err := os.MkdirAll(absoluteDir, 0755); err != nil {
 		return TouchGeneratedAssets{}, err
 	}
 	masks := buildTouchVertexMasks(component.VertexCount, positions, indices, component, draft.Zones)
-	result := TouchGeneratedAssets{ComponentID: component.ID, AssetPrefix: prefix, RelativeDir: filepath.ToSlash(relativeDir), Masks: masks, MaskPaths: []string{}, ObjectMapPaths: []TouchGeneratedObjectMap{}}
+	result := TouchGeneratedAssets{
+		ComponentID:    component.ID,
+		AssetPrefix:    prefix,
+		RelativeDir:    filepath.ToSlash(relativeDir),
+		Masks:          masks,
+		MaskPaths:      []string{},
+		ObjectMapPaths: []TouchGeneratedObjectMap{},
+	}
 	for band := range touchMaskBands {
 		name := prefix + "JiggleMasks" + string(rune('0'+band)) + ".buf"
 		absolute := filepath.Join(absoluteDir, name)
@@ -290,7 +321,15 @@ func writeTouchComponentAssets(outputRoot string, component TouchComponentAnalys
 		if len(component.DrawRanges) > 0 {
 			first, count = component.DrawRanges[0].FirstIndex, component.DrawRanges[0].IndexCount
 		}
-		maps = []TouchObjectMapEntry{{FirstIndex: first, IndexCount: count, ObjectMode: touchObjectMode, ObjectID: draft.ObjectID, Label: "main"}}
+		maps = []TouchObjectMapEntry{
+			{
+				FirstIndex: first,
+				IndexCount: count,
+				ObjectMode: touchObjectMode,
+				ObjectID:   draft.ObjectID,
+				Label:      "main",
+			},
+		}
 	}
 	for _, entry := range maps {
 		entry.ObjectID = draft.ObjectID
@@ -306,7 +345,14 @@ func writeTouchComponentAssets(outputRoot string, component TouchComponentAnalys
 		if err := writeTouchFloat32File(absolute, encodeTouchObjectMap([]TouchObjectMapEntry{entry})); err != nil {
 			return TouchGeneratedAssets{}, err
 		}
-		result.ObjectMapPaths = append(result.ObjectMapPaths, TouchGeneratedObjectMap{Label: entry.Label, RelativePath: filepath.ToSlash(filepath.Join(relativeDir, name)), AbsolutePath: absolute})
+		result.ObjectMapPaths = append(
+			result.ObjectMapPaths,
+			TouchGeneratedObjectMap{
+				Label:        entry.Label,
+				RelativePath: filepath.ToSlash(filepath.Join(relativeDir, name)),
+				AbsolutePath: absolute,
+			},
+		)
 	}
 	paramsName := prefix + "JiggleParams.buf"
 	paramsAbs := filepath.Join(absoluteDir, paramsName)
@@ -314,7 +360,10 @@ func writeTouchComponentAssets(outputRoot string, component TouchComponentAnalys
 	if len(draft.Zones) > 0 {
 		settings = draft.Zones[0].Settings
 	}
-	if err := writeTouchFloat32File(paramsAbs, encodeTouchJiggleParams(resolveTouchJiggleParams(settings, draft.ObjectID))); err != nil {
+	if err := writeTouchFloat32File(
+		paramsAbs,
+		encodeTouchJiggleParams(resolveTouchJiggleParams(settings, draft.ObjectID)),
+	); err != nil {
 		return TouchGeneratedAssets{}, err
 	}
 	result.ParamsRelativePath = filepath.ToSlash(filepath.Join(relativeDir, paramsName))
@@ -345,7 +394,24 @@ func encodeTouchObjectMap(entries []TouchObjectMapEntry) []float32 {
 	return values
 }
 func encodeTouchJiggleParams(p TouchJiggleParams) []float32 {
-	return []float32{float32(p.ObjectID), float32(p.Radius), float32(p.Strength), float32(p.Falloff), float32(p.DragScale), float32(p.GrabDamping), float32(p.GrabSpring), float32(p.ReleaseDamping), float32(p.ReleaseSpring), float32(p.ReleaseKick), float32(p.MaxOffset), float32(p.TargetFollow), float32(p.MouseYDirection), float32(p.MouseXDirection), 0, 0}
+	return []float32{
+		float32(p.ObjectID),
+		float32(p.Radius),
+		float32(p.Strength),
+		float32(p.Falloff),
+		float32(p.DragScale),
+		float32(p.GrabDamping),
+		float32(p.GrabSpring),
+		float32(p.ReleaseDamping),
+		float32(p.ReleaseSpring),
+		float32(p.ReleaseKick),
+		float32(p.MaxOffset),
+		float32(p.TargetFollow),
+		float32(p.MouseYDirection),
+		float32(p.MouseXDirection),
+		0,
+		0,
+	}
 }
 func writeTouchFloat32File(path string, values []float32) error {
 	file, err := os.Create(path)
@@ -421,7 +487,16 @@ func writeTouchMaskPreview(path string, positions, masks []float32) error {
 		} else {
 			gain := .25 + .75*float64(best)
 			p := palette[channel]
-			img.SetNRGBA(x, y, color.NRGBA{uint8(math.Min(255, float64(p[0])*gain)), uint8(math.Min(255, float64(p[1])*gain)), uint8(math.Min(255, float64(p[2])*gain)), 255})
+			img.SetNRGBA(
+				x,
+				y,
+				color.NRGBA{
+					uint8(math.Min(255, float64(p[0])*gain)),
+					uint8(math.Min(255, float64(p[1])*gain)),
+					uint8(math.Min(255, float64(p[2])*gain)),
+					255,
+				},
+			)
 		}
 	}
 	file, err := os.Create(path)

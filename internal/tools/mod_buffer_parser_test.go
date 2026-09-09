@@ -12,8 +12,16 @@ func TestMatchIndexResources(t *testing.T) {
 			{Name: "beef0022Position", Filename: "beef0022-Position.buf", Stride: 40},
 		}
 		indices := []modBufferResource{
-			{Name: "_LOD0.beef0021_16590_0_Index", Filename: "LOD0.beef0021-16590-0-Index.buf", Format: "DXGI_FORMAT_R32_UINT"},
-			{Name: "_LOD0.beef0022_57612_0_Index", Filename: "LOD0.beef0022-57612-0-Index.buf", Format: "DXGI_FORMAT_R32_UINT"},
+			{
+				Name:     "_LOD0.beef0021_16590_0_Index",
+				Filename: "LOD0.beef0021-16590-0-Index.buf",
+				Format:   "DXGI_FORMAT_R32_UINT",
+			},
+			{
+				Name:     "_LOD0.beef0022_57612_0_Index",
+				Filename: "LOD0.beef0022-57612-0-Index.buf",
+				Format:   "DXGI_FORMAT_R32_UINT",
+			},
 		}
 		matches := matchIndexResources(positions, indices, nil)
 		assertIndexNames(t, matches["beef0021position"], "_LOD0.beef0021_16590_0_Index")

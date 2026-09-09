@@ -95,7 +95,11 @@ func TestEnsureMergeBackupRejectsNonNumericBackupPrefix(t *testing.T) {
 	if err := os.WriteFile(active, []byte("original"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "DISABLED_BACKUP_OLD_CharA.ini"), []byte("unrelated"), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(root, "DISABLED_BACKUP_OLD_CharA.ini"),
+		[]byte("unrelated"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	created := []mergeRollback{}

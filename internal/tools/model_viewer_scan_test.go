@@ -48,7 +48,8 @@ drawindexed = 3, 0, 0`)
 			t.Fatalf("conditions = %#v", record.conditions)
 		}
 	}
-	if !states["BodyIB:Pos"] || !states["AltIB:AltPos"] || records[0].conditions[0][0].Negate == records[1].conditions[0][0].Negate {
+	if !states["BodyIB:Pos"] || !states["AltIB:AltPos"] ||
+		records[0].conditions[0][0].Negate == records[1].conditions[0][0].Negate {
 		t.Fatalf("states=%v records=%#v", states, records)
 	}
 }
@@ -206,7 +207,11 @@ stride = 20`
 	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "index.buf"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "index.buf"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "tc.buf"), make([]byte, 20), 0o600); err != nil {
@@ -292,7 +297,9 @@ drawindexed = 3, 0, 0`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 1 || records[0].state.ib != "BodyIB" || records[0].state.vb0 != "Pos" || records[0].state.vb1 != "Tc" || len(records[0].draw.Conditions) != 0 {
+	if len(records) != 1 || records[0].state.ib != "BodyIB" || records[0].state.vb0 != "Pos" ||
+		records[0].state.vb1 != "Tc" ||
+		len(records[0].draw.Conditions) != 0 {
 		t.Fatalf("records = %#v", records)
 	}
 }
@@ -372,7 +379,10 @@ run = CommandListTedom
 	for index := range 13 {
 		fmt.Fprintf(&ini, "if $choice%d == 1\ndrawindexed = 3, 0, 0\nendif\n", index)
 	}
-	records, err := collectModelViewerDirectDrawRecords(parseModINI(ini.String()), collectModelViewerDefaultVariables(parseModINI(ini.String())))
+	records, err := collectModelViewerDirectDrawRecords(
+		parseModINI(ini.String()),
+		collectModelViewerDefaultVariables(parseModINI(ini.String())),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +409,13 @@ $swapvarColor = 0,1,2,3
 		name  string
 		draws int
 	}{{"HairA", 4}, {"HairB", 3}, {"BodyA", 40}, {"BodyB", 14}} {
-		fmt.Fprintf(&ini, "[TextureOverride%s]\nib = Resource%sIB\nrun = CommandListRunSlotFix\nrun = CommandList%s\n", group.name, group.name, group.name)
+		fmt.Fprintf(
+			&ini,
+			"[TextureOverride%s]\nib = Resource%sIB\nrun = CommandListRunSlotFix\nrun = CommandList%s\n",
+			group.name,
+			group.name,
+			group.name,
+		)
 		fmt.Fprintf(&ini, "[CommandList%s]\n", group.name)
 		for index := range group.draws {
 			fmt.Fprintf(&ini, "drawindexed = 3, %d, 0\n", index*3)
@@ -682,7 +698,8 @@ filename = .\2. charbbody\CharBHead.ib`
 	}
 	xs := []float32{meshes[0].geometry.Position[0], meshes[1].geometry.Position[0]}
 	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })
-	if xs[0] != 1 || xs[1] != 100 || modelViewerDNFIsTrue(meshes[0].conditions) || modelViewerDNFIsTrue(meshes[1].conditions) {
+	if xs[0] != 1 || xs[1] != 100 || modelViewerDNFIsTrue(meshes[0].conditions) ||
+		modelViewerDNFIsTrue(meshes[1].conditions) {
 		t.Fatalf("xs=%v conditions=%#v/%#v", xs, meshes[0].conditions, meshes[1].conditions)
 	}
 }
@@ -789,13 +806,19 @@ filename = unused.png`
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
 	mesh := result.Meshes[0]
-	if result.MaterialProfile != "zzmi" || len(mesh.TextureVariants) != 3 || len(mesh.NormalMapVariants) != 2 || mesh.LightMapKey == nil || len(mesh.MaterialMapVariants) != 1 {
+	if result.MaterialProfile != "zzmi" || len(mesh.TextureVariants) != 3 || len(mesh.NormalMapVariants) != 2 ||
+		mesh.LightMapKey == nil ||
+		len(mesh.MaterialMapVariants) != 1 {
 		t.Fatalf("profile=%q mesh=%#v", result.MaterialProfile, mesh)
 	}
 	if _, prepared := result.Textures[modelViewerNormalizeKey("ResourceUnused")]; prepared {
 		t.Fatalf("unreferenced texture was prepared: %#v", result.Textures)
 	}
-	if removed, cleanupErr := service.CleanupModelViewer(context.Background(), result.MemorySessionID); cleanupErr != nil || !removed {
+	if removed, cleanupErr := service.CleanupModelViewer(
+		context.Background(),
+		result.MemorySessionID,
+	); cleanupErr != nil ||
+		!removed {
 		t.Fatalf("cleanup=%v, %v", removed, cleanupErr)
 	}
 }

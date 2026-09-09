@@ -76,7 +76,17 @@ type ParallelDownloader struct {
 func (d *ParallelDownloader) UseLog(log *Log) { d.log = log }
 
 func (d *ParallelDownloader) reportCleanup(err error, path string) {
-	_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "parallel-download", Stage: "cleanup", Fields: map[string]any{"path": path}})
+	_ = ReportError(
+		d.log,
+		err,
+		"Download",
+		Diagnostic{
+			Severity:  DiagnosticWarn,
+			Operation: "parallel-download",
+			Stage:     "cleanup",
+			Fields:    map[string]any{"path": path},
+		},
+	)
 }
 
 func NewParallelDownloader() *ParallelDownloader {
@@ -152,7 +162,11 @@ func (d *ParallelDownloader) CheckRangeSupport(ctx context.Context, rawURL strin
 	return d.CheckRangeSupportWithHeader(ctx, rawURL, nil)
 }
 
-func (d *ParallelDownloader) CheckRangeSupportWithHeader(ctx context.Context, rawURL string, caller http.Header) (bool, error) {
+func (d *ParallelDownloader) CheckRangeSupportWithHeader(
+	ctx context.Context,
+	rawURL string,
+	caller http.Header,
+) (bool, error) {
 	if d.cache == nil {
 		d.cache = map[string]rangeCacheEntry{}
 	}
@@ -168,7 +182,17 @@ func (d *ParallelDownloader) CheckRangeSupportWithHeader(ctx context.Context, ra
 		if ctx.Err() != nil {
 			return false, err
 		}
-		_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "range-probe", Stage: "fallback", Fields: map[string]any{"endpoint": SanitizeLogURL(rawURL)}})
+		_ = ReportError(
+			d.log,
+			err,
+			"Download",
+			Diagnostic{
+				Severity:  DiagnosticWarn,
+				Operation: "range-probe",
+				Stage:     "fallback",
+				Fields:    map[string]any{"endpoint": SanitizeLogURL(rawURL)},
+			},
+		)
 		return false, nil
 	}
 	if supported {
@@ -405,7 +429,17 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 	chunkMetaPath := options.SavePath + ".chunk-meta.json"
 	expected := chunkMeta{Resource: SafeURLResource(options.URL), FileSize: float64(options.FileSize)}
 	existing := readChunkMeta(chunkMetaPath, func(err error) {
-		_ = ReportError(d.log, err, "Download", Diagnostic{Severity: DiagnosticWarn, Operation: "parallel-download", Stage: "read-chunk-metadata", Fields: map[string]any{"path": chunkMetaPath}})
+		_ = ReportError(
+			d.log,
+			err,
+			"Download",
+			Diagnostic{
+				Severity:  DiagnosticWarn,
+				Operation: "parallel-download",
+				Stage:     "read-chunk-metadata",
+				Fields:    map[string]any{"path": chunkMetaPath},
+			},
+		)
 	})
 	if existing == nil || existing.Resource != expected.Resource || existing.FileSize != expected.FileSize {
 		cleanupErr := d.removeChunkArtifacts(options.SavePath)
@@ -425,11 +459,23 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 	targetPath := options.SavePath + ".ntmp"
 	defer func() {
 		if returnErr != nil {
-			returnErr = WithCause(returnErr, AnnotateError(d.removeChunkArtifacts(options.SavePath), Diagnostic{Stage: "cleanup-chunks", Fields: map[string]any{"path": options.SavePath}}))
+			returnErr = WithCause(
+				returnErr,
+				AnnotateError(
+					d.removeChunkArtifacts(options.SavePath),
+					Diagnostic{Stage: "cleanup-chunks", Fields: map[string]any{"path": options.SavePath}},
+				),
+			)
 		}
 		cleanupErr := d.removePath(targetPath)
 		if returnErr != nil {
-			returnErr = WithCause(returnErr, AnnotateError(cleanupErr, Diagnostic{Stage: "cleanup-temporary", Fields: map[string]any{"path": targetPath}}))
+			returnErr = WithCause(
+				returnErr,
+				AnnotateError(
+					cleanupErr,
+					Diagnostic{Stage: "cleanup-temporary", Fields: map[string]any{"path": targetPath}},
+				),
+			)
 		} else {
 			d.reportCleanup(cleanupErr, targetPath)
 		}
@@ -714,12 +760,20 @@ func (d *ParallelDownloader) downloadChunk(ctx context.Context, args downloadChu
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusPartialContent {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return fmt.Errorf("chunk download failed: expected 206 Partial Content, got %s (%d)", response.Status, response.StatusCode)
+		return fmt.Errorf(
+			"chunk download failed: expected 206 Partial Content, got %s (%d)",
+			response.Status,
+			response.StatusCode,
+		)
 	}
 	if !isExpectedContentRange(response.Header.Get("Content-Range"), rangeStart, args.End, args.FileSize) {
 		_, _ = io.Copy(io.Discard, response.Body)
 		return &UnexpectedContentRangeError{
-			Message: fmt.Sprintf("chunk download returned an unexpected Content-Range for bytes=%d-%d", rangeStart, args.End),
+			Message: fmt.Sprintf(
+				"chunk download returned an unexpected Content-Range for bytes=%d-%d",
+				rangeStart,
+				args.End,
+			),
 		}
 	}
 	flags := os.O_WRONLY | os.O_CREATE

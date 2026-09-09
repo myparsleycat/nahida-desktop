@@ -17,7 +17,8 @@ import (
 
 func modelViewerArgument(args []string, workingDir string) string {
 	for i := 1; i+1 < len(args); i++ {
-		if args[i] != "--model-viewer" || strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") || strings.HasPrefix(strings.ToLower(args[i+1]), "nahida:") {
+		if args[i] != "--model-viewer" || strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") ||
+			strings.HasPrefix(strings.ToLower(args[i+1]), "nahida:") {
 			continue
 		}
 		path := args[i+1]
@@ -31,7 +32,11 @@ func modelViewerArgument(args []string, workingDir string) string {
 	return ""
 }
 
-func newLaunchHandler(openViewer func(string), openMain func(), handleArguments func([]string)) func(application.SecondInstanceData) {
+func newLaunchHandler(
+	openViewer func(string),
+	openMain func(),
+	handleArguments func([]string),
+) func(application.SecondInstanceData) {
 	initial := true
 	return func(data application.SecondInstanceData) {
 		first := initial
@@ -118,7 +123,12 @@ func newModelViewerWindows(app *application.App, rt *runtime) *modelViewerWindow
 			rt.window.bringToForeground(window)
 		},
 	}
-	v.closed = modelViewerCloseHandler(rt.window, rt.setting.GetRunInBackground, func() { v.quitIfEmpty(app.Quit) }, rt.log)
+	v.closed = modelViewerCloseHandler(
+		rt.window,
+		rt.setting.GetRunInBackground,
+		func() { v.quitIfEmpty(app.Quit) },
+		rt.log,
+	)
 	app.Window.OnCreate(v.attach)
 	return v
 }
@@ -135,7 +145,12 @@ func (v *modelViewerWindows) quitIfEmpty(quit func()) {
 	quit()
 }
 
-func modelViewerCloseHandler(main *Window, runInBackground func(context.Context) (bool, error), quit func(), log *infra.Log) func(bool) {
+func modelViewerCloseHandler(
+	main *Window,
+	runInBackground func(context.Context) (bool, error),
+	quit func(),
+	log *infra.Log,
+) func(bool) {
 	return func(last bool) {
 		main.mu.Lock()
 		hasMain := main.window != nil
@@ -145,7 +160,12 @@ func modelViewerCloseHandler(main *Window, runInBackground func(context.Context)
 		}
 		background, err := runInBackground(context.Background())
 		if err != nil {
-			_ = infra.ReportError(log, err, "ModelViewerWindow", infra.Diagnostic{Operation: "close", Stage: "run-in-background"})
+			_ = infra.ReportError(
+				log,
+				err,
+				"ModelViewerWindow",
+				infra.Diagnostic{Operation: "close", Stage: "run-in-background"},
+			)
 			return
 		}
 		if !background {
@@ -176,13 +196,22 @@ func (v *modelViewerWindows) Open(path string) {
 		return
 	}
 	opts := application.WebviewWindowOptions{
-		Name:  key,
-		Title: filepath.Base(path) + " — Nahida Model Viewer",
-		URL:   "/#/model-viewer-window?" + url.Values{"path": {path}}.Encode(),
-		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
-		Hidden: true, Frameless: true, InitialPosition: application.WindowCentered,
+		Name:             key,
+		Title:            filepath.Base(path) + " — Nahida Model Viewer",
+		URL:              "/#/model-viewer-window?" + url.Values{"path": {path}}.Encode(),
+		Width:            1200,
+		Height:           800,
+		MinWidth:         800,
+		MinHeight:        600,
+		Hidden:           true,
+		Frameless:        true,
+		InitialPosition:  application.WindowCentered,
 		BackgroundColour: application.NewRGB(6, 7, 15),
-		Windows:          application.WindowsWindow{DisableMenu: true, NonClientRegionSupport: true, WebView2CompositionHosting: true},
+		Windows: application.WindowsWindow{
+			DisableMenu:                true,
+			NonClientRegionSupport:     true,
+			WebView2CompositionHosting: true,
+		},
 	}
 	v.windows[key] = &modelViewerWindow{}
 	v.mu.Unlock()

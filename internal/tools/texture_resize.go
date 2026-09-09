@@ -108,12 +108,22 @@ func (t *Tools) ResizeTextureFolder(ctx context.Context, input TextureResizeRunI
 	if err != nil {
 		return TextureResizeResult{}, err
 	}
-	return t.runTextureResizeJob(ctx, resolved, settings, false, func(jobCtx context.Context) (TextureResizeResult, error) {
-		return t.runTextureResize(jobCtx, resolved, settings)
-	})
+	return t.runTextureResizeJob(
+		ctx,
+		resolved,
+		settings,
+		false,
+		func(jobCtx context.Context) (TextureResizeResult, error) {
+			return t.runTextureResize(jobCtx, resolved, settings)
+		},
+	)
 }
 
-func (t *Tools) ResizeTextureMod(ctx context.Context, modPath string, input TextureResizeModInput) (TextureResizeResult, error) {
+func (t *Tools) ResizeTextureMod(
+	ctx context.Context,
+	modPath string,
+	input TextureResizeModInput,
+) (TextureResizeResult, error) {
 	return t.ResizeTextureFolder(ctx, TextureResizeRunInput{TargetPath: modPath, Settings: input.Settings})
 }
 
@@ -130,15 +140,24 @@ func (t *Tools) ResizeTextureFile(ctx context.Context, input TextureResizeFileRu
 	if err != nil {
 		return TextureResizeResult{}, err
 	}
-	return t.runTextureResizeJob(ctx, resolved, settings, true, func(jobCtx context.Context) (TextureResizeResult, error) {
-		if isTextureUpscaleOperation(settings.Operation) {
-			return t.upscaleTextureFile(jobCtx, resolved, settings)
-		}
-		return t.runTextureResize(jobCtx, resolved, settings)
-	})
+	return t.runTextureResizeJob(
+		ctx,
+		resolved,
+		settings,
+		true,
+		func(jobCtx context.Context) (TextureResizeResult, error) {
+			if isTextureUpscaleOperation(settings.Operation) {
+				return t.upscaleTextureFile(jobCtx, resolved, settings)
+			}
+			return t.runTextureResize(jobCtx, resolved, settings)
+		},
+	)
 }
 
-func (t *Tools) saveFullTextureResizeSettings(ctx context.Context, settings TextureResizeSettings) (TextureResizeSettings, error) {
+func (t *Tools) saveFullTextureResizeSettings(
+	ctx context.Context,
+	settings TextureResizeSettings,
+) (TextureResizeSettings, error) {
 	return t.SaveTextureResizeSettings(ctx, TextureResizeSettingsPatch{
 		Mode: &settings.Mode, Operation: &settings.Operation, Percent: &settings.Percent,
 		CustomWidth: &settings.CustomWidth, CustomHeight: &settings.CustomHeight,
@@ -147,7 +166,13 @@ func (t *Tools) saveFullTextureResizeSettings(ctx context.Context, settings Text
 	})
 }
 
-func (t *Tools) runTextureResizeJob(ctx context.Context, path string, settings TextureResizeSettings, singleFile bool, work func(context.Context) (TextureResizeResult, error)) (TextureResizeResult, error) {
+func (t *Tools) runTextureResizeJob(
+	ctx context.Context,
+	path string,
+	settings TextureResizeSettings,
+	singleFile bool,
+	work func(context.Context) (TextureResizeResult, error),
+) (TextureResizeResult, error) {
 	running := TextureResizeProgressEvent{
 		Status: "running", Operation: stringPointer(settings.Operation), FilePath: stringPointer(path),
 		FileName: stringPointer(filepath.Base(path)),
@@ -214,7 +239,11 @@ func (t *Tools) settleTextureJob(jobID uint64, terminal TextureResizeProgressEve
 	}
 }
 
-func (t *Tools) runTextureResize(ctx context.Context, target string, settings TextureResizeSettings) (TextureResizeResult, error) {
+func (t *Tools) runTextureResize(
+	ctx context.Context,
+	target string,
+	settings TextureResizeSettings,
+) (TextureResizeResult, error) {
 	return executeTextureResize(ctx, textureResizeRequest{
 		TargetPath: target, Mode: settings.Mode, Operation: settings.Operation,
 		Percent: settings.Percent, CustomWidth: settings.CustomWidth, CustomHeight: settings.CustomHeight,
@@ -222,7 +251,11 @@ func (t *Tools) runTextureResize(ctx context.Context, target string, settings Te
 	})
 }
 
-func (t *Tools) upscaleTextureFile(ctx context.Context, path string, settings TextureResizeSettings) (TextureResizeResult, error) {
+func (t *Tools) upscaleTextureFile(
+	ctx context.Context,
+	path string,
+	settings TextureResizeSettings,
+) (TextureResizeResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return TextureResizeResult{}, err
@@ -276,7 +309,15 @@ func (t *Tools) upscaleTextureFile(ctx context.Context, path string, settings Te
 		return skippedTextureResizeResult(path, metadata, message), nil
 	}
 	t.emitTextureUpscaleProgress("upscale", nil, stringPointer("Running "+displayName), path)
-	if err := t.runNCNNUpscaler(ctx, engine, *runtimeStatus.BinaryPath, *runtimeStatus.ModelsPath, inputPNG, outputPNG, settings); err != nil {
+	if err := t.runNCNNUpscaler(
+		ctx,
+		engine,
+		*runtimeStatus.BinaryPath,
+		*runtimeStatus.ModelsPath,
+		inputPNG,
+		outputPNG,
+		settings,
+	); err != nil {
 		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
@@ -286,10 +327,18 @@ func (t *Tools) upscaleTextureFile(ctx context.Context, path string, settings Te
 		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
-	if expectedWidth, expectedHeight := decoded.Width*settings.UpscaleScale, decoded.Height*settings.UpscaleScale; encoded.Width != expectedWidth || encoded.Height != expectedHeight {
+	if expectedWidth, expectedHeight := decoded.Width*settings.UpscaleScale, decoded.Height*settings.UpscaleScale; encoded.Width != expectedWidth ||
+		encoded.Height != expectedHeight {
 		if t.log != nil {
 			t.log.Warn(
-				fmt.Sprintf("%s output size %dx%d did not match expected %dx%d", displayName, encoded.Width, encoded.Height, expectedWidth, expectedHeight),
+				fmt.Sprintf(
+					"%s output size %dx%d did not match expected %dx%d",
+					displayName,
+					encoded.Width,
+					encoded.Height,
+					expectedWidth,
+					expectedHeight,
+				),
 				"TextureResizer:upscale",
 			)
 		}
@@ -304,7 +353,11 @@ func (t *Tools) upscaleTextureFile(ctx context.Context, path string, settings Te
 	}, nil
 }
 
-func (t *Tools) runNCNNUpscaler(parent context.Context, engine, binaryPath, modelsPath, inputPath, outputPath string, settings TextureResizeSettings) error {
+func (t *Tools) runNCNNUpscaler(
+	parent context.Context,
+	engine, binaryPath, modelsPath, inputPath, outputPath string,
+	settings TextureResizeSettings,
+) error {
 	ctx, cancel := context.WithTimeout(parent, textureProcessTimeout)
 	defer cancel()
 	args := buildNCNNUpscalerArgs(engine, modelsPath, inputPath, outputPath, settings)
@@ -321,7 +374,9 @@ func (t *Tools) runNCNNUpscaler(parent context.Context, engine, binaryPath, mode
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return errors.New(formatTextureProcessExit(displayName, exitErr.ExitCode(), strings.TrimSpace(stderr.String())))
+			return errors.New(
+				formatTextureProcessExit(displayName, exitErr.ExitCode(), strings.TrimSpace(stderr.String())),
+			)
 		}
 		return err
 	}
@@ -342,7 +397,12 @@ func textureUpscaleDisplayName(engine string) string {
 }
 
 func formatTextureProcessTimeout(displayName, stderr string) string {
-	return fmt.Sprintf("%s timed out after %dms%s", displayName, textureProcessTimeout.Milliseconds(), textureProcessErrorSuffix(stderr))
+	return fmt.Sprintf(
+		"%s timed out after %dms%s",
+		displayName,
+		textureProcessTimeout.Milliseconds(),
+		textureProcessErrorSuffix(stderr),
+	)
 }
 
 func formatTextureProcessExit(displayName string, code int, stderr string) string {
@@ -359,13 +419,50 @@ func textureProcessErrorSuffix(stderr string) string {
 func buildNCNNUpscalerArgs(engine, modelsPath, inputPath, outputPath string, settings TextureResizeSettings) []string {
 	if engine == "realcugan" {
 		modelDir := "models-" + strings.TrimPrefix(settings.UpscaleModel, "realcugan-")
-		return []string{"-i", inputPath, "-o", outputPath, "-n", "0", "-s", strconv.Itoa(settings.UpscaleScale), "-t", "0", "-c", "3", "-f", "png", "-m", filepath.Join(modelsPath, modelDir)}
+		return []string{
+			"-i",
+			inputPath,
+			"-o",
+			outputPath,
+			"-n",
+			"0",
+			"-s",
+			strconv.Itoa(settings.UpscaleScale),
+			"-t",
+			"0",
+			"-c",
+			"3",
+			"-f",
+			"png",
+			"-m",
+			filepath.Join(modelsPath, modelDir),
+		}
 	}
-	return []string{"-i", inputPath, "-o", outputPath, "-n", settings.UpscaleModel, "-s", strconv.Itoa(settings.UpscaleScale), "-t", "0", "-f", "png", "-m", modelsPath}
+	return []string{
+		"-i",
+		inputPath,
+		"-o",
+		outputPath,
+		"-n",
+		settings.UpscaleModel,
+		"-s",
+		strconv.Itoa(settings.UpscaleScale),
+		"-t",
+		"0",
+		"-f",
+		"png",
+		"-m",
+		modelsPath,
+	}
 }
 
 func (t *Tools) emitTextureUpscaleProgress(phase string, percent *float64, message *string, path string) {
-	event := TextureUpscaleProgressEvent{Phase: phase, Percent: percent, Message: message, FilePath: stringPointer(path)}
+	event := TextureUpscaleProgressEvent{
+		Phase:    phase,
+		Percent:  percent,
+		Message:  message,
+		FilePath: stringPointer(path),
+	}
 	t.emitEvent("tools:textureUpscaleProgress", event)
 }
 

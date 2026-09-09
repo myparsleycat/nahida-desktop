@@ -31,7 +31,14 @@ type modelViewerComputeBranchFrame struct {
 	variable, value, parentVariable, parentValue string
 }
 
-func detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID string, sections []modINISection, reachable map[string]bool, resources map[string]modelViewerResource, defaults map[string]any, meshes []modelViewerDirectMesh) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
+func detectModelViewerPackedShapeAnimation(
+	root, shaderBaseDir, scopeID string,
+	sections []modINISection,
+	reachable map[string]bool,
+	resources map[string]modelViewerResource,
+	defaults map[string]any,
+	meshes []modelViewerDirectMesh,
+) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
 	candidates := collectModelViewerPackedShapeCandidates(root, shaderBaseDir, sections, reachable, resources)
 	if len(candidates) == 0 {
 		return nil, nil
@@ -67,11 +74,22 @@ func detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID string, 
 			return nil, nil
 		}
 		stage := ModelViewerComputeShapeStage{
-			Base: item.baseSource, Target: item.targetSource, PhaseRate: rate,
-			WrapAt:      findModelViewerAccumulatorWrapInLines(branchLines, phaseVariable, defaults),
-			PhaseStart:  modelViewerPackedShapePhaseStart(incomingStarts, stateVariable, stateValue, phaseVariable, branchLines, defaults),
-			PhaseOffset: item.phaseOffset, AngularScale: item.angularScale,
-			Amplitude: item.amplitude, Bias: item.bias,
+			Base:      item.baseSource,
+			Target:    item.targetSource,
+			PhaseRate: rate,
+			WrapAt:    findModelViewerAccumulatorWrapInLines(branchLines, phaseVariable, defaults),
+			PhaseStart: modelViewerPackedShapePhaseStart(
+				incomingStarts,
+				stateVariable,
+				stateValue,
+				phaseVariable,
+				branchLines,
+				defaults,
+			),
+			PhaseOffset:  item.phaseOffset,
+			AngularScale: item.angularScale,
+			Amplitude:    item.amplitude,
+			Bias:         item.bias,
 		}
 		stage.Duration = modelViewerPackedShapeStageDuration(stage)
 		stages = append(stages, stage)
@@ -85,10 +103,16 @@ func detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID string, 
 	}, []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Shape Animation", frameCount, 30)}
 }
 
-func collectModelViewerPackedShapeCandidates(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool, resources map[string]modelViewerResource) []modelViewerPackedShapeCandidate {
+func collectModelViewerPackedShapeCandidates(
+	root, shaderBaseDir string,
+	sections []modINISection,
+	reachable map[string]bool,
+	resources map[string]modelViewerResource,
+) []modelViewerPackedShapeCandidate {
 	var candidates []modelViewerPackedShapeCandidate
 	for _, section := range sections {
-		if !strings.EqualFold(section.Header, "CustomShader") || !reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
+		if !strings.EqualFold(section.Header, "CustomShader") ||
+			!reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
 			continue
 		}
 		passes := collectModelViewerComputePasses(section)
@@ -97,7 +121,8 @@ func collectModelViewerPackedShapeCandidates(root, shaderBaseDir string, section
 			continue
 		}
 		for index, pass := range passes {
-			if pass.t50 == "" || pass.t51 == "" || pass.t52 != "" || pass.x88 == "" || pass.outputName == "" || pass.shader == "" {
+			if pass.t50 == "" || pass.t51 == "" || pass.t52 != "" || pass.x88 == "" || pass.outputName == "" ||
+				pass.shader == "" {
 				continue
 			}
 			shader, shaderOK := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
@@ -110,7 +135,10 @@ func collectModelViewerPackedShapeCandidates(root, shaderBaseDir string, section
 			if !shaderOK || !known || !expressionOK || !baseOK || !targetOK || !baseSourceOK || !targetSourceOK {
 				continue
 			}
-			if baseSource.Stride != modelViewerPackedObjectStride || targetSource.Stride != modelViewerPackedObjectStride || baseSource.ByteLength != targetSource.ByteLength || baseSource.ByteLength%int64(modelViewerPackedObjectStride) != 0 {
+			if baseSource.Stride != modelViewerPackedObjectStride ||
+				targetSource.Stride != modelViewerPackedObjectStride ||
+				baseSource.ByteLength != targetSource.ByteLength ||
+				baseSource.ByteLength%int64(modelViewerPackedObjectStride) != 0 {
 				continue
 			}
 			vertexCount := int(baseSource.ByteLength / int64(modelViewerPackedObjectStride))
@@ -127,7 +155,9 @@ func collectModelViewerPackedShapeCandidates(root, shaderBaseDir string, section
 	return candidates
 }
 
-func selectModelViewerPackedShapeStages(candidates []modelViewerPackedShapeCandidate) ([]modelViewerPackedShapeCandidate, string, bool) {
+func selectModelViewerPackedShapeStages(
+	candidates []modelViewerPackedShapeCandidate,
+) ([]modelViewerPackedShapeCandidate, string, bool) {
 	if len(candidates) == 1 {
 		return candidates, "", true
 	}
@@ -181,7 +211,10 @@ func collectModelViewerComputeDispatchEqualities(section modINISection) [][]mode
 	return output
 }
 
-func applyModelViewerComputeBranch(stack []modelViewerComputeBranchFrame, line string) ([]modelViewerComputeBranchFrame, bool) {
+func applyModelViewerComputeBranch(
+	stack []modelViewerComputeBranchFrame,
+	line string,
+) ([]modelViewerComputeBranchFrame, bool) {
 	lower := strings.ToLower(line)
 	switch {
 	case strings.HasPrefix(lower, "if "):
@@ -297,7 +330,8 @@ func modelViewerComputeBranchLines(section modINISection, variable, value string
 	for _, raw := range section.Lines {
 		line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
 		lower := strings.ToLower(line)
-		isOpen := strings.HasPrefix(lower, "if ") || strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if ")
+		isOpen := strings.HasPrefix(lower, "if ") || strings.HasPrefix(lower, "elif ") ||
+			strings.HasPrefix(lower, "else if ")
 		if isOpen && modelViewerComputeStackHas(stack, variable, value) {
 			lines = append(lines, line)
 		}
@@ -323,7 +357,10 @@ func modelViewerPackedShapeStageDuration(stage ModelViewerComputeShapeStage) flo
 	return 1
 }
 
-func collectModelViewerPackedShapeIncomingStarts(selected []modelViewerPackedShapeCandidate, stateVariable string) map[string]float64 {
+func collectModelViewerPackedShapeIncomingStarts(
+	selected []modelViewerPackedShapeCandidate,
+	stateVariable string,
+) map[string]float64 {
 	incoming := map[string]float64{}
 	if stateVariable == "" {
 		return incoming
@@ -345,7 +382,12 @@ func collectModelViewerPackedShapeIncomingStarts(selected []modelViewerPackedSha
 	return incoming
 }
 
-func modelViewerPackedShapePhaseStart(incoming map[string]float64, stateVariable, stateValue, phaseVariable string, branchLines []string, defaults map[string]any) float64 {
+func modelViewerPackedShapePhaseStart(
+	incoming map[string]float64,
+	stateVariable, stateValue, phaseVariable string,
+	branchLines []string,
+	defaults map[string]any,
+) float64 {
 	if start, ok := incoming[stateValue]; ok {
 		return start
 	}

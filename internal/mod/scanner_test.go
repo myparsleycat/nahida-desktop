@@ -208,7 +208,9 @@ func TestGetModsReparsesIniPathsWithoutScanCache(t *testing.T) {
 	for _, ini := range second.Mods[0].Inis {
 		paths[ini.Path] = ini
 	}
-	if got, ok := paths[renamedINI]; !ok || got.Name != "CC88.ini" || got.ToggleKeys[0].Key == nil || *got.ToggleKeys[0].Key != "F2" || len(got.ToggleKeys[0].Values) != 3 {
+	if got, ok := paths[renamedINI]; !ok || got.Name != "CC88.ini" || got.ToggleKeys[0].Key == nil ||
+		*got.ToggleKeys[0].Key != "F2" ||
+		len(got.ToggleKeys[0].Values) != 3 {
 		t.Fatalf("renamed ini not reparsed: %#v", second.Mods[0].Inis)
 	}
 	if _, ok := paths[renamedFaceINI]; !ok {

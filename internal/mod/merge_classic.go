@@ -196,7 +196,15 @@ func writeClassicMergedINI(
 }
 
 func parseClassicSections(text, location string, groupIndex int) []classicSection {
-	recognized := []string{"TextureOverride", "ShaderOverride", "Resource", "Constants", "Present", "CommandList", "CustomShader"}
+	recognized := []string{
+		"TextureOverride",
+		"ShaderOverride",
+		"Resource",
+		"Constants",
+		"Present",
+		"CommandList",
+		"CustomShader",
+	}
 	result := []classicSection{}
 	current := -1
 	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {

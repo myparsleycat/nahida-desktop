@@ -71,7 +71,17 @@ func (d *Drive) downloadDriveFile(
 					onProgress(-parallelProgress)
 				}
 				if d.log != nil {
-					_ = infra.ReportError(d.log, err, "Drive:Download:parallel-fallback", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "download", Stage: "parallel-fallback", Fields: map[string]any{"name": file.Name, "fileId": file.ID, "path": destination}})
+					_ = infra.ReportError(
+						d.log,
+						err,
+						"Drive:Download:parallel-fallback",
+						infra.Diagnostic{
+							Severity:  infra.DiagnosticWarn,
+							Operation: "download",
+							Stage:     "parallel-fallback",
+							Fields:    map[string]any{"name": file.Name, "fileId": file.ID, "path": destination},
+						},
+					)
 				}
 			}
 		}
@@ -181,7 +191,8 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 		}
 
 		var httpErr *infra.DownloadHTTPError
-		if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden && origin == "presign" && !refreshedExpiredPresign {
+		if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden && origin == "presign" &&
+			!refreshedExpiredPresign {
 			freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, link)
 			if freshErr == nil {
 				currentURL = freshURL

@@ -169,7 +169,10 @@ func (m *MenuMaker) Generate(_ context.Context, req MenuMakerGenerateRequest) (M
 	return generatePreview(req.SourceText, req.Slots, req.Settings), nil
 }
 
-func (m *MenuMaker) ApplyBundle(ctx context.Context, req MenuMakerApplyRequest) (result MenuMakerWriteResult, err error) {
+func (m *MenuMaker) ApplyBundle(
+	ctx context.Context,
+	req MenuMakerApplyRequest,
+) (result MenuMakerWriteResult, err error) {
 	stage := "validate"
 	cleanupState := "not-started"
 	writtenPaths := []string{}
@@ -293,7 +296,13 @@ func (m *MenuMaker) applyGenerated(
 			return result, fmt.Errorf("write menu maker source backup: %w", err)
 		}
 		if backup, readErr := os.ReadFile(backupPath); readErr != nil || sha256Hex(backup) != sha256Hex(req.original) {
-			return result, infra.WithCause(errors.New("menu maker source backup verification failed"), errors.Join(readErr, infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"})))
+			return result, infra.WithCause(
+				errors.New("menu maker source backup verification failed"),
+				errors.Join(
+					readErr,
+					infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"}),
+				),
+			)
 		}
 		result.BackupPath = backupPath
 	}
@@ -305,11 +314,17 @@ func (m *MenuMaker) applyGenerated(
 		for index := len(promotions) - 1; index >= 0; index-- {
 			entry := promotions[index]
 			if removeErr := os.Remove(entry.target); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-				rollbackErrors = append(rollbackErrors, fmt.Errorf("remove partially applied target %s: %w", entry.target, removeErr))
+				rollbackErrors = append(
+					rollbackErrors,
+					fmt.Errorf("remove partially applied target %s: %w", entry.target, removeErr),
+				)
 			}
 			if entry.existed {
 				if restoreErr := os.Rename(entry.rollback, entry.target); restoreErr != nil {
-					rollbackErrors = append(rollbackErrors, fmt.Errorf("restore menu maker target %s: %w", entry.target, restoreErr))
+					rollbackErrors = append(
+						rollbackErrors,
+						fmt.Errorf("restore menu maker target %s: %w", entry.target, restoreErr),
+					)
 				}
 			}
 		}
@@ -383,14 +398,30 @@ func (m *MenuMaker) SaveINI(_ context.Context, req MenuMakerSaveINIRequest) (Men
 		return MenuMakerWriteResult{}, err
 	}
 	generated := generatePreview(req.SourceText, req.Slots, req.Settings)
-	return saveINIBytes(destination, generated.INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}, m.reportCleanup)
+	return saveINIBytes(
+		destination,
+		generated.INIText,
+		textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline},
+		m.reportCleanup,
+	)
 }
 
 func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (MenuMakerWriteResult, error) {
-	return saveZIPBytes(req.DestinationPath, req.OutputININame, generatePreview(req.SourceText, req.Slots, req.Settings).INIText, textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}, req.Assets, m.reportCleanup)
+	return saveZIPBytes(
+		req.DestinationPath,
+		req.OutputININame,
+		generatePreview(req.SourceText, req.Slots, req.Settings).INIText,
+		textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline},
+		req.Assets,
+		m.reportCleanup,
+	)
 }
 
-func saveINIBytes(destination, iniText string, encoding textEncoding, reports ...func(error)) (MenuMakerWriteResult, error) {
+func saveINIBytes(
+	destination, iniText string,
+	encoding textEncoding,
+	reports ...func(error),
+) (MenuMakerWriteResult, error) {
 	data, err := encodeText(iniText, encoding)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
@@ -401,7 +432,12 @@ func saveINIBytes(destination, iniText string, encoding textEncoding, reports ..
 	return MenuMakerWriteResult{OutputINIPath: destination, ResourcePaths: []string{}}, nil
 }
 
-func saveZIPBytes(destination, outputININame, iniText string, encoding textEncoding, assets []MenuMakerGeneratedAsset, reports ...func(error)) (MenuMakerWriteResult, error) {
+func saveZIPBytes(
+	destination, outputININame, iniText string,
+	encoding textEncoding,
+	assets []MenuMakerGeneratedAsset,
+	reports ...func(error),
+) (MenuMakerWriteResult, error) {
 	resolved, err := requireSavePath(destination, ".zip")
 	if err != nil {
 		return MenuMakerWriteResult{}, err
@@ -484,9 +520,13 @@ func requireSavePath(path, extension string) (string, error) {
 	if !strings.EqualFold(filepath.Ext(resolved), extension) {
 		return "", fmt.Errorf("menu maker destination must use %s", extension)
 	}
-	if info, statErr := os.Lstat(resolved); statErr == nil && (info.Mode()&os.ModeSymlink != 0 || isReparsePoint(resolved)) {
+	if info, statErr := os.Lstat(
+		resolved,
+	); statErr == nil &&
+		(info.Mode()&os.ModeSymlink != 0 || isReparsePoint(resolved)) {
 		return "", errors.New("menu maker destination cannot be a link")
-	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+	} else if statErr != nil &&
+		!errors.Is(statErr, os.ErrNotExist) {
 		return "", statErr
 	}
 	return filepath.Clean(resolved), nil
@@ -651,7 +691,10 @@ func writeAtomic(path string, data []byte, reports ...func(error)) error {
 	}
 	if err = os.Rename(tempPath, path); err != nil {
 		if existed {
-			err = infra.WithCause(err, infra.AnnotateError(os.Rename(rollback, path), infra.Diagnostic{Stage: "rollback"}))
+			err = infra.WithCause(
+				err,
+				infra.AnnotateError(os.Rename(rollback, path), infra.Diagnostic{Stage: "rollback"}),
+			)
 		}
 		return err
 	}
@@ -674,5 +717,10 @@ func (m *MenuMaker) reportCleanup(err error) {
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		return
 	}
-	_ = infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "write-output", Stage: "cleanup"})
+	_ = infra.ReportError(
+		m.log,
+		err,
+		"MenuMaker",
+		infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "write-output", Stage: "cleanup"},
+	)
 }

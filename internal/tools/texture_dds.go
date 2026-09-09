@@ -87,7 +87,10 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	}
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || (!info.IsDir() && !info.Mode().IsRegular()) {
-		return TextureResizeResult{}, infra.WithCause(contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved)), statErr)
+		return TextureResizeResult{}, infra.WithCause(
+			contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved)),
+			statErr,
+		)
 	}
 	var files []string
 	if info.IsDir() {
@@ -250,7 +253,13 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 	}
 	output := decoded
 	if targetWidth != originalWidth || targetHeight != originalHeight {
-		if output, err = resizeTextureSurfaceRgba32F(decoded, surface.Layers, surface.Depth, uint32(targetWidth), uint32(targetHeight)); err != nil {
+		if output, err = resizeTextureSurfaceRgba32F(
+			decoded,
+			surface.Layers,
+			surface.Depth,
+			uint32(targetWidth),
+			uint32(targetHeight),
+		); err != nil {
 			return TextureResizeFileResult{}, textureError("Failed to resize DDS '%s': %s", path, err)
 		}
 	}
@@ -296,7 +305,11 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 	}, nil
 }
 
-func skippedResizeFileResult(path string, width, height int, originalFormat, outputFormat, message string) TextureResizeFileResult {
+func skippedResizeFileResult(
+	path string,
+	width, height int,
+	originalFormat, outputFormat, message string,
+) TextureResizeFileResult {
 	return TextureResizeFileResult{
 		FilePath:       path,
 		Status:         "skipped",
@@ -328,7 +341,10 @@ func calculateTextureResizeTarget(width, height uint32, mode *textureResizeMode)
 
 // resizeTextureSurfaceRgba32F resizes the base mip of every layer and depth
 // level with a triangle filter, mirroring the sidecar's resize_surface_rgba32f.
-func resizeTextureSurfaceRgba32F(surface *ddsutil.SurfaceRgba32Float, layers, depth, targetWidth, targetHeight uint32) (*ddsutil.SurfaceRgba32Float, error) {
+func resizeTextureSurfaceRgba32F(
+	surface *ddsutil.SurfaceRgba32Float,
+	layers, depth, targetWidth, targetHeight uint32,
+) (*ddsutil.SurfaceRgba32Float, error) {
 	data := make([]float32, 0, uint64(layers)*uint64(depth)*uint64(targetWidth)*uint64(targetHeight)*4)
 	for layer := range layers {
 		for level := range depth {
@@ -388,7 +404,10 @@ func decodeDDSToPng(input, output string) (textureDecodedMetadata, error) {
 }
 
 // encodePNGToDDS mirrors the sidecar's `encode` subcommand.
-func encodePNGToDDS(input, target, outputFormatName string, backup, generateMipmaps bool) (textureEncodedMetadata, error) {
+func encodePNGToDDS(
+	input, target, outputFormatName string,
+	backup, generateMipmaps bool,
+) (textureEncodedMetadata, error) {
 	pixels, width, height, err := loadTexturePNG(input)
 	if err != nil {
 		return textureEncodedMetadata{}, textureError("Failed to read upscaled PNG '%s': %s", input, err)
@@ -692,7 +711,10 @@ func createBackupIfMissing(path string) (bool, error) {
 		copyErr = closeErr
 	}
 	if copyErr != nil {
-		return false, infra.WithCause(textureError("Failed to create backup file '%s': %s", backupPath, copyErr), os.Remove(backupPath))
+		return false, infra.WithCause(
+			textureError("Failed to create backup file '%s': %s", backupPath, copyErr),
+			os.Remove(backupPath),
+		)
 	}
 	return true, nil
 }

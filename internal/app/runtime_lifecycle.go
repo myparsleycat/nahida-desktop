@@ -26,7 +26,12 @@ type runtimePaths struct {
 
 // bootRuntime opens the shared app data root, configures the logger,
 // and always opens the store. This is the path app.Run uses.
-func bootRuntime(ctx context.Context, rt *runtime, in runtimePathInput, configureBrowserArguments func([]string) error) (runtimePaths, error) {
+func bootRuntime(
+	ctx context.Context,
+	rt *runtime,
+	in runtimePathInput,
+	configureBrowserArguments func([]string) error,
+) (runtimePaths, error) {
 	data, err := appdata.Open(in.HomeDir)
 	if err != nil {
 		return runtimePaths{}, err
@@ -83,7 +88,12 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 		return err
 	}
 	if rt.store != nil {
-		_ = infra.ReportError(rt.log, rt.store.Close(), "Runtime", infra.Diagnostic{Operation: "startup", Stage: "close-previous-store"})
+		_ = infra.ReportError(
+			rt.log,
+			rt.store.Close(),
+			"Runtime",
+			infra.Diagnostic{Operation: "startup", Stage: "close-previous-store"},
+		)
 	}
 	rt.store = store
 	if rt.updater != nil && store.DB != nil {
@@ -100,7 +110,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	} else {
 		rt.setting.UseClient(store.DB)
 		rt.setting.UseLocale(platform.SystemLocale())
-		rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil))
+		rt.setting.UseHooks(
+			runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil),
+		)
 	}
 	if rt.transfer != nil {
 		rt.transfer.UseSettings(rt.setting)
@@ -138,7 +150,16 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 		rt.mod.UseClient(store.DB)
 		rt.mod.UseSettings(rt.setting)
 		if err := rt.mod.StartCompression(ctx); err != nil {
-			_ = infra.ReportError(rt.log, err, "Mod:compression:start", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:compression:start", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"Mod:compression:start",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "Mod:compression:start",
+					Stage:     "background",
+				},
+			)
 		}
 	}
 	if rt.native != nil {
@@ -147,18 +168,46 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.tools != nil {
 		rt.tools.UseClient(store.DB)
 		if err := rt.tools.CleanupStaleModelViewerDirs(); err != nil {
-			_ = infra.ReportError(rt.log, err, "StaticGlb.cleanupStaleViewerTempDirs", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "StaticGlb.cleanupStaleViewerTempDirs", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"StaticGlb.cleanupStaleViewerTempDirs",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "StaticGlb.cleanupStaleViewerTempDirs",
+					Stage:     "background",
+				},
+			)
 		}
 		if err := rt.tools.CleanupStaleD3DBuilds(ctx); err != nil {
-			_ = infra.ReportError(rt.log, err, "4001Fixer:cleanupStaleBuildDirs", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "4001Fixer:cleanupStaleBuildDirs", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"4001Fixer:cleanupStaleBuildDirs",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "4001Fixer:cleanupStaleBuildDirs",
+					Stage:     "background",
+				},
+			)
 		}
 		rt.tools.Start4001ReleasePrefetch()
 		if err := rt.tools.RecoverBisects(ctx); err != nil {
-			_ = infra.ReportError(rt.log, err, "ModBisect", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "ModBisect", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"ModBisect",
+				infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "ModBisect", Stage: "background"},
+			)
 		}
 		rt.tools.StartWuwaAutoUpdateCheck()
 		if err := rt.tools.StartPersistWatcher(ctx); err != nil {
-			_ = infra.ReportError(rt.log, err, "TogglePersist", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "TogglePersist", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"TogglePersist",
+				infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "TogglePersist", Stage: "background"},
+			)
 		}
 	}
 	return nil
@@ -172,7 +221,12 @@ func (rt *runtime) Close() error {
 		rt.gameBananaLogin.Close()
 	}
 	if rt.gamebanana != nil {
-		_ = infra.ReportError(rt.log, rt.gamebanana.ServiceShutdown(), "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"})
+		_ = infra.ReportError(
+			rt.log,
+			rt.gamebanana.ServiceShutdown(),
+			"Runtime",
+			infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"},
+		)
 	}
 	var err error
 	if rt.proxyRelay != nil {
@@ -180,7 +234,10 @@ func (rt *runtime) Close() error {
 		rt.proxyRelay = nil
 	}
 	if rt.localHTTP != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.localHTTP.ServiceShutdown(), infra.Diagnostic{Stage: "localHTTP"}))
+		err = errors.Join(
+			err,
+			infra.AnnotateError(rt.localHTTP.ServiceShutdown(), infra.Diagnostic{Stage: "localHTTP"}),
+		)
 	}
 	if rt.updater != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
@@ -223,6 +280,11 @@ func (rt *runtime) Close() error {
 
 func (rt *runtime) failInit(err error, stage string) error {
 	cleanupErr := rt.Close()
-	_ = infra.ReportError(rt.log, infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})), "Runtime", infra.Diagnostic{Operation: "startup", Stage: stage})
+	_ = infra.ReportError(
+		rt.log,
+		infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})),
+		"Runtime",
+		infra.Diagnostic{Operation: "startup", Stage: stage},
+	)
 	return err
 }

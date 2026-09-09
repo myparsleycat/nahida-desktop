@@ -35,7 +35,8 @@ func TestRollbackMergeContinuesInReverseOrderAndCollectsFailures(t *testing.T) {
 	if strings.Join(calls, ",") != "third,second,first" {
 		t.Fatalf("rollback calls = %v", calls)
 	}
-	if len(failures) != 1 || failures[0].action.path != "second" || failures[0].err.Error() != "simulated rollback failure" {
+	if len(failures) != 1 || failures[0].action.path != "second" ||
+		failures[0].err.Error() != "simulated rollback failure" {
 		t.Fatalf("rollback failures = %#v", failures)
 	}
 }
@@ -124,7 +125,8 @@ func TestEnablePackFoldersStagesCollisionsAndRollbackRestoresNames(t *testing.T)
 	}
 	disabledText, disabledErr := os.ReadFile(disabledINI)
 	enabledText, enabledErr := os.ReadFile(enabledINI)
-	if disabledErr != nil || string(disabledText) != "disabled" || enabledErr != nil || string(enabledText) != "enabled" {
+	if disabledErr != nil || string(disabledText) != "disabled" || enabledErr != nil ||
+		string(enabledText) != "enabled" {
 		t.Fatalf("restored files = disabled %q/%v, enabled %q/%v", disabledText, disabledErr, enabledText, enabledErr)
 	}
 	if _, err := os.Stat(filepath.Join(root, "PackA (2)")); !os.IsNotExist(err) {
@@ -178,7 +180,8 @@ func TestMergeModsLogsOriginalErrorAndRollbackFailures(t *testing.T) {
 	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		t.Fatalf("merge payload = %q: %v", rawPayload, err)
 	}
-	if payload.Operation != "merge-mods" || payload.Stage != "execute" || payload.Error != "NAMESPACE_MERGE_NEEDS_CHILD" {
+	if payload.Operation != "merge-mods" || payload.Stage != "execute" ||
+		payload.Error != "NAMESPACE_MERGE_NEEDS_CHILD" {
 		t.Fatalf("merge payload = %#v", payload)
 	}
 	wantAction := failedPath

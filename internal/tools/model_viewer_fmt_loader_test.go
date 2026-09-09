@@ -12,7 +12,13 @@ func TestLoadModelViewerFmtPrefersLocal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(modDir, "Body.fmt"), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	layout, err := loadModelViewerFmt(modDir, assetDir, modelViewerIbResource{Filename: "Body.ib", Format: "DXGI_FORMAT_R16_UINT"}, 12, "mihoyo")
+	layout, err := loadModelViewerFmt(
+		modDir,
+		assetDir,
+		modelViewerIbResource{Filename: "Body.ib", Format: "DXGI_FORMAT_R16_UINT"},
+		12,
+		"mihoyo",
+	)
 	if err != nil || layout.Stride != 12 || len(layout.Elements) != 1 {
 		t.Fatalf("layout=%#v err=%v", layout, err)
 	}

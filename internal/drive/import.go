@@ -56,7 +56,10 @@ type DriveCopyProgress struct {
 	Message     string `json:"message,omitempty"`
 }
 
-func (d *Drive) beginCopy(parent context.Context, operationID, source string) (context.Context, string, context.CancelFunc, func()) {
+func (d *Drive) beginCopy(
+	parent context.Context,
+	operationID, source string,
+) (context.Context, string, context.CancelFunc, func()) {
 	id := strings.TrimSpace(operationID)
 	if id == "" {
 		id = newOperationID()
@@ -167,7 +170,10 @@ func (d *Drive) CopyFromURL(ctx context.Context, params CopyFromURLParams) (resu
 	defer done()
 	params.OperationID = operationID
 	stage = "copy"
-	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: max(1, len(params.SelectedIDs))})
+	d.emitCopyProgress(
+		operationID,
+		DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: max(1, len(params.SelectedIDs))},
+	)
 
 	result, err = d.runCopyFromURL(opCtx, params, source)
 	if err != nil {
@@ -180,7 +186,16 @@ func (d *Drive) CopyFromURL(ctx context.Context, params CopyFromURLParams) (resu
 		d.setImportTransferFailure(operationID, transfer.StatusError, err.Error())
 		return CopyFromURLResult{}, err
 	}
-	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "completed", Current: result.Copied, Total: max(1, result.Copied), CopiedFiles: result.Copied})
+	d.emitCopyProgress(
+		operationID,
+		DriveCopyProgress{
+			Source:      source.Type,
+			Phase:       "completed",
+			Current:     result.Copied,
+			Total:       max(1, result.Copied),
+			CopiedFiles: result.Copied,
+		},
+	)
 	return result, nil
 }
 
@@ -204,7 +219,10 @@ func (d *Drive) CopyFromURLMany(ctx context.Context, params CopyFromURLParams) (
 	defer done()
 	params.OperationID = operationID
 	stage = "copy"
-	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: len(params.SelectedIDs)})
+	d.emitCopyProgress(
+		operationID,
+		DriveCopyProgress{Source: source.Type, Phase: "preparing", Total: len(params.SelectedIDs)},
+	)
 
 	result, err = d.runCopyFromURLMany(opCtx, params, source)
 	if err != nil {
@@ -217,7 +235,16 @@ func (d *Drive) CopyFromURLMany(ctx context.Context, params CopyFromURLParams) (
 		d.setImportTransferFailure(operationID, transfer.StatusError, err.Error())
 		return CopyFromURLResult{}, err
 	}
-	d.emitCopyProgress(operationID, DriveCopyProgress{Source: source.Type, Phase: "completed", Current: len(params.SelectedIDs), Total: len(params.SelectedIDs), CopiedFiles: result.Copied})
+	d.emitCopyProgress(
+		operationID,
+		DriveCopyProgress{
+			Source:      source.Type,
+			Phase:       "completed",
+			Current:     len(params.SelectedIDs),
+			Total:       len(params.SelectedIDs),
+			CopiedFiles: result.Copied,
+		},
+	)
 	return result, nil
 }
 
@@ -291,7 +318,11 @@ func copyFailureCause(err error) string {
 	return err.Error()
 }
 
-func (d *Drive) runCopyFromURL(ctx context.Context, params CopyFromURLParams, source DriveSource) (CopyFromURLResult, error) {
+func (d *Drive) runCopyFromURL(
+	ctx context.Context,
+	params CopyFromURLParams,
+	source DriveSource,
+) (CopyFromURLResult, error) {
 	if ctx.Err() != nil {
 		return CopyFromURLResult{}, copyCanceledError()
 	}
@@ -455,7 +486,11 @@ func (d *Drive) runCopyFromURL(ctx context.Context, params CopyFromURLParams, so
 	return CopyFromURLResult{Source: "mod", Copied: copied, DestinationID: params.DestinationID}, nil
 }
 
-func (d *Drive) runCopyFromURLMany(ctx context.Context, params CopyFromURLParams, source DriveSource) (CopyFromURLResult, error) {
+func (d *Drive) runCopyFromURLMany(
+	ctx context.Context,
+	params CopyFromURLParams,
+	source DriveSource,
+) (CopyFromURLResult, error) {
 	password := params.Password
 	if source.Type == "link" {
 		access, err := d.requestSharedLinkAccess(ctx, source.ID, password)

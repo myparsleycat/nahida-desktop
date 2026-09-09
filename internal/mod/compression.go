@@ -434,17 +434,55 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 	if target {
 		if method == "zstd" {
 			err = errors.Join(
-				restoreEnabledZstd(ctx, workRoots, c.addRestoreTotals, c.progress, c.markSelfChanges, logFileError("restore-file")),
-				compressDisabledZstd(ctx, workRoots, int64(threshold)*1024*1024, c.addCompressTotals, c.progress, c.markSelfChanges, logFileError("compress-file")),
+				restoreEnabledZstd(
+					ctx,
+					workRoots,
+					c.addRestoreTotals,
+					c.progress,
+					c.markSelfChanges,
+					logFileError("restore-file"),
+				),
+				compressDisabledZstd(
+					ctx,
+					workRoots,
+					int64(threshold)*1024*1024,
+					c.addCompressTotals,
+					c.progress,
+					c.markSelfChanges,
+					logFileError("compress-file"),
+				),
 			)
 		} else {
-			err = applyXpress4K(ctx, workRoots, c.addCompressTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("compress-file"))
+			err = applyXpress4K(
+				ctx,
+				workRoots,
+				c.addCompressTotals,
+				c.progress,
+				&c.wofOwnership,
+				c.markSelfChanges,
+				logFileError("compress-file"),
+			)
 		}
 	} else if work.full {
 		if method == "zstd" {
-			err = restoreAllZstd(ctx, workRoots, c.addRestoreTotals, c.progress, c.markSelfChanges, logFileError("restore-file"))
+			err = restoreAllZstd(
+				ctx,
+				workRoots,
+				c.addRestoreTotals,
+				c.progress,
+				c.markSelfChanges,
+				logFileError("restore-file"),
+			)
 		} else {
-			err = restoreWOF(ctx, workRoots, c.addRestoreTotals, c.progress, &c.wofOwnership, c.markSelfChanges, logFileError("decompress-file"))
+			err = restoreWOF(
+				ctx,
+				workRoots,
+				c.addRestoreTotals,
+				c.progress,
+				&c.wofOwnership,
+				c.markSelfChanges,
+				logFileError("decompress-file"),
+			)
 		}
 	}
 	if errors.Is(err, context.Canceled) {
@@ -644,7 +682,8 @@ func closeCompressionWatcher(value *watcher.Watcher) error {
 
 func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder string) error {
 	state := c.snapshot()
-	compressionApplies := state.Method == "zstd" && (state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
+	compressionApplies := state.Method == "zstd" &&
+		(state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
 	if !compressionApplies {
 		return nil
 	}
@@ -854,7 +893,16 @@ func (c *compressionCoordinator) logError(err error, stage, method, path string)
 	if err == nil || c.owner.log == nil {
 		return
 	}
-	c.diagnostic.Report(c.owner.log, err, "Mod:compression", infra.Diagnostic{Operation: "compression", Stage: stage, Fields: map[string]any{"method": method, "path": path, "cleanup": "pending"}})
+	c.diagnostic.Report(
+		c.owner.log,
+		err,
+		"Mod:compression",
+		infra.Diagnostic{
+			Operation: "compression",
+			Stage:     stage,
+			Fields:    map[string]any{"method": method, "path": path, "cleanup": "pending"},
+		},
+	)
 }
 
 func (c *compressionCoordinator) snapshot() CompressionState {
@@ -868,7 +916,8 @@ func (c *compressionCoordinator) publish() {
 }
 
 func (c *compressionCoordinator) deriveCapabilitiesLocked() {
-	busy := c.running || c.state.Status == "checking" || c.state.Status == "compressing" || c.state.Status == "decompressing"
+	busy := c.running || c.state.Status == "checking" || c.state.Status == "compressing" ||
+		c.state.Status == "decompressing"
 	interruptibleEnable := compressionEnableInProgress(c.state)
 	c.state.CanToggle = !c.configuring && (!busy || interruptibleEnable)
 	c.state.CanConfigure = !c.configuring && !c.state.Enabled && !busy

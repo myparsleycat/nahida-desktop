@@ -12,7 +12,15 @@ func TestProxyCredentialsAndRestart(t *testing.T) {
 	if _, err := s.LoadProxySettings(ctx); err != nil {
 		t.Fatal(err)
 	}
-	input := ProxySettingsInput{Enabled: true, Type: "socks5h", Host: "127.0.0.1", Port: 1080, Username: "private-user", Password: "private-password", PasswordAction: "replace"}
+	input := ProxySettingsInput{
+		Enabled:        true,
+		Type:           "socks5h",
+		Host:           "127.0.0.1",
+		Port:           1080,
+		Username:       "private-user",
+		Password:       "private-password",
+		PasswordAction: "replace",
+	}
 	if err := s.SetProxySettings(ctx, input); err != nil {
 		t.Fatal(err)
 	}

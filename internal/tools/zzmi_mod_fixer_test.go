@@ -48,7 +48,10 @@ filename = hair.buf
 	service.UseClient(openToolsTestDB(t))
 	useToolsTestAppData(t, service, t.TempDir())
 	importer := "ZZMI"
-	if err := service.client.GamePaths.Insert(ctx, db.GamePathRow{Game: "ZZZ", ModFolderPath: root, Importer: &importer}); err != nil {
+	if err := service.client.GamePaths.Insert(
+		ctx,
+		db.GamePathRow{Game: "ZZZ", ModFolderPath: root, Importer: &importer},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +85,10 @@ filename = hair.buf
 	if len(restore.Conflicts) != 1 || restore.Restored != 0 {
 		t.Fatalf("expected one restore conflict: %+v", restore)
 	}
-	restore, err = service.ZZMIFixerRestore(ctx, ZZMIFixerRestoreInput{Path: target, SessionID: *result.SessionID, Force: true})
+	restore, err = service.ZZMIFixerRestore(
+		ctx,
+		ZZMIFixerRestoreInput{Path: target, SessionID: *result.SessionID, Force: true},
+	)
 	if err != nil || restore.Restored != 1 {
 		t.Fatalf("force restore = %+v, %v", restore, err)
 	}
@@ -105,10 +111,18 @@ func TestZZMIFixerRequiresZZMIImporter(t *testing.T) {
 	service.UseClient(openToolsTestDB(t))
 	useToolsTestAppData(t, service, t.TempDir())
 	importer := "WWMI"
-	if err := service.client.GamePaths.Insert(ctx, db.GamePathRow{Game: "WW", ModFolderPath: root, Importer: &importer}); err != nil {
+	if err := service.client.GamePaths.Insert(
+		ctx,
+		db.GamePathRow{Game: "WW", ModFolderPath: root, Importer: &importer},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ZZMIFixerPrepare(ctx, root, false); err == nil || err.Error() != "Path is outside the managed ZZMI mod folder" {
+	if _, err := service.ZZMIFixerPrepare(
+		ctx,
+		root,
+		false,
+	); err == nil ||
+		err.Error() != "Path is outside the managed ZZMI mod folder" {
 		t.Fatalf("unexpected importer validation: %v", err)
 	}
 }
@@ -189,7 +203,11 @@ func TestZZMIActivePackRequiresMatchingManifestDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256Hex(data)
-	if err := os.WriteFile(filepath.Join(dir, zzmiRulesCacheDirName, digest, zzmiRulesFileName), []byte("tampered"), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, zzmiRulesCacheDirName, digest, zzmiRulesFileName),
+		[]byte("tampered"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	loaded, source, err := service.zzmiLoadActivePack()
@@ -300,7 +318,8 @@ func TestZZMIFixerPreparePersistsRemoteRelease(t *testing.T) {
 	}
 
 	stored := readZZMILatestRelease(t, client)
-	if stored.Tag != remote.Tag || stored.Commit != remote.Commit || stored.Zipball != remote.Zipball || stored.CheckedAt == "" {
+	if stored.Tag != remote.Tag || stored.Commit != remote.Commit || stored.Zipball != remote.Zipball ||
+		stored.CheckedAt == "" {
 		t.Fatalf("persisted release = %#v", stored)
 	}
 
@@ -313,7 +332,8 @@ func TestZZMIFixerPreparePersistsRemoteRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hits != 0 || result2.Rules.CheckedRemotely || result2.Rules.LatestTag == nil || *result2.Rules.LatestTag != remote.Tag {
+	if hits != 0 || result2.Rules.CheckedRemotely || result2.Rules.LatestTag == nil ||
+		*result2.Rules.LatestTag != remote.Tag {
 		t.Fatalf("persisted cache was not reused: hits=%d rules=%+v", hits, result2.Rules)
 	}
 }
@@ -350,7 +370,11 @@ func TestZZMIFixerPrepareForceRefreshBypassesCache(t *testing.T) {
 		Zipball: "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/zipball/v2.0.0",
 	}
 	hits := 0
-	service := newZZMIFixerTestService(t, client, zzmiRemoteReleaseHandler(remote.Tag, remote.Commit, func() { hits++ }))
+	service := newZZMIFixerTestService(
+		t,
+		client,
+		zzmiRemoteReleaseHandler(remote.Tag, remote.Commit, func() { hits++ }),
+	)
 
 	result, err := service.ZZMIFixerPrepare(ctx, root, true)
 	if err != nil {
@@ -393,7 +417,8 @@ func TestZZMIFixerPrepareFallsBackAndRefreshesCooldown(t *testing.T) {
 	}
 
 	stored := readZZMILatestRelease(t, client)
-	if parseRFC3339(stored.CheckedAt).Equal(staleCheckedAt) || time.Since(parseRFC3339(stored.CheckedAt)) > time.Minute {
+	if parseRFC3339(stored.CheckedAt).Equal(staleCheckedAt) ||
+		time.Since(parseRFC3339(stored.CheckedAt)) > time.Minute {
 		t.Fatalf("fallback did not refresh CheckedAt: %q", stored.CheckedAt)
 	}
 
@@ -402,7 +427,8 @@ func TestZZMIFixerPrepareFallsBackAndRefreshesCooldown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hits != 0 || result2.Rules.CheckedRemotely || result2.Rules.LatestTag == nil || *result2.Rules.LatestTag != cached.Tag {
+	if hits != 0 || result2.Rules.CheckedRemotely || result2.Rules.LatestTag == nil ||
+		*result2.Rules.LatestTag != cached.Tag {
 		t.Fatalf("refreshed cooldown still contacted GitHub: hits=%d rules=%+v", hits, result2.Rules)
 	}
 }
@@ -445,7 +471,12 @@ func TestZZMIFixerPrepareTreatsBrokenCacheAsMiss(t *testing.T) {
 	ctx := context.Background()
 	client := openToolsTestDB(t)
 	root := insertZZMITestTarget(t, client)
-	if err := client.AppState.Upsert(ctx, zzmiLatestReleaseKey, "{not-json", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := client.AppState.Upsert(
+		ctx,
+		zzmiLatestReleaseKey,
+		"{not-json",
+		time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
 		t.Fatal(err)
 	}
 	remote := sampleZZMILatestRelease(time.Time{})
@@ -464,7 +495,10 @@ func insertZZMITestTarget(t *testing.T, client *db.Client) string {
 	t.Helper()
 	root := t.TempDir()
 	importer := "ZZMI"
-	if err := client.GamePaths.Insert(context.Background(), db.GamePathRow{Game: "ZZZ", ModFolderPath: root, Importer: &importer}); err != nil {
+	if err := client.GamePaths.Insert(
+		context.Background(),
+		db.GamePathRow{Game: "ZZZ", ModFolderPath: root, Importer: &importer},
+	); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -521,7 +555,11 @@ func newZZMIFixerTestService(t *testing.T, client *db.Client, handle func(*http.
 				if err != nil {
 					return nil, err
 				}
-				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+				return &http.Response{
+					StatusCode: status,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
 			})},
 		}),
 	})
@@ -540,7 +578,11 @@ func zzmiRemoteReleaseHandler(tag, commit string, onHit func()) func(*http.Reque
 		}
 		switch request.URL.String() {
 		case zzmiLatestReleaseURL:
-			return http.StatusOK, fmt.Sprintf(`{"tag_name":%q,"zipball_url":%q,"published_at":"2026-09-03T12:00:00Z"}`, tag, zipball), nil
+			return http.StatusOK, fmt.Sprintf(
+				`{"tag_name":%q,"zipball_url":%q,"published_at":"2026-09-03T12:00:00Z"}`,
+				tag,
+				zipball,
+			), nil
 		case refURL:
 			return http.StatusOK, fmt.Sprintf(`{"object":{"type":"commit","sha":%q}}`, commit), nil
 		case treeURL:

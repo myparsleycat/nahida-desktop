@@ -20,7 +20,9 @@ if DRAW_TYPE == 8
 endif
 `
 	wrapped := wrapNamespaceHashes(input, "CharCMerge", 0)
-	want := regexp.MustCompile(`(?s)hash = beef0002\nmatch_priority = 0\nif \$\\CharCMerge\\Master\\swapvar==0\n\thandling = skip\n\tvb2 = ResourceCharCHairBlend\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourceCharCHairPosition\n\t\tdraw = 2981, 0\n\tendif\n\tif DRAW_TYPE == 8\n\t\tResource\\SRMI\\PositionBuffer = ref ResourceCharCHairPositionCS\n\t\t\$\\SRMI\\vertcount = 2981\n\tendif\nendif`)
+	want := regexp.MustCompile(
+		`(?s)hash = beef0002\nmatch_priority = 0\nif \$\\CharCMerge\\Master\\swapvar==0\n\thandling = skip\n\tvb2 = ResourceCharCHairBlend\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourceCharCHairPosition\n\t\tdraw = 2981, 0\n\tendif\n\tif DRAW_TYPE == 8\n\t\tResource\\SRMI\\PositionBuffer = ref ResourceCharCHairPositionCS\n\t\t\$\\SRMI\\vertcount = 2981\n\tendif\nendif`,
+	)
 	if !want.MatchString(wrapped) {
 		t.Fatalf("wrapped = %s", wrapped)
 	}
@@ -50,7 +52,9 @@ vb0 = ResourcePosition1
 ps-t0 = ResourceTexture
 `
 	wrapped := wrapNamespaceHashes(input, "CharA", 0)
-	want := regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\n\tps-t0 = ResourceTexture\nendif`)
+	want := regexp.MustCompile(
+		`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\n\tps-t0 = ResourceTexture\nendif`,
+	)
 	if !want.MatchString(wrapped) {
 		t.Fatalf("wrapped = %s", wrapped)
 	}
@@ -72,7 +76,9 @@ if $mod_enabled && DRAW_TYPE == 4
 endif
 `
 	wrapped := wrapNamespaceHashes(input, "CharD", 1)
-	want := regexp.MustCompile(`(?s)hash = beef0003\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\CharD\\Master\\swapvar==1\n\t\$object_detected = 1\n\t\$lod_level = 0\n\tif \$mod_enabled && DRAW_TYPE == 4\n\t    handling = skip\n\t    run = CommandList_Draw_Component0\n\tendif\nendif`)
+	want := regexp.MustCompile(
+		`(?s)hash = beef0003\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\CharD\\Master\\swapvar==1\n\t\$object_detected = 1\n\t\$lod_level = 0\n\tif \$mod_enabled && DRAW_TYPE == 4\n\t    handling = skip\n\t    run = CommandList_Draw_Component0\n\tendif\nendif`,
+	)
 	if !want.MatchString(wrapped) {
 		t.Fatalf("wrapped = %s", wrapped)
 	}
@@ -92,7 +98,9 @@ match_index_count = 48909
 handling = skip
 `
 	wrapped := wrapNamespaceHashes(input, "CharD", 1)
-	want := regexp.MustCompile(`hash = beef0003\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\CharD\\Master\\swapvar==1\n\t\$object_detected = 1\n\thandling = skip\nendif`)
+	want := regexp.MustCompile(
+		`hash = beef0003\nmatch_priority = 1\nmatch_index_count = 48909\nif \$\\CharD\\Master\\swapvar==1\n\t\$object_detected = 1\n\thandling = skip\nendif`,
+	)
 	if !want.MatchString(wrapped) {
 		t.Fatalf("wrapped = %s", wrapped)
 	}
@@ -107,7 +115,9 @@ if $object_detected
 endif
 `
 	wrapped := wrapNamespaceHashes(input, "CharD", 1)
-	want := regexp.MustCompile(`(?s)hash = beef0004\nmatch_priority = 1\nif \$\\CharD\\Master\\swapvar==1\n\tif \$object_detected\n\t    this = Resource_Texture0\n\tendif\nendif`)
+	want := regexp.MustCompile(
+		`(?s)hash = beef0004\nmatch_priority = 1\nif \$\\CharD\\Master\\swapvar==1\n\tif \$object_detected\n\t    this = Resource_Texture0\n\tendif\nendif`,
+	)
 	if !want.MatchString(wrapped) {
 		t.Fatalf("wrapped = %s", wrapped)
 	}

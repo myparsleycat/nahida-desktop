@@ -43,7 +43,10 @@ func TestCalculateTextureResizeTargetMatchesSourceBackend(t *testing.T) {
 func TestTextureCandidatesMatchSourceBackend(t *testing.T) {
 	t.Parallel()
 	if candidates := textureCandidates(4096, 4096); len(candidates) != 3 ||
-		candidates[0] != [2]int{1024, 1024} || candidates[1] != [2]int{2048, 2048} || candidates[2] != [2]int{3072, 3072} {
+		candidates[0] != [2]int{
+			1024,
+			1024,
+		} || candidates[1] != [2]int{2048, 2048} || candidates[2] != [2]int{3072, 3072} {
 		t.Fatalf("candidates = %v", candidates)
 	}
 	if candidates := textureCandidates(4096, 2048); len(candidates) != 1 || candidates[0] != [2]int{2048, 1024} {
@@ -132,7 +135,8 @@ func TestExecuteResizeSkipsConvertWithSameFormat(t *testing.T) {
 	if result.Skipped != 1 || result.Updated != 0 || len(result.Files) != 1 {
 		t.Fatalf("result = %#v", result)
 	}
-	if result.Files[0].Message == nil || *result.Files[0].Message != "Selected output format matches the source format." {
+	if result.Files[0].Message == nil ||
+		*result.Files[0].Message != "Selected output format matches the source format." {
 		t.Fatalf("message = %v", result.Files[0].Message)
 	}
 	if regularFile(ddsPath + ".bak") {
@@ -149,7 +153,8 @@ func TestExecuteResizeRejectsNonDDSFile(t *testing.T) {
 	_, err := executeTextureResize(context.Background(), textureResizeRequest{
 		TargetPath: path, Mode: "percent", Operation: "resize", Percent: 50,
 	})
-	if err == nil || !strings.HasPrefix(err.Error(), "Target file '") || !strings.HasSuffix(err.Error(), "' must be a DDS texture.") {
+	if err == nil || !strings.HasPrefix(err.Error(), "Target file '") ||
+		!strings.HasSuffix(err.Error(), "' must be a DDS texture.") {
 		t.Fatalf("error = %v", err)
 	}
 }

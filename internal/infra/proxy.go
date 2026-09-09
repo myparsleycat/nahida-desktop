@@ -84,7 +84,10 @@ func NewProxyNetwork(config ProxyConfig) (*ProxyNetwork, error) {
 	return newProxyNetwork(config, net.DefaultResolver.LookupIPAddr)
 }
 
-func newProxyNetwork(config ProxyConfig, lookup func(context.Context, string) ([]net.IPAddr, error)) (*ProxyNetwork, error) {
+func newProxyNetwork(
+	config ProxyConfig,
+	lookup func(context.Context, string) ([]net.IPAddr, error),
+) (*ProxyNetwork, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -111,9 +114,17 @@ func newProxyNetwork(config ProxyConfig, lookup func(context.Context, string) ([
 			stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 			defer stop()
 			_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
-			request := &http.Request{Method: http.MethodConnect, URL: &url.URL{Opaque: target}, Host: target, Header: make(http.Header)}
+			request := &http.Request{
+				Method: http.MethodConnect,
+				URL:    &url.URL{Opaque: target},
+				Host:   target,
+				Header: make(http.Header),
+			}
 			if config.Username != "" {
-				request.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(config.Username+":"+config.Password)))
+				request.Header.Set(
+					"Proxy-Authorization",
+					"Basic "+base64.StdEncoding.EncodeToString([]byte(config.Username+":"+config.Password)),
+				)
 			}
 			if err = request.Write(conn); err != nil {
 				_ = conn.Close()
@@ -139,7 +150,12 @@ func newProxyNetwork(config ProxyConfig, lookup func(context.Context, string) ([
 		if config.Username != "" {
 			auth = &proxy.Auth{User: config.Username, Password: config.Password}
 		}
-		socks, err := proxy.SOCKS5("tcp", address, auth, &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second})
+		socks, err := proxy.SOCKS5(
+			"tcp",
+			address,
+			auth,
+			&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second},
+		)
 		if err != nil {
 			return nil, err
 		}

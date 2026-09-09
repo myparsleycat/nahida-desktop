@@ -144,7 +144,11 @@ func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...
 	w.cookies = kept
 	return nil
 }
-func (w *fakeLoginWindow) OnWindowEvent(eventType events.WindowEventType, callback func(*application.WindowEvent)) func() {
+
+func (w *fakeLoginWindow) OnWindowEvent(
+	eventType events.WindowEventType,
+	callback func(*application.WindowEvent),
+) func() {
 	w.mu.Lock()
 	w.listeners[eventType] = append(w.listeners[eventType], callback)
 	w.mu.Unlock()
@@ -196,7 +200,8 @@ func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 		t.Fatalf("created = %d", created.Load())
 	}
 	login.Close()
-	if err := <-ownerDone; !errors.Is(err, gamebanana.ErrAuthFailed) && err != nil && err.Error() != "GAMEBANANA_AUTH_FAILED" {
+	if err := <-ownerDone; !errors.Is(err, gamebanana.ErrAuthFailed) && err != nil &&
+		err.Error() != "GAMEBANANA_AUTH_FAILED" {
 		t.Fatalf("owner err = %v", err)
 	}
 }

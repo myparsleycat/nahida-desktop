@@ -80,7 +80,14 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 }
 
 func waitForVisibleProcess(ctx context.Context, processName string, timeout time.Duration) (int, error) {
-	return waitForVisibleProcessWith(ctx, processName, timeout, 100*time.Millisecond, findProcessPID, processHasVisibleWindow)
+	return waitForVisibleProcessWith(
+		ctx,
+		processName,
+		timeout,
+		100*time.Millisecond,
+		findProcessPID,
+		processHasVisibleWindow,
+	)
 }
 
 func waitForVisibleProcessWith(

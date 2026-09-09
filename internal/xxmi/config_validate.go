@@ -38,24 +38,54 @@ var proxyConfigFields = []configField{
 }
 
 var packageConfigFields = []configField{
-	{"latest_version", configString}, {"skipped_version", configString}, {"deployed_version", configString},
-	{"update_check_time", configNumber}, {"latest_release_notes", configString}, {"deployed_release_notes", configString},
+	{"latest_version", configString},
+	{"skipped_version", configString},
+	{"deployed_version", configString},
+	{
+		"update_check_time",
+		configNumber,
+	},
+	{"latest_release_notes", configString},
+	{"deployed_release_notes", configString},
 }
 
 var baseImporterConfigFields = []configField{
-	{"game_exe_names", configStringArray}, {"game_folder_names", configStringArray},
-	{"game_folder_children", configStringArray}, {"package_name", configString}, {"importer_folder", configString},
-	{"game_folder", configString}, {"use_launch_options", configBoolean}, {"overwrite_ini", configBoolean},
-	{"process_start_method", configString}, {"xxmi_dll_init_delay", configNumber}, {"process_priority", configString},
-	{"window_mode", configString}, {"run_pre_launch_enabled", configBoolean}, {"run_pre_launch", configString},
-	{"run_pre_launch_signature", configString}, {"run_pre_launch_wait", configBoolean},
-	{"custom_launch_enabled", configBoolean}, {"custom_launch", configString}, {"custom_launch_signature", configString},
-	{"custom_launch_inject_mode", configString}, {"run_post_load_enabled", configBoolean},
-	{"run_post_load", configString}, {"run_post_load_signature", configString}, {"run_post_load_wait", configBoolean},
-	{"extra_libraries_enabled", configBoolean}, {"extra_libraries", configString},
-	{"extra_libraries_signature", configString}, {"deployed_migoto_signatures", configStringRecord},
-	{"shortcut_deployed", configBoolean}, {"d3dx_ini", configObject}, {"configure_game", configBoolean},
-	{"launch_count", configNumber}, {"launch_options", configString},
+	{"game_exe_names", configStringArray},
+	{"game_folder_names", configStringArray},
+	{"game_folder_children", configStringArray},
+	{"package_name", configString},
+	{"importer_folder", configString},
+	{"game_folder", configString},
+	{"use_launch_options", configBoolean},
+	{"overwrite_ini", configBoolean},
+	{"process_start_method", configString},
+	{"xxmi_dll_init_delay", configNumber},
+	{"process_priority", configString},
+	{"window_mode", configString},
+	{"run_pre_launch_enabled", configBoolean},
+	{"run_pre_launch", configString},
+	{"run_pre_launch_signature", configString},
+	{"run_pre_launch_wait", configBoolean},
+	{
+		"custom_launch_enabled",
+		configBoolean,
+	},
+	{"custom_launch", configString},
+	{"custom_launch_signature", configString},
+	{"custom_launch_inject_mode", configString},
+	{"run_post_load_enabled", configBoolean},
+	{"run_post_load", configString},
+	{"run_post_load_signature", configString},
+	{"run_post_load_wait", configBoolean},
+	{"extra_libraries_enabled", configBoolean},
+	{"extra_libraries", configString},
+	{"extra_libraries_signature", configString},
+	{"deployed_migoto_signatures", configStringRecord},
+	{"shortcut_deployed", configBoolean},
+	{"d3dx_ini", configObject},
+	{"configure_game", configBoolean},
+	{"launch_count", configNumber},
+	{"launch_options", configString},
 }
 
 var migotoConfigFields = []configField{
@@ -166,7 +196,11 @@ func validateImporterConfig(name string, value any) error {
 			return err
 		}
 		perf, _ := importer["perf_tweaks"].(map[string]any)
-		if err := requireConfigFields(perf, path+".Importer.perf_tweaks", []configField{{"SystemSettings", configScalarRecord}}); err != nil {
+		if err := requireConfigFields(
+			perf,
+			path+".Importer.perf_tweaks",
+			[]configField{{"SystemSettings", configScalarRecord}},
+		); err != nil {
 			return err
 		}
 		for _, field := range []string{"unlock_fps", "force_max_lod_bias", "disable_wounded_fx", "disable_wounded_fx_warned"} {
@@ -199,12 +233,36 @@ func validateD3DXConfig(value any, path string) error {
 		fields []configField
 	}{
 		{path + ".core.Loader", nestedConfigValue(d3dx, "core", "Loader"), []configField{{"loader", configString}}},
-		{path + ".enforce_rendering.Rendering", nestedConfigValue(d3dx, "enforce_rendering", "Rendering"), []configField{{"texture_hash", configNumber}, {"track_texture_updates", configNumber}}},
-		{path + ".calls_logging.Logging.calls", nestedConfigValue(d3dx, "calls_logging", "Logging", "calls"), []configField{{"on", configNumber}, {"off", configNumber}}},
-		{path + ".debug_logging.Logging.debug", nestedConfigValue(d3dx, "debug_logging", "Logging", "debug"), []configField{{"on", configNumber}, {"off", configNumber}}},
-		{path + ".mute_warnings.Logging.show_warnings", nestedConfigValue(d3dx, "mute_warnings", "Logging", "show_warnings"), []configField{{"on", configNumber}, {"off", configNumber}}},
-		{path + ".enable_hunting.Hunting.hunting", nestedConfigValue(d3dx, "enable_hunting", "Hunting", "hunting"), []configField{{"on", configNumber}, {"off", configNumber}}},
-		{path + ".dump_shaders.Hunting.marking_actions", nestedConfigValue(d3dx, "dump_shaders", "Hunting", "marking_actions"), []configField{{"on", configString}, {"off", configString}}},
+		{
+			path + ".enforce_rendering.Rendering",
+			nestedConfigValue(d3dx, "enforce_rendering", "Rendering"),
+			[]configField{{"texture_hash", configNumber}, {"track_texture_updates", configNumber}},
+		},
+		{
+			path + ".calls_logging.Logging.calls",
+			nestedConfigValue(d3dx, "calls_logging", "Logging", "calls"),
+			[]configField{{"on", configNumber}, {"off", configNumber}},
+		},
+		{
+			path + ".debug_logging.Logging.debug",
+			nestedConfigValue(d3dx, "debug_logging", "Logging", "debug"),
+			[]configField{{"on", configNumber}, {"off", configNumber}},
+		},
+		{
+			path + ".mute_warnings.Logging.show_warnings",
+			nestedConfigValue(d3dx, "mute_warnings", "Logging", "show_warnings"),
+			[]configField{{"on", configNumber}, {"off", configNumber}},
+		},
+		{
+			path + ".enable_hunting.Hunting.hunting",
+			nestedConfigValue(d3dx, "enable_hunting", "Hunting", "hunting"),
+			[]configField{{"on", configNumber}, {"off", configNumber}},
+		},
+		{
+			path + ".dump_shaders.Hunting.marking_actions",
+			nestedConfigValue(d3dx, "dump_shaders", "Hunting", "marking_actions"),
+			[]configField{{"on", configString}, {"off", configString}},
+		},
 	}
 	for _, check := range checks {
 		object, ok := check.value.(map[string]any)

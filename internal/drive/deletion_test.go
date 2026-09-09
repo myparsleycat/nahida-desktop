@@ -13,7 +13,8 @@ func TestResolveDeletionResultAcceptedFromData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveDeletionResult: %v", err)
 	}
-	if got.Accepted == nil || got.Accepted.DeletionJobID != "job-1" || got.Accepted.Status != "pending" || got.Accepted.DeletionJobToken != "" {
+	if got.Accepted == nil || got.Accepted.DeletionJobID != "job-1" || got.Accepted.Status != "pending" ||
+		got.Accepted.DeletionJobToken != "" {
 		t.Fatalf("accepted = %+v", got.Accepted)
 	}
 }

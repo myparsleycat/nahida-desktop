@@ -14,14 +14,24 @@ type touchSettingsFingerprint struct{ Radius, Strength, Falloff, MaxOffset, Damp
 
 var (
 	touchEmptyAssignmentRE = regexp.MustCompile(`(?m)^[\t ]*(?:global[\t ]+|post[\t ]+)?=[\t ]*`)
-	touchMalformedHeaderRE = regexp.MustCompile(`(?mi)^[\t ]*(?:constants|present|key|textureoverride|commandlist|customshader|resource)[^\[\r\n]*\][\t ]*$`)
-	touchStateMarkerRE     = regexp.MustCompile(`(?i)Nahida Touch Profile state\s*\(\s*([^\s)]+)\s*\)`)
+	touchMalformedHeaderRE = regexp.MustCompile(
+		`(?mi)^[\t ]*(?:constants|present|key|textureoverride|commandlist|customshader|resource)[^\[\r\n]*\][\t ]*$`,
+	)
+	touchStateMarkerRE = regexp.MustCompile(`(?i)Nahida Touch Profile state\s*\(\s*([^\s)]+)\s*\)`)
 )
 
-func validateTouchOutput(outputRoot, iniPath string, components []TouchComponentAnalysis, drafts []TouchComponentDraft, assets []TouchGeneratedAssets) (TouchValidationResult, error) {
+func validateTouchOutput(
+	outputRoot, iniPath string,
+	components []TouchComponentAnalysis,
+	drafts []TouchComponentDraft,
+	assets []TouchGeneratedAssets,
+) (TouchValidationResult, error) {
 	result := TouchValidationResult{OK: true, Issues: []TouchValidationIssue{}}
 	add := func(level, code, message string, componentID *string) {
-		result.Issues = append(result.Issues, TouchValidationIssue{Level: level, Code: code, Message: message, ComponentID: componentID})
+		result.Issues = append(
+			result.Issues,
+			TouchValidationIssue{Level: level, Code: code, Message: message, ComponentID: componentID},
+		)
 		if level == "error" {
 			result.OK = false
 		}
@@ -35,7 +45,10 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 		add("error", "invalid_ini_syntax", message, nil)
 	}
 	for _, shader := range touchShaderFiles {
-		if info, statErr := os.Stat(filepath.Join(outputRoot, "Resources", "IM", shader)); statErr != nil || !info.Mode().IsRegular() {
+		if info, statErr := os.Stat(
+			filepath.Join(outputRoot, "Resources", "IM", shader),
+		); statErr != nil ||
+			!info.Mode().IsRegular() {
 			add("error", "missing_shader", "Missing runtime shader: "+shader, nil)
 		}
 	}
@@ -64,14 +77,31 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 			settings, settingsErr := normalizeTouchZoneSettings(zone.Settings)
 			if settingsErr != nil {
 				id := draft.ComponentID
-				add("error", "invalid_zone_settings", fmt.Sprintf("Invalid settings for %s: %s", zone.ID, settingsErr), &id)
+				add(
+					"error",
+					"invalid_zone_settings",
+					fmt.Sprintf("Invalid settings for %s: %s", zone.ID, settingsErr),
+					&id,
+				)
 				continue
 			}
 			params := resolveTouchJiggleParams(settings, draft.ObjectID)
-			next := touchSettingsFingerprint{params.Radius, params.Strength, params.Falloff, params.MaxOffset, params.GrabDamping / defaultTouchJiggleParams.GrabDamping, params.GrabSpring / defaultTouchJiggleParams.GrabSpring}
+			next := touchSettingsFingerprint{
+				params.Radius,
+				params.Strength,
+				params.Falloff,
+				params.MaxOffset,
+				params.GrabDamping / defaultTouchJiggleParams.GrabDamping,
+				params.GrabSpring / defaultTouchJiggleParams.GrabSpring,
+			}
 			if previous, ok := channels[zone.Channel]; ok && !sameTouchFingerprint(previous, next) {
 				id := draft.ComponentID
-				add("error", "conflicting_zone_channel", fmt.Sprintf("Conflicting settings for runtime zone channel %d", zone.Channel), &id)
+				add(
+					"error",
+					"conflicting_zone_channel",
+					fmt.Sprintf("Conflicting settings for runtime zone channel %d", zone.Channel),
+					&id,
+				)
 			} else {
 				channels[zone.Channel] = next
 			}
@@ -106,7 +136,12 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 			}
 			expected := component.VertexCount * 16
 			if len(raw) != expected {
-				add("error", "mask_size", fmt.Sprintf("Mask size mismatch for %s: %d != %d", relative, len(raw), expected), &id)
+				add(
+					"error",
+					"mask_size",
+					fmt.Sprintf("Mask size mismatch for %s: %d != %d", relative, len(raw), expected),
+					&id,
+				)
 			}
 			for offset := 0; offset+4 <= len(raw); offset += 4 {
 				value := math.Float32frombits(binary.LittleEndian.Uint32(raw[offset:]))
@@ -149,7 +184,10 @@ func validateTouchOutput(outputRoot, iniPath string, components []TouchComponent
 func touchINIStructureErrors(text string) []string {
 	issues := []string{}
 	if line := touchEmptyAssignmentRE.FindString(text); line != "" {
-		issues = append(issues, "Generated INI contains an assignment without a variable name: "+strings.TrimSpace(line))
+		issues = append(
+			issues,
+			"Generated INI contains an assignment without a variable name: "+strings.TrimSpace(line),
+		)
 	}
 	if line := touchMalformedHeaderRE.FindString(text); line != "" {
 		issues = append(issues, "Generated INI contains a malformed section header: "+strings.TrimSpace(line))
@@ -168,5 +206,9 @@ func touchINIStructureErrors(text string) []string {
 }
 
 func sameTouchFingerprint(left, right touchSettingsFingerprint) bool {
-	return mathAbs(left.Radius-right.Radius) < 1e-9 && mathAbs(left.Strength-right.Strength) < 1e-9 && mathAbs(left.Falloff-right.Falloff) < 1e-9 && mathAbs(left.MaxOffset-right.MaxOffset) < 1e-9 && mathAbs(left.Damping-right.Damping) < 1e-9 && mathAbs(left.Spring-right.Spring) < 1e-9
+	return mathAbs(left.Radius-right.Radius) < 1e-9 && mathAbs(left.Strength-right.Strength) < 1e-9 &&
+		mathAbs(left.Falloff-right.Falloff) < 1e-9 &&
+		mathAbs(left.MaxOffset-right.MaxOffset) < 1e-9 &&
+		mathAbs(left.Damping-right.Damping) < 1e-9 &&
+		mathAbs(left.Spring-right.Spring) < 1e-9
 }

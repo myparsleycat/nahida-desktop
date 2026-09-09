@@ -91,7 +91,10 @@ func encodeFlatPNG(width, height int) []byte {
 
 func encodeOversizedPNG(width, height int) []byte {
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, solidImage{w: width, h: height, c: color.NRGBA{R: 32, G: 64, B: 96, A: 255}}); err != nil {
+	if err := png.Encode(
+		&buf,
+		solidImage{w: width, h: height, c: color.NRGBA{R: 32, G: 64, B: 96, A: 255}},
+	); err != nil {
 		panic(err)
 	}
 	return buf.Bytes()
@@ -1229,7 +1232,8 @@ filename = light.png
 			keys = append(keys, variant.TexKey)
 		}
 		joined := strings.Join(keys, " ")
-		if !strings.Contains(joined, "body.png") || !strings.Contains(joined, "womb.png") || !strings.Contains(joined, "ult.png") {
+		if !strings.Contains(joined, "body.png") || !strings.Contains(joined, "womb.png") ||
+			!strings.Contains(joined, "ult.png") {
 			t.Fatalf("bodyB textures = %q variants=%#v", joined, mesh.TextureVariants)
 		}
 	}
@@ -1310,7 +1314,8 @@ filename = bodyc-light.png
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
 	for _, mesh := range bodyA {
-		if !strings.Contains(texKey(mesh), "bodyc.png") || strings.Contains(texKey(mesh), "bodya.png") || !strings.Contains(lightMapKey(mesh), "bodyc-light.png") {
+		if !strings.Contains(texKey(mesh), "bodyc.png") || strings.Contains(texKey(mesh), "bodya.png") ||
+			!strings.Contains(lightMapKey(mesh), "bodyc-light.png") {
 			t.Fatalf("bodyA texKey=%q light=%q", texKey(mesh), lightMapKey(mesh))
 		}
 	}

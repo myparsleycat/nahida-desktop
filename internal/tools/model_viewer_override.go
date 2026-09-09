@@ -83,13 +83,28 @@ func collectModelViewerDrawBindings(sections []modINISection, variables map[stri
 		}
 		for _, key := range order {
 			group := byIB[key]
-			bindings = append(bindings, modelViewerDrawBinding{SectionName: section.Name, IBResourceName: group[0].IBResourceName, OverrideHash: modelViewerSectionValue(section, "hash"), Draws: group})
+			bindings = append(
+				bindings,
+				modelViewerDrawBinding{
+					SectionName:    section.Name,
+					IBResourceName: group[0].IBResourceName,
+					OverrideHash:   modelViewerSectionValue(section, "hash"),
+					Draws:          group,
+				},
+			)
 		}
 	}
 	return bindings
 }
 
-func collectModelViewerDrawContext(section modINISection, variables map[string]any, sectionLookup map[string]modINISection, inherited []modelViewerConditionClause, inheritedIB string, visited map[string]bool) ([]modelViewerDrawInstruction, string) {
+func collectModelViewerDrawContext(
+	section modINISection,
+	variables map[string]any,
+	sectionLookup map[string]modINISection,
+	inherited []modelViewerConditionClause,
+	inheritedIB string,
+	visited map[string]bool,
+) ([]modelViewerDrawInstruction, string) {
 	name := modelViewerNormalizeKey(section.Header + section.Name)
 	if visited[name] {
 		return nil, inheritedIB
@@ -112,7 +127,13 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 		switch {
 		case strings.HasPrefix(lower, "if "):
 			expression := strings.TrimSpace(line[3:])
-			stack = append(stack, modelViewerBranchFrame{active: []modelViewerConditionClause{{Expression: expression, Expected: true}}, inverse: []modelViewerConditionClause{{Expression: expression, Expected: false}}})
+			stack = append(
+				stack,
+				modelViewerBranchFrame{
+					active:  []modelViewerConditionClause{{Expression: expression, Expected: true}},
+					inverse: []modelViewerConditionClause{{Expression: expression, Expected: false}},
+				},
+			)
 			continue
 		case strings.HasPrefix(lower, "elif "), strings.HasPrefix(lower, "else if "):
 			expression := strings.TrimSpace(line[5:])
@@ -124,8 +145,14 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 				previous = stack[len(stack)-1]
 				stack = stack[:len(stack)-1]
 			}
-			active := append(append([]modelViewerConditionClause(nil), previous.inverse...), modelViewerConditionClause{Expression: expression, Expected: true})
-			inverse := append(append([]modelViewerConditionClause(nil), previous.inverse...), modelViewerConditionClause{Expression: expression, Expected: false})
+			active := append(
+				append([]modelViewerConditionClause(nil), previous.inverse...),
+				modelViewerConditionClause{Expression: expression, Expected: true},
+			)
+			inverse := append(
+				append([]modelViewerConditionClause(nil), previous.inverse...),
+				modelViewerConditionClause{Expression: expression, Expected: false},
+			)
 			stack = append(stack, modelViewerBranchFrame{active: active, inverse: inverse})
 			continue
 		case lower == "else":
@@ -145,7 +172,14 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
 			if nested := modelViewerNestedSectionName(key, value); nested != "" {
 				if nestedSection, ok := sectionLookup[modelViewerNormalizeKey(nested)]; ok {
-					draws, nextIB := collectModelViewerDrawContext(nestedSection, variables, sectionLookup, activeConditions(), currentIB, visited)
+					draws, nextIB := collectModelViewerDrawContext(
+						nestedSection,
+						variables,
+						sectionLookup,
+						activeConditions(),
+						currentIB,
+						visited,
+					)
 					instructions = append(instructions, draws...)
 					if nextIB != "" {
 						currentIB = nextIB
@@ -171,7 +205,13 @@ func collectModelViewerDrawContext(section modINISection, variables map[string]a
 	return instructions, currentIB
 }
 
-func buildModelViewerIndicesForState(bindings []modelViewerDrawBinding, ibName string, indices []uint32, variables map[string]any, warn func(string)) ([]uint32, error) {
+func buildModelViewerIndicesForState(
+	bindings []modelViewerDrawBinding,
+	ibName string,
+	indices []uint32,
+	variables map[string]any,
+	warn func(string),
+) ([]uint32, error) {
 	var active []modelViewerDrawInstruction
 	for _, binding := range bindings {
 		if modelViewerNormalizeKey(binding.IBResourceName) != modelViewerNormalizeKey(ibName) {
@@ -205,7 +245,12 @@ func buildModelViewerIndicesForState(bindings []modelViewerDrawBinding, ibName s
 		for _, index := range indices[draw.StartIndex:end] {
 			value := int64(index) + int64(draw.BaseVertex)
 			if value < 0 {
-				return nil, fmt.Errorf("merged index became negative for draw start=%d count=%d baseVertex=%d", draw.StartIndex, draw.IndexCount, draw.BaseVertex)
+				return nil, fmt.Errorf(
+					"merged index became negative for draw start=%d count=%d baseVertex=%d",
+					draw.StartIndex,
+					draw.IndexCount,
+					draw.BaseVertex,
+				)
 			}
 			merged = append(merged, uint32(value))
 		}

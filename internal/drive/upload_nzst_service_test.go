@@ -61,12 +61,24 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 					items := make([]map[string]any, 0, len(plan.Files))
 					uploads := make([]map[string]any, 0, len(plan.Files))
 					for index, file := range plan.Files {
-						if strings.HasSuffix(file.Name, ".nzst") || file.Size != int64(len(content)) || file.SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) {
+						if strings.HasSuffix(file.Name, ".nzst") || file.Size != int64(len(content)) ||
+							file.SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) {
 							t.Errorf("plan file = %+v", file)
 						}
 						intent := fmt.Sprintf("intent-%d", index)
-						items = append(items, map[string]any{"clientId": file.ClientID, "status": "pending", "intentId": intent})
-						uploads = append(uploads, map[string]any{"intentId": intent, "url": server.URL + "/v2/uploads/" + intent, "method": "POST", "form": map[string]string{"token": "test", "sha256": file.SHA256}})
+						items = append(
+							items,
+							map[string]any{"clientId": file.ClientID, "status": "pending", "intentId": intent},
+						)
+						uploads = append(
+							uploads,
+							map[string]any{
+								"intentId": intent,
+								"url":      server.URL + "/v2/uploads/" + intent,
+								"method":   "POST",
+								"form":     map[string]string{"token": "test", "sha256": file.SHA256},
+							},
+						)
 					}
 					payload, err := json.Marshal(map[string]any{"items": items, "uploads": uploads})
 					if err != nil {
@@ -128,7 +140,10 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 						results := make([]map[string]string, 0, len(manifest.Entries))
 						for _, entry := range manifest.Entries {
 							assertUploadNZSTPayload(t, io.LimitReader(file, entry.PayloadBytes), entry.CompAlg, content)
-							results = append(results, map[string]string{"intentId": entry.IntentID, "status": "completed"})
+							results = append(
+								results,
+								map[string]string{"intentId": entry.IntentID, "status": "completed"},
+							)
 						}
 						_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
 						return
@@ -156,7 +171,10 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 				rules.MaxUploadBodyBytes = 32
 			}
 			drive.setUploadRules(rules)
-			conflicts, err := drive.GetUploadConflicts(t.Context(), GetUploadConflictsParams{DestID: "dest", Paths: paths})
+			conflicts, err := drive.GetUploadConflicts(
+				t.Context(),
+				GetUploadConflictsParams{DestID: "dest", Paths: paths},
+			)
 			if err != nil || len(conflicts.SkippedExtensions) != 0 {
 				t.Fatalf("conflicts = %+v, %v", conflicts, err)
 			}
@@ -190,7 +208,8 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 					t.Fatal(err)
 				}
 				if expect == transfer.StatusCompleted {
-					if record.TotalSize != int64(len(content)*len(paths)) || record.TransferredSize != record.TotalSize {
+					if record.TotalSize != int64(len(content)*len(paths)) ||
+						record.TransferredSize != record.TotalSize {
 						t.Fatalf("sizes = %+v", record)
 					}
 					break
@@ -299,7 +318,11 @@ func TestUploadNZSTResumeSkipsDeletedCompletedSources(t *testing.T) {
 					t.Fatal(err)
 				}
 				transfers := transfer.New()
-				restart := &uploadRestartData{Params: StartUploadParams{DestID: "dest"}, Preparation: prep, RequestID: "resume"}
+				restart := &uploadRestartData{
+					Params:      StartUploadParams{DestID: "dest"},
+					Preparation: prep,
+					RequestID:   "resume",
+				}
 				_, err = transfers.Create(transfer.CreateParams{
 					PID: prep.PID, Type: "upload", InitialStatus: transfer.StatusPending, RestartData: restart,
 					Data: transfer.Data{Files: []transfer.DownloadFile{
@@ -343,7 +366,10 @@ func TestUploadNZSTResumeSkipsDeletedCompletedSources(t *testing.T) {
 						w.WriteHeader(500)
 						return
 					}
-					if len(plan.Files) != 1 || plan.Files[0].ClientID != prep.Files[1].FID || plan.Files[0].Name != "pending.ini" || plan.Files[0].Size != 7 || plan.Files[0].SHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte("pending"))) {
+					if len(plan.Files) != 1 || plan.Files[0].ClientID != prep.Files[1].FID ||
+						plan.Files[0].Name != "pending.ini" ||
+						plan.Files[0].Size != 7 ||
+						plan.Files[0].SHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte("pending"))) {
 						t.Errorf("resume plan = %+v", plan)
 					}
 					record, _ := transfers.Get(prep.PID)
@@ -351,22 +377,33 @@ func TestUploadNZSTResumeSkipsDeletedCompletedSources(t *testing.T) {
 						t.Errorf("completed progress lost: %+v", record)
 					}
 					w.Header().Set("Content-Type", "text/event-stream")
-					_, _ = fmt.Fprintf(w, "event: complete\ndata: {\"items\":[{\"clientId\":%q,\"status\":\"exists\"}],\"uploads\":[]}\n\n", prep.Files[1].FID)
+					_, _ = fmt.Fprintf(
+						w,
+						"event: complete\ndata: {\"items\":[{\"clientId\":%q,\"status\":\"exists\"}],\"uploads\":[]}\n\n",
+						prep.Files[1].FID,
+					)
 				}))
 				defer server.Close()
 				drive := uploadServiceTestDrive(server, transfers)
 				drive.setUploadRules(testUploadRules())
-				state := &uploadRunnerState{hashes: map[string]string{prep.Files[0].FID: "cached-done", prep.Files[1].FID: "cached-pending"}}
-				if err := transfers.RegisterRunner(prep.PID, func(ctx context.Context, transfers *transfer.Transfer, pid string) error {
-					return drive.runUpload(ctx, transfers, pid, restart, state)
-				}); err != nil {
+				state := &uploadRunnerState{
+					hashes: map[string]string{prep.Files[0].FID: "cached-done", prep.Files[1].FID: "cached-pending"},
+				}
+				if err := transfers.RegisterRunner(
+					prep.PID,
+					func(ctx context.Context, transfers *transfer.Transfer, pid string) error {
+						return drive.runUpload(ctx, transfers, pid, restart, state)
+					},
+				); err != nil {
 					t.Fatal(err)
 				}
 				if err := transfers.ProcessQueue(t.Context()); err != nil {
 					t.Fatal(err)
 				}
 				record, ok := transfers.Get(prep.PID)
-				if !ok || record.Status != transfer.StatusCompleted || record.TransferredFiles != 2 || record.TransferredSize != 11 || record.TotalSize != 11 {
+				if !ok || record.Status != transfer.StatusCompleted || record.TransferredFiles != 2 ||
+					record.TransferredSize != 11 ||
+					record.TotalSize != 11 {
 					t.Fatalf("resume record = %+v", record)
 				}
 				if planned.Load() == allCompleted {

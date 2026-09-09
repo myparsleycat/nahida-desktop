@@ -47,7 +47,16 @@ func collectModelViewerResources(sections []modINISection) []modelViewerResource
 			continue
 		}
 		stride, _ := strconv.Atoi(modelViewerSectionValue(section, "stride"))
-		resources = append(resources, modelViewerResource{Name: section.Name, Filename: modelViewerSectionValue(section, "filename"), Stride: stride, Format: modelViewerSectionValue(section, "format"), Values: section.Values})
+		resources = append(
+			resources,
+			modelViewerResource{
+				Name:     section.Name,
+				Filename: modelViewerSectionValue(section, "filename"),
+				Stride:   stride,
+				Format:   modelViewerSectionValue(section, "format"),
+				Values:   section.Values,
+			},
+		)
 	}
 	return resources
 }
@@ -66,7 +75,9 @@ func detectModelViewerLayout(sections []modINISection, resources []modelViewerRe
 	for _, resource := range resources {
 		names[modelViewerNormalizeKey(resource.Name)] = true
 	}
-	if names[modelViewerNormalizeKey("IndexBuffer")] && names[modelViewerNormalizeKey("PositionBuffer")] && names[modelViewerNormalizeKey("VectorBuffer")] && names[modelViewerNormalizeKey("TexCoordBuffer")] {
+	if names[modelViewerNormalizeKey("IndexBuffer")] && names[modelViewerNormalizeKey("PositionBuffer")] &&
+		names[modelViewerNormalizeKey("VectorBuffer")] &&
+		names[modelViewerNormalizeKey("TexCoordBuffer")] {
 		return "wwmi"
 	}
 	return "mihoyo"
@@ -90,14 +101,24 @@ func parseModelViewerWwmiResourceName(name string) *modelViewerTypedResource {
 	return &modelViewerTypedResource{Key: match[1] + "IndexBuffer" + match[3], Kind: strings.ToLower(match[2])}
 }
 
-func collectModelViewerBufferGroups(modDir, layout string, resources []modelViewerResource, cache *modelViewerBufferCache, warn func(string)) ([]modelViewerBufferGroup, error) {
+func collectModelViewerBufferGroups(
+	modDir, layout string,
+	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
+	warn func(string),
+) ([]modelViewerBufferGroup, error) {
 	if layout == "wwmi" {
 		return collectModelViewerWwmiGroups(modDir, resources, cache, warn)
 	}
 	return collectModelViewerMihoyoGroups(modDir, resources, cache, warn)
 }
 
-func collectModelViewerMihoyoGroups(modDir string, resources []modelViewerResource, cache *modelViewerBufferCache, warn func(string)) ([]modelViewerBufferGroup, error) {
+func collectModelViewerMihoyoGroups(
+	modDir string,
+	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
+	warn func(string),
+) ([]modelViewerBufferGroup, error) {
 	type group struct{ position, blend, texcoord, single *modelViewerResource }
 	byKey := make(map[string]*group)
 	order := make([]string, 0)
@@ -141,7 +162,16 @@ func collectModelViewerMihoyoGroups(modDir string, resources []modelViewerResour
 			if err != nil {
 				return nil, err
 			}
-			groups = append(groups, modelViewerBufferGroup{Key: key, VBFilename: entry.single.Filename, VB: bytes, Stride: entry.single.Stride, SourceFiles: []string{entry.single.Filename}})
+			groups = append(
+				groups,
+				modelViewerBufferGroup{
+					Key:         key,
+					VBFilename:  entry.single.Filename,
+					VB:          bytes,
+					Stride:      entry.single.Stride,
+					SourceFiles: []string{entry.single.Filename},
+				},
+			)
 			continue
 		}
 		if entry.position == nil || entry.blend == nil || entry.texcoord == nil {
@@ -151,7 +181,11 @@ func collectModelViewerMihoyoGroups(modDir string, resources []modelViewerResour
 		strides := []int{entry.position.Stride, entry.blend.Stride, entry.texcoord.Stride}
 		interleaveKey := fmt.Sprintf("%s|%d|%d|%d", strings.Join(sourceFiles, "|"), strides[0], strides[1], strides[2])
 		vb, stride, err := cache.interleavedBuffers(interleaveKey, func() ([]byte, int, error) {
-			parts, err := readModelViewerResourceSet(modDir, []*modelViewerResource{entry.position, entry.blend, entry.texcoord}, cache)
+			parts, err := readModelViewerResourceSet(
+				modDir,
+				[]*modelViewerResource{entry.position, entry.blend, entry.texcoord},
+				cache,
+			)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -170,7 +204,10 @@ func collectModelViewerMihoyoGroups(modDir string, resources []modelViewerResour
 			}
 			return nil, err
 		}
-		groups = append(groups, modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles})
+		groups = append(
+			groups,
+			modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles},
+		)
 	}
 	return groups, nil
 }
@@ -182,10 +219,16 @@ func isModelViewerShapePositionVariant(name string) bool {
 		return false
 	}
 	suffix := lower[position+len("position"):]
-	return suffix != "" && suffix != "base" && !strings.HasPrefix(suffix, "base.") && modelViewerPositionSuffixRE.MatchString(suffix)
+	return suffix != "" && suffix != "base" && !strings.HasPrefix(suffix, "base.") &&
+		modelViewerPositionSuffixRE.MatchString(suffix)
 }
 
-func collectModelViewerWwmiGroups(modDir string, resources []modelViewerResource, cache *modelViewerBufferCache, warn func(string)) ([]modelViewerBufferGroup, error) {
+func collectModelViewerWwmiGroups(
+	modDir string,
+	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
+	warn func(string),
+) ([]modelViewerBufferGroup, error) {
 	type group struct{ position, vector, blend, color, texcoord *modelViewerResource }
 	byKey := make(map[string]*group)
 	order := make([]string, 0)
@@ -223,7 +266,8 @@ func collectModelViewerWwmiGroups(modDir string, resources []modelViewerResource
 	for _, key := range order {
 		entry := byKey[key]
 		set := []*modelViewerResource{entry.position, entry.vector, entry.blend, entry.color, entry.texcoord}
-		if entry.position == nil || entry.vector == nil || entry.blend == nil || entry.color == nil || entry.texcoord == nil {
+		if entry.position == nil || entry.vector == nil || entry.blend == nil || entry.color == nil ||
+			entry.texcoord == nil {
 			if warn != nil {
 				warn("Skipping incomplete WWMI buffer group: " + key)
 			}
@@ -250,12 +294,19 @@ func collectModelViewerWwmiGroups(modDir string, resources []modelViewerResource
 		if err != nil {
 			return nil, err
 		}
-		groups = append(groups, modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles})
+		groups = append(
+			groups,
+			modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles},
+		)
 	}
 	return groups, nil
 }
 
-func readModelViewerResourceSet(modDir string, resources []*modelViewerResource, cache *modelViewerBufferCache) ([][]byte, error) {
+func readModelViewerResourceSet(
+	modDir string,
+	resources []*modelViewerResource,
+	cache *modelViewerBufferCache,
+) ([][]byte, error) {
 	parts := make([][]byte, len(resources))
 	for i, resource := range resources {
 		bytes, err := cache.read(filepath.Join(modDir, filepath.FromSlash(resource.Filename)))
@@ -349,7 +400,14 @@ type modelViewerPairedBuffers struct {
 }
 
 func newModelViewerBufferCache() *modelViewerBufferCache {
-	return &modelViewerBufferCache{files: make(map[string][]byte), indices: make(map[string][]uint32), geometries: make(map[string]*modelViewerGeometry), pairs: make(map[string]modelViewerPairedBuffers), fmts: make(map[string]modelViewerFmtCacheEntry), interleaved: make(map[string]modelViewerInterleavedBuffers)}
+	return &modelViewerBufferCache{
+		files:       make(map[string][]byte),
+		indices:     make(map[string][]uint32),
+		geometries:  make(map[string]*modelViewerGeometry),
+		pairs:       make(map[string]modelViewerPairedBuffers),
+		fmts:        make(map[string]modelViewerFmtCacheEntry),
+		interleaved: make(map[string]modelViewerInterleavedBuffers),
+	}
 }
 
 func (c *modelViewerBufferCache) releaseGeometryScratch() {
@@ -377,7 +435,10 @@ func (c *modelViewerBufferCache) releaseAll() {
 
 // fmtLayout caches a resolved vertex layout per lookup key so IBs referenced
 // by several ini files parse their .fmt once per viewer load.
-func (c *modelViewerBufferCache) fmtLayout(key string, build func() (modelViewerFmtLayout, error)) (modelViewerFmtLayout, error) {
+func (c *modelViewerBufferCache) fmtLayout(
+	key string,
+	build func() (modelViewerFmtLayout, error),
+) (modelViewerFmtLayout, error) {
 	c.mu.Lock()
 	if entry, ok := c.fmts[key]; ok {
 		c.mu.Unlock()
@@ -393,7 +454,10 @@ func (c *modelViewerBufferCache) fmtLayout(key string, build func() (modelViewer
 
 // interleavedBuffers caches an interleaved vertex buffer per source file set
 // so buffer groups shared across ini files interleave once per viewer load.
-func (c *modelViewerBufferCache) interleavedBuffers(key string, build func() ([]byte, int, error)) ([]byte, int, error) {
+func (c *modelViewerBufferCache) interleavedBuffers(
+	key string,
+	build func() ([]byte, int, error),
+) ([]byte, int, error) {
 	c.mu.Lock()
 	if entry, ok := c.interleaved[key]; ok {
 		c.mu.Unlock()
@@ -414,7 +478,10 @@ func (c *modelViewerBufferCache) interleavedBuffers(key string, build func() ([]
 // resolve to the same buffers, layout, and index range are extracted once per
 // viewer load. The cached geometry must stay read-only after the build
 // function returns (including any UV post-processing done inside it).
-func (c *modelViewerBufferCache) geometry(key string, build func() (*modelViewerGeometry, error)) (*modelViewerGeometry, error) {
+func (c *modelViewerBufferCache) geometry(
+	key string,
+	build func() (*modelViewerGeometry, error),
+) (*modelViewerGeometry, error) {
 	c.mu.Lock()
 	if cached, ok := c.geometries[key]; ok {
 		c.mu.Unlock()
@@ -471,8 +538,21 @@ func (c *modelViewerBufferCache) decodeIndices(path, format string, raw []byte) 
 	return decoded, nil
 }
 
-func (c *modelViewerBufferCache) paired(posPath string, posStride int, tcPath string, tcStride int) (modelViewerPairedBuffers, error) {
-	key := strings.ToLower(posPath) + "|" + strconv.Itoa(posStride) + "|" + strings.ToLower(tcPath) + "|" + strconv.Itoa(tcStride)
+func (c *modelViewerBufferCache) paired(
+	posPath string,
+	posStride int,
+	tcPath string,
+	tcStride int,
+) (modelViewerPairedBuffers, error) {
+	key := strings.ToLower(
+		posPath,
+	) + "|" + strconv.Itoa(
+		posStride,
+	) + "|" + strings.ToLower(
+		tcPath,
+	) + "|" + strconv.Itoa(
+		tcStride,
+	)
 	c.mu.Lock()
 	if entry, ok := c.pairs[key]; ok {
 		c.mu.Unlock()

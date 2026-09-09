@@ -44,23 +44,41 @@ type textureRuntimeSpec struct {
 }
 
 var realesrganSpec = textureRuntimeSpec{
-	dirName: "realesrgan-ncnn-vulkan", binaryName: "realesrgan-ncnn-vulkan.exe", version: "20220424",
-	settingPrefix: "mod_tools:realesrgan-ncnn-vulkan", modelsRelative: "models",
+	dirName:        "realesrgan-ncnn-vulkan",
+	binaryName:     "realesrgan-ncnn-vulkan.exe",
+	version:        "20220424",
+	settingPrefix:  "mod_tools:realesrgan-ncnn-vulkan",
+	modelsRelative: "models",
 	displayName:    "Real-ESRGAN",
 	downloadURL:    "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
 	archiveSHA256:  "abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d",
 	modelDirNames:  []string{"models"},
-	requiredModels: []string{"realesr-animevideov3-x2", "realesr-animevideov3-x3", "realesr-animevideov3-x4", "realesrgan-x4plus-anime", "realesrgan-x4plus"},
+	requiredModels: []string{
+		"realesr-animevideov3-x2",
+		"realesr-animevideov3-x3",
+		"realesr-animevideov3-x4",
+		"realesrgan-x4plus-anime",
+		"realesrgan-x4plus",
+	},
 }
 
 var realcuganSpec = textureRuntimeSpec{
-	dirName: "realcugan-ncnn-vulkan", binaryName: "realcugan-ncnn-vulkan.exe", version: "20220728",
-	settingPrefix:  "mod_tools:realcugan-ncnn-vulkan",
-	displayName:    "Real-CUGAN",
-	downloadURL:    "https://github.com/nihui/realcugan-ncnn-vulkan/releases/download/20220728/realcugan-ncnn-vulkan-20220728-windows.zip",
-	archiveSHA256:  "c6e08d46c11704b1e3a1ada9ddd591cb5005f52f132136c8633ba25def400e01",
-	modelDirNames:  []string{"models-pro", "models-se", "models-nose"},
-	requiredModels: []string{"models-pro/up2x-no-denoise", "models-pro/up3x-no-denoise", "models-se/up2x-no-denoise", "models-se/up3x-no-denoise", "models-se/up4x-no-denoise", "models-nose/up2x-no-denoise"},
+	dirName:       "realcugan-ncnn-vulkan",
+	binaryName:    "realcugan-ncnn-vulkan.exe",
+	version:       "20220728",
+	settingPrefix: "mod_tools:realcugan-ncnn-vulkan",
+	displayName:   "Real-CUGAN",
+	downloadURL:   "https://github.com/nihui/realcugan-ncnn-vulkan/releases/download/20220728/realcugan-ncnn-vulkan-20220728-windows.zip",
+	archiveSHA256: "c6e08d46c11704b1e3a1ada9ddd591cb5005f52f132136c8633ba25def400e01",
+	modelDirNames: []string{"models-pro", "models-se", "models-nose"},
+	requiredModels: []string{
+		"models-pro/up2x-no-denoise",
+		"models-pro/up3x-no-denoise",
+		"models-se/up2x-no-denoise",
+		"models-se/up3x-no-denoise",
+		"models-se/up4x-no-denoise",
+		"models-nose/up2x-no-denoise",
+	},
 }
 
 func (t *Tools) GetTextureUpscaleRuntimeStatus(ctx context.Context) (TextureUpscaleRuntimeStatuses, error) {
@@ -75,7 +93,10 @@ func (t *Tools) GetTextureUpscaleRuntimeStatus(ctx context.Context) (TextureUpsc
 	return TextureUpscaleRuntimeStatuses{Realesrgan: realesrgan, Realcugan: realcugan}, nil
 }
 
-func (t *Tools) textureRuntimeStatus(ctx context.Context, spec textureRuntimeSpec) (TextureUpscaleRuntimeStatus, error) {
+func (t *Tools) textureRuntimeStatus(
+	ctx context.Context,
+	spec textureRuntimeSpec,
+) (TextureUpscaleRuntimeStatus, error) {
 	client, err := t.requireClient()
 	if err != nil {
 		return TextureUpscaleRuntimeStatus{}, err
@@ -109,13 +130,22 @@ func (t *Tools) textureRuntimeStatus(ctx context.Context, spec textureRuntimeSpe
 	} else if stored != nil && *stored != "" {
 		version = *stored
 	}
-	return TextureUpscaleRuntimeStatus{Installed: true, Version: &version, BinaryPath: &binaryPath, ModelsPath: &modelsPath}, nil
+	return TextureUpscaleRuntimeStatus{
+		Installed:  true,
+		Version:    &version,
+		BinaryPath: &binaryPath,
+		ModelsPath: &modelsPath,
+	}, nil
 }
 
 // installTextureUpscaleRuntime downloads and atomically promotes one pinned
 // ncnn-vulkan runtime. It is intentionally internal: Electron installed it on
 // demand from the file-upscale operation rather than exposing a separate IPC.
-func (t *Tools) installTextureUpscaleRuntime(ctx context.Context, engine string, progress func(string, *float64)) (TextureUpscaleRuntimeStatus, error) {
+func (t *Tools) installTextureUpscaleRuntime(
+	ctx context.Context,
+	engine string,
+	progress func(string, *float64),
+) (TextureUpscaleRuntimeStatus, error) {
 	spec, err := textureRuntimeSpecForEngine(engine)
 	if err != nil {
 		return TextureUpscaleRuntimeStatus{}, err
@@ -123,7 +153,11 @@ func (t *Tools) installTextureUpscaleRuntime(ctx context.Context, engine string,
 	return t.installTextureRuntime(ctx, spec, progress)
 }
 
-func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSpec, progress func(string, *float64)) (TextureUpscaleRuntimeStatus, error) {
+func (t *Tools) installTextureRuntime(
+	ctx context.Context,
+	spec textureRuntimeSpec,
+	progress func(string, *float64),
+) (TextureUpscaleRuntimeStatus, error) {
 	t.textureRuntimeMu.Lock()
 	defer t.textureRuntimeMu.Unlock()
 	if status, statusErr := t.textureRuntimeStatus(ctx, spec); statusErr != nil || status.Installed {
@@ -160,7 +194,13 @@ func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSp
 		return TextureUpscaleRuntimeStatus{}, err
 	}
 	emitTextureRuntimeProgress(progress, "extract", nil)
-	extractedRoot, err := t.archive.Extract(ctx, archivePath, filepath.Join(installRoot, "extract"), infra.ExtractOptions{}, nil)
+	extractedRoot, err := t.archive.Extract(
+		ctx,
+		archivePath,
+		filepath.Join(installRoot, "extract"),
+		infra.ExtractOptions{},
+		nil,
+	)
 	if err != nil {
 		return TextureUpscaleRuntimeStatus{}, fmt.Errorf("extract %s runtime: %w", spec.displayName, err)
 	}
@@ -174,7 +214,11 @@ func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSp
 		return TextureUpscaleRuntimeStatus{}, err
 	}
 	defer func() { t.reportTextureCleanup(os.RemoveAll(stageRoot), stageRoot) }()
-	if err := promoteTextureRuntime(stageRoot, filepath.Join(toolsRoot, spec.dirName), t.reportTextureCleanup); err != nil {
+	if err := promoteTextureRuntime(
+		stageRoot,
+		filepath.Join(toolsRoot, spec.dirName),
+		t.reportTextureCleanup,
+	); err != nil {
 		return TextureUpscaleRuntimeStatus{}, err
 	}
 	client, err := t.requireClient()
@@ -184,7 +228,11 @@ func (t *Tools) installTextureRuntime(ctx context.Context, spec textureRuntimeSp
 	values := map[string]string{
 		spec.settingPrefix + ":installed-version": spec.version,
 		spec.settingPrefix + ":binary-path":       filepath.Join(toolsRoot, spec.dirName, spec.binaryName),
-		spec.settingPrefix + ":models-path":       filepath.Join(toolsRoot, spec.dirName, filepath.FromSlash(spec.modelsRelative)),
+		spec.settingPrefix + ":models-path": filepath.Join(
+			toolsRoot,
+			spec.dirName,
+			filepath.FromSlash(spec.modelsRelative),
+		),
 	}
 	if spec.modelsRelative == "" {
 		values[spec.settingPrefix+":models-path"] = filepath.Join(toolsRoot, spec.dirName)
@@ -459,7 +507,16 @@ func promoteTextureRuntime(stageRoot, targetRoot string, reports ...func(error, 
 		if hadTarget {
 			rollbackErr = os.Rename(backupRoot, targetRoot)
 		}
-		return infra.WithCause(fmt.Errorf("promote texture runtime: %w", err), infra.AnnotateError(rollbackErr, infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": targetRoot, "backupPath": backupRoot}}))
+		return infra.WithCause(
+			fmt.Errorf("promote texture runtime: %w", err),
+			infra.AnnotateError(
+				rollbackErr,
+				infra.Diagnostic{
+					Stage:  "rollback",
+					Fields: map[string]any{"path": targetRoot, "backupPath": backupRoot},
+				},
+			),
+		)
 	}
 	if hadTarget {
 		if err := os.RemoveAll(backupRoot); err != nil {
@@ -503,5 +560,10 @@ func regularFile(path string) bool {
 }
 
 func (t *Tools) reportTextureCleanup(err error, path string) {
-	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: "install-texture-runtime", Stage: "cleanup", Fields: map[string]any{"path": path}})
+	_ = infra.ReportError(
+		t.log,
+		err,
+		"Tools",
+		infra.Diagnostic{Operation: "install-texture-runtime", Stage: "cleanup", Fields: map[string]any{"path": path}},
+	)
 }

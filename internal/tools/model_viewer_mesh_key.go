@@ -9,7 +9,9 @@ import (
 
 var (
 	modelViewerNumericSuffixRE = regexp.MustCompile(`\.([0-9]+)$`)
-	modelViewerMeshFamilyRE    = regexp.MustCompile(`(?i)(head|body|dress|hair|face|weapon|cloth|skirt|shoe|arm|leg|hand|foot)(?:[a-z0-9]+)?$`)
+	modelViewerMeshFamilyRE    = regexp.MustCompile(
+		`(?i)(head|body|dress|hair|face|weapon|cloth|skirt|shoe|arm|leg|hand|foot)(?:[a-z0-9]+)?$`,
+	)
 )
 
 func modelViewerTrimResourcePrefix(value string) string {
@@ -50,7 +52,11 @@ func modelViewerCanonicalMeshKey(value string) string {
 }
 
 func modelViewerKeyMatches(groupKey, ibKey string, strict bool) bool {
-	a, b := modelViewerNormalizeKey(modelViewerCanonicalMeshKey(groupKey)), modelViewerNormalizeKey(modelViewerCanonicalMeshKey(ibKey))
+	a, b := modelViewerNormalizeKey(
+		modelViewerCanonicalMeshKey(groupKey),
+	), modelViewerNormalizeKey(
+		modelViewerCanonicalMeshKey(ibKey),
+	)
 	if a == b {
 		return true
 	}
@@ -60,8 +66,12 @@ func modelViewerKeyMatches(groupKey, ibKey string, strict bool) bool {
 		if strict && (!groupHas || !ibHas || groupSuffix != ibSuffix) || groupHas && ibHas && groupSuffix != ibSuffix {
 			return false
 		}
-		groupBase := modelViewerNormalizeKey(modelViewerNumericSuffixRE.ReplaceAllString(modelViewerCanonicalMeshKey(groupKey), ""))
-		ibBase := modelViewerNormalizeKey(modelViewerNumericSuffixRE.ReplaceAllString(modelViewerCanonicalMeshKey(ibKey), ""))
+		groupBase := modelViewerNormalizeKey(
+			modelViewerNumericSuffixRE.ReplaceAllString(modelViewerCanonicalMeshKey(groupKey), ""),
+		)
+		ibBase := modelViewerNormalizeKey(
+			modelViewerNumericSuffixRE.ReplaceAllString(modelViewerCanonicalMeshKey(ibKey), ""),
+		)
 		if strict {
 			return groupBase == ibBase
 		}
@@ -105,7 +115,8 @@ func modelViewerBestKeyForIB(stem, resourceName string, keys []string) string {
 		key = strings.TrimRight(modelViewerNormalizeKey(modelViewerCanonicalMeshKey(key)), "0123456789")
 		stemBase := strings.TrimRight(normalizedStem, "0123456789")
 		nameBase := strings.TrimRight(normalizedName, "0123456789")
-		return strings.Contains(stemBase, key) || strings.Contains(nameBase, key) || strings.Contains(key, stemBase) || strings.Contains(key, nameBase)
+		return strings.Contains(stemBase, key) || strings.Contains(nameBase, key) || strings.Contains(key, stemBase) ||
+			strings.Contains(key, nameBase)
 	}
 	for _, pool := range [][]string{sameSuffix, sorted} {
 		for _, key := range pool {

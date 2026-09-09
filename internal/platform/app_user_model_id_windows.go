@@ -9,7 +9,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var setCurrentProcessExplicitAppUserModelID = windows.NewLazySystemDLL("shell32.dll").NewProc("SetCurrentProcessExplicitAppUserModelID")
+var setCurrentProcessExplicitAppUserModelID = windows.NewLazySystemDLL("shell32.dll").
+	NewProc("SetCurrentProcessExplicitAppUserModelID")
 
 // SetAppUserModelID assigns the explicit Windows taskbar and notification
 // identity for this process. It must be called before the first window is

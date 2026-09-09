@@ -28,7 +28,10 @@ func TestSetManualRMCTokenValidatesAndPersistsOnlyRMC(t *testing.T) {
 			t.Fatalf("path = %q, cookie = %q", request.URL.Path, request.Header.Get("Cookie"))
 		}
 		w.Header().Add("Set-Cookie", "session=temporary; Path=/; HttpOnly")
-		_, _ = io.WriteString(w, `{"_sUsername":"member","_sProfileUrl":"https://gamebanana.com/members/1","_sAvatarUrl":"avatar"}`)
+		_, _ = io.WriteString(
+			w,
+			`{"_sUsername":"member","_sProfileUrl":"https://gamebanana.com/members/1","_sAvatarUrl":"avatar"}`,
+		)
 	}))
 	defer server.Close()
 	service, client := gameBananaTestService(t, server)
@@ -78,11 +81,17 @@ func TestGetGameOverviewFetchesComponentsConcurrently(t *testing.T) {
 		<-release
 		switch request.URL.Path {
 		case "/apiv13/Game/8552/ProfilePage":
-			_, _ = io.WriteString(w, `{"_idRow":8552,"_sName":"Game","_sProfileUrl":"https://gamebanana.com/games/8552","_aModRootCategories":[]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_idRow":8552,"_sName":"Game","_sProfileUrl":"https://gamebanana.com/games/8552","_aModRootCategories":[]}`,
+			)
 		case "/apiv13/Game/8552/TopSubs":
 			_, _ = io.WriteString(w, `[]`)
 		case "/apiv13/Game/8552/Subfeed":
-			_, _ = io.WriteString(w, `{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`,
+			)
 		default:
 			t.Errorf("unexpected URL %s", request.URL)
 			http.NotFound(w, request)
@@ -153,7 +162,8 @@ func TestGameBananaRequestsUseBrowserUserAgent(t *testing.T) {
 
 func TestGetGameSubfeedAppliesDefaultsAndGamesMatchSource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/apiv13/Game/8552/Subfeed" || request.URL.Query().Get("_sSort") != "default" || request.URL.Query().Get("_nPage") != "1" {
+		if request.URL.Path != "/apiv13/Game/8552/Subfeed" || request.URL.Query().Get("_sSort") != "default" ||
+			request.URL.Query().Get("_nPage") != "1" {
 			t.Fatalf("URL = %s", request.URL)
 		}
 		_, _ = io.WriteString(w, `{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`)
@@ -320,7 +330,10 @@ func TestToggleModLikeUsesCachedProfileState(t *testing.T) {
 		requestsMu.Unlock()
 		switch request.URL.Path {
 		case "/apiv13/Mod/10/ProfilePage":
-			_, _ = io.WriteString(w, `{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_bAccessorHasLiked":true,"_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"}}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_bAccessorHasLiked":true,"_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"}}`,
+			)
 		case "/apiv13/Mod/10/Config":
 			_, _ = io.WriteString(w, `{}`)
 		case "/apiv13/Mod/10/Like":
@@ -351,7 +364,10 @@ func TestToggleModLikeReauthenticatesLoginRequiredBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/apiv13/Mod/10/ProfilePage":
-			_, _ = io.WriteString(w, `{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_bAccessorHasLiked":false,"_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"}}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_bAccessorHasLiked":false,"_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"}}`,
+			)
 		case "/apiv13/Mod/10/Config":
 			_, _ = io.WriteString(w, `{}`)
 		case "/apiv13/Mod/10/Like":
@@ -405,7 +421,10 @@ func TestRequestReauthenticatesAndRetriesUnauthorized(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			_, _ = io.WriteString(w, `{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`,
+			)
 		case "/apiv13/Member/Navigator/Personal":
 			if request.Header.Get("Cookie") == "rmc=fresh" {
 				_, _ = io.WriteString(w, validMemberJSON)
@@ -476,7 +495,10 @@ func TestGetModOverviewNormalizesPreviewShapes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/apiv13/Mod/10/ProfilePage":
-			_, _ = io.WriteString(w, `{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"},"_aPreviewContent":{"screenshot":{"_sBaseUrl":"https://images.gamebanana.com/img/ss/mods","_sFile":"abc.jpg"}},"_aFiles":[{"_idRow":20,"_sDownloadUrl":"https://gamebanana.com/dl/20","_sFile":"mod.zip","_tsDateAdded":1,"_nDownloadCount":1}]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"_idRow":10,"_sName":"Mod","_sProfileUrl":"https://gamebanana.com/mods/10","_aSubmitter":{"_sName":"author"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Category"},"_aPreviewContent":{"screenshot":{"_sBaseUrl":"https://images.gamebanana.com/img/ss/mods","_sFile":"abc.jpg"}},"_aFiles":[{"_idRow":20,"_sDownloadUrl":"https://gamebanana.com/dl/20","_sFile":"mod.zip","_tsDateAdded":1,"_nDownloadCount":1}]}`,
+			)
 		case "/apiv13/Mod/10/Config":
 			_, _ = io.WriteString(w, `{}`)
 		default:
@@ -528,8 +550,12 @@ func gameBananaTestService(t *testing.T, server *httptest.Server) (*GameBanana, 
 	if err := client.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	httpClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client(), Status: infra.BackendOnline})
-	service := NewWithOptions(Options{HTTP: httpClient, Crypto: passCrypto{}, BaseURL: server.URL + "/apiv13", SiteURL: server.URL})
+	httpClient := infra.NewClientWithOptions(
+		infra.ClientOptions{HTTPClient: server.Client(), Status: infra.BackendOnline},
+	)
+	service := NewWithOptions(
+		Options{HTTP: httpClient, Crypto: passCrypto{}, BaseURL: server.URL + "/apiv13", SiteURL: server.URL},
+	)
 	service.UseClient(client)
 	return service, client
 }

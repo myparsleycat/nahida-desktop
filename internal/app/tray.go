@@ -24,7 +24,16 @@ func newTray(app *application.App, rt *runtime, icon []byte) *application.System
 		}
 		go func() {
 			if err := rt.updater.CheckForUpdates(context.Background(), true); err != nil && rt.log != nil {
-				_ = infra.ReportError(rt.log, err, "updater.manualCheck", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "updater.manualCheck", Stage: "background"})
+				_ = infra.ReportError(
+					rt.log,
+					err,
+					"updater.manualCheck",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "updater.manualCheck",
+						Stage:     "background",
+					},
+				)
 			}
 		}()
 	})

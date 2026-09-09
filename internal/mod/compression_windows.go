@@ -169,7 +169,11 @@ func ownedWofRestoreFiles(
 	return work, nil
 }
 
-func restoreOwnedWofFile(work wofRestoreWork, ownership *compressionFileOwnership, mark compressionMutationMarker) error {
+func restoreOwnedWofFile(
+	work wofRestoreWork,
+	ownership *compressionFileOwnership,
+	mark compressionMutationMarker,
+) error {
 	handle, err := openXpressFile(work.file.path)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)

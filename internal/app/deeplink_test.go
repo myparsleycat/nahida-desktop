@@ -35,7 +35,9 @@ func TestParseNahidaDeepLink(t *testing.T) {
 
 func TestNahidaDeepLinkRouteUsesFirstValidArgument(t *testing.T) {
 	t.Parallel()
-	got := nahidaDeepLinkRoute([]string{"Nahida Desktop.exe", "--flag", "nahida://gamebanana/mods/42", "nahida://gamebanana/mods/43"})
+	got := nahidaDeepLinkRoute(
+		[]string{"Nahida Desktop.exe", "--flag", "nahida://gamebanana/mods/42", "nahida://gamebanana/mods/43"},
+	)
 	if got != "/gamebanana?mod=42" {
 		t.Fatalf("nahidaDeepLinkRoute = %q", got)
 	}

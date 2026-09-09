@@ -29,7 +29,12 @@ func isHTMLContentType(header http.Header) bool {
 	return contentType == "text/html" || contentType == "application/xhtml+xml"
 }
 
-func isArchiveByResponseOrContent(ctx context.Context, header http.Header, originalFileName, filePath string, archive *infra.Archive) bool {
+func isArchiveByResponseOrContent(
+	ctx context.Context,
+	header http.Header,
+	originalFileName, filePath string,
+	archive *infra.Archive,
+) bool {
 	if originalFileName != "" && isArchiveFileName(originalFileName) {
 		return true
 	}

@@ -225,7 +225,10 @@ func (d *Drive) executeUploadPlanV2(
 	}
 	for _, file := range files {
 		if _, ok := returned[file.FID]; !ok {
-			rejected = append(rejected, UploadPlanItem{ClientID: file.FID, Status: "error", Reason: "upload_plan_item_missing"})
+			rejected = append(
+				rejected,
+				UploadPlanItem{ClientID: file.FID, Status: "error", Reason: "upload_plan_item_missing"},
+			)
 		}
 	}
 	for _, item := range rejected {
@@ -260,9 +263,16 @@ func (d *Drive) executeUploadPlanV2(
 			if len(group.members) == 1 {
 				member := group.members[0]
 				if err := queueTask(func() {
-					err := d.uploadPreparedDirect(ctx, member.upload, member.source, member.data, member.compression, func(bytes int64) {
-						report(member.source, bytes, false)
-					})
+					err := d.uploadPreparedDirect(
+						ctx,
+						member.upload,
+						member.source,
+						member.data,
+						member.compression,
+						func(bytes int64) {
+							report(member.source, bytes, false)
+						},
+					)
 					if err != nil {
 						addFailure(err)
 						return
@@ -359,7 +369,14 @@ func (d *Drive) executeUploadPlanV2(
 		if allBundled {
 			taskCtx := targetContext(targets)
 			if err := queueTask(func() {
-				err := d.uploadPreparedDirect(taskCtx, upload, source, data, compression, func(bytes int64) { report(source, bytes, false) })
+				err := d.uploadPreparedDirect(
+					taskCtx,
+					upload,
+					source,
+					data,
+					compression,
+					func(bytes int64) { report(source, bytes, false) },
+				)
 				if err != nil {
 					if taskCtx.Err() == nil || ctx.Err() != nil {
 						failTargets(err, targets)
@@ -423,7 +440,10 @@ func (d *Drive) executeUploadPlanV2(
 			if len(members) > 0 {
 				name = members[0].Name
 			}
-			failTargets(&UploadV2Error{Code: "nte_bundle_incomplete", Message: name + ": nte_bundle_incomplete"}, members)
+			failTargets(
+				&UploadV2Error{Code: "nte_bundle_incomplete", Message: name + ": nte_bundle_incomplete"},
+				members,
+			)
 			continue
 		}
 		if err := d.completeNTEBundle(ctx, bundle); err != nil {

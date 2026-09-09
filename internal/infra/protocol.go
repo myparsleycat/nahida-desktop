@@ -79,7 +79,10 @@ func (p *Protocol) CreateMemorySession() string {
 	if p.sessions == nil {
 		p.sessions = make(map[string]*memoryProtocolSession)
 	}
-	p.sessions[id] = &memoryProtocolSession{buffers: make(map[string]memoryProtocolEntry), uploads: make(map[string]*memoryUploadEntry)}
+	p.sessions[id] = &memoryProtocolSession{
+		buffers: make(map[string]memoryProtocolEntry),
+		uploads: make(map[string]*memoryUploadEntry),
+	}
 	p.mu.Unlock()
 	return id
 }
@@ -120,7 +123,10 @@ func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
 // The loader owns any caching; responses keep their bytes alive even after eviction.
 //
 //wails:ignore
-func (p *Protocol) StoreMemoryLoader(sessionID, bufferID string, load func(context.Context) ([]byte, error)) (string, error) {
+func (p *Protocol) StoreMemoryLoader(
+	sessionID, bufferID string,
+	load func(context.Context) ([]byte, error),
+) (string, error) {
 	if p == nil || load == nil || bufferID == "" {
 		return "", errors.New("memory loader and buffer id are required")
 	}
@@ -279,7 +285,12 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 	if entry.load != nil {
 		data, err := entry.load(request.Context())
 		if err != nil {
-			p.reportProtocolFailure(err, request, "load-memory-buffer", map[string]any{"sessionId": sessionID, "bufferId": bufferID})
+			p.reportProtocolFailure(
+				err,
+				request,
+				"load-memory-buffer",
+				map[string]any{"sessionId": sessionID, "bufferId": bufferID},
+			)
 			http.Error(w, "Failed to load binary buffer", http.StatusInternalServerError)
 			return
 		}
@@ -335,7 +346,12 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		expected := upload.expected
 		contentLength := request.ContentLength
 		p.mu.Unlock()
-		p.reportProtocolFailure(errors.New("memory upload content length exceeds remaining slot"), request, "validate-memory-upload-length", map[string]any{"expectedBytes": expected, "receivedBytes": received, "contentLength": contentLength})
+		p.reportProtocolFailure(
+			errors.New("memory upload content length exceeds remaining slot"),
+			request,
+			"validate-memory-upload-length",
+			map[string]any{"expectedBytes": expected, "receivedBytes": received, "contentLength": contentLength},
+		)
 		http.Error(w, "content length does not match upload slot", http.StatusBadRequest)
 		return
 	}
@@ -349,7 +365,12 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		if failure == nil {
 			failure = errors.New("memory upload length mismatch")
 		}
-		p.reportProtocolFailure(failure, request, "read-memory-upload", map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": len(data)})
+		p.reportProtocolFailure(
+			failure,
+			request,
+			"read-memory-upload",
+			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": len(data)},
+		)
 		p.mu.Lock()
 		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
 			delete(current.uploads, uploadID)
@@ -397,18 +418,37 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		p.reportProtocolFailure(&HTTPError{Status: response.StatusCode}, request, "web-image-response", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode})
+		p.reportProtocolFailure(
+			&HTTPError{Status: response.StatusCode},
+			request,
+			"web-image-response",
+			map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode},
+		)
 		http.Error(w, "upstream image error", response.StatusCode)
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, maxProtocolWebResponse+1))
 	if err != nil {
-		p.reportProtocolFailure(err, request, "read-web-image", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode})
+		p.reportProtocolFailure(
+			err,
+			request,
+			"read-web-image",
+			map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode},
+		)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	if len(raw) > maxProtocolWebResponse {
-		p.reportProtocolFailure(errors.New("upstream image is too large"), request, "validate-web-image-size", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode, "limitBytes": maxProtocolWebResponse})
+		p.reportProtocolFailure(
+			errors.New("upstream image is too large"),
+			request,
+			"validate-web-image-size",
+			map[string]any{
+				"endpoint":   SanitizeLogURL(rawURL),
+				"status":     response.StatusCode,
+				"limitBytes": maxProtocolWebResponse,
+			},
+		)
 		http.Error(w, "upstream image is too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -417,7 +457,16 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 		contentType = http.DetectContentType(raw)
 	}
 	if !strings.HasPrefix(contentType, "image/") {
-		p.reportProtocolFailure(errors.New("upstream response is not an image"), request, "validate-web-image-type", map[string]any{"endpoint": SanitizeLogURL(rawURL), "status": response.StatusCode, "contentType": contentType})
+		p.reportProtocolFailure(
+			errors.New("upstream response is not an image"),
+			request,
+			"validate-web-image-type",
+			map[string]any{
+				"endpoint":    SanitizeLogURL(rawURL),
+				"status":      response.StatusCode,
+				"contentType": contentType,
+			},
+		)
 		http.Error(w, "upstream response is not an image", http.StatusUnsupportedMediaType)
 		return
 	}

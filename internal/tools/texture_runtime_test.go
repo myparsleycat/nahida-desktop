@@ -168,7 +168,11 @@ func TestInstallTextureRuntimeRejectsChecksumMismatch(t *testing.T) {
 		downloadURL: "https://downloads.example.test/bad.zip", archiveSHA256: "00",
 	}
 	transport := textureRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(payload))}, nil
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(payload)),
+		}, nil
 	})
 	httpClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{Transport: transport}})
 	download := infra.NewDownload()
@@ -176,7 +180,12 @@ func TestInstallTextureRuntimeRejectsChecksumMismatch(t *testing.T) {
 	service := NewWithOptions(Options{Download: download, Archive: infra.NewArchive()})
 	service.UseClient(openToolsTestDB(t))
 	useToolsTestAppData(t, service, t.TempDir())
-	if _, err := service.installTextureRuntime(context.Background(), spec, nil); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+	if _, err := service.installTextureRuntime(
+		context.Background(),
+		spec,
+		nil,
+	); err == nil ||
+		!strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("checksum error = %v", err)
 	}
 }

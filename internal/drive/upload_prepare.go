@@ -75,7 +75,10 @@ type collectedUploadPaths struct {
 	SkippedCount      int
 }
 
-func (d *Drive) GetUploadConflicts(ctx context.Context, params GetUploadConflictsParams) (result UploadConflictsResult, err error) {
+func (d *Drive) GetUploadConflicts(
+	ctx context.Context,
+	params GetUploadConflictsParams,
+) (result UploadConflictsResult, err error) {
 	defer normalizeDriveBoundaryError(&err, "fn:getUploadConflicts")
 	if len(params.Paths) == 0 {
 		return UploadConflictsResult{}, errors.New("upload paths are required")
@@ -142,11 +145,34 @@ func ensureUploadSourceReadable(path string) error {
 }
 
 //wails:ignore
-func PrepareUpload(paths []string, existingNames []string, strategy UploadConflictStrategy, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
-	return prepareUpload(context.Background(), paths, existingNames, strategy, rules, additionalExtensions, allowAllFiles)
+func PrepareUpload(
+	paths []string,
+	existingNames []string,
+	strategy UploadConflictStrategy,
+	rules UploadRules,
+	additionalExtensions []string,
+	allowAllFiles bool,
+) (UploadPreparation, error) {
+	return prepareUpload(
+		context.Background(),
+		paths,
+		existingNames,
+		strategy,
+		rules,
+		additionalExtensions,
+		allowAllFiles,
+	)
 }
 
-func prepareUpload(ctx context.Context, paths []string, existingNames []string, strategy UploadConflictStrategy, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (UploadPreparation, error) {
+func prepareUpload(
+	ctx context.Context,
+	paths []string,
+	existingNames []string,
+	strategy UploadConflictStrategy,
+	rules UploadRules,
+	additionalExtensions []string,
+	allowAllFiles bool,
+) (UploadPreparation, error) {
 	if strategy == "" {
 		strategy = UploadConflictSuffix
 	}
@@ -239,11 +265,22 @@ func prepareUpload(ctx context.Context, paths []string, existingNames []string, 
 	}, nil
 }
 
-func collectUploadPaths(paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (collectedUploadPaths, error) {
+func collectUploadPaths(
+	paths []string,
+	rules UploadRules,
+	additionalExtensions []string,
+	allowAllFiles bool,
+) (collectedUploadPaths, error) {
 	return collectUploadPathsContext(context.Background(), paths, rules, additionalExtensions, allowAllFiles)
 }
 
-func collectUploadPathsContext(ctx context.Context, paths []string, rules UploadRules, additionalExtensions []string, allowAllFiles bool) (collectedUploadPaths, error) {
+func collectUploadPathsContext(
+	ctx context.Context,
+	paths []string,
+	rules UploadRules,
+	additionalExtensions []string,
+	allowAllFiles bool,
+) (collectedUploadPaths, error) {
 	allowed := extensionMaxSizes(rules, additionalExtensions)
 	files := make([]UploadFile, 0)
 	directories := make([]UploadDirectory, 0)
@@ -314,7 +351,10 @@ func collectUploadPathsContext(ctx context.Context, paths []string, rules Upload
 				parent = ""
 			}
 			if entry.IsDir() {
-				directories = append(directories, UploadDirectory{Path: relative, Name: entry.Name(), ParentPath: parent})
+				directories = append(
+					directories,
+					UploadDirectory{Path: relative, Name: entry.Name(), ParentPath: parent},
+				)
 				return nil
 			}
 			entryInfo, infoErr := entry.Info()
@@ -393,7 +433,12 @@ func assignStableUploadFileIDs(files []UploadFile) {
 	}
 }
 
-func HashUploadFiles(ctx context.Context, files []UploadFile, concurrency int, onProgress func(int)) ([]FinalUploadFile, error) {
+func HashUploadFiles(
+	ctx context.Context,
+	files []UploadFile,
+	concurrency int,
+	onProgress func(int),
+) ([]FinalUploadFile, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

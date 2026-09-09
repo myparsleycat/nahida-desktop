@@ -50,7 +50,10 @@ func newBisectTestService(t *testing.T, root string) (*Tools, *db.Client, *[]Bis
 	})
 	service.UseClient(client)
 	useToolsTestAppData(t, service, t.TempDir())
-	if err := client.GamePaths.Insert(context.Background(), db.GamePathRow{Game: "test", ModFolderPath: root}); err != nil {
+	if err := client.GamePaths.Insert(
+		context.Background(),
+		db.GamePathRow{Game: "test", ModFolderPath: root},
+	); err != nil {
 		t.Fatalf("insert game: %v", err)
 	}
 	return service, client, &events
@@ -227,7 +230,12 @@ func TestBisectExcludeValidationAndDisabledScanning(t *testing.T) {
 	if err != nil || filepath.ToSlash(relative) != "a" {
 		t.Fatalf("BisectValidateExcludePath = %q, %v", relative, err)
 	}
-	if _, err := service.BisectValidateExcludePath(context.Background(), "test", ".."); err == nil || !strings.Contains(err.Error(), bisectExcludeOutside) {
+	if _, err := service.BisectValidateExcludePath(
+		context.Background(),
+		"test",
+		"..",
+	); err == nil ||
+		!strings.Contains(err.Error(), bisectExcludeOutside) {
 		t.Fatalf("outside validation error = %v", err)
 	}
 	snapshot, err := service.BisectStart(context.Background(), "test", []string{"a"})
@@ -289,13 +297,22 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.BisectStart(ctx, "test", nil); err == nil || err.Error() != "A bisect session is already running. Cancel it first." {
+	if _, err := service.BisectStart(
+		ctx,
+		"test",
+		nil,
+	); err == nil ||
+		err.Error() != "A bisect session is already running. Cancel it first." {
 		t.Fatalf("already running error = %v", err)
 	}
 	if _, err := service.BisectUndoLastRound(ctx); err == nil || err.Error() != "Nothing to undo." {
 		t.Fatalf("undo error = %v", err)
 	}
-	if _, err := service.BisectRecover(ctx, "test"); err == nil || err.Error() != "Cannot recover while a bisect session is active." {
+	if _, err := service.BisectRecover(
+		ctx,
+		"test",
+	); err == nil ||
+		err.Error() != "Cannot recover while a bisect session is active." {
 		t.Fatalf("recover error = %v", err)
 	}
 	if done, err := service.BisectRespond(ctx, true); err != nil || done.Status != BisectDone {
@@ -315,7 +332,11 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: empty}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.requireBisectGame(ctx, empty); err == nil || err.Error() != "Mod folder path is not configured for empty." {
+	if _, err := service.requireBisectGame(
+		ctx,
+		empty,
+	); err == nil ||
+		err.Error() != "Mod folder path is not configured for empty." {
 		t.Fatalf("mod path error = %v", err)
 	}
 }
@@ -324,7 +345,10 @@ func TestRequireBisectGameDoesNotPreflightConfiguredFolder(t *testing.T) {
 	root := t.TempDir()
 	service, client, _ := newBisectTestService(t, root)
 	missing := filepath.Join(root, "not-created")
-	if err := client.GamePaths.Insert(context.Background(), db.GamePathRow{Game: "configured", ModFolderPath: missing}); err != nil {
+	if err := client.GamePaths.Insert(
+		context.Background(),
+		db.GamePathRow{Game: "configured", ModFolderPath: missing},
+	); err != nil {
 		t.Fatal(err)
 	}
 	row, err := service.requireBisectGame(context.Background(), "configured")
@@ -373,7 +397,13 @@ func TestD3dxRestoreQueueDoesNotBlockWatcherDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	guard := &d3dxGuard{path: path, initial: initial, cancel: cancel, restoreWake: make(chan struct{}, 1), restoreDone: make(chan struct{})}
+	guard := &d3dxGuard{
+		path:        path,
+		initial:     initial,
+		cancel:      cancel,
+		restoreWake: make(chan struct{}, 1),
+		restoreDone: make(chan struct{}),
+	}
 	service := &Tools{}
 	go service.runD3dxRestoreWorker(ctx, guard)
 	started := time.Now()

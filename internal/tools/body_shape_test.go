@@ -112,7 +112,8 @@ func TestLoadBodyShapeModMatchesBuffersAndBones(t *testing.T) {
 		t.Fatalf("meshes = %#v", loaded.Meshes)
 	}
 	mesh := loaded.Meshes[0]
-	if mesh.VertexCount != 4 || len(mesh.Positions) != 12 || len(mesh.Indices) != 6 || mesh.BlendStride == nil || *mesh.BlendStride != 16 {
+	if mesh.VertexCount != 4 || len(mesh.Positions) != 12 || len(mesh.Indices) != 6 || mesh.BlendStride == nil ||
+		*mesh.BlendStride != 16 {
 		t.Fatalf("mesh = %#v", mesh)
 	}
 	if len(mesh.Bones) != 2 || mesh.Bones[0].ID != 3 || mesh.Bones[1].ID != 9 {
@@ -148,16 +149,23 @@ func TestBodyShapeSessionDescriptorUsesBinaryMeshTransport(t *testing.T) {
 	if len(descriptor.Meshes) != 1 || descriptor.Meshes[0].VertexCount != 3 {
 		t.Fatalf("descriptor = %#v", descriptor)
 	}
-	mesh, err := service.BodyShapeGetMesh(context.Background(), BodyShapeMeshInput{SessionID: descriptor.SessionID, MeshID: descriptor.Meshes[0].ID})
+	mesh, err := service.BodyShapeGetMesh(
+		context.Background(),
+		BodyShapeMeshInput{SessionID: descriptor.SessionID, MeshID: descriptor.Meshes[0].ID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	positionResponse := httptest.NewRecorder()
 	service.protocol.ServeHTTP(positionResponse, httptest.NewRequest(http.MethodGet, mesh.PositionsURL, nil))
-	if positionResponse.Code != http.StatusOK || !strings.EqualFold(positionResponse.Header().Get("Content-Type"), "application/octet-stream") {
+	if positionResponse.Code != http.StatusOK ||
+		!strings.EqualFold(positionResponse.Header().Get("Content-Type"), "application/octet-stream") {
 		t.Fatalf("position response = %d %v", positionResponse.Code, positionResponse.Header())
 	}
-	if got, decodeErr := decodeFloat32Bytes(positionResponse.Body.Bytes()); decodeErr != nil || len(got) != len(positions) {
+	if got, decodeErr := decodeFloat32Bytes(
+		positionResponse.Body.Bytes(),
+	); decodeErr != nil ||
+		len(got) != len(positions) {
 		t.Fatalf("positions = %#v, %v", got, decodeErr)
 	}
 	if _, err = service.BodyShapeCloseSession(context.Background(), descriptor.SessionID); err != nil {
@@ -176,7 +184,12 @@ func TestLoadBodyShapeModMatchesNativeEFMIComponents(t *testing.T) {
 	if err := os.Mkdir(meshes, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	writeTestPositions(t, filepath.Join(meshes, "Component0_VB0.buf"), []float32{0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1}, 16)
+	writeTestPositions(
+		t,
+		filepath.Join(meshes, "Component0_VB0.buf"),
+		[]float32{0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1},
+		16,
+	)
 	indices := make([]byte, 12)
 	for index, value := range []uint16{0, 1, 2, 0, 2, 3} {
 		binary.LittleEndian.PutUint16(indices[index*2:], value)
@@ -201,7 +214,9 @@ func TestLoadBodyShapeModMatchesNativeEFMIComponents(t *testing.T) {
 		t.Fatal(err)
 	}
 	mesh := loaded.Meshes[0]
-	if mesh.ID != "_Component0_VB0" || len(mesh.Indices) != 6 || mesh.BlendStride == nil || *mesh.BlendStride != 12 || len(mesh.Bones) != 1 || mesh.Bones[0].ID != 3 {
+	if mesh.ID != "_Component0_VB0" || len(mesh.Indices) != 6 || mesh.BlendStride == nil || *mesh.BlendStride != 12 ||
+		len(mesh.Bones) != 1 ||
+		mesh.Bones[0].ID != 3 {
 		t.Fatalf("mesh = %#v", mesh)
 	}
 }
@@ -223,13 +238,23 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	service := NewWithOptions(Options{Mod: disabler})
 	changed := []float32{0, 0, 0, 2, 0, 0}
 	result, err := service.BodyShapeExport(ctx, BodyShapeExportInput{
-		ModRoot: sourceRoot, PositionPath: positionPath, PositionStride: 12,
-		Positions: changed, ChangeSummary: &BodyShapeChangeSummary{Amount: .5, AxisScale: []float64{1, 0, 0}, MovedVertices: 1, MaxDisplacement: 1},
+		ModRoot:        sourceRoot,
+		PositionPath:   positionPath,
+		PositionStride: 12,
+		Positions:      changed,
+		ChangeSummary: &BodyShapeChangeSummary{
+			Amount:          .5,
+			AxisScale:       []float64{1, 0, 0},
+			MovedVertices:   1,
+			MaxDisplacement: 1,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.ModRoot == nil || filepath.Base(*result.ModRoot) != "Character Mod (Body Shaped)" || result.SourceModPath == nil || disabler.called != sourceRoot {
+	if result.ModRoot == nil || filepath.Base(*result.ModRoot) != "Character Mod (Body Shaped)" ||
+		result.SourceModPath == nil ||
+		disabler.called != sourceRoot {
 		t.Fatalf("result = %#v, called = %q", result, disabler.called)
 	}
 	variantPosition := filepath.Join(*result.ModRoot, "Meshes", "Position.buf")
@@ -280,19 +305,29 @@ func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
 	if err != nil || len(loaded.Meshes) != 1 {
 		t.Fatalf("load = %#v, %v", loaded, err)
 	}
-	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshID: loaded.Meshes[0].ID})
+	upload, err := service.BodyShapeBeginExport(
+		ctx,
+		BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshID: loaded.Meshes[0].ID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	changed := []float32{0, 0, 0, 2, 0, 0}
-	request := httptest.NewRequest(http.MethodPut, upload.PositionsUploadURL, strings.NewReader(string(float32Bytes(changed))))
+	request := httptest.NewRequest(
+		http.MethodPut,
+		upload.PositionsUploadURL,
+		strings.NewReader(string(float32Bytes(changed))),
+	)
 	request.Header.Set("Content-Type", "application/octet-stream")
 	recorder := httptest.NewRecorder()
 	service.protocol.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("upload = %d %s", recorder.Code, recorder.Body.String())
 	}
-	result, err := service.BodyShapeCommitExport(ctx, BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID})
+	result, err := service.BodyShapeCommitExport(
+		ctx,
+		BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID},
+	)
 	if err != nil || result.ModRoot == nil {
 		t.Fatalf("commit = %#v, %v", result, err)
 	}

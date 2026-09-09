@@ -94,7 +94,8 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 		record["stage"] = merged.Stage
 	}
 	record["error"] = records[0]["error"]
-	if (merged.Stage != "" && records[0]["stage"] != merged.Stage) || (merged.Operation != "" && records[0]["operation"] != merged.Operation) {
+	if (merged.Stage != "" && records[0]["stage"] != merged.Stage) ||
+		(merged.Operation != "" && records[0]["operation"] != merged.Operation) {
 		// Preserve the inner context without repeating the same error text.
 		origin := make(map[string]any, len(records[0]))
 		for key, value := range records[0] {
@@ -104,7 +105,9 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 		}
 		origin["errorRef"] = "error"
 		record["causes"] = append([]map[string]any{origin}, records[1:]...)
-	} else if len(records) > 1 {
+	} else if len(
+		records,
+	) > 1 {
 		record["causes"] = records[1:]
 	}
 	if truncated {

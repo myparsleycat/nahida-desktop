@@ -67,8 +67,14 @@ func (s *LocalHTTP) Start() error {
 		return fmt.Errorf("listen local HTTP bridge: %w", err)
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/version", s.withCORS(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, s.opts.Version) }))
-	mux.HandleFunc("/ping", s.withCORS(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "pong") }))
+	mux.HandleFunc(
+		"/version",
+		s.withCORS(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, s.opts.Version) }),
+	)
+	mux.HandleFunc(
+		"/ping",
+		s.withCORS(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "pong") }),
+	)
 	mux.HandleFunc("/ws", s.withCORS(s.handleWebSocket))
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -117,7 +123,11 @@ func (s *LocalHTTP) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if messageType != websocket.MessageBinary {
-			s.reportWebSocketFailure(readCtx, conn.Write(readCtx, websocket.MessageText, []byte("invalid data")), "write-validation-response")
+			s.reportWebSocketFailure(
+				readCtx,
+				conn.Write(readCtx, websocket.MessageText, []byte("invalid data")),
+				"write-validation-response",
+			)
 			continue
 		}
 		s.mu.Lock()
@@ -186,5 +196,15 @@ func (s *LocalHTTP) reportWebSocketFailure(ctx context.Context, err error, stage
 	s.mu.Lock()
 	log := s.opts.Log
 	s.mu.Unlock()
-	_ = ReportError(log, err, "LocalHTTP", Diagnostic{Severity: DiagnosticWarn, Operation: "websocket-download", Stage: stage, Fields: map[string]any{"closeStatus": status}})
+	_ = ReportError(
+		log,
+		err,
+		"LocalHTTP",
+		Diagnostic{
+			Severity:  DiagnosticWarn,
+			Operation: "websocket-download",
+			Stage:     stage,
+			Fields:    map[string]any{"closeStatus": status},
+		},
+	)
 }

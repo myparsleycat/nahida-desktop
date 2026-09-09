@@ -143,11 +143,25 @@ func NewWithOptions(opts Options) *Tools {
 	}
 	fixInspectionCtx, fixInspectionCancel := context.WithCancel(context.Background())
 	t := &Tools{
-		log: opts.Log, emit: opts.EventEmit, notify: opts.Notify, settings: opts.Settings, xxmi: opts.XXMI,
-		fs: opts.FS, http: opts.HTTP, download: opts.Download, archive: opts.Archive, protocol: opts.Protocol, githubRate: opts.GitHubRate, mod: opts.Mod,
+		log:           opts.Log,
+		emit:          opts.EventEmit,
+		notify:        opts.Notify,
+		settings:      opts.Settings,
+		xxmi:          opts.XXMI,
+		fs:            opts.FS,
+		http:          opts.HTTP,
+		download:      opts.Download,
+		archive:       opts.Archive,
+		protocol:      opts.Protocol,
+		githubRate:    opts.GitHubRate,
+		mod:           opts.Mod,
 		peDiversifier: opts.PEDiversifier,
 		textureState:  TextureResizeProgressEvent{Status: "idle"},
-		textureJobs:   make(map[uint64]TextureResizeProgressEvent), releaseCache: make(map[string]releaseCacheEntry), releaseCalls: make(map[string]*releaseFetchCall),
+		textureJobs: make(
+			map[uint64]TextureResizeProgressEvent,
+		),
+		releaseCache:             make(map[string]releaseCacheEntry),
+		releaseCalls:             make(map[string]*releaseFetchCall),
 		touchSessions:            make(map[string]*touchSession),
 		bodyShapeSessions:        make(map[string]*bodyShapeSession),
 		modelViewerSessions:      make(map[string]*modelViewerSession),
@@ -168,7 +182,16 @@ func NewWithOptions(opts Options) *Tools {
 	}
 	var persistDiagnostics infra.DiagnosticThrottle
 	t.persist.diagnosticFn = func(err error, message string) {
-		persistDiagnostics.Report(t.log, err, "TogglePersist", infra.Diagnostic{Operation: "toggle-persist", Stage: "background", Fields: map[string]any{"context": message}})
+		persistDiagnostics.Report(
+			t.log,
+			err,
+			"TogglePersist",
+			infra.Diagnostic{
+				Operation: "toggle-persist",
+				Stage:     "background",
+				Fields:    map[string]any{"context": message},
+			},
+		)
 	}
 	t.persist.errorFn = func(message string) {
 		if t.log != nil {
@@ -296,7 +319,16 @@ func (t *Tools) ServiceShutdown() error {
 			err = errors.New("timed out waiting for tools process to stop")
 		}
 	}
-	return errors.Join(err, t.shutdownFixInspections(), t.shutdownBisect(), t.stopWuwaAutoUpdateCheck(), t.shutdownTouchProfiles(), t.shutdownBodyShape(), t.shutdownModelViewer(), t.shutdownPersistWatcher())
+	return errors.Join(
+		err,
+		t.shutdownFixInspections(),
+		t.shutdownBisect(),
+		t.stopWuwaAutoUpdateCheck(),
+		t.shutdownTouchProfiles(),
+		t.shutdownBodyShape(),
+		t.shutdownModelViewer(),
+		t.shutdownPersistWatcher(),
+	)
 }
 
 func (t *Tools) reportCleanup(err error, operation string) {

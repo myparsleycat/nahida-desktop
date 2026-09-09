@@ -94,13 +94,23 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 			continue
 		}
 		branches := splitModelViewerMenuSlotBranches(section.Lines)
-		if len(branches) == 0 || len(branches) == 1 && modelViewerNormalizeKey(section.Name) != modelViewerNormalizeKey("ClickedSlot") {
+		if len(branches) == 0 ||
+			len(branches) == 1 && modelViewerNormalizeKey(section.Name) != modelViewerNormalizeKey("ClickedSlot") {
 			continue
 		}
 		for _, branch := range branches {
 			variable, values, effects, ok := parseModelViewerMenuBranch(branch.lines)
 			if ok {
-				bindings = append(bindings, modelViewerSlotBinding{Slot: branch.slot, Variable: variable, Values: values, Effects: effects, AlwaysVisible: true})
+				bindings = append(
+					bindings,
+					modelViewerSlotBinding{
+						Slot:          branch.slot,
+						Variable:      variable,
+						Values:        values,
+						Effects:       effects,
+						AlwaysVisible: true,
+					},
+				)
 			}
 		}
 	}
@@ -137,7 +147,14 @@ func splitModelViewerMenuSlotBranches(lines []string) []modelViewerMenuSlotBranc
 						continue
 					}
 					slot, _ := strconv.Atoi(match[2])
-					slots = append(slots, modelViewerMenuSlotBranch{slotVariable: modelViewerNormalizeKey(match[1]), slot: slot, lines: branch.lines})
+					slots = append(
+						slots,
+						modelViewerMenuSlotBranch{
+							slotVariable: modelViewerNormalizeKey(match[1]),
+							slot:         slot,
+							lines:        branch.lines,
+						},
+					)
 				}
 			}
 			if (len(slots) >= 2 || len(slots) == 1 && depth == 0) && len(nested) == 0 {
@@ -233,7 +250,10 @@ func parseModelViewerMenuBranch(lines []string) (string, []any, []ModelViewerMen
 			variable, values = lhs, modelViewerMenuCycleValues(0, 1)
 			continue
 		}
-		if match := modelViewerMenuIncrModRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) {
+		if match := modelViewerMenuIncrModRE.FindStringSubmatch(
+			rhs,
+		); match != nil &&
+			strings.EqualFold(match[1], lhsRaw) {
 			count, _ := strconv.Atoi(match[2])
 			variable, values = lhs, modelViewerMenuCycleValues(0, count-1)
 			continue
@@ -248,7 +268,10 @@ func parseModelViewerMenuBranch(lines []string) (string, []any, []ModelViewerMen
 			}
 			continue
 		}
-		if match := modelViewerMenuModRE.FindStringSubmatch(rhs); match != nil && strings.EqualFold(match[1], lhsRaw) && variable == lhs {
+		if match := modelViewerMenuModRE.FindStringSubmatch(
+			rhs,
+		); match != nil && strings.EqualFold(match[1], lhsRaw) &&
+			variable == lhs {
 			count, _ := strconv.Atoi(match[2])
 			values = modelViewerMenuCycleValues(0, count-1)
 			continue
@@ -321,7 +344,10 @@ func collectModelViewerArrowBindings(sections []modINISection) []modelViewerSlot
 			continue
 		}
 		slot, _ := strconv.Atoi(match[1])
-		bySlot[slot] = append(bySlot[slot], modelViewerSlotBinding{Slot: slot, Variable: variable, Values: values, AlwaysVisible: true})
+		bySlot[slot] = append(
+			bySlot[slot],
+			modelViewerSlotBinding{Slot: slot, Variable: variable, Values: values, AlwaysVisible: true},
+		)
 	}
 	if len(bySlot) < 2 {
 		return nil
@@ -360,7 +386,8 @@ func parseModelViewerArrowButton(lines []string) (string, []any, bool) {
 			continue
 		}
 		guard := parseModelViewerMenuGuard(strings.TrimSpace(line)[3:])
-		if guard == nil || guard.variable != variable || direction == "-" && guard.op != "<" && guard.op != "<=" || direction == "+" && guard.op != ">" && guard.op != ">=" {
+		if guard == nil || guard.variable != variable || direction == "-" && guard.op != "<" && guard.op != "<=" ||
+			direction == "+" && guard.op != ">" && guard.op != ">=" {
 			continue
 		}
 		for _, later := range lines[index+1:] {
@@ -368,7 +395,8 @@ func parseModelViewerArrowButton(lines []string) (string, []any, bool) {
 				break
 			}
 			assignment := modelViewerMenuAssignRE.FindStringSubmatch(strings.TrimSpace(later))
-			if assignment == nil || modelViewerNormalizeKey(assignment[1]) != variable || !modelViewerMenuLiteralRE.MatchString(strings.TrimSpace(assignment[2])) {
+			if assignment == nil || modelViewerNormalizeKey(assignment[1]) != variable ||
+				!modelViewerMenuLiteralRE.MatchString(strings.TrimSpace(assignment[2])) {
 				continue
 			}
 			reset, err := strconv.Atoi(strings.TrimSpace(assignment[2]))

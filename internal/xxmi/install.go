@@ -67,11 +67,24 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	header.Set("User-Agent", "nahida-desktop")
 	header.Set("Referer", "https://github.com/SpectrumQT/XXMI-Libs-Package")
 	zipPath := filepath.Join(workDir, "package.zip")
-	packageURL := fmt.Sprintf("https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/XXMI-PACKAGE-%s.zip", escaped, escaped)
-	if err := download.File(ctx, infra.DownloadRequest{URL: packageURL, Destination: zipPath, Header: header}); err != nil {
+	packageURL := fmt.Sprintf(
+		"https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/XXMI-PACKAGE-%s.zip",
+		escaped,
+		escaped,
+	)
+	if err := download.File(
+		ctx,
+		infra.DownloadRequest{URL: packageURL, Destination: zipPath, Header: header},
+	); err != nil {
 		return fmt.Errorf("failed to download XXMI package: %w", err)
 	}
-	extractedPath, err := archive.Extract(ctx, zipPath, filepath.Join(workDir, "extracted"), infra.ExtractOptions{}, nil)
+	extractedPath, err := archive.Extract(
+		ctx,
+		zipPath,
+		filepath.Join(workDir, "extracted"),
+		infra.ExtractOptions{},
+		nil,
+	)
 	if err != nil {
 		return fmt.Errorf("extract XXMI package: %w", err)
 	}
@@ -79,8 +92,15 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	if err := copyTree(extractedPath, stagingDir); err != nil {
 		return fmt.Errorf("stage XXMI package: %w", err)
 	}
-	manifestURL := fmt.Sprintf("https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/Manifest.json", escaped)
-	response, err := httpClient.Fetch(ctx, manifestURL, infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true})
+	manifestURL := fmt.Sprintf(
+		"https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/Manifest.json",
+		escaped,
+	)
+	response, err := httpClient.Fetch(
+		ctx,
+		manifestURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return err
 	}

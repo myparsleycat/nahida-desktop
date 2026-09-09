@@ -49,7 +49,8 @@ func TestHashUploadFilesPreservesOrderAndReportsProgress(t *testing.T) {
 	}
 	firstHash := sha256.Sum256([]byte("first"))
 	secondHash := sha256.Sum256([]byte("second"))
-	if len(hashed) != 2 || hashed[0].SHA256 != hex.EncodeToString(firstHash[:]) || hashed[1].SHA256 != hex.EncodeToString(secondHash[:]) {
+	if len(hashed) != 2 || hashed[0].SHA256 != hex.EncodeToString(firstHash[:]) ||
+		hashed[1].SHA256 != hex.EncodeToString(secondHash[:]) {
 		t.Fatalf("hashes = %#v", hashed)
 	}
 	if len(progress) != 2 || progress[0] != 1 || progress[1] != 2 {
@@ -166,7 +167,14 @@ func TestPrepareUploadAllowsAdditionalExtensionAndAllFiles(t *testing.T) {
 	executable := filepath.Join(base, "tool.exe")
 	writeUploadFile(t, custom, "custom")
 	writeUploadFile(t, executable, "tool")
-	withExtension, err := PrepareUpload([]string{custom}, nil, UploadConflictSuffix, testUploadRules(), []string{"xyz"}, false)
+	withExtension, err := PrepareUpload(
+		[]string{custom},
+		nil,
+		UploadConflictSuffix,
+		testUploadRules(),
+		[]string{"xyz"},
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +197,11 @@ func TestCollectUploadPathsReportsDeniedExtensions(t *testing.T) {
 	writeUploadFile(t, filepath.Join(root, "Character", "notes.zip"), "zip")
 	writeUploadFile(t, filepath.Join(root, "Character", "README"), "readme")
 	writeUploadFile(t, filepath.Join(root, "Character", "desktop.ini"), "metadata")
-	if err := os.WriteFile(filepath.Join(root, "Character", "huge.png"), make([]byte, 100*1024*1024), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(root, "Character", "huge.png"),
+		make([]byte, 100*1024*1024),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 

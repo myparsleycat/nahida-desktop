@@ -274,8 +274,15 @@ func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, err
 	header := make(http.Header)
 	header.Set("Accept", "application/vnd.github+json")
 	header.Set("X-GitHub-Api-Version", "2026-03-10")
-	header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
-	response, err := httpClient.Fetch(ctx, rawURL, infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true})
+	header.Set(
+		"User-Agent",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+	)
+	response, err := httpClient.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return x.finishReleaseFetch(call, nil, err)
 	}
@@ -334,7 +341,12 @@ func (x *XXMI) load(ctx context.Context) error {
 	config, parsed, err := readAndValidateConfig(filepath.Join(*path, xxmiConfigName))
 	if err != nil {
 		if x.log != nil {
-			_ = infra.ReportError(x.log, err, "XXMI.initialize", infra.Diagnostic{Operation: "initialize", Stage: "background"})
+			_ = infra.ReportError(
+				x.log,
+				err,
+				"XXMI.initialize",
+				infra.Diagnostic{Operation: "initialize", Stage: "background"},
+			)
 		}
 		x.mu.Lock()
 		x.path = cloneString(path)

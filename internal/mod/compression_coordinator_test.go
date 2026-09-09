@@ -337,7 +337,12 @@ func TestCompressionCapabilitiesAllowOnlyInterruptingEnable(t *testing.T) {
 			coordinator.state.TargetEnabled = test.target
 			coordinator.deriveCapabilitiesLocked()
 			if coordinator.state.CanToggle != test.canToggle {
-				t.Fatalf("CanToggle = %v, want %v for state %+v", coordinator.state.CanToggle, test.canToggle, coordinator.state)
+				t.Fatalf(
+					"CanToggle = %v, want %v for state %+v",
+					coordinator.state.CanToggle,
+					test.canToggle,
+					coordinator.state,
+				)
 			}
 		})
 	}
@@ -780,7 +785,11 @@ func TestCompressionWatcherMergesMultipleModScopes(t *testing.T) {
 	waitForCompression(t, m.compression)
 
 	for _, folder := range folders {
-		if err := os.WriteFile(filepath.Join(folder, "payload.bin"), bytes.Repeat([]byte("scope"), 256*1024), 0o644); err != nil {
+		if err := os.WriteFile(
+			filepath.Join(folder, "payload.bin"),
+			bytes.Repeat([]byte("scope"), 256*1024),
+			0o644,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -817,9 +826,16 @@ func waitForCompression(t *testing.T, coordinator *compressionCoordinator) {
 		}
 	}
 	coordinator.mu.Lock()
-	state, pendingFull, pendingScopes := coordinator.state, coordinator.pendingFull, maps.Clone(coordinator.pendingScopes)
+	state, pendingFull, pendingScopes := coordinator.state, coordinator.pendingFull, maps.Clone(
+		coordinator.pendingScopes,
+	)
 	coordinator.mu.Unlock()
-	t.Fatalf("compression worker did not stop: state=%+v pendingFull=%v pendingScopes=%v", state, pendingFull, pendingScopes)
+	t.Fatalf(
+		"compression worker did not stop: state=%+v pendingFull=%v pendingScopes=%v",
+		state,
+		pendingFull,
+		pendingScopes,
+	)
 }
 
 func TestMarkSelfChangesReusesExpiryTimer(t *testing.T) {

@@ -381,7 +381,10 @@ func parseINI(path string, reports ...func(error)) IniResult {
 			}
 		}
 	}
-	reportScanFailure(infra.AnnotateError(scanner.Err(), infra.Diagnostic{Stage: "read-ini", Fields: map[string]any{"path": path}}), reports)
+	reportScanFailure(
+		infra.AnnotateError(scanner.Err(), infra.Diagnostic{Stage: "read-ini", Fields: map[string]any{"path": path}}),
+		reports,
+	)
 	flush()
 	sort.SliceStable(result.ToggleKeys, func(i, j int) bool {
 		return result.ToggleKeys[i].Key != nil && result.ToggleKeys[j].Key == nil

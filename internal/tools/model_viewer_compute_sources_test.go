@@ -26,14 +26,36 @@ func TestModelViewerComputeSourcesCompactUnionAndDecodePacked(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := ModelViewerComputeBinarySource{sourcePath: path, Stride: 20, ByteLength: 80}
-	transport := ModelViewerTransport{Meshes: []ModelViewerMeshTransport{{ID: "a"}, {ID: "b"}}, ComputeDeformers: []ModelViewerComputeDeformerTransport{{Kind: "gimi_cyclic_packed_shape_v1", ID: "shape", MeshIDs: []string{"a", "b"}, VertexCount: 4, Base: base, ShapeStages: []ModelViewerComputeShapeStage{{Base: base, Target: base}}}}}
-	meshes := []modelViewerMeshPayload{{Positions: make([]float32, 6), SourceIndices: []uint32{3, 1}}, {Positions: make([]float32, 3), SourceIndices: []uint32{1}}}
+	transport := ModelViewerTransport{
+		Meshes: []ModelViewerMeshTransport{{ID: "a"}, {ID: "b"}},
+		ComputeDeformers: []ModelViewerComputeDeformerTransport{
+			{
+				Kind:        "gimi_cyclic_packed_shape_v1",
+				ID:          "shape",
+				MeshIDs:     []string{"a", "b"},
+				VertexCount: 4,
+				Base:        base,
+				ShapeStages: []ModelViewerComputeShapeStage{{Base: base, Target: base}},
+			},
+		},
+	}
+	meshes := []modelViewerMeshPayload{
+		{Positions: make([]float32, 6), SourceIndices: []uint32{3, 1}},
+		{Positions: make([]float32, 3), SourceIndices: []uint32{1}},
+	}
 	cache := &modelViewerPositionCache{limit: 1024}
-	if err := service.prepareModelViewerComputeSources(context.Background(), session, &transport, meshes, cache); err != nil {
+	if err := service.prepareModelViewerComputeSources(
+		context.Background(),
+		session,
+		&transport,
+		meshes,
+		cache,
+	); err != nil {
 		t.Fatal(err)
 	}
 	d := transport.ComputeDeformers[0]
-	if d.VertexCount != 2 || d.Base.Stride != 28 || d.Base.ByteLength != 56 || d.Base.Encoding != modelViewerPackedFloatEncoding {
+	if d.VertexCount != 2 || d.Base.Stride != 28 || d.Base.ByteLength != 56 ||
+		d.Base.Encoding != modelViewerPackedFloatEncoding {
 		t.Fatalf("deformer=%+v", d)
 	}
 	if cache.bytes != 0 {
@@ -51,7 +73,8 @@ func TestModelViewerComputeSourcesCompactUnionAndDecodePacked(t *testing.T) {
 	for i := range values {
 		values[i] = math.Float32frombits(binary.LittleEndian.Uint32(data[i*4:]))
 	}
-	if !slices.Equal(values[:7], []float32{2, 1.0 / (1 << 24), 0, 1, -128, 127, -1}) || values[7] != 8 || !math.Signbit(float64(values[2])) {
+	if !slices.Equal(values[:7], []float32{2, 1.0 / (1 << 24), 0, 1, -128, 127, -1}) || values[7] != 8 ||
+		!math.Signbit(float64(values[2])) {
 		t.Fatalf("decoded=%v", values)
 	}
 	if meshes[0].SourceIndices[0] != 3 {
@@ -76,8 +99,30 @@ func TestModelViewerComputeSourcesPreserveUnpackedLayoutAndBlendMapping(t *testi
 		return ModelViewerComputeBinarySource{sourcePath: path, Stride: stride, ByteLength: int64(len(raw))}
 	}
 	base, blend := source("base", 40), source("blend", 32)
-	transport := ModelViewerTransport{Meshes: []ModelViewerMeshTransport{{ID: "a"}}, ComputeDeformers: []ModelViewerComputeDeformerTransport{{ID: "pose", Kind: "gimi_shape_pose_v1", MeshIDs: []string{"a"}, VertexCount: 3, Base: base, ShapePasses: []ModelViewerComputeShapePass{{Target: base}}, Pose: &ModelViewerComputePoseSource{Blend: blend, Frames: ModelViewerComputeBinarySource{sourcePath: "pose"}}}}}
-	if err := service.prepareModelViewerComputeSources(context.Background(), session, &transport, []modelViewerMeshPayload{{Positions: make([]float32, 3), SourceIndices: []uint32{2}}}, &modelViewerPositionCache{limit: 1024}); err != nil {
+	transport := ModelViewerTransport{
+		Meshes: []ModelViewerMeshTransport{{ID: "a"}},
+		ComputeDeformers: []ModelViewerComputeDeformerTransport{
+			{
+				ID:          "pose",
+				Kind:        "gimi_shape_pose_v1",
+				MeshIDs:     []string{"a"},
+				VertexCount: 3,
+				Base:        base,
+				ShapePasses: []ModelViewerComputeShapePass{{Target: base}},
+				Pose: &ModelViewerComputePoseSource{
+					Blend:  blend,
+					Frames: ModelViewerComputeBinarySource{sourcePath: "pose"},
+				},
+			},
+		},
+	}
+	if err := service.prepareModelViewerComputeSources(
+		context.Background(),
+		session,
+		&transport,
+		[]modelViewerMeshPayload{{Positions: make([]float32, 3), SourceIndices: []uint32{2}}},
+		&modelViewerPositionCache{limit: 1024},
+	); err != nil {
 		t.Fatal(err)
 	}
 	d := transport.ComputeDeformers[0]

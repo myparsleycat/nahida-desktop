@@ -34,7 +34,8 @@ func TestUploadPackSendsManifestAndCreditsLogicalFiles(t *testing.T) {
 		if err := json.Unmarshal([]byte(request.FormValue("manifest")), &manifest); err != nil {
 			t.Fatal(err)
 		}
-		if len(manifest.Entries) != 2 || manifest.Entries[0].Token != "token-1" || manifest.Entries[1].CompAlg != "zstd" {
+		if len(manifest.Entries) != 2 || manifest.Entries[0].Token != "token-1" ||
+			manifest.Entries[1].CompAlg != "zstd" {
 			t.Fatalf("manifest = %+v", manifest)
 		}
 		file, header, err := request.FormFile("pack")
@@ -50,7 +51,10 @@ func TestUploadPackSendsManifestAndCreditsLogicalFiles(t *testing.T) {
 			t.Fatalf("filename = %q, payload = %q", header.Filename, payload)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"completed"}]}`)
+		_, _ = io.WriteString(
+			w,
+			`{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"completed"}]}`,
+		)
 	}))
 	defer server.Close()
 	members := []preparedUpload{

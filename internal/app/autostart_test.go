@@ -26,7 +26,9 @@ func TestSyncAutostartUsesHiddenLaunchArgument(t *testing.T) {
 	if err := syncAutostartState(controller, true, true, true); err != nil {
 		t.Fatal(err)
 	}
-	if len(controller.enabled) != 1 || controller.enabled[0].Identifier != autostartIdentifier || len(controller.enabled[0].Arguments) != 1 || controller.enabled[0].Arguments[0] != "--hidden" {
+	if len(controller.enabled) != 1 || controller.enabled[0].Identifier != autostartIdentifier ||
+		len(controller.enabled[0].Arguments) != 1 ||
+		controller.enabled[0].Arguments[0] != "--hidden" {
 		t.Fatalf("enable options = %#v", controller.enabled)
 	}
 	if err := syncAutostartState(controller, false, true, true); err != nil {

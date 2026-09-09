@@ -235,7 +235,10 @@ func (a *Auth) getToken(ctx context.Context) (string, error) {
 		severity = infra.DiagnosticError
 	}
 	_ = infra.ReportError(a.log, infra.WithCause(decryptErr, cleanupErr), "Auth", infra.Diagnostic{
-		Severity: severity, Operation: "restore-token", Stage: "decrypt", Fields: map[string]any{"cleanupFailed": cleanupErr != nil},
+		Severity:  severity,
+		Operation: "restore-token",
+		Stage:     "decrypt",
+		Fields:    map[string]any{"cleanupFailed": cleanupErr != nil},
 	})
 	return "", nil
 }
@@ -480,7 +483,16 @@ func validateSessionJSON(body []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := requireStrings(session, "session", "id", "userId", "createdAt", "updatedAt", "expiresAt", "token"); err != nil {
+	if err := requireStrings(
+		session,
+		"session",
+		"id",
+		"userId",
+		"createdAt",
+		"updatedAt",
+		"expiresAt",
+		"token",
+	); err != nil {
 		return err
 	}
 	user, err := requireRecord("user")

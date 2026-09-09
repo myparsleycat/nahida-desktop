@@ -218,7 +218,12 @@ func (m *Mod) PastePreview(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := atomicWriteFile(filePath, content, 0o644, func(err error) {
-		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{Operation: "paste-preview", Stage: "cleanup", Fields: map[string]any{"path": filePath}})
+		_ = infra.ReportError(
+			m.log,
+			err,
+			"Mod",
+			infra.Diagnostic{Operation: "paste-preview", Stage: "cleanup", Fields: map[string]any{"path": filePath}},
+		)
 	}); err != nil {
 		return "", err
 	}
@@ -397,7 +402,13 @@ func atomicWriteFile(path string, content []byte, mode os.FileMode, reports ...f
 		}
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		return infra.WithCause(err, infra.AnnotateError(os.Rename(backup, path), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path, "backupPath": backup}}))
+		return infra.WithCause(
+			err,
+			infra.AnnotateError(
+				os.Rename(backup, path),
+				infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path, "backupPath": backup}},
+			),
+		)
 	}
 	report(os.Remove(backup))
 	return nil

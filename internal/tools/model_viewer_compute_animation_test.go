@@ -140,18 +140,23 @@ filename = pose.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer == nil {
 		t.Fatal("expected known GIMI shape/pose deformer")
 	}
-	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 3 {
+	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 ||
+		deformer.Pose.FrameCount != 3 {
 		t.Fatalf("unexpected pose descriptor: %+v", deformer)
 	}
-	if len(deformer.ShapePasses) != 2 || deformer.ShapePasses[0].AngularScale != 30 || deformer.ShapePasses[1].PhaseOffset != -0.05236 {
+	if len(deformer.ShapePasses) != 2 || deformer.ShapePasses[0].AngularScale != 30 ||
+		deformer.ShapePasses[1].PhaseOffset != -0.05236 {
 		t.Fatalf("unexpected shape passes: %+v", deformer.ShapePasses)
 	}
-	if len(clips) != 1 || clips[0].FrameStart != 0 || clips[0].FrameEnd != 2 || clips[0].FPS != 30 || clips[0].Label != "Anime State 0" {
+	if len(clips) != 1 || clips[0].FrameStart != 0 || clips[0].FrameEnd != 2 || clips[0].FPS != 30 ||
+		clips[0].Label != "Anime State 0" {
 		t.Fatalf("unexpected clips: %+v", clips)
 	}
 
@@ -176,7 +181,11 @@ filename = pose.buf
 	}
 	shapeOnly, shapeClips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if shapeOnly == nil || shapeOnly.Pose != nil || len(shapeOnly.ShapePasses) != 2 || len(shapeClips) != 1 {
-		t.Fatalf("invalid bone data did not preserve shape-only animation: deformer=%+v clips=%+v", shapeOnly, shapeClips)
+		t.Fatalf(
+			"invalid bone data did not preserve shape-only animation: deformer=%+v clips=%+v",
+			shapeOnly,
+			shapeClips,
+		)
 	}
 }
 
@@ -238,7 +247,16 @@ filename = blend.buf
 [ResourcePose]
 stride = 56
 filename = pose.buf`, filepath.Join(dir, "mod.ini"))
-	if deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", parsed.Sections, collectModelViewerResources(parsed.Sections), []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 1}}}, nil); deformer != nil && deformer.Pose != nil {
+	if deformer, _ := detectModelViewerComputeAnimation(
+		dir,
+		dir,
+		"",
+		parsed.Sections,
+		collectModelViewerResources(parsed.Sections),
+		[]modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 1}}},
+		nil,
+	); deformer != nil &&
+		deformer.Pose != nil {
 		t.Fatal("non-integral bone count must not enable pose animation")
 	}
 }
@@ -277,7 +295,15 @@ cs = anim_bone.hlsl
 cs-u5 = ResourcePosition
 ResourcePositionOut = ref cs-u5
 Dispatch = 1,1,1`, filepath.Join(dir, "mod.ini"))
-	if deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", parsed.Sections, collectModelViewerResources(parsed.Sections), nil, nil); deformer != nil {
+	if deformer, _ := detectModelViewerComputeAnimation(
+		dir,
+		dir,
+		"",
+		parsed.Sections,
+		collectModelViewerResources(parsed.Sections),
+		nil,
+		nil,
+	); deformer != nil {
 		t.Fatal("shader filename alone must not enable compute animation")
 	}
 }
@@ -354,12 +380,16 @@ filename = pose.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer == nil || deformer.Kind != modelViewerPackedObjectKind {
 		t.Fatalf("deformer = %+v", deformer)
 	}
-	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 2 || len(deformer.ShapePasses) != 0 {
+	if deformer.VertexCount != 3 || deformer.Pose == nil || deformer.Pose.BoneCount != 2 ||
+		deformer.Pose.FrameCount != 2 ||
+		len(deformer.ShapePasses) != 0 {
 		t.Fatalf("unexpected cyclic descriptor: %+v", deformer)
 	}
 	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FPS != 24 {
@@ -434,7 +464,9 @@ filename = pose.buf
 			text += "\n[ResourceUnmatched]\nstride = 20\nfilename = unmatched.buf\n"
 			sections, names := scopeModelViewerSections(parseModINI(text), 0, "")
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-			meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+			meshes := []modelViewerDirectMesh{
+				{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+			}
 			deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 			if !test.want {
 				if deformer != nil || len(clips) != 0 {
@@ -442,7 +474,9 @@ filename = pose.buf
 				}
 				return
 			}
-			if deformer == nil || deformer.Kind != modelViewerPackedObjectKind || deformer.VertexCount != 3 || filepath.Base(deformer.Base.sourcePath) != "base.buf" || filepath.Base(deformer.Pose.Blend.sourcePath) != "blend.buf" {
+			if deformer == nil || deformer.Kind != modelViewerPackedObjectKind || deformer.VertexCount != 3 ||
+				filepath.Base(deformer.Base.sourcePath) != "base.buf" ||
+				filepath.Base(deformer.Pose.Blend.sourcePath) != "blend.buf" {
 				t.Fatalf("matching branch was not selected: %+v", deformer)
 			}
 			if len(clips) != 1 || clips[0].FrameStart != 1 || clips[0].FrameEnd != 3 || clips[0].FPS != 24 {
@@ -462,8 +496,16 @@ filename = pose.buf
 
 func TestBindModelViewerComputeBranchRejectsConflictingClips(t *testing.T) {
 	clips := []modelViewerPreparedAnimationClip{
-		{ID: "matching", VariableIDs: []string{"mode"}, Frames: []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(1)}}}},
-		{ID: "conflicting", VariableIDs: []string{"mode"}, Frames: []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(0)}}}},
+		{
+			ID:          "matching",
+			VariableIDs: []string{"mode"},
+			Frames:      []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(1)}}},
+		},
+		{
+			ID:          "conflicting",
+			VariableIDs: []string{"mode"},
+			Frames:      []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(0)}}},
+		},
 	}
 	bound := bindModelViewerComputeBranch(clips, []modelViewerStateEquality{{variable: "mode", value: "1"}})
 	if len(bound) != 1 || bound[0].ID != "matching" || !slices.Equal(bound[0].VariableIDs, []string{"mode"}) {
@@ -597,27 +639,34 @@ filename = Kimono4.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "Kimono1.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "Kimono1.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer == nil || deformer.Kind != modelViewerPackedShapeKind {
 		t.Fatalf("deformer = %+v", deformer)
 	}
-	if deformer.VertexCount != 3 || deformer.Pose != nil || len(deformer.ShapePasses) != 0 || len(deformer.ShapeStages) != 4 {
+	if deformer.VertexCount != 3 || deformer.Pose != nil || len(deformer.ShapePasses) != 0 ||
+		len(deformer.ShapeStages) != 4 {
 		t.Fatalf("unexpected packed shape descriptor: %+v", deformer)
 	}
-	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 10 || deformer.ShapeStages[0].PhaseStart != -0.05236 {
+	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 10 ||
+		deformer.ShapeStages[0].PhaseStart != -0.05236 {
 		t.Fatalf("stage0 = %+v", deformer.ShapeStages[0])
 	}
-	if deformer.ShapeStages[1].PhaseStart != -0.05236 || deformer.ShapeStages[2].PhaseStart != -0.05236 || deformer.ShapeStages[3].PhaseStart != -0.05236 {
+	if deformer.ShapeStages[1].PhaseStart != -0.05236 || deformer.ShapeStages[2].PhaseStart != -0.05236 ||
+		deformer.ShapeStages[3].PhaseStart != -0.05236 {
 		t.Fatalf("incoming phase starts = %+v", deformer.ShapeStages)
 	}
 	if !samePathFold(deformer.ShapeStages[0].Base.sourcePath, deformer.Base.sourcePath) {
 		t.Fatalf("stage0 base = %+v deformer base = %+v", deformer.ShapeStages[0].Base, deformer.Base)
 	}
-	if deformer.ShapeStages[2].PhaseRate != 5 || deformer.ShapeStages[2].WrapAt != 12 || samePathFold(deformer.ShapeStages[2].Base.sourcePath, deformer.Base.sourcePath) {
+	if deformer.ShapeStages[2].PhaseRate != 5 || deformer.ShapeStages[2].WrapAt != 12 ||
+		samePathFold(deformer.ShapeStages[2].Base.sourcePath, deformer.Base.sourcePath) {
 		t.Fatalf("stage2 = %+v", deformer.ShapeStages[2])
 	}
-	if deformer.ShapeStages[3].PhaseRate != 0.1 || deformer.ShapeStages[3].WrapAt != 0.05236 || deformer.ShapeStages[0].Duration <= 0 {
+	if deformer.ShapeStages[3].PhaseRate != 0.1 || deformer.ShapeStages[3].WrapAt != 0.05236 ||
+		deformer.ShapeStages[0].Duration <= 0 {
 		t.Fatalf("stage3 = %+v", deformer.ShapeStages[3])
 	}
 	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FrameEnd < 2 {
@@ -674,7 +723,9 @@ filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer == nil || len(deformer.ShapeStages) != 2 {
 		t.Fatalf("deformer = %+v", deformer)
@@ -721,12 +772,17 @@ filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
-	if deformer == nil || deformer.Kind != modelViewerPackedShapeKind || len(deformer.ShapePasses) != 0 || len(deformer.ShapeStages) != 1 {
+	if deformer == nil || deformer.Kind != modelViewerPackedShapeKind || len(deformer.ShapePasses) != 0 ||
+		len(deformer.ShapeStages) != 1 {
 		t.Fatalf("deformer = %+v", deformer)
 	}
-	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 6.283 || deformer.ShapeStages[0].Duration <= 0 || len(clips) != 1 {
+	if deformer.ShapeStages[0].PhaseRate != 0.5 || deformer.ShapeStages[0].WrapAt != 6.283 ||
+		deformer.ShapeStages[0].Duration <= 0 ||
+		len(clips) != 1 {
 		t.Fatalf("stage=%+v clips=%+v", deformer.ShapeStages[0], clips)
 	}
 }
@@ -768,7 +824,9 @@ filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
 	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-	meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer != nil || clips != nil {
 		t.Fatalf("unsequenced packed shape passes should fail closed: deformer=%+v clips=%+v", deformer, clips)

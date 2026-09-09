@@ -12,7 +12,16 @@ func (d *Drive) listDestinationChildIDs(ctx context.Context, destinationID strin
 	item, err := d.GetItem(ctx, destinationID)
 	if err != nil {
 		if d.log != nil {
-			_ = infra.ReportError(d.log, err, "Drive:CopyFromUrl:ListDestinationChildrenFailed", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "copy-from-url", Fields: map[string]any{"destinationId": destinationID}})
+			_ = infra.ReportError(
+				d.log,
+				err,
+				"Drive:CopyFromUrl:ListDestinationChildrenFailed",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "copy-from-url",
+					Fields:    map[string]any{"destinationId": destinationID},
+				},
+			)
 		}
 		return ids
 	}
@@ -24,7 +33,13 @@ func (d *Drive) listDestinationChildIDs(ctx context.Context, destinationID strin
 	return ids
 }
 
-func (d *Drive) hasRemoteImportResult(ctx context.Context, destinationID string, expectedSize int64, preexistingChildIDs map[string]struct{}, sourceName string) bool {
+func (d *Drive) hasRemoteImportResult(
+	ctx context.Context,
+	destinationID string,
+	expectedSize int64,
+	preexistingChildIDs map[string]struct{},
+	sourceName string,
+) bool {
 	if ctx.Err() != nil {
 		return false
 	}
@@ -150,7 +165,12 @@ func (d *Drive) getOrCreateCollectionFolder(ctx context.Context, parentID, name 
 	if existing := findCollectionFolder(updated, sanitized); existing != "" {
 		return existing, nil
 	}
-	return "", newDriveAPIError("DRIVE_COLLECTION_FOLDER_CREATE_FAILED", `The collection folder "`+sanitized+`" could not be created.`, 0, nil)
+	return "", newDriveAPIError(
+		"DRIVE_COLLECTION_FOLDER_CREATE_FAILED",
+		`The collection folder "`+sanitized+`" could not be created.`,
+		0,
+		nil,
+	)
 }
 
 func findCollectionFolder(item any, name string) string {

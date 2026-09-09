@@ -274,14 +274,19 @@ func TestSetGetEncodings(t *testing.T) {
 		t.Fatalf("get passwords: %v", err)
 	}
 	passwords, ok := got.([]string)
-	if !ok || len(passwords) != 3 || passwords[0] != "secret" || passwords[1] != "alpha" || passwords[2] != "<tag>&value>" {
+	if !ok || len(passwords) != 3 || passwords[0] != "secret" || passwords[1] != "alpha" ||
+		passwords[2] != "<tag>&value>" {
 		t.Fatalf("passwords = %#v", got)
 	}
 	if raw := rawValue(t, s, "drive_password_list"); raw != `["secret","alpha","<tag>&value>"]` {
 		t.Fatalf("password list stored %q", raw)
 	}
 
-	if err := s.Set(ctx, KeyModAutoResolveDownloadTargetSources, []string{"drive", "unknown", "gamebanana"}); err != nil {
+	if err := s.Set(
+		ctx,
+		KeyModAutoResolveDownloadTargetSources,
+		[]string{"drive", "unknown", "gamebanana"},
+	); err != nil {
 		t.Fatalf("set sources: %v", err)
 	}
 	got, err = s.Get(ctx, KeyModAutoResolveDownloadTargetSources)
@@ -562,7 +567,8 @@ func TestAdvancedGetAllMasksAndSetRejectsUnknown(t *testing.T) {
 	}
 	invented := 0
 	for _, row := range rows {
-		if _, ok := publicKeys[row.Key]; ok && row.Key != "general_language" && row.Key != "debug_open_console" && row.Key != "drive_password_list" {
+		if _, ok := publicKeys[row.Key]; ok && row.Key != "general_language" && row.Key != "debug_open_console" &&
+			row.Key != "drive_password_list" {
 			invented++
 		}
 	}

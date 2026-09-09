@@ -95,9 +95,16 @@ func restoreZstdFiles(
 	archives = uniqueZstdFiles(archives)
 	setCompressionTotals(archives, setTotals)
 	mark = serialZstdMarker(mark)
-	return runZstdWorkers(ctx, archives, zstdRestoreWorkerCount(archives, runtime.GOMAXPROCS(0)), func(file compressionFile) error {
-		return restoreZstdFile(ctx, file.path, maxZstdRestoreSize, mark)
-	}, progress, onError)
+	return runZstdWorkers(
+		ctx,
+		archives,
+		zstdRestoreWorkerCount(archives, runtime.GOMAXPROCS(0)),
+		func(file compressionFile) error {
+			return restoreZstdFile(ctx, file.path, maxZstdRestoreSize, mark)
+		},
+		progress,
+		onError,
+	)
 }
 
 func uniqueZstdFiles(files []compressionFile) []compressionFile {
@@ -202,7 +209,15 @@ func restoreZstdFolder(
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
-	return restoreZstdFiles(ctx, []string{folder}, func(string) bool { return true }, func(int, int64) {}, func(string, int64, bool) {}, mark, onError)
+	return restoreZstdFiles(
+		ctx,
+		[]string{folder},
+		func(string) bool { return true },
+		func(int, int64) {},
+		func(string, int64, bool) {},
+		mark,
+		onError,
+	)
 }
 
 func disabledModFolders(roots []string) ([]string, error) {
@@ -406,7 +421,12 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (retur
 			returnErr = infra.WithCause(returnErr, os.Remove(tempPath))
 		}
 	}()
-	encoder, err := zstd.NewWriter(temp, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderConcurrency(1), zstd.WithEncoderCRC(true))
+	encoder, err := zstd.NewWriter(
+		temp,
+		zstd.WithEncoderLevel(zstd.SpeedDefault),
+		zstd.WithEncoderConcurrency(1),
+		zstd.WithEncoderCRC(true),
+	)
 	if err != nil {
 		return err
 	}

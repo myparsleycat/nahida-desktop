@@ -30,9 +30,11 @@ type modBufferResource struct {
 }
 
 var (
-	modINIHeaderRE   = regexp.MustCompile(`^\[([^\]]+)\]$`)
-	modINIMergedRE   = regexp.MustCompile(`(?i)^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$`)
-	modINISectionRE  = regexp.MustCompile(`(?i)^(TextureOverride|ShaderOverride|Resource|Constants|Present|CommandList|CustomShader)(.*)$`)
+	modINIHeaderRE  = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	modINIMergedRE  = regexp.MustCompile(`(?i)^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$`)
+	modINISectionRE = regexp.MustCompile(
+		`(?i)^(TextureOverride|ShaderOverride|Resource|Constants|Present|CommandList|CustomShader)(.*)$`,
+	)
 	modLOResourceRE  = regexp.MustCompile(`(?i)(?:_LOD$|_VB\d+_LOD)`)
 	positionCSNameRE = regexp.MustCompile(`(?i)position(?:\.\d+)?cs$`)
 	componentVB0RE   = regexp.MustCompile(`(?i)component\d+_vb0$`)
@@ -104,7 +106,8 @@ func findPrimaryModINI(input string) (string, error) {
 			}
 			return nil
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") || strings.HasPrefix(strings.ToLower(entry.Name()), "disabled") {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") ||
+			strings.HasPrefix(strings.ToLower(entry.Name()), "disabled") {
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)
@@ -299,10 +302,12 @@ func collectModResources(sections []modINISection) []modBufferResource {
 func collectPositionResources(resources []modBufferResource) []modBufferResource {
 	var out []modBufferResource
 	for _, resource := range resources {
-		if resource.Filename == "" || resource.Stride == 0 || modLOResourceRE.MatchString(resource.Name) || positionCSNameRE.MatchString(resource.Name) {
+		if resource.Filename == "" || resource.Stride == 0 || modLOResourceRE.MatchString(resource.Name) ||
+			positionCSNameRE.MatchString(resource.Name) {
 			continue
 		}
-		if (strings.Contains(strings.ToLower(resource.Name), "position") || componentVB0RE.MatchString(resource.Name)) && resource.Stride >= 12 {
+		if (strings.Contains(strings.ToLower(resource.Name), "position") || componentVB0RE.MatchString(resource.Name)) &&
+			resource.Stride >= 12 {
 			out = append(out, resource)
 		}
 	}
@@ -316,7 +321,8 @@ func collectIndexResources(resources []modBufferResource) []modBufferResource {
 		if resource.Filename == "" || modLOResourceRE.MatchString(resource.Name) {
 			continue
 		}
-		if strings.Contains(lowerName, "index") || ((strings.Contains(upperFormat, "R16_UINT") || strings.Contains(upperFormat, "R32_UINT")) && !containsAny(lowerName, "position", "blend", "vector", "texcoord", "color")) {
+		if strings.Contains(lowerName, "index") ||
+			((strings.Contains(upperFormat, "R16_UINT") || strings.Contains(upperFormat, "R32_UINT")) && !containsAny(lowerName, "position", "blend", "vector", "texcoord", "color")) {
 			out = append(out, resource)
 		}
 	}
@@ -337,7 +343,10 @@ func collectNamedResources(resources []modBufferResource, kind string, excludeLO
 	return out
 }
 
-func matchIndexResources(positions, indices []modBufferResource, sections []modINISection) map[string][]modBufferResource {
+func matchIndexResources(
+	positions, indices []modBufferResource,
+	sections []modINISection,
+) map[string][]modBufferResource {
 	matches := make(map[string][]modBufferResource)
 	byName := make(map[string]modBufferResource)
 	for _, resource := range append(append([]modBufferResource(nil), positions...), indices...) {
@@ -381,7 +390,10 @@ func matchIndexResources(positions, indices []modBufferResource, sections []modI
 		}
 	}
 	for key, matched := range matches {
-		sort.SliceStable(matched, func(i, j int) bool { return resourceIndex(indices, matched[i]) < resourceIndex(indices, matched[j]) })
+		sort.SliceStable(
+			matched,
+			func(i, j int) bool { return resourceIndex(indices, matched[i]) < resourceIndex(indices, matched[j]) },
+		)
 		matches[key] = matched
 	}
 	return matches
@@ -449,7 +461,9 @@ func addIndexMatch(matches map[string][]modBufferResource, position, index modBu
 func indexResourceMatchScore(position, index modBufferResource) int {
 	positionBase, positionVariant := logicalResourceName(position.Name, "position")
 	indexBase, indexVariant := logicalResourceName(index.Name, "index")
-	if positionBase == "" || indexBase == "" || positionVariant != "" && indexVariant != "" && positionVariant != indexVariant || !strings.HasPrefix(indexBase, positionBase) {
+	if positionBase == "" || indexBase == "" ||
+		positionVariant != "" && indexVariant != "" && positionVariant != indexVariant ||
+		!strings.HasPrefix(indexBase, positionBase) {
 		return 0
 	}
 	variantScore := 0
@@ -520,7 +534,10 @@ func companionResourceKey(name string) string {
 
 func resourceGroupKey(resource modBufferResource) string {
 	if resource.Filename != "" {
-		stem := strings.TrimSuffix(filepath.Base(filepath.FromSlash(resource.Filename)), filepath.Ext(resource.Filename))
+		stem := strings.TrimSuffix(
+			filepath.Base(filepath.FromSlash(resource.Filename)),
+			filepath.Ext(resource.Filename),
+		)
 		if key := companionResourceKey(stem); key != "" {
 			return key
 		}

@@ -441,7 +441,8 @@ func (w *Watcher) stopping() bool {
 }
 
 func (w *Watcher) reportReadError(path string, err error) {
-	if w.stopping() && (errors.Is(err, windows.ERROR_OPERATION_ABORTED) || errors.Is(err, windows.ERROR_INVALID_HANDLE)) {
+	if w.stopping() &&
+		(errors.Is(err, windows.ERROR_OPERATION_ABORTED) || errors.Is(err, windows.ERROR_INVALID_HANDLE)) {
 		return
 	}
 	w.reportError(wrapReadError(path, err))

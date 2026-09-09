@@ -157,9 +157,14 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 			l.mu.Lock()
 			l.opening = false
 			l.mu.Unlock()
-			return "", infra.ReportError(l.log, infra.WithCause(gamebanana.ErrLoginInitFailed, err), "GameBananaLogin.Open", infra.Diagnostic{
-				Severity: infra.DiagnosticWarn, Operation: "login", Stage: "logout-shared-webview-profile",
-			})
+			return "", infra.ReportError(
+				l.log,
+				infra.WithCause(gamebanana.ErrLoginInitFailed, err),
+				"GameBananaLogin.Open",
+				infra.Diagnostic{
+					Severity: infra.DiagnosticWarn, Operation: "login", Stage: "logout-shared-webview-profile",
+				},
+			)
 		}
 
 		window, err := factory()
@@ -333,8 +338,13 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 		defer closeCancel()
 		window.Close()
 		return infra.AnnotateError(window.WaitClosed(closeCtx), infra.Diagnostic{
-			Operation: "login", Stage: "close-logout-window",
-			Fields: map[string]any{"windowID": window.ID(), "elapsedMs": time.Since(started).Milliseconds(), "cleanupTimeoutMs": cleanupWait.Milliseconds()},
+			Operation: "login",
+			Stage:     "close-logout-window",
+			Fields: map[string]any{
+				"windowID":         window.ID(),
+				"elapsedMs":        time.Since(started).Milliseconds(),
+				"cleanupTimeoutMs": cleanupWait.Milliseconds(),
+			},
 		})
 	}
 	original := infra.AnnotateError(err, infra.Diagnostic{Operation: "login", Stage: stage})
@@ -367,7 +377,13 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 	if fallbackCtx.Err() != nil {
 		fields["contextError"] = fallbackCtx.Err().Error()
 	}
-	diagnostic := infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: stage, Fields: fields, Causes: []error{original}}
+	diagnostic := infra.Diagnostic{
+		Severity:  infra.DiagnosticWarn,
+		Operation: "login",
+		Stage:     stage,
+		Fields:    fields,
+		Causes:    []error{original},
+	}
 	if err != nil {
 		return infra.AnnotateError(err, diagnostic)
 	}
@@ -547,7 +563,11 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 			return false
 		}
 		if errors.Is(err, application.ErrWebviewCookiesUnsupported) {
-			l.settle(window, "", infra.AnnotateError(classifyLoginWindowError(err), l.cookieDiagnostic(ctx, "poll-cookies")))
+			l.settle(
+				window,
+				"",
+				infra.AnnotateError(classifyLoginWindowError(err), l.cookieDiagnostic(ctx, "poll-cookies")),
+			)
 			return false
 		}
 		l.pollDiagnostic.Report(l.log, err, "GameBananaLogin", l.cookieDiagnostic(ctx, "poll-cookies"))
@@ -756,7 +776,11 @@ func (w *nativeLoginWindow) GetCookies(ctx context.Context, uri string) ([]appli
 func (w *nativeLoginWindow) DeleteCookies(ctx context.Context, uri string, names ...string) error {
 	return w.window.DeleteCookies(ctx, uri, names...)
 }
-func (w *nativeLoginWindow) OnWindowEvent(eventType events.WindowEventType, callback func(*application.WindowEvent)) func() {
+
+func (w *nativeLoginWindow) OnWindowEvent(
+	eventType events.WindowEventType,
+	callback func(*application.WindowEvent),
+) func() {
 	return w.window.OnWindowEvent(eventType, callback)
 }
 

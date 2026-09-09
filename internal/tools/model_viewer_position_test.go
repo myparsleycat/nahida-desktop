@@ -51,11 +51,14 @@ func TestModelViewerDerivedGeometryMatchesAreaWeightedNormals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if normals[0] != 0 || math.Abs(float64(normals[1])-1/math.Sqrt(5)) > 1e-6 || math.Abs(float64(normals[2])-2/math.Sqrt(5)) > 1e-6 {
+	if normals[0] != 0 || math.Abs(float64(normals[1])-1/math.Sqrt(5)) > 1e-6 ||
+		math.Abs(float64(normals[2])-2/math.Sqrt(5)) > 1e-6 {
 		t.Fatalf("normals=%v", normals)
 	}
 	bounds, err := modelViewerGeometryBounds(context.Background(), positions)
-	if err != nil || bounds.Min != [3]float64{0, 0, 0} || bounds.Max != [3]float64{2, 2, 1} || bounds.Center != [3]float64{1, 1, 0.5} || bounds.Radius != 1.5 {
+	if err != nil || bounds.Min != [3]float64{0, 0, 0} || bounds.Max != [3]float64{2, 2, 1} ||
+		bounds.Center != [3]float64{1, 1, 0.5} ||
+		bounds.Radius != 1.5 {
 		t.Fatalf("bounds=%+v err=%v", bounds, err)
 	}
 	if _, err := modelViewerGeometryBounds(context.Background(), []float32{float32(math.NaN()), 0, 0}); err == nil {
@@ -80,7 +83,11 @@ func TestModelViewerPositionCacheBoundsAndCancellation(t *testing.T) {
 	if _, err := cache.load(ctx, "a", read); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled cache hit: %v", err)
 	}
-	if _, err := cache.load(context.Background(), "large", func(context.Context) ([]byte, error) { return make([]byte, 11), nil }); err != nil {
+	if _, err := cache.load(
+		context.Background(),
+		"large",
+		func(context.Context) ([]byte, error) { return make([]byte, 11), nil },
+	); err != nil {
 		t.Fatal(err)
 	}
 	if cache.bytes != 8 || cache.entries["large"] != nil {
@@ -93,7 +100,16 @@ func TestModelViewerPositionLoaderIsLazyAndSessionBound(t *testing.T) {
 	session := service.protocol.CreateMemorySession()
 	path := filepath.Join(t.TempDir(), "late.buf")
 	cache := &modelViewerPositionCache{limit: 1024}
-	url, err := service.registerModelViewerPosition(session, "mesh", 0, modelViewerDirectPositionAssignment{sourcePath: path, stride: 12, sourceBytes: 36}, []uint32{0, 1, 2}, nil, 3, cache)
+	url, err := service.registerModelViewerPosition(
+		session,
+		"mesh",
+		0,
+		modelViewerDirectPositionAssignment{sourcePath: path, stride: 12, sourceBytes: 36},
+		[]uint32{0, 1, 2},
+		nil,
+		3,
+		cache,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

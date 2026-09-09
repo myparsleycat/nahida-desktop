@@ -130,7 +130,8 @@ func TestDisableDCRMutatesEnabledSettings(t *testing.T) {
 	if len(roundTrip.grades) != 2 || roundTrip.grades[0].Value != genshinDCRDisabledValue {
 		t.Fatalf("grades = %+v", roundTrip.grades)
 	}
-	if roundTrip.saveItems[0].Index != genshinDCRDisabledIndex || roundTrip.saveItems[0].ItemVersion != genshinDCRItemVersion {
+	if roundTrip.saveItems[0].Index != genshinDCRDisabledIndex ||
+		roundTrip.saveItems[0].ItemVersion != genshinDCRItemVersion {
 		t.Fatalf("save item = %+v", roundTrip.saveItems[0])
 	}
 }

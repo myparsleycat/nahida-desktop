@@ -97,10 +97,12 @@ func TestListTextureFolderParsesDDSAndSortsByPixels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 || items[0].FilePath != large || items[0].Format != "DXGI_FORMAT_BC1_UNORM_SRGB" || items[0].ColorSpace != "srgb" {
+	if len(items) != 2 || items[0].FilePath != large || items[0].Format != "DXGI_FORMAT_BC1_UNORM_SRGB" ||
+		items[0].ColorSpace != "srgb" {
 		t.Fatalf("items = %#v", items)
 	}
-	if items[0].TargetWidth != 2048 || items[0].TargetHeight != 1024 || !items[0].CanResize || items[0].MipLevelCount != 4 {
+	if items[0].TargetWidth != 2048 || items[0].TargetHeight != 1024 || !items[0].CanResize ||
+		items[0].MipLevelCount != 4 {
 		t.Fatalf("large item = %#v", items[0])
 	}
 	if items[1].ColorSpace != "linear" || items[1].FormatConversionMessage != nil {
@@ -143,7 +145,8 @@ func TestTextureRuntimeStatusRequiresEveryModelPair(t *testing.T) {
 		}
 	}
 	statuses, err := service.GetTextureUpscaleRuntimeStatus(ctx)
-	if err != nil || !statuses.Realesrgan.Installed || statuses.Realesrgan.Version == nil || *statuses.Realesrgan.Version != realesrganSpec.version {
+	if err != nil || !statuses.Realesrgan.Installed || statuses.Realesrgan.Version == nil ||
+		*statuses.Realesrgan.Version != realesrganSpec.version {
 		t.Fatalf("statuses = %#v, %v", statuses, err)
 	}
 	if statuses.Realcugan.Installed || !statuses.Realcugan.NeedsInstall {

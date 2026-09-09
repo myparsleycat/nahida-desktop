@@ -10,7 +10,16 @@ import (
 	"nahida.live/desktop/internal/transfer"
 )
 
-func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *infra.Updater, toolsService *tools.Tools, windowService *Window, autostart func(bool) error, emit func(string, ...any), syncModelViewerMenu func(language string)) setting.Hooks {
+func runtimeSettingHooks(
+	log *infra.Log,
+	transfers *transfer.Transfer,
+	updater *infra.Updater,
+	toolsService *tools.Tools,
+	windowService *Window,
+	autostart func(bool) error,
+	emit func(string, ...any),
+	syncModelViewerMenu func(language string),
+) setting.Hooks {
 	return setting.Hooks{
 		AfterRunOnStartupChanged: autostart,
 		AfterSet: func(key string, value any) {
@@ -45,7 +54,16 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 				return
 			}
 			if err := transfers.RefreshPowerSaveBlock(context.Background()); err != nil {
-				_ = infra.ReportError(log, err, "setting.powerSaveBlockInTransfer", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "setting.powerSaveBlockInTransfer", Stage: "background"})
+				_ = infra.ReportError(
+					log,
+					err,
+					"setting.powerSaveBlockInTransfer",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "setting.powerSaveBlockInTransfer",
+						Stage:     "background",
+					},
+				)
 			}
 		},
 		AfterBandwidthLimitChanged: transfers.SetDownloadBandwidthLimitMibps,
@@ -60,7 +78,16 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 			}
 			if enabled {
 				if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
-					_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Setting.xxmi.persistToggles", Stage: "background"})
+					_ = infra.ReportError(
+						log,
+						err,
+						"Setting.xxmi.persistToggles",
+						infra.Diagnostic{
+							Severity:  infra.DiagnosticError,
+							Operation: "Setting.xxmi.persistToggles",
+							Stage:     "background",
+						},
+					)
 				}
 				return
 			}
@@ -72,7 +99,12 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 func modelViewerMenuSyncer(log *infra.Log) func(language string) {
 	return func(language string) {
 		if err := platform.UpdateModelViewerContextMenu(language); err != nil {
-			_ = infra.ReportError(log, err, "App:syncModelViewerMenu", infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "background"})
+			_ = infra.ReportError(
+				log,
+				err,
+				"App:syncModelViewerMenu",
+				infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "background"},
+			)
 		}
 	}
 }

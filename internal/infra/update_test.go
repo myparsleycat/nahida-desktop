@@ -117,10 +117,12 @@ func TestConfigureDefaultGitHubChecksumAsset(t *testing.T) {
 
 func TestUpdaterDefaultProviderUsesApplicationTransport(t *testing.T) {
 	var requests []string
-	httpClient := NewClientWithOptions(ClientOptions{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		requests = append(requests, r.URL.String())
-		return nil, errors.New("proxy blocked test request")
-	})})
+	httpClient := NewClientWithOptions(
+		ClientOptions{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			requests = append(requests, r.URL.String())
+			return nil, errors.New("proxy blocked test request")
+		})},
+	)
 	engine := &fakeUpdaterEngine{}
 	updater := NewUpdater()
 	if err := updater.Configure(UpdaterOptions{Engine: engine, HTTP: httpClient}); err != nil {
@@ -162,7 +164,8 @@ func TestUpdaterNotifyFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus: %v", err)
 	}
-	if !status.UpdateAvailable || status.UpdateDownloaded || status.ReleaseVersion == nil || *status.ReleaseVersion != "1.2.3" {
+	if !status.UpdateAvailable || status.UpdateDownloaded || status.ReleaseVersion == nil ||
+		*status.ReleaseVersion != "1.2.3" {
 		t.Fatalf("available status = %#v", status)
 	}
 	if engine.downloads != 0 {
@@ -292,12 +295,47 @@ func TestApplyTranslationResultBroadcastGuards(t *testing.T) {
 		wantNotes        string
 		wantLanguage     string
 	}{
-		{name: "success", translated: "변경 사항", language: "ko", wantCurrent: true, wantBroadcast: true, wantNotes: "변경 사항", wantLanguage: "ko"},
+		{
+			name:          "success",
+			translated:    "변경 사항",
+			language:      "ko",
+			wantCurrent:   true,
+			wantBroadcast: true,
+			wantNotes:     "변경 사항",
+			wantLanguage:  "ko",
+		},
 		{name: "empty without previous translation", language: "ko", wantCurrent: true},
-		{name: "same as original without previous translation", translated: original, language: "ja", wantCurrent: true},
-		{name: "empty clears previous translation", language: "zh", previousNotes: "旧内容", previousLanguage: "zh", wantCurrent: true, wantBroadcast: true},
-		{name: "error always broadcasts", language: "ko", translateErr: errors.New("translation failed"), wantCurrent: true, wantBroadcast: true},
-		{name: "stale request is ignored", translated: "stale", language: "ko", previousNotes: "current", previousLanguage: "ja", mutateSerial: true, wantNotes: "current", wantLanguage: "ja"},
+		{
+			name:        "same as original without previous translation",
+			translated:  original,
+			language:    "ja",
+			wantCurrent: true,
+		},
+		{
+			name:             "empty clears previous translation",
+			language:         "zh",
+			previousNotes:    "旧内容",
+			previousLanguage: "zh",
+			wantCurrent:      true,
+			wantBroadcast:    true,
+		},
+		{
+			name:          "error always broadcasts",
+			language:      "ko",
+			translateErr:  errors.New("translation failed"),
+			wantCurrent:   true,
+			wantBroadcast: true,
+		},
+		{
+			name:             "stale request is ignored",
+			translated:       "stale",
+			language:         "ko",
+			previousNotes:    "current",
+			previousLanguage: "ja",
+			mutateSerial:     true,
+			wantNotes:        "current",
+			wantLanguage:     "ja",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -311,12 +349,25 @@ func TestApplyTranslationResultBroadcastGuards(t *testing.T) {
 			if test.mutateSerial {
 				u.translationSerial++
 			}
-			current, broadcast := u.applyTranslationResult(serial, original, version, test.translated, test.language, test.translateErr)
+			current, broadcast := u.applyTranslationResult(
+				serial,
+				original,
+				version,
+				test.translated,
+				test.language,
+				test.translateErr,
+			)
 			if current != test.wantCurrent || broadcast != test.wantBroadcast {
 				t.Fatalf("result = (%v, %v), want (%v, %v)", current, broadcast, test.wantCurrent, test.wantBroadcast)
 			}
 			if u.translatedNotes != test.wantNotes || u.translatedLang != test.wantLanguage {
-				t.Fatalf("translation = %q/%q, want %q/%q", u.translatedNotes, u.translatedLang, test.wantNotes, test.wantLanguage)
+				t.Fatalf(
+					"translation = %q/%q, want %q/%q",
+					u.translatedNotes,
+					u.translatedLang,
+					test.wantNotes,
+					test.wantLanguage,
+				)
 			}
 		})
 	}
@@ -337,7 +388,11 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		t.Fatalf("missing state allowed=%v state=%#v", allowed, state)
 	}
 
-	seedGitHubRateState(t, client, GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Used: 60, Resource: "core"})
+	seedGitHubRateState(
+		t,
+		client,
+		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Used: 60, Resource: "core"},
+	)
 	allowed, state, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI limited: %v", err)
@@ -346,7 +401,11 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		t.Fatalf("limited allowed=%v state=%#v", allowed, state)
 	}
 
-	seedGitHubRateState(t, client, GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(-time.Hour).Unix(), Used: 60, Resource: "core"})
+	seedGitHubRateState(
+		t,
+		client,
+		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(-time.Hour).Unix(), Used: 60, Resource: "core"},
+	)
 	allowed, _, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI expired: %v", err)
@@ -374,7 +433,11 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 			header.Set("X-RateLimit-Reset", "2000000000")
 			header.Set("X-RateLimit-Used", "48")
 			header.Set("X-RateLimit-Resource", "core")
-			return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader([]byte(`{}`)))}, nil
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     header,
+				Body:       io.NopCloser(bytes.NewReader([]byte(`{}`))),
+			}, nil
 		})},
 	}))
 	allowed, state, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{RefreshIfMissing: true})
@@ -443,7 +506,11 @@ func TestCheckForUpdatesRefreshesMissingRateState(t *testing.T) {
 			header.Set("X-RateLimit-Used", "60")
 			header.Set("X-RateLimit-Resource", "core")
 			body := []byte(`{"rate":{"limit":60,"remaining":0,"reset":2000000000,"used":60,"resource":"core"}}`)
-			return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     header,
+				Body:       io.NopCloser(bytes.NewReader(body)),
+			}, nil
 		})},
 	}))
 	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "3.0.0"}}
@@ -482,7 +549,12 @@ func seedGitHubRateState(t *testing.T, client *db.Client, state GitHubRateState)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if err := client.AppState.Upsert(context.Background(), githubCoreRateKey, string(raw), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := client.AppState.Upsert(
+		context.Background(),
+		githubCoreRateKey,
+		string(raw),
+		time.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 }
@@ -492,7 +564,9 @@ func TestExtractTranslatedTextShapes(t *testing.T) {
 	if got := extractTranslatedText(map[string]any{"response": " translated "}); got != "translated" {
 		t.Fatalf("string response = %q", got)
 	}
-	value := map[string]any{"response": map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": " choice "}}}}}
+	value := map[string]any{
+		"response": map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": " choice "}}}},
+	}
 	if got := extractTranslatedText(value); got != "choice" {
 		t.Fatalf("choice response = %q", got)
 	}

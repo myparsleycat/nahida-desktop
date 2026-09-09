@@ -36,7 +36,8 @@ func TestPEDiversifierInProcessContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.DiscoveredRegions == 0 || report.ModifiedRegions == 0 || len(report.Patches) == 0 || report.OutputSHA256 == nil {
+	if report.DiscoveredRegions == 0 || report.ModifiedRegions == 0 || len(report.Patches) == 0 ||
+		report.OutputSHA256 == nil {
 		t.Fatalf("report = %#v", report)
 	}
 	outputHash, err := hashFile(output)
@@ -56,11 +57,20 @@ func TestFourThousandOneFixerReleaseCacheUsesProcessLifetimeAndRefreshCooldown(t
 			t.Fatalf("User-Agent = %q", request.Header.Get("User-Agent"))
 		}
 		return &http.Response{
-			StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header),
-			Body: io.NopCloser(strings.NewReader(`[{"tag_name":"v2"},{"tag_name":"main"},{"tag_name":"v1"}]`)), Request: request,
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body: io.NopCloser(
+				strings.NewReader(`[{"tag_name":"v2"},{"tag_name":"main"},{"tag_name":"v1"}]`),
+			),
+			Request: request,
 		}, nil
 	})}
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})})
+	service := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline}),
+		},
+	)
 	for range 2 {
 		got, err := service.FourThousandOneFixerGetProviderReleases(context.Background(), "SpectrumQT")
 		if err != nil || strings.Join(got, ",") != "v2,v1" {
@@ -106,7 +116,11 @@ func TestFourThousandOneFixerReleaseCacheDeduplicatesInFlightFetch(t *testing.T)
 			Body: io.NopCloser(strings.NewReader(`[{"tag_name":"v1"}]`)), Request: request,
 		}, nil
 	})}
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})})
+	service := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline}),
+		},
+	)
 	results := make(chan error, 2)
 	go func() {
 		_, err := service.FourThousandOneFixerGetProviderReleases(context.Background(), "SpectrumQT")
@@ -134,7 +148,11 @@ func TestFourThousandOneFixerInstallErrorClassification(t *testing.T) {
 	if got := service.FourThousandOneFixerGetState().Progress; got != "XXMI_ERR_DLL_IN_USE" {
 		t.Fatalf("sharing violation code = %q", got)
 	}
-	service.failed4001Install(elevatedFileCopyError{err: errors.New("elevated failed")}, "target", "XXMI_ERR_BUILD_FAILED")
+	service.failed4001Install(
+		elevatedFileCopyError{err: errors.New("elevated failed")},
+		"target",
+		"XXMI_ERR_BUILD_FAILED",
+	)
 	if got := service.FourThousandOneFixerGetState().Progress; got != "XXMI_ERR_ELEVATION_FAILED" {
 		t.Fatalf("elevated code = %q", got)
 	}
@@ -185,7 +203,10 @@ func TestFourThousandOneFixerDiversifiesAndRestoresThroughNativeBoundary(t *test
 	}
 	service := NewWithOptions(Options{PEDiversifier: fakePEDiversifier{}})
 	service.UseClient(client)
-	result := service.FourThousandOneFixerDiversifyDllPadding(ctx, Fixer4001ImporterInput{ImporterKey: "GIMI", ImporterPath: &importerPath})
+	result := service.FourThousandOneFixerDiversifyDllPadding(
+		ctx,
+		Fixer4001ImporterInput{ImporterKey: "GIMI", ImporterPath: &importerPath},
+	)
 	if !result.Success || result.BackupPath == nil {
 		t.Fatalf("diversify result = %#v", result)
 	}
@@ -218,7 +239,10 @@ func TestFourThousandOneFixerDiversifierNoCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewWithOptions(Options{PEDiversifier: fakePEDiversifier{noCandidates: true}})
-	result := service.FourThousandOneFixerDiversifyDllPadding(context.Background(), Fixer4001ImporterInput{ImporterPath: &importerPath})
+	result := service.FourThousandOneFixerDiversifyDllPadding(
+		context.Background(),
+		Fixer4001ImporterInput{ImporterPath: &importerPath},
+	)
 	if result.Success || service.FourThousandOneFixerGetState().Progress != "XXMI_ERR_OBFUSCATE_NO_CANDIDATES" {
 		t.Fatalf("result/state = %#v / %#v", result, service.FourThousandOneFixerGetState())
 	}
@@ -241,7 +265,10 @@ func TestFourThousandOneFixerDiversifyRejectsExistingBackup(t *testing.T) {
 	}
 
 	service := NewWithOptions(Options{PEDiversifier: fakePEDiversifier{}})
-	result := service.FourThousandOneFixerDiversifyDllPadding(context.Background(), Fixer4001ImporterInput{ImporterPath: &importerPath})
+	result := service.FourThousandOneFixerDiversifyDllPadding(
+		context.Background(),
+		Fixer4001ImporterInput{ImporterPath: &importerPath},
+	)
 	if result.Success || result.BackupPath == nil || *result.BackupPath != backup {
 		t.Fatalf("diversify result = %#v", result)
 	}
@@ -379,12 +406,18 @@ func TestResolveVSDevCmdAcceptsFileAndBoundedInstallTrees(t *testing.T) {
 		t.Fatalf("aux tree = %q, want %q", got, aux)
 	}
 
-	edition := writeVSDevCmd(t, filepath.Join(root, "edition", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	edition := writeVSDevCmd(
+		t,
+		filepath.Join(root, "edition", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName),
+	)
 	if got := resolveVSDevCmd(filepath.Join(root, "edition")); got != edition {
 		t.Fatalf("edition tree = %q, want %q", got, edition)
 	}
 
-	versioned := writeVSDevCmd(t, filepath.Join(root, "versioned", "2022", "BuildTools", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	versioned := writeVSDevCmd(
+		t,
+		filepath.Join(root, "versioned", "2022", "BuildTools", "VC", "Auxiliary", "Build", vsDevCmdFileName),
+	)
 	if got := resolveVSDevCmd(filepath.Join(root, "versioned")); got != versioned {
 		t.Fatalf("versioned tree = %q, want %q", got, versioned)
 	}
@@ -447,8 +480,31 @@ func TestFindVSDevCmdIgnoresVersionlessEditionRoots(t *testing.T) {
 	t.Setenv("ProgramFiles", programFiles)
 	t.Setenv("ProgramFiles(x86)", programFilesX86)
 
-	stale := writeVSDevCmd(t, filepath.Join(programFiles, "Microsoft Visual Studio", "Community", "VC", "Auxiliary", "Build", vsDevCmdFileName))
-	want := writeVSDevCmd(t, filepath.Join(programFiles, "Microsoft Visual Studio", "2022", "BuildTools", "VC", "Auxiliary", "Build", vsDevCmdFileName))
+	stale := writeVSDevCmd(
+		t,
+		filepath.Join(
+			programFiles,
+			"Microsoft Visual Studio",
+			"Community",
+			"VC",
+			"Auxiliary",
+			"Build",
+			vsDevCmdFileName,
+		),
+	)
+	want := writeVSDevCmd(
+		t,
+		filepath.Join(
+			programFiles,
+			"Microsoft Visual Studio",
+			"2022",
+			"BuildTools",
+			"VC",
+			"Auxiliary",
+			"Build",
+			vsDevCmdFileName,
+		),
+	)
 	if got := findVSDevCmd(); got != want {
 		t.Fatalf("findVSDevCmd() = %q, want versioned layout %q, not %q", got, want, stale)
 	}

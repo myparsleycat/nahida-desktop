@@ -230,7 +230,10 @@ func (w *Window) registerEvents(window application.Window) {
 		})
 	})
 	window.OnWindowEvent(events.Common.WindowDidMove, func(_ *application.WindowEvent) { w.scheduleBoundsSave(window) })
-	window.OnWindowEvent(events.Common.WindowDidResize, func(_ *application.WindowEvent) { w.scheduleBoundsSave(window) })
+	window.OnWindowEvent(
+		events.Common.WindowDidResize,
+		func(_ *application.WindowEvent) { w.scheduleBoundsSave(window) },
+	)
 	// Closing listeners run concurrently, including Wails' internal listener
 	// that destroys the native window. Use a hook so bounds are read before
 	// teardown; Bounds returns an empty rectangle once the window is destroyed.
@@ -257,7 +260,16 @@ func (w *Window) registerEvents(window application.Window) {
 		runInBackground, err := settings.GetRunInBackground(context.Background())
 		if err != nil {
 			if log != nil {
-				_ = infra.ReportError(log, err, "MainWindow.runInBackground", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.runInBackground", Stage: "background"})
+				_ = infra.ReportError(
+					log,
+					err,
+					"MainWindow.runInBackground",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "MainWindow.runInBackground",
+						Stage:     "background",
+					},
+				)
 			}
 			return
 		}
@@ -297,9 +309,17 @@ func (w *Window) saveBoundsLocked(window application.Window) {
 		return
 	}
 	bounds := window.Bounds()
-	err := settings.SetBounds(context.Background(), setting.Bounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height})
+	err := settings.SetBounds(
+		context.Background(),
+		setting.Bounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height},
+	)
 	if err != nil && log != nil {
-		_ = infra.ReportError(log, err, "MainWindow.saveBounds", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.saveBounds", Stage: "background"})
+		_ = infra.ReportError(
+			log,
+			err,
+			"MainWindow.saveBounds",
+			infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.saveBounds", Stage: "background"},
+		)
 	}
 }
 
@@ -542,7 +562,16 @@ func (w *Window) logTaskbarError(err error) {
 	log := w.log
 	w.mu.Unlock()
 	if log != nil {
-		_ = infra.ReportError(log, err, "MainWindow.taskbarProgress", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "MainWindow.taskbarProgress", Stage: "background"})
+		_ = infra.ReportError(
+			log,
+			err,
+			"MainWindow.taskbarProgress",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "MainWindow.taskbarProgress",
+				Stage:     "background",
+			},
+		)
 	}
 }
 

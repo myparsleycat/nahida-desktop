@@ -39,7 +39,11 @@ var (
 	modelViewerVariableRE    = regexp.MustCompile(`\$([\w.]+)`)
 )
 
-func collectModelViewerShapeKeys(sections []modINISection, resources []modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectModelViewerShapeKeys(
+	sections []modINISection,
+	resources []modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	sectionLookup := make(map[string]modINISection)
 	for _, section := range sections {
 		sectionLookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
@@ -51,7 +55,8 @@ func collectModelViewerShapeKeys(sections []modINISection, resources []modelView
 	var output []modelViewerShapeKey
 	for _, shader := range sections {
 		shaderPath := sectionValue(shader.Lines, "cs")
-		if !strings.EqualFold(shader.Header, "CustomShader") || !strings.EqualFold(filepath.Base(shaderPath), "shapekey.hlsl") {
+		if !strings.EqualFold(shader.Header, "CustomShader") ||
+			!strings.EqualFold(filepath.Base(shaderPath), "shapekey.hlsl") {
 			continue
 		}
 		outputName, baseName := "", ""
@@ -93,19 +98,38 @@ func collectModelViewerShapeKeys(sections []modINISection, resources []modelView
 			if !calls {
 				continue
 			}
-			assignments := resolveModelViewerAssignments(caller, []string{"x88", "x89", "cs-t51", "cs-t52", "cs-t53", "cs-t54"}, sectionLookup, nil, make(map[string]bool))
+			assignments := resolveModelViewerAssignments(
+				caller,
+				[]string{"x88", "x89", "cs-t51", "cs-t52", "cs-t53", "cs-t54"},
+				sectionLookup,
+				nil,
+				make(map[string]bool),
+			)
 			addDimension := func(variableValue, smallerValue, biggerValue string) {
 				match := modelViewerVariableRE.FindStringSubmatch(variableValue)
 				if match == nil {
 					return
 				}
 				variable := modelViewerNormalizeKey(match[1])
-				smallerName := modelViewerTrimResourcePrefix(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(smallerValue), "copy "), "ref ")))
-				biggerName := modelViewerTrimResourcePrefix(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(biggerValue), "copy "), "ref ")))
+				smallerName := modelViewerTrimResourcePrefix(
+					strings.TrimSpace(
+						strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(smallerValue), "copy "), "ref "),
+					),
+				)
+				biggerName := modelViewerTrimResourcePrefix(
+					strings.TrimSpace(
+						strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(biggerValue), "copy "), "ref "),
+					),
+				)
 				smaller, smallerOK := resourceMap[modelViewerNormalizeKey(smallerName)]
 				bigger, biggerOK := resourceMap[modelViewerNormalizeKey(biggerName)]
 				if smallerOK && biggerOK && smaller.Filename != "" && bigger.Filename != "" {
-					dimensions[variable] = modelViewerShapeKeyDimension{VariableID: variable, Mode: "midpoint_pair", SmallerPath: filepath.Join(modDir, filepath.FromSlash(smaller.Filename)), BiggerPath: filepath.Join(modDir, filepath.FromSlash(bigger.Filename))}
+					dimensions[variable] = modelViewerShapeKeyDimension{
+						VariableID:  variable,
+						Mode:        "midpoint_pair",
+						SmallerPath: filepath.Join(modDir, filepath.FromSlash(smaller.Filename)),
+						BiggerPath:  filepath.Join(modDir, filepath.FromSlash(bigger.Filename)),
+					}
 				}
 			}
 			addDimension(assignments["x88"], assignments["cst52"], assignments["cst51"])
@@ -119,7 +143,15 @@ func collectModelViewerShapeKeys(sections []modINISection, resources []modelView
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
-		shape := modelViewerShapeKey{ShaderPath: filepath.Join(modDir, filepath.FromSlash(shaderPath)), TargetMeshPrefixes: []string{target}, BasePath: filepath.Join(modDir, filepath.FromSlash(baseResource.Filename)), VertexStride: baseResource.Stride, PositionOffset: 0, NormalOffset: 12, TangentOffset: 24}
+		shape := modelViewerShapeKey{
+			ShaderPath:         filepath.Join(modDir, filepath.FromSlash(shaderPath)),
+			TargetMeshPrefixes: []string{target},
+			BasePath:           filepath.Join(modDir, filepath.FromSlash(baseResource.Filename)),
+			VertexStride:       baseResource.Stride,
+			PositionOffset:     0,
+			NormalOffset:       12,
+			TangentOffset:      24,
+		}
 		if shape.VertexStride == 0 {
 			shape.VertexStride = 40
 		}
@@ -131,7 +163,11 @@ func collectModelViewerShapeKeys(sections []modINISection, resources []modelView
 	return append(output, collectAdditionalModelViewerShapeKeys(sections, resourceMap, modDir)...)
 }
 
-func readModelViewerSparseShapePositions(cache *modelViewerBufferCache, dimension modelViewerShapeKeyDimension, geometry *modelViewerGeometry) ([]float32, error) {
+func readModelViewerSparseShapePositions(
+	cache *modelViewerBufferCache,
+	dimension modelViewerShapeKeyDimension,
+	geometry *modelViewerGeometry,
+) ([]float32, error) {
 	offsets, err := cache.read(dimension.OffsetPath)
 	if err != nil {
 		return nil, err

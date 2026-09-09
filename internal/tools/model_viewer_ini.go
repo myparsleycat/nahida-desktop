@@ -36,8 +36,12 @@ var (
 	modelViewerVariableUseRE  = regexp.MustCompile(`\$(\w+)`)
 	modelViewerVariableDeclRE = regexp.MustCompile(`(?i)^global\s+(?:persist\s+)?\$(\w+)\b`)
 	modelViewerZZMIResourceRE = regexp.MustCompile(`(?i)Resource\\ZZMI\\(?:Diffuse|NormalMap|LightMap|MaterialMap)`)
-	modelViewerWWMIMarkerRE   = regexp.MustCompile(`(?i)(?:global\s+\$required_wwmi_version\b|(?:Resource|CommandList|\$)\\WWMIv1\\)`)
-	modelViewerRabbitFXRE     = regexp.MustCompile(`(?i)(?:Resource\\RabbitFX\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|run\s*=\s*CommandList\\RabbitFX\\SetTextures\b)`)
+	modelViewerWWMIMarkerRE   = regexp.MustCompile(
+		`(?i)(?:global\s+\$required_wwmi_version\b|(?:Resource|CommandList|\$)\\WWMIv1\\)`,
+	)
+	modelViewerRabbitFXRE = regexp.MustCompile(
+		`(?i)(?:Resource\\RabbitFX\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|run\s*=\s*CommandList\\RabbitFX\\SetTextures\b)`,
+	)
 )
 
 func detectModelViewerMaterialProfile(sections []modINISection) string {
@@ -183,7 +187,8 @@ func activeModelViewerINIs(folder string, less func(string, string) bool, report
 	}
 	var paths []string
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") || strings.HasPrefix(strings.ToUpper(entry.Name()), "DISABLED") {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") ||
+			strings.HasPrefix(strings.ToUpper(entry.Name()), "DISABLED") {
 			continue
 		}
 		paths = append(paths, filepath.Join(folder, entry.Name()))
@@ -239,7 +244,11 @@ func canonicalModelViewerVariables(sections []modINISection) map[string]string {
 // scopeModelViewerSections assigns a collision-free internal token to each INI
 // variable. Public IDs are restored only after the Electron-compatible payload
 // has been assembled.
-func scopeModelViewerSections(sections []modINISection, scopeIndex int, publicPrefix string) ([]modINISection, map[string]modelViewerVariableName) {
+func scopeModelViewerSections(
+	sections []modINISection,
+	scopeIndex int,
+	publicPrefix string,
+) ([]modINISection, map[string]modelViewerVariableName) {
 	canonical := canonicalModelViewerVariables(sections)
 	internalByLower := make(map[string]string, len(canonical))
 	publicByInternal := make(map[string]modelViewerVariableName, len(canonical))
@@ -287,7 +296,9 @@ func rebaseModelViewerResources(sections []modINISection, iniPath, folder string
 		if filename == "" {
 			continue
 		}
-		rebased := filepath.Clean(filepath.Join(relativeDir, filepath.FromSlash(strings.ReplaceAll(filename, `\`, "/"))))
+		rebased := filepath.Clean(
+			filepath.Join(relativeDir, filepath.FromSlash(strings.ReplaceAll(filename, `\`, "/"))),
+		)
 		setModelViewerSectionValue(section, "filename", rebased)
 	}
 }
@@ -315,7 +326,8 @@ func setModelViewerSectionValue(section *modINISection, key, value string) {
 }
 
 func stripModelViewerQuotes(value string) string {
-	if len(value) >= 2 && (value[0] == '"' && value[len(value)-1] == '"' || value[0] == '\'' && value[len(value)-1] == '\'') {
+	if len(value) >= 2 &&
+		(value[0] == '"' && value[len(value)-1] == '"' || value[0] == '\'' && value[len(value)-1] == '\'') {
 		return value[1 : len(value)-1]
 	}
 	return value

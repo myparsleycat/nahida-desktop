@@ -40,8 +40,18 @@ func TestLaunchDispatcherPreservesColdAndForwardedLaunches(t *testing.T) {
 	d := &launchDispatcher{}
 	var got []string
 	d.Enqueue(application.SecondInstanceData{Args: []string{"app", "--model-viewer", "queued"}, WorkingDir: `C:\Mods`})
-	handler := newLaunchHandler(func(path string) { got = append(got, path) }, func() { got = append(got, "main") }, func([]string) { got = append(got, "arguments") })
-	d.Start(application.SecondInstanceData{Args: []string{"app", "--model-viewer", "first", "nahida://gamebanana/42"}, WorkingDir: `C:\Mods`}, handler)
+	handler := newLaunchHandler(
+		func(path string) { got = append(got, path) },
+		func() { got = append(got, "main") },
+		func([]string) { got = append(got, "arguments") },
+	)
+	d.Start(
+		application.SecondInstanceData{
+			Args:       []string{"app", "--model-viewer", "first", "nahida://gamebanana/42"},
+			WorkingDir: `C:\Mods`,
+		},
+		handler,
+	)
 	d.Enqueue(application.SecondInstanceData{Args: []string{"app"}})
 	if want := []string{`C:\Mods\first`, `C:\Mods\queued`, "arguments"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("launches = %v, want %v", got, want)
@@ -64,7 +74,11 @@ func TestLaunchDispatcherAllowsReentrantLaunch(t *testing.T) {
 
 func TestMissingModelViewerFolderOpensMain(t *testing.T) {
 	main := 0
-	handler := newLaunchHandler(func(string) { t.Fatal("unexpected viewer") }, func() { main++ }, func([]string) { t.Fatal("unexpected forward") })
+	handler := newLaunchHandler(
+		func(string) { t.Fatal("unexpected viewer") },
+		func() { main++ },
+		func([]string) { t.Fatal("unexpected forward") },
+	)
 	handler(application.SecondInstanceData{Args: []string{"app", "--model-viewer"}})
 	if main != 1 {
 		t.Fatalf("main windows = %d", main)
@@ -125,7 +139,8 @@ func TestModelViewerWindowsDeduplicateAndCloseIndependently(t *testing.T) {
 	if err != nil || route.Query().Get("path") != path {
 		t.Fatalf("URL did not roundtrip: %s, %v", first.options.URL, err)
 	}
-	if first.options.Width != 1200 || first.options.Height != 800 || first.options.MinWidth != 800 || first.options.MinHeight != 600 {
+	if first.options.Width != 1200 || first.options.Height != 800 || first.options.MinWidth != 800 ||
+		first.options.MinHeight != 600 {
 		t.Fatal(first.options)
 	}
 	v.Open(`C:\Mods\Other`)
@@ -183,7 +198,10 @@ func TestSyncRouteIgnoresNonMainWindow(t *testing.T) {
 	w := NewWindow()
 	w.currentRoute = "/tools/model-viewer"
 	viewer := &viewerTestWindow{options: application.WebviewWindowOptions{Name: "model-viewer-test"}}
-	w.SyncRoute(context.WithValue(context.Background(), application.WindowKey, viewer), "/model-viewer-window?path=other")
+	w.SyncRoute(
+		context.WithValue(context.Background(), application.WindowKey, viewer),
+		"/model-viewer-window?path=other",
+	)
 	w.SyncRoute(context.Background(), "/other")
 	if w.currentRoute != "/tools/model-viewer" {
 		t.Fatal(w.currentRoute)
@@ -206,7 +224,12 @@ func TestModelViewerLastWindowExitPolicy(t *testing.T) {
 				main.window = &viewerTestWindow{}
 			}
 			quit := false
-			handler := modelViewerCloseHandler(main, func(context.Context) (bool, error) { return tt.background, nil }, func() { quit = true }, nil)
+			handler := modelViewerCloseHandler(
+				main,
+				func(context.Context) (bool, error) { return tt.background, nil },
+				func() { quit = true },
+				nil,
+			)
 			handler(tt.last)
 			if quit != tt.quit {
 				t.Fatalf("quit = %v, want %v", quit, tt.quit)
@@ -241,10 +264,13 @@ func TestModelViewerCloseKeepsWindowOpenedDuringSettingsRead(t *testing.T) {
 }
 
 func TestModelViewerShutdownCommitPreventsNewNativeWindows(t *testing.T) {
-	v := &modelViewerWindows{windows: make(map[string]*modelViewerWindow), create: func(application.WebviewWindowOptions) application.Window {
-		t.Fatal("created a native window after shutdown committed")
-		return nil
-	}}
+	v := &modelViewerWindows{
+		windows: make(map[string]*modelViewerWindow),
+		create: func(application.WebviewWindowOptions) application.Window {
+			t.Fatal("created a native window after shutdown committed")
+			return nil
+		},
+	}
 	quits := 0
 	v.quitIfEmpty(func() {
 		quits++

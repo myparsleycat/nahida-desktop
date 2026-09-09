@@ -309,7 +309,11 @@ func TestParallelDownloaderStopsRetryingMismatchedContentRangesWhenThePartialChu
 	if err := os.WriteFile(savePath+".chunk0", []byte("abc"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(savePath+".chunk-meta.json", []byte(`{"resource":"https://n3.nahida.live/132/123412341234","fileSize":6}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		savePath+".chunk-meta.json",
+		[]byte(`{"resource":"https://n3.nahida.live/132/123412341234","fileSize":6}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var requests atomic.Int32
@@ -339,7 +343,11 @@ func TestParallelDownloaderDiscardsLeftoverChunksThatDoNotMatchTheCurrentResourc
 	if err := os.WriteFile(savePath+".chunk0", []byte("stale!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(savePath+".chunk-meta.json", []byte(`{"resource":"https://other.example/file","fileSize":6}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		savePath+".chunk-meta.json",
+		[]byte(`{"resource":"https://other.example/file","fileSize":6}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	downloader := NewParallelDownloader()
@@ -366,7 +374,11 @@ func TestParallelDownloaderDoesNotResumeLeftoverChunksWhenMismatchedArtifactsCan
 	if err := os.WriteFile(savePath+".chunk0", []byte("stale!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(savePath+".chunk-meta.json", []byte(`{"resource":"https://other.example/file","fileSize":6}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		savePath+".chunk-meta.json",
+		[]byte(`{"resource":"https://other.example/file","fileSize":6}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var requests int
@@ -417,7 +429,11 @@ func TestParallelDownloaderResumesLeftoverChunksThatMatchTheCurrentResource(t *t
 	if err := os.WriteFile(savePath+".chunk0", []byte("abc"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(savePath+".chunk-meta.json", []byte(`{"resource":"https://n3.nahida.live/132/123412341234","fileSize":6}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		savePath+".chunk-meta.json",
+		[]byte(`{"resource":"https://n3.nahida.live/132/123412341234","fileSize":6}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var gotRange string

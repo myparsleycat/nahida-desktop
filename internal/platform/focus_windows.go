@@ -98,7 +98,12 @@ func (n *Native) ProcessName(pid uint32) string {
 	defer func() { _ = windows.CloseHandle(handle) }()
 	var buffer [1024]uint16
 	size := uint32(len(buffer))
-	r1, _, _ := procQueryFullProcessImageNameW.Call(uintptr(handle), processNameWin32, uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)))
+	r1, _, _ := procQueryFullProcessImageNameW.Call(
+		uintptr(handle),
+		processNameWin32,
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(unsafe.Pointer(&size)),
+	)
 	if r1 == 0 {
 		return ""
 	}

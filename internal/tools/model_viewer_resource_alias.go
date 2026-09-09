@@ -25,7 +25,10 @@ const (
 	modelViewerResourceInvalid
 )
 
-func resolveModelViewerEffectiveResources(sections []modINISection, resources []modelViewerResource) []modelViewerResource {
+func resolveModelViewerEffectiveResources(
+	sections []modINISection,
+	resources []modelViewerResource,
+) []modelViewerResource {
 	aliases := collectModelViewerResourceAliases(sections, resources)
 	output := append([]modelViewerResource(nil), resources...)
 	for index := range output {
@@ -44,7 +47,11 @@ func resolveModelViewerEffectiveResources(sections []modINISection, resources []
 	return output
 }
 
-func resolveModelViewerEffectiveResourcesAt(root, baseDir string, sections []modINISection, resources []modelViewerResource) []modelViewerResource {
+func resolveModelViewerEffectiveResourcesAt(
+	root, baseDir string,
+	sections []modINISection,
+	resources []modelViewerResource,
+) []modelViewerResource {
 	output := resolveModelViewerEffectiveResources(sections, resources)
 	for index := range output {
 		if resources[index].Filename != "" || output[index].Filename == "" {
@@ -63,7 +70,10 @@ func resolveModelViewerEffectiveResourcesAt(root, baseDir string, sections []mod
 	return output
 }
 
-func collectModelViewerResourceAliases(sections []modINISection, resources []modelViewerResource) modelViewerResourceAliases {
+func collectModelViewerResourceAliases(
+	sections []modINISection,
+	resources []modelViewerResource,
+) modelViewerResourceAliases {
 	aliases := modelViewerResourceAliases{
 		descriptors: make(map[string][]string),
 		defaultUAV:  make(map[string][]string),
@@ -89,7 +99,11 @@ func collectModelViewerResourceAliases(sections []modINISection, resources []mod
 			lower := strings.ToLower(line)
 			switch {
 			case strings.HasPrefix(lower, "if "):
-				branch := parseModelViewerConditionDNF(strings.TrimSpace(line[3:]), modelViewerAliases(variables), variables)
+				branch := parseModelViewerConditionDNF(
+					strings.TrimSpace(line[3:]),
+					modelViewerAliases(variables),
+					variables,
+				)
 				stack = append(stack, modelViewerSymbolicBranchFrame{current: branch, seen: branch})
 				continue
 			case strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if "):
@@ -177,7 +191,11 @@ func (a modelViewerResourceAliases) resolve(name string) (modelViewerResource, b
 	return resource, status == modelViewerResourceResolved
 }
 
-func (a modelViewerResourceAliases) resolveAt(name string, visiting map[string]bool, depth int) (modelViewerResource, modelViewerResourceResolution) {
+func (a modelViewerResourceAliases) resolveAt(
+	name string,
+	visiting map[string]bool,
+	depth int,
+) (modelViewerResource, modelViewerResourceResolution) {
 	key := modelViewerNormalizeKey(name)
 	resource, exists := a.resources[key]
 	if !exists {
@@ -191,16 +209,28 @@ func (a modelViewerResourceAliases) resolveAt(name string, visiting map[string]b
 	}
 	visiting[key] = true
 	defer delete(visiting, key)
-	if resolved, status := a.resolveUnique(a.descriptors[key], visiting, depth+1); status != modelViewerResourceUnresolved {
+	if resolved, status := a.resolveUnique(
+		a.descriptors[key],
+		visiting,
+		depth+1,
+	); status != modelViewerResourceUnresolved {
 		return resolved, status
 	}
-	if resolved, status := a.resolveUnique(a.defaultUAV[key], visiting, depth+1); status != modelViewerResourceUnresolved {
+	if resolved, status := a.resolveUnique(
+		a.defaultUAV[key],
+		visiting,
+		depth+1,
+	); status != modelViewerResourceUnresolved {
 		return resolved, status
 	}
 	return a.resolveUnique(a.outputs[key], visiting, depth+1)
 }
 
-func (a modelViewerResourceAliases) resolveUnique(sources []string, visiting map[string]bool, depth int) (modelViewerResource, modelViewerResourceResolution) {
+func (a modelViewerResourceAliases) resolveUnique(
+	sources []string,
+	visiting map[string]bool,
+	depth int,
+) (modelViewerResource, modelViewerResourceResolution) {
 	var selected modelViewerResource
 	selectedKey := ""
 	for _, source := range sources {

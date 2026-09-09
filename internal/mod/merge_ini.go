@@ -38,15 +38,21 @@ type parsedMergeINI struct {
 }
 
 var (
-	mergeINIHeaderRE        = regexp.MustCompile(`^\[([^\]]+)\]\s*$`)
-	mergedModHeaderRE       = regexp.MustCompile(`(?i)^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$`)
-	mergedINICommaSplitRE   = regexp.MustCompile(`(?i)^(.+?\.ini["']?)\s*,\s*(.*)$`)
-	mergeNamespaceLineRE    = regexp.MustCompile(`(?im)^\s*namespace\s*=\s*([^;\r\n]+)`)
-	masterSwapRefRE         = regexp.MustCompile(`(?i)\$\\[^\\\s]+\\Master\\swapvar\w*`)
-	masterSwapIfRE          = regexp.MustCompile(`(?i)^if\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$`)
-	masterSwapElseIfRE      = regexp.MustCompile(`(?i)^(?:else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$`)
-	masterSwapElseRE        = regexp.MustCompile(`(?i)^else\s*(?:;.*)?$`)
-	compoundMasterSwapRE    = regexp.MustCompile(`(?i)^(?:if|else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*.*(?:&&|\|\|)`)
+	mergeINIHeaderRE      = regexp.MustCompile(`^\[([^\]]+)\]\s*$`)
+	mergedModHeaderRE     = regexp.MustCompile(`(?i)^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$`)
+	mergedINICommaSplitRE = regexp.MustCompile(`(?i)^(.+?\.ini["']?)\s*,\s*(.*)$`)
+	mergeNamespaceLineRE  = regexp.MustCompile(`(?im)^\s*namespace\s*=\s*([^;\r\n]+)`)
+	masterSwapRefRE       = regexp.MustCompile(`(?i)\$\\[^\\\s]+\\Master\\swapvar\w*`)
+	masterSwapIfRE        = regexp.MustCompile(
+		`(?i)^if\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$`,
+	)
+	masterSwapElseIfRE = regexp.MustCompile(
+		`(?i)^(?:else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$`,
+	)
+	masterSwapElseRE     = regexp.MustCompile(`(?i)^else\s*(?:;.*)?$`)
+	compoundMasterSwapRE = regexp.MustCompile(
+		`(?i)^(?:if|else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*.*(?:&&|\|\|)`,
+	)
 	existingSwapSlotRE      = regexp.MustCompile(`(?i)\$\\[^\\\s]+\\Master\\swapvar\w*\s*==\s*(\d+)`)
 	positionSectionPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)position$`),

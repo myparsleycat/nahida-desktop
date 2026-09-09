@@ -145,24 +145,42 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 			sections := parseModINI(ini)
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 			var diagnostics []string
-			deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}, nil, func(message string) { diagnostics = append(diagnostics, message) })
+			deformer, clips := detectModelViewerComputeAnimation(
+				dir,
+				dir,
+				"",
+				sections,
+				resources,
+				[]modelViewerDirectMesh{
+					{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+				},
+				nil,
+				func(message string) { diagnostics = append(diagnostics, message) },
+			)
 			if !tc.valid {
 				if deformer != nil || len(clips) != 0 {
 					t.Fatal("invalid animation accepted")
 				}
 				return
 			}
-			if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind || deformer.Pose.Frames.Stride != 56 || deformer.Pose.FrameCount != 5160 || deformer.VertexCount != 3 {
+			if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
+				deformer.Pose.Frames.Stride != 56 ||
+				deformer.Pose.FrameCount != 5160 ||
+				deformer.VertexCount != 3 {
 				t.Fatalf("unexpected deformer: %+v", deformer)
 			}
-			if len(clips) != 1 || clips[0].FrameStart != 6 || clips[0].FrameEnd != 5157 || clips[0].FPS != 24 || len(clips[0].Frames) != 5152 || clips[0].Frames[5151].Index != 5157 {
+			if len(clips) != 1 || clips[0].FrameStart != 6 || clips[0].FrameEnd != 5157 || clips[0].FPS != 24 ||
+				len(clips[0].Frames) != 5152 ||
+				clips[0].Frames[5151].Index != 5157 {
 				t.Fatalf("unexpected clips: %d", len(clips))
 			}
-			if tc.name == "legacy stride" && (len(diagnostics) != 1 || !strings.Contains(diagnostics[0], "declaredStride=52")) {
+			if tc.name == "legacy stride" &&
+				(len(diagnostics) != 1 || !strings.Contains(diagnostics[0], "declaredStride=52")) {
 				t.Fatalf("diagnostics: %v", diagnostics)
 			}
 			for _, resource := range resources {
-				if modelViewerNormalizeKey(resource.Name) == "pose" && tc.name == "legacy stride" && resource.Stride != 52 {
+				if modelViewerNormalizeKey(resource.Name) == "pose" && tc.name == "legacy stride" &&
+					resource.Stride != 52 {
 					t.Fatal("original resource was mutated")
 				}
 			}
@@ -172,13 +190,31 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 			}
 			cache := newModelViewerBufferCache()
 			defer cache.releaseAll()
-			source := resolveModelViewerDrawVertexSource(dir, "mihoyo", modelViewerDirectBufferState{vb0: "Position", ib: "IB"}, modelViewerResourceMap(resources), resources, cache, packed)
+			source := resolveModelViewerDrawVertexSource(
+				dir,
+				"mihoyo",
+				modelViewerDirectBufferState{vb0: "Position", ib: "IB"},
+				modelViewerResourceMap(resources),
+				resources,
+				cache,
+				packed,
+			)
 			buffers, _, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 			if err != nil || len(buffers.layout.Elements) < 3 || buffers.layout.Elements[2].AlignedByteOffset != 16 {
 				t.Fatalf("UV layout: %+v %v source=%+v resources=%+v", buffers.layout, err, source, resources)
 			}
-			geometry, err := extractModelViewerGeometry(buffers.combined, buffers.stride, buffers.layout, []uint32{0, 1, 2}, true, false, true, nil)
-			if err != nil || geometry == nil || len(geometry.Texcoord0) != 6 || geometry.Texcoord0[0] != 0.25 || geometry.Texcoord0[1] != 0.75 {
+			geometry, err := extractModelViewerGeometry(
+				buffers.combined,
+				buffers.stride,
+				buffers.layout,
+				[]uint32{0, 1, 2},
+				true,
+				false,
+				true,
+				nil,
+			)
+			if err != nil || geometry == nil || len(geometry.Texcoord0) != 6 || geometry.Texcoord0[0] != 0.25 ||
+				geometry.Texcoord0[1] != 0.75 {
 				t.Fatalf("decoded UV: %+v error=%v", geometry, err)
 			}
 
@@ -188,7 +224,9 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 
 func TestPackedDualQuaternionRejectsChangedShaderAndBuffers(t *testing.T) {
 	for _, replacement := range []string{"float4 x; float4 y; float4 z;", "float3 S; float3 T; float4 QR;"} {
-		if isKnownModelViewerPackedDualQuaternionShader(strings.ReplaceAll(packedDualQuaternionShader, "float3 S; float3 T; float4 QR; float4 QD;", replacement)) {
+		if isKnownModelViewerPackedDualQuaternionShader(
+			strings.ReplaceAll(packedDualQuaternionShader, "float3 S; float3 T; float4 QR; float4 QD;", replacement),
+		) {
 			t.Fatal("wrong pose accepted")
 		}
 	}
@@ -201,7 +239,17 @@ func TestPackedDualQuaternionRejectsChangedShaderAndBuffers(t *testing.T) {
 			}
 			sections := parseModINI(packedDualQuaternionINI)
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-			deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}, nil)
+			deformer, _ := detectModelViewerComputeAnimation(
+				dir,
+				dir,
+				"",
+				sections,
+				resources,
+				[]modelViewerDirectMesh{
+					{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+				},
+				nil,
+			)
 			if deformer != nil {
 				t.Fatal("corrupt buffer or unknown shader accepted")
 			}
@@ -244,7 +292,15 @@ func TestPackedDualQuaternionUVStreamEvidence(t *testing.T) {
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 			cache := newModelViewerBufferCache()
 			defer cache.releaseAll()
-			source := resolveModelViewerDrawVertexSource(dir, "mihoyo", modelViewerDirectBufferState{vb0: "Position", ib: "IB"}, modelViewerResourceMap(resources), resources, cache, collectModelViewerPackedObjectResources(dir, dir, sections))
+			source := resolveModelViewerDrawVertexSource(
+				dir,
+				"mihoyo",
+				modelViewerDirectBufferState{vb0: "Position", ib: "IB"},
+				modelViewerResourceMap(resources),
+				resources,
+				cache,
+				collectModelViewerPackedObjectResources(dir, dir, sections),
+			)
 			buffers, ok, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 			if err != nil || !ok {
 				t.Fatalf("load: %v", err)
@@ -252,7 +308,16 @@ func TestPackedDualQuaternionUVStreamEvidence(t *testing.T) {
 			if got := buffers.layout.Elements[2].AlignedByteOffset; got != tc.want {
 				t.Fatalf("UV offset=%d want=%d", got, tc.want)
 			}
-			geometry, err := extractModelViewerGeometry(buffers.combined, buffers.stride, buffers.layout, []uint32{2, 0, 1}, false, false, true, nil)
+			geometry, err := extractModelViewerGeometry(
+				buffers.combined,
+				buffers.stride,
+				buffers.layout,
+				[]uint32{2, 0, 1},
+				false,
+				false,
+				true,
+				nil,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -278,8 +343,18 @@ func TestComputePoseClipLimits(t *testing.T) {
 		{"-1", "5", 10, false}, {"2", "1", 10, false}, {"0", "10", 10, false},
 		{"0.5", "5", 10, false},
 	} {
-		sections := parseModINI("[Constants]\nglobal $first=" + tc.start + "\nglobal $last=" + tc.end + "\n[CustomShaderPose]\n$freq=$freq+24*$dt\nif $freq > $last\n$freq=$first\nendif")
-		clips, explicit := detectModelViewerGIMIShapePoseClips(sections, sections[1], "$freq", collectModelViewerDefaultVariables(sections), nil, "test", tc.count)
+		sections := parseModINI(
+			"[Constants]\nglobal $first=" + tc.start + "\nglobal $last=" + tc.end + "\n[CustomShaderPose]\n$freq=$freq+24*$dt\nif $freq > $last\n$freq=$first\nendif",
+		)
+		clips, explicit := detectModelViewerGIMIShapePoseClips(
+			sections,
+			sections[1],
+			"$freq",
+			collectModelViewerDefaultVariables(sections),
+			nil,
+			"test",
+			tc.count,
+		)
 		if !explicit || (len(clips) == 1) != tc.valid {
 			t.Fatalf("range %s..%s: clips=%d explicit=%t", tc.start, tc.end, len(clips), explicit)
 		}
@@ -299,7 +374,12 @@ func TestComputePoseInvalidStatePreservesValidClips(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			ini := strings.Replace(packedDualQuaternionINI, "[Present]\n", "[Present]\nif $mode == 0\n$start = "+tc.firstStart+"\n$end = "+tc.firstEnd+"\nelse if $mode == 1\n$start = "+tc.secondStart+"\n$end = "+tc.secondEnd+"\nendif\n", 1)
+			ini := strings.Replace(
+				packedDualQuaternionINI,
+				"[Present]\n",
+				"[Present]\nif $mode == 0\n$start = "+tc.firstStart+"\n$end = "+tc.firstEnd+"\nelse if $mode == 1\n$start = "+tc.secondStart+"\n$end = "+tc.secondEnd+"\nendif\n",
+				1,
+			)
 			ini = strings.Replace(ini, "$end-2", "$end", 1)
 			ini = strings.Replace(ini, "stride = 52", "stride = 56", 1)
 			writePackedDualQuaternionFixture(t, dir, ini)
@@ -309,9 +389,20 @@ func TestComputePoseInvalidStatePreservesValidClips(t *testing.T) {
 			sections := parseModINI(ini)
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 			var diagnostics []string
-			deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}, nil, func(message string) {
-				diagnostics = append(diagnostics, message)
-			})
+			deformer, clips := detectModelViewerComputeAnimation(
+				dir,
+				dir,
+				"",
+				sections,
+				resources,
+				[]modelViewerDirectMesh{
+					{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+				},
+				nil,
+				func(message string) {
+					diagnostics = append(diagnostics, message)
+				},
+			)
 			if tc.validState == "" {
 				if deformer != nil || len(clips) != 0 {
 					t.Fatal("all-invalid state ranges must not create a full-pose fallback")
@@ -322,13 +413,19 @@ func TestComputePoseInvalidStatePreservesValidClips(t *testing.T) {
 				t.Fatalf("valid state %s was lost: deformer=%v clips=%d", tc.validState, deformer, len(clips))
 			}
 			clip := clips[0]
-			if !strings.HasSuffix(clip.ID, ":"+tc.validState) || clip.FrameStart != 0 || clip.FrameEnd != 2 || len(clip.Frames) != 3 || clip.FPS != 24 {
+			if !strings.HasSuffix(clip.ID, ":"+tc.validState) || clip.FrameStart != 0 || clip.FrameEnd != 2 ||
+				len(clip.Frames) != 3 ||
+				clip.FPS != 24 {
 				t.Fatalf("unexpected surviving clip: %+v", clip)
 			}
-			if len(clip.VariableIDs) != 1 || clip.VariableIDs[0] != "mode" || modelViewerString(clip.Frames[0].Values["mode"]) != tc.validState {
+			if len(clip.VariableIDs) != 1 || clip.VariableIDs[0] != "mode" ||
+				modelViewerString(clip.Frames[0].Values["mode"]) != tc.validState {
 				t.Fatalf("surviving clip lost its state binding: %+v", clip)
 			}
-			if len(diagnostics) != 1 || !strings.Contains(diagnostics[0], "variable=\"mode\"") || !strings.Contains(diagnostics[0], "frameStart=10 frameEnd=12 frameCount=3") || !strings.Contains(diagnostics[0], "pose.buf") || !strings.Contains(diagnostics[0], "anim.hlsl") {
+			if len(diagnostics) != 1 || !strings.Contains(diagnostics[0], "variable=\"mode\"") ||
+				!strings.Contains(diagnostics[0], "frameStart=10 frameEnd=12 frameCount=3") ||
+				!strings.Contains(diagnostics[0], "pose.buf") ||
+				!strings.Contains(diagnostics[0], "anim.hlsl") {
 				t.Fatalf("missing invalid-state diagnostic: %v", diagnostics)
 			}
 		})
@@ -377,10 +474,22 @@ func TestPackedDualQuaternionLocalMod(t *testing.T) {
 		t.Fatalf("deformers=%d animations=%d", len(prepared.computeDeformers), len(prepared.computeAnimations))
 	}
 	d, c := prepared.computeDeformers[0], prepared.computeAnimations[0]
-	if d.Kind != modelViewerPackedDualQuaternionKind || d.VertexCount != 23775 || d.Pose.BoneCount != 446 || d.Pose.FrameCount != 5160 || c.FrameStart != 6 || c.FrameEnd != 5157 || c.FPS != 24 {
+	if d.Kind != modelViewerPackedDualQuaternionKind || d.VertexCount != 23775 || d.Pose.BoneCount != 446 ||
+		d.Pose.FrameCount != 5160 ||
+		c.FrameStart != 6 ||
+		c.FrameEnd != 5157 ||
+		c.FPS != 24 {
 		t.Fatalf("unexpected local mod: %+v clip=%d..%d fps=%g", d, c.FrameStart, c.FrameEnd, c.FPS)
 	}
-	t.Logf("vertices=%d bones=%d poseFrames=%d clip=%d..%d fps=%g", d.VertexCount, d.Pose.BoneCount, d.Pose.FrameCount, c.FrameStart, c.FrameEnd, c.FPS)
+	t.Logf(
+		"vertices=%d bones=%d poseFrames=%d clip=%d..%d fps=%g",
+		d.VertexCount,
+		d.Pose.BoneCount,
+		d.Pose.FrameCount,
+		c.FrameStart,
+		c.FrameEnd,
+		c.FPS,
+	)
 	uv, err := os.ReadFile(filepath.Join(dir, "NilouStandeeTexcoord.buf"))
 	if err != nil {
 		t.Fatal(err)

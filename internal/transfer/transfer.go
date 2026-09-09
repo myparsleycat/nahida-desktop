@@ -164,7 +164,10 @@ func (t *Transfer) UsePreventSuspension(fn func(bool) error) {
 func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) (returnErr error) {
 	defer func() {
 		if returnErr != nil && t.reportFailure != nil {
-			returnErr = t.reportFailure(returnErr, map[string]any{"operation": "refresh-power-save", "stage": "power-state"})
+			returnErr = t.reportFailure(
+				returnErr,
+				map[string]any{"operation": "refresh-power-save", "stage": "power-state"},
+			)
 		}
 	}()
 	t.mu.RLock()

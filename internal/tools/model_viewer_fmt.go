@@ -29,7 +29,17 @@ func modelViewerLayoutKey(layout modelViewerFmtLayout) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "%d|%s|%s", layout.Stride, layout.Topology, layout.IndexFormat)
 	for _, element := range layout.Elements {
-		fmt.Fprintf(&builder, "|%s,%d,%s,%d,%d,%s,%d", element.SemanticName, element.SemanticIndex, element.Format, element.InputSlot, element.AlignedByteOffset, element.InputSlotClass, element.InstanceDataStepRate)
+		fmt.Fprintf(
+			&builder,
+			"|%s,%d,%s,%d,%d,%s,%d",
+			element.SemanticName,
+			element.SemanticIndex,
+			element.Format,
+			element.InputSlot,
+			element.AlignedByteOffset,
+			element.InputSlotClass,
+			element.InstanceDataStepRate,
+		)
 	}
 	return builder.String()
 }

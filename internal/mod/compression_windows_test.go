@@ -263,7 +263,13 @@ func TestRestoreWOFInspectsEveryRegularFileAndDeletesOnlyOwnedBacking(t *testing
 		t.Fatal(err)
 	}
 	if inspected.Load() != 4 || total.Load() != 1 || processed.Load() != 1 || deleted.Load() != 1 {
-		t.Fatalf("inspected=%d total=%d processed=%d deleted=%d", inspected.Load(), total.Load(), processed.Load(), deleted.Load())
+		t.Fatalf(
+			"inspected=%d total=%d processed=%d deleted=%d",
+			inspected.Load(),
+			total.Load(),
+			processed.Load(),
+			deleted.Load(),
+		)
 	}
 }
 

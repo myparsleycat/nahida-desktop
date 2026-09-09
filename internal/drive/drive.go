@@ -141,7 +141,12 @@ type UploadSettings interface {
 // PathSelector is Electron desktop.lib.pathSelector for download destination
 // selection. A nil path means the user cancelled.
 type PathSelector interface {
-	SelectDownloadPath(ctx context.Context, suggestedName, source string, suggestedNames []string, selectFile bool) (path *string, fileName *string, err error)
+	SelectDownloadPath(
+		ctx context.Context,
+		suggestedName, source string,
+		suggestedNames []string,
+		selectFile bool,
+	) (path *string, fileName *string, err error)
 }
 
 //wails:ignore
@@ -270,7 +275,11 @@ func (d *Drive) Rename(ctx context.Context, itemID, name string) (result any, er
 	return data, nil
 }
 
-func (d *Drive) DeleteItems(ctx context.Context, ids []string, action string) (outcome BatchDeletionOutcome, err error) {
+func (d *Drive) DeleteItems(
+	ctx context.Context,
+	ids []string,
+	action string,
+) (outcome BatchDeletionOutcome, err error) {
 	defer normalizeDriveBoundaryError(&err, "delete:items")
 	switch action {
 	case "trash":

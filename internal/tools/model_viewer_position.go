@@ -28,7 +28,11 @@ type modelViewerPositionCache struct {
 	limit   int
 }
 
-func (c *modelViewerPositionCache) load(ctx context.Context, key string, read func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *modelViewerPositionCache) load(
+	ctx context.Context,
+	key string,
+	read func(context.Context) ([]byte, error),
+) ([]byte, error) {
 	// Serialize misses to bound transient decode memory as well as retained bytes.
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -61,12 +65,35 @@ func (c *modelViewerPositionCache) load(ctx context.Context, key string, read fu
 	return data, nil
 }
 
-func (t *Tools) registerModelViewerPosition(sessionID, meshID string, variantIndex int, source modelViewerDirectPositionAssignment, indices, sources []uint32, vertexCount int, cache *modelViewerPositionCache) (string, error) {
+func (t *Tools) registerModelViewerPosition(
+	sessionID, meshID string,
+	variantIndex int,
+	source modelViewerDirectPositionAssignment,
+	indices, sources []uint32,
+	vertexCount int,
+	cache *modelViewerPositionCache,
+) (string, error) {
 	key := fmt.Sprintf("%s.variant.%d", meshID, variantIndex)
 	return t.protocol.StoreMemoryLoader(sessionID, key, func(ctx context.Context) (data []byte, err error) {
 		defer func() {
 			if err != nil && ctx.Err() == nil {
-				err = infra.ReportError(t.log, err, "Tools.LoadModelViewerPosition", infra.Diagnostic{Operation: "load-position-variant", Stage: "prepare-geometry", Fields: map[string]any{"memorySessionId": sessionID, "meshId": meshID, "variantIndex": variantIndex, "sourcePath": source.sourcePath, "sourceBytes": source.sourceBytes, "stride": source.stride}})
+				err = infra.ReportError(
+					t.log,
+					err,
+					"Tools.LoadModelViewerPosition",
+					infra.Diagnostic{
+						Operation: "load-position-variant",
+						Stage:     "prepare-geometry",
+						Fields: map[string]any{
+							"memorySessionId": sessionID,
+							"meshId":          meshID,
+							"variantIndex":    variantIndex,
+							"sourcePath":      source.sourcePath,
+							"sourceBytes":     source.sourceBytes,
+							"stride":          source.stride,
+						},
+					},
+				)
 			}
 		}()
 		return cache.load(ctx, key, func(ctx context.Context) ([]byte, error) {
@@ -87,8 +114,14 @@ func (t *Tools) registerModelViewerPosition(sessionID, meshID string, variantInd
 	})
 }
 
-func readModelViewerVariantPositions(ctx context.Context, source modelViewerDirectPositionAssignment, sources []uint32, vertexCount int) ([]float32, error) {
-	if source.stride < 12 || source.sourceBytes <= 0 || source.sourceBytes%int64(source.stride) != 0 || vertexCount < 0 {
+func readModelViewerVariantPositions(
+	ctx context.Context,
+	source modelViewerDirectPositionAssignment,
+	sources []uint32,
+	vertexCount int,
+) ([]float32, error) {
+	if source.stride < 12 || source.sourceBytes <= 0 || source.sourceBytes%int64(source.stride) != 0 ||
+		vertexCount < 0 {
 		return nil, fmt.Errorf("invalid position source layout")
 	}
 	file, err := os.Open(source.sourcePath)
@@ -101,7 +134,11 @@ func readModelViewerVariantPositions(ctx context.Context, source modelViewerDire
 		return nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() != source.sourceBytes {
-		return nil, fmt.Errorf("position source size changed: expected %d, received %d", source.sourceBytes, info.Size())
+		return nil, fmt.Errorf(
+			"position source size changed: expected %d, received %d",
+			source.sourceBytes,
+			info.Size(),
+		)
 	}
 	count := vertexCount
 	if sources != nil {
@@ -136,7 +173,9 @@ func readModelViewerVariantPositions(ctx context.Context, source modelViewerDire
 			}
 		}
 		for axis := range 3 {
-			positions[vertex*3+axis] = math.Float32frombits(binary.LittleEndian.Uint32(chunk[int(offset-chunkStart)+axis*4:]))
+			positions[vertex*3+axis] = math.Float32frombits(
+				binary.LittleEndian.Uint32(chunk[int(offset-chunkStart)+axis*4:]),
+			)
 		}
 	}
 	return positions, ctx.Err()

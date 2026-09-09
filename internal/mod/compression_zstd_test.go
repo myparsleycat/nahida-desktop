@@ -148,7 +148,12 @@ func TestZstdRoundTripRestoresMetadataWithoutManifest(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(folder, legacyCompressionManifestName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("manifest was created: %v", err)
 	}
-	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+	if err := restoreZstdFolder(
+		context.Background(),
+		folder,
+		ignoreCompressionMutations,
+		ignoreCompressionFileErrors,
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -207,7 +212,12 @@ func TestZstdCompressionUsesSourceWhenDestinationExists(t *testing.T) {
 	if err := compressZstdFile(context.Background(), path, ignoreCompressionMutations); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreZstdFile(context.Background(), path+managedZstdExtension, maxZstdRestoreSize, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFile(
+		context.Background(),
+		path+managedZstdExtension,
+		maxZstdRestoreSize,
+		ignoreCompressionMutations,
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -227,7 +237,12 @@ func TestZstdRestoreUsesExistingSourceAndRemovesArchive(t *testing.T) {
 	if err := os.WriteFile(targetPath, []byte("not-even-zstd"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreZstdFile(context.Background(), targetPath, maxZstdRestoreSize, ignoreCompressionMutations); err != nil {
+	if err := restoreZstdFile(
+		context.Background(),
+		targetPath,
+		maxZstdRestoreSize,
+		ignoreCompressionMutations,
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(sourcePath)
@@ -255,7 +270,12 @@ func TestZstdPassRemovesLegacyManifestAndTemps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := restoreZstdFolder(context.Background(), folder, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+	if err := restoreZstdFolder(
+		context.Background(),
+		folder,
+		ignoreCompressionMutations,
+		ignoreCompressionFileErrors,
+	); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range artifacts {
@@ -345,7 +365,14 @@ func TestRestoreEnabledZstdSkipsDisabledFolders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := restoreEnabledZstd(context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+	if err := restoreEnabledZstd(
+		context.Background(),
+		[]string{root},
+		func(int, int64) {},
+		func(string, int64, bool) {},
+		ignoreCompressionMutations,
+		ignoreCompressionFileErrors,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(enabled, "payload.bin")); err != nil {
@@ -373,7 +400,14 @@ func TestEveryNZstdFileIsTreatedAsManaged(t *testing.T) {
 	if err := os.Remove(sourcePath); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreAllZstd(context.Background(), []string{folder}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, ignoreCompressionFileErrors); err != nil {
+	if err := restoreAllZstd(
+		context.Background(),
+		[]string{folder},
+		func(int, int64) {},
+		func(string, int64, bool) {},
+		ignoreCompressionMutations,
+		ignoreCompressionFileErrors,
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(sourcePath)
@@ -392,9 +426,16 @@ func TestOrdinaryZstdArchiveIsIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fileErrors int
-	if err := restoreAllZstd(context.Background(), []string{folder}, func(int, int64) {}, func(string, int64, bool) {}, ignoreCompressionMutations, func(string, error) {
-		fileErrors++
-	}); err != nil {
+	if err := restoreAllZstd(
+		context.Background(),
+		[]string{folder},
+		func(int, int64) {},
+		func(string, int64, bool) {},
+		ignoreCompressionMutations,
+		func(string, error) {
+			fileErrors++
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if fileErrors != 0 {
@@ -418,7 +459,11 @@ func TestEnableContinuesAfterIndividualZstdRestoreFailure(t *testing.T) {
 	if err := os.MkdirAll(disabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(disabled, "payload.bin"+managedZstdExtension), []byte("corrupt"), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(disabled, "payload.bin"+managedZstdExtension),
+		[]byte("corrupt"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 

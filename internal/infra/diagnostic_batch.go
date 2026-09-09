@@ -34,5 +34,15 @@ func (b *DiagnosticBatch) Report(log *Log, where, operation string) {
 	if b.count == 0 {
 		return
 	}
-	_ = ReportError(log, errors.Join(b.causes...), where, Diagnostic{Severity: DiagnosticWarn, Operation: operation, Stage: "partial-result", Fields: map[string]any{"failureCount": b.count, "omittedCount": b.count - len(b.causes)}})
+	_ = ReportError(
+		log,
+		errors.Join(b.causes...),
+		where,
+		Diagnostic{
+			Severity:  DiagnosticWarn,
+			Operation: operation,
+			Stage:     "partial-result",
+			Fields:    map[string]any{"failureCount": b.count, "omittedCount": b.count - len(b.causes)},
+		},
+	)
 }

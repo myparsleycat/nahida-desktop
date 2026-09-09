@@ -34,7 +34,8 @@ func TestWailsReplaceAndCookieAPIArePinned(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(cookieAPI)
-	if !strings.Contains(text, "func (w *WebviewWindow) GetCookies") || !strings.Contains(text, "func (w *WebviewWindow) DeleteCookies") {
+	if !strings.Contains(text, "func (w *WebviewWindow) GetCookies") ||
+		!strings.Contains(text, "func (w *WebviewWindow) DeleteCookies") {
 		t.Fatal("fork is missing the public cookie API")
 	}
 	if strings.Contains(text, "InvokeSync(func() {\n\t\timpl.getCookies") {

@@ -146,7 +146,17 @@ func TestZstdWorkersCancellationDrainsAndWaits(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := runZstdWorkers(ctx, []compressionFile{{}}, 4, func(compressionFile) error { t.Error("started after cancellation"); return nil }, func(string, int64, bool) {}, ignoreCompressionFileErrors); !errors.Is(err, context.Canceled) {
+	if err := runZstdWorkers(
+		ctx,
+		[]compressionFile{{}},
+		4,
+		func(compressionFile) error { t.Error("started after cancellation"); return nil },
+		func(string, int64, bool) {},
+		ignoreCompressionFileErrors,
+	); !errors.Is(
+		err,
+		context.Canceled,
+	) {
 		t.Fatal(err)
 	}
 }
@@ -251,7 +261,14 @@ func TestZstdRestoreNestedArchivesPreserveSerialOrder(t *testing.T) {
 		t.Fatalf("workers = %d", got)
 	}
 	var order []string
-	if err := restoreAllZstd(t.Context(), []string{folder}, func(int, int64) {}, func(path string, _ int64, _ bool) { order = append(order, filepath.Base(path)) }, ignoreCompressionMutations, func(path string, err error) { t.Errorf("%s: %v", path, err) }); err != nil {
+	if err := restoreAllZstd(
+		t.Context(),
+		[]string{folder},
+		func(int, int64) {},
+		func(path string, _ int64, _ bool) { order = append(order, filepath.Base(path)) },
+		ignoreCompressionMutations,
+		func(path string, err error) { t.Errorf("%s: %v", path, err) },
+	); err != nil {
 		t.Fatal(err)
 	}
 	if fmt.Sprint(order) != "[payload.nzst payload.nzst.nzst]" {

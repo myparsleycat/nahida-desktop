@@ -66,7 +66,10 @@ func TestApplyViewerVariableSelectionAppliesGuardedEffects(t *testing.T) {
 	}
 }
 
-func computeViewerIneffectiveValues(payload ModelViewerTransport, state map[string]any) map[string]map[string][]viewerBlockingVar {
+func computeViewerIneffectiveValues(
+	payload ModelViewerTransport,
+	state map[string]any,
+) map[string]map[string][]viewerBlockingVar {
 	resolved := viewerEvalApplyStateRules(mergeViewerEvalState(payload.DefaultState, state), payload.StateRules)
 	baseline := evaluateViewerTransport(payload, resolved)
 	result := make(map[string]map[string][]viewerBlockingVar)

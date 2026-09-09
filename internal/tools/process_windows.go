@@ -21,5 +21,16 @@ func killProcessTree(cmd *exec.Cmd) error {
 	if treeErr == nil || errors.Is(killErr, os.ErrProcessDone) {
 		return nil
 	}
-	return infra.AnnotateError(infra.WithCause(treeErr, killErr), infra.Diagnostic{Operation: "execute-script", Stage: "terminate-tree", Fields: map[string]any{"pid": cmd.Process.Pid, "executable": cmd.Path, "parentTerminated": killErr == nil}})
+	return infra.AnnotateError(
+		infra.WithCause(treeErr, killErr),
+		infra.Diagnostic{
+			Operation: "execute-script",
+			Stage:     "terminate-tree",
+			Fields: map[string]any{
+				"pid":              cmd.Process.Pid,
+				"executable":       cmd.Path,
+				"parentTerminated": killErr == nil,
+			},
+		},
+	)
 }

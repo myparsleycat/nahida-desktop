@@ -181,14 +181,30 @@ func nteListGroups(roots nteRoots, groupPath string, searchPreview bool, reports
 }
 
 func nteScanGroup(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) FolderGroup {
-	return nteScanGroupWith(roots, groupPath, searchPreview, func(entry nteModEntry) ModInfo { return nteModInfo(entry, reports...) }, reports...)
+	return nteScanGroupWith(
+		roots,
+		groupPath,
+		searchPreview,
+		func(entry nteModEntry) ModInfo { return nteModInfo(entry, reports...) },
+		reports...)
 }
 
 func nteScanGroupLight(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) FolderGroup {
-	return nteScanGroupWith(roots, groupPath, searchPreview, func(entry nteModEntry) ModInfo { return nteModInfoLight(entry, reports...) }, reports...)
+	return nteScanGroupWith(
+		roots,
+		groupPath,
+		searchPreview,
+		func(entry nteModEntry) ModInfo { return nteModInfoLight(entry, reports...) },
+		reports...)
 }
 
-func nteScanGroupWith(roots nteRoots, groupPath string, searchPreview bool, scan func(nteModEntry) ModInfo, reports ...func(error)) FolderGroup {
+func nteScanGroupWith(
+	roots nteRoots,
+	groupPath string,
+	searchPreview bool,
+	scan func(nteModEntry) ModInfo,
+	reports ...func(error),
+) FolderGroup {
 	relative := nteRelative(roots, groupPath)
 	groupDir := filepath.Join(roots.modRoot, relative)
 	result := FolderGroup{
@@ -397,7 +413,10 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 		for i := len(renamed) - 1; i >= 0; i-- {
 			failures = append(failures, os.Rename(renamed[i].to, renamed[i].from))
 		}
-		return infra.AnnotateError(errors.Join(failures...), infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}})
+		return infra.AnnotateError(
+			errors.Join(failures...),
+			infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}},
+		)
 	}
 	for _, entry := range entries {
 		if !entry.Type().IsRegular() || !isPakModFile(entry.Name()) {

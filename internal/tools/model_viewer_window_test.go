@@ -31,7 +31,8 @@ func TestModelViewerWindowCleanupIsOwnedAndIdempotent(t *testing.T) {
 	if removed, err := service.CleanupModelViewer(context.Background(), ids[1]); err != nil || removed {
 		t.Fatalf("duplicate cleanup = %v, %v", removed, err)
 	}
-	if len(service.modelViewerSessions) != 2 || service.modelViewerSessions[ids[0]] == nil || service.modelViewerSessions[ids[2]] == nil {
+	if len(service.modelViewerSessions) != 2 || service.modelViewerSessions[ids[0]] == nil ||
+		service.modelViewerSessions[ids[2]] == nil {
 		t.Fatal("closing window released another window's payload")
 	}
 	for _, id := range []string{ids[0], ids[2]} {
@@ -65,7 +66,8 @@ drawindexed = 3, 0, 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.PreviewPath == nil || *result.PreviewPath != preview || fixture.service.modelViewerSessions[result.MemorySessionID].windowID != 42 {
+	if result.PreviewPath == nil || *result.PreviewPath != preview ||
+		fixture.service.modelViewerSessions[result.MemorySessionID].windowID != 42 {
 		t.Fatal("transport lost preview or owner")
 	}
 	fixture.service.CleanupModelViewerWindow(42)

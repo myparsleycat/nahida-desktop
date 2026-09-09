@@ -347,7 +347,13 @@ func TestRequestCannotMutateReplacedSession(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				r, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/test", nil, requestPolicy{PersistResponseCookies: true, ClearStoredCookieOnAuth: true, SkipAuthRetry: true})
+				r, err := service.request(
+					ctx,
+					http.MethodGet,
+					server.URL+"/apiv13/test",
+					nil,
+					requestPolicy{PersistResponseCookies: true, ClearStoredCookieOnAuth: true, SkipAuthRetry: true},
+				)
 				if r != nil {
 					_ = r.Body.Close()
 				}

@@ -120,7 +120,11 @@ func TestFixInspectionStateWatchesExternalChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !result.NeedsFix || len(service.fixInspectionSnapshot().Inspections) != 1 {
-		t.Fatalf("expected one retained inspection, got result=%+v snapshot=%+v", result, service.fixInspectionSnapshot())
+		t.Fatalf(
+			"expected one retained inspection, got result=%+v snapshot=%+v",
+			result,
+			service.fixInspectionSnapshot(),
+		)
 	}
 
 	if err := os.Remove(marker); err != nil {

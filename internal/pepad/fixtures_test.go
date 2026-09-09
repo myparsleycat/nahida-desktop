@@ -34,7 +34,13 @@ func exceptionFixture(text []byte, begin, end uint32) []byte {
 		name: ".pdata", rva: rdataRVA + 0x200, raw: rdataRaw + 0x200,
 		virtualSize: 0x200, rawSize: 0x200, characteristics: 0x40000040, data: pdata,
 	}
-	return buildPE([]sectionSpec{textSection(text), rdataSection(rdata), pdataSection}, directories, true, 0x8664, 0x20b)
+	return buildPE(
+		[]sectionSpec{textSection(text), rdataSection(rdata), pdataSection},
+		directories,
+		true,
+		0x8664,
+		0x20b,
+	)
 }
 
 func relocationFixture(text []byte, targetRVA uint32) []byte {

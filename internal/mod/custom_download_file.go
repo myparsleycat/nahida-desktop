@@ -143,7 +143,10 @@ func downloadCustomFileRegular(ctx context.Context, opts customDownloadFileOptio
 		if err == nil {
 			return nil
 		}
-		if cleanupErr := os.Remove(opts.SavePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) && opts.ReportCleanup != nil {
+		if cleanupErr := os.Remove(
+			opts.SavePath,
+		); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) &&
+			opts.ReportCleanup != nil {
 			opts.ReportCleanup(cleanupErr)
 		}
 		if attemptBytes > 0 && opts.OnProgress != nil {

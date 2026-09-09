@@ -16,7 +16,8 @@ func TestPartitionPackedUploadsHonorsMemberAndGroupLimits(t *testing.T) {
 		packMember(2, 7),
 	}
 	groups := partitionPackedUploads(members, pack)
-	if len(groups) != 4 || len(groups[0].members) != 2 || len(groups[1].members) != 1 || len(groups[2].members) != 1 || len(groups[3].members) != 1 {
+	if len(groups) != 4 || len(groups[0].members) != 2 || len(groups[1].members) != 1 || len(groups[2].members) != 1 ||
+		len(groups[3].members) != 1 {
 		t.Fatalf("groups = %#v", groups)
 	}
 }

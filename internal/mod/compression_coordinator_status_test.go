@@ -218,9 +218,21 @@ func TestAddWorkTotalsSetsBusyStatusOnlyWhenWorkExists(t *testing.T) {
 		files  int
 		bytes  int64
 	}{
-		{name: "compress files", add: (*compressionCoordinator).addCompressTotals, status: "compressing", files: 2, bytes: 40},
+		{
+			name:   "compress files",
+			add:    (*compressionCoordinator).addCompressTotals,
+			status: "compressing",
+			files:  2,
+			bytes:  40,
+		},
 		{name: "compress bytes only", add: (*compressionCoordinator).addCompressTotals, status: "compressing"},
-		{name: "restore files", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing", files: 2, bytes: 40},
+		{
+			name:   "restore files",
+			add:    (*compressionCoordinator).addRestoreTotals,
+			status: "decompressing",
+			files:  2,
+			bytes:  40,
+		},
 		{name: "restore bytes only", add: (*compressionCoordinator).addRestoreTotals, status: "decompressing"},
 	}
 	for _, test := range tests {
@@ -236,7 +248,8 @@ func TestAddWorkTotalsSetsBusyStatusOnlyWhenWorkExists(t *testing.T) {
 				bytes = 40
 			}
 			test.add(coordinator, files, bytes)
-			if state := coordinator.snapshot(); state.Status != test.status || state.TotalFiles != files || state.TotalBytes != bytes {
+			if state := coordinator.snapshot(); state.Status != test.status || state.TotalFiles != files ||
+				state.TotalBytes != bytes {
 				t.Fatalf("work totals = %+v", state)
 			}
 		})

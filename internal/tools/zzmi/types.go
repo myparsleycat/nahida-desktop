@@ -173,7 +173,8 @@ func validateCommand(command Command) error {
 		if err := exactArgs(3); err != nil {
 			return err
 		}
-		if _, ok := command.Args[0].(string); !ok || !validStringSequence(command.Args[1]) || !validStringSequence(command.Args[2]) {
+		if _, ok := command.Args[0].(string); !ok || !validStringSequence(command.Args[1]) ||
+			!validStringSequence(command.Args[2]) {
 			return errors.New("invalid texcoord remap arguments")
 		}
 	case "update_buffer_blend_indices":
@@ -185,7 +186,8 @@ func validateCommand(command Command) error {
 			return errors.New("invalid blend remap arguments")
 		}
 	case "transfer_indexed_sections":
-		if len(command.Args) != 0 || len(command.Kwargs) != 2 || !validStringSequence(command.Kwargs["src_indices"]) || !validStringSequence(command.Kwargs["trg_indices"]) {
+		if len(command.Args) != 0 || len(command.Kwargs) != 2 || !validStringSequence(command.Kwargs["src_indices"]) ||
+			!validStringSequence(command.Kwargs["trg_indices"]) {
 			return errors.New("invalid indexed-section transfer")
 		}
 	}

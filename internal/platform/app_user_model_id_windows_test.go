@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	getCurrentProcessExplicitAppUserModelID = windows.NewLazySystemDLL("shell32.dll").NewProc("GetCurrentProcessExplicitAppUserModelID")
-	coTaskMemFree                           = windows.NewLazySystemDLL("ole32.dll").NewProc("CoTaskMemFree")
+	getCurrentProcessExplicitAppUserModelID = windows.NewLazySystemDLL("shell32.dll").
+						NewProc("GetCurrentProcessExplicitAppUserModelID")
+	coTaskMemFree = windows.NewLazySystemDLL("ole32.dll").NewProc("CoTaskMemFree")
 )
 
 func TestSetAppUserModelID(t *testing.T) {

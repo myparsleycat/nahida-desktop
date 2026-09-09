@@ -50,7 +50,8 @@ func (t *Transfer) Pause(pid string) error {
 		t.destinationMu.Unlock()
 		return fmt.Errorf("transfer %q not found", pid)
 	}
-	if item.record.Status != StatusPending && item.record.Status != StatusPreparing && item.record.Status != StatusProgress {
+	if item.record.Status != StatusPending && item.record.Status != StatusPreparing &&
+		item.record.Status != StatusProgress {
 		t.mu.Unlock()
 		t.destinationMu.Unlock()
 		return nil
@@ -365,7 +366,18 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 		t.emit()
 	}
 	if t.reportFailure != nil {
-		_ = t.reportFailure(runErr, map[string]any{"operation": "run", "stage": "finish", "pid": pid, "name": snapshot.Name, "path": snapshot.Path, "type": snapshot.Type, "currentId": snapshot.CurrentID})
+		_ = t.reportFailure(
+			runErr,
+			map[string]any{
+				"operation": "run",
+				"stage":     "finish",
+				"pid":       pid,
+				"name":      snapshot.Name,
+				"path":      snapshot.Path,
+				"type":      snapshot.Type,
+				"currentId": snapshot.CurrentID,
+			},
+		)
 	} else if !interrupted && runErr != nil && !isNormalRunnerCancellation(runErr) && !isReportedRunnerError(runErr) {
 		t.logRecord(map[string]any{
 			"operation":        "run",
@@ -383,7 +395,10 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 		}, "Transfer")
 	}
 	if err := t.RefreshPowerSaveBlock(context.Background()); err != nil && !isReportedRunnerError(err) {
-		t.logRecord(map[string]any{"operation": "finish", "stage": "power-save", "pid": pid, "error": err.Error()}, "Transfer")
+		t.logRecord(
+			map[string]any{"operation": "finish", "stage": "power-save", "pid": pid, "error": err.Error()},
+			"Transfer",
+		)
 	}
 }
 

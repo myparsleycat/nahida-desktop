@@ -82,7 +82,14 @@ func touchVersionParts(value string) ([]int, bool) {
 	return parts, true
 }
 
-func compileTouchINI(sourcePath, targetPath string, analysis TouchModAnalysis, drafts []TouchComponentDraft, assets []TouchGeneratedAssets, namespace, varPrefix string, useFrameGuard bool) (string, int, error) {
+func compileTouchINI(
+	sourcePath, targetPath string,
+	analysis TouchModAnalysis,
+	drafts []TouchComponentDraft,
+	assets []TouchGeneratedAssets,
+	namespace, varPrefix string,
+	useFrameGuard bool,
+) (string, int, error) {
 	raw, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return "", 0, err
@@ -230,7 +237,10 @@ func ensureTouchPresent(text, varPrefix string) string {
 	st := touchSectionToken(varPrefix)
 	full, body, ok := matchTouchINISection(text, "[Present]")
 	if !ok {
-		return strings.TrimRight(text, " \t\r\n") + "\n\n[Present]\nrun = CommandList" + st + "Present\npost $" + varPrefix + "_active = 0\n"
+		return strings.TrimRight(
+			text,
+			" \t\r\n",
+		) + "\n\n[Present]\nrun = CommandList" + st + "Present\npost $" + varPrefix + "_active = 0\n"
 	}
 	if !strings.Contains(body, "CommandList"+st+"Present") {
 		body = "\nrun = CommandList" + st + "Present" + body
@@ -510,7 +520,12 @@ run = CommandList{{S}}Cursor
 	return strings.Split(touchTemplate(template, varPrefix, st, "", ""), "\n")
 }
 
-func buildTouchSharedShaders(varPrefix, st string, entries []touchInteractiveEntry, overrides touchZoneOverrides, runtime string) []string {
+func buildTouchSharedShaders(
+	varPrefix, st string,
+	entries []touchInteractiveEntry,
+	overrides touchZoneOverrides,
+	runtime string,
+) []string {
 	lines := strings.Split(touchTemplate(`[CustomShader{{S}}PinDetected]
 cs = {{R}}/rzm_pin_detected.hlsl
 x24 = ${{V}}_cursor_x
@@ -601,7 +616,12 @@ post cs-u1 = null
 	return append(lines, screen...)
 }
 
-func buildTouchComponentShaders(varPrefix, st string, entry touchInteractiveEntry, overrides touchZoneOverrides, runtime string) []string {
+func buildTouchComponentShaders(
+	varPrefix, st string,
+	entry touchInteractiveEntry,
+	overrides touchZoneOverrides,
+	runtime string,
+) []string {
 	id := touchToken(entry.Component.ID)
 	maskBase := touchMaskResourceToken(entry.Asset.AssetPrefix)
 	params := touchParamsResourceToken(entry.Asset.AssetPrefix)
@@ -618,15 +638,38 @@ func buildTouchComponentShaders(varPrefix, st string, entry touchInteractiveEntr
 		first, count = entry.Component.DrawRanges[0].FirstIndex, entry.Component.DrawRanges[0].IndexCount
 	}
 	samples := touchBakeOffsets(first, count, touchBakeSamples)
-	lines := []string{"[CustomShader" + st + "Bake" + id + "]", "run = BuiltInCommandListUnbindAllRenderTargets", "clear = Resource" + st + "BakeRT 0.0"}
+	lines := []string{
+		"[CustomShader" + st + "Bake" + id + "]",
+		"run = BuiltInCommandListUnbindAllRenderTargets",
+		"clear = Resource" + st + "BakeRT 0.0",
+	}
 	for index := range samples {
 		lines = append(lines, "run = CustomShader"+st+"Bake"+id+strconv.Itoa(index))
 	}
 	lines = append(lines, "")
 	for index, sample := range samples {
-		lines = append(lines, "[CustomShader"+st+"Bake"+id+strconv.Itoa(index)+"]", "gs = "+runtime+"/rzm_gs_probe.hlsl", "gs-t1 = Resource"+derefString(entry.Component.IndexResourceName), "ps = "+runtime+"/rzm_gs_probe.hlsl", "topology = point_list", "o0 = set_viewport no_view_cache Resource"+st+"BakeRT", "x26 = "+strconv.Itoa(index), "y26 = "+strconv.Itoa(sample), fmt.Sprintf("drawindexed = 1, %d, 0", sample), "")
+		lines = append(
+			lines,
+			"[CustomShader"+st+"Bake"+id+strconv.Itoa(index)+"]",
+			"gs = "+runtime+"/rzm_gs_probe.hlsl",
+			"gs-t1 = Resource"+derefString(entry.Component.IndexResourceName),
+			"ps = "+runtime+"/rzm_gs_probe.hlsl",
+			"topology = point_list",
+			"o0 = set_viewport no_view_cache Resource"+st+"BakeRT",
+			"x26 = "+strconv.Itoa(index),
+			"y26 = "+strconv.Itoa(sample),
+			fmt.Sprintf("drawindexed = 1, %d, 0", sample),
+			"",
+		)
 	}
-	lines = append(lines, "[CustomShader"+st+"Detect"+id+"]", "cs = "+runtime+"/rzm_object_detect.hlsl", fmt.Sprintf("x28 = %d", entry.Draft.ObjectID), "cs-t0 = vb0", "cs-t1 = ib")
+	lines = append(
+		lines,
+		"[CustomShader"+st+"Detect"+id+"]",
+		"cs = "+runtime+"/rzm_object_detect.hlsl",
+		fmt.Sprintf("x28 = %d", entry.Draft.ObjectID),
+		"cs-t0 = vb0",
+		"cs-t1 = ib",
+	)
 	if len(entry.Asset.ObjectMapPaths) >= 2 && entry.Component.Kind == "body" {
 		clothed, nude := entry.Asset.ObjectMapPaths[0], entry.Asset.ObjectMapPaths[1]
 		for _, objectMap := range entry.Asset.ObjectMapPaths {
@@ -637,7 +680,14 @@ func buildTouchComponentShaders(varPrefix, st string, entry touchInteractiveEntr
 				nude = objectMap
 			}
 		}
-		lines = append(lines, "if $body <= 1", "\tcs-t2 = Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, clothed.Label), "else", "\tcs-t2 = Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, nude.Label), "endif")
+		lines = append(
+			lines,
+			"if $body <= 1",
+			"\tcs-t2 = Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, clothed.Label),
+			"else",
+			"\tcs-t2 = Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, nude.Label),
+			"endif",
+		)
 	} else {
 		label := "main"
 		if len(entry.Asset.ObjectMapPaths) > 0 {
@@ -645,14 +695,110 @@ func buildTouchComponentShaders(varPrefix, st string, entry touchInteractiveEntr
 		}
 		lines = append(lines, "cs-t2 = Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, label))
 	}
-	lines = append(lines,
-		"cs-t3 = Resource"+st+"BakeRT", "cs-t4 = Resource"+st+maskBase+"0", "cs-t5 = Resource"+st+maskBase+"1", "cs-t7 = Resource"+st+maskBase+"2", "cs-t6 = Resource"+st+"ViewportAPI", "cs-u0 = Resource"+st+"DetectID", "cs-u1 = Resource"+st+"ComponentDetect"+id, "cs-u2 = Resource"+st+"DebugDetect"+id,
-		"x24 = $"+varPrefix+"_cursor_x", "y24 = $"+varPrefix+"_cursor_y", "z24 = $"+varPrefix+"_screen_w", "w24 = $"+varPrefix+"_screen_h", "x25 = $"+varPrefix+"_mouse_down", "x26 = 48.0", "w26 = 8.0", "x27 = $"+varPrefix+"_cursor_x", "y27 = $"+varPrefix+"_cursor_y", "z27 = $"+varPrefix+"_screen_w", "w27 = $"+varPrefix+"_screen_h", "x85 = 0", "y85 = 0", "z85 = 1", "w85 = 1", "x86 = 1", "x74 = 0", "dispatch = 1, 1, 1", "post cs-u0 = null", "post cs-u1 = null", "post cs-u2 = null", "",
-		"[CustomShader"+st+"Jiggle"+id+"]", "local $cursor_x_past", "local $cursor_y_past", "local $was_mouse_down", "if $"+varPrefix+"_mouse_down == 1", "\tif $was_mouse_down == 0", "\t\t$cursor_x_past = $"+varPrefix+"_cursor_x", "\t\t$cursor_y_past = $"+varPrefix+"_cursor_y", "\tendif", "\t$was_mouse_down = 1", "\tw67 = 1", "else", "\t$was_mouse_down = 0", "\t$cursor_x_past = 0", "\t$cursor_y_past = 0", "\tw67 = 0", "endif", "cs = "+runtime+"/rzm_jiggle_interaction.hlsl", "x67 = $cursor_x_past", "y67 = $cursor_y_past")
+	lines = append(
+		lines,
+		"cs-t3 = Resource"+st+"BakeRT",
+		"cs-t4 = Resource"+st+maskBase+"0",
+		"cs-t5 = Resource"+st+maskBase+"1",
+		"cs-t7 = Resource"+st+maskBase+"2",
+		"cs-t6 = Resource"+st+"ViewportAPI",
+		"cs-u0 = Resource"+st+"DetectID",
+		"cs-u1 = Resource"+st+"ComponentDetect"+id,
+		"cs-u2 = Resource"+st+"DebugDetect"+id,
+		"x24 = $"+varPrefix+"_cursor_x",
+		"y24 = $"+varPrefix+"_cursor_y",
+		"z24 = $"+varPrefix+"_screen_w",
+		"w24 = $"+varPrefix+"_screen_h",
+		"x25 = $"+varPrefix+"_mouse_down",
+		"x26 = 48.0",
+		"w26 = 8.0",
+		"x27 = $"+varPrefix+"_cursor_x",
+		"y27 = $"+varPrefix+"_cursor_y",
+		"z27 = $"+varPrefix+"_screen_w",
+		"w27 = $"+varPrefix+"_screen_h",
+		"x85 = 0",
+		"y85 = 0",
+		"z85 = 1",
+		"w85 = 1",
+		"x86 = 1",
+		"x74 = 0",
+		"dispatch = 1, 1, 1",
+		"post cs-u0 = null",
+		"post cs-u1 = null",
+		"post cs-u2 = null",
+		"",
+		"[CustomShader"+st+"Jiggle"+id+"]",
+		"local $cursor_x_past",
+		"local $cursor_y_past",
+		"local $was_mouse_down",
+		"if $"+varPrefix+"_mouse_down == 1",
+		"\tif $was_mouse_down == 0",
+		"\t\t$cursor_x_past = $"+varPrefix+"_cursor_x",
+		"\t\t$cursor_y_past = $"+varPrefix+"_cursor_y",
+		"\tendif",
+		"\t$was_mouse_down = 1",
+		"\tw67 = 1",
+		"else",
+		"\t$was_mouse_down = 0",
+		"\t$cursor_x_past = 0",
+		"\t$cursor_y_past = 0",
+		"\tw67 = 0",
+		"endif",
+		"cs = "+runtime+"/rzm_jiggle_interaction.hlsl",
+		"x67 = $cursor_x_past",
+		"y67 = $cursor_y_past",
+	)
 	lines = append(lines, touchBasePhysicsLines()...)
-	lines = append(lines, "x69 = $"+varPrefix+"_cursor_x", "y69 = $"+varPrefix+"_cursor_y", "z69 = $"+varPrefix+"_screen_w", "w69 = $"+varPrefix+"_screen_h", "x72 = 1", "y72 = 1.0", "z72 = 0.333333", "w72 = 0.333333", "x73 = 1.0", "y73 = 1.0", "x76 = $"+varPrefix+"_delta_time", "y76 = 3.0", "z76 = 3.0")
+	lines = append(
+		lines,
+		"x69 = $"+varPrefix+"_cursor_x",
+		"y69 = $"+varPrefix+"_cursor_y",
+		"z69 = $"+varPrefix+"_screen_w",
+		"w69 = $"+varPrefix+"_screen_h",
+		"x72 = 1",
+		"y72 = 1.0",
+		"z72 = 0.333333",
+		"w72 = 0.333333",
+		"x73 = 1.0",
+		"y73 = 1.0",
+		"x76 = $"+varPrefix+"_delta_time",
+		"y76 = 3.0",
+		"z76 = 3.0",
+	)
 	lines = append(lines, touchZoneOverrideLines(overrides)...)
-	lines = append(lines, "x99 = 1", "y99 = 1", "z99 = 1", "w99 = 1", "x100 = 1", "y100 = 1", "z100 = 1", "w100 = 1", "x112 = 1", "y112 = 1", "z112 = 1", "w112 = 1", "cs-t67 = Resource"+st+"PinnedComponentInfo"+id, "cs-t68 = Resource"+st+params, "cs-t65 = Resource"+st+maskBase+"0", "cs-t66 = Resource"+st+maskBase+"1", "cs-t69 = Resource"+st+maskBase+"2", "cs-t71 = Resource"+st+"ScreenState", "cs-t74 = Resource"+st+"PathProgress", "cs-u6 = Resource"+st+"JiggleState"+id, "Resource"+st+"TempVB"+id+" = vb0", "cs-t24 = vb0", "cs-u5 = copy Resource"+st+"TempVB"+id, fmt.Sprintf("dispatch = (%d + 255) // 256, 1, 1", entry.Component.VertexCount), "vb0 = null", "Resource"+st+"TempVB"+id+" = copy cs-u5", "cs-u5 = null", "post cs-u6 = null", "post cs-t71 = null", "")
+	lines = append(
+		lines,
+		"x99 = 1",
+		"y99 = 1",
+		"z99 = 1",
+		"w99 = 1",
+		"x100 = 1",
+		"y100 = 1",
+		"z100 = 1",
+		"w100 = 1",
+		"x112 = 1",
+		"y112 = 1",
+		"z112 = 1",
+		"w112 = 1",
+		"cs-t67 = Resource"+st+"PinnedComponentInfo"+id,
+		"cs-t68 = Resource"+st+params,
+		"cs-t65 = Resource"+st+maskBase+"0",
+		"cs-t66 = Resource"+st+maskBase+"1",
+		"cs-t69 = Resource"+st+maskBase+"2",
+		"cs-t71 = Resource"+st+"ScreenState",
+		"cs-t74 = Resource"+st+"PathProgress",
+		"cs-u6 = Resource"+st+"JiggleState"+id,
+		"Resource"+st+"TempVB"+id+" = vb0",
+		"cs-t24 = vb0",
+		"cs-u5 = copy Resource"+st+"TempVB"+id,
+		fmt.Sprintf("dispatch = (%d + 255) // 256, 1, 1", entry.Component.VertexCount),
+		"vb0 = null",
+		"Resource"+st+"TempVB"+id+" = copy cs-u5",
+		"cs-u5 = null",
+		"post cs-u6 = null",
+		"post cs-t71 = null",
+		"",
+	)
 	return lines
 }
 
@@ -707,12 +853,61 @@ func buildTouchComponentResources(st string, entry touchInteractiveEntry) []stri
 	params := touchParamsResourceToken(entry.Asset.AssetPrefix)
 	lines := []string{}
 	for _, objectMap := range entry.Asset.ObjectMapPaths {
-		lines = append(lines, "[Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, objectMap.Label)+"]", "type = Buffer", "format = R32G32B32A32_FLOAT", "filename = "+objectMap.RelativePath, "")
+		lines = append(
+			lines,
+			"[Resource"+st+touchObjectMapResourceToken(entry.Asset.AssetPrefix, objectMap.Label)+"]",
+			"type = Buffer",
+			"format = R32G32B32A32_FLOAT",
+			"filename = "+objectMap.RelativePath,
+			"",
+		)
 	}
 	for index, path := range entry.Asset.MaskPaths {
-		lines = append(lines, "[Resource"+st+mask+strconv.Itoa(index)+"]", "type = Buffer", "format = R32G32B32A32_FLOAT", "filename = "+path, "")
+		lines = append(
+			lines,
+			"[Resource"+st+mask+strconv.Itoa(index)+"]",
+			"type = Buffer",
+			"format = R32G32B32A32_FLOAT",
+			"filename = "+path,
+			"",
+		)
 	}
-	lines = append(lines, "[Resource"+st+params+"]", "type = Buffer", "format = R32G32B32A32_FLOAT", "filename = "+entry.Asset.ParamsRelativePath, "", "[Resource"+st+"ComponentDetect"+id+"]", "type = RWBuffer", "format = R32G32B32A32_FLOAT", "array = 15", "", "[Resource"+st+"PinnedComponentID"+id+"]", "type = RWBuffer", "format = R32_FLOAT", "array = 1", "", "[Resource"+st+"PinnedComponentInfo"+id+"]", "type = RWBuffer", "format = R32G32B32A32_FLOAT", "array = 15", "", "[Resource"+st+"DebugDetect"+id+"]", "type = RWBuffer", "format = R32G32B32A32_FLOAT", "array = 23", "", "[Resource"+st+"JiggleState"+id+"]", "type = RWBuffer", "format = R32G32B32A32_FLOAT", "array = 10", "", "[Resource"+st+"TempVB"+id+"]", "type = RWBuffer", "")
+	lines = append(
+		lines,
+		"[Resource"+st+params+"]",
+		"type = Buffer",
+		"format = R32G32B32A32_FLOAT",
+		"filename = "+entry.Asset.ParamsRelativePath,
+		"",
+		"[Resource"+st+"ComponentDetect"+id+"]",
+		"type = RWBuffer",
+		"format = R32G32B32A32_FLOAT",
+		"array = 15",
+		"",
+		"[Resource"+st+"PinnedComponentID"+id+"]",
+		"type = RWBuffer",
+		"format = R32_FLOAT",
+		"array = 1",
+		"",
+		"[Resource"+st+"PinnedComponentInfo"+id+"]",
+		"type = RWBuffer",
+		"format = R32G32B32A32_FLOAT",
+		"array = 15",
+		"",
+		"[Resource"+st+"DebugDetect"+id+"]",
+		"type = RWBuffer",
+		"format = R32G32B32A32_FLOAT",
+		"array = 23",
+		"",
+		"[Resource"+st+"JiggleState"+id+"]",
+		"type = RWBuffer",
+		"format = R32G32B32A32_FLOAT",
+		"array = 10",
+		"",
+		"[Resource"+st+"TempVB"+id+"]",
+		"type = RWBuffer",
+		"",
+	)
 	return lines
 }
 
@@ -732,7 +927,9 @@ func buildTouchZoneOverrides(entries []touchInteractiveEntry) (touchZoneOverride
 			for _, item := range values {
 				current := item.target[zone.Channel]
 				if current != 0 && mathAbs(current-item.value) > 1e-6 {
-					return out, contractError(fmt.Sprintf("Touch zone channel %d has conflicting %s overrides", zone.Channel, item.name))
+					return out, contractError(
+						fmt.Sprintf("Touch zone channel %d has conflicting %s overrides", zone.Channel, item.name),
+					)
 				}
 				item.target[zone.Channel] = item.value
 			}
@@ -742,7 +939,20 @@ func buildTouchZoneOverrides(entries []touchInteractiveEntry) (touchZoneOverride
 }
 func touchBasePhysicsLines() []string {
 	p := defaultTouchJiggleParams
-	return []string{"x68 = " + formatTouchNumber(p.Radius), "y68 = " + formatTouchNumber(p.Strength), "z68 = " + formatTouchNumber(p.Falloff), "w68 = " + formatTouchNumber(p.DragScale), "x70 = " + formatTouchNumber(p.GrabDamping), "y70 = " + formatTouchNumber(p.GrabSpring), "z70 = " + formatTouchNumber(p.ReleaseDamping), "w70 = " + formatTouchNumber(p.ReleaseSpring), "x71 = " + formatTouchNumber(p.MaxOffset), "y71 = " + formatTouchNumber(p.ReleaseKick), "z71 = " + formatTouchNumber(p.MouseYDirection), "w71 = " + formatTouchNumber(p.TargetFollow)}
+	return []string{
+		"x68 = " + formatTouchNumber(p.Radius),
+		"y68 = " + formatTouchNumber(p.Strength),
+		"z68 = " + formatTouchNumber(p.Falloff),
+		"w68 = " + formatTouchNumber(p.DragScale),
+		"x70 = " + formatTouchNumber(p.GrabDamping),
+		"y70 = " + formatTouchNumber(p.GrabSpring),
+		"z70 = " + formatTouchNumber(p.ReleaseDamping),
+		"w70 = " + formatTouchNumber(p.ReleaseSpring),
+		"x71 = " + formatTouchNumber(p.MaxOffset),
+		"y71 = " + formatTouchNumber(p.ReleaseKick),
+		"z71 = " + formatTouchNumber(p.MouseYDirection),
+		"w71 = " + formatTouchNumber(p.TargetFollow),
+	}
 }
 func touchZoneOverrideLines(o touchZoneOverrides) []string {
 	lines := []string{}

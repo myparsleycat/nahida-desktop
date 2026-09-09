@@ -47,7 +47,11 @@ type downloadChunkEnvelope struct {
 	Type       string `json:"type"`
 }
 
-func (d *Drive) fetchDirectoryDownloadMetadata(ctx context.Context, itemID string, link *DownloadLink) (DownloadMetadata, error) {
+func (d *Drive) fetchDirectoryDownloadMetadata(
+	ctx context.Context,
+	itemID string,
+	link *DownloadLink,
+) (DownloadMetadata, error) {
 	if d == nil || d.http == nil {
 		return DownloadMetadata{}, errDriveHTTPUnconfigured
 	}
@@ -58,7 +62,11 @@ func (d *Drive) fetchDirectoryDownloadMetadata(ctx context.Context, itemID strin
 		header.Set("nhd-link-token", link.Token)
 	}
 	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/dir/download?" + query.Encode()
-	response, err := d.http.Fetch(ctx, rawURL, infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true})
+	response, err := d.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return DownloadMetadata{}, err
 	}
@@ -68,7 +76,14 @@ func (d *Drive) fetchDirectoryDownloadMetadata(ctx context.Context, itemID strin
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		raw, readErr := io.ReadAll(response.Body)
-		return DownloadMetadata{}, infra.WithCause(CreateDriveAPIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), "download metadata", response.StatusCode), infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", response)))
+		return DownloadMetadata{}, infra.WithCause(
+			CreateDriveAPIError(
+				decodeAPIValue(response.Header.Get("Content-Type"), raw),
+				"download metadata",
+				response.StatusCode,
+			),
+			infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", response)),
+		)
 	}
 	metadata := DownloadMetadata{Files: []transfer.DownloadFile{}, Dirs: []transfer.Directory{}}
 	hasRoot := false
@@ -146,7 +161,11 @@ func decodeDownloadChunk(eventData string, target any) error {
 	return json.Unmarshal(bytes.TrimSpace(raw), target)
 }
 
-func (d *Drive) fetchFileDownloadMetadataBatch(ctx context.Context, ids []string, link *DownloadLink) ([]transfer.DownloadFile, error) {
+func (d *Drive) fetchFileDownloadMetadataBatch(
+	ctx context.Context,
+	ids []string,
+	link *DownloadLink,
+) ([]transfer.DownloadFile, error) {
 	if len(ids) == 0 {
 		return []transfer.DownloadFile{}, nil
 	}
@@ -156,7 +175,14 @@ func (d *Drive) fetchFileDownloadMetadataBatch(ctx context.Context, ids []string
 		query.Set("linkId", link.LinkID)
 		header.Set("nhd-link-token", link.Token)
 	}
-	data, _, edenErr, err := d.doJSONHeaders(ctx, http.MethodPost, "/akasha/file/downloads", query, header, map[string]any{"ids": ids})
+	data, _, edenErr, err := d.doJSONHeaders(
+		ctx,
+		http.MethodPost,
+		"/akasha/file/downloads",
+		query,
+		header,
+		map[string]any{"ids": ids},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +208,11 @@ func (d *Drive) fetchFileDownloadMetadataBatch(ctx context.Context, ids []string
 	return files, nil
 }
 
-func (d *Drive) fetchDownloadMetadata(ctx context.Context, items []DownloadItem, link *DownloadLink) (DownloadMetadata, error) {
+func (d *Drive) fetchDownloadMetadata(
+	ctx context.Context,
+	items []DownloadItem,
+	link *DownloadLink,
+) (DownloadMetadata, error) {
 	unique := make(map[string]DownloadItem, len(items))
 	ordered := make([]DownloadItem, 0, len(items))
 	for _, item := range items {
@@ -199,7 +229,11 @@ func (d *Drive) fetchDownloadMetadata(ctx context.Context, items []DownloadItem,
 			if err != nil {
 				return DownloadMetadata{}, err
 			}
-			metadata.Dirs = append([]transfer.Directory{{ID: metadata.Root.ID, ParentID: metadata.Root.ParentID, Name: metadata.Root.Name}}, metadata.Dirs...)
+			metadata.Dirs = append(
+				[]transfer.Directory{
+					{ID: metadata.Root.ID, ParentID: metadata.Root.ParentID, Name: metadata.Root.Name},
+				},
+				metadata.Dirs...)
 			return metadata, nil
 		}
 		files, err := d.fetchFileDownloadMetadataBatch(ctx, []string{item.ID}, link)
@@ -229,7 +263,10 @@ func (d *Drive) fetchDownloadMetadata(ctx context.Context, items []DownloadItem,
 				return DownloadMetadata{}, err
 			}
 			parent := batchRootID
-			metadata.Dirs = append(metadata.Dirs, transfer.Directory{ID: folder.Root.ID, ParentID: &parent, Name: folder.Root.Name})
+			metadata.Dirs = append(
+				metadata.Dirs,
+				transfer.Directory{ID: folder.Root.ID, ParentID: &parent, Name: folder.Root.Name},
+			)
 			metadata.Dirs = append(metadata.Dirs, folder.Dirs...)
 			metadata.Files = append(metadata.Files, folder.Files...)
 			metadata.TotalBytes += folder.TotalBytes

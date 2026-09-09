@@ -177,11 +177,24 @@ func (m *Mod) queueFixInspection(paths ...string) {
 // for Drive downloads. A nil path means the user cancelled.
 //
 //wails:ignore
-func (m *Mod) SelectDownloadPath(ctx context.Context, suggestedName, source string, suggestedNames []string, selectFile bool) (*string, *string, error) {
+func (m *Mod) SelectDownloadPath(
+	ctx context.Context,
+	suggestedName, source string,
+	suggestedNames []string,
+	selectFile bool,
+) (*string, *string, error) {
 	if m == nil || m.paths == nil {
 		return nil, nil, errors.New("path selector is not configured")
 	}
-	result, err := m.paths.getSelectedPathWithModeModal(ctx, suggestedName, nil, nil, source, suggestedNames, selectFile)
+	result, err := m.paths.getSelectedPathWithModeModal(
+		ctx,
+		suggestedName,
+		nil,
+		nil,
+		source,
+		suggestedNames,
+		selectFile,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -380,7 +393,12 @@ func (m *Mod) AddGame(
 		rollbacks = append(rollbacks, func() error {
 			return cleanupNteModFolder(modFolderPath, linkedModFolderPath)
 		})
-		executablePath, err := m.resolveNteBootstrapExecutablePath(ctx, modFolderPath, linkedModFolderPath, cleanOptional(gameInstallPath))
+		executablePath, err := m.resolveNteBootstrapExecutablePath(
+			ctx,
+			modFolderPath,
+			linkedModFolderPath,
+			cleanOptional(gameInstallPath),
+		)
 		if err != nil {
 			m.rollbackNteDiskChanges(rollbacks)
 			return err
@@ -405,7 +423,16 @@ func (m *Mod) AddGame(
 	}
 	if bootstrapInstall != nil {
 		if err := bootstrapInstall.Commit(); err != nil && m.log != nil {
-			_ = infra.ReportError(m.log, err, "Mod:commitNteBootstrap", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:commitNteBootstrap", Stage: "background"})
+			_ = infra.ReportError(
+				m.log,
+				err,
+				"Mod:commitNteBootstrap",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "Mod:commitNteBootstrap",
+					Stage:     "background",
+				},
+			)
 		}
 	}
 	return nil
@@ -504,7 +531,16 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 func (m *Mod) rollbackNteDiskChanges(rollbacks []func() error) {
 	for index := len(rollbacks) - 1; index >= 0; index-- {
 		if err := rollbacks[index](); err != nil && m != nil && m.log != nil {
-			_ = infra.ReportError(m.log, err, "Mod:rollbackNteDiskChanges", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:rollbackNteDiskChanges", Stage: "background"})
+			_ = infra.ReportError(
+				m.log,
+				err,
+				"Mod:rollbackNteDiskChanges",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "Mod:rollbackNteDiskChanges",
+					Stage:     "background",
+				},
+			)
 		}
 	}
 }

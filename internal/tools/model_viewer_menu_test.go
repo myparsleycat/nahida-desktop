@@ -101,7 +101,9 @@ if $other <= -1
 $other = 1
 endif`)
 	bindings := collectModelViewerSlotBindings(sections, nil)
-	if len(bindings) != 2 || bindings[0].Variable != "swapvar" || len(bindings[0].Values) != 3 || bindings[1].Variable != "other" || len(bindings[1].Values) != 2 {
+	if len(bindings) != 2 || bindings[0].Variable != "swapvar" || len(bindings[0].Values) != 3 ||
+		bindings[1].Variable != "other" ||
+		len(bindings[1].Values) != 2 {
 		t.Fatalf("bindings = %#v", bindings)
 	}
 }

@@ -9,8 +9,10 @@ import (
 )
 
 var (
-	hashTextureSuffixRE  = regexp.MustCompile(`(?i)(Diffuse|NormalMap|LightMap|MaterialMap)$`)
-	ibComponentDumpRE    = regexp.MustCompile(`(?i)(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\.`)
+	hashTextureSuffixRE = regexp.MustCompile(`(?i)(Diffuse|NormalMap|LightMap|MaterialMap)$`)
+	ibComponentDumpRE   = regexp.MustCompile(
+		`(?i)(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\.`,
+	)
 	ibComponentDumpRefRE = regexp.MustCompile(`(?i)(?:^|_)IB_([0-9a-f]{8})(?:_[A-Za-z][A-Za-z0-9]*)*_Component(\d+)$`)
 	hashLightMapRE       = regexp.MustCompile(`(?i)hash_lightmap|_lightmap\.`)
 	hashDiffuseRE        = regexp.MustCompile(`(?i)hash_diffusemap|diffuse`)
@@ -45,7 +47,12 @@ type familyRoleSection struct {
 	files    []hashImageFile
 }
 
-func attachFamilyAndStemTextures(meshes []modelViewerDirectMesh, sections []modINISection, resources []modelViewerResource, variables map[string]any) {
+func attachFamilyAndStemTextures(
+	meshes []modelViewerDirectMesh,
+	sections []modINISection,
+	resources []modelViewerResource,
+	variables map[string]any,
+) {
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
 		resourceMap[modelViewerNormalizeKey(resource.Name)] = resource
@@ -82,7 +89,11 @@ func attachFamilyAndStemTextures(meshes []modelViewerDirectMesh, sections []modI
 	}
 }
 
-func collectFamilyRoleSections(sections []modINISection, resources map[string]modelViewerResource, variables map[string]any) []familyRoleSection {
+func collectFamilyRoleSections(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	variables map[string]any,
+) []familyRoleSection {
 	var output []familyRoleSection
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") {
@@ -109,13 +120,19 @@ func collectFamilyRoleSections(sections []modINISection, resources map[string]mo
 				continue
 			}
 			seen[key] = true
-			files = append(files, hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)})
+			files = append(
+				files,
+				hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)},
+			)
 		}
 		if len(files) == 0 {
 			continue
 		}
 		meta := sectionMatchMeta(section)
-		output = append(output, familyRoleSection{name: section.Name, role: role, hash: meta.hash, priority: meta.priority, files: files})
+		output = append(
+			output,
+			familyRoleSection{name: section.Name, role: role, hash: meta.hash, priority: meta.priority, files: files},
+		)
 	}
 	return output
 }
@@ -242,11 +259,29 @@ func applyFamilyRoleFiles(mesh *modelViewerDirectMesh, files []hashImageFile, ro
 	}
 	if keepVariants {
 		for _, entry := range files {
-			mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{role: role, resource: entry.file, file: entry.file, authored: authored, conditions: cloneModelViewerDNF(entry.cond)})
+			mesh.textureAssignments = append(
+				mesh.textureAssignments,
+				modelViewerDirectTextureAssignment{
+					role:       role,
+					resource:   entry.file,
+					file:       entry.file,
+					authored:   authored,
+					conditions: cloneModelViewerDNF(entry.cond),
+				},
+			)
 		}
 		return
 	}
-	mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{role: role, resource: defaultFile, file: defaultFile, authored: authored, conditions: modelViewerDNFTrue()})
+	mesh.textureAssignments = append(
+		mesh.textureAssignments,
+		modelViewerDirectTextureAssignment{
+			role:       role,
+			resource:   defaultFile,
+			file:       defaultFile,
+			authored:   authored,
+			conditions: modelViewerDNFTrue(),
+		},
+	)
 }
 
 func meshHasRole(mesh *modelViewerDirectMesh, role string) bool {
@@ -314,7 +349,15 @@ func attachIbComponentDumpTextures(meshes []modelViewerDirectMesh, resources []m
 		if file == "" || match == nil {
 			continue
 		}
-		dumps = append(dumps, ibComponentDumpFile{file: file, ibHash: strings.ToLower(match[1]), index: match[2], role: strings.ToLower(match[4])})
+		dumps = append(
+			dumps,
+			ibComponentDumpFile{
+				file:   file,
+				ibHash: strings.ToLower(match[1]),
+				index:  match[2],
+				role:   strings.ToLower(match[4]),
+			},
+		)
 	}
 	if len(dumps) == 0 {
 		return
@@ -392,7 +435,13 @@ func assignIbDump(mesh *modelViewerDirectMesh, file, role string) {
 	})
 }
 
-func bindHashImageTextures(meshes []modelViewerDirectMesh, sections []modINISection, resources []modelViewerResource, modDir string, variables map[string]any) {
+func bindHashImageTextures(
+	meshes []modelViewerDirectMesh,
+	sections []modINISection,
+	resources []modelViewerResource,
+	modDir string,
+	variables map[string]any,
+) {
 	var needed []*modelViewerDirectMesh
 	for index := range meshes {
 		mesh := &meshes[index]
@@ -508,10 +557,16 @@ func bindHashImageTextures(meshes []modelViewerDirectMesh, sections []modINISect
 	}
 }
 
-func collectHashImageSlots(sections []modINISection, resources map[string]modelViewerResource, variables map[string]any, modDir string) []hashImageSlot {
+func collectHashImageSlots(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	variables map[string]any,
+	modDir string,
+) []hashImageSlot {
 	var slots []hashImageSlot
 	for _, section := range sections {
-		if !strings.EqualFold(section.Header, "TextureOverride") || hashTextureSuffixRE.MatchString(section.Name) || sectionHasIBOrDraw(section) {
+		if !strings.EqualFold(section.Header, "TextureOverride") || hashTextureSuffixRE.MatchString(section.Name) ||
+			sectionHasIBOrDraw(section) {
 			continue
 		}
 		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
@@ -530,7 +585,10 @@ func collectHashImageSlots(sections []modINISection, resources map[string]modelV
 				continue
 			}
 			seen[key] = true
-			files = append(files, hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)})
+			files = append(
+				files,
+				hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)},
+			)
 		}
 		if len(files) == 0 {
 			continue
@@ -577,10 +635,26 @@ func applyHashImageSlot(meshes []*modelViewerDirectMesh, slot *hashImageSlot, li
 		if !hasDiffuse {
 			if keepVariants {
 				for _, entry := range slot.files {
-					mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{role: "diffuse", resource: entry.file, file: entry.file, conditions: cloneModelViewerDNF(entry.cond)})
+					mesh.textureAssignments = append(
+						mesh.textureAssignments,
+						modelViewerDirectTextureAssignment{
+							role:       "diffuse",
+							resource:   entry.file,
+							file:       entry.file,
+							conditions: cloneModelViewerDNF(entry.cond),
+						},
+					)
 				}
 			} else {
-				mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{role: "diffuse", resource: defaultFile, file: defaultFile, conditions: modelViewerDNFTrue()})
+				mesh.textureAssignments = append(
+					mesh.textureAssignments,
+					modelViewerDirectTextureAssignment{
+						role:       "diffuse",
+						resource:   defaultFile,
+						file:       defaultFile,
+						conditions: modelViewerDNFTrue(),
+					},
+				)
 			}
 		}
 		if lightFile != "" {
@@ -592,7 +666,15 @@ func applyHashImageSlot(meshes []*modelViewerDirectMesh, slot *hashImageSlot, li
 				}
 			}
 			if !hasLight {
-				mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{role: "light_map", resource: lightFile, file: lightFile, conditions: modelViewerDNFTrue()})
+				mesh.textureAssignments = append(
+					mesh.textureAssignments,
+					modelViewerDirectTextureAssignment{
+						role:       "light_map",
+						resource:   lightFile,
+						file:       lightFile,
+						conditions: modelViewerDNFTrue(),
+					},
+				)
 			}
 		}
 	}

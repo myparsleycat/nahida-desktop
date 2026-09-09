@@ -54,7 +54,12 @@ func newRuntime() *runtime {
 	httpClient.UseLog(log)
 	shell := platform.NewShell()
 	shell.UseDiagnostic(func(err error, stage string, fields map[string]any) {
-		_ = infra.ReportError(log, err, "Shell", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "open-external", Stage: stage, Fields: fields})
+		_ = infra.ReportError(
+			log,
+			err,
+			"Shell",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "open-external", Stage: stage, Fields: fields},
+		)
 	})
 	fs := platform.NewFS()
 	fs.UseDiagnostic(func(err error, stage string, fields map[string]any) {
@@ -147,8 +152,17 @@ func newRuntime() *runtime {
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
 			FindModelViewerPreview: modService.FindModelViewerPreview,
-			Log:                    log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
-			FS: fs, HTTP: httpClient, Download: download, Archive: archive, Protocol: protocolService, GitHubRate: githubRate, Mod: modService,
+			Log:                    log,
+			EventEmit:              eventEmit,
+			Settings:               settings,
+			XXMI:                   xxmiService,
+			FS:                     fs,
+			HTTP:                   httpClient,
+			Download:               download,
+			Archive:                archive,
+			Protocol:               protocolService,
+			GitHubRate:             githubRate,
+			Mod:                    modService,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
 					ID: "wuwa-mod-fixer-updated", Title: title, Body: body,
@@ -182,7 +196,9 @@ func newRuntime() *runtime {
 			rt.drive.UseFixInspection(queueFixInspections)
 		}
 	}
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil))
+	settings.UseHooks(
+		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil),
+	)
 	return rt
 }
 
@@ -219,7 +235,12 @@ func newLoggedService[T any](rt *runtime, name string, instance *T) application.
 	return newLoggedServiceWithOptions(rt, name, instance, application.ServiceOptions{})
 }
 
-func newLoggedServiceWithOptions[T any](rt *runtime, name string, instance *T, options application.ServiceOptions) application.Service {
+func newLoggedServiceWithOptions[T any](
+	rt *runtime,
+	name string,
+	instance *T,
+	options application.ServiceOptions,
+) application.Service {
 	if rt != nil && rt.log != nil {
 		options.MarshalError = rt.log.ServiceErrorMarshaler(name)
 	}

@@ -72,7 +72,10 @@ func (m *Mod) resolveNteBootstrapExecutablePath(
 	return resolution.ExecutablePath, nil
 }
 
-func (m *Mod) ensureNteBootstrapFiles(ctx context.Context, executablePath string) (install *nteBootstrapInstall, returnErr error) {
+func (m *Mod) ensureNteBootstrapFiles(
+	ctx context.Context,
+	executablePath string,
+) (install *nteBootstrapInstall, returnErr error) {
 	targetDir := filepath.Dir(executablePath)
 	if info, err := os.Stat(targetDir); err != nil || !info.IsDir() {
 		return nil, infra.WithCause(errors.New("NTE_BOOTSTRAP_INVALID_TARGET_DIR"), err)
@@ -133,7 +136,10 @@ func (m *Mod) ensureNteBootstrapFiles(ctx context.Context, executablePath string
 	}
 	for _, path := range files {
 		if strings.HasSuffix(strings.ToLower(filepath.Base(path)), ".sha512") {
-			copies = append(copies, nteBootstrapFileCopy{sourcePath: path, targetPath: filepath.Join(targetDir, filepath.Base(path))})
+			copies = append(
+				copies,
+				nteBootstrapFileCopy{sourcePath: path, targetPath: filepath.Join(targetDir, filepath.Base(path))},
+			)
 		}
 	}
 
@@ -184,7 +190,13 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, rawURL, archiv
 
 	m.emitNteBootstrapProgress("extracting", nil, archiveName, "")
 	flatten := false
-	if _, err := m.archive.Extract(ctx, archivePath, extractDir, infra.ExtractOptions{FlattenSingleRoot: &flatten}, nil); err != nil {
+	if _, err := m.archive.Extract(
+		ctx,
+		archivePath,
+		extractDir,
+		infra.ExtractOptions{FlattenSingleRoot: &flatten},
+		nil,
+	); err != nil {
 		return fmt.Errorf("NTE_BOOTSTRAP_EXTRACT_FAILED:%s: %w", archiveName, err)
 	}
 	return nil

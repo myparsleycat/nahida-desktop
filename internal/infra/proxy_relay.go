@@ -29,11 +29,21 @@ func StartProxyRelay(network *ProxyNetwork, log *Log) (*ProxyRelay, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &ProxyRelay{listener: listener, transport: BlockedProxyTransport{}, log: log, tunnels: make(map[net.Conn]io.Closer)}
+	r := &ProxyRelay{
+		listener:  listener,
+		transport: BlockedProxyTransport{},
+		log:       log,
+		tunnels:   make(map[net.Conn]io.Closer),
+	}
 	if network != nil {
 		r.transport, r.dial = network.Transport, network.dial
 	}
-	r.server = &http.Server{Handler: r, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
+	r.server = &http.Server{
+		Handler:           r,
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	go func() {
 		if err := r.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			_ = ReportError(log, err, "ProxyRelay", Diagnostic{Operation: "serve"})
@@ -71,7 +81,8 @@ func (r *ProxyRelay) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodConnect {
 		host, port, err := net.SplitHostPort(request.Host)
 		number, parseErr := strconv.Atoi(port)
-		if err != nil || parseErr != nil || host == "" || number < 1 || number > 65535 || strings.ContainsAny(host, "/\\@?# \t\r\n") {
+		if err != nil || parseErr != nil || host == "" || number < 1 || number > 65535 ||
+			strings.ContainsAny(host, "/\\@?# \t\r\n") {
 			http.Error(w, "invalid CONNECT target", http.StatusBadRequest)
 			return
 		}
@@ -152,11 +163,24 @@ func stripProxyHeaders(header http.Header) {
 }
 
 func (r *ProxyRelay) fail(w http.ResponseWriter, request *http.Request, err error) {
-	_ = ReportError(r.log, err, "ProxyRelay", Diagnostic{Operation: "forward", Fields: map[string]any{"host": request.URL.Hostname(), "method": request.Method}})
+	_ = ReportError(
+		r.log,
+		err,
+		"ProxyRelay",
+		Diagnostic{
+			Operation: "forward",
+			Fields:    map[string]any{"host": request.URL.Hostname(), "method": request.Method},
+		},
+	)
 	http.Error(w, "proxy.connectionFailed", http.StatusBadGateway)
 }
 
-func (r *ProxyRelay) tunnel(w http.ResponseWriter, request *http.Request, upstream io.ReadWriteCloser, response *http.Response) {
+func (r *ProxyRelay) tunnel(
+	w http.ResponseWriter,
+	request *http.Request,
+	upstream io.ReadWriteCloser,
+	response *http.Response,
+) {
 	conn, buffer, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		return

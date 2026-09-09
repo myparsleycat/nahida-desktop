@@ -125,7 +125,8 @@ func IsBackendUnavailableStatus(status int) bool {
 func CreateDriveAPIError(err any, operation string, status int) *DriveAPIError {
 	var existing *DriveAPIError
 	if asDriveAPIError(err, &existing) {
-		if original, ok := err.(error); ok && original != existing { //nolint:errorlint // Preserve only wrappers; errors.Is also matches the unwrapped value.
+		if original, ok := err.(error); ok &&
+			original != existing { //nolint:errorlint // Preserve only wrappers; errors.Is also matches the unwrapped value.
 			copy := *existing
 			copy.diagnosticSource = original
 			copy.diagnosticIdentity = existing

@@ -53,7 +53,8 @@ global $other = enabled
 $top = 9`)
 
 	variables := collectModelViewerDefaultVariables(sections)
-	if variables["top"] != float64(1) || variables["mode"] != float64(2) || variables["variant"] != float64(3) || variables["other"] != "enabled" {
+	if variables["top"] != float64(1) || variables["mode"] != float64(2) || variables["variant"] != float64(3) ||
+		variables["other"] != "enabled" {
 		t.Fatalf("defaults = %#v", variables)
 	}
 	if _, ok := variables["ignored"]; ok {

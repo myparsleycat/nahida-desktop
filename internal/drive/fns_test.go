@@ -389,7 +389,8 @@ func TestListLinkChildrenIssuesTokenHeader(t *testing.T) {
 	if out.Content.ID != "item-1" || out.Content.Name != "Root" || !out.Content.IsDir {
 		t.Fatalf("content = %+v", out.Content)
 	}
-	if len(out.Children) != 1 || out.Children[0].ID != "c1" || out.Children[0].Size == nil || *out.Children[0].Size != 12 {
+	if len(out.Children) != 1 || out.Children[0].ID != "c1" || out.Children[0].Size == nil ||
+		*out.Children[0].Size != 12 {
 		t.Fatalf("children = %+v", out.Children)
 	}
 	if len(out.Ancestors) != 1 || out.Ancestors[0].ID != "item-1" {
@@ -490,7 +491,10 @@ func TestCopyFromURLLinkIssuesImportSSEAndCompletes(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/akasha/content/dest-1":
 			return jsonResp(r, 200, `{"id":"dest-1","children":[]}`), nil
 		case r.Method == http.MethodGet && r.URL.Path == "/akasha/common/sse/import":
-			return sseResp(r, "event: metadata\ndata: {\"totalExpectedSize\":10}\n\nevent: complete\ndata: {\"ok\":true}\n\n"), nil
+			return sseResp(
+				r,
+				"event: metadata\ndata: {\"totalExpectedSize\":10}\n\nevent: complete\ndata: {\"ok\":true}\n\n",
+			), nil
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 			return nil, errors.New("unexpected")
@@ -776,11 +780,22 @@ func TestCopyFromURLVerifiesCopiedDirectoryAfterSSEError(t *testing.T) {
 			current := destinationGets
 			mu.Unlock()
 			if current == 1 {
-				return jsonResp(r, 200, `{"id":"dest-1","children":[{"id":"old","name":"Shared","isDir":true,"size":10}]}`), nil
+				return jsonResp(
+					r,
+					200,
+					`{"id":"dest-1","children":[{"id":"old","name":"Shared","isDir":true,"size":10}]}`,
+				), nil
 			}
-			return jsonResp(r, 200, `{"id":"dest-1","children":[{"id":"old","name":"Shared","isDir":true,"size":10},{"id":"new","name":"Shared (1)","isDir":true,"size":10}]}`), nil
+			return jsonResp(
+				r,
+				200,
+				`{"id":"dest-1","children":[{"id":"old","name":"Shared","isDir":true,"size":10},{"id":"new","name":"Shared (1)","isDir":true,"size":10}]}`,
+			), nil
 		case r.Method == http.MethodGet && r.URL.Path == "/akasha/common/sse/import":
-			return sseResp(r, "event: metadata\ndata: {\"totalExpectedSize\":10}\n\nevent: error\ndata: {\"message\":\"late failure\"}\n\n"), nil
+			return sseResp(
+				r,
+				"event: metadata\ndata: {\"totalExpectedSize\":10}\n\nevent: error\ndata: {\"message\":\"late failure\"}\n\n",
+			), nil
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 			return nil, errors.New("unexpected")
@@ -831,7 +846,10 @@ func TestCopyFromURLManyCreatesAndUpdatesTransfer(t *testing.T) {
 			return jsonResp(r, 200, `{"token":"link-tok","parent":{"id":"parent-1","name":"Shared"}}`), nil
 		case r.Method == http.MethodPost && r.URL.Path == "/akasha/common/sse/import-many":
 			_, _ = io.Copy(io.Discard, r.Body)
-			return sseResp(r, "event: metadata\ndata: {\"totalExpectedSize\":100}\n\nevent: status\ndata: {\"status\":\"copying\",\"processedFiles\":1,\"currentTotalSize\":40}\n\nevent: complete\ndata: {\"totalSize\":100}\n\n"), nil
+			return sseResp(
+				r,
+				"event: metadata\ndata: {\"totalExpectedSize\":100}\n\nevent: status\ndata: {\"status\":\"copying\",\"processedFiles\":1,\"currentTotalSize\":40}\n\nevent: complete\ndata: {\"totalSize\":100}\n\n",
+			), nil
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 			return nil, errors.New("unexpected")
@@ -858,7 +876,9 @@ func TestCopyFromURLManyCreatesAndUpdatesTransfer(t *testing.T) {
 		t.Fatalf("out = %+v", out)
 	}
 	record, ok := transfers.Get("import-many-op")
-	if !ok || record.Status != transfer.StatusCompleted || record.TotalSize != 100 || record.TransferredSize != 100 || record.TransferredFiles != 2 || record.Progress != 100 {
+	if !ok || record.Status != transfer.StatusCompleted || record.TotalSize != 100 || record.TransferredSize != 100 ||
+		record.TransferredFiles != 2 ||
+		record.Progress != 100 {
 		t.Fatalf("transfer = %+v, ok=%v", record, ok)
 	}
 	if len(progress) < 4 || progress[0].Phase != "preparing" || progress[len(progress)-1].Phase != "completed" {

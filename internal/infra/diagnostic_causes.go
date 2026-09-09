@@ -19,7 +19,11 @@ func WithCause(err, cause error) error {
 	return AnnotateError(err, Diagnostic{Causes: []error{cause}})
 }
 
-func collectDiagnosticCauses(err error, extra Diagnostic, includeReported bool) ([]map[string]any, bool, DiagnosticSeverity) {
+func collectDiagnosticCauses(
+	err error,
+	extra Diagnostic,
+	includeReported bool,
+) ([]map[string]any, bool, DiagnosticSeverity) {
 	remaining, truncated := 32, false
 	var severity DiagnosticSeverity
 	seen := make(map[error]bool)
@@ -41,7 +45,8 @@ func collectDiagnosticCauses(err error, extra Diagnostic, includeReported bool) 
 			seen[current] = true
 			defer delete(seen, current)
 		}
-		if marker, ok := current.(interface{ DiagnosticReported() bool }); ok && marker.DiagnosticReported() && !includeReported {
+		if marker, ok := current.(interface{ DiagnosticReported() bool }); ok && marker.DiagnosticReported() &&
+			!includeReported {
 			return nil
 		}
 		if annotated, ok := current.(*diagnosticError); ok { //nolint:errorlint // Inspect this node, not a descendant.
@@ -117,7 +122,9 @@ func collectDiagnosticCauses(err error, extra Diagnostic, includeReported bool) 
 		result = append(result, walk(cause, extra)...)
 	}
 	if truncated && len(result) == 0 {
-		result = []map[string]any{{"error": "diagnostic cause traversal limit reached", "errorType": "diagnostic-limit"}}
+		result = []map[string]any{
+			{"error": "diagnostic cause traversal limit reached", "errorType": "diagnostic-limit"},
+		}
 	}
 	return result, truncated, severity
 }

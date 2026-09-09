@@ -54,7 +54,8 @@ func TestSaveScriptCompressesAndRejectsDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scripts) != 1 || scripts[0].Name != "fix.py" || scripts[0].Type != "python" || scripts[0].Size != int64(len(want)) {
+	if len(scripts) != 1 || scripts[0].Name != "fix.py" || scripts[0].Type != "python" ||
+		scripts[0].Size != int64(len(want)) {
 		t.Fatalf("GetScripts = %#v", scripts)
 	}
 	stored, err := client.Scripts.FindByID(ctx, scripts[0].ID)
@@ -90,7 +91,10 @@ func TestCreatePresetIsOrderedAndDeleteScriptProtectsReferences(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := service.CreatePreset(ctx, CreateScriptPresetInput{Name: "  repair  ", ScriptIDs: []string{"b", "a"}}); err != nil {
+	if err := service.CreatePreset(
+		ctx,
+		CreateScriptPresetInput{Name: "  repair  ", ScriptIDs: []string{"b", "a"}},
+	); err != nil {
 		t.Fatalf("CreatePreset: %v", err)
 	}
 	presets, err := service.GetPresets(ctx)

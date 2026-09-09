@@ -29,7 +29,13 @@ func newScriptExecutor(onLog func(string, bool)) *scriptExecutor {
 	return &scriptExecutor{onLog: onLog}
 }
 
-func (e *scriptExecutor) execute(ctx context.Context, filePath string, scriptType db.ScriptType, cwd string, args []string) error {
+func (e *scriptExecutor) execute(
+	ctx context.Context,
+	filePath string,
+	scriptType db.ScriptType,
+	cwd string,
+	args []string,
+) error {
 	var cmd *exec.Cmd
 	switch scriptType {
 	case db.ScriptTypePython:
@@ -96,7 +102,19 @@ func (e *scriptExecutor) execute(ctx context.Context, filePath string, scriptTyp
 	if waitErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
-			return infra.AnnotateError(infra.WithCause(fmt.Errorf("process exited with code %d", exitErr.ExitCode()), waitErr), infra.Diagnostic{Operation: "execute-script", Stage: "wait", Fields: map[string]any{"executable": cmd.Path, "path": filePath, "pid": cmd.Process.Pid, "exitCode": exitErr.ExitCode()}})
+			return infra.AnnotateError(
+				infra.WithCause(fmt.Errorf("process exited with code %d", exitErr.ExitCode()), waitErr),
+				infra.Diagnostic{
+					Operation: "execute-script",
+					Stage:     "wait",
+					Fields: map[string]any{
+						"executable": cmd.Path,
+						"path":       filePath,
+						"pid":        cmd.Process.Pid,
+						"exitCode":   exitErr.ExitCode(),
+					},
+				},
+			)
 		}
 		return waitErr
 	}

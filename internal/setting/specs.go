@@ -143,8 +143,11 @@ func buildSpecs() map[string]spec {
 				return sanitizeDefaultStartPage(asString(value))
 			},
 		},
-		KeyGeneralLogLevel:                          logLevel,
-		KeyGeneralMoveTransferPageWhenStartTransfer: boolSpec(definitionsByKey[KeyGeneralMoveTransferPageWhenStartTransfer], false),
+		KeyGeneralLogLevel: logLevel,
+		KeyGeneralMoveTransferPageWhenStartTransfer: boolSpec(
+			definitionsByKey[KeyGeneralMoveTransferPageWhenStartTransfer],
+			false,
+		),
 		KeyGeneralPowerSaveBlockInTransfer: {
 			def:        definitionsByKey[KeyGeneralPowerSaveBlockInTransfer],
 			getDefault: func(*Setting) any { return false },
@@ -159,10 +162,17 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
-		KeyGeneralBisectPreserveD3dx:                 boolSpec(definitionsByKey[KeyGeneralBisectPreserveD3dx], true),
-		KeyGeneralTitlebarActivityBadgeClickNavigate: boolSpec(definitionsByKey[KeyGeneralTitlebarActivityBadgeClickNavigate], true),
+		KeyGeneralBisectPreserveD3dx: boolSpec(definitionsByKey[KeyGeneralBisectPreserveD3dx], true),
+		KeyGeneralTitlebarActivityBadgeClickNavigate: boolSpec(
+			definitionsByKey[KeyGeneralTitlebarActivityBadgeClickNavigate],
+			true,
+		),
 
-		KeyModArchiveExtractPathMode:    enumSpec(definitionsByKey[KeyModArchiveExtractPathMode], defaultArchiveExtractPath, archiveExtractPathModes),
+		KeyModArchiveExtractPathMode: enumSpec(
+			definitionsByKey[KeyModArchiveExtractPathMode],
+			defaultArchiveExtractPath,
+			archiveExtractPathModes,
+		),
 		KeyModDeleteArchiveAfterExtract: boolSpec(definitionsByKey[KeyModDeleteArchiveAfterExtract], true),
 		KeyModMoveFolderInsteadOfCopy:   boolSpec(definitionsByKey[KeyModMoveFolderInsteadOfCopy], true),
 		KeyModSearchModPreview:          boolSpec(definitionsByKey[KeyModSearchModPreview], false),
@@ -183,14 +193,22 @@ func buildSpecs() map[string]spec {
 			},
 		},
 		KeyModCopyShaderFixesOnEnable: boolSpec(definitionsByKey[KeyModCopyShaderFixesOnEnable], true),
-		KeyModSidebarLayout:           enumSpec(definitionsByKey[KeyModSidebarLayout], defaultSidebarLayout, sidebarLayoutModes),
+		KeyModSidebarLayout: enumSpec(
+			definitionsByKey[KeyModSidebarLayout],
+			defaultSidebarLayout,
+			sidebarLayoutModes,
+		),
 		KeyModCharacterSidebarWidth: clampedIntSpec(
 			definitionsByKey[KeyModCharacterSidebarWidth],
 			modCharacterSidebarWidthDefault,
 			modCharacterSidebarWidthMin,
 			modCharacterSidebarWidthMax,
 		),
-		KeyModGridLayoutMode: enumSpec(definitionsByKey[KeyModGridLayoutMode], defaultModGridLayout, modGridLayoutModes),
+		KeyModGridLayoutMode: enumSpec(
+			definitionsByKey[KeyModGridLayoutMode],
+			defaultModGridLayout,
+			modGridLayoutModes,
+		),
 		KeyModGridResponsiveBaseWidth: clampedIntSpec(
 			definitionsByKey[KeyModGridResponsiveBaseWidth],
 			modGridResponsiveBaseWidthDefault,
@@ -209,12 +227,25 @@ func buildSpecs() map[string]spec {
 			modGridColumnMin,
 			modGridColumnMax,
 		),
-		KeyModDisabledPrefixStyle:             enumSpec(definitionsByKey[KeyModDisabledPrefixStyle], defaultDisabledPrefix, disabledPrefixStyles),
+		KeyModDisabledPrefixStyle: enumSpec(
+			definitionsByKey[KeyModDisabledPrefixStyle],
+			defaultDisabledPrefix,
+			disabledPrefixStyles,
+		),
 		KeyModReturnToGamebananaAfterDownload: boolSpec(definitionsByKey[KeyModReturnToGamebananaAfterDownload], false),
 		KeyModAutoInspectFix:                  boolSpec(definitionsByKey[KeyModAutoInspectFix], true),
-		KeyModCompressionMethod:               enumSpec(definitionsByKey[KeyModCompressionMethod], "xpress4k", modCompressionMethods),
-		KeyModCompressionThresholdMib:         clampedIntSpec(definitionsByKey[KeyModCompressionThresholdMib], 1, 1, 64),
-		KeyModCompressionEnabled:              boolSpec(definitionsByKey[KeyModCompressionEnabled], false),
+		KeyModCompressionMethod: enumSpec(
+			definitionsByKey[KeyModCompressionMethod],
+			"xpress4k",
+			modCompressionMethods,
+		),
+		KeyModCompressionThresholdMib: clampedIntSpec(
+			definitionsByKey[KeyModCompressionThresholdMib],
+			1,
+			1,
+			64,
+		),
+		KeyModCompressionEnabled: boolSpec(definitionsByKey[KeyModCompressionEnabled], false),
 
 		KeyToolsTouchProfileLlmProtocol: {
 			def: definitionsByKey[KeyToolsTouchProfileLlmProtocol],
@@ -303,7 +334,12 @@ func buildSpecs() map[string]spec {
 				if !ok {
 					return transferBandwidthDefault
 				}
-				return clampIntegerSetting(float64(n), transferBandwidthMin, transferBandwidthMax, transferBandwidthDefault)
+				return clampIntegerSetting(
+					float64(n),
+					transferBandwidthMin,
+					transferBandwidthMax,
+					transferBandwidthDefault,
+				)
 			},
 			normalize: func(_ *Setting, value any) any {
 				n, ok := asFloat(value)
@@ -317,7 +353,9 @@ func buildSpecs() map[string]spec {
 				if !ok {
 					return formatInt(transferBandwidthDefault)
 				}
-				return formatInt(clampIntegerSetting(n, transferBandwidthMin, transferBandwidthMax, transferBandwidthDefault))
+				return formatInt(
+					clampIntegerSetting(n, transferBandwidthMin, transferBandwidthMax, transferBandwidthDefault),
+				)
 			},
 			afterSet: func(s *Setting, _ context.Context, value any) error {
 				n, _ := asFloat(value)
@@ -376,8 +414,16 @@ func buildSpecs() map[string]spec {
 			},
 		},
 
-		KeyModelViewerToneMapping: enumSpec(definitionsByKey[KeyModelViewerToneMapping], defaultToneMapping, modelViewerToneMappings),
-		KeyModelViewerEnvironment: enumSpec(definitionsByKey[KeyModelViewerEnvironment], defaultEnvironment, modelViewerEnvironments),
+		KeyModelViewerToneMapping: enumSpec(
+			definitionsByKey[KeyModelViewerToneMapping],
+			defaultToneMapping,
+			modelViewerToneMappings,
+		),
+		KeyModelViewerEnvironment: enumSpec(
+			definitionsByKey[KeyModelViewerEnvironment],
+			defaultEnvironment,
+			modelViewerEnvironments,
+		),
 		KeyModelViewerExposure: {
 			def: definitionsByKey[KeyModelViewerExposure],
 			getDefault: func(*Setting) any {

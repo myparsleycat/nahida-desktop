@@ -31,13 +31,25 @@ func TestModelViewerLoadCancellation(t *testing.T) {
 		t.Run(marker, func(t *testing.T) {
 			dir := t.TempDir()
 			writeViewerGeometry(t, dir)
-			if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte("[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\ndrawindexed = 3, 0, 0\n"+viewerBodyResources), 0o600); err != nil {
+			if err := os.WriteFile(
+				filepath.Join(dir, "mod.ini"),
+				[]byte(
+					"[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\ndrawindexed = 3, 0, 0\n"+viewerBodyResources,
+				),
+				0o600,
+			); err != nil {
 				t.Fatal(err)
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			protocol := infra.NewProtocol()
-			log := infra.NewLogWithOptions(infra.LogOptions{Dev: true, DisableFile: true, Writer: viewerCancelWriter{cancel: cancel, marker: marker}})
+			log := infra.NewLogWithOptions(
+				infra.LogOptions{
+					Dev:         true,
+					DisableFile: true,
+					Writer:      viewerCancelWriter{cancel: cancel, marker: marker},
+				},
+			)
 			service := NewWithOptions(Options{Protocol: protocol, Log: log})
 			if marker == "before-load" {
 				cancel()
@@ -89,9 +101,14 @@ func TestModelViewerTextureJobsCancelDuringActiveHash(t *testing.T) {
 		})
 	}
 	t.Cleanup(func() { modelViewerTextureIOHook = nil })
-	output, stats, err := runModelViewerTextureJobs(ctx, modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85}, 1, []modelViewerTextureJob{
-		{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
-	})
+	output, stats, err := runModelViewerTextureJobs(
+		ctx,
+		modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85},
+		1,
+		[]modelViewerTextureJob{
+			{path: path, resourceName: "BodyDiffuse", keys: []string{"body"}, role: "diffuse", canonicalKey: "body"},
+		},
+	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
@@ -113,7 +130,14 @@ func TestModelViewerCanceledPayloadDoesNotWrite(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	transport := ModelViewerTransport{Textures: make(map[string]ModelViewerTextureTransport)}
-	err := writeModelViewerPayload(ctx, service, sessionID, &transport, nil, map[string]modelViewerTexturePayload{"texture": {Bytes: []byte("data")}})
+	err := writeModelViewerPayload(
+		ctx,
+		service,
+		sessionID,
+		&transport,
+		nil,
+		map[string]modelViewerTexturePayload{"texture": {Bytes: []byte("data")}},
+	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
@@ -128,7 +152,11 @@ func TestModelViewerCanceledPayloadDoesNotWrite(t *testing.T) {
 
 func TestModelViewerFailedLoadPreservesExistingSession(t *testing.T) {
 	dir := t.TempDir()
-	fixture := loadViewerFixture(t, dir, "[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\ndrawindexed = 3, 0, 0\n"+viewerBodyResources)
+	fixture := loadViewerFixture(
+		t,
+		dir,
+		"[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\ndrawindexed = 3, 0, 0\n"+viewerBodyResources,
+	)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := fixture.service.LoadModViewer(ctx, dir); !errors.Is(err, context.Canceled) {

@@ -178,19 +178,40 @@ func (t *Tools) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShape
 		return BodyShapeSessionDescriptor{}, errors.New("tools service has no protocol service")
 	}
 	sessionID := t.protocol.CreateMemorySession()
-	session := &bodyShapeSession{loaded: loaded, descriptors: make(map[string]BodyShapeMeshDescriptor), exports: make(map[string]bodyShapeExportSlot)}
+	session := &bodyShapeSession{
+		loaded:      loaded,
+		descriptors: make(map[string]BodyShapeMeshDescriptor),
+		exports:     make(map[string]bodyShapeExportSlot),
+	}
 	t.bodyShapeMu.Lock()
 	t.bodyShapeSessions[sessionID] = session
 	t.bodyShapeMu.Unlock()
-	descriptor := BodyShapeSessionDescriptor{SessionID: sessionID, ModRoot: loaded.ModRoot, INIPath: loaded.INIPath, Meshes: make([]BodyShapeMeshSummary, 0, len(loaded.Meshes))}
+	descriptor := BodyShapeSessionDescriptor{
+		SessionID: sessionID,
+		ModRoot:   loaded.ModRoot,
+		INIPath:   loaded.INIPath,
+		Meshes:    make([]BodyShapeMeshSummary, 0, len(loaded.Meshes)),
+	}
 	for _, mesh := range loaded.Meshes {
-		descriptor.Meshes = append(descriptor.Meshes, BodyShapeMeshSummary{ID: mesh.ID, Name: mesh.Name, VertexCount: mesh.VertexCount, IndexCount: len(mesh.Indices), PositionStride: mesh.PositionStride})
+		descriptor.Meshes = append(
+			descriptor.Meshes,
+			BodyShapeMeshSummary{
+				ID:             mesh.ID,
+				Name:           mesh.Name,
+				VertexCount:    mesh.VertexCount,
+				IndexCount:     len(mesh.Indices),
+				PositionStride: mesh.PositionStride,
+			},
+		)
 	}
 	return descriptor, nil
 }
 
 //wails:ignore
-func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput) (result BodyShapeExportResult, err error) {
+func (t *Tools) BodyShapeExport(
+	ctx context.Context,
+	input BodyShapeExportInput,
+) (result BodyShapeExportResult, err error) {
 	sourceRoot, err := filepath.Abs(input.ModRoot)
 	if err != nil {
 		return result, err
@@ -216,7 +237,8 @@ func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput)
 	baseName := bodyShapedFolderBaseName(filepath.Base(sourceRoot))
 	targetName := t.fs.GetUniqueName(baseName, existing)
 	targetRoot := filepath.Join(parent, targetName)
-	if !sameOrChildPath(parent, targetRoot) || samePathFold(parent, targetRoot) || samePathFold(sourceRoot, targetRoot) {
+	if !sameOrChildPath(parent, targetRoot) || samePathFold(parent, targetRoot) ||
+		samePathFold(sourceRoot, targetRoot) {
 		return result, errors.New("invalid body shape target path")
 	}
 	copied := false
@@ -231,7 +253,10 @@ func (t *Tools) BodyShapeExport(ctx context.Context, input BodyShapeExportInput)
 		return result, err
 	}
 	copied = true
-	if removeErr := os.Remove(filepath.Join(targetRoot, shaderFixMarker)); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+	if removeErr := os.Remove(
+		filepath.Join(targetRoot, shaderFixMarker),
+	); removeErr != nil &&
+		!errors.Is(removeErr, os.ErrNotExist) {
 		return result, removeErr
 	}
 	remappedPosition, err := remapBodyShapePath(input.PositionPath, sourceRoot, targetRoot)
@@ -280,20 +305,46 @@ func (t *Tools) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput) 
 	if mesh == nil {
 		return BodyShapeMeshDescriptor{}, contractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
 	}
-	positionsURL, err := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":positions", float32Bytes(mesh.Positions), "application/octet-stream")
+	positionsURL, err := t.protocol.StoreMemoryBuffer(
+		input.SessionID,
+		"mesh:"+mesh.ID+":positions",
+		float32Bytes(mesh.Positions),
+		"application/octet-stream",
+	)
 	if err != nil {
 		return BodyShapeMeshDescriptor{}, err
 	}
-	descriptor := BodyShapeMeshDescriptor{SessionID: input.SessionID, MeshID: mesh.ID, PositionsURL: positionsURL, PositionsCount: len(mesh.Positions), IndexCount: len(mesh.Indices), BlendBytes: len(mesh.BlendBytes), PositionStride: mesh.PositionStride, VectorLayout: mesh.VectorLayout, BlendStride: mesh.BlendStride, Bones: mesh.Bones}
+	descriptor := BodyShapeMeshDescriptor{
+		SessionID:      input.SessionID,
+		MeshID:         mesh.ID,
+		PositionsURL:   positionsURL,
+		PositionsCount: len(mesh.Positions),
+		IndexCount:     len(mesh.Indices),
+		BlendBytes:     len(mesh.BlendBytes),
+		PositionStride: mesh.PositionStride,
+		VectorLayout:   mesh.VectorLayout,
+		BlendStride:    mesh.BlendStride,
+		Bones:          mesh.Bones,
+	}
 	if len(mesh.Indices) > 0 {
-		value, storeErr := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":indices", uint32Bytes(mesh.Indices), "application/octet-stream")
+		value, storeErr := t.protocol.StoreMemoryBuffer(
+			input.SessionID,
+			"mesh:"+mesh.ID+":indices",
+			uint32Bytes(mesh.Indices),
+			"application/octet-stream",
+		)
 		if storeErr != nil {
 			return BodyShapeMeshDescriptor{}, storeErr
 		}
 		descriptor.IndicesURL = &value
 	}
 	if len(mesh.BlendBytes) > 0 {
-		value, storeErr := t.protocol.StoreMemoryBuffer(input.SessionID, "mesh:"+mesh.ID+":blend", mesh.BlendBytes, "application/octet-stream")
+		value, storeErr := t.protocol.StoreMemoryBuffer(
+			input.SessionID,
+			"mesh:"+mesh.ID+":blend",
+			mesh.BlendBytes,
+			"application/octet-stream",
+		)
 		if storeErr != nil {
 			return BodyShapeMeshDescriptor{}, storeErr
 		}
@@ -303,7 +354,10 @@ func (t *Tools) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput) 
 	return descriptor, nil
 }
 
-func (t *Tools) BodyShapeBeginExport(ctx context.Context, input BodyShapeBeginExportInput) (BodyShapeExportUpload, error) {
+func (t *Tools) BodyShapeBeginExport(
+	ctx context.Context,
+	input BodyShapeBeginExportInput,
+) (BodyShapeExportUpload, error) {
 	if err := ctx.Err(); err != nil {
 		return BodyShapeExportUpload{}, err
 	}
@@ -340,7 +394,10 @@ func (t *Tools) BodyShapeBeginExport(ctx context.Context, input BodyShapeBeginEx
 	return result, nil
 }
 
-func (t *Tools) BodyShapeCommitExport(ctx context.Context, input BodyShapeCommitExportInput) (BodyShapeExportResult, error) {
+func (t *Tools) BodyShapeCommitExport(
+	ctx context.Context,
+	input BodyShapeCommitExportInput,
+) (BodyShapeExportResult, error) {
 	session, err := t.requireBodyShapeSession(input.SessionID)
 	if err != nil {
 		return BodyShapeExportResult{}, err
@@ -378,7 +435,22 @@ func (t *Tools) BodyShapeCommitExport(ctx context.Context, input BodyShapeCommit
 			return BodyShapeExportResult{}, err
 		}
 	}
-	return t.BodyShapeExport(ctx, BodyShapeExportInput{ModRoot: session.loaded.ModRoot, PositionPath: mesh.PositionPath, PositionStride: mesh.PositionStride, Positions: positions, VectorPath: mesh.VectorPath, VectorLayout: mesh.VectorLayout, Weights: weights, Amount: input.Amount, AxisScale: input.AxisScale, WriteChangeLog: input.WriteChangeLog, ChangeSummary: input.ChangeSummary})
+	return t.BodyShapeExport(
+		ctx,
+		BodyShapeExportInput{
+			ModRoot:        session.loaded.ModRoot,
+			PositionPath:   mesh.PositionPath,
+			PositionStride: mesh.PositionStride,
+			Positions:      positions,
+			VectorPath:     mesh.VectorPath,
+			VectorLayout:   mesh.VectorLayout,
+			Weights:        weights,
+			Amount:         input.Amount,
+			AxisScale:      input.AxisScale,
+			WriteChangeLog: input.WriteChangeLog,
+			ChangeSummary:  input.ChangeSummary,
+		},
+	)
 }
 
 func (t *Tools) BodyShapeCloseSession(_ context.Context, sessionID string) (BodyShapeOK, error) {
@@ -467,7 +539,10 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 		return BodyShapeLoadResult{}, err
 	}
 	if _, err := os.Stat(resolved); err != nil {
-		return BodyShapeLoadResult{}, infra.WithCause(contractError(fmt.Sprintf("Path does not exist: %s", resolved)), err)
+		return BodyShapeLoadResult{}, infra.WithCause(
+			contractError(fmt.Sprintf("Path does not exist: %s", resolved)),
+			err,
+		)
 	}
 	iniPath, sections, err := loadModINIBundle(resolved)
 	if err != nil {
@@ -532,7 +607,10 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 			if mesh.IndexPath == nil {
 				mesh.IndexPath, mesh.IndexRelativePath = &indexPath, stringPtr(index.Filename)
 			}
-			mesh.GLBMeshNames = append(mesh.GLBMeshNames, strings.TrimSuffix(filepath.Base(filepath.FromSlash(index.Filename)), filepath.Ext(index.Filename)))
+			mesh.GLBMeshNames = append(
+				mesh.GLBMeshNames,
+				strings.TrimSuffix(filepath.Base(filepath.FromSlash(index.Filename)), filepath.Ext(index.Filename)),
+			)
 		}
 		if vector, ok := matchCompanionResource(position, vectors); ok {
 			if vectorPath, resolveErr := resolveBodyShapeResource(modRoot, vector.Filename); resolveErr == nil {
@@ -541,7 +619,9 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					if stride == 0 {
 						stride = 8
 					}
-					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, stringPtr(vector.Filename), &stride
+					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, stringPtr(
+						vector.Filename,
+					), &stride
 					if stride == 8 && stat.Size() == int64(vertexCount*8) {
 						mesh.VectorLayout = stringPtr("snorm8-tangent-normal")
 					}
@@ -558,7 +638,9 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					if validationErr := validateBlendBuffer(len(raw), vertexCount, stride); validationErr != nil {
 						warn(fmt.Sprintf("Skipping blend buffer %s: %s", blendPath, validationErr))
 					} else {
-						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, stringPtr(blend.Filename), &stride
+						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, stringPtr(
+							blend.Filename,
+						), &stride
 						mesh.BlendBytes = raw
 						mesh.Bones = listBlendBones(raw, vertexCount, stride)
 					}
@@ -580,7 +662,10 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 	}
 	original, err := os.ReadFile(positionPath)
 	if err != nil {
-		return BodyShapeExportResult{}, infra.WithCause(contractError(fmt.Sprintf("Position buffer not found: %s", positionPath)), err)
+		return BodyShapeExportResult{}, infra.WithCause(
+			contractError(fmt.Sprintf("Position buffer not found: %s", positionPath)),
+			err,
+		)
 	}
 	expected := len(input.Positions) / 3
 	if len(input.Positions)%3 != 0 {
@@ -594,13 +679,22 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 		return BodyShapeExportResult{}, err
 	}
 	if len(written) != len(original) {
-		return BodyShapeExportResult{}, contractError(fmt.Sprintf("Refusing to write position buffer: size would change from %d to %d", len(original), len(written)))
+		return BodyShapeExportResult{}, contractError(
+			fmt.Sprintf(
+				"Refusing to write position buffer: size would change from %d to %d",
+				len(original),
+				len(written),
+			),
+		)
 	}
 	if err := writeBodyFileAtomic(positionPath, written, 0o600); err != nil {
 		return BodyShapeExportResult{}, err
 	}
 	result := BodyShapeExportResult{PositionPath: positionPath, PositionBytes: len(written)}
-	if input.VectorPath != nil && input.VectorLayout != nil && *input.VectorLayout == "snorm8-tangent-normal" && len(input.Weights) > 0 && input.Amount != nil && len(input.AxisScale) == 3 {
+	if input.VectorPath != nil && input.VectorLayout != nil && *input.VectorLayout == "snorm8-tangent-normal" &&
+		len(input.Weights) > 0 &&
+		input.Amount != nil &&
+		len(input.AxisScale) == 3 {
 		vectorPath, absErr := filepath.Abs(*input.VectorPath)
 		if absErr != nil {
 			return result, absErr
@@ -645,9 +739,15 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 			lines[3] = "- 방향 버퍼: " + relativeVector
 		}
 		if summary := input.ChangeSummary; summary != nil && len(summary.AxisScale) == 3 {
-			lines = append(lines,
+			lines = append(
+				lines,
 				fmt.Sprintf("- 강도: %v", summary.Amount),
-				fmt.Sprintf("- 축 스케일: X=%v, Y=%v, Z=%v", summary.AxisScale[0], summary.AxisScale[1], summary.AxisScale[2]),
+				fmt.Sprintf(
+					"- 축 스케일: X=%v, Y=%v, Z=%v",
+					summary.AxisScale[0],
+					summary.AxisScale[1],
+					summary.AxisScale[2],
+				),
 				fmt.Sprintf("- 이동 정점 수: %d", summary.MovedVertices),
 				fmt.Sprintf("- 최대 이동 거리: %.6f", summary.MaxDisplacement),
 			)
@@ -696,7 +796,9 @@ func writeBodyPositions(original []byte, stride int, positions []float32) ([]byt
 		return nil, err
 	}
 	if len(positions) != count*3 {
-		return nil, contractError(fmt.Sprintf("Position count %v does not match vertex count %d", float64(len(positions))/3, count))
+		return nil, contractError(
+			fmt.Sprintf("Position count %v does not match vertex count %d", float64(len(positions))/3, count),
+		)
 	}
 	out := append([]byte(nil), original...)
 	for index, value := range positions {
@@ -885,7 +987,9 @@ func remapBodyShapePathWithResolver(
 		}
 	}
 	relative, err := filepath.Rel(comparisonRoot, comparisonPath)
-	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+	if err != nil || relative == "." || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relative) {
 		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
 	}
 	return filepath.Join(targetRoot, relative), nil

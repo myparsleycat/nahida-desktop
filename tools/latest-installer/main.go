@@ -211,7 +211,11 @@ func verifyDigest(digest string, actual []byte) error {
 	}
 
 	if len(actual) != sha256.Size || subtle.ConstantTimeCompare(expected, actual) != 1 {
-		return fmt.Errorf("digest mismatch: expected %s, got %s", hex.EncodeToString(expected), hex.EncodeToString(actual))
+		return fmt.Errorf(
+			"digest mismatch: expected %s, got %s",
+			hex.EncodeToString(expected),
+			hex.EncodeToString(actual),
+		)
 	}
 
 	return nil

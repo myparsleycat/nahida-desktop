@@ -323,7 +323,8 @@ func (p *literalParser) parseString() (string, error) {
 	}
 	var result strings.Builder
 	for p.pos < len(p.source) {
-		if triple && p.pos+2 < len(p.source) && p.source[p.pos] == quote && p.source[p.pos+1] == quote && p.source[p.pos+2] == quote {
+		if triple && p.pos+2 < len(p.source) && p.source[p.pos] == quote && p.source[p.pos+1] == quote &&
+			p.source[p.pos+2] == quote {
 			p.pos += 3
 			return result.String(), nil
 		}

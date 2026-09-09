@@ -24,9 +24,20 @@ type TouchBoneComponentSelection struct {
 
 func defaultTouchZoneSettings() TouchZoneSettings {
 	return TouchZoneSettings{
-		MaskStrength: 1, MaskCurve: 1, MaskRadiusScale: 1,
-		MaskCoreAttenuation: "off", StrengthPreset: "normal", PhysicsPreset: "normal",
-		Advanced: TouchAdvancedSettings{Radius: 0.2, Strength: 1.15, Damping: 0.86, Spring: 0.176, MaxOffset: 0.065, Falloff: 1.8},
+		MaskStrength:        1,
+		MaskCurve:           1,
+		MaskRadiusScale:     1,
+		MaskCoreAttenuation: "off",
+		StrengthPreset:      "normal",
+		PhysicsPreset:       "normal",
+		Advanced: TouchAdvancedSettings{
+			Radius:    0.2,
+			Strength:  1.15,
+			Damping:   0.86,
+			Spring:    0.176,
+			MaxOffset: 0.065,
+			Falloff:   1.8,
+		},
 	}
 }
 
@@ -34,7 +45,8 @@ func normalizeTouchZoneSettings(input TouchZoneSettings) (TouchZoneSettings, err
 	if input.StrengthPreset != "light" && input.StrengthPreset != "normal" && input.StrengthPreset != "strong" {
 		return input, fmt.Errorf("invalid touch strength preset: %s", input.StrengthPreset)
 	}
-	if input.PhysicsPreset != "soft" && input.PhysicsPreset != "normal" && input.PhysicsPreset != "firm" && input.PhysicsPreset != "custom" {
+	if input.PhysicsPreset != "soft" && input.PhysicsPreset != "normal" && input.PhysicsPreset != "firm" &&
+		input.PhysicsPreset != "custom" {
 		return input, fmt.Errorf("invalid touch physics preset: %s", input.PhysicsPreset)
 	}
 	if err := finiteRange(input.MaskStrength, 0, 2, "Touch mask strength out of range"); err != nil {
@@ -46,7 +58,9 @@ func normalizeTouchZoneSettings(input TouchZoneSettings) (TouchZoneSettings, err
 	if err := finiteRange(input.MaskRadiusScale, 0.1, 2, "Touch mask radius scale out of range"); err != nil {
 		return input, err
 	}
-	if input.MaskCoreAttenuation != "off" && input.MaskCoreAttenuation != "linear" && input.MaskCoreAttenuation != "sqrt" && input.MaskCoreAttenuation != "pow" {
+	if input.MaskCoreAttenuation != "off" && input.MaskCoreAttenuation != "linear" &&
+		input.MaskCoreAttenuation != "sqrt" &&
+		input.MaskCoreAttenuation != "pow" {
 		return input, fmt.Errorf("invalid touch mask core attenuation: %q", input.MaskCoreAttenuation)
 	}
 	ranges := []struct {
@@ -90,9 +104,22 @@ func resolveTouchJiggleParams(settings TouchZoneSettings, objectID int) TouchJig
 	return params
 }
 
-func analyzeTouchComponentBones(component TouchComponentAnalysis, positions []float32, blendBytes []byte, blendStride int, selections []TouchBoneZoneSelection, threshold [2]float64, objectID int) TouchComponentDraft {
+func analyzeTouchComponentBones(
+	component TouchComponentAnalysis,
+	positions []float32,
+	blendBytes []byte,
+	blendStride int,
+	selections []TouchBoneZoneSelection,
+	threshold [2]float64,
+	objectID int,
+) TouchComponentDraft {
 	unsupported := func(warning string) TouchComponentDraft {
-		return TouchComponentDraft{ComponentID: component.ID, ObjectID: objectID, Zones: []TouchZoneSpec{}, Warnings: []string{warning}}
+		return TouchComponentDraft{
+			ComponentID: component.ID,
+			ObjectID:    objectID,
+			Zones:       []TouchZoneSpec{},
+			Warnings:    []string{warning},
+		}
 	}
 	if component.SupportGrade == "C" {
 		return unsupported("Component support grade is C (unsupported mesh layout)")
@@ -120,7 +147,17 @@ func analyzeTouchComponentBones(component TouchComponentAnalysis, positions []fl
 		}
 		minimum := min(12, max(3, int(math.Floor(float64(component.VertexCount)*.01))))
 		if len(seeds) < minimum {
-			warnings = append(warnings, fmt.Sprintf("Bone %d: only %d vertices within threshold %g-%g (need %d)", selection.BoneID, len(seeds), threshold[0], threshold[1], minimum))
+			warnings = append(
+				warnings,
+				fmt.Sprintf(
+					"Bone %d: only %d vertices within threshold %g-%g (need %d)",
+					selection.BoneID,
+					len(seeds),
+					threshold[0],
+					threshold[1],
+					minimum,
+				),
+			)
 			continue
 		}
 		center := [3]float64{}
@@ -157,5 +194,12 @@ func analyzeTouchComponentBones(component TouchComponentAnalysis, positions []fl
 		}
 		return TouchComponentDraft{ComponentID: component.ID, ObjectID: objectID, Zones: zones, Warnings: warnings}
 	}
-	return TouchComponentDraft{ComponentID: component.ID, Interactive: true, ObjectID: objectID, Zones: zones, Confidence: 1, Warnings: warnings}
+	return TouchComponentDraft{
+		ComponentID: component.ID,
+		Interactive: true,
+		ObjectID:    objectID,
+		Zones:       zones,
+		Confidence:  1,
+		Warnings:    warnings,
+	}
 }

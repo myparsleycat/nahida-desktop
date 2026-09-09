@@ -90,7 +90,10 @@ type touchCachedPreview struct {
 	bufferID   string
 }
 
-func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadInput) (result TouchModInspection, err error) {
+func (t *Tools) TouchProfilePrepare(
+	ctx context.Context,
+	input TouchProfileLoadInput,
+) (result TouchModInspection, err error) {
 	stage := "validate"
 	defer func() {
 		if err != nil {
@@ -144,18 +147,52 @@ func (t *Tools) TouchProfilePrepare(ctx context.Context, input TouchProfileLoadI
 		return result, err
 	}
 	protocolID := t.protocol.CreateMemorySession()
-	session := &touchSession{Analysis: analysis, Dir: sessionDir, ProtocolID: protocolID, Mesh: map[string]touchMeshBuffers{}, Topology: map[string]TouchMeshDescriptor{}, Preview: map[string]touchCachedPreview{}}
+	session := &touchSession{
+		Analysis:   analysis,
+		Dir:        sessionDir,
+		ProtocolID: protocolID,
+		Mesh:       map[string]touchMeshBuffers{},
+		Topology:   map[string]TouchMeshDescriptor{},
+		Preview:    map[string]touchCachedPreview{},
+	}
 	t.touchMu.Lock()
 	t.touchSessions[id] = session
 	t.touchMu.Unlock()
-	result = TouchModInspection{SessionID: id, ModRoot: analysis.ModRoot, INIRelativePath: analysis.INIRelativePath, SourceFilesRelativePaths: analysis.SourceFilesRelativePaths, SupportGrade: analysis.SupportGrade, SupportReasons: analysis.SupportReasons, Components: []TouchComponentInspection{}}
+	result = TouchModInspection{
+		SessionID:                id,
+		ModRoot:                  analysis.ModRoot,
+		INIRelativePath:          analysis.INIRelativePath,
+		SourceFilesRelativePaths: analysis.SourceFilesRelativePaths,
+		SupportGrade:             analysis.SupportGrade,
+		SupportReasons:           analysis.SupportReasons,
+		Components:               []TouchComponentInspection{},
+	}
 	for _, component := range analysis.Components {
-		result.Components = append(result.Components, TouchComponentInspection{ID: component.ID, Name: component.Name, Kind: component.Kind, SupportGrade: component.SupportGrade, InteractiveCandidate: component.InteractiveCandidate, VertexCount: component.VertexCount, IndexCount: component.IndexCount, VariantKey: component.VariantKey, VariantCondition: component.VariantCondition, ObjectMaps: component.ObjectMaps, HasBlend: component.BlendPath != nil, Bones: component.Bones})
+		result.Components = append(
+			result.Components,
+			TouchComponentInspection{
+				ID:                   component.ID,
+				Name:                 component.Name,
+				Kind:                 component.Kind,
+				SupportGrade:         component.SupportGrade,
+				InteractiveCandidate: component.InteractiveCandidate,
+				VertexCount:          component.VertexCount,
+				IndexCount:           component.IndexCount,
+				VariantKey:           component.VariantKey,
+				VariantCondition:     component.VariantCondition,
+				ObjectMaps:           component.ObjectMaps,
+				HasBlend:             component.BlendPath != nil,
+				Bones:                component.Bones,
+			},
+		)
 	}
 	return result, nil
 }
 
-func (t *Tools) TouchProfileGetMeshDescriptor(ctx context.Context, input TouchProfilePreviewInput) (TouchMeshDescriptor, error) {
+func (t *Tools) TouchProfileGetMeshDescriptor(
+	ctx context.Context,
+	input TouchProfilePreviewInput,
+) (TouchMeshDescriptor, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return TouchMeshDescriptor{}, err
@@ -181,20 +218,46 @@ func (t *Tools) TouchProfileGetMeshDescriptor(ctx context.Context, input TouchPr
 		session.Mesh[input.ComponentID] = mesh
 	}
 	revision := session.Analysis.MeshHash + ":" + input.ComponentID
-	positionsURL, err := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":positions", float32Bytes(mesh.Positions), "application/octet-stream")
+	positionsURL, err := t.protocol.StoreMemoryBuffer(
+		session.ProtocolID,
+		"topology:"+input.ComponentID+":positions",
+		float32Bytes(mesh.Positions),
+		"application/octet-stream",
+	)
 	if err != nil {
 		return TouchMeshDescriptor{}, err
 	}
-	descriptor := TouchMeshDescriptor{SessionID: input.SessionID, ComponentID: input.ComponentID, TopologyRevision: revision, VertexCount: len(mesh.Positions) / 3, PositionsURL: positionsURL, PositionsCount: len(mesh.Positions), IndexCount: len(mesh.Indices), Bones: mesh.Bones, BlendStride: mesh.BlendStride, BlendBytes: len(mesh.BlendBytes)}
+	descriptor := TouchMeshDescriptor{
+		SessionID:        input.SessionID,
+		ComponentID:      input.ComponentID,
+		TopologyRevision: revision,
+		VertexCount:      len(mesh.Positions) / 3,
+		PositionsURL:     positionsURL,
+		PositionsCount:   len(mesh.Positions),
+		IndexCount:       len(mesh.Indices),
+		Bones:            mesh.Bones,
+		BlendStride:      mesh.BlendStride,
+		BlendBytes:       len(mesh.BlendBytes),
+	}
 	if len(mesh.Indices) > 0 {
-		value, storeErr := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":indices", uint32Bytes(mesh.Indices), "application/octet-stream")
+		value, storeErr := t.protocol.StoreMemoryBuffer(
+			session.ProtocolID,
+			"topology:"+input.ComponentID+":indices",
+			uint32Bytes(mesh.Indices),
+			"application/octet-stream",
+		)
 		if storeErr != nil {
 			return TouchMeshDescriptor{}, storeErr
 		}
 		descriptor.IndicesURL = &value
 	}
 	if len(mesh.BlendBytes) > 0 {
-		value, storeErr := t.protocol.StoreMemoryBuffer(session.ProtocolID, "topology:"+input.ComponentID+":blend", mesh.BlendBytes, "application/octet-stream")
+		value, storeErr := t.protocol.StoreMemoryBuffer(
+			session.ProtocolID,
+			"topology:"+input.ComponentID+":blend",
+			mesh.BlendBytes,
+			"application/octet-stream",
+		)
 		if storeErr != nil {
 			return TouchMeshDescriptor{}, storeErr
 		}
@@ -204,7 +267,10 @@ func (t *Tools) TouchProfileGetMeshDescriptor(ctx context.Context, input TouchPr
 	return descriptor, nil
 }
 
-func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchProfileAnalyzeInput) (result TouchDraft, err error) {
+func (t *Tools) TouchProfileAnalyzeComponents(
+	ctx context.Context,
+	input TouchProfileAnalyzeInput,
+) (result TouchDraft, err error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return result, err
@@ -254,7 +320,12 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 		}
 	}()
 	for index, component := range selectedComponents {
-		emitProgress("preview", .1+float64(index)/float64(max(len(selectedComponents), 1))*.25, "Loading mesh for "+component.Name, component.ID)
+		emitProgress(
+			"preview",
+			.1+float64(index)/float64(max(len(selectedComponents), 1))*.25,
+			"Loading mesh for "+component.Name,
+			component.ID,
+		)
 		mesh, loadErr := loadTouchMeshBuffers(component)
 		if loadErr != nil {
 			return result, loadErr
@@ -262,14 +333,32 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 		meshCache[component.ID] = mesh
 		var draft TouchComponentDraft
 		if mode == "bone" {
-			emitProgress("vision", .35+float64(index)/float64(max(len(selectedComponents), 1))*.4, "Analyzing bone zones for "+component.Name, component.ID)
+			emitProgress(
+				"vision",
+				.35+float64(index)/float64(max(len(selectedComponents), 1))*.4,
+				"Analyzing bone zones for "+component.Name,
+				component.ID,
+			)
 			stride := 0
 			if mesh.BlendStride != nil {
 				stride = *mesh.BlendStride
 			}
-			draft = analyzeTouchComponentBones(component, mesh.Positions, mesh.BlendBytes, stride, selectionMap[component.ID], threshold, objectID)
+			draft = analyzeTouchComponentBones(
+				component,
+				mesh.Positions,
+				mesh.BlendBytes,
+				stride,
+				selectionMap[component.ID],
+				threshold,
+				objectID,
+			)
 		} else {
-			draft = TouchComponentDraft{ComponentID: component.ID, ObjectID: objectID, Zones: []TouchZoneSpec{}, Warnings: []string{"Vision LLM mode is disabled"}}
+			draft = TouchComponentDraft{
+				ComponentID: component.ID,
+				ObjectID:    objectID,
+				Zones:       []TouchZoneSpec{},
+				Warnings:    []string{"Vision LLM mode is disabled"},
+			}
 		}
 		draft.ObjectID = objectID
 		if draft.Interactive {
@@ -281,7 +370,15 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 		if selected[component.ID] {
 			continue
 		}
-		drafts = append(drafts, TouchComponentDraft{ComponentID: component.ID, ObjectID: objectID, Zones: []TouchZoneSpec{}, Warnings: []string{"Component was not selected for touch analysis"}})
+		drafts = append(
+			drafts,
+			TouchComponentDraft{
+				ComponentID: component.ID,
+				ObjectID:    objectID,
+				Zones:       []TouchZoneSpec{},
+				Warnings:    []string{"Component was not selected for touch analysis"},
+			},
+		)
 	}
 	warnings := []string{}
 	for _, reason := range session.Analysis.SupportReasons {
@@ -300,7 +397,19 @@ func (t *Tools) TouchProfileAnalyzeComponents(ctx context.Context, input TouchPr
 	}
 	canApply := touchDraftAutoApplyable(interactive)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result = TouchDraft{SessionID: input.SessionID, CreatedAt: now, SourceModRoot: session.Analysis.SourceRoot, Analysis: session.Analysis, Components: drafts, ModelName: map[bool]string{true: "bone-weight", false: ""}[mode == "bone"], LLM: TouchProfileLLMSettings{Protocol: "openai-compatible", Reasoning: "auto"}, PromptVersion: touchPromptVersion, RuntimeVersion: touchRuntimeVersion, CanAutoApply: canApply, Warnings: warnings}
+	result = TouchDraft{
+		SessionID:      input.SessionID,
+		CreatedAt:      now,
+		SourceModRoot:  session.Analysis.SourceRoot,
+		Analysis:       session.Analysis,
+		Components:     drafts,
+		ModelName:      map[bool]string{true: "bone-weight", false: ""}[mode == "bone"],
+		LLM:            TouchProfileLLMSettings{Protocol: "openai-compatible", Reasoning: "auto"},
+		PromptVersion:  touchPromptVersion,
+		RuntimeVersion: touchRuntimeVersion,
+		CanAutoApply:   canApply,
+		Warnings:       warnings,
+	}
 	if err = writeTouchDraft(session.Dir, result); err != nil {
 		return result, err
 	}
@@ -344,7 +453,10 @@ func (t *Tools) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (To
 }
 
 //wails:ignore
-func (t *Tools) TouchProfileUpdateZoneSettings(ctx context.Context, input TouchProfileUpdateZoneSettingsInput) (TouchDraft, error) {
+func (t *Tools) TouchProfileUpdateZoneSettings(
+	ctx context.Context,
+	input TouchProfileUpdateZoneSettingsInput,
+) (TouchDraft, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return TouchDraft{}, err
@@ -395,7 +507,10 @@ func (t *Tools) TouchProfileUpdateZoneSettings(ctx context.Context, input TouchP
 	return next, nil
 }
 
-func (t *Tools) TouchProfileUpdateZoneSettingsBatch(ctx context.Context, input TouchProfileUpdateZoneSettingsBatchInput) (TouchProfileUpdateResult, error) {
+func (t *Tools) TouchProfileUpdateZoneSettingsBatch(
+	ctx context.Context,
+	input TouchProfileUpdateZoneSettingsBatchInput,
+) (TouchProfileUpdateResult, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return TouchProfileUpdateResult{}, err
@@ -406,7 +521,9 @@ func (t *Tools) TouchProfileUpdateZoneSettingsBatch(ctx context.Context, input T
 		return TouchProfileUpdateResult{}, err
 	}
 	if session.Operation != "" {
-		return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch profile is busy with %s", session.Operation))
+		return TouchProfileUpdateResult{}, contractError(
+			fmt.Sprintf("Touch profile is busy with %s", session.Operation),
+		)
 	}
 	if session.Draft == nil {
 		return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
@@ -443,7 +560,9 @@ func (t *Tools) TouchProfileUpdateZoneSettingsBatch(ctx context.Context, input T
 			}
 		}
 		if !found {
-			return TouchProfileUpdateResult{}, contractError(fmt.Sprintf("Touch zone not found: %s:%s", change.ComponentID, change.ZoneID))
+			return TouchProfileUpdateResult{}, contractError(
+				fmt.Sprintf("Touch zone not found: %s:%s", change.ComponentID, change.ZoneID),
+			)
 		}
 	}
 	if err = writeTouchDraft(session.Dir, next); err != nil {
@@ -457,7 +576,10 @@ func (t *Tools) TouchProfileUpdateZoneSettingsBatch(ctx context.Context, input T
 	return TouchProfileUpdateResult{OK: true, DraftRevision: session.DraftRevision, PreviewChanged: previewChanged}, nil
 }
 
-func (t *Tools) TouchProfileGetPreviewDescriptor(ctx context.Context, input TouchProfilePreviewInput) (TouchProfilePreviewDescriptor, error) {
+func (t *Tools) TouchProfileGetPreviewDescriptor(
+	ctx context.Context,
+	input TouchProfilePreviewInput,
+) (TouchProfilePreviewDescriptor, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return TouchProfilePreviewDescriptor{}, err
@@ -471,15 +593,21 @@ func (t *Tools) TouchProfileGetPreviewDescriptor(ctx context.Context, input Touc
 		return preview.descriptor, nil
 	}
 	if session.Draft == nil {
-		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
+		return TouchProfilePreviewDescriptor{}, contractError(
+			fmt.Sprintf("Touch profile has no draft: %s", input.SessionID),
+		)
 	}
 	component := findTouchComponent(session.Analysis.Components, input.ComponentID)
 	if component == nil {
-		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch component not found: %s", input.ComponentID))
+		return TouchProfilePreviewDescriptor{}, contractError(
+			fmt.Sprintf("Touch component not found: %s", input.ComponentID),
+		)
 	}
 	draft := findTouchDraft(session.Draft.Components, input.ComponentID)
 	if draft == nil {
-		return TouchProfilePreviewDescriptor{}, contractError(fmt.Sprintf("Touch component draft not found: %s", input.ComponentID))
+		return TouchProfilePreviewDescriptor{}, contractError(
+			fmt.Sprintf("Touch component draft not found: %s", input.ComponentID),
+		)
 	}
 	mesh, ok := session.Mesh[input.ComponentID]
 	if !ok {
@@ -490,7 +618,14 @@ func (t *Tools) TouchProfileGetPreviewDescriptor(ctx context.Context, input Touc
 		session.Mesh[input.ComponentID] = mesh
 	}
 	t.emitTouchProgress(input.SessionID, "preview", .4, "Building mask for "+component.Name, component.ID)
-	masks, err := buildTouchVertexMasksContext(ctx, component.VertexCount, mesh.Positions, mesh.Indices, *component, draft.Zones)
+	masks, err := buildTouchVertexMasksContext(
+		ctx,
+		component.VertexCount,
+		mesh.Positions,
+		mesh.Indices,
+		*component,
+		draft.Zones,
+	)
 	if err != nil {
 		return TouchProfilePreviewDescriptor{}, err
 	}
@@ -503,11 +638,24 @@ func (t *Tools) TouchProfileGetPreviewDescriptor(ctx context.Context, input Touc
 	}
 	session.PreviewRevision++
 	bufferID := fmt.Sprintf("preview:%s:%d", component.ID, session.PreviewRevision)
-	weightsURL, err := t.protocol.StoreMemoryBuffer(session.ProtocolID, bufferID, float32Bytes(weights), "application/octet-stream")
+	weightsURL, err := t.protocol.StoreMemoryBuffer(
+		session.ProtocolID,
+		bufferID,
+		float32Bytes(weights),
+		"application/octet-stream",
+	)
 	if err != nil {
 		return TouchProfilePreviewDescriptor{}, err
 	}
-	descriptor := TouchProfilePreviewDescriptor{SessionID: input.SessionID, ComponentID: component.ID, PreviewRevision: session.PreviewRevision, VertexCount: component.VertexCount, WeightsURL: weightsURL, WeightsCount: len(weights), Zones: zones}
+	descriptor := TouchProfilePreviewDescriptor{
+		SessionID:       input.SessionID,
+		ComponentID:     component.ID,
+		PreviewRevision: session.PreviewRevision,
+		VertexCount:     component.VertexCount,
+		WeightsURL:      weightsURL,
+		WeightsCount:    len(weights),
+		Zones:           zones,
+	}
 	if previous, ok := session.Preview[input.ComponentID]; ok {
 		t.protocol.RemoveMemoryBuffer(session.ProtocolID, previous.bufferID)
 	}
@@ -539,7 +687,9 @@ func (t *Tools) TouchProfileApply(ctx context.Context, input TouchProfileApplyIn
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.Draft == nil {
-		return TouchApplyResult{}, contractError(fmt.Sprintf("Touch profile has no draft to apply: %s", input.SessionID))
+		return TouchApplyResult{}, contractError(
+			fmt.Sprintf("Touch profile has no draft to apply: %s", input.SessionID),
+		)
 	}
 	if err = assertTouchDraftCanApply(*session.Draft, input.Force); err != nil {
 		return TouchApplyResult{}, err
@@ -590,7 +740,14 @@ func (t *Tools) TouchProfileApply(ctx context.Context, input TouchProfileApplyIn
 	}
 	session.Applied = &touchAppliedProfile{OutputRoot: targetRoot, SourceRoot: disabledSource, Reenable: reenable}
 	t.emitTouchProgress(input.SessionID, "complete", 1, "Touch mod created", "")
-	return TouchApplyResult{SessionID: input.SessionID, OutputModRoot: targetRoot, SourceModRoot: disabledSource, ReenableSourceOnRollback: reenable, Validation: validation, Warnings: session.Draft.Warnings}, nil
+	return TouchApplyResult{
+		SessionID:                input.SessionID,
+		OutputModRoot:            targetRoot,
+		SourceModRoot:            disabledSource,
+		ReenableSourceOnRollback: reenable,
+		Validation:               validation,
+		Warnings:                 session.Draft.Warnings,
+	}, nil
 }
 
 func (t *Tools) TouchProfileRegenerate(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
@@ -601,7 +758,9 @@ func (t *Tools) TouchProfileRegenerate(ctx context.Context, input TouchProfileAp
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.Draft == nil {
-		return TouchApplyResult{}, contractError(fmt.Sprintf("Touch profile has no draft to regenerate: %s", input.SessionID))
+		return TouchApplyResult{}, contractError(
+			fmt.Sprintf("Touch profile has no draft to regenerate: %s", input.SessionID),
+		)
 	}
 	if err = assertTouchDraftCanApply(*session.Draft, input.Force); err != nil {
 		return TouchApplyResult{}, err
@@ -640,10 +799,20 @@ func (t *Tools) TouchProfileRegenerate(ctx context.Context, input TouchProfileAp
 		return TouchApplyResult{}, err
 	}
 	t.emitTouchProgress(input.SessionID, "complete", 1, "Touch mod regenerated", "")
-	return TouchApplyResult{SessionID: input.SessionID, OutputModRoot: outputRoot, SourceModRoot: sourceRoot, ReenableSourceOnRollback: session.Applied.Reenable, Validation: validation, Warnings: session.Draft.Warnings}, nil
+	return TouchApplyResult{
+		SessionID:                input.SessionID,
+		OutputModRoot:            outputRoot,
+		SourceModRoot:            sourceRoot,
+		ReenableSourceOnRollback: session.Applied.Reenable,
+		Validation:               validation,
+		Warnings:                 session.Draft.Warnings,
+	}, nil
 }
 
-func (t *Tools) TouchProfileRollback(ctx context.Context, input TouchProfileRollbackInput) (TouchRollbackResult, error) {
+func (t *Tools) TouchProfileRollback(
+	ctx context.Context,
+	input TouchProfileRollbackInput,
+) (TouchRollbackResult, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {
 		return TouchRollbackResult{}, err
@@ -655,8 +824,11 @@ func (t *Tools) TouchProfileRollback(ctx context.Context, input TouchProfileRoll
 	}
 	outputRoot, _ := filepath.Abs(input.OutputModRoot)
 	sourceRoot, _ := filepath.Abs(input.SourceModRoot)
-	if !samePathFold(session.Applied.OutputRoot, outputRoot) || !samePathFold(session.Applied.SourceRoot, sourceRoot) || session.Applied.Reenable != input.ReenableSourceOnRollback {
-		return TouchRollbackResult{}, contractError("Touch rollback paths do not match the active touch profile session")
+	if !samePathFold(session.Applied.OutputRoot, outputRoot) || !samePathFold(session.Applied.SourceRoot, sourceRoot) ||
+		session.Applied.Reenable != input.ReenableSourceOnRollback {
+		return TouchRollbackResult{}, contractError(
+			"Touch rollback paths do not match the active touch profile session",
+		)
 	}
 	if samePathFold(outputRoot, sourceRoot) {
 		return TouchRollbackResult{}, contractError("Touch rollback refused: output and source paths are identical")
@@ -692,10 +864,19 @@ func (t *Tools) TouchProfileRollback(ctx context.Context, input TouchProfileRoll
 		session.Draft = &next
 	}
 	session.Applied = nil
-	return TouchRollbackResult{OutputModRoot: outputRoot, SourceModRoot: restored, RemovedOutput: true, ReenabledSource: reenabled}, nil
+	return TouchRollbackResult{
+		OutputModRoot:   outputRoot,
+		SourceModRoot:   restored,
+		RemovedOutput:   true,
+		ReenabledSource: reenabled,
+	}, nil
 }
 
-func (t *Tools) generateTouchOutput(ctx context.Context, session *touchSession, sourceRoot, targetRoot, operation string) (TouchValidationResult, error) {
+func (t *Tools) generateTouchOutput(
+	ctx context.Context,
+	session *touchSession,
+	sourceRoot, targetRoot, operation string,
+) (TouchValidationResult, error) {
 	draft := session.Draft
 	if draft == nil {
 		return TouchValidationResult{}, contractError("Touch profile has no draft for output generation")
@@ -727,18 +908,36 @@ func (t *Tools) generateTouchOutput(ctx context.Context, session *touchSession, 
 	assets := []TouchGeneratedAssets{}
 	for index, component := range interactive {
 		componentDraft := findTouchDraft(draft.Components, component.ID)
-		t.emitTouchProgress(draft.SessionID, "assets", .3+float64(index)/float64(len(interactive))*.3, "Generating touch assets for "+component.Name, component.ID)
+		t.emitTouchProgress(
+			draft.SessionID,
+			"assets",
+			.3+float64(index)/float64(len(interactive))*.3,
+			"Generating touch assets for "+component.Name,
+			component.ID,
+		)
 		mesh, ok := session.Mesh[component.ID]
 		if !ok {
 			if operation == "regenerate" {
-				return TouchValidationResult{}, contractError(fmt.Sprintf("Touch mesh cache is missing for %s; analyze the mod again before regenerating", component.ID))
+				return TouchValidationResult{}, contractError(
+					fmt.Sprintf(
+						"Touch mesh cache is missing for %s; analyze the mod again before regenerating",
+						component.ID,
+					),
+				)
 			}
 			mesh, err = loadTouchMeshBuffers(component)
 			if err != nil {
 				return TouchValidationResult{}, err
 			}
 		}
-		asset, assetErr := writeTouchComponentAssets(targetRoot, component, *componentDraft, mesh.Positions, mesh.Indices, touchAssetPrefix(component, namespace))
+		asset, assetErr := writeTouchComponentAssets(
+			targetRoot,
+			component,
+			*componentDraft,
+			mesh.Positions,
+			mesh.Indices,
+			touchAssetPrefix(component, namespace),
+		)
 		if assetErr != nil {
 			return TouchValidationResult{}, assetErr
 		}
@@ -758,7 +957,16 @@ func (t *Tools) generateTouchOutput(ctx context.Context, session *touchSession, 
 		return TouchValidationResult{}, err
 	}
 	analysis.Components = interactive
-	if _, _, err = compileTouchINI(sourceINI, targetINI, analysis, draft.Components, assets, namespace, varPrefix, t.touchUseFrameGuard(ctx)); err != nil {
+	if _, _, err = compileTouchINI(
+		sourceINI,
+		targetINI,
+		analysis,
+		draft.Components,
+		assets,
+		namespace,
+		varPrefix,
+		t.touchUseFrameGuard(ctx),
+	); err != nil {
 		return TouchValidationResult{}, err
 	}
 	t.emitTouchProgress(draft.SessionID, "validate", .9, "Validating generated touch mod", "")
@@ -968,7 +1176,8 @@ func resolveTouchRelative(root, relative string) (string, error) {
 func remapTouchPath(path, sourceRoot, targetRoot string) (string, error) {
 	absolute, _ := filepath.Abs(path)
 	relative, err := filepath.Rel(sourceRoot, absolute)
-	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relative) {
 		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
 	}
 	return filepath.Join(targetRoot, relative), nil
@@ -1053,7 +1262,10 @@ func replaceTouchOutput(staging, output string) (err error) {
 	newMoved = true
 	if err = os.RemoveAll(backup); err != nil {
 		if newMoved {
-			err = infra.WithCause(err, infra.AnnotateError(os.RemoveAll(output), infra.Diagnostic{Stage: "rollback-remove"}))
+			err = infra.WithCause(
+				err,
+				infra.AnnotateError(os.RemoveAll(output), infra.Diagnostic{Stage: "rollback-remove"}),
+			)
 		}
 		if oldMoved {
 			if restoreErr := os.Rename(backup, output); restoreErr != nil {
@@ -1066,7 +1278,8 @@ func replaceTouchOutput(staging, output string) (err error) {
 }
 func sanitizeTouchNamespace(root string) string {
 	base := filepath.Base(root)
-	if regexp.MustCompile(`(?i)^(body|face|hair|leg|legs|outfit|parts?)$`).MatchString(touchDisabledPrefixRE.ReplaceAllString(base, "")) {
+	if regexp.MustCompile(`(?i)^(body|face|hair|leg|legs|outfit|parts?)$`).
+		MatchString(touchDisabledPrefixRE.ReplaceAllString(base, "")) {
 		base = filepath.Base(filepath.Dir(root))
 	}
 	base = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(touchDisabledPrefixRE.ReplaceAllString(base, ""), "")
@@ -1095,7 +1308,15 @@ func copyTouchRuntimeShaders(outputRoot string) error {
 	return nil
 }
 func writeTouchManifest(root, version string) error {
-	raw, err := json.MarshalIndent(map[string]string{"kind": touchProfileManifestKind, "runtimeVersion": version, "createdAt": time.Now().UTC().Format(time.RFC3339Nano)}, "", "  ")
+	raw, err := json.MarshalIndent(
+		map[string]string{
+			"kind":           touchProfileManifestKind,
+			"runtimeVersion": version,
+			"createdAt":      time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		"",
+		"  ",
+	)
 	if err != nil {
 		return err
 	}

@@ -130,10 +130,26 @@ func TestValidateSessionJSONRequiresElectronSchemaFieldsAndTypes(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "empty strings remain valid zod strings", payload: validEmptyStrings},
-		{name: "missing session token", payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":""},"user":{"id":"","name":"","email":"","role":"","image":null},"drive":{"id":"","rootId":""}}`, wantErr: true},
-		{name: "missing nullable image", payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":""},"drive":{"id":"","rootId":""}}`, wantErr: true},
-		{name: "wrong nullable image type", payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":"","image":1},"drive":{"id":"","rootId":""}}`, wantErr: true},
-		{name: "wrong drive root ID type", payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":"","image":"avatar"},"drive":{"id":"","rootId":1}}`, wantErr: true},
+		{
+			name:    "missing session token",
+			payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":""},"user":{"id":"","name":"","email":"","role":"","image":null},"drive":{"id":"","rootId":""}}`,
+			wantErr: true,
+		},
+		{
+			name:    "missing nullable image",
+			payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":""},"drive":{"id":"","rootId":""}}`,
+			wantErr: true,
+		},
+		{
+			name:    "wrong nullable image type",
+			payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":"","image":1},"drive":{"id":"","rootId":""}}`,
+			wantErr: true,
+		},
+		{
+			name:    "wrong drive root ID type",
+			payload: `{"session":{"id":"","userId":"","createdAt":"","updatedAt":"","expiresAt":"","token":""},"user":{"id":"","name":"","email":"","role":"","image":"avatar"},"drive":{"id":"","rootId":1}}`,
+			wantErr: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -572,7 +588,10 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 		sseCookie = r.Header.Get("Cookie")
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "event: ping\ndata: {}\n\n")
-		_, _ = io.WriteString(w, "event: state-response\ndata: {\"state\":\"st\",\"status\":\"loggedin\",\"session\":{\"userId\":\"user-id\",\"token\":\"login-token\"}}\n\n")
+		_, _ = io.WriteString(
+			w,
+			"event: state-response\ndata: {\"state\":\"st\",\"status\":\"loggedin\",\"session\":{\"userId\":\"user-id\",\"token\":\"login-token\"}}\n\n",
+		)
 	})
 	mux.HandleFunc("/api/auth/get-session", func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

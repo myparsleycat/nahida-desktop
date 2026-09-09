@@ -26,14 +26,22 @@ func newModelViewerLoadBudget(root string) (*modelViewerLoadBudget, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &modelViewerLoadBudget{root: filepath.Clean(resolved), seen: make(map[string]bool), resolved: make(map[string]string)}, nil
+	return &modelViewerLoadBudget{
+		root:     filepath.Clean(resolved),
+		seen:     make(map[string]bool),
+		resolved: make(map[string]string),
+	}, nil
 }
 
 func (b *modelViewerLoadBudget) validateResources(baseDir string, resources []modelViewerResource) error {
 	return b.validateReferencedResources(baseDir, resources, nil)
 }
 
-func (b *modelViewerLoadBudget) validateReferencedResources(baseDir string, resources []modelViewerResource, referenced map[string]bool) error {
+func (b *modelViewerLoadBudget) validateReferencedResources(
+	baseDir string,
+	resources []modelViewerResource,
+	referenced map[string]bool,
+) error {
 	for _, resource := range resources {
 		if referenced != nil && !referenced[modelViewerNormalizeKey(resource.Name)] {
 			continue
@@ -162,7 +170,8 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 
 func modelViewerPathWithin(root, target string) bool {
 	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relative) {
 		return false
 	}
 	return true
@@ -170,5 +179,6 @@ func modelViewerPathWithin(root, target string) bool {
 
 func isModelViewerBufferResource(resource modelViewerResource) bool {
 	extension := strings.ToLower(filepath.Ext(resource.Filename))
-	return resource.Stride > 0 || extension == ".buf" || extension == ".vb" || extension == ".ib" || strings.Contains(strings.ToUpper(resource.Format), "UINT")
+	return resource.Stride > 0 || extension == ".buf" || extension == ".vb" || extension == ".ib" ||
+		strings.Contains(strings.ToUpper(resource.Format), "UINT")
 }

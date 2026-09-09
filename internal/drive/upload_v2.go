@@ -155,7 +155,12 @@ func nteGroupKey(file FinalUploadFile) string {
 	return file.ParentID + "\x00" + strings.ToLower(norm.NFC.String(base))
 }
 
-func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, files []FinalUploadFile, onProgress func(UploadPlanProgress)) (UploadPlan, error) {
+func (d *Drive) planUploadV2(
+	ctx context.Context,
+	currentID, requestID string,
+	files []FinalUploadFile,
+	onProgress func(UploadPlanProgress),
+) (UploadPlan, error) {
 	if d == nil || d.http == nil {
 		return UploadPlan{}, errDriveHTTPUnconfigured
 	}
@@ -169,7 +174,10 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 			maxSize = limit
 		}
 		if file.Size > maxSize {
-			return UploadPlan{}, &UploadV2Error{Code: "upload_file_too_large", Message: file.Name + ": upload_file_too_large"}
+			return UploadPlan{}, &UploadV2Error{
+				Code:    "upload_file_too_large",
+				Message: file.Name + ": upload_file_too_large",
+			}
 		}
 	}
 	pages, err := paginateUploadFiles(files, min(rules.MaxPlanFiles, max(len(files), 1)))
@@ -219,7 +227,13 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			raw, readErr := io.ReadAll(response.Body)
 			_ = response.Body.Close()
-			return UploadPlan{}, infra.AnnotateError(infra.WithCause(uploadV2APIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), response.StatusCode), readErr), infra.HTTPDiagnostic(http.MethodPost, rawURL, "read-upload-plan-error", response))
+			return UploadPlan{}, infra.AnnotateError(
+				infra.WithCause(
+					uploadV2APIError(decodeAPIValue(response.Header.Get("Content-Type"), raw), response.StatusCode),
+					readErr,
+				),
+				infra.HTTPDiagnostic(http.MethodPost, rawURL, "read-upload-plan-error", response),
+			)
 		}
 		completed := false
 		parseErr := parseSSE(response.Body, func(event, data string) error {
@@ -236,7 +250,13 @@ func (d *Drive) planUploadV2(ctx context.Context, currentID, requestID string, f
 					return fmt.Errorf("decode upload plan progress: %w", err)
 				}
 				if onProgress != nil {
-					onProgress(UploadPlanProgress{Phase: progress.Phase, Processed: planned + progress.Processed, Total: len(files)})
+					onProgress(
+						UploadPlanProgress{
+							Phase:     progress.Phase,
+							Processed: planned + progress.Processed,
+							Total:     len(files),
+						},
+					)
 				}
 			case "complete":
 				var complete struct {

@@ -54,7 +54,10 @@ func inspectTouchProfileBundle(root string, sourcePaths []string) (touchInputDet
 			Kind string `json:"kind"`
 		}
 		if json.Unmarshal(raw, &manifest) == nil && manifest.Kind == touchProfileManifestKind {
-			return touchDetectionWithFiles(root, touchInputDetection{Status: "generated", Reasons: []string{"Nahida Touch Profile manifest found"}}), nil
+			return touchDetectionWithFiles(
+				root,
+				touchInputDetection{Status: "generated", Reasons: []string{"Nahida Touch Profile manifest found"}},
+			), nil
 		}
 	}
 	var builder strings.Builder
@@ -68,16 +71,32 @@ func inspectTouchProfileBundle(root string, sourcePaths []string) (touchInputDet
 	}
 	text := builder.String()
 	states := touchMarkerNamespaces(text, regexp.MustCompile(`(?i)Nahida Touch Profile state\s*\(\s*([^\s)]+)\s*\)`))
-	runtimes := touchMarkerNamespaces(text, regexp.MustCompile(`(?i)Nahida Touch Profile runtime\s*\(\s*([^\s)]+)\s*\)`))
+	runtimes := touchMarkerNamespaces(
+		text,
+		regexp.MustCompile(`(?i)Nahida Touch Profile runtime\s*\(\s*([^\s)]+)\s*\)`),
+	)
 	for _, state := range states {
 		for _, runtime := range runtimes {
 			if state == runtime {
-				return touchDetectionWithFiles(root, touchInputDetection{Status: "generated", Reasons: []string{"Nahida Touch Profile INI markers found"}, Namespace: state}), nil
+				return touchDetectionWithFiles(
+					root,
+					touchInputDetection{
+						Status:    "generated",
+						Reasons:   []string{"Nahida Touch Profile INI markers found"},
+						Namespace: state,
+					},
+				), nil
 			}
 		}
 	}
 	if len(states) > 0 || len(runtimes) > 0 {
-		return touchDetectionWithFiles(root, touchInputDetection{Status: "incomplete", Reasons: []string{"Incomplete Nahida Touch Profile INI markers found"}}), nil
+		return touchDetectionWithFiles(
+			root,
+			touchInputDetection{
+				Status:  "incomplete",
+				Reasons: []string{"Incomplete Nahida Touch Profile INI markers found"},
+			},
+		), nil
 	}
 	missing := missingTouchShaders(root)
 	lower := strings.ToLower(text)
@@ -86,7 +105,10 @@ func inspectTouchProfileBundle(root string, sourcePaths []string) (touchInputDet
 		references = references && strings.Contains(lower, name)
 	}
 	if len(missing) == 0 && references {
-		return touchInputDetection{Status: "suspected", Reasons: []string{"Touch runtime shaders and INI references found"}}, nil
+		return touchInputDetection{
+			Status:  "suspected",
+			Reasons: []string{"Touch runtime shaders and INI references found"},
+		}, nil
 	}
 	return touchInputDetection{Status: "none", Reasons: []string{}}, nil
 }

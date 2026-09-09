@@ -63,34 +63,87 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}()
 
 	if err := platform.SetAppUserModelID("com.nahida"); err != nil && rt.log != nil {
-		_ = infra.ReportError(rt.log, err, "App:setAppUserModelID", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:setAppUserModelID", Stage: "background"})
+		_ = infra.ReportError(
+			rt.log,
+			err,
+			"App:setAppUserModelID",
+			infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:setAppUserModelID", Stage: "background"},
+		)
 	}
 	if executable, err := os.Executable(); err != nil {
 		if rt.log != nil {
-			_ = infra.ReportError(rt.log, err, "App:registerURLProtocol", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:registerURLProtocol", Stage: "background"})
+			_ = infra.ReportError(
+				rt.log,
+				err,
+				"App:registerURLProtocol",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "App:registerURLProtocol",
+					Stage:     "background",
+				},
+			)
 		}
 	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil && rt.log != nil {
-		_ = infra.ReportError(rt.log, err, "App:registerURLProtocol", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:registerURLProtocol", Stage: "background"})
+		_ = infra.ReportError(
+			rt.log,
+			err,
+			"App:registerURLProtocol",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "App:registerURLProtocol",
+				Stage:     "background",
+			},
+		)
 	}
 	if err := platform.SyncInstalledVersion(); err != nil && rt.log != nil {
-		_ = infra.ReportError(rt.log, err, "App:syncInstalledVersion", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncInstalledVersion", Stage: "background"})
+		_ = infra.ReportError(
+			rt.log,
+			err,
+			"App:syncInstalledVersion",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "App:syncInstalledVersion",
+				Stage:     "background",
+			},
+		)
 	}
 	autostartSync := func(enabled bool) error {
 		return syncAutostart(app.Autostart, enabled)
 	}
 	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
-	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent, syncModelViewerMenu))
+	rt.setting.UseHooks(
+		runtimeSettingHooks(
+			rt.log,
+			rt.transfer,
+			rt.updater,
+			rt.tools,
+			rt.window,
+			autostartSync,
+			emitAppEvent,
+			syncModelViewerMenu,
+		),
+	)
 	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
 		syncModelViewerMenu(language)
 	} else if rt.log != nil {
-		_ = infra.ReportError(rt.log, langErr, "App:syncModelViewerMenu", infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "read-language"})
+		_ = infra.ReportError(
+			rt.log,
+			langErr,
+			"App:syncModelViewerMenu",
+			infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "read-language"},
+		)
 	}
 	enabled, err := rt.setting.GetRunOnStartup(context.Background())
 	if err == nil {
 		err = autostartSync(enabled)
 	}
 	if err != nil && rt.log != nil {
-		_ = infra.ReportError(rt.log, err, "App:syncAutostart", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncAutostart", Stage: "background"})
+		_ = infra.ReportError(
+			rt.log,
+			err,
+			"App:syncAutostart",
+			infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncAutostart", Stage: "background"},
+		)
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)

@@ -77,7 +77,11 @@ func TestModelViewerPackedObjectDrawExtractsWithoutVB1(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "InazumaCloset.buf"), position, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "InazumaClosetHead.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "InazumaClosetHead.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	leftover := make([]byte, 3*4)
@@ -172,7 +176,11 @@ func TestModelViewerPackedObjectHeuristicWinsWithoutShader(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Object.buf"), position, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ObjectHead.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "ObjectHead.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	iniText := `[TextureOverrideObjectPosition]
@@ -297,10 +305,18 @@ func TestModelViewerPackedShaderDoesNotReclassifyUnrelatedVB1(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeModelViewerHalfTexcoord(t, filepath.Join(dir, "BodyTexcoord.buf"), 3, 0.5, 0)
-	if err := os.WriteFile(filepath.Join(dir, "InazumaClosetHead.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "InazumaClosetHead.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedObjectAnimShader), 0o600); err != nil {
@@ -369,7 +385,8 @@ filename = body.ib
 	}
 	closetGeo := byFile["InazumaCloset.buf"]
 	bodyGeo := byFile["BodyFloat.buf"]
-	if closetGeo == nil || closetGeo.Position[0] != 1 || closetGeo.Texcoord0[0] != 0.25 || closetGeo.Texcoord0[1] != 0.25 {
+	if closetGeo == nil || closetGeo.Position[0] != 1 || closetGeo.Texcoord0[0] != 0.25 ||
+		closetGeo.Texcoord0[1] != 0.25 {
 		t.Fatalf("packed closet = %#v", closetGeo)
 	}
 	if bodyGeo == nil || bodyGeo.Position[0] != 9 || bodyGeo.Position[1] != 8 || bodyGeo.Position[2] != 7 {
@@ -419,7 +436,11 @@ func TestModelViewerStride24ObjectFrameSwapWithoutPositionSuffix(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Fire.1.buf"), frame1, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "FireBody.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "FireBody.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	writeTextureFile(t, dir, "body.png", encodeTinyPNG())
@@ -519,13 +540,15 @@ filename = body.png
 	if len(meshes) != 2 {
 		t.Fatalf("scanned meshes = %d %#v", len(meshes), meshes)
 	}
-	if meshes[0].geometry == nil || meshes[0].geometry.Position[0] != 1 || meshes[0].geometry.Position[1] != 2 || meshes[0].geometry.Position[2] != 3 {
+	if meshes[0].geometry == nil || meshes[0].geometry.Position[0] != 1 || meshes[0].geometry.Position[1] != 2 ||
+		meshes[0].geometry.Position[2] != 3 {
 		t.Fatalf("frame 0 position = %v", meshes[0].geometry.Position)
 	}
 	if meshes[1].geometry == nil || meshes[1].geometry.Position[0] != 10 {
 		t.Fatalf("frame 1 position = %v", meshes[1].geometry.Position)
 	}
-	if len(meshes[0].geometry.Texcoord0) < 2 || meshes[0].geometry.Texcoord0[0] != 0.25 || meshes[0].geometry.Texcoord0[1] != 0.25 {
+	if len(meshes[0].geometry.Texcoord0) < 2 || meshes[0].geometry.Texcoord0[0] != 0.25 ||
+		meshes[0].geometry.Texcoord0[1] != 0.25 {
 		t.Fatalf("texcoord after V-flip = %v", meshes[0].geometry.Texcoord0)
 	}
 
@@ -553,7 +576,12 @@ func TestModelViewerStride24PackedHeuristicRejectsFloat3(t *testing.T) {
 	if modelViewerPositionLooksPackedObject(data, 24) {
 		t.Fatal("float3 stride 24 should not look packed")
 	}
-	layout, err := inferModelViewerFmtLayout(modelViewerBufferGroup{Key: "Fire", VB: data, Stride: 24}, nil, "mihoyo", "DXGI_FORMAT_R32_UINT")
+	layout, err := inferModelViewerFmtLayout(
+		modelViewerBufferGroup{Key: "Fire", VB: data, Stride: 24},
+		nil,
+		"mihoyo",
+		"DXGI_FORMAT_R32_UINT",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,11 +599,17 @@ func TestModelViewerStride24PackedHeuristicAcceptsHalf4(t *testing.T) {
 	if !modelViewerPositionLooksPackedObject(data, 24) {
 		t.Fatal("half4 stride 24 should look packed")
 	}
-	layout, err := inferModelViewerFmtLayout(modelViewerBufferGroup{Key: "Fire", VB: data, Stride: 24}, nil, "mihoyo", "DXGI_FORMAT_R32_UINT")
+	layout, err := inferModelViewerFmtLayout(
+		modelViewerBufferGroup{Key: "Fire", VB: data, Stride: 24},
+		nil,
+		"mihoyo",
+		"DXGI_FORMAT_R32_UINT",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if layout.Stride != 24 || findModelViewerElement(layout, "POSITION", -1).Format != "DXGI_FORMAT_R16G16B16A16_FLOAT" {
+	if layout.Stride != 24 ||
+		findModelViewerElement(layout, "POSITION", -1).Format != "DXGI_FORMAT_R16G16B16A16_FLOAT" {
 		t.Fatalf("layout = %#v", layout)
 	}
 }

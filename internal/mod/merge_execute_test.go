@@ -236,7 +236,10 @@ func TestMergeModsFlattensTwoMultiChildNamespacePacks(t *testing.T) {
 		forwardKey: "]", backKey: "[",
 	})
 	service := setupMergeGame(t, root)
-	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, alphaDir, betaDir)); err != nil {
+	if _, err := service.MergeMods(
+		context.Background(),
+		namespaceMergeRequest(root, false, alphaDir, betaDir),
+	); err != nil {
 		t.Fatal(err)
 	}
 	master, err := os.ReadFile(filepath.Join(alphaDir, "MasterCharA.ini"))
@@ -311,7 +314,10 @@ func TestMergeModsInsertsMultiChildPackOntoExistingMaster(t *testing.T) {
 		forwardKey: "]", backKey: "[",
 	})
 	service := setupMergeGame(t, root)
-	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, hostDir, extraDir)); err != nil {
+	if _, err := service.MergeMods(
+		context.Background(),
+		namespaceMergeRequest(root, false, hostDir, extraDir),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(extraDir, "MasterBeta.ini")); !os.IsNotExist(err) {
@@ -635,7 +641,12 @@ func TestMergeModsReenablesClassicSourcesWhenLaterNestedMergeFails(t *testing.T)
 	extra := filepath.Join(root, "Extra")
 	aIni := writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI(""))
 	bIni := writeMergePackINI(t, packB, "CharA.ini", ordinaryMergeINI(""))
-	writeMergePackINI(t, wwmi, "mod.ini", "; WWMI ALPHA-2 INI\n[Constants]\nglobal $object_guid = 100001\n[TextureOverrideComponent0]\nhash = beef0001\n")
+	writeMergePackINI(
+		t,
+		wwmi,
+		"mod.ini",
+		"; WWMI ALPHA-2 INI\n[Constants]\nglobal $object_guid = 100001\n[TextureOverrideComponent0]\nhash = beef0001\n",
+	)
 	writeMergePackINI(t, extra, "CharA.ini", ordinaryMergeINI(""))
 	service := setupMergeGame(t, root)
 	_, err := service.MergeMods(context.Background(), MergeModsRequest{
@@ -684,7 +695,10 @@ func TestMergeModsStagesPacksThroughTemporaryPathsWhenInPlaceDestinationsCollide
 	writeMergePackINI(t, disabledPackA, "CharA.ini", ordinaryMergeINI("abcdef01"))
 	writeMergePackINI(t, packA, "CharA.ini", ordinaryMergeINI("abcdef02"))
 	service := setupMergeGame(t, root)
-	if _, err := service.MergeMods(context.Background(), namespaceMergeRequest(root, false, disabledPackA, packA)); err != nil {
+	if _, err := service.MergeMods(
+		context.Background(),
+		namespaceMergeRequest(root, false, disabledPackA, packA),
+	); err != nil {
 		t.Fatal(err)
 	}
 	finalPackA := filepath.Join(root, "PackA")

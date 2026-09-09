@@ -12,7 +12,11 @@ func TestProtocolMemoryLoaderLifetimeAndRange(t *testing.T) {
 	p := NewProtocol()
 	session := p.CreateMemorySession()
 	calls := 0
-	url, err := p.StoreMemoryLoader(session, "lazy", func(context.Context) ([]byte, error) { calls++; return []byte("0123456789"), nil })
+	url, err := p.StoreMemoryLoader(
+		session,
+		"lazy",
+		func(context.Context) ([]byte, error) { calls++; return []byte("0123456789"), nil },
+	)
 	if err != nil || calls != 0 {
 		t.Fatalf("registration calls=%d err=%v", calls, err)
 	}
@@ -34,7 +38,11 @@ func TestProtocolMemoryLoaderLifetimeAndRange(t *testing.T) {
 func TestProtocolMemoryLoaderRejectsCompletionAfterCleanup(t *testing.T) {
 	p := NewProtocol()
 	session := p.CreateMemorySession()
-	url, err := p.StoreMemoryLoader(session, "lazy", func(context.Context) ([]byte, error) { p.CleanupMemorySession(session); return []byte("old"), nil })
+	url, err := p.StoreMemoryLoader(
+		session,
+		"lazy",
+		func(context.Context) ([]byte, error) { p.CleanupMemorySession(session); return []byte("old"), nil },
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

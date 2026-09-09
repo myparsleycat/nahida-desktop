@@ -34,7 +34,11 @@ func TestProxyNativeWebView(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
 				command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProxyNativeWebView$", "-test.v")
-				command.Env = append(os.Environ(), "NAHIDA_PROXY_WEBVIEW_TEST="+kind, "NAHIDA_PROXY_WEBVIEW_PROFILE="+t.TempDir())
+				command.Env = append(
+					os.Environ(),
+					"NAHIDA_PROXY_WEBVIEW_TEST="+kind,
+					"NAHIDA_PROXY_WEBVIEW_PROFILE="+t.TempDir(),
+				)
 				t.Cleanup(func() { time.Sleep(time.Second) }) // Wait for browser descendants to exit after the helper.
 				command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 				output, err := command.CombinedOutput()
@@ -78,7 +82,10 @@ func TestProxyNativeWebView(t *testing.T) {
 			_, _ = io.WriteString(w, script("remote"))
 		case "/image":
 			w.Header().Set("Content-Type", "image/svg+xml")
-			_, _ = io.WriteString(w, `<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>`)
+			_, _ = io.WriteString(
+				w,
+				`<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>`,
+			)
 		case "/fetch":
 			_, _ = io.WriteString(w, "proxied")
 		case "/sse":
@@ -157,17 +164,34 @@ func TestProxyNativeWebView(t *testing.T) {
 	}
 	defer func() { _ = relay.Close() }()
 	profile := os.Getenv("NAHIDA_PROXY_WEBVIEW_PROFILE")
-	app = application.New(application.Options{Name: "Nahida proxy integration", Windows: application.WindowsOptions{WebviewUserDataPath: profile, DisableQuitOnLastWindowClosed: true}, Assets: application.AssetOptions{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		t.Log("asset request", r.URL.Path)
-		_, _ = io.WriteString(w, script("main"))
-	})}})
+	app = application.New(
+		application.Options{
+			Name:    "Nahida proxy integration",
+			Windows: application.WindowsOptions{WebviewUserDataPath: profile, DisableQuitOnLastWindowClosed: true},
+			Assets: application.AssetOptions{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html")
+				t.Log("asset request", r.URL.Path)
+				_, _ = io.WriteString(w, script("main"))
+			})},
+		},
+	)
 	if err := app.SetWindowsBrowserArguments(relay.BrowserArguments()); err != nil {
 		t.Fatal(err)
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		app.Window.NewWithOptions(application.WebviewWindowOptions{Title: "Proxy test main", URL: "/", Hidden: true, Width: 400, Height: 300})
-		app.Window.NewWithOptions(application.WebviewWindowOptions{Title: "Proxy test remote", URL: originURL + "/page", Hidden: true, Width: 400, Height: 300, DisableWailsRuntime: true})
+		app.Window.NewWithOptions(
+			application.WebviewWindowOptions{Title: "Proxy test main", URL: "/", Hidden: true, Width: 400, Height: 300},
+		)
+		app.Window.NewWithOptions(
+			application.WebviewWindowOptions{
+				Title:               "Proxy test remote",
+				URL:                 originURL + "/page",
+				Hidden:              true,
+				Width:               400,
+				Height:              300,
+				DisableWailsRuntime: true,
+			},
+		)
 	})
 	timeout := time.AfterFunc(25*time.Second, func() { failed.Store(true); app.Quit() })
 	defer timeout.Stop()

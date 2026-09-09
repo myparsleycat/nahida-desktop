@@ -34,7 +34,8 @@ func TestRuntimeErrorAndPanicHandlersLogSanitizedDetails(t *testing.T) {
 		t.Fatalf("panic exit code = %d, want 1", exitCode)
 	}
 	got := output.String()
-	if strings.Count(got, " ERROR ") != 2 || !strings.Contains(got, `"operation":"runtime"`) || !strings.Contains(got, `"operation":"panic"`) {
+	if strings.Count(got, " ERROR ") != 2 || !strings.Contains(got, `"operation":"runtime"`) ||
+		!strings.Contains(got, `"operation":"panic"`) {
 		t.Fatalf("handler output = %q", got)
 	}
 	for _, secret := range []string{home, "runtime-secret", "panic-secret"} {
@@ -82,7 +83,8 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 		t.Fatalf("language event = %#v", got[0])
 	}
 	update, ok := got[1].data.(map[string]any)
-	if !ok || got[1].name != "setting:update" || update["key"] != setting.KeyGeneralLanguage || update["value"] != "ko" {
+	if !ok || got[1].name != "setting:update" || update["key"] != setting.KeyGeneralLanguage ||
+		update["value"] != "ko" {
 		t.Fatalf("setting event = %#v", got[1])
 	}
 	if got[2].name != "renderer:reload" || got[2].data != nil {

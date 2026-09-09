@@ -141,7 +141,11 @@ func TestTogglePersistRevalidatesAMatchingLearnedProfileBeforeSuppressingWrites(
 		t.Fatalf("suppressed variable was written: %s", raw)
 	}
 	if countPrefix(harness.info, "Suppressed continuously changing persist variables") != 1 {
-		t.Fatalf("suppress log count = %d (%v)", countPrefix(harness.info, "Suppressed continuously changing persist variables"), harness.info)
+		t.Fatalf(
+			"suppress log count = %d (%v)",
+			countPrefix(harness.info, "Suppressed continuously changing persist variables"),
+			harness.info,
+		)
 	}
 }
 
@@ -263,7 +267,11 @@ func TestTogglePersistLearnsAcrossPeriodicFlushesAndSavesAReusableModProfile(t *
 		t.Fatalf("updated count = %d (%v)", countPrefix(harness.info, "Updated persist variable"), harness.info)
 	}
 	if countPrefix(harness.info, "Suppressed continuously changing persist variables") != 1 {
-		t.Fatalf("suppress count = %d (%v)", countPrefix(harness.info, "Suppressed continuously changing persist variables"), harness.info)
+		t.Fatalf(
+			"suppress count = %d (%v)",
+			countPrefix(harness.info, "Suppressed continuously changing persist variables"),
+			harness.info,
+		)
 	}
 }
 
@@ -315,10 +323,13 @@ func createPersistHarness(t *testing.T, initial [][2]string) *persistHarness {
 }
 
 func (h *persistHarness) start() error {
-	return h.engine.Start([]persistImporter{{Key: "test", Folder: filepath.Dir(h.d3dxPath)}}, func(_ string, onModify func()) (func(), error) {
-		h.onModify = onModify
-		return func() {}, nil
-	})
+	return h.engine.Start(
+		[]persistImporter{{Key: "test", Folder: filepath.Dir(h.d3dxPath)}},
+		func(_ string, onModify func()) (func(), error) {
+			h.onModify = onModify
+			return func() {}, nil
+		},
+	)
 }
 
 func (h *persistHarness) trigger(state [][2]string) {

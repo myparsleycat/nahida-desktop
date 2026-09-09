@@ -167,13 +167,19 @@ func finalizeStagedDownload(stagingPath, destinationDir string) (stagedDownloadH
 			isFailedEntry := !wasMoved && entry.backupPath != ""
 			if wasMoved || isFailedEntry {
 				if removeErr := os.RemoveAll(entry.destinationPath); removeErr != nil && !os.IsNotExist(removeErr) {
-					restoreErrors = append(restoreErrors, infra.AnnotateError(removeErr, infra.Diagnostic{Stage: "rollback-remove"}))
+					restoreErrors = append(
+						restoreErrors,
+						infra.AnnotateError(removeErr, infra.Diagnostic{Stage: "rollback-remove"}),
+					)
 				}
 			}
 			if entry.backupPath != "" {
 				if _, statErr := os.Stat(entry.backupPath); statErr == nil {
 					if moveErr := stagedMove(entry.backupPath, entry.destinationPath); moveErr != nil {
-						restoreErrors = append(restoreErrors, infra.AnnotateError(moveErr, infra.Diagnostic{Stage: "rollback-restore"}))
+						restoreErrors = append(
+							restoreErrors,
+							infra.AnnotateError(moveErr, infra.Diagnostic{Stage: "rollback-restore"}),
+						)
 					}
 				}
 			}
@@ -211,7 +217,16 @@ func finalizeStagedDownload(stagingPath, destinationDir string) (stagedDownloadH
 			var cleanupErrors []error
 			for _, entry := range backups {
 				if entry.backupPath != "" {
-					cleanupErrors = append(cleanupErrors, infra.AnnotateError(os.RemoveAll(entry.backupPath), infra.Diagnostic{Stage: "commit-cleanup", Fields: map[string]any{"backupPath": entry.backupPath}}))
+					cleanupErrors = append(
+						cleanupErrors,
+						infra.AnnotateError(
+							os.RemoveAll(entry.backupPath),
+							infra.Diagnostic{
+								Stage:  "commit-cleanup",
+								Fields: map[string]any{"backupPath": entry.backupPath},
+							},
+						),
+					)
 				}
 			}
 			return errors.Join(cleanupErrors...)

@@ -75,8 +75,14 @@ func Run(ctx context.Context, target, tool string, pack *RulePack, log Logger) (
 		return Result{}, fmt.Errorf("unsupported ZZMI fixer tool %q", tool)
 	}
 	eng := &engine{
-		ctx: ctx, root: root, pack: pack, log: log,
-		buffers: map[string][]byte{}, bufferPaths: map[string]string{}, bufferKind: map[string]string{}, applied: map[string]map[string]bool{},
+		ctx:         ctx,
+		root:        root,
+		pack:        pack,
+		log:         log,
+		buffers:     map[string][]byte{},
+		bufferPaths: map[string]string{},
+		bufferKind:  map[string]string{},
+		applied:     map[string]map[string]bool{},
 	}
 	inis, err := eng.scanINI()
 	if err != nil {
@@ -156,10 +162,13 @@ func (e *engine) scanINI() ([]string, error) {
 			return nil
 		}
 		upper := strings.ToUpper(entry.Name())
-		if path != e.root && entry.IsDir() && (strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP")) {
+		if path != e.root && entry.IsDir() &&
+			(strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP")) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") || strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP") {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") ||
+			strings.HasPrefix(upper, "DISABLED") ||
+			strings.HasPrefix(upper, "DESKTOP") {
 			return nil
 		}
 		resolved, err := e.securePath(path)
@@ -226,7 +235,11 @@ func (e *engine) fixHashFile(filename string) ([]Change, error) {
 	return []Change{{Path: filename, Kind: "ini", Data: updated}}, nil
 }
 
-func (e *engine) executeCommand(filename, content, activeHash string, known map[string]bool, command Command) (string, []string, error) {
+func (e *engine) executeCommand(
+	filename, content, activeHash string,
+	known map[string]bool,
+	command Command,
+) (string, []string, error) {
 	switch command.Op {
 	case "log":
 		if e.log != nil && len(command.Args) > 0 {
@@ -309,7 +322,8 @@ func addIBChecks(content, hash string) string {
 		insert := -1
 		for lineIndex, line := range lines {
 			match := assignmentPattern.FindStringSubmatch(line)
-			if len(match) == 3 && (strings.EqualFold(match[1], "match_first_index") || insert < 0 && strings.EqualFold(match[1], "hash")) {
+			if len(match) == 3 &&
+				(strings.EqualFold(match[1], "match_first_index") || insert < 0 && strings.EqualFold(match[1], "hash")) {
 				insert = lineIndex + 1
 				if strings.EqualFold(match[1], "match_first_index") {
 					break
@@ -383,7 +397,14 @@ func transferIndexed(content, hash string, kwargs map[string]any) (string, error
 	}
 	for index := range source {
 		letter := string(rune('A' + index))
-		fmt.Fprintf(&replacement, "[TextureOverride%s%s]\nhash = %s\nmatch_first_index = %s\n", title, letter, hash, target[index])
+		fmt.Fprintf(
+			&replacement,
+			"[TextureOverride%s%s]\nhash = %s\nmatch_first_index = %s\n",
+			title,
+			letter,
+			hash,
+			target[index],
+		)
 		if source[index] == "-1" {
 			replacement.WriteString("ib = null\n\n")
 		} else {
@@ -538,7 +559,11 @@ func (e *engine) remapTexcoord(filename, content, hash string, args []any) (stri
 			cursor := 0
 			for i := range oldFormat {
 				size, _ := chunkSize(oldFormat[i])
-				converted, convertErr := convertChunk(data[offset+cursor:offset+cursor+size], oldFormat[i], newFormat[i])
+				converted, convertErr := convertChunk(
+					data[offset+cursor:offset+cursor+size],
+					oldFormat[i],
+					newFormat[i],
+				)
 				if convertErr != nil {
 					return content, convertErr
 				}
@@ -675,7 +700,9 @@ func (e *engine) resourceFile(iniPath, content, name string) (string, int, error
 		if filename == "" {
 			return "", 0, errors.New("resource has no filename")
 		}
-		resolved, err := e.securePath(filepath.Join(filepath.Dir(iniPath), filepath.FromSlash(strings.ReplaceAll(filename, "\\", "/"))))
+		resolved, err := e.securePath(
+			filepath.Join(filepath.Dir(iniPath), filepath.FromSlash(strings.ReplaceAll(filename, "\\", "/"))),
+		)
 		return resolved, stride, err
 	}
 	return "", 0, fmt.Errorf("resource %s was not found", name)
@@ -687,7 +714,8 @@ func (e *engine) securePath(candidate string) (string, error) {
 		return "", err
 	}
 	logicalRelative, err := filepath.Rel(e.root, abs)
-	if err != nil || logicalRelative == ".." || strings.HasPrefix(logicalRelative, ".."+string(filepath.Separator)) || filepath.IsAbs(logicalRelative) {
+	if err != nil || logicalRelative == ".." || strings.HasPrefix(logicalRelative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(logicalRelative) {
 		return "", infra.WithCause(errors.New("path escapes the selected ZZMI target"), err)
 	}
 	current := e.root
@@ -709,7 +737,8 @@ func (e *engine) securePath(candidate string) (string, error) {
 		return "", err
 	}
 	relative, err := filepath.Rel(e.root, resolved)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relative) {
 		return "", infra.WithCause(errors.New("path escapes the selected ZZMI target"), err)
 	}
 	return resolved, nil
@@ -880,7 +909,10 @@ func criticalContent(body string) string {
 		if i == 0 && strings.HasPrefix(strings.TrimSpace(line), "[") {
 			continue
 		}
-		if m := assignmentPattern.FindStringSubmatch(line); len(m) == 3 && (strings.EqualFold(m[1], "hash") || strings.EqualFold(m[1], "match_first_index")) {
+		if m := assignmentPattern.FindStringSubmatch(
+			line,
+		); len(m) == 3 &&
+			(strings.EqualFold(m[1], "hash") || strings.EqualFold(m[1], "match_first_index")) {
 			continue
 		}
 		out = append(out, line)

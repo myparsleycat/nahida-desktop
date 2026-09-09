@@ -41,7 +41,12 @@ func TestGameBananaCookieCleanupDiagnostic(t *testing.T) {
 		t.Fatal("cookie value leaked")
 	}
 	if validations != 1 || win.closed.Load() || strings.Count(output.String(), "\n") != 1 {
-		t.Fatalf("cleanup behavior changed: validations=%d, closed=%v, log=%s", validations, win.closed.Load(), output.String())
+		t.Fatalf(
+			"cleanup behavior changed: validations=%d, closed=%v, log=%s",
+			validations,
+			win.closed.Load(),
+			output.String(),
+		)
 	}
 }
 
@@ -52,7 +57,9 @@ func TestGameBananaCookiePollDiagnosticThrottle(t *testing.T) {
 	win.getErr = errors.New("GetCookies E_FAIL Cookie: poll-secret")
 	login := newGameBananaLogin()
 	login.window = win
-	login.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true, Now: func() time.Time { return now }})
+	login.log = infra.NewLogWithOptions(
+		infra.LogOptions{Writer: &output, DisableFile: true, Now: func() time.Time { return now }},
+	)
 	poll := func() {
 		t.Helper()
 		if !login.pollOnce(context.Background(), nil) {
@@ -133,7 +140,10 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 			log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
 			login := newGameBananaLogin()
 			login.log = log
-			cause := infra.AnnotateError(errors.New("native failure rmc=private-value"), infra.Diagnostic{Fields: map[string]any{"status": 503}})
+			cause := infra.AnnotateError(
+				errors.New("native failure rmc=private-value"),
+				infra.Diagnostic{Fields: map[string]any{"status": 503}},
+			)
 			wantCode := gamebanana.ErrAuthFailed
 			var err error
 			switch stage {
@@ -144,7 +154,10 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 					win.getErr = fmt.Errorf("native failure: %w", application.ErrWebviewCookiesUnsupported)
 					wantCode = gamebanana.ErrAutoLoginUnsupported
 				}
-				login.pollOnce(context.Background(), func(context.Context, string) (bool, error) { return false, cause })
+				login.pollOnce(
+					context.Background(),
+					func(context.Context, string) (bool, error) { return false, cause },
+				)
 				err = login.err
 			case "create-login-window":
 				login.factory = func() (loginWindow, error) { return nil, cause }
@@ -158,7 +171,12 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 			if err == nil || err.Error() != wantCode.Error() || !errors.Is(err, wantCode) {
 				t.Fatalf("public contract changed: %v", err)
 			}
-			_ = infra.ReportError(log, infra.WithCause(gamebanana.ClassifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "open-login"})
+			_ = infra.ReportError(
+				log,
+				infra.WithCause(gamebanana.ClassifyLoginError(err), err),
+				"GameBananaService.login",
+				infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "open-login"},
+			)
 			for _, want := range []string{"native failure", stage} {
 				if !strings.Contains(output.String(), want) {
 					t.Fatalf("missing %q: %s", want, output.String())
@@ -167,7 +185,8 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 			if stage != "poll-cookies" && !strings.Contains(output.String(), `"status":503`) {
 				t.Fatalf("inner diagnostic lost: %s", output.String())
 			}
-			if strings.Contains(output.String(), "private-value") || strings.Contains(output.String(), "candidate-secret") {
+			if strings.Contains(output.String(), "private-value") ||
+				strings.Contains(output.String(), "candidate-secret") {
 				t.Fatal("cookie value leaked")
 			}
 		})

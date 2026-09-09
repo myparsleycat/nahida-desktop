@@ -22,12 +22,21 @@ func TestTextureUpscaleSkipsCubemapWithoutInstallingRuntime(t *testing.T) {
 	service.UseClient(openToolsTestDB(t))
 	result, err := service.ResizeTextureFile(context.Background(), TextureResizeFileRunInput{
 		FilePath: path,
-		Settings: TextureResizeSettings{Mode: "custom", Operation: "upscale", CustomWidth: 2048, CustomHeight: 2048, Backup: true, UpscaleScale: 2, UpscaleModel: "realesr-animevideov3"},
+		Settings: TextureResizeSettings{
+			Mode:         "custom",
+			Operation:    "upscale",
+			CustomWidth:  2048,
+			CustomHeight: 2048,
+			Backup:       true,
+			UpscaleScale: 2,
+			UpscaleModel: "realesr-animevideov3",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Skipped != 1 || result.Updated != 0 || len(result.Files) != 1 || result.Files[0].Message == nil || *result.Files[0].Message != "Cubemap and layered DDS textures cannot be upscaled." {
+	if result.Skipped != 1 || result.Updated != 0 || len(result.Files) != 1 || result.Files[0].Message == nil ||
+		*result.Files[0].Message != "Cubemap and layered DDS textures cannot be upscaled." {
 		t.Fatalf("result = %#v", result)
 	}
 }
@@ -38,7 +47,14 @@ func TestTextureFolderUpscaleIsRejected(t *testing.T) {
 	service.UseClient(openToolsTestDB(t))
 	_, err := service.ResizeTextureFolder(context.Background(), TextureResizeRunInput{
 		TargetPath: t.TempDir(),
-		Settings:   TextureResizeSettings{Mode: "custom", Operation: "upscale", CustomWidth: 2048, CustomHeight: 2048, UpscaleScale: 2, UpscaleModel: "realesr-animevideov3"},
+		Settings: TextureResizeSettings{
+			Mode:         "custom",
+			Operation:    "upscale",
+			CustomWidth:  2048,
+			CustomHeight: 2048,
+			UpscaleScale: 2,
+			UpscaleModel: "realesr-animevideov3",
+		},
 	})
 	if err == nil || err.Error() != "Folder upscale is not supported." {
 		t.Fatalf("error = %v", err)
@@ -62,10 +78,17 @@ func TestBuildNCNNUpscalerArgs(t *testing.T) {
 
 func TestTextureProcessErrorsUseElectronDisplayNames(t *testing.T) {
 	t.Parallel()
-	if got, want := formatTextureProcessTimeout("Real-ESRGAN", ""), "Real-ESRGAN timed out after 600000ms"; got != want {
+	if got, want := formatTextureProcessTimeout(
+		"Real-ESRGAN",
+		"",
+	), "Real-ESRGAN timed out after 600000ms"; got != want {
 		t.Fatalf("timeout = %q, want %q", got, want)
 	}
-	if got, want := formatTextureProcessExit("Real-CUGAN", 7, "bad model"), "Real-CUGAN exited with code 7: bad model"; got != want {
+	if got, want := formatTextureProcessExit(
+		"Real-CUGAN",
+		7,
+		"bad model",
+	), "Real-CUGAN exited with code 7: bad model"; got != want {
 		t.Fatalf("exit error = %q, want %q", got, want)
 	}
 }
@@ -140,7 +163,9 @@ func TestResizeTextureFileProcessesDDS(t *testing.T) {
 	if len(events) != 2 || events[0] != "tools:textureResizeProgress" || events[1] != "tools:textureResizeProgress" {
 		t.Fatalf("progress events = %v", events)
 	}
-	if len(progress) == 0 || progress[0].TotalFiles == nil || *progress[0].TotalFiles != 1 || progress[0].ProcessedFiles == nil || *progress[0].ProcessedFiles != 0 {
+	if len(progress) == 0 || progress[0].TotalFiles == nil || *progress[0].TotalFiles != 1 ||
+		progress[0].ProcessedFiles == nil ||
+		*progress[0].ProcessedFiles != 0 {
 		t.Fatalf("initial file progress = %#v", progress)
 	}
 }

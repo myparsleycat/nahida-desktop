@@ -128,7 +128,13 @@ func TestTogglePersistLearnerLearnsSparseCyclePair(t *testing.T) {
 	}
 	for _, observation := range observations {
 		for _, varName := range []string{"autoDirToy", "autoDirBeads"} {
-			result := learner.Observe(togglePersistTestINI, varName, observation.value, observation.revision, observation.at)
+			result := learner.Observe(
+				togglePersistTestINI,
+				varName,
+				observation.value,
+				observation.revision,
+				observation.at,
+			)
 			for _, name := range result.NewlySuppressed {
 				suppressed[name] = struct{}{}
 			}
@@ -232,20 +238,36 @@ func TestTogglePersistLearnerUsesLearnedProfileAsPrior(t *testing.T) {
 	t.Parallel()
 	learner := newTogglePersistLearner()
 	learner.RegisterLearnedVariables(togglePersistTestINI, map[string]TogglePersistLearnedVariable{
-		"phase": {Name: "Phase", MedianIntervalMs: 1_000, LearnedAt: time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z")},
+		"phase": {
+			Name:             "Phase",
+			MedianIntervalMs: 1_000,
+			LearnedAt:        time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z"),
+		},
 	})
 	learner.Observe(togglePersistTestINI, "Phase", "0.5", 1, 0)
-	if got := learner.TakeReady(togglePersistTestINI, 3_000).Updates; !reflect.DeepEqual(got, [][2]string{{"phase", "0.5"}}) {
+	if got := learner.TakeReady(
+		togglePersistTestINI,
+		3_000,
+	).Updates; !reflect.DeepEqual(
+		got,
+		[][2]string{{"phase", "0.5"}},
+	) {
 		t.Fatalf("isolated = %#v", got)
 	}
 
 	repeated := newTogglePersistLearner()
 	repeated.RegisterLearnedVariables(togglePersistTestINI, map[string]TogglePersistLearnedVariable{
-		"phase": {Name: "Phase", MedianIntervalMs: 1_000, LearnedAt: time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z")},
+		"phase": {
+			Name:             "Phase",
+			MedianIntervalMs: 1_000,
+			LearnedAt:        time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z"),
+		},
 	})
 	var suppressed []string
 	for index, at := range []int64{0, 1_000, 2_000} {
-		suppressed = append(suppressed, repeated.Observe(togglePersistTestINI, "Phase", formatInt(index), index+1, at).NewlySuppressed...)
+		suppressed = append(
+			suppressed,
+			repeated.Observe(togglePersistTestINI, "Phase", formatInt(index), index+1, at).NewlySuppressed...)
 	}
 	if !reflect.DeepEqual(suppressed, []string{"Phase"}) {
 		t.Fatalf("suppressed = %#v", suppressed)
@@ -256,14 +278,32 @@ func TestTogglePersistLearnerUsesLearnedProfileAsPrior(t *testing.T) {
 
 	different := newTogglePersistLearner()
 	different.RegisterLearnedVariables(togglePersistTestINI, map[string]TogglePersistLearnedVariable{
-		"phase": {Name: "Phase", MedianIntervalMs: 1_000, LearnedAt: time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z")},
+		"phase": {
+			Name:             "Phase",
+			MedianIntervalMs: 1_000,
+			LearnedAt:        time.Unix(0, 0).UTC().Format("2006-01-02T15:04:05.000Z"),
+		},
 	})
 	for index, at := range []int64{0, 3_000, 6_000} {
-		if got := different.Observe(togglePersistTestINI, "Phase", formatInt(index), index+1, at).NewlySuppressed; len(got) != 0 {
+		if got := different.Observe(
+			togglePersistTestINI,
+			"Phase",
+			formatInt(index),
+			index+1,
+			at,
+		).NewlySuppressed; len(
+			got,
+		) != 0 {
 			t.Fatalf("different cadence suppressed = %#v", got)
 		}
 	}
-	if got := different.TakeReady(togglePersistTestINI, 15_000).Updates; !reflect.DeepEqual(got, [][2]string{{"phase", "2"}}) {
+	if got := different.TakeReady(
+		togglePersistTestINI,
+		15_000,
+	).Updates; !reflect.DeepEqual(
+		got,
+		[][2]string{{"phase", "2"}},
+	) {
 		t.Fatalf("different cadence updates = %#v", got)
 	}
 }
@@ -303,7 +343,9 @@ func TestParseTogglePersistProfileNormalizesVariableKeys(t *testing.T) {
 	if profile.Files["example.ini"].Variables["phase"].Name != "Phase" {
 		t.Fatalf("normalized variable = %#v", profile.Files["example.ini"].Variables)
 	}
-	if _, err := parseTogglePersistProfile(map[string]any{"version": float64(2), "files": map[string]any{}}); err == nil {
+	if _, err := parseTogglePersistProfile(
+		map[string]any{"version": float64(2), "files": map[string]any{}},
+	); err == nil {
 		t.Fatal("expected version error")
 	}
 }

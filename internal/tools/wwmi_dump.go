@@ -27,8 +27,15 @@ var (
 )
 
 var (
-	ddsPackedFourCC = map[string]bool{"ATI1": true, "ATI2": true, "BC4U": true, "BC4S": true, "BC5U": true, "BC5S": true}
-	ddsPackedDXGI   = map[uint32]bool{80: true, 81: true, 83: true, 84: true}
+	ddsPackedFourCC = map[string]bool{
+		"ATI1": true,
+		"ATI2": true,
+		"BC4U": true,
+		"BC4S": true,
+		"BC5U": true,
+		"BC5S": true,
+	}
+	ddsPackedDXGI = map[uint32]bool{80: true, 81: true, 83: true, 84: true}
 )
 
 type wwmiTextureHint struct {
@@ -72,7 +79,11 @@ func pickWwmiDumpDiffuse(candidates []wwmiDumpCandidate) string {
 	ranked := append([]wwmiDumpCandidate(nil), candidates...)
 	sort.SliceStable(ranked, func(i, j int) bool {
 		left, right := ranked[i], ranked[j]
-		if leftShare, rightShare := wwmiDumpShareCount(left.File), wwmiDumpShareCount(right.File); leftShare != rightShare {
+		if leftShare, rightShare := wwmiDumpShareCount(
+			left.File,
+		), wwmiDumpShareCount(
+			right.File,
+		); leftShare != rightShare {
 			return leftShare < rightShare
 		}
 		if left.SRGB != right.SRGB {
@@ -192,7 +203,10 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 			if hint == nil || !isLikelyWwmiDiffuse(*hint) {
 				continue
 			}
-			scored = append(scored, wwmiDumpCandidate{File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: order})
+			scored = append(
+				scored,
+				wwmiDumpCandidate{File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: order},
+			)
 		}
 		if picked := pickWwmiDumpDiffuse(scored); picked != "" {
 			pickedByIndex[index] = picked
@@ -226,12 +240,23 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 				kept = append(kept, assignment)
 			}
 		}
-		mesh.textureAssignments = append(kept, modelViewerDirectTextureAssignment{role: "diffuse", resource: resourceName, file: dumpPick, conditions: modelViewerDNFTrue()})
+		mesh.textureAssignments = append(
+			kept,
+			modelViewerDirectTextureAssignment{
+				role:       "diffuse",
+				resource:   resourceName,
+				file:       dumpPick,
+				conditions: modelViewerDNFTrue(),
+			},
+		)
 		mesh.textureDefaultFile = dumpPick
 	}
 }
 
-func keepLikelyDiffuseAssignments(assignments []modelViewerDirectTextureAssignment, inspect func(string) *wwmiTextureHint) []modelViewerDirectTextureAssignment {
+func keepLikelyDiffuseAssignments(
+	assignments []modelViewerDirectTextureAssignment,
+	inspect func(string) *wwmiTextureHint,
+) []modelViewerDirectTextureAssignment {
 	var kept []modelViewerDirectTextureAssignment
 	for _, assignment := range assignments {
 		if assignment.role != "diffuse" {
@@ -300,8 +325,16 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 		}
 	}
 	packedFormat := ddsPackedFourCC[fourcc] || ddsPackedDXGI[dxgi]
-	if colorSpace == "linear" || packedFormat || texturePixelCount(width, height) > uint64(maxHintDecodeArea) || size > maxHintDecodeBytes {
-		return &wwmiTextureHint{SRGB: colorSpace == "srgb", ColorSpace: colorSpace, Area: area, Bytes: size, IsLikelyNormal: packedFormat, IsLikelyPacked: packedFormat}
+	if colorSpace == "linear" || packedFormat || texturePixelCount(width, height) > uint64(maxHintDecodeArea) ||
+		size > maxHintDecodeBytes {
+		return &wwmiTextureHint{
+			SRGB:           colorSpace == "srgb",
+			ColorSpace:     colorSpace,
+			Area:           area,
+			Bytes:          size,
+			IsLikelyNormal: packedFormat,
+			IsLikelyPacked: packedFormat,
+		}
 	}
 	decoded, decodeErr := decodeModelViewerDDSHint(filePath, size)
 	if decodeErr != nil {

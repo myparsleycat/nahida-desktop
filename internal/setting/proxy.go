@@ -98,26 +98,51 @@ func (s *Setting) GetProxySettings(ctx context.Context) (ProxySettings, error) {
 		// A damaged record must remain repairable from the offline settings page.
 		return ProxySettings{Type: "http", ConfigurationInvalid: true}, nil
 	}
-	return ProxySettings{Enabled: config.Enabled, Type: config.Type, Host: config.Host, Port: config.Port,
-		Username: config.Username, HasPassword: config.Password != "", RestartRequired: s.proxyInvalid || config != s.activeProxy}, nil
+	return ProxySettings{
+		Enabled:         config.Enabled,
+		Type:            config.Type,
+		Host:            config.Host,
+		Port:            config.Port,
+		Username:        config.Username,
+		HasPassword:     config.Password != "",
+		RestartRequired: s.proxyInvalid || config != s.activeProxy,
+	}, nil
 }
 
 func (s *Setting) SetProxySettings(ctx context.Context, input ProxySettingsInput) error {
 	s.proxyMu.Lock()
 	defer s.proxyMu.Unlock()
-	config := infra.ProxyConfig{Enabled: input.Enabled, Type: input.Type, Host: strings.TrimSpace(input.Host), Port: input.Port, Username: input.Username}
+	config := infra.ProxyConfig{
+		Enabled:  input.Enabled,
+		Type:     input.Type,
+		Host:     strings.TrimSpace(input.Host),
+		Port:     input.Port,
+		Username: input.Username,
+	}
 	switch input.PasswordAction {
 	case "keep":
 		previous, err := s.readProxy(ctx)
 		if err != nil {
-			return settingError(errors.New("proxy.passwordResetRequired"), "proxy", "read-password", proxyStorageKey, infra.DiagnosticWarn)
+			return settingError(
+				errors.New("proxy.passwordResetRequired"),
+				"proxy",
+				"read-password",
+				proxyStorageKey,
+				infra.DiagnosticWarn,
+			)
 		}
 		config.Password = previous.Password
 	case "replace":
 		config.Password = input.Password
 	case "clear":
 	default:
-		return settingError(errors.New("proxy.passwordAction"), "proxy", "validate", proxyStorageKey, infra.DiagnosticWarn)
+		return settingError(
+			errors.New("proxy.passwordAction"),
+			"proxy",
+			"validate",
+			proxyStorageKey,
+			infra.DiagnosticWarn,
+		)
 	}
 	if err := config.Validate(); err != nil {
 		return settingError(err, "proxy", "validate", proxyStorageKey, infra.DiagnosticWarn)

@@ -93,9 +93,16 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		for key, value := range assignments {
 			lowerValue := strings.ToLower(value)
 			_, semantic := modelViewerSemanticTextureRole(key)
-			if (strings.HasPrefix(key, "pst") || semantic) && (strings.HasPrefix(lowerValue, "resource") || strings.HasPrefix(lowerValue, "ref resource")) {
+			if (strings.HasPrefix(key, "pst") || semantic) &&
+				(strings.HasPrefix(lowerValue, "resource") || strings.HasPrefix(lowerValue, "ref resource")) {
 				name := modelViewerTrimResourcePrefix(strings.TrimPrefix(value, "ref "))
-				if resolved := resolveModelViewerTextureReference(name, section, lookup, variables, make(map[string]bool)); resolved != "" {
+				if resolved := resolveModelViewerTextureReference(
+					name,
+					section,
+					lookup,
+					variables,
+					make(map[string]bool),
+				); resolved != "" {
 					textureNames = appendUniqueModelViewer(textureNames, resolved)
 					if role, ok := modelViewerSemanticTextureRole(key); ok {
 						textureRoles[modelViewerNormalizeKey(resolved)] = role
@@ -113,7 +120,9 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		for _, ibName := range ibNames {
 			diffuse := semanticDiffuse
 			for _, name := range textureNames {
-				if strings.Contains(strings.ToLower(name), "diffuse") || strings.Contains(strings.ToLower(name), "basecolor") || strings.Contains(strings.ToLower(name), "albedo") {
+				if strings.Contains(strings.ToLower(name), "diffuse") ||
+					strings.Contains(strings.ToLower(name), "basecolor") ||
+					strings.Contains(strings.ToLower(name), "albedo") {
 					diffuse = name
 					break
 				}
@@ -130,13 +139,29 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			if diffuse == "" {
 				diffuse = direct
 			}
-			bindings = append(bindings, modelViewerTextureBinding{SectionName: section.Name, IBResourceName: modelViewerTrimResourcePrefix(ibName), DiffuseResourceName: diffuse, TextureResourceNames: textureNames, TextureRoles: textureRoles, OverrideHash: strings.TrimSpace(modelViewerSectionValue(section, "hash"))})
+			bindings = append(
+				bindings,
+				modelViewerTextureBinding{
+					SectionName:          section.Name,
+					IBResourceName:       modelViewerTrimResourcePrefix(ibName),
+					DiffuseResourceName:  diffuse,
+					TextureResourceNames: textureNames,
+					TextureRoles:         textureRoles,
+					OverrideHash:         strings.TrimSpace(modelViewerSectionValue(section, "hash")),
+				},
+			)
 		}
 	}
 	return bindings
 }
 
-func resolveModelViewerAssignments(section modINISection, targets []string, lookup map[string]modINISection, variables map[string]any, visited map[string]bool) map[string]string {
+func resolveModelViewerAssignments(
+	section modINISection,
+	targets []string,
+	lookup map[string]modINISection,
+	variables map[string]any,
+	visited map[string]bool,
+) map[string]string {
 	name := modelViewerNormalizeKey(section.Header + section.Name)
 	if visited[name] {
 		return nil
@@ -221,7 +246,13 @@ func resolveModelViewerAssignments(section modINISection, targets []string, look
 	return assignments
 }
 
-func resolveModelViewerTextureReference(resourceName string, section modINISection, lookup map[string]modINISection, variables map[string]any, visited map[string]bool) string {
+func resolveModelViewerTextureReference(
+	resourceName string,
+	section modINISection,
+	lookup map[string]modINISection,
+	variables map[string]any,
+	visited map[string]bool,
+) string {
 	key := modelViewerNormalizeKey(resourceName)
 	if key == "" || visited[key] {
 		return resourceName
@@ -266,12 +297,24 @@ func appendUniqueModelViewer(values []string, value string) []string {
 	return values
 }
 
-func prepareModelViewerTexture(ctx context.Context, path, resourceName, format string, quality int) (*modelViewerPreparedTexture, error) {
+func prepareModelViewerTexture(
+	ctx context.Context,
+	path, resourceName, format string,
+	quality int,
+) (*modelViewerPreparedTexture, error) {
 	decoded, err := decodeModelViewerTextureSource(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	return encodeModelViewerPreparedTexture(ctx, decoded, path, resourceName, modelViewerTextureTransformPassthrough, format, quality)
+	return encodeModelViewerPreparedTexture(
+		ctx,
+		decoded,
+		path,
+		resourceName,
+		modelViewerTextureTransformPassthrough,
+		format,
+		quality,
+	)
 }
 
 func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
@@ -308,7 +351,10 @@ func modelViewerTextureFileHash(ctx context.Context, path string) (string, int64
 	if err := ctx.Err(); err != nil {
 		return "", 0, err
 	}
-	if _, err = io.Copy(hash, io.LimitReader(modelViewerContextReader{ctx: ctx, reader: file}, info.Size())); err != nil {
+	if _, err = io.Copy(
+		hash,
+		io.LimitReader(modelViewerContextReader{ctx: ctx, reader: file}, info.Size()),
+	); err != nil {
 		return "", 0, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -414,7 +460,8 @@ func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelView
 		return false
 	}
 	return modelViewerTextureNameRequestsAlphaInvert(resourceName) ||
-		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 && decoded.lowRGB/float64(decoded.low) >= 8
+		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 &&
+			decoded.lowRGB/float64(decoded.low) >= 8
 }
 
 func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
@@ -444,7 +491,14 @@ func reconstructModelViewerNormalZ(ctx context.Context, rgba *image.NRGBA) error
 	return ctx.Err()
 }
 
-func encodeModelViewerPreparedTexture(ctx context.Context, decoded *modelViewerDecodedTexture, path, resourceName string, transform modelViewerTextureTransform, format string, quality int) (*modelViewerPreparedTexture, error) {
+func encodeModelViewerPreparedTexture(
+	ctx context.Context,
+	decoded *modelViewerDecodedTexture,
+	path, resourceName string,
+	transform modelViewerTextureTransform,
+	format string,
+	quality int,
+) (*modelViewerPreparedTexture, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -498,7 +552,12 @@ func encodeModelViewerPreparedTexture(ctx context.Context, decoded *modelViewerD
 	} else if err := png.Encode(writer, rgba); err != nil {
 		return nil, err
 	}
-	prepared := &modelViewerPreparedTexture{bytes: output.Bytes(), mimeType: mimeType, name: filepath.Base(path), score: modelViewerTextureNamePriority(resourceName) + 20}
+	prepared := &modelViewerPreparedTexture{
+		bytes:    output.Bytes(),
+		mimeType: mimeType,
+		name:     filepath.Base(path),
+		score:    modelViewerTextureNamePriority(resourceName) + 20,
+	}
 	if cutout {
 		prepared.alphaMode, prepared.alphaCutoff = "MASK", .5
 	}
@@ -535,7 +594,11 @@ func decodeModelViewerDDSHint(path string, size int64) (*image.NRGBA, error) {
 	return decodeModelViewerDDSWithMip(path, size, wwmiHintMipmap)
 }
 
-func decodeModelViewerDDSWithMip(path string, size int64, selectMip func(width, height, mipmaps uint32) (uint32, uint32, uint32)) (*image.NRGBA, error) {
+func decodeModelViewerDDSWithMip(
+	path string,
+	size int64,
+	selectMip func(width, height, mipmaps uint32) (uint32, uint32, uint32),
+) (*image.NRGBA, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -560,7 +623,10 @@ func decodeModelViewerDDSWithMip(path string, size int64, selectMip func(width, 
 	return decodeModelViewerDDSMip(reader, mipmap, targetWidth, targetHeight)
 }
 
-func decodeModelViewerDDSMip(reader *ddsutil.DdsReader, mipmap, targetWidth, targetHeight uint32) (*image.NRGBA, error) {
+func decodeModelViewerDDSMip(
+	reader *ddsutil.DdsReader,
+	mipmap, targetWidth, targetHeight uint32,
+) (*image.NRGBA, error) {
 	metadata := reader.Metadata()
 	width := ddsutil.MipDimension(metadata.Width, mipmap)
 	height := ddsutil.MipDimension(metadata.Height, mipmap)
@@ -574,7 +640,8 @@ func decodeModelViewerDDSMip(reader *ddsutil.DdsReader, mipmap, targetWidth, tar
 	if err != nil {
 		return nil, err
 	}
-	if surface == nil || surface.Width == 0 || surface.Height == 0 || len(surface.Data) != int(surface.Width)*int(surface.Height)*4 {
+	if surface == nil || surface.Width == 0 || surface.Height == 0 ||
+		len(surface.Data) != int(surface.Width)*int(surface.Height)*4 {
 		return nil, fmt.Errorf("dds decode produced an invalid image")
 	}
 	return &image.NRGBA{
@@ -676,7 +743,11 @@ func modelViewerTextureDimensions(raw []byte, extension string) (int, int, error
 			return 0, 0, fmt.Errorf("invalid texture dimensions")
 		}
 		if uint64(configuration.Width)*uint64(configuration.Height) > uint64(maxModelViewerTextureInputPixels) {
-			return 0, 0, fmt.Errorf("viewer texture dimensions exceed the input safety limit: %dx%d", configuration.Width, configuration.Height)
+			return 0, 0, fmt.Errorf(
+				"viewer texture dimensions exceed the input safety limit: %dx%d",
+				configuration.Width,
+				configuration.Height,
+			)
 		}
 		return configuration.Width, configuration.Height, nil
 	}

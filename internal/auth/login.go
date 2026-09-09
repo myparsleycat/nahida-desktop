@@ -105,15 +105,24 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	defer func() { _ = resp.Body.Close() }()
 	stage = "login-response"
 	if resp.StatusCode >= 400 {
-		return infra.AnnotateError(infra.WithCause(errIWantToLogin, &infra.HTTPError{Status: resp.StatusCode}), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-response", resp))
+		return infra.AnnotateError(
+			infra.WithCause(errIWantToLogin, &infra.HTTPError{Status: resp.StatusCode}),
+			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-response", resp),
+		)
 	}
 	var start loginStart
 	stage = "login-decode"
 	if err := json.NewDecoder(resp.Body).Decode(&start); err != nil {
-		return infra.AnnotateError(infra.WithCause(errIWantToLogin, err), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-decode", resp))
+		return infra.AnnotateError(
+			infra.WithCause(errIWantToLogin, err),
+			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-decode", resp),
+		)
 	}
 	if !start.valid {
-		return infra.AnnotateError(infra.WithCause(errIWantToLogin, errors.New("login response is not an object")), infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-validate", resp))
+		return infra.AnnotateError(
+			infra.WithCause(errIWantToLogin, errors.New("login response is not an object")),
+			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-validate", resp),
+		)
 	}
 
 	stage = "open-browser"

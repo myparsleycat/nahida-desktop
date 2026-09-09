@@ -64,7 +64,10 @@ func (e *persistEngine) GetLogs() []string {
 	return append([]string{}, e.logs...)
 }
 
-func (e *persistEngine) PersistStateToINI(targetINIPath string, state map[string]any) (PersistModelViewerResult, error) {
+func (e *persistEngine) PersistStateToINI(
+	targetINIPath string,
+	state map[string]any,
+) (PersistModelViewerResult, error) {
 	updates := persistUpdatesFromState(state)
 	if len(updates) == 0 {
 		return PersistModelViewerResult{UpdatedVariables: []string{}}, nil
@@ -107,7 +110,10 @@ func (e *persistEngine) Stop() {
 	}
 }
 
-func (e *persistEngine) Start(importers []persistImporter, watch func(path string, onModify func()) (func(), error)) error {
+func (e *persistEngine) Start(
+	importers []persistImporter,
+	watch func(path string, onModify func()) (func(), error),
+) error {
 	e.Stop()
 	e.mu.Lock()
 	e.generation++
@@ -283,7 +289,11 @@ func (e *persistEngine) loadPersistProfile(targetINIPath string, generation int)
 	e.mu.Unlock()
 }
 
-func (e *persistEngine) savePersistProfile(targetINIPath string, variables []TogglePersistLearnedVariable, generation int) {
+func (e *persistEngine) savePersistProfile(
+	targetINIPath string,
+	variables []TogglePersistLearnedVariable,
+	generation int,
+) {
 	if len(variables) == 0 || !e.active(generation) {
 		return
 	}
@@ -516,7 +526,10 @@ func (e *persistEngine) logError(message string, causes ...error) {
 }
 
 func (e *persistEngine) logPersistProfileError(stage, targetINIPath, profilePath string, err error) {
-	e.logError("Error processing toggle persist profile: stage="+stage+", targetIniPath="+targetINIPath+", profilePath="+profilePath+", error="+err.Error(), err)
+	e.logError(
+		"Error processing toggle persist profile: stage="+stage+", targetIniPath="+targetINIPath+", profilePath="+profilePath+", error="+err.Error(),
+		err,
+	)
 }
 
 func (e *persistEngine) addLog(level, message string) {
@@ -580,12 +593,15 @@ func resolvePersistTarget(importerFolder, key string) *persistTarget {
 	if err != nil {
 		importerRoot = filepath.Clean(importerFolder)
 	}
-	targetINIPath, err := filepath.Abs(filepath.Join(importerRoot, filepath.FromSlash(strings.ReplaceAll(match[1], `\`, "/"))))
+	targetINIPath, err := filepath.Abs(
+		filepath.Join(importerRoot, filepath.FromSlash(strings.ReplaceAll(match[1], `\`, "/"))),
+	)
 	if err != nil {
 		return nil
 	}
 	relative, err := filepath.Rel(importerRoot, targetINIPath)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) ||
+		filepath.IsAbs(relative) {
 		return nil
 	}
 	info, err := os.Stat(targetINIPath)

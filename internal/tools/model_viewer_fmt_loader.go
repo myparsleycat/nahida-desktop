@@ -18,7 +18,12 @@ type modelViewerIbResource struct {
 	OverrideHashes []string
 }
 
-func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, stride int, layout string) (modelViewerFmtLayout, error) {
+func loadModelViewerFmt(
+	modDir, assetDir string,
+	ib modelViewerIbResource,
+	stride int,
+	layout string,
+) (modelViewerFmtLayout, error) {
 	stem := strings.TrimSuffix(filepath.Base(ib.Filename), filepath.Ext(ib.Filename))
 	local := filepath.Join(modDir, stem+".fmt")
 	if text, err := os.ReadFile(local); err == nil {
@@ -29,7 +34,8 @@ func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, strid
 		return modelViewerFmtLayout{}, err
 	}
 	for _, file := range assetFiles {
-		if strings.EqualFold(filepath.Ext(file), ".fmt") && strings.Contains(modelViewerNormalizeKey(filepath.Base(file)), modelViewerNormalizeKey(stem)) {
+		if strings.EqualFold(filepath.Ext(file), ".fmt") &&
+			strings.Contains(modelViewerNormalizeKey(filepath.Base(file)), modelViewerNormalizeKey(stem)) {
 			text, readErr := os.ReadFile(file)
 			if readErr != nil {
 				return modelViewerFmtLayout{}, readErr
@@ -45,7 +51,8 @@ func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, strid
 	vb0Path := ""
 	for _, file := range assetFiles {
 		base := strings.ToLower(filepath.Base(file))
-		if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "vb0") && strings.Contains(modelViewerNormalizeKey(base), modelViewerNormalizeKey(stem)) {
+		if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "vb0") &&
+			strings.Contains(modelViewerNormalizeKey(base), modelViewerNormalizeKey(stem)) {
 			vb0Path = file
 			break
 		}
@@ -55,7 +62,8 @@ func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, strid
 			ibBase := ""
 			for _, file := range assetFiles {
 				base := strings.ToLower(filepath.Base(file))
-				if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "-ib=") && strings.Contains(modelViewerNormalizeKey(base), hash) {
+				if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "-ib=") &&
+					strings.Contains(modelViewerNormalizeKey(base), hash) {
 					ibBase = strings.SplitN(filepath.Base(file), "-ib=", 2)[0]
 					break
 				}
@@ -65,7 +73,8 @@ func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, strid
 			}
 			for _, file := range assetFiles {
 				base := strings.ToLower(filepath.Base(file))
-				if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "vb0") && strings.HasPrefix(base, strings.ToLower(ibBase)) {
+				if strings.EqualFold(filepath.Ext(file), ".txt") && strings.Contains(base, "vb0") &&
+					strings.HasPrefix(base, strings.ToLower(ibBase)) {
 					vb0Path = file
 					break
 				}
@@ -76,7 +85,11 @@ func loadModelViewerFmt(modDir, assetDir string, ib modelViewerIbResource, strid
 		}
 	}
 	if vb0Path == "" {
-		return modelViewerFmtLayout{}, fmt.Errorf("no matching .fmt or *-vb0.txt found for %s under %s", ib.Filename, assetDir)
+		return modelViewerFmtLayout{}, fmt.Errorf(
+			"no matching .fmt or *-vb0.txt found for %s under %s",
+			ib.Filename,
+			assetDir,
+		)
 	}
 	text, err := os.ReadFile(vb0Path)
 	if err != nil {
@@ -120,7 +133,9 @@ func findModelViewerWwmiFmt(files []string, ib modelViewerIbResource, stride int
 		}
 		var candidates []string
 		for _, candidate := range files {
-			if filepath.Dir(candidate) == filepath.Dir(file) && strings.HasPrefix(strings.ToLower(filepath.Base(candidate)), "component ") && strings.EqualFold(filepath.Ext(candidate), ".fmt") {
+			if filepath.Dir(candidate) == filepath.Dir(file) &&
+				strings.HasPrefix(strings.ToLower(filepath.Base(candidate)), "component ") &&
+				strings.EqualFold(filepath.Ext(candidate), ".fmt") {
 				candidates = append(candidates, candidate)
 			}
 		}

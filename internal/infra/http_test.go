@@ -290,7 +290,14 @@ func TestStreamRecoversWhenOfflineProbeIsOnline(t *testing.T) {
 			return textResp(r, 200, "ok"), nil
 		}),
 	})
-	resp, err := c.Stream(context.Background(), "https://api.nahida.live/api/drive", http.MethodPut, nil, strings.NewReader("payload"), 7)
+	resp, err := c.Stream(
+		context.Background(),
+		"https://api.nahida.live/api/drive",
+		http.MethodPut,
+		nil,
+		strings.NewReader("payload"),
+		7,
+	)
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -307,7 +314,14 @@ func TestStreamProbesOnNHDTimeout(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	})
 	c := testClient(t, ClientOptions{Transport: transport})
-	resp, err := c.Stream(context.Background(), "https://api.nahida.live/api/drive", http.MethodPut, nil, strings.NewReader("payload"), 7)
+	resp, err := c.Stream(
+		context.Background(),
+		"https://api.nahida.live/api/drive",
+		http.MethodPut,
+		nil,
+		strings.NewReader("payload"),
+		7,
+	)
 	closeBody(t, resp)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
@@ -335,7 +349,11 @@ func TestFetchNormalizesNHDAPIResponseCBORToJSON(t *testing.T) {
 			return response, nil
 		}),
 	})
-	response, err := client.Fetch(context.Background(), "https://api.nahida.live/akasha/v2/uploads:pack", FetchOptions{})
+	response, err := client.Fetch(
+		context.Background(),
+		"https://api.nahida.live/akasha/v2/uploads:pack",
+		FetchOptions{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +370,8 @@ func TestFetchNormalizesNHDAPIResponseCBORToJSON(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Results) != 1 || payload.Results[0].IntentID != "intent" || payload.Results[0].Status != "completed" {
+	if len(payload.Results) != 1 || payload.Results[0].IntentID != "intent" ||
+		payload.Results[0].Status != "completed" {
 		t.Fatalf("payload = %+v", payload)
 	}
 }

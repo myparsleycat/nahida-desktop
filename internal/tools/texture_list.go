@@ -36,27 +36,75 @@ var srgbTextureFormats = []string{
 }
 
 var linearTextureFormats = []string{
-	"DXGI_FORMAT_R8_UNORM", "DXGI_FORMAT_R8_SNORM", "DXGI_FORMAT_R8G8_UNORM", "DXGI_FORMAT_R8G8_SNORM",
-	"DXGI_FORMAT_R8G8B8A8_UNORM", "DXGI_FORMAT_R8G8B8A8_SNORM", "DXGI_FORMAT_R16_UNORM", "DXGI_FORMAT_R16_SNORM",
-	"DXGI_FORMAT_R16_FLOAT", "DXGI_FORMAT_R16G16_UNORM", "DXGI_FORMAT_R16G16_SNORM", "DXGI_FORMAT_R16G16_FLOAT",
-	"DXGI_FORMAT_R16G16B16A16_UNORM", "DXGI_FORMAT_R16G16B16A16_SNORM", "DXGI_FORMAT_R16G16B16A16_FLOAT",
-	"DXGI_FORMAT_R32_FLOAT", "DXGI_FORMAT_R32G32_FLOAT", "DXGI_FORMAT_R32G32B32_FLOAT", "DXGI_FORMAT_R32G32B32A32_FLOAT",
-	"DXGI_FORMAT_B8G8R8A8_UNORM", "DXGI_FORMAT_B4G4R4A4_UNORM", "DXGI_FORMAT_B5G5R5A1_UNORM", "DXGI_FORMAT_BC1_UNORM",
-	"DXGI_FORMAT_BC2_UNORM", "DXGI_FORMAT_BC3_UNORM", "DXGI_FORMAT_BC4_UNORM", "DXGI_FORMAT_BC4_SNORM",
-	"DXGI_FORMAT_BC5_UNORM", "DXGI_FORMAT_BC5_SNORM", "DXGI_FORMAT_BC6H_UF16", "DXGI_FORMAT_BC6H_SF16", "DXGI_FORMAT_BC7_UNORM",
+	"DXGI_FORMAT_R8_UNORM",
+	"DXGI_FORMAT_R8_SNORM",
+	"DXGI_FORMAT_R8G8_UNORM",
+	"DXGI_FORMAT_R8G8_SNORM",
+	"DXGI_FORMAT_R8G8B8A8_UNORM",
+	"DXGI_FORMAT_R8G8B8A8_SNORM",
+	"DXGI_FORMAT_R16_UNORM",
+	"DXGI_FORMAT_R16_SNORM",
+	"DXGI_FORMAT_R16_FLOAT",
+	"DXGI_FORMAT_R16G16_UNORM",
+	"DXGI_FORMAT_R16G16_SNORM",
+	"DXGI_FORMAT_R16G16_FLOAT",
+	"DXGI_FORMAT_R16G16B16A16_UNORM",
+	"DXGI_FORMAT_R16G16B16A16_SNORM",
+	"DXGI_FORMAT_R16G16B16A16_FLOAT",
+	"DXGI_FORMAT_R32_FLOAT",
+	"DXGI_FORMAT_R32G32_FLOAT",
+	"DXGI_FORMAT_R32G32B32_FLOAT",
+	"DXGI_FORMAT_R32G32B32A32_FLOAT",
+	"DXGI_FORMAT_B8G8R8A8_UNORM",
+	"DXGI_FORMAT_B4G4R4A4_UNORM",
+	"DXGI_FORMAT_B5G5R5A1_UNORM",
+	"DXGI_FORMAT_BC1_UNORM",
+	"DXGI_FORMAT_BC2_UNORM",
+	"DXGI_FORMAT_BC3_UNORM",
+	"DXGI_FORMAT_BC4_UNORM",
+	"DXGI_FORMAT_BC4_SNORM",
+	"DXGI_FORMAT_BC5_UNORM",
+	"DXGI_FORMAT_BC5_SNORM",
+	"DXGI_FORMAT_BC6H_UF16",
+	"DXGI_FORMAT_BC6H_SF16",
+	"DXGI_FORMAT_BC7_UNORM",
 }
 
 var dxgiNames = map[uint32]string{
-	0: "DXGI_FORMAT_UNKNOWN", 2: "DXGI_FORMAT_R32G32B32A32_FLOAT", 10: "DXGI_FORMAT_R16G16B16A16_FLOAT",
-	24: "DXGI_FORMAT_R10G10B10A2_UNORM", 28: "DXGI_FORMAT_R8G8B8A8_UNORM", 29: "DXGI_FORMAT_R8G8B8A8_UNORM_SRGB",
-	41: "DXGI_FORMAT_R32_FLOAT", 49: "DXGI_FORMAT_R8G8_UNORM", 54: "DXGI_FORMAT_R16_FLOAT", 56: "DXGI_FORMAT_R16_UNORM",
-	57: "DXGI_FORMAT_R16_UINT", 58: "DXGI_FORMAT_R16_SNORM", 60: "DXGI_FORMAT_R8G8_SNORM", 61: "DXGI_FORMAT_R8_UNORM",
-	63: "DXGI_FORMAT_R8_SNORM", 71: "DXGI_FORMAT_BC1_UNORM", 72: "DXGI_FORMAT_BC1_UNORM_SRGB", 74: "DXGI_FORMAT_BC2_UNORM",
-	75: "DXGI_FORMAT_BC2_UNORM_SRGB", 77: "DXGI_FORMAT_BC3_UNORM", 78: "DXGI_FORMAT_BC3_UNORM_SRGB",
-	80: "DXGI_FORMAT_BC4_UNORM", 81: "DXGI_FORMAT_BC4_SNORM", 83: "DXGI_FORMAT_BC5_UNORM", 84: "DXGI_FORMAT_BC5_SNORM",
-	87: "DXGI_FORMAT_B8G8R8A8_UNORM", 88: "DXGI_FORMAT_B8G8R8X8_UNORM", 91: "DXGI_FORMAT_B8G8R8A8_UNORM_SRGB",
-	93: "DXGI_FORMAT_B8G8R8X8_UNORM_SRGB", 95: "DXGI_FORMAT_BC6H_UF16", 96: "DXGI_FORMAT_BC6H_SF16",
-	98: "DXGI_FORMAT_BC7_UNORM", 99: "DXGI_FORMAT_BC7_UNORM_SRGB", 115: "DXGI_FORMAT_B4G4R4A4_UNORM",
+	0:   "DXGI_FORMAT_UNKNOWN",
+	2:   "DXGI_FORMAT_R32G32B32A32_FLOAT",
+	10:  "DXGI_FORMAT_R16G16B16A16_FLOAT",
+	24:  "DXGI_FORMAT_R10G10B10A2_UNORM",
+	28:  "DXGI_FORMAT_R8G8B8A8_UNORM",
+	29:  "DXGI_FORMAT_R8G8B8A8_UNORM_SRGB",
+	41:  "DXGI_FORMAT_R32_FLOAT",
+	49:  "DXGI_FORMAT_R8G8_UNORM",
+	54:  "DXGI_FORMAT_R16_FLOAT",
+	56:  "DXGI_FORMAT_R16_UNORM",
+	57:  "DXGI_FORMAT_R16_UINT",
+	58:  "DXGI_FORMAT_R16_SNORM",
+	60:  "DXGI_FORMAT_R8G8_SNORM",
+	61:  "DXGI_FORMAT_R8_UNORM",
+	63:  "DXGI_FORMAT_R8_SNORM",
+	71:  "DXGI_FORMAT_BC1_UNORM",
+	72:  "DXGI_FORMAT_BC1_UNORM_SRGB",
+	74:  "DXGI_FORMAT_BC2_UNORM",
+	75:  "DXGI_FORMAT_BC2_UNORM_SRGB",
+	77:  "DXGI_FORMAT_BC3_UNORM",
+	78:  "DXGI_FORMAT_BC3_UNORM_SRGB",
+	80:  "DXGI_FORMAT_BC4_UNORM",
+	81:  "DXGI_FORMAT_BC4_SNORM",
+	83:  "DXGI_FORMAT_BC5_UNORM",
+	84:  "DXGI_FORMAT_BC5_SNORM",
+	87:  "DXGI_FORMAT_B8G8R8A8_UNORM",
+	88:  "DXGI_FORMAT_B8G8R8X8_UNORM",
+	91:  "DXGI_FORMAT_B8G8R8A8_UNORM_SRGB",
+	93:  "DXGI_FORMAT_B8G8R8X8_UNORM_SRGB",
+	95:  "DXGI_FORMAT_BC6H_UF16",
+	96:  "DXGI_FORMAT_BC6H_SF16",
+	98:  "DXGI_FORMAT_BC7_UNORM",
+	99:  "DXGI_FORMAT_BC7_UNORM_SRGB",
+	115: "DXGI_FORMAT_B4G4R4A4_UNORM",
 }
 
 type TextureResizeSettings struct {
@@ -116,7 +164,16 @@ type ddsHeaderError struct{ message string }
 func (e ddsHeaderError) Error() string { return e.message }
 
 func defaultTextureSettings() TextureResizeSettings {
-	return TextureResizeSettings{Mode: "custom", Operation: "resize", Percent: 50, CustomWidth: 2048, CustomHeight: 2048, Backup: true, UpscaleScale: 2, UpscaleModel: "realesr-animevideov3"}
+	return TextureResizeSettings{
+		Mode:         "custom",
+		Operation:    "resize",
+		Percent:      50,
+		CustomWidth:  2048,
+		CustomHeight: 2048,
+		Backup:       true,
+		UpscaleScale: 2,
+		UpscaleModel: "realesr-animevideov3",
+	}
 }
 
 func (t *Tools) GetTextureResizeSettings(ctx context.Context) (TextureResizeSettings, error) {
@@ -124,8 +181,17 @@ func (t *Tools) GetTextureResizeSettings(ctx context.Context) (TextureResizeSett
 	if err != nil {
 		return TextureResizeSettings{}, err
 	}
-	keys := []string{textureSettingKeys.mode, textureSettingKeys.operation, textureSettingKeys.format, textureSettingKeys.percent,
-		textureSettingKeys.width, textureSettingKeys.height, textureSettingKeys.backup, textureSettingKeys.scale, textureSettingKeys.model}
+	keys := []string{
+		textureSettingKeys.mode,
+		textureSettingKeys.operation,
+		textureSettingKeys.format,
+		textureSettingKeys.percent,
+		textureSettingKeys.width,
+		textureSettingKeys.height,
+		textureSettingKeys.backup,
+		textureSettingKeys.scale,
+		textureSettingKeys.model,
+	}
 	values := make(map[string]string, len(keys))
 	for _, key := range keys {
 		value, getErr := client.Settings.GetValue(ctx, key)
@@ -161,7 +227,10 @@ func (t *Tools) GetTextureResizeSettings(ctx context.Context) (TextureResizeSett
 	return s, nil
 }
 
-func (t *Tools) SaveTextureResizeSettings(ctx context.Context, patch TextureResizeSettingsPatch) (TextureResizeSettings, error) {
+func (t *Tools) SaveTextureResizeSettings(
+	ctx context.Context,
+	patch TextureResizeSettingsPatch,
+) (TextureResizeSettings, error) {
 	current, err := t.GetTextureResizeSettings(ctx)
 	if err != nil {
 		return TextureResizeSettings{}, err
@@ -196,9 +265,19 @@ func (t *Tools) SaveTextureResizeSettings(ctx context.Context, patch TextureResi
 		current.UpscaleScale = normalizeUpscaleScale(current.UpscaleModel, current.UpscaleScale)
 	}
 	client, _ := t.requireClient()
-	values := map[string]string{textureSettingKeys.mode: current.Mode, textureSettingKeys.operation: current.Operation, textureSettingKeys.format: current.OutputFormat,
-		textureSettingKeys.percent: strconv.Itoa(current.Percent), textureSettingKeys.width: strconv.Itoa(current.CustomWidth), textureSettingKeys.height: strconv.Itoa(current.CustomHeight),
-		textureSettingKeys.backup: map[bool]string{true: "1", false: "0"}[current.Backup], textureSettingKeys.scale: strconv.Itoa(current.UpscaleScale), textureSettingKeys.model: current.UpscaleModel}
+	values := map[string]string{
+		textureSettingKeys.mode:      current.Mode,
+		textureSettingKeys.operation: current.Operation,
+		textureSettingKeys.format:    current.OutputFormat,
+		textureSettingKeys.percent: strconv.Itoa(
+			current.Percent,
+		),
+		textureSettingKeys.width:  strconv.Itoa(current.CustomWidth),
+		textureSettingKeys.height: strconv.Itoa(current.CustomHeight),
+		textureSettingKeys.backup: map[bool]string{true: "1", false: "0"}[current.Backup],
+		textureSettingKeys.scale:  strconv.Itoa(current.UpscaleScale),
+		textureSettingKeys.model:  current.UpscaleModel,
+	}
 	for key, value := range values {
 		if err := client.Settings.Upsert(ctx, key, &value); err != nil {
 			return TextureResizeSettings{}, err
@@ -207,7 +286,11 @@ func (t *Tools) SaveTextureResizeSettings(ctx context.Context, patch TextureResi
 	return current, nil
 }
 
-func (t *Tools) ListTextureFolder(ctx context.Context, targetPath string, patch *TextureResizeSettingsPatch) ([]TextureResizeListItem, error) {
+func (t *Tools) ListTextureFolder(
+	ctx context.Context,
+	targetPath string,
+	patch *TextureResizeSettingsPatch,
+) ([]TextureResizeListItem, error) {
 	settings, err := t.GetTextureResizeSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -253,7 +336,11 @@ func (t *Tools) ListTextureFolder(ctx context.Context, targetPath string, patch 
 	return items, nil
 }
 
-func (t *Tools) ListTextureMod(ctx context.Context, modPath string, patch *TextureResizeSettingsPatch) ([]TextureResizeListItem, error) {
+func (t *Tools) ListTextureMod(
+	ctx context.Context,
+	modPath string,
+	patch *TextureResizeSettingsPatch,
+) ([]TextureResizeListItem, error) {
 	return t.ListTextureFolder(ctx, modPath, patch)
 }
 
@@ -366,7 +453,28 @@ func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResize
 	if rel == "." || strings.HasPrefix(rel, "..") {
 		rel = filepath.Base(path)
 	}
-	return TextureResizeListItem{FilePath: path, RelativePath: rel, FileName: filepath.Base(path), FileSize: int64(len(raw)), Format: m.format, ColorSpace: m.colorSpace, LayerCount: m.layers, MipLevelCount: m.mipmaps, OriginalWidth: m.width, OriginalHeight: m.height, TargetWidth: tw, TargetHeight: th, CanResize: canResize, CanUpscale: canUpscale, CanConvertFormat: len(formats) > 0, CanProcess: canUpscale || len(formats) > 0 || len(candidates) > 0, AvailableOutputFormats: formats, OutputFormatDefault: defaultFormat, FormatConversionMessage: conversionMessage, Message: message}, nil
+	return TextureResizeListItem{
+		FilePath:                path,
+		RelativePath:            rel,
+		FileName:                filepath.Base(path),
+		FileSize:                int64(len(raw)),
+		Format:                  m.format,
+		ColorSpace:              m.colorSpace,
+		LayerCount:              m.layers,
+		MipLevelCount:           m.mipmaps,
+		OriginalWidth:           m.width,
+		OriginalHeight:          m.height,
+		TargetWidth:             tw,
+		TargetHeight:            th,
+		CanResize:               canResize,
+		CanUpscale:              canUpscale,
+		CanConvertFormat:        len(formats) > 0,
+		CanProcess:              canUpscale || len(formats) > 0 || len(candidates) > 0,
+		AvailableOutputFormats:  formats,
+		OutputFormatDefault:     defaultFormat,
+		FormatConversionMessage: conversionMessage,
+		Message:                 message,
+	}, nil
 }
 
 func textureUpscaleSkipReason(m ddsMetadata, scale int) *string {
@@ -428,7 +536,17 @@ func detectDDSFormat(u func(int) uint32) string {
 			}
 			return fmt.Sprintf("DXGI_FORMAT_%d", u(128))
 		}
-		legacy := map[uint32]string{0x31545844: "DXGI_FORMAT_BC1_UNORM", 0x33545844: "DXGI_FORMAT_BC2_UNORM", 0x35545844: "DXGI_FORMAT_BC3_UNORM", 0x31495441: "DXGI_FORMAT_BC4_UNORM", 0x55344342: "DXGI_FORMAT_BC4_UNORM", 0x53344342: "DXGI_FORMAT_BC4_SNORM", 0x32495441: "DXGI_FORMAT_BC5_UNORM", 0x55354342: "DXGI_FORMAT_BC5_UNORM", 0x53354342: "DXGI_FORMAT_BC5_SNORM"}
+		legacy := map[uint32]string{
+			0x31545844: "DXGI_FORMAT_BC1_UNORM",
+			0x33545844: "DXGI_FORMAT_BC2_UNORM",
+			0x35545844: "DXGI_FORMAT_BC3_UNORM",
+			0x31495441: "DXGI_FORMAT_BC4_UNORM",
+			0x55344342: "DXGI_FORMAT_BC4_UNORM",
+			0x53344342: "DXGI_FORMAT_BC4_SNORM",
+			0x32495441: "DXGI_FORMAT_BC5_UNORM",
+			0x55354342: "DXGI_FORMAT_BC5_UNORM",
+			0x53354342: "DXGI_FORMAT_BC5_SNORM",
+		}
 		if name := legacy[four]; name != "" {
 			return name
 		}
@@ -547,7 +665,17 @@ func normalizeTextureFormat(v string) string {
 	return ""
 }
 func normalizeUpscaleModel(v string) string {
-	if contains([]string{"realesr-animevideov3", "realesrgan-x4plus-anime", "realesrgan-x4plus", "realcugan-pro", "realcugan-se", "realcugan-nose"}, v) {
+	if contains(
+		[]string{
+			"realesr-animevideov3",
+			"realesrgan-x4plus-anime",
+			"realesrgan-x4plus",
+			"realcugan-pro",
+			"realcugan-se",
+			"realcugan-nose",
+		},
+		v,
+	) {
 		return v
 	}
 	return "realesr-animevideov3"

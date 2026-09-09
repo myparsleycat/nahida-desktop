@@ -6,11 +6,13 @@ import (
 )
 
 var (
-	ErrInvalidPE        = errors.New("invalid PE input")
-	ErrUnsupported      = errors.New("unsupported input")
-	ErrOverflow         = errors.New("integer overflow")
-	ErrAddress          = errors.New("address conversion failed")
-	ErrAuthenticode     = errors.New("input contains an Authenticode certificate table; pass the explicit allow option to produce an invalidated signature")
+	ErrInvalidPE    = errors.New("invalid PE input")
+	ErrUnsupported  = errors.New("unsupported input")
+	ErrOverflow     = errors.New("integer overflow")
+	ErrAddress      = errors.New("address conversion failed")
+	ErrAuthenticode = errors.New(
+		"input contains an Authenticode certificate table; pass the explicit allow option to produce an invalidated signature",
+	)
 	ErrValidation       = errors.New("transformation validation failed")
 	ErrNotDeterministic = errors.New("patch planning was not deterministic")
 )

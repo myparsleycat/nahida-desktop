@@ -28,7 +28,16 @@ func detectModelViewerPositionFrame(data []byte, stride int) bool {
 		normalLength := math.Sqrt(nx*nx + ny*ny + nz*nz)
 		tangentLength := math.Sqrt(tx*tx + ty*ty + tz*tz)
 		sampled++
-		if !math.IsNaN(normalLength) && !math.IsInf(normalLength, 0) && !math.IsNaN(tangentLength) && !math.IsInf(tangentLength, 0) && !math.IsNaN(tw) && !math.IsInf(tw, 0) && normalLength >= 0.9 && normalLength <= 1.1 && tangentLength >= 0.9 && tangentLength <= 1.1 && math.Abs(tw) >= 0.9 && math.Abs(tw) <= 1.1 {
+		if !math.IsNaN(normalLength) && !math.IsInf(normalLength, 0) && !math.IsNaN(tangentLength) &&
+			!math.IsInf(tangentLength, 0) &&
+			!math.IsNaN(tw) &&
+			!math.IsInf(tw, 0) &&
+			normalLength >= 0.9 &&
+			normalLength <= 1.1 &&
+			tangentLength >= 0.9 &&
+			tangentLength <= 1.1 &&
+			math.Abs(tw) >= 0.9 &&
+			math.Abs(tw) <= 1.1 {
 			valid++
 		}
 	}
@@ -46,7 +55,14 @@ type modelViewerGeometry struct {
 	SourceIndices []uint32
 }
 
-func extractModelViewerGeometry(vb []byte, stride int, layout modelViewerFmtLayout, indices []uint32, includeTangents, includeColors, compact bool, warn func(string)) (*modelViewerGeometry, error) {
+func extractModelViewerGeometry(
+	vb []byte,
+	stride int,
+	layout modelViewerFmtLayout,
+	indices []uint32,
+	includeTangents, includeColors, compact bool,
+	warn func(string),
+) (*modelViewerGeometry, error) {
 	if !strings.EqualFold(layout.Topology, "trianglelist") {
 		return nil, fmt.Errorf("unsupported topology: %s", layout.Topology)
 	}
@@ -74,7 +90,15 @@ func extractModelViewerGeometry(vb []byte, stride int, layout modelViewerFmtLayo
 		data, err := readModelViewerAttribute(vb, stride, len(vb)/stride, sourceIndices, *element, width)
 		if err != nil {
 			if warn != nil {
-				warn(fmt.Sprintf("Skipping %s: failed to read %s @ %d: %v", label, element.Format, element.AlignedByteOffset, err))
+				warn(
+					fmt.Sprintf(
+						"Skipping %s: failed to read %s @ %d: %v",
+						label,
+						element.Format,
+						element.AlignedByteOffset,
+						err,
+					),
+				)
 			}
 			return nil, false
 		}
@@ -84,7 +108,12 @@ func extractModelViewerGeometry(vb []byte, stride int, layout modelViewerFmtLayo
 	if !ok {
 		return nil, nil
 	}
-	mesh := &modelViewerGeometry{Position: positionData, Indices: indices, VertexCount: vertexCount, SourceIndices: sourceIndices}
+	mesh := &modelViewerGeometry{
+		Position:      positionData,
+		Indices:       indices,
+		VertexCount:   vertexCount,
+		SourceIndices: sourceIndices,
+	}
 	if data, valid := read(findModelViewerElement(layout, "NORMAL", -1), 3, "NORMAL", false); valid && data != nil {
 		mesh.Normal = data
 	}
@@ -94,7 +123,13 @@ func extractModelViewerGeometry(vb []byte, stride int, layout modelViewerFmtLayo
 			mesh.Tangent = ensureModelViewerVec4(data, vertexCount, width, 1)
 		}
 	}
-	if data, valid := read(findModelViewerElement(layout, "TEXCOORD", 0), 2, "TEXCOORD_0", false); valid && data != nil {
+	if data, valid := read(
+		findModelViewerElement(layout, "TEXCOORD", 0),
+		2,
+		"TEXCOORD_0",
+		false,
+	); valid &&
+		data != nil {
 		mesh.Texcoord0 = data
 	}
 	if color := findModelViewerElement(layout, "COLOR", 0); includeColors && color != nil {
@@ -116,7 +151,13 @@ func findModelViewerElement(layout modelViewerFmtLayout, semantic string, index 
 	return nil
 }
 
-func readModelViewerAttribute(bytes []byte, stride, vertexCount int, sourceIndices []uint32, element modelViewerFmtElement, width int) ([]float32, error) {
+func readModelViewerAttribute(
+	bytes []byte,
+	stride, vertexCount int,
+	sourceIndices []uint32,
+	element modelViewerFmtElement,
+	width int,
+) ([]float32, error) {
 	decoder, err := resolveModelViewerFormatDecoder(element.Format)
 	if err != nil || decoder.byteSize <= 0 {
 		return nil, infra.WithCause(fmt.Errorf("unsupported attribute format %s", element.Format), err)
@@ -154,7 +195,13 @@ func modelViewerCompactIndices(indices []uint32, vertexCount int, warn func(stri
 	for _, source := range indices {
 		if int(source) >= vertexCount {
 			if warn != nil {
-				warn(fmt.Sprintf("Skipping compacted animation geometry: index %d exceeds vertex count %d", source, vertexCount))
+				warn(
+					fmt.Sprintf(
+						"Skipping compacted animation geometry: index %d exceeds vertex count %d",
+						source,
+						vertexCount,
+					),
+				)
 			}
 			return nil, nil, false
 		}

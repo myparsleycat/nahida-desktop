@@ -70,7 +70,8 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 	}
 	applyUpdates(&item.record.Snapshot, updates)
 	if updates.TransferredSize != nil && item.record.Status == StatusProgress {
-		lastIsDuplicate := len(item.samples) > 0 && item.samples[len(item.samples)-1].size == item.record.TransferredSize
+		lastIsDuplicate := len(item.samples) > 0 &&
+			item.samples[len(item.samples)-1].size == item.record.TransferredSize
 		if !lastIsDuplicate {
 			item.samples = append(item.samples, speedSample{at: now, size: item.record.TransferredSize})
 		}
@@ -95,7 +96,11 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 			item.record.ETA = math.Ceil(float64(item.record.TotalSize-item.record.TransferredSize) / item.record.Speed)
 		}
 		if item.record.TotalSize > 0 {
-			item.record.Progress = clamp(float64(item.record.TransferredSize)/float64(item.record.TotalSize)*100, 0, 100)
+			item.record.Progress = clamp(
+				float64(item.record.TransferredSize)/float64(item.record.TotalSize)*100,
+				0,
+				100,
+			)
 		} else if item.record.TransferredSize > 0 {
 			item.record.Progress = 100
 		}
@@ -128,7 +133,13 @@ func (t *Transfer) Get(pid string) (Record, bool) {
 }
 
 //wails:ignore
-func (t *Transfer) SetData(pid string, data Data, totalSize int64, name string, destinationTargets []DestinationTarget) error {
+func (t *Transfer) SetData(
+	pid string,
+	data Data,
+	totalSize int64,
+	name string,
+	destinationTargets []DestinationTarget,
+) error {
 	t.destinationMu.Lock()
 	t.mu.Lock()
 	item, ok := t.entries[pid]
@@ -428,7 +439,8 @@ func isTerminal(status Status) bool {
 }
 
 func isValidStatus(status Status) bool {
-	return isOpen(status) || status == StatusCompleted || status == StatusPaused || status == StatusCanceled || status == StatusError
+	return isOpen(status) || status == StatusCompleted || status == StatusPaused || status == StatusCanceled ||
+		status == StatusError
 }
 
 func clamp(value, low, high float64) float64 {

@@ -14,7 +14,10 @@ import (
 )
 
 func TestParseModelViewerINIMatchesElectronCommentsAndDuplicateSections(t *testing.T) {
-	parsed := parseModelViewerINI("\ufeff[KeyToggle]\nkey = no_ctrl K ; keep\n$Mode = 0, 1 ; trim\n[KeyToggle]\nback = L ; keep\n$Reset = 0 ; trim\n", "mod.ini")
+	parsed := parseModelViewerINI(
+		"\ufeff[KeyToggle]\nkey = no_ctrl K ; keep\n$Mode = 0, 1 ; trim\n[KeyToggle]\nback = L ; keep\n$Reset = 0 ; trim\n",
+		"mod.ini",
+	)
 	if len(parsed.Sections) != 1 {
 		t.Fatalf("sections = %#v", parsed.Sections)
 	}
@@ -178,7 +181,11 @@ drawindexed = 3, 0, 0
 
 func TestLoadModViewerUsesElectronGeometryErrors(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "empty.ini"), []byte("[Constants]\nglobal $unused = 0\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(root, "empty.ini"),
+		[]byte("[Constants]\nglobal $unused = 0\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	service := NewWithOptions(Options{Protocol: infra.NewProtocol()})
@@ -211,7 +218,11 @@ func TestLoadModViewerLogsElectronLoadMessages(t *testing.T) {
 	log.SetLevel("info")
 	service := NewWithOptions(Options{Protocol: infra.NewProtocol(), Log: log})
 	service.UseClient(openToolsTestDB(t))
-	if err := os.WriteFile(filepath.Join(root, "empty.ini"), []byte("[Constants]\nglobal $unused = 0\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(root, "empty.ini"),
+		[]byte("[Constants]\nglobal $unused = 0\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, err := service.LoadModViewer(context.Background(), root)
@@ -219,7 +230,9 @@ func TestLoadModViewerLogsElectronLoadMessages(t *testing.T) {
 		t.Fatal("expected geometry error")
 	}
 	failed := buf.String()
-	if !strings.Contains(failed, "Starting model viewer load") || !strings.Contains(failed, "Model viewer load failed after") || !strings.Contains(failed, "No mesh geometry found") {
+	if !strings.Contains(failed, "Starting model viewer load") ||
+		!strings.Contains(failed, "Model viewer load failed after") ||
+		!strings.Contains(failed, "No mesh geometry found") {
 		t.Fatalf("failure logs = %q", failed)
 	}
 	if !strings.Contains(failed, "StaticGlb.loadForViewer") {
@@ -249,7 +262,10 @@ filename = diffuse.png
 		_, _ = service.CleanupModelViewer(context.Background(), result.MemorySessionID)
 	})
 	ok := buf.String()
-	if !strings.Contains(ok, "Starting model viewer load") || !strings.Contains(ok, "Texture encoding completed in") || !strings.Contains(ok, "textures=1") || !strings.Contains(ok, "Completed model viewer load in") || !strings.Contains(ok, "meshes=1") {
+	if !strings.Contains(ok, "Starting model viewer load") || !strings.Contains(ok, "Texture encoding completed in") ||
+		!strings.Contains(ok, "textures=1") ||
+		!strings.Contains(ok, "Completed model viewer load in") ||
+		!strings.Contains(ok, "meshes=1") {
 		t.Fatalf("success logs = %q", ok)
 	}
 }

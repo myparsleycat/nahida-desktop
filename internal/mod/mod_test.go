@@ -76,7 +76,16 @@ func TestGameCRUDRejectsDuplicateRootsAndInvalidOrder(t *testing.T) {
 	if err := service.AddGame(ctx, "ZZZ", modsB, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.AddGame(ctx, "Duplicate", modsA, nil, nil, nil, nil); err == nil || err.Error() != "DUPLICATE_MOD_FOLDER_PATH" {
+	if err := service.AddGame(
+		ctx,
+		"Duplicate",
+		modsA,
+		nil,
+		nil,
+		nil,
+		nil,
+	); err == nil ||
+		err.Error() != "DUPLICATE_MOD_FOLDER_PATH" {
 		t.Fatalf("duplicate root error = %v", err)
 	}
 	if err := service.ReorderGames(ctx, []string{"ZZZ", "ZZZ"}); err == nil || err.Error() != "INVALID_GAME_ORDER" {
@@ -125,7 +134,16 @@ func TestAddGameClassifiesCaseVariantNameOnSamePathAsPathDuplicate(t *testing.T)
 	if err := service.AddGame(ctx, "Game", first, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.AddGame(ctx, "game", first, nil, nil, nil, nil); err == nil || err.Error() != "DUPLICATE_MOD_FOLDER_PATH" {
+	if err := service.AddGame(
+		ctx,
+		"game",
+		first,
+		nil,
+		nil,
+		nil,
+		nil,
+	); err == nil ||
+		err.Error() != "DUPLICATE_MOD_FOLDER_PATH" {
 		t.Fatalf("case-variant same-path error = %v", err)
 	}
 	if err := service.AddGame(ctx, "game", second, nil, nil, nil, nil); err != nil {
@@ -253,7 +271,8 @@ $ignored = 0, 1
 	if before.ModCount != 1 || before.EnabledModCount != 1 || len(before.Mods[0].Inis) != 1 {
 		t.Fatalf("before = %#v", before)
 	}
-	if got := before.Mods[0].Inis[0].ToggleKeys; len(got) != 1 || got[0].Variable != "$swap" || got[0].Key == nil || *got[0].Key != "F1" {
+	if got := before.Mods[0].Inis[0].ToggleKeys; len(got) != 1 || got[0].Variable != "$swap" || got[0].Key == nil ||
+		*got[0].Key != "F1" {
 		t.Fatalf("toggle keys = %#v", got)
 	}
 	disabledPath, err := service.Toggle(ctx, modPath)
@@ -550,7 +569,14 @@ func TestPresetConflictMustBeResolved(t *testing.T) {
 	if len(conflicts) != 1 || len(conflicts[0].Candidates) != 2 {
 		t.Fatalf("conflicts = %#v", conflicts)
 	}
-	if _, err := service.CreatePreset(ctx, "Game", "Blocked", nil, false); err == nil || err.Error() != "PRESET_CONFLICTS_EXIST" {
+	if _, err := service.CreatePreset(
+		ctx,
+		"Game",
+		"Blocked",
+		nil,
+		false,
+	); err == nil ||
+		err.Error() != "PRESET_CONFLICTS_EXIST" {
 		t.Fatalf("create without resolve error = %v", err)
 	}
 	if _, err := service.CreatePreset(ctx, "Game", "Resolved", nil, true); err != nil {

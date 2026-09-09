@@ -80,7 +80,8 @@ drawindexedinstanced = 6, INSTANCE_COUNT, 3, 2, FIRST_INSTANCE`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 1 || records[0].auto || records[0].draw.IndexCount != 6 || records[0].draw.StartIndex != 3 || records[0].draw.BaseVertex != 2 {
+	if len(records) != 1 || records[0].auto || records[0].draw.IndexCount != 6 || records[0].draw.StartIndex != 3 ||
+		records[0].draw.BaseVertex != 2 {
 		t.Fatalf("records = %#v", records)
 	}
 }
@@ -184,7 +185,10 @@ endif`)
 		t.Fatalf("records = %#v", records)
 	}
 	record := records[0]
-	if record.sectionName != "_EntryPoint_Component0" || record.state.ib != "_Component0_IB" || record.state.vb0 != "_Component0_VB0" || record.state.vb1 != "_Component0_VB1" || record.draw.IndexCount != 3 {
+	if record.sectionName != "_EntryPoint_Component0" || record.state.ib != "_Component0_IB" ||
+		record.state.vb0 != "_Component0_VB0" ||
+		record.state.vb1 != "_Component0_VB1" ||
+		record.draw.IndexCount != 3 {
 		t.Fatalf("record = %#v", record)
 	}
 }

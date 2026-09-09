@@ -33,7 +33,16 @@ func (a *Archive) IsArchive(ctx context.Context, archivePath string) bool {
 	input, err := os.Open(archivePath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			_ = ReportError(a.log, err, "Archive", Diagnostic{Severity: DiagnosticWarn, Operation: "identify", Fields: map[string]any{"path": archivePath}})
+			_ = ReportError(
+				a.log,
+				err,
+				"Archive",
+				Diagnostic{
+					Severity:  DiagnosticWarn,
+					Operation: "identify",
+					Fields:    map[string]any{"path": archivePath},
+				},
+			)
 		}
 		return false
 	}
@@ -56,7 +65,16 @@ func (a *Archive) IsArchiveOf(ctx context.Context, archivePath string, extension
 	input, err := os.Open(archivePath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			_ = ReportError(a.log, err, "Archive", Diagnostic{Severity: DiagnosticWarn, Operation: "identify", Fields: map[string]any{"path": archivePath}})
+			_ = ReportError(
+				a.log,
+				err,
+				"Archive",
+				Diagnostic{
+					Severity:  DiagnosticWarn,
+					Operation: "identify",
+					Fields:    map[string]any{"path": archivePath},
+				},
+			)
 		}
 		return false
 	}
@@ -104,7 +122,12 @@ func (a *Archive) HasSingleTopLevelDirectory(ctx context.Context, archivePath st
 	return false, nil
 }
 
-func (a *Archive) Extract(ctx context.Context, archivePath, targetDir string, options ExtractOptions, onProgress ExtractProgress) (string, error) {
+func (a *Archive) Extract(
+	ctx context.Context,
+	archivePath, targetDir string,
+	options ExtractOptions,
+	onProgress ExtractProgress,
+) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -130,7 +153,16 @@ func (a *Archive) Extract(ctx context.Context, archivePath, targetDir string, op
 	keepTemporary := false
 	defer func() {
 		if !keepTemporary {
-			_ = ReportError(a.log, os.RemoveAll(temporaryDir), "Archive", Diagnostic{Operation: "extract", Stage: "cleanup", Fields: map[string]any{"path": temporaryDir, "archivePath": archivePath}})
+			_ = ReportError(
+				a.log,
+				os.RemoveAll(temporaryDir),
+				"Archive",
+				Diagnostic{
+					Operation: "extract",
+					Stage:     "cleanup",
+					Fields:    map[string]any{"path": temporaryDir, "archivePath": archivePath},
+				},
+			)
 		}
 	}()
 	emitExtractProgress(onProgress, 1, "Starting extraction")

@@ -64,7 +64,12 @@ func cmdScript(ctx context.Context, script string) *exec.Cmd {
 func elevatedCopyFiles(copies []fileCopy) error {
 	var entries strings.Builder
 	for _, item := range copies {
-		fmt.Fprintf(&entries, "[pscustomobject]@{ SourcePath = %s; TargetPath = %s }\n", psLiteral(item.Source), psLiteral(item.Target))
+		fmt.Fprintf(
+			&entries,
+			"[pscustomobject]@{ SourcePath = %s; TargetPath = %s }\n",
+			psLiteral(item.Source),
+			psLiteral(item.Target),
+		)
 	}
 	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
 $Copies = @(
@@ -98,7 +103,14 @@ try {
   if ($null -eq $Process -or $null -eq $Process.ExitCode) { exit 1 }
   exit $Process.ExitCode
 } catch { exit 1 }`, inner)
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodePowerShell(outer))
+	cmd := exec.Command(
+		"powershell.exe",
+		"-NoProfile",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-EncodedCommand",
+		encodePowerShell(outer),
+	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%s: %w", errorPrefix, err)

@@ -67,7 +67,12 @@ type pathSelector struct {
 
 const pathSelectorColdStartDelay = 500 * time.Millisecond
 
-func newPathSelector(dialog pathSelectionDialog, fs *platform.FS, emit func(string, ...any), focus func()) *pathSelector {
+func newPathSelector(
+	dialog pathSelectionDialog,
+	fs *platform.FS,
+	emit func(string, ...any),
+	focus func(),
+) *pathSelector {
 	return &pathSelector{
 		pending: map[string]*pendingPathSelection{},
 		dialog:  dialog,
@@ -205,7 +210,11 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 		}
 		if result.Canceled {
 			if !p.hasPending(selectionID) {
-				return false, newFolderPathSelectionError("resume_after_cancel", "", errors.New("pending selection not found"))
+				return false, newFolderPathSelectionError(
+					"resume_after_cancel",
+					"",
+					errors.New("pending selection not found"),
+				)
 			}
 			return false, nil
 		}
@@ -217,7 +226,11 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 			return false, newFolderPathSelectionError("validate_file_path", result.FilePath, err)
 		}
 		if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &dir, FileName: &name}, nil) {
-			return false, newFolderPathSelectionError("settle_file_path", result.FilePath, errors.New("pending selection not found"))
+			return false, newFolderPathSelectionError(
+				"settle_file_path",
+				result.FilePath,
+				errors.New("pending selection not found"),
+			)
 		}
 		return true, nil
 	}
@@ -228,7 +241,11 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 	}
 	if result.Canceled {
 		if !p.hasPending(selectionID) {
-			return false, newFolderPathSelectionError("resume_after_cancel", "", errors.New("pending selection not found"))
+			return false, newFolderPathSelectionError(
+				"resume_after_cancel",
+				"",
+				errors.New("pending selection not found"),
+			)
 		}
 		return false, nil
 	}
@@ -238,7 +255,11 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 		return false, newFolderPathSelectionError("validate_directory_path", result.FilePath, err)
 	}
 	if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &result.FilePath}, nil) {
-		return false, newFolderPathSelectionError("settle_directory_path", result.FilePath, errors.New("pending selection not found"))
+		return false, newFolderPathSelectionError(
+			"settle_directory_path",
+			result.FilePath,
+			errors.New("pending selection not found"),
+		)
 	}
 	return true, nil
 }

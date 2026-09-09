@@ -184,7 +184,11 @@ func collectRemapperHashes(pack *zzmiengine.RulePack) (janeHashes, dialynHashes 
 	return janeHashes, dialynHashes
 }
 
-func (z *ZZMIFixInspector) checkRemapperHashes(ctx context.Context, target string, janeHashes, dialynHashes map[string]bool) (hasJane bool, hasDialyn bool, err error) {
+func (z *ZZMIFixInspector) checkRemapperHashes(
+	ctx context.Context,
+	target string,
+	janeHashes, dialynHashes map[string]bool,
+) (hasJane bool, hasDialyn bool, err error) {
 	err = filepath.WalkDir(target, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -199,10 +203,13 @@ func (z *ZZMIFixInspector) checkRemapperHashes(ctx context.Context, target strin
 			return nil
 		}
 		upper := strings.ToUpper(entry.Name())
-		if path != target && entry.IsDir() && (strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP")) {
+		if path != target && entry.IsDir() &&
+			(strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP")) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") || strings.HasPrefix(upper, "DISABLED") || strings.HasPrefix(upper, "DESKTOP") {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".ini") ||
+			strings.HasPrefix(upper, "DISABLED") ||
+			strings.HasPrefix(upper, "DESKTOP") {
 			return nil
 		}
 

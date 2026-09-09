@@ -94,7 +94,11 @@ func TestZZMIFixInspector(t *testing.T) {
 	if err := os.Mkdir(cleanTarget, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cleanTarget, "mod.ini"), []byte("[TextureOverrideClean]\nhash = aabbccdd\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(cleanTarget, "mod.ini"),
+		[]byte("[TextureOverrideClean]\nhash = aabbccdd\n"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 

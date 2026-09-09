@@ -20,12 +20,18 @@ var (
 	modelViewerSparseIDRE          = regexp.MustCompile(`(?i)^\$\\WWMIv1\\shapekey_id\s*=\s*(\d+)\s*$`)
 	modelViewerSparseValueRE       = regexp.MustCompile(`(?i)^\$\\WWMIv1\\shapekey_value\s*=\s*\$(\w+)\s*$`)
 	modelViewerSparseBindRE        = regexp.MustCompile(`(?i)^(cs-t(?:0|1|6|33))\s*=\s*(?:copy\s+|ref\s+)?(\S+)\s*$`)
-	modelViewerSparseBatchRE       = regexp.MustCompile(`(?i)^global\s+\$shapekey_vertex_offset_batch(\d+)\s*=\s*(\d+)\s*$`)
-	modelViewerMultiBufferRE       = regexp.MustCompile(`(?i)^cs-t(5[0-4])\s*=\s*copy\s+(\S+)\s*$`)
-	modelViewerMultiScalarRE       = regexp.MustCompile(`(?i)^x(88|89)\s*=\s*\$(\w+)\s*$`)
+	modelViewerSparseBatchRE       = regexp.MustCompile(
+		`(?i)^global\s+\$shapekey_vertex_offset_batch(\d+)\s*=\s*(\d+)\s*$`,
+	)
+	modelViewerMultiBufferRE = regexp.MustCompile(`(?i)^cs-t(5[0-4])\s*=\s*copy\s+(\S+)\s*$`)
+	modelViewerMultiScalarRE = regexp.MustCompile(`(?i)^x(88|89)\s*=\s*\$(\w+)\s*$`)
 )
 
-func collectAdditionalModelViewerShapeKeys(sections []modINISection, resources map[string]modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectAdditionalModelViewerShapeKeys(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	var output []modelViewerShapeKey
 	output = append(output, collectSimpleModelViewerShapeKeys(sections, resources, modDir)...)
 	output = append(output, collectX88ModelViewerShapeKeys(sections, resources, modDir)...)
@@ -38,7 +44,17 @@ func collectAdditionalModelViewerShapeKeys(sections []modINISection, resources m
 			continue
 		}
 		dimension := shape.Dimensions[0]
-		key := modelViewerNormalizeKey(dimension.VariableID) + "|" + strings.ToLower(shape.BasePath) + "|" + strings.ToLower(dimension.SmallerPath) + "|" + strings.ToLower(dimension.BiggerPath) + "|" + strconv.FormatBool(dimension.Sparse)
+		key := modelViewerNormalizeKey(
+			dimension.VariableID,
+		) + "|" + strings.ToLower(
+			shape.BasePath,
+		) + "|" + strings.ToLower(
+			dimension.SmallerPath,
+		) + "|" + strings.ToLower(
+			dimension.BiggerPath,
+		) + "|" + strconv.FormatBool(
+			dimension.Sparse,
+		)
 		if seen[key] {
 			continue
 		}
@@ -48,7 +64,11 @@ func collectAdditionalModelViewerShapeKeys(sections []modINISection, resources m
 	return kept
 }
 
-func collectSimpleModelViewerShapeKeys(sections []modINISection, resources map[string]modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectSimpleModelViewerShapeKeys(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	var output []modelViewerShapeKey
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CustomShader") {
@@ -77,13 +97,18 @@ func collectSimpleModelViewerShapeKeys(sections []modINISection, resources map[s
 	return output
 }
 
-func collectX88ModelViewerShapeKeys(sections []modINISection, resources map[string]modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectX88ModelViewerShapeKeys(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	remaps := make(map[string]string)
 	authoredSliders := make(map[string]bool)
 	for _, section := range sections {
 		for _, raw := range section.Lines {
 			line := cleanModelViewerShapeLine(raw)
-			if strings.EqualFold(section.Header, "CommandList") && strings.HasPrefix(strings.ToLower(section.Name), "drawslider") {
+			if strings.EqualFold(section.Header, "CommandList") &&
+				strings.HasPrefix(strings.ToLower(section.Name), "drawslider") {
 				if match := modelViewerShapeSliderRE.FindStringSubmatch(line); match != nil {
 					authoredSliders[modelViewerNormalizeKey(match[1])] = true
 				}
@@ -175,7 +200,15 @@ func collectX88ModelViewerShapeKeys(sections []modINISection, resources map[stri
 				continue
 			}
 			base := runtimeModelViewerShapeBaseName(item.base, resources)
-			if shape, ok := directModelViewerShape(item.variable, base, item.low, item.high, "midpoint_pair", resources, modDir); ok {
+			if shape, ok := directModelViewerShape(
+				item.variable,
+				base,
+				item.low,
+				item.high,
+				"midpoint_pair",
+				resources,
+				modDir,
+			); ok {
 				output = append(output, shape)
 			}
 		}
@@ -183,7 +216,11 @@ func collectX88ModelViewerShapeKeys(sections []modINISection, resources map[stri
 	return output
 }
 
-func collectSparseModelViewerShapeKeys(sections []modINISection, resources map[string]modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectSparseModelViewerShapeKeys(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	bindings := make(map[string]string)
 	shapeIDs := make(map[string]int)
 	batchOffsets := make(map[int]int)
@@ -192,7 +229,8 @@ func collectSparseModelViewerShapeKeys(sections []modINISection, resources map[s
 		pendingID := -1
 		for _, raw := range section.Lines {
 			line := cleanModelViewerShapeLine(raw)
-			if strings.EqualFold(section.Header, "CommandList") && strings.HasPrefix(strings.ToLower(section.Name), "drawslider") {
+			if strings.EqualFold(section.Header, "CommandList") &&
+				strings.HasPrefix(strings.ToLower(section.Name), "drawslider") {
 				if match := modelViewerShapeSliderRE.FindStringSubmatch(line); match != nil {
 					sliders = append(sliders, modelViewerNormalizeKey(match[1]))
 				}
@@ -210,7 +248,10 @@ func collectSparseModelViewerShapeKeys(sections []modINISection, resources map[s
 				shapeIDs[modelViewerNormalizeKey(match[1])] = pendingID
 				pendingID = -1
 			}
-			if match := modelViewerSparseBindRE.FindStringSubmatch(line); match != nil && bindings[strings.ToLower(match[1])] == "" {
+			if match := modelViewerSparseBindRE.FindStringSubmatch(
+				line,
+			); match != nil &&
+				bindings[strings.ToLower(match[1])] == "" {
 				bindings[strings.ToLower(match[1])] = match[2]
 			}
 		}
@@ -219,7 +260,9 @@ func collectSparseModelViewerShapeKeys(sections []modINISection, resources map[s
 	offsets, offsetsOK := lookupModelViewerShapeResource(resources, bindings["cs-t33"])
 	vertexIDs, vertexIDsOK := lookupModelViewerShapeResource(resources, bindings["cs-t0"])
 	deltas, deltasOK := lookupModelViewerShapeResource(resources, bindings["cs-t1"])
-	if !baseOK || !offsetsOK || !vertexIDsOK || !deltasOK || base.Filename == "" || offsets.Filename == "" || vertexIDs.Filename == "" || deltas.Filename == "" {
+	if !baseOK || !offsetsOK || !vertexIDsOK || !deltasOK || base.Filename == "" || offsets.Filename == "" ||
+		vertexIDs.Filename == "" ||
+		deltas.Filename == "" {
 		return nil
 	}
 	var output []modelViewerShapeKey
@@ -232,19 +275,38 @@ func collectSparseModelViewerShapeKeys(sections []modINISection, resources map[s
 		seen[variable] = true
 		batch := shapeID / 127
 		dimension := modelViewerShapeKeyDimension{
-			VariableID: variable, Sparse: true, BufferShapeID: shapeID + batch, SparseOffset: batchOffsets[batch],
-			OffsetPath: shapeResourcePath(modDir, offsets), VertexIDPath: shapeResourcePath(modDir, vertexIDs), VertexDeltaPath: shapeResourcePath(modDir, deltas),
+			VariableID:    variable,
+			Sparse:        true,
+			BufferShapeID: shapeID + batch,
+			SparseOffset:  batchOffsets[batch],
+			OffsetPath: shapeResourcePath(
+				modDir,
+				offsets,
+			),
+			VertexIDPath:    shapeResourcePath(modDir, vertexIDs),
+			VertexDeltaPath: shapeResourcePath(modDir, deltas),
 		}
 		stride := base.Stride
 		if stride == 0 {
 			stride = 12
 		}
-		output = append(output, modelViewerShapeKey{BasePath: shapeResourcePath(modDir, base), VertexStride: stride, Dimensions: []modelViewerShapeKeyDimension{dimension}})
+		output = append(
+			output,
+			modelViewerShapeKey{
+				BasePath:     shapeResourcePath(modDir, base),
+				VertexStride: stride,
+				Dimensions:   []modelViewerShapeKeyDimension{dimension},
+			},
+		)
 	}
 	return output
 }
 
-func collectMultiModelViewerShapeKeys(sections []modINISection, resources map[string]modelViewerResource, modDir string) []modelViewerShapeKey {
+func collectMultiModelViewerShapeKeys(
+	sections []modINISection,
+	resources map[string]modelViewerResource,
+	modDir string,
+) []modelViewerShapeKey {
 	menuVars := make(map[string]bool)
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CommandList") {
@@ -290,7 +352,15 @@ func collectMultiModelViewerShapeKeys(sections []modINISection, resources map[st
 				if variable == "" || !menuVars[variable] {
 					continue
 				}
-				if shape, ok := directModelViewerShape(variable, set[0], set[slots[1]], set[slots[0]], "midpoint_pair", resources, modDir); ok {
+				if shape, ok := directModelViewerShape(
+					variable,
+					set[0],
+					set[slots[1]],
+					set[slots[0]],
+					"midpoint_pair",
+					resources,
+					modDir,
+				); ok {
 					output = append(output, shape)
 				}
 			}
@@ -299,7 +369,11 @@ func collectMultiModelViewerShapeKeys(sections []modINISection, resources map[st
 	return output
 }
 
-func directModelViewerShape(variable, baseName, lowName, highName, mode string, resources map[string]modelViewerResource, modDir string) (modelViewerShapeKey, bool) {
+func directModelViewerShape(
+	variable, baseName, lowName, highName, mode string,
+	resources map[string]modelViewerResource,
+	modDir string,
+) (modelViewerShapeKey, bool) {
 	base, baseOK := lookupModelViewerShapeResource(resources, baseName)
 	high, highOK := lookupModelViewerShapeResource(resources, highName)
 	if !baseOK || !highOK || base.Filename == "" || high.Filename == "" {
@@ -315,7 +389,11 @@ func directModelViewerShape(variable, baseName, lowName, highName, mode string, 
 	if strings.EqualFold(base.Filename, high.Filename) {
 		return modelViewerShapeKey{}, false
 	}
-	dimension := modelViewerShapeKeyDimension{VariableID: modelViewerNormalizeKey(variable), Mode: mode, BiggerPath: shapeResourcePath(modDir, high)}
+	dimension := modelViewerShapeKeyDimension{
+		VariableID: modelViewerNormalizeKey(variable),
+		Mode:       mode,
+		BiggerPath: shapeResourcePath(modDir, high),
+	}
 	if lowName != "" {
 		low, lowOK := lookupModelViewerShapeResource(resources, lowName)
 		if !lowOK || low.Filename == "" || low.Stride != 0 && low.Stride != stride {
@@ -323,7 +401,14 @@ func directModelViewerShape(variable, baseName, lowName, highName, mode string, 
 		}
 		dimension.SmallerPath = shapeResourcePath(modDir, low)
 	}
-	return modelViewerShapeKey{BasePath: shapeResourcePath(modDir, base), VertexStride: stride, PositionOffset: 0, NormalOffset: 12, TangentOffset: 24, Dimensions: []modelViewerShapeKeyDimension{dimension}}, true
+	return modelViewerShapeKey{
+		BasePath:       shapeResourcePath(modDir, base),
+		VertexStride:   stride,
+		PositionOffset: 0,
+		NormalOffset:   12,
+		TangentOffset:  24,
+		Dimensions:     []modelViewerShapeKeyDimension{dimension},
+	}, true
 }
 
 func runtimeModelViewerShapeBaseName(name string, resources map[string]modelViewerResource) string {

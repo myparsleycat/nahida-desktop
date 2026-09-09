@@ -40,7 +40,11 @@ func TestSavePathLoadsConfigManifestAndEnabledImporters(t *testing.T) {
 	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(manifestDir, "Manifest.json"), []byte(`{"version":"v1.2.3"}`), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(manifestDir, "Manifest.json"),
+		[]byte(`{"version":"v1.2.3"}`),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	service := New()
@@ -55,7 +59,8 @@ func TestSavePathLoadsConfigManifestAndEnabledImporters(t *testing.T) {
 	if data.XXMIPath == nil || *data.XXMIPath != root || data.DLLVersion == nil || *data.DLLVersion != "v1.2.3" {
 		t.Fatalf("data = %+v", data)
 	}
-	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].Key != "GIMI" || data.EnabledImporters[0].ImporterFolder != filepath.Join(root, "GIMI") {
+	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].Key != "GIMI" ||
+		data.EnabledImporters[0].ImporterFolder != filepath.Join(root, "GIMI") {
 		t.Fatalf("enabled importers = %+v", data.EnabledImporters)
 	}
 }
@@ -295,7 +300,8 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 		if request.URL.Path != "/repos/SpectrumQT/XXMI-Libs-Package/releases" || request.URL.RawQuery != "" {
 			t.Fatalf("URL = %s", request.URL)
 		}
-		if request.Header.Get("Accept") != "application/vnd.github+json" || request.Header.Get("X-GitHub-Api-Version") != "2026-03-10" {
+		if request.Header.Get("Accept") != "application/vnd.github+json" ||
+			request.Header.Get("X-GitHub-Api-Version") != "2026-03-10" {
 			t.Fatalf("headers = %v", request.Header)
 		}
 		if !strings.Contains(request.Header.Get("User-Agent"), "Chrome/138.0.0.0") {
@@ -309,7 +315,11 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 			Request:    request,
 		}, nil
 	})}
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})})
+	service := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline}),
+		},
+	)
 	first, err := service.GetLibsReleases(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -352,7 +362,11 @@ func TestGetLibsReleasesDeduplicatesInitialInFlightRequest(t *testing.T) {
 			Body: io.NopCloser(strings.NewReader(`[{"tag_name":"v1"}]`)), Request: request,
 		}, nil
 	})}
-	service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})})
+	service := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline}),
+		},
+	)
 	results := make(chan error, 2)
 	go func() { _, err := service.GetLibsReleases(context.Background()); results <- err }()
 	<-started
@@ -396,7 +410,13 @@ func TestInstallDLLVersionStagesAndValidatesBeforeCopy(t *testing.T) {
 		if strings.HasSuffix(request.URL.Path, ".zip") {
 			body = archive.Bytes()
 		}
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: request}, nil
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Request:    request,
+		}, nil
 	})}
 	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
 	download := infra.NewDownload()
@@ -511,13 +531,21 @@ func xxmiTestBaseImporter(name string) map[string]any {
 		"extra_libraries_signature": "", "deployed_migoto_signatures": map[string]string{},
 		"shortcut_deployed": false, "configure_game": false, "launch_count": 0, "launch_options": "",
 		"d3dx_ini": map[string]any{
-			"core":              map[string]any{"Loader": map[string]any{"loader": "d3d11.dll"}},
-			"enforce_rendering": map[string]any{"Rendering": map[string]any{"texture_hash": 0, "track_texture_updates": 0}},
-			"calls_logging":     map[string]any{"Logging": map[string]any{"calls": map[string]any{"on": 1, "off": 0}}},
-			"debug_logging":     map[string]any{"Logging": map[string]any{"debug": map[string]any{"on": 1, "off": 0}}},
-			"mute_warnings":     map[string]any{"Logging": map[string]any{"show_warnings": map[string]any{"on": 1, "off": 0}}},
-			"enable_hunting":    map[string]any{"Hunting": map[string]any{"hunting": map[string]any{"on": 1, "off": 0}}},
-			"dump_shaders":      map[string]any{"Hunting": map[string]any{"marking_actions": map[string]any{"on": "mark", "off": "no_mark"}}},
+			"core": map[string]any{"Loader": map[string]any{"loader": "d3d11.dll"}},
+			"enforce_rendering": map[string]any{
+				"Rendering": map[string]any{"texture_hash": 0, "track_texture_updates": 0},
+			},
+			"calls_logging": map[string]any{"Logging": map[string]any{"calls": map[string]any{"on": 1, "off": 0}}},
+			"debug_logging": map[string]any{"Logging": map[string]any{"debug": map[string]any{"on": 1, "off": 0}}},
+			"mute_warnings": map[string]any{
+				"Logging": map[string]any{"show_warnings": map[string]any{"on": 1, "off": 0}},
+			},
+			"enable_hunting": map[string]any{
+				"Hunting": map[string]any{"hunting": map[string]any{"on": 1, "off": 0}},
+			},
+			"dump_shaders": map[string]any{
+				"Hunting": map[string]any{"marking_actions": map[string]any{"on": "mark", "off": "no_mark"}},
+			},
 		},
 	}
 }

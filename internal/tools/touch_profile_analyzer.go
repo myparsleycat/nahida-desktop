@@ -116,7 +116,10 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 				warn(fmt.Sprintf("Skipping index buffer %s: index exceeds %d", indexPath, vertexCount-1))
 				continue
 			}
-			indexInfos = append(indexInfos, touchIndexInfo{Resource: index, Offset: len(combined), Count: len(values), Path: indexPath})
+			indexInfos = append(
+				indexInfos,
+				touchIndexInfo{Resource: index, Offset: len(combined), Count: len(values), Path: indexPath},
+			)
 			combined = append(combined, values...)
 			indexPaths, indexRelativePaths = append(indexPaths, indexPath), append(indexRelativePaths, index.Filename)
 			format := index.Format
@@ -131,9 +134,19 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 			continue
 		}
 
-		drawRanges, blendSection, ibSection, ibHash, variantCondition := findTouchDrawContext(sections, position, indexInfos, len(combined))
+		drawRanges, blendSection, ibSection, ibHash, variantCondition := findTouchDrawContext(
+			sections,
+			position,
+			indexInfos,
+			len(combined),
+		)
 		drawRanges = uniqueTouchDrawRanges(drawRanges)
-		kind := classifyTouchComponent(position.Name, indexInfos[0].Resource.Name, derefString(blendSection), derefString(ibSection))
+		kind := classifyTouchComponent(
+			position.Name,
+			indexInfos[0].Resource.Name,
+			derefString(blendSection),
+			derefString(ibSection),
+		)
 		grade, reasons := gradeTouchComponent(position.Stride, positionBytes, vertexCount, combined, drawRanges, kind)
 		meshPositions, _ := extractBodyPositions(positionBytes, position.Stride)
 		blendRelative, blendPath, blendStride := (*string)(nil), (*string)(nil), (*int)(nil)
@@ -160,16 +173,34 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		primary := indexInfos[0]
 		primaryName, primaryRel, primaryPath, primaryFormat := primary.Resource.Name, indexRelativePaths[0], primary.Path, primary.Resource.Format
 		component := TouchComponentAnalysis{
-			ID: sanitizeTouchID(position.Name), Name: position.Name, Kind: kind,
+			ID:                   sanitizeTouchID(position.Name),
+			Name:                 position.Name,
+			Kind:                 kind,
 			InteractiveCandidate: touchInteractiveCandidate(kind, vertexCount, len(combined), position.Name),
-			SupportGrade:         grade, SupportReasons: reasons, PositionResourceName: position.Name,
-			PositionRelativePath: position.Filename, PositionPath: positionPath, PositionStride: position.Stride,
-			VertexCount: vertexCount, IndexResourceName: &primaryName, IndexRelativePath: &primaryRel,
-			IndexPath: &primaryPath, IndexRelativePaths: indexRelativePaths, IndexPaths: indexPaths,
-			IndexFormats: indexFormats, IndexCount: len(combined), BlendSectionName: blendSection,
-			IBSectionName: ibSection, IBHash: ibHash, VariantCondition: variantCondition,
-			DrawRanges: drawRanges, ObjectMaps: buildTouchObjectMaps(drawRanges, kind, len(components)+1, meshPositions, combined),
-			BlendRelativePath: blendRelative, BlendPath: blendPath, BlendStride: blendStride, Bones: bones,
+			SupportGrade:         grade,
+			SupportReasons:       reasons,
+			PositionResourceName: position.Name,
+			PositionRelativePath: position.Filename,
+			PositionPath:         positionPath,
+			PositionStride:       position.Stride,
+			VertexCount:          vertexCount,
+			IndexResourceName:    &primaryName,
+			IndexRelativePath:    &primaryRel,
+			IndexPath:            &primaryPath,
+			IndexRelativePaths:   indexRelativePaths,
+			IndexPaths:           indexPaths,
+			IndexFormats:         indexFormats,
+			IndexCount:           len(combined),
+			BlendSectionName:     blendSection,
+			IBSectionName:        ibSection,
+			IBHash:               ibHash,
+			VariantCondition:     variantCondition,
+			DrawRanges:           drawRanges,
+			ObjectMaps:           buildTouchObjectMaps(drawRanges, kind, len(components)+1, meshPositions, combined),
+			BlendRelativePath:    blendRelative,
+			BlendPath:            blendPath,
+			BlendStride:          blendStride,
+			Bones:                bones,
 		}
 		if primaryFormat != "" {
 			component.IndexFormat = &primaryFormat
@@ -224,7 +255,19 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 	for i, path := range sourcePaths {
 		sourceRel[i], _ = filepath.Rel(modRoot, path)
 	}
-	return TouchModAnalysis{ModRoot: modRoot, SourceRoot: resolved, ModRootRelativeToSource: modRel, INIPath: iniPath, INIRelativePath: iniRel, SourceFilesRelativePaths: sourceRel, SupportGrade: grade, SupportReasons: reasons, Components: components, MeshHash: meshHash, INIHash: iniHash}, nil
+	return TouchModAnalysis{
+		ModRoot:                  modRoot,
+		SourceRoot:               resolved,
+		ModRootRelativeToSource:  modRel,
+		INIPath:                  iniPath,
+		INIRelativePath:          iniRel,
+		SourceFilesRelativePaths: sourceRel,
+		SupportGrade:             grade,
+		SupportReasons:           reasons,
+		Components:               components,
+		MeshHash:                 meshHash,
+		INIHash:                  iniHash,
+	}, nil
 }
 
 func loadTouchMeshBuffers(component TouchComponentAnalysis) (touchMeshBuffers, error) {
@@ -241,7 +284,17 @@ func loadTouchMeshBuffers(component TouchComponentAnalysis) (touchMeshBuffers, e
 		for vertex := range component.VertexCount {
 			base := vertex*component.PositionStride + 12
 			for axis := range 3 {
-				normals[vertex*3+axis] = math.Float32frombits(uint32(positionRaw[base+axis*4]) | uint32(positionRaw[base+axis*4+1])<<8 | uint32(positionRaw[base+axis*4+2])<<16 | uint32(positionRaw[base+axis*4+3])<<24)
+				normals[vertex*3+axis] = math.Float32frombits(
+					uint32(
+						positionRaw[base+axis*4],
+					) | uint32(
+						positionRaw[base+axis*4+1],
+					)<<8 | uint32(
+						positionRaw[base+axis*4+2],
+					)<<16 | uint32(
+						positionRaw[base+axis*4+3],
+					)<<24,
+				)
 			}
 		}
 	}
@@ -269,7 +322,14 @@ func loadTouchMeshBuffers(component TouchComponentAnalysis) (touchMeshBuffers, e
 			return touchMeshBuffers{}, err
 		}
 	}
-	mesh := touchMeshBuffers{Positions: positions, Normals: normals, Indices: indices, PositionRaw: positionRaw, BlendStride: component.BlendStride, Bones: append([]BlendBoneInfo(nil), component.Bones...)}
+	mesh := touchMeshBuffers{
+		Positions:   positions,
+		Normals:     normals,
+		Indices:     indices,
+		PositionRaw: positionRaw,
+		BlendStride: component.BlendStride,
+		Bones:       append([]BlendBoneInfo(nil), component.Bones...),
+	}
 	if component.BlendPath != nil && component.BlendStride != nil {
 		mesh.BlendBytes, err = os.ReadFile(*component.BlendPath)
 		if err != nil {
@@ -282,7 +342,14 @@ func loadTouchMeshBuffers(component TouchComponentAnalysis) (touchMeshBuffers, e
 	return mesh, nil
 }
 
-func gradeTouchComponent(stride int, bytes []byte, vertexCount int, indices []uint32, ranges []TouchDrawRange, kind string) (string, []string) {
+func gradeTouchComponent(
+	stride int,
+	bytes []byte,
+	vertexCount int,
+	indices []uint32,
+	ranges []TouchDrawRange,
+	kind string,
+) (string, []string) {
 	if len(indices) == 0 || len(indices)%3 != 0 {
 		return "C", []string{"Mesh is not a triangle list"}
 	}
@@ -343,10 +410,16 @@ func classifyTouchComponent(names ...string) string {
 }
 
 func touchInteractiveCandidate(kind string, vertices, indices int, name string) bool {
-	return (kind == "body" || kind == "legs") && vertices >= 1500 && indices >= 3000 && !regexp.MustCompile(`(?i)(body|leg)\d+`).MatchString(name)
+	return (kind == "body" || kind == "legs") && vertices >= 1500 && indices >= 3000 &&
+		!regexp.MustCompile(`(?i)(body|leg)\d+`).MatchString(name)
 }
 
-func findTouchDrawContext(sections []modINISection, position modBufferResource, indices []touchIndexInfo, indexCount int) ([]TouchDrawRange, *string, *string, *string, *string) {
+func findTouchDrawContext(
+	sections []modINISection,
+	position modBufferResource,
+	indices []touchIndexInfo,
+	indexCount int,
+) ([]TouchDrawRange, *string, *string, *string, *string) {
 	resources := collectModResources(sections)
 	byName := map[string]modBufferResource{}
 	for _, resource := range resources {
@@ -396,14 +469,23 @@ func findTouchDrawContext(sections []modINISection, position modBufferResource, 
 				variant = assignment.condition
 			}
 			for _, draw := range extractTouchDrawRanges(conditionLines) {
-				if draw.ConditionText == nil || assignment.condition == nil || sameTouchCondition(draw.ConditionText, assignment.condition) {
+				if draw.ConditionText == nil || assignment.condition == nil ||
+					sameTouchCondition(draw.ConditionText, assignment.condition) {
 					draw.FirstIndex += info.Offset
 					ranges = append(ranges, draw)
 				}
 			}
 			for _, entry := range conditionLines {
-				if regexp.MustCompile(`(?i)^drawindexed\s*=\s*auto$`).MatchString(entry.Line) && sameTouchCondition(entry.Condition, assignment.condition) {
-					ranges = append(ranges, TouchDrawRange{FirstIndex: info.Offset, IndexCount: info.Count, ConditionText: assignment.condition})
+				if regexp.MustCompile(`(?i)^drawindexed\s*=\s*auto$`).MatchString(entry.Line) &&
+					sameTouchCondition(entry.Condition, assignment.condition) {
+					ranges = append(
+						ranges,
+						TouchDrawRange{
+							FirstIndex:    info.Offset,
+							IndexCount:    info.Count,
+							ConditionText: assignment.condition,
+						},
+					)
 				}
 			}
 		}
@@ -419,7 +501,11 @@ type touchAssignment struct {
 	condition *string
 }
 
-func touchConditionalAssignments(lines []touchConditionalLine, key string, resources map[string]modBufferResource) []touchAssignment {
+func touchConditionalAssignments(
+	lines []touchConditionalLine,
+	key string,
+	resources map[string]modBufferResource,
+) []touchAssignment {
 	out := []touchAssignment{}
 	refRE := regexp.MustCompile(`(?i)^(?:ref\s+)?Resource(.+)$`)
 	for _, entry := range lines {
@@ -528,7 +614,10 @@ func extractTouchDrawRanges(lines []touchConditionalLine) []TouchDrawRange {
 		first, e2 := strconv.Atoi(strings.TrimSpace(match[2]))
 		base, e3 := strconv.Atoi(strings.TrimSpace(match[3]))
 		if e1 == nil && e2 == nil && e3 == nil && count > 0 {
-			out = append(out, TouchDrawRange{FirstIndex: first, IndexCount: count, BaseVertex: base, ConditionText: entry.Condition})
+			out = append(
+				out,
+				TouchDrawRange{FirstIndex: first, IndexCount: count, BaseVertex: base, ConditionText: entry.Condition},
+			)
 		}
 	}
 	return out
@@ -538,7 +627,13 @@ func uniqueTouchDrawRanges(input []TouchDrawRange) []TouchDrawRange {
 	seen := map[string]bool{}
 	out := []TouchDrawRange{}
 	for _, item := range input {
-		key := fmt.Sprintf("%d:%d:%d:%s", item.FirstIndex, item.IndexCount, item.BaseVertex, derefString(item.ConditionText))
+		key := fmt.Sprintf(
+			"%d:%d:%d:%s",
+			item.FirstIndex,
+			item.IndexCount,
+			item.BaseVertex,
+			derefString(item.ConditionText),
+		)
 		if !seen[key] {
 			seen[key] = true
 			out = append(out, item)
@@ -547,7 +642,13 @@ func uniqueTouchDrawRanges(input []TouchDrawRange) []TouchDrawRange {
 	return out
 }
 
-func buildTouchObjectMaps(ranges []TouchDrawRange, kind string, objectID int, positions []float32, indices []uint32) []TouchObjectMapEntry {
+func buildTouchObjectMaps(
+	ranges []TouchDrawRange,
+	kind string,
+	objectID int,
+	positions []float32,
+	indices []uint32,
+) []TouchObjectMapEntry {
 	unique := map[string]TouchDrawRange{}
 	for _, entry := range ranges {
 		if entry.IndexCount >= 300 {
@@ -575,7 +676,10 @@ func buildTouchObjectMaps(ranges []TouchDrawRange, kind string, objectID int, po
 	}
 	if kind == "body" {
 		if pair := pickTouchBodyPair(meaningful, positions, indices); len(pair) == 2 {
-			return []TouchObjectMapEntry{{pair[0].FirstIndex, pair[0].IndexCount, touchObjectMode, objectID, "clothed"}, {pair[1].FirstIndex, pair[1].IndexCount, touchObjectMode, objectID, "nude"}}
+			return []TouchObjectMapEntry{
+				{pair[0].FirstIndex, pair[0].IndexCount, touchObjectMode, objectID, "clothed"},
+				{pair[1].FirstIndex, pair[1].IndexCount, touchObjectMode, objectID, "nude"},
+			}
 		}
 	}
 	label := "main"
@@ -593,7 +697,15 @@ func pickTouchBodyPair(ranges []TouchDrawRange, positions []float32, indices []u
 			if ranges[i].IndexCount != ranges[j].IndexCount {
 				continue
 			}
-			score := scoreTouchUpperBody(ranges[i], positions, indices) + scoreTouchUpperBody(ranges[j], positions, indices)
+			score := scoreTouchUpperBody(
+				ranges[i],
+				positions,
+				indices,
+			) + scoreTouchUpperBody(
+				ranges[j],
+				positions,
+				indices,
+			)
 			total := score*10000 + float64(ranges[i].IndexCount)
 			if total > bestScore {
 				bestScore = total

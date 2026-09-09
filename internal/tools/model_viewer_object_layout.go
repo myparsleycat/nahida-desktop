@@ -24,7 +24,9 @@ const (
 )
 
 var (
-	modelViewerPackedVertexStructRE   = regexp.MustCompile(`structvertexattributes\{uint2position;uintnormal;uinttexcoord;uinttangent;\}`)
+	modelViewerPackedVertexStructRE = regexp.MustCompile(
+		`structvertexattributes\{uint2position;uintnormal;uinttexcoord;uinttangent;\}`,
+	)
 	modelViewerFilenamePositionRE     = regexp.MustCompile(`(?i)position`)
 	modelViewerPackedPositionAbsLimit = 1e5
 )
@@ -49,9 +51,24 @@ func modelViewerPackedObjectLayoutAt(indexFormat string, stride, texcoordOffset 
 		Topology:    "trianglelist",
 		IndexFormat: indexFormat,
 		Elements: []modelViewerFmtElement{
-			{SemanticName: "POSITION", Format: "DXGI_FORMAT_R16G16B16A16_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
-			{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R8G8B8A8_SINT", AlignedByteOffset: 8, InputSlotClass: "per-vertex"},
-			{SemanticName: "TEXCOORD", Format: "DXGI_FORMAT_R16G16_FLOAT", AlignedByteOffset: texcoordOffset, InputSlotClass: "per-vertex"},
+			{
+				SemanticName:      "POSITION",
+				Format:            "DXGI_FORMAT_R16G16B16A16_FLOAT",
+				AlignedByteOffset: 0,
+				InputSlotClass:    "per-vertex",
+			},
+			{
+				SemanticName:      "NORMAL",
+				Format:            "DXGI_FORMAT_R8G8B8A8_SINT",
+				AlignedByteOffset: 8,
+				InputSlotClass:    "per-vertex",
+			},
+			{
+				SemanticName:      "TEXCOORD",
+				Format:            "DXGI_FORMAT_R16G16_FLOAT",
+				AlignedByteOffset: texcoordOffset,
+				InputSlotClass:    "per-vertex",
+			},
 		},
 	}
 }
@@ -89,7 +106,8 @@ func collectModelViewerPackedObjectResources(root, shaderBaseDir string, section
 		}
 	}
 	for _, section := range sections {
-		if !strings.EqualFold(section.Header, "CustomShader") || !reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
+		if !strings.EqualFold(section.Header, "CustomShader") ||
+			!reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
 			continue
 		}
 		for _, pass := range collectModelViewerComputePasses(section) {
@@ -131,10 +149,12 @@ func modelViewerPackedObjectStrideOf(declared int, data []byte) (int, bool) {
 	if declared != 0 {
 		return 0, false
 	}
-	if len(data) >= modelViewerPackedObjectStride24 && len(data)%modelViewerPackedObjectStride24 == 0 && modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride24) {
+	if len(data) >= modelViewerPackedObjectStride24 && len(data)%modelViewerPackedObjectStride24 == 0 &&
+		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride24) {
 		return modelViewerPackedObjectStride24, true
 	}
-	if len(data) >= modelViewerPackedObjectStride && len(data)%modelViewerPackedObjectStride == 0 && modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride) {
+	if len(data) >= modelViewerPackedObjectStride && len(data)%modelViewerPackedObjectStride == 0 &&
+		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride) {
 		return modelViewerPackedObjectStride, true
 	}
 	return 0, false
@@ -160,7 +180,8 @@ func modelViewerPositionLooksPackedObject(data []byte, stride int) bool {
 		}
 		if requireW {
 			w := modelViewerHalfToFloat(binary.LittleEndian.Uint16(data[offset+6:]))
-			if math.IsNaN(float64(w)) || math.IsInf(float64(w), 0) || math.Abs(float64(w-1)) > modelViewerPackedObjectWEpsilon {
+			if math.IsNaN(float64(w)) || math.IsInf(float64(w), 0) ||
+				math.Abs(float64(w-1)) > modelViewerPackedObjectWEpsilon {
 				continue
 			}
 		}
@@ -171,14 +192,19 @@ func modelViewerPositionLooksPackedObject(data []byte, stride int) bool {
 
 func modelViewerPackedPositionSampleOK(x, y, z float32) bool {
 	for _, value := range []float32{x, y, z} {
-		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) || math.Abs(float64(value)) > modelViewerPackedPositionAbsLimit {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) ||
+			math.Abs(float64(value)) > modelViewerPackedPositionAbsLimit {
 			return false
 		}
 	}
 	return true
 }
 
-func lookupModelViewerFamilyTexcoord(modDir string, position modelViewerResource, resources []modelViewerResource) (modelViewerResource, bool) {
+func lookupModelViewerFamilyTexcoord(
+	modDir string,
+	position modelViewerResource,
+	resources []modelViewerResource,
+) (modelViewerResource, bool) {
 	posCount, _, ok := modelViewerResourceVertexCount(modDir, position, 40)
 	if !ok || posCount == 0 {
 		return modelViewerResource{}, false
@@ -186,10 +212,17 @@ func lookupModelViewerFamilyTexcoord(modDir string, position modelViewerResource
 	if typed := parseModelViewerMihoyoResourceName(position.Name); typed != nil && typed.Kind == "position" {
 		for _, resource := range resources {
 			other := parseModelViewerMihoyoResourceName(resource.Name)
-			if other == nil || other.Kind != "texcoord" || modelViewerNormalizeKey(other.Key) != modelViewerNormalizeKey(typed.Key) || resource.Filename == "" {
+			if other == nil || other.Kind != "texcoord" ||
+				modelViewerNormalizeKey(other.Key) != modelViewerNormalizeKey(typed.Key) ||
+				resource.Filename == "" {
 				continue
 			}
-			if tcCount, _, tcOK := modelViewerResourceVertexCount(modDir, resource, resource.Stride); tcOK && tcCount == posCount {
+			if tcCount, _, tcOK := modelViewerResourceVertexCount(
+				modDir,
+				resource,
+				resource.Stride,
+			); tcOK &&
+				tcCount == posCount {
 				return resource, true
 			}
 		}
@@ -207,7 +240,11 @@ func lookupModelViewerFamilyTexcoord(modDir string, position modelViewerResource
 		if stride < 4 || stride > 64 {
 			continue
 		}
-		return modelViewerResource{Name: strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)), Filename: filename, Stride: stride}, true
+		return modelViewerResource{
+			Name:     strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)),
+			Filename: filename,
+			Stride:   stride,
+		}, true
 	}
 	return modelViewerResource{}, false
 }
@@ -275,7 +312,12 @@ func resolveModelViewerDrawVertexSource(
 	}
 	texcoord, tcOK := resourceMap[modelViewerNormalizeKey(state.vb1)]
 	if !tcOK || texcoord.Filename == "" {
-		if raw, packedStride, packed := readModelViewerPackedObjectBuffer(modDir, position, cache, shaderPacked); packed {
+		if raw, packedStride, packed := readModelViewerPackedObjectBuffer(
+			modDir,
+			position,
+			cache,
+			shaderPacked,
+		); packed {
 			source.kind = modelViewerDrawVertexPacked
 			source.packed = raw
 			source.packedStride = packedStride
@@ -302,7 +344,12 @@ func resolveModelViewerDrawVertexSource(
 	return source
 }
 
-func readModelViewerPackedObjectBuffer(modDir string, position modelViewerResource, cache *modelViewerBufferCache, shaderPacked bool) ([]byte, int, bool) {
+func readModelViewerPackedObjectBuffer(
+	modDir string,
+	position modelViewerResource,
+	cache *modelViewerBufferCache,
+	shaderPacked bool,
+) ([]byte, int, bool) {
 	raw, err := cache.read(filepath.Join(modDir, filepath.FromSlash(position.Filename)))
 	if err != nil {
 		return nil, 0, false
@@ -319,7 +366,11 @@ type modelViewerDrawVertexBuffers struct {
 	hasFrame  bool
 }
 
-func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVertexSource, cache *modelViewerBufferCache) (modelViewerDrawVertexBuffers, bool, error) {
+func loadModelViewerDrawVertexBuffers(
+	modDir string,
+	source modelViewerDrawVertexSource,
+	cache *modelViewerBufferCache,
+) (modelViewerDrawVertexBuffers, bool, error) {
 	position, vector, texcoord := source.position, source.vector, source.texcoord
 	posStride := position.Stride
 	if posStride <= 0 {
@@ -350,10 +401,18 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 		if vectorStride <= 0 {
 			vectorStride = 8
 		}
-		parts, readErr := readModelViewerResourceSet(modDir, []*modelViewerResource{&position, &vector, &texcoord}, cache)
+		parts, readErr := readModelViewerResourceSet(
+			modDir,
+			[]*modelViewerResource{&position, &vector, &texcoord},
+			cache,
+		)
 		if readErr == nil {
 			strides := []int{posStride, vectorStride, tcStride}
-			key := strings.ToLower(strings.Join([]string{position.Filename, vector.Filename, texcoord.Filename}, "|")) + "#" + fmt.Sprint(strides)
+			key := strings.ToLower(
+				strings.Join([]string{position.Filename, vector.Filename, texcoord.Filename}, "|"),
+			) + "#" + fmt.Sprint(
+				strides,
+			)
 			combined, stride, buffersErr := cache.interleavedBuffers(key, func() ([]byte, int, error) {
 				bytes, combinedStride, _, combineErr := interleaveModelViewerBuffers(parts, strides)
 				return bytes, combinedStride, combineErr
@@ -365,17 +424,42 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 					combined:  combined,
 					stride:    stride,
 					posStride: posStride,
-					layout: modelViewerFmtLayout{Stride: stride, Topology: "trianglelist", IndexFormat: source.ib.Format, Elements: []modelViewerFmtElement{
-						{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
-						{SemanticName: "NORMAL", Format: vectorFormat, AlignedByteOffset: posStride, InputSlotClass: "per-vertex"},
-						{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"},
-					}},
+					layout: modelViewerFmtLayout{
+						Stride:      stride,
+						Topology:    "trianglelist",
+						IndexFormat: source.ib.Format,
+						Elements: []modelViewerFmtElement{
+							{
+								SemanticName:      "POSITION",
+								Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+								AlignedByteOffset: 0,
+								InputSlotClass:    "per-vertex",
+							},
+							{
+								SemanticName:      "NORMAL",
+								Format:            vectorFormat,
+								AlignedByteOffset: posStride,
+								InputSlotClass:    "per-vertex",
+							},
+							{
+								SemanticName:      "TEXCOORD",
+								Format:            uvFormat,
+								AlignedByteOffset: uvOffset,
+								InputSlotClass:    "per-vertex",
+							},
+						},
+					},
 				}, true, nil
 			}
 		}
 		return modelViewerDrawVertexBuffers{}, false, nil
 	case modelViewerDrawVertexMihoyo:
-		buffers, buffersErr := cache.paired(filepath.Join(modDir, filepath.FromSlash(position.Filename)), posStride, filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)), tcStride)
+		buffers, buffersErr := cache.paired(
+			filepath.Join(modDir, filepath.FromSlash(position.Filename)),
+			posStride,
+			filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)),
+			tcStride,
+		)
 		if buffersErr != nil {
 			if isModelViewerInterleaveValidationError(buffersErr) {
 				return modelViewerDrawVertexBuffers{}, false, nil
@@ -387,10 +471,25 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 			stride:    buffers.stride,
 			posStride: posStride,
 			hasFrame:  buffers.hasFrame,
-			layout: modelViewerFmtLayout{Stride: buffers.stride, Topology: "trianglelist", IndexFormat: source.ib.Format, Elements: []modelViewerFmtElement{
-				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
-				{SemanticName: "TEXCOORD", Format: buffers.uvFormat, AlignedByteOffset: buffers.uvOffset, InputSlotClass: "per-vertex"},
-			}},
+			layout: modelViewerFmtLayout{
+				Stride:      buffers.stride,
+				Topology:    "trianglelist",
+				IndexFormat: source.ib.Format,
+				Elements: []modelViewerFmtElement{
+					{
+						SemanticName:      "POSITION",
+						Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+						AlignedByteOffset: 0,
+						InputSlotClass:    "per-vertex",
+					},
+					{
+						SemanticName:      "TEXCOORD",
+						Format:            buffers.uvFormat,
+						AlignedByteOffset: buffers.uvOffset,
+						InputSlotClass:    "per-vertex",
+					},
+				},
+			},
 		}, true, nil
 	default:
 		return modelViewerDrawVertexBuffers{}, false, nil
@@ -399,7 +498,13 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 
 // Some compute shaders name the untouched UV word "tangent". Only override
 // their declared layout when a separate UV stream matches every vertex byte.
-func resolveModelViewerPackedTexcoordOffset(modDir string, position modelViewerResource, packed []byte, stride int, cache *modelViewerBufferCache) int {
+func resolveModelViewerPackedTexcoordOffset(
+	modDir string,
+	position modelViewerResource,
+	packed []byte,
+	stride int,
+	cache *modelViewerBufferCache,
+) int {
 	if stride < 20 || len(packed) == 0 || len(packed)%stride != 0 {
 		return 16
 	}
@@ -465,7 +570,13 @@ func modelViewerSiblingTexcoordFilenames(position modelViewerResource) []string 
 		seen[key] = true
 		names = append(names, name)
 	}
-	if replaced := modelViewerFilenamePositionRE.ReplaceAllString(stem, "Texcoord"); !strings.EqualFold(replaced, stem) {
+	if replaced := modelViewerFilenamePositionRE.ReplaceAllString(
+		stem,
+		"Texcoord",
+	); !strings.EqualFold(
+		replaced,
+		stem,
+	) {
 		add(join(replaced + ext))
 	}
 	add(join(stem + "Texcoord" + ext))

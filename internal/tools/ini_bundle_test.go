@@ -18,7 +18,16 @@ hash = abcdef01
 		t.Fatal(err)
 	}
 	mergedPath := filepath.Join(root, "merged.ini")
-	if err := os.WriteFile(mergedPath, []byte("; Merged Mods: "+filepath.Join("CharBMain", "CharB.ini")+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		mergedPath,
+		[]byte(
+			"; Merged Mods: "+filepath.Join(
+				"CharBMain",
+				"CharB.ini",
+			)+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n",
+		),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
@@ -55,7 +64,11 @@ hash = abcdef01
 		t.Fatal(err)
 	}
 	mergedPath := filepath.Join(root, "merged.ini")
-	if err := os.WriteFile(mergedPath, []byte("; Merged Mod: "+childIni+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		mergedPath,
+		[]byte("; Merged Mod: "+childIni+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
@@ -79,7 +92,18 @@ hash = 11111111
 		t.Fatal(err)
 	}
 	mergedPath := filepath.Join(root, "merged.ini")
-	if err := os.WriteFile(mergedPath, []byte("; Merged Mods: "+filepath.Join(outside, "secret.ini")+", ..\\"+filepath.Base(outside)+"\\secret.ini, missing.ini\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		mergedPath,
+		[]byte(
+			"; Merged Mods: "+filepath.Join(
+				outside,
+				"secret.ini",
+			)+", ..\\"+filepath.Base(
+				outside,
+			)+"\\secret.ini, missing.ini\n[TextureOverrideMergedPosition]\nhash = fedcba98\n",
+		),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
@@ -100,7 +124,11 @@ func TestLoadModINIBundleRejectsDirectoryMergedReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 	mergedPath := filepath.Join(root, "merged.ini")
-	if err := os.WriteFile(mergedPath, []byte("; Merged Mods: CharBMain\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		mergedPath,
+		[]byte("; Merged Mods: CharBMain\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
@@ -129,7 +157,16 @@ vb0 = ResourcePosition
 		t.Fatal(err)
 	}
 	mergedPath := filepath.Join(root, "merged.ini")
-	if err := os.WriteFile(mergedPath, []byte("; Merged Mod: .\\"+filepath.Join("CharB, (Summer Outfit)", "CharB.ini")+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		mergedPath,
+		[]byte(
+			"; Merged Mod: .\\"+filepath.Join(
+				"CharB, (Summer Outfit)",
+				"CharB.ini",
+			)+"\n[TextureOverrideMergedPosition]\nhash = fedcba98\n",
+		),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)

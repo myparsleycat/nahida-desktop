@@ -286,11 +286,17 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 			mesh.MaterialMapVariants,
 		} {
 			for variantIndex := range variants {
-				variants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(variants[variantIndex].Conditions, tracked)
+				variants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(
+					variants[variantIndex].Conditions,
+					tracked,
+				)
 			}
 		}
 		for variantIndex := range mesh.PositionVariants {
-			mesh.PositionVariants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(mesh.PositionVariants[variantIndex].Conditions, tracked)
+			mesh.PositionVariants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(
+				mesh.PositionVariants[variantIndex].Conditions,
+				tracked,
+			)
 		}
 	}
 }
@@ -317,7 +323,14 @@ func (t *Tools) CleanupModelViewer(_ context.Context, memorySessionID string) (b
 		startedAt := time.Now()
 		modelViewerFreeOSMemory()
 		if t.log != nil {
-			t.log.Info(fmt.Sprintf("Released model viewer memory in %dms (session=%s)", time.Since(startedAt).Milliseconds(), memorySessionID), "StaticGlb.cleanupViewer")
+			t.log.Info(
+				fmt.Sprintf(
+					"Released model viewer memory in %dms (session=%s)",
+					time.Since(startedAt).Milliseconds(),
+					memorySessionID,
+				),
+				"StaticGlb.cleanupViewer",
+			)
 		}
 	}
 	return exists, nil
@@ -372,11 +385,26 @@ func modelViewerVariableIsGating(variable ModelViewerVariable, gating map[string
 	return gating[modelViewerNormalizeKey(variable.ID)]
 }
 
-func buildModelViewerDirectMeshes(iniPath, assetPath string, sections []modINISection) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
-	return buildModelViewerDirectMeshesAt(iniPath, filepath.Dir(iniPath), assetPath, sections, newModelViewerBufferCache(), nil)
+func buildModelViewerDirectMeshes(
+	iniPath, assetPath string,
+	sections []modINISection,
+) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
+	return buildModelViewerDirectMeshesAt(
+		iniPath,
+		filepath.Dir(iniPath),
+		assetPath,
+		sections,
+		newModelViewerBufferCache(),
+		nil,
+	)
 }
 
-func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections []modINISection, cache *modelViewerBufferCache, timing *modelViewerMeshBuildTiming) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
+func buildModelViewerDirectMeshesAt(
+	iniPath, modDir, assetPath string,
+	sections []modINISection,
+	cache *modelViewerBufferCache,
+	timing *modelViewerMeshBuildTiming,
+) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
 	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
 	variables := collectModelViewerDefaultVariables(sections)
 	textures := collectModelViewerTextureBindings(sections, variables)
@@ -442,7 +470,10 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 		if group == nil {
 			continue
 		}
-		localFMT := filepath.Join(modDir, strings.TrimSuffix(filepath.Base(ib.Filename), filepath.Ext(ib.Filename))+".fmt")
+		localFMT := filepath.Join(
+			modDir,
+			strings.TrimSuffix(filepath.Base(ib.Filename), filepath.Ext(ib.Filename))+".fmt",
+		)
 		fmtKey := fmt.Sprintf("%s|%s|%s|%d|%s|%s", modDir, assetPath, ib.Filename, group.Stride, layoutName, ib.Format)
 		layout, loadErr := cache.fmtLayout(fmtKey, func() (modelViewerFmtLayout, error) {
 			if assetPath != "" || regularFile(localFMT) {
@@ -474,13 +505,21 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 			}
 		}
 		if len(ibDraws) == 0 {
-			ibDraws = append(ibDraws, legacyPreparedDraw{draw: modelViewerDrawInstruction{IBResourceName: ib.Name, IndexCount: len(indices)}})
+			ibDraws = append(
+				ibDraws,
+				legacyPreparedDraw{draw: modelViewerDrawInstruction{IBResourceName: ib.Name, IndexCount: len(indices)}},
+			)
 		}
 		drawTotal += len(ibDraws)
 		if drawTotal > maxModelViewerDraws {
-			return nil, nil, nil, nil, contractError(fmt.Sprintf("Mod has too many draws (%d; limit %d).", drawTotal, maxModelViewerDraws))
+			return nil, nil, nil, nil, contractError(
+				fmt.Sprintf("Mod has too many draws (%d; limit %d).", drawTotal, maxModelViewerDraws),
+			)
 		}
-		prepared = append(prepared, legacyPreparedIB{ib: ib, group: group, layout: layout, indices: indices, draws: ibDraws})
+		prepared = append(
+			prepared,
+			legacyPreparedIB{ib: ib, group: group, layout: layout, indices: indices, draws: ibDraws},
+		)
 	}
 	if timing != nil {
 		timing.LegacyPrepareMs += time.Since(legacyPrepareStartedAt).Milliseconds()
@@ -516,9 +555,28 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 		if layoutName == "wwmi" {
 			reverseModelViewerTriangleWinding(active)
 		}
-		geoKey := fmt.Sprintf("%s|%d|%s|%s|%s|%d|%d|%d", strings.Join(task.entry.group.SourceFiles, "|"), task.entry.group.Stride, modelViewerLayoutKey(task.entry.layout), filepath.Join(modDir, filepath.FromSlash(task.entry.ib.Filename)), firstModelViewerString(task.entry.ib.Format, task.entry.layout.IndexFormat), task.draw.draw.StartIndex, task.draw.draw.IndexCount, task.draw.draw.BaseVertex)
+		geoKey := fmt.Sprintf(
+			"%s|%d|%s|%s|%s|%d|%d|%d",
+			strings.Join(task.entry.group.SourceFiles, "|"),
+			task.entry.group.Stride,
+			modelViewerLayoutKey(task.entry.layout),
+			filepath.Join(modDir, filepath.FromSlash(task.entry.ib.Filename)),
+			firstModelViewerString(task.entry.ib.Format, task.entry.layout.IndexFormat),
+			task.draw.draw.StartIndex,
+			task.draw.draw.IndexCount,
+			task.draw.draw.BaseVertex,
+		)
 		geometry, geometryErr := cache.geometry(geoKey, func() (*modelViewerGeometry, error) {
-			geometry, err := extractModelViewerGeometry(task.entry.group.VB, task.entry.group.Stride, task.entry.layout, active, true, false, true, nil)
+			geometry, err := extractModelViewerGeometry(
+				task.entry.group.VB,
+				task.entry.group.Stride,
+				task.entry.layout,
+				active,
+				true,
+				false,
+				true,
+				nil,
+			)
 			if err != nil || geometry == nil {
 				return geometry, err
 			}
@@ -540,12 +598,26 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 		if component == "" {
 			component = task.entry.ib.Name
 		}
-		id := modelViewerNormalizeKey(filepath.Base(iniPath)) + ":" + modelViewerNormalizeKey(component) + ":" + strconv.Itoa(task.drawIndex)
+		id := modelViewerNormalizeKey(
+			filepath.Base(iniPath),
+		) + ":" + modelViewerNormalizeKey(
+			component,
+		) + ":" + strconv.Itoa(
+			task.drawIndex,
+		)
 		positionFile := task.entry.group.VBFilename
 		if len(task.entry.group.SourceFiles) > 0 {
 			positionFile = task.entry.group.SourceFiles[0]
 		}
-		return modelViewerDirectMesh{id: id, component: component, sectionName: task.draw.section, ibName: task.entry.ib.Name, positionFile: positionFile, geometry: geometry, conditions: conditions}, true
+		return modelViewerDirectMesh{
+			id:           id,
+			component:    component,
+			sectionName:  task.draw.section,
+			ibName:       task.entry.ib.Name,
+			positionFile: positionFile,
+			geometry:     geometry,
+			conditions:   conditions,
+		}, true
 	}
 	if workers := min(len(tasks), runtime.GOMAXPROCS(0)); workers > 1 {
 		work := make(chan int)
@@ -577,7 +649,14 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 			output = append(output, taskMeshes[taskIndex])
 		}
 	}
-	if err := attachModelViewerDirectPositionOverrides(output, sections, resources, modDir, conditionVariables, cache); err != nil {
+	if err := attachModelViewerDirectPositionOverrides(
+		output,
+		sections,
+		resources,
+		modDir,
+		conditionVariables,
+		cache,
+	); err != nil {
 		return nil, nil, nil, nil, err
 	}
 	attachFamilyAndStemTextures(output, sections, resources, conditionVariables)
@@ -585,12 +664,21 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
 	for meshIndex := range output {
-		output[meshIndex].conditions = normalizeModelViewerDNFWithDomains(output[meshIndex].conditions, conditionVariables)
+		output[meshIndex].conditions = normalizeModelViewerDNFWithDomains(
+			output[meshIndex].conditions,
+			conditionVariables,
+		)
 		for assignmentIndex := range output[meshIndex].textureAssignments {
-			output[meshIndex].textureAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(output[meshIndex].textureAssignments[assignmentIndex].conditions, conditionVariables)
+			output[meshIndex].textureAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
+				output[meshIndex].textureAssignments[assignmentIndex].conditions,
+				conditionVariables,
+			)
 		}
 		for assignmentIndex := range output[meshIndex].positionAssignments {
-			output[meshIndex].positionAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(output[meshIndex].positionAssignments[assignmentIndex].conditions, conditionVariables)
+			output[meshIndex].positionAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
+				output[meshIndex].positionAssignments[assignmentIndex].conditions,
+				conditionVariables,
+			)
 		}
 	}
 	if timing != nil {
@@ -599,7 +687,15 @@ func buildModelViewerDirectMeshesAt(iniPath, modDir, assetPath string, sections 
 	return output, textures, resources, collectModelViewerShapeKeys(sections, resources, modDir), nil
 }
 
-func collectModelViewerIBResources(resources []modelViewerResource, groups []modelViewerBufferGroup, _ []modINISection, _ map[string]any, textureBindings []modelViewerTextureBinding, drawBindings []modelViewerDrawBinding, _ bool) []modelViewerIbResource {
+func collectModelViewerIBResources(
+	resources []modelViewerResource,
+	groups []modelViewerBufferGroup,
+	_ []modINISection,
+	_ map[string]any,
+	textureBindings []modelViewerTextureBinding,
+	drawBindings []modelViewerDrawBinding,
+	_ bool,
+) []modelViewerIbResource {
 	keys := sortedModelViewerGroupKeys(groups)
 	var output []modelViewerIbResource
 	seen := make(map[string]bool)
@@ -607,7 +703,9 @@ func collectModelViewerIBResources(resources []modelViewerResource, groups []mod
 		filename := strings.TrimSpace(resource.Filename)
 		nameKey := strings.ToLower(resource.Name)
 		extension := strings.ToLower(filepath.Ext(filename))
-		isIndexBuffer := extension == ".ib" || strings.Contains(strings.ToUpper(resource.Format), "UINT") || strings.HasSuffix(nameKey, "ib") || strings.Contains(nameKey, "indexbuffer")
+		isIndexBuffer := extension == ".ib" || strings.Contains(strings.ToUpper(resource.Format), "UINT") ||
+			strings.HasSuffix(nameKey, "ib") ||
+			strings.Contains(nameKey, "indexbuffer")
 		if filename == "" || !isIndexBuffer {
 			continue
 		}
@@ -617,14 +715,21 @@ func collectModelViewerIBResources(resources []modelViewerResource, groups []mod
 		}
 		seen[identity] = true
 		stem := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-		ib := modelViewerIbResource{Name: resource.Name, Filename: filename, Format: resource.Format, Key: modelViewerBestKeyForIB(stem, resource.Name, keys)}
+		ib := modelViewerIbResource{
+			Name:     resource.Name,
+			Filename: filename,
+			Format:   resource.Format,
+			Key:      modelViewerBestKeyForIB(stem, resource.Name, keys),
+		}
 		for _, binding := range drawBindings {
-			if modelViewerNormalizeKey(binding.IBResourceName) == modelViewerNormalizeKey(resource.Name) && binding.OverrideHash != "" {
+			if modelViewerNormalizeKey(binding.IBResourceName) == modelViewerNormalizeKey(resource.Name) &&
+				binding.OverrideHash != "" {
 				ib.OverrideHashes = appendUniqueModelViewer(ib.OverrideHashes, binding.OverrideHash)
 			}
 		}
 		for _, binding := range textureBindings {
-			if modelViewerNormalizeKey(binding.IBResourceName) == modelViewerNormalizeKey(resource.Name) && binding.OverrideHash != "" {
+			if modelViewerNormalizeKey(binding.IBResourceName) == modelViewerNormalizeKey(resource.Name) &&
+				binding.OverrideHash != "" {
 				ib.OverrideHashes = appendUniqueModelViewer(ib.OverrideHashes, binding.OverrideHash)
 			}
 		}
@@ -645,7 +750,11 @@ func firstModelViewerString(values ...string) string {
 	return ""
 }
 
-func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelViewerResource, layoutName, indexFormat string) (modelViewerFmtLayout, error) {
+func inferModelViewerFmtLayout(
+	group modelViewerBufferGroup,
+	resources []modelViewerResource,
+	layoutName, indexFormat string,
+) (modelViewerFmtLayout, error) {
 	layout := modelViewerFmtLayout{Stride: group.Stride, Topology: "trianglelist", IndexFormat: indexFormat}
 	if layout.IndexFormat == "" {
 		layout.IndexFormat = "DXGI_FORMAT_R32_UINT"
@@ -667,16 +776,40 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 			}
 			switch kind {
 			case "position":
-				layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: offset, InputSlotClass: "per-vertex"})
+				layout.Elements = append(
+					layout.Elements,
+					modelViewerFmtElement{
+						SemanticName:      "POSITION",
+						Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+						AlignedByteOffset: offset,
+						InputSlotClass:    "per-vertex",
+					},
+				)
 			case "vector":
-				layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: firstModelViewerString(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"), AlignedByteOffset: offset, InputSlotClass: "per-vertex"})
+				layout.Elements = append(
+					layout.Elements,
+					modelViewerFmtElement{
+						SemanticName:      "NORMAL",
+						Format:            firstModelViewerString(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"),
+						AlignedByteOffset: offset,
+						InputSlotClass:    "per-vertex",
+					},
+				)
 			case "texcoord":
 				texcoordOffset = offset
 			}
 			offset += resource.Stride
 		}
 		if texcoordOffset >= 0 {
-			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "TEXCOORD", Format: "DXGI_FORMAT_R16G16_FLOAT", AlignedByteOffset: texcoordOffset, InputSlotClass: "per-vertex"})
+			layout.Elements = append(
+				layout.Elements,
+				modelViewerFmtElement{
+					SemanticName:      "TEXCOORD",
+					Format:            "DXGI_FORMAT_R16G16_FLOAT",
+					AlignedByteOffset: texcoordOffset,
+					InputSlotClass:    "per-vertex",
+				},
+			)
 		}
 	} else {
 		positionStride, blendStride, texcoordStride := 0, 0, 0
@@ -697,17 +830,48 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 		if positionStride == 0 {
 			positionStride = group.Stride
 		}
-		if texcoordStride == 0 && isModelViewerPackedObjectStride(group.Stride) && modelViewerPositionLooksPackedObject(group.VB, group.Stride) {
+		if texcoordStride == 0 && isModelViewerPackedObjectStride(group.Stride) &&
+			modelViewerPositionLooksPackedObject(group.VB, group.Stride) {
 			return modelViewerPackedObjectLayout(indexFormat, group.Stride), nil
 		}
-		layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"})
+		layout.Elements = append(
+			layout.Elements,
+			modelViewerFmtElement{
+				SemanticName:      "POSITION",
+				Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+				AlignedByteOffset: 0,
+				InputSlotClass:    "per-vertex",
+			},
+		)
 		if positionStride >= 40 && detectModelViewerPositionFrame(group.VB, group.Stride) {
-			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R32G32B32_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"}, modelViewerFmtElement{SemanticName: "TANGENT", Format: "DXGI_FORMAT_R32G32B32A32_FLOAT", AlignedByteOffset: 24, InputSlotClass: "per-vertex"})
+			layout.Elements = append(
+				layout.Elements,
+				modelViewerFmtElement{
+					SemanticName:      "NORMAL",
+					Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+					AlignedByteOffset: 12,
+					InputSlotClass:    "per-vertex",
+				},
+				modelViewerFmtElement{
+					SemanticName:      "TANGENT",
+					Format:            "DXGI_FORMAT_R32G32B32A32_FLOAT",
+					AlignedByteOffset: 24,
+					InputSlotClass:    "per-vertex",
+				},
+			)
 		}
 		if texcoordStride > 0 {
 			baseOffset := positionStride + blendStride
 			uvOffset, uvFormat := detectModelViewerUVBest(group.VB, group.Stride, baseOffset, texcoordStride)
-			layout.Elements = append(layout.Elements, modelViewerFmtElement{SemanticName: "TEXCOORD", Format: uvFormat, AlignedByteOffset: uvOffset, InputSlotClass: "per-vertex"})
+			layout.Elements = append(
+				layout.Elements,
+				modelViewerFmtElement{
+					SemanticName:      "TEXCOORD",
+					Format:            uvFormat,
+					AlignedByteOffset: uvOffset,
+					InputSlotClass:    "per-vertex",
+				},
+			)
 		}
 	}
 	if findModelViewerElement(layout, "POSITION", -1) == nil {
@@ -716,8 +880,24 @@ func inferModelViewerFmtLayout(group modelViewerBufferGroup, resources []modelVi
 	return layout, nil
 }
 
-func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []modelViewerTextureBinding, availableTextures map[string]modelViewerTexturePayload, shapeKeys []modelViewerShapeKey, cache *modelViewerBufferCache) (ModelViewerMeshTransport, modelViewerMeshPayload) {
-	item := ModelViewerMeshTransport{ID: mesh.id, Component: mesh.component, Conditions: mesh.conditions, TextureVariants: []ModelViewerTextureVariant{}, NormalMapVariants: []ModelViewerTextureVariant{}, LightMapVariants: []ModelViewerTextureVariant{}, MaterialMapVariants: []ModelViewerTextureVariant{}, ShapeTargets: []ModelViewerShapeTarget{}, PositionVariants: []ModelViewerPositionVariant{}}
+func buildModelViewerDirectMeshPayload(
+	mesh modelViewerDirectMesh,
+	textures []modelViewerTextureBinding,
+	availableTextures map[string]modelViewerTexturePayload,
+	shapeKeys []modelViewerShapeKey,
+	cache *modelViewerBufferCache,
+) (ModelViewerMeshTransport, modelViewerMeshPayload) {
+	item := ModelViewerMeshTransport{
+		ID:                  mesh.id,
+		Component:           mesh.component,
+		Conditions:          mesh.conditions,
+		TextureVariants:     []ModelViewerTextureVariant{},
+		NormalMapVariants:   []ModelViewerTextureVariant{},
+		LightMapVariants:    []ModelViewerTextureVariant{},
+		MaterialMapVariants: []ModelViewerTextureVariant{},
+		ShapeTargets:        []ModelViewerShapeTarget{},
+		PositionVariants:    []ModelViewerPositionVariant{},
+	}
 	payload := modelViewerMeshPayload{
 		Positions:     mesh.geometry.Position,
 		Normals:       mesh.geometry.Normal,
@@ -728,10 +908,14 @@ func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []mo
 	}
 	if len(mesh.positionAssignments) > 0 {
 		for _, assignment := range mesh.positionAssignments {
-			if assignment.sourcePath == "" || assignment.stride <= 0 || assignment.sourceBytes <= 0 || len(assignment.conditions) == 0 {
+			if assignment.sourcePath == "" || assignment.stride <= 0 || assignment.sourceBytes <= 0 ||
+				len(assignment.conditions) == 0 {
 				continue
 			}
-			item.PositionVariants = append(item.PositionVariants, ModelViewerPositionVariant{Conditions: assignment.conditions})
+			item.PositionVariants = append(
+				item.PositionVariants,
+				ModelViewerPositionVariant{Conditions: assignment.conditions},
+			)
 			payload.PositionSources = append(payload.PositionSources, assignment)
 		}
 	}
@@ -861,17 +1045,32 @@ func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []mo
 			if dimension.Sparse {
 				high, highErr = readModelViewerSparseShapePositions(cache, dimension, mesh.geometry)
 			} else {
-				high, highErr = readModelViewerShapePositions(cache, dimension.BiggerPath, shapeKey.VertexStride, mesh.geometry.SourceIndices, mesh.geometry.VertexCount)
+				high, highErr = readModelViewerShapePositions(
+					cache,
+					dimension.BiggerPath,
+					shapeKey.VertexStride,
+					mesh.geometry.SourceIndices,
+					mesh.geometry.VertexCount,
+				)
 			}
 			low := append([]float32(nil), mesh.geometry.Position...)
 			var lowErr error
 			if dimension.SmallerPath != "" {
-				low, lowErr = readModelViewerShapePositions(cache, dimension.SmallerPath, shapeKey.VertexStride, mesh.geometry.SourceIndices, mesh.geometry.VertexCount)
+				low, lowErr = readModelViewerShapePositions(
+					cache,
+					dimension.SmallerPath,
+					shapeKey.VertexStride,
+					mesh.geometry.SourceIndices,
+					mesh.geometry.VertexCount,
+				)
 			}
 			if highErr != nil || lowErr != nil {
 				continue
 			}
-			item.ShapeTargets = append(item.ShapeTargets, ModelViewerShapeTarget{Var: dimension.VariableID, Mode: dimension.Mode})
+			item.ShapeTargets = append(
+				item.ShapeTargets,
+				ModelViewerShapeTarget{Var: dimension.VariableID, Mode: dimension.Mode},
+			)
 			payload.ShapePositions = append(payload.ShapePositions, high)
 			payload.ShapeLowPositions = append(payload.ShapeLowPositions, low)
 		}
@@ -879,7 +1078,14 @@ func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []mo
 	return item, payload
 }
 
-func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, transport *ModelViewerTransport, meshes []modelViewerMeshPayload, textures map[string]modelViewerTexturePayload) error {
+func writeModelViewerPayload(
+	ctx context.Context,
+	t *Tools,
+	sessionID string,
+	transport *ModelViewerTransport,
+	meshes []modelViewerMeshPayload,
+	textures map[string]modelViewerTexturePayload,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -963,16 +1169,23 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 				return err
 			}
 		}
-		if len(payload.ShapePositions) != len(mesh.ShapeTargets) || len(payload.ShapeLowPositions) != len(mesh.ShapeTargets) {
+		if len(payload.ShapePositions) != len(mesh.ShapeTargets) ||
+			len(payload.ShapeLowPositions) != len(mesh.ShapeTargets) {
 			return fmt.Errorf("model viewer shape payload count mismatch for %s", mesh.ID)
 		}
 		for targetIndex := range mesh.ShapeTargets {
 			target := &mesh.ShapeTargets[targetIndex]
-			target.PositionsURL, err = write(fmt.Sprintf(".shape.%d", targetIndex), modelViewerFloat32Bytes(payload.ShapePositions[targetIndex]))
+			target.PositionsURL, err = write(
+				fmt.Sprintf(".shape.%d", targetIndex),
+				modelViewerFloat32Bytes(payload.ShapePositions[targetIndex]),
+			)
 			if err != nil {
 				return err
 			}
-			target.LowPositionsURL, err = write(fmt.Sprintf(".shape.%d.low", targetIndex), modelViewerFloat32Bytes(payload.ShapeLowPositions[targetIndex]))
+			target.LowPositionsURL, err = write(
+				fmt.Sprintf(".shape.%d.low", targetIndex),
+				modelViewerFloat32Bytes(payload.ShapeLowPositions[targetIndex]),
+			)
 			if err != nil {
 				return err
 			}
@@ -981,7 +1194,16 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 			return fmt.Errorf("model viewer position variant payload count mismatch for %s", mesh.ID)
 		}
 		for variantIndex := range mesh.PositionVariants {
-			mesh.PositionVariants[variantIndex].GeometryURL, err = t.registerModelViewerPosition(sessionID, mesh.ID, variantIndex, payload.PositionSources[variantIndex], payload.Indices, payload.SourceIndices, len(payload.Positions)/3, positionCache)
+			mesh.PositionVariants[variantIndex].GeometryURL, err = t.registerModelViewerPosition(
+				sessionID,
+				mesh.ID,
+				variantIndex,
+				payload.PositionSources[variantIndex],
+				payload.Indices,
+				payload.SourceIndices,
+				len(payload.Positions)/3,
+				positionCache,
+			)
 			if err != nil {
 				return err
 			}
@@ -1031,7 +1253,13 @@ func modelViewerSourceIndicesAreIdentity(indices []uint32) bool {
 	return true
 }
 
-func readModelViewerShapePositions(cache *modelViewerBufferCache, path string, stride int, sources []uint32, vertexCount int) ([]float32, error) {
+func readModelViewerShapePositions(
+	cache *modelViewerBufferCache,
+	path string,
+	stride int,
+	sources []uint32,
+	vertexCount int,
+) ([]float32, error) {
 	raw, err := cache.read(path)
 	if err != nil {
 		return nil, err
@@ -1089,7 +1317,13 @@ type modelViewerTextureRunStats struct {
 	TotalWallMs     int64
 }
 
-func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []modelViewerResource, bindings []modelViewerTextureBinding, meshes []modelViewerDirectMesh) []modelViewerTextureJob {
+func collectModelViewerTextureJobs(
+	batchIndex int,
+	modDir string,
+	resources []modelViewerResource,
+	bindings []modelViewerTextureBinding,
+	meshes []modelViewerDirectMesh,
+) []modelViewerTextureJob {
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
 		key := modelViewerNormalizeKey(resource.Name)
@@ -1176,7 +1410,12 @@ func collectModelViewerTextureJobs(batchIndex int, modDir string, resources []mo
 	return jobs
 }
 
-func runModelViewerTextureJobs(ctx context.Context, settings modelViewerTextureSettings, batchCount int, jobs []modelViewerTextureJob) ([]map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
+func runModelViewerTextureJobs(
+	ctx context.Context,
+	settings modelViewerTextureSettings,
+	batchCount int,
+	jobs []modelViewerTextureJob,
+) ([]map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
 	outputs := make([]map[string]modelViewerTexturePayload, batchCount)
 	for index := range outputs {
 		outputs[index] = make(map[string]modelViewerTexturePayload)
@@ -1320,7 +1559,15 @@ hashDispatch:
 					texture, exists := variants[variant]
 					if !exists {
 						group.encodes++
-						texture, err = encodeModelViewerPreparedTexture(ctx, decoded, job.path, job.resourceName, variant.transform, variant.format, variant.quality)
+						texture, err = encodeModelViewerPreparedTexture(
+							ctx,
+							decoded,
+							job.path,
+							job.resourceName,
+							variant.transform,
+							variant.format,
+							variant.quality,
+						)
 						if err != nil {
 							texture = nil
 						}
@@ -1357,7 +1604,12 @@ prepareDispatch:
 			if prepared.job.batchIndex < 0 || prepared.job.batchIndex >= len(outputs) {
 				continue
 			}
-			item := modelViewerTexturePayload{Key: prepared.job.canonicalKey, Role: prepared.job.role, Bytes: prepared.texture.bytes, MIMEType: prepared.texture.mimeType}
+			item := modelViewerTexturePayload{
+				Key:      prepared.job.canonicalKey,
+				Role:     prepared.job.role,
+				Bytes:    prepared.texture.bytes,
+				MIMEType: prepared.texture.mimeType,
+			}
 			for _, key := range prepared.job.keys {
 				outputs[prepared.job.batchIndex][key] = item
 			}
@@ -1399,7 +1651,11 @@ func classifyModelViewerTextureRole(name string) string {
 	}
 }
 
-func buildModelViewerDirectVariables(sections []modINISection, bindings []modelViewerSlotBinding, defaults map[string]any) []ModelViewerVariable {
+func buildModelViewerDirectVariables(
+	sections []modINISection,
+	bindings []modelViewerSlotBinding,
+	defaults map[string]any,
+) []ModelViewerVariable {
 	seen := make(map[string]bool)
 	var output []ModelViewerVariable
 	sort.SliceStable(bindings, func(i, j int) bool {
@@ -1410,13 +1666,24 @@ func buildModelViewerDirectVariables(sections []modINISection, bindings []modelV
 			continue
 		}
 		seen[binding.Variable] = true
-		variable := ModelViewerVariable{ID: binding.Variable, Label: humanizeModelViewerLabel(binding.Variable), DefaultValue: defaults[binding.Variable], Order: len(output), Slot: binding.Slot, ControlType: "buttons", alwaysVisible: binding.AlwaysVisible}
+		variable := ModelViewerVariable{
+			ID:            binding.Variable,
+			Label:         humanizeModelViewerLabel(binding.Variable),
+			DefaultValue:  defaults[binding.Variable],
+			Order:         len(output),
+			Slot:          binding.Slot,
+			ControlType:   "buttons",
+			alwaysVisible: binding.AlwaysVisible,
+		}
 		variable.Label, variable.Effects = modelViewerDirectVariableMetadata(sections, binding, variable.Label)
 		if variable.DefaultValue == nil && len(binding.Values) > 0 {
 			variable.DefaultValue = binding.Values[0]
 		}
 		for _, value := range binding.Values {
-			variable.Values = append(variable.Values, ModelViewerVariableValue{Value: value, Label: modelViewerString(value)})
+			variable.Values = append(
+				variable.Values,
+				ModelViewerVariableValue{Value: value, Label: modelViewerString(value)},
+			)
 		}
 		if slider := inferModelViewerSlider(binding.Variable, binding.Values, false); slider != nil {
 			variable.ControlType = "slider"
@@ -1427,7 +1694,11 @@ func buildModelViewerDirectVariables(sections []modINISection, bindings []modelV
 	return output
 }
 
-func prependModelViewerShapeVariables(variables []ModelViewerVariable, shapeKeys []modelViewerShapeKey, defaults map[string]any) []ModelViewerVariable {
+func prependModelViewerShapeVariables(
+	variables []ModelViewerVariable,
+	shapeKeys []modelViewerShapeKey,
+	defaults map[string]any,
+) []ModelViewerVariable {
 	seen := make(map[string]bool)
 	output := make([]ModelViewerVariable, 0, len(variables))
 	for _, shapeKey := range shapeKeys {
@@ -1466,7 +1737,11 @@ func prependModelViewerShapeVariables(variables []ModelViewerVariable, shapeKeys
 	return output
 }
 
-func modelViewerDirectVariableMetadata(sections []modINISection, binding modelViewerSlotBinding, fallbackLabel string) (string, []ModelViewerMenuEffect) {
+func modelViewerDirectVariableMetadata(
+	sections []modINISection,
+	binding modelViewerSlotBinding,
+	fallbackLabel string,
+) (string, []ModelViewerMenuEffect) {
 	label := fallbackLabel
 	var effects []ModelViewerMenuEffect
 	for _, section := range sections {
@@ -1476,7 +1751,8 @@ func modelViewerDirectVariableMetadata(sections []modINISection, binding modelVi
 		containsBinding := false
 		for _, line := range section.Lines {
 			assignment := modelViewerMenuAssignRE.FindStringSubmatch(strings.TrimSpace(line))
-			if assignment != nil && modelViewerNormalizeKey(assignment[1]) == binding.Variable && strings.Contains(assignment[2], ",") {
+			if assignment != nil && modelViewerNormalizeKey(assignment[1]) == binding.Variable &&
+				strings.Contains(assignment[2], ",") {
 				containsBinding = true
 				break
 			}
@@ -1565,7 +1841,12 @@ func detectModelViewerUVBest(data []byte, vertexStride, baseOffset, texcoordStri
 			values := make([]float32, max(decoder.components, 2))
 			sampled := 0
 			for vertex := 0; vertex < total; vertex += step {
-				if err := readModelViewerDecoded(data, vertex*vertexStride+baseOffset+relative, decoder, values); err != nil {
+				if err := readModelViewerDecoded(
+					data,
+					vertex*vertexStride+baseOffset+relative,
+					decoder,
+					values,
+				); err != nil {
 					break
 				}
 				sampled++
@@ -1590,7 +1871,16 @@ func detectModelViewerUVBest(data []byte, vertexStride, baseOffset, texcoordStri
 				maxV = max(maxV, vs[i])
 			}
 			du, dv := maxU-minU, maxV-minV
-			scores = append(scores, score{live: du >= 1e-4 && dv >= 1e-4, inRange: inRange, spread: du + dv, offset: baseOffset + relative, format: format})
+			scores = append(
+				scores,
+				score{
+					live:    du >= 1e-4 && dv >= 1e-4,
+					inRange: inRange,
+					spread:  du + dv,
+					offset:  baseOffset + relative,
+					format:  format,
+				},
+			)
 		}
 	}
 	sort.SliceStable(scores, func(i, j int) bool {
@@ -1626,7 +1916,13 @@ func extractModelViewerDirectStateRules(sections []modINISection, variables map[
 			switch {
 			case strings.HasPrefix(lower, "if "):
 				expression := strings.TrimSpace(line[3:])
-				stack = append(stack, modelViewerBranchFrame{active: []modelViewerConditionClause{{Expression: expression, Expected: true}}, inverse: []modelViewerConditionClause{{Expression: expression, Expected: false}}})
+				stack = append(
+					stack,
+					modelViewerBranchFrame{
+						active:  []modelViewerConditionClause{{Expression: expression, Expected: true}},
+						inverse: []modelViewerConditionClause{{Expression: expression, Expected: false}},
+					},
+				)
 				continue
 			case strings.HasPrefix(lower, "elif "), strings.HasPrefix(lower, "else if "):
 				expression := strings.TrimSpace(line[5:])
@@ -1638,7 +1934,19 @@ func extractModelViewerDirectStateRules(sections []modINISection, variables map[
 					previous = stack[len(stack)-1]
 					stack = stack[:len(stack)-1]
 				}
-				stack = append(stack, modelViewerBranchFrame{active: append(append([]modelViewerConditionClause(nil), previous.inverse...), modelViewerConditionClause{Expression: expression, Expected: true}), inverse: append(append([]modelViewerConditionClause(nil), previous.inverse...), modelViewerConditionClause{Expression: expression, Expected: false})})
+				stack = append(
+					stack,
+					modelViewerBranchFrame{
+						active: append(
+							append([]modelViewerConditionClause(nil), previous.inverse...),
+							modelViewerConditionClause{Expression: expression, Expected: true},
+						),
+						inverse: append(
+							append([]modelViewerConditionClause(nil), previous.inverse...),
+							modelViewerConditionClause{Expression: expression, Expected: false},
+						),
+					},
+				)
 				continue
 			case lower == "else":
 				if len(stack) > 0 {
@@ -1664,7 +1972,10 @@ func extractModelViewerDirectStateRules(sections []modINISection, variables map[
 			if len(conditions) == 0 {
 				continue
 			}
-			rules = append(rules, ModelViewerStateRule{Var: modelViewerNormalizeKey(match[1]), Value: match[2], Conditions: conditions})
+			rules = append(
+				rules,
+				ModelViewerStateRule{Var: modelViewerNormalizeKey(match[1]), Value: match[2], Conditions: conditions},
+			)
 		}
 	}
 	return rules

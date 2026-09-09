@@ -45,9 +45,23 @@ func TestValidSavedBoundsRequiresIntersectionWithWorkArea(t *testing.T) {
 	}{
 		{name: "primary", bounds: &setting.Bounds{X: 100, Y: 100, Width: 1200, Height: 800}, valid: true},
 		{name: "negative secondary", bounds: &setting.Bounds{X: -1280, Y: -200, Width: 1200, Height: 800}, valid: true},
-		{name: "secondary inside corner", bounds: &setting.Bounds{X: -1, Y: 823, Width: 1200, Height: 800}, valid: true},
-		{name: "left overhang", bounds: &setting.Bounds{X: -100, Y: 100, Width: 1200, Height: 800}, screens: []*application.Screen{primary}, valid: true},
-		{name: "top overhang", bounds: &setting.Bounds{X: 100, Y: -50, Width: 1200, Height: 800}, screens: []*application.Screen{primary}, valid: true},
+		{
+			name:   "secondary inside corner",
+			bounds: &setting.Bounds{X: -1, Y: 823, Width: 1200, Height: 800},
+			valid:  true,
+		},
+		{
+			name:    "left overhang",
+			bounds:  &setting.Bounds{X: -100, Y: 100, Width: 1200, Height: 800},
+			screens: []*application.Screen{primary},
+			valid:   true,
+		},
+		{
+			name:    "top overhang",
+			bounds:  &setting.Bounds{X: 100, Y: -50, Width: 1200, Height: 800},
+			screens: []*application.Screen{primary},
+			valid:   true,
+		},
 		{name: "right edge excluded", bounds: &setting.Bounds{X: 1920, Y: 0, Width: 1200, Height: 800}},
 		{name: "bottom edge excluded", bounds: &setting.Bounds{X: 0, Y: 1040, Width: 1200, Height: 800}},
 		{name: "off screen", bounds: &setting.Bounds{X: 5000, Y: 5000, Width: 1200, Height: 800}},
@@ -129,7 +143,10 @@ func TestSetConsoleWindowEnabledRecreatesWindowAndPreservesRoute(t *testing.T) {
 	if current == nil {
 		t.Fatal("Create returned nil")
 	}
-	window.SyncRoute(context.WithValue(context.Background(), application.WindowKey, current), "/setting/gen?tab=advanced")
+	window.SyncRoute(
+		context.WithValue(context.Background(), application.WindowKey, current),
+		"/setting/gen?tab=advanced",
+	)
 
 	window.SetConsoleWindowEnabled(true)
 

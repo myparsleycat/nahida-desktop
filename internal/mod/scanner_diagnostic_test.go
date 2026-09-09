@@ -12,7 +12,11 @@ import (
 
 func TestParseINIPreservesPartialResultAndReportsReadLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.ini")
-	if err := os.WriteFile(path, []byte("[KeyTest]\nkey = k\n$test = 0, 1\n"+strings.Repeat("x", 2<<20)), 0o600); err != nil {
+	if err := os.WriteFile(
+		path,
+		[]byte("[KeyTest]\nkey = k\n$test = 0, 1\n"+strings.Repeat("x", 2<<20)),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var batch infra.DiagnosticBatch

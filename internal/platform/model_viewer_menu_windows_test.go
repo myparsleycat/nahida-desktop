@@ -47,7 +47,14 @@ func TestUpdateModelViewerMenuSkipsWhenKeyAbsent(t *testing.T) {
 	if updated {
 		t.Fatal("missing key must not be reported as updated")
 	}
-	if _, err := registry.OpenKey(registry.CURRENT_USER, path, registry.QUERY_VALUE); !errors.Is(err, registry.ErrNotExist) {
+	if _, err := registry.OpenKey(
+		registry.CURRENT_USER,
+		path,
+		registry.QUERY_VALUE,
+	); !errors.Is(
+		err,
+		registry.ErrNotExist,
+	) {
 		t.Fatalf("missing key must stay absent, error = %v", err)
 	}
 }

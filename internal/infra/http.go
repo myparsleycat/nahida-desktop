@@ -329,7 +329,11 @@ func (c *Client) GetHeaders(rawURL string) (http.Header, error) {
 	return h, nil
 }
 
-func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (response *http.Response, returnErr error) {
+func (c *Client) Fetch(
+	ctx context.Context,
+	rawURL string,
+	opts FetchOptions,
+) (response *http.Response, returnErr error) {
 	var diagnosticResponse *http.Response
 	attemptsMade := 0
 	stage := "prepare"
@@ -472,7 +476,13 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, opts FetchOptions) (r
 // The caller owns and must close the response body.
 //
 //wails:ignore
-func (c *Client) Stream(ctx context.Context, rawURL, method string, header http.Header, body io.Reader, contentLength int64) (*http.Response, error) {
+func (c *Client) Stream(
+	ctx context.Context,
+	rawURL, method string,
+	header http.Header,
+	body io.Reader,
+	contentLength int64,
+) (*http.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

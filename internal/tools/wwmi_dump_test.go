@@ -28,7 +28,13 @@ func TestPickWwmiDumpDiffusePrefersSRGBThenLarger(t *testing.T) {
 func TestPickWwmiDumpDiffusePrefersExclusiveOverShared(t *testing.T) {
 	t.Parallel()
 	got := pickWwmiDumpDiffuse([]wwmiDumpCandidate{
-		{File: "Textures/Components-0-1-2-3-4-5 t=beef0012.dds", SRGB: true, Area: 2048 * 2048, Bytes: 4_194_452, Order: 0},
+		{
+			File:  "Textures/Components-0-1-2-3-4-5 t=beef0012.dds",
+			SRGB:  true,
+			Area:  2048 * 2048,
+			Bytes: 4_194_452,
+			Order: 0,
+		},
 		{File: "Textures/Components-3 t=beef001c.dds", Area: 512 * 512, Bytes: 262_292, Order: 1},
 	})
 	if got != "Textures/Components-3 t=beef001c.dds" {
@@ -179,7 +185,12 @@ func TestInspectWwmiTextureHintKeepsHeaderAreaAfterDownsample(t *testing.T) {
 	diffusePixels := make([]color.NRGBA, dim*dim)
 	for y := range dim {
 		for x := range dim {
-			diffusePixels[y*dim+x] = color.NRGBA{R: uint8(x * 255 / (dim - 1)), G: uint8(y * 255 / (dim - 1)), B: 90, A: 255}
+			diffusePixels[y*dim+x] = color.NRGBA{
+				R: uint8(x * 255 / (dim - 1)),
+				G: uint8(y * 255 / (dim - 1)),
+				B: 90,
+				A: 255,
+			}
 		}
 	}
 	diffusePath := filepath.Join(root, "diffuse.dds")
@@ -225,7 +236,11 @@ func TestInspectWwmiTextureHintDecodesCompressedMipChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if flatDecoded.Bounds().Dx() != 256 || flatDecoded.Bounds().Dy() != 256 {
-		t.Fatalf("flat compressed decode size = %dx%d, want 256x256", flatDecoded.Bounds().Dx(), flatDecoded.Bounds().Dy())
+		t.Fatalf(
+			"flat compressed decode size = %dx%d, want 256x256",
+			flatDecoded.Bounds().Dx(),
+			flatDecoded.Bounds().Dy(),
+		)
 	}
 	flat := inspectWwmiTextureHint(flatPath)
 	if flat == nil || flat.Area != dim*dim || !flat.IsLikelyFlat || isLikelyWwmiDiffuse(*flat) {
@@ -235,7 +250,12 @@ func TestInspectWwmiTextureHintDecodesCompressedMipChain(t *testing.T) {
 	diffusePixels := make([]color.NRGBA, dim*dim)
 	for y := range dim {
 		for x := range dim {
-			diffusePixels[y*dim+x] = color.NRGBA{R: uint8(x * 255 / (dim - 1)), G: uint8(y * 255 / (dim - 1)), B: 90, A: 255}
+			diffusePixels[y*dim+x] = color.NRGBA{
+				R: uint8(x * 255 / (dim - 1)),
+				G: uint8(y * 255 / (dim - 1)),
+				B: 90,
+				A: 255,
+			}
 		}
 	}
 	diffusePath := filepath.Join(root, "diffuse.dds")
@@ -260,7 +280,8 @@ func TestKeepLikelyDiffuseAssignmentsPreservesRelativeOrder(t *testing.T) {
 		return &wwmiTextureHint{ColorSpace: "srgb", IsLikelyFlat: file == "flat"}
 	}
 	kept := keepLikelyDiffuseAssignments(assignments, inspect)
-	if len(kept) != 4 || kept[0].file != "first" || kept[1].file != "normal" || kept[2].file != "light" || kept[3].file != "last" {
+	if len(kept) != 4 || kept[0].file != "first" || kept[1].file != "normal" || kept[2].file != "light" ||
+		kept[3].file != "last" {
 		t.Fatalf("kept assignments = %#v", kept)
 	}
 }
@@ -323,7 +344,12 @@ func encodeWwmiBC1MipDDS(t *testing.T, width, height int, pixels []color.NRGBA) 
 			img.Set(x, y, pixels[y*width+x])
 		}
 	}
-	encoded, err := ddsutil.DdsFromImage(img, ddsutil.BC1RgbaUnormSrgb, ddsutil.QualityFast, ddsutil.MipmapsGeneratedAutomatic)
+	encoded, err := ddsutil.DdsFromImage(
+		img,
+		ddsutil.BC1RgbaUnormSrgb,
+		ddsutil.QualityFast,
+		ddsutil.MipmapsGeneratedAutomatic,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

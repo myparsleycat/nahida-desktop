@@ -48,7 +48,11 @@ type uploadRestartData struct {
 	RequestID   string
 }
 
-func (d *Drive) CreateDirs(ctx context.Context, parentID string, directories []UploadDirectory) ([]CreatedUploadDirectory, error) {
+func (d *Drive) CreateDirs(
+	ctx context.Context,
+	parentID string,
+	directories []UploadDirectory,
+) ([]CreatedUploadDirectory, error) {
 	if d == nil || d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
@@ -135,7 +139,15 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 	if err != nil {
 		return StartUploadResult{}, err
 	}
-	preparation, err := prepareUpload(ctx, params.Paths, slices.Collect(stringsMapKeys(childNames(item))), params.ConflictStrategy, rules, params.AdditionalExtensions, params.AllowAllFiles)
+	preparation, err := prepareUpload(
+		ctx,
+		params.Paths,
+		slices.Collect(stringsMapKeys(childNames(item))),
+		params.ConflictStrategy,
+		rules,
+		params.AdditionalExtensions,
+		params.AllowAllFiles,
+	)
 	if err != nil {
 		return StartUploadResult{}, d.reportUploadSourceFailure(params.DestID, "inspect", err)
 	}
@@ -175,9 +187,12 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 		_ = d.transfer.Cancel(preparation.PID)
 		return StartUploadResult{}, err
 	}
-	if err := d.transfer.RegisterRunner(preparation.PID, func(runCtx context.Context, transfers *transfer.Transfer, pid string) error {
-		return d.runUpload(runCtx, transfers, pid, restart, &state)
-	}); err != nil {
+	if err := d.transfer.RegisterRunner(
+		preparation.PID,
+		func(runCtx context.Context, transfers *transfer.Transfer, pid string) error {
+			return d.runUpload(runCtx, transfers, pid, restart, &state)
+		},
+	); err != nil {
 		_ = d.transfer.Cancel(preparation.PID)
 		return StartUploadResult{}, err
 	}
@@ -189,7 +204,13 @@ type uploadRunnerState struct {
 	hashes map[string]string
 }
 
-func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid string, restart *uploadRestartData, state *uploadRunnerState) (returnErr error) {
+func (d *Drive) runUpload(
+	ctx context.Context,
+	transfers *transfer.Transfer,
+	pid string,
+	restart *uploadRestartData,
+	state *uploadRunnerState,
+) (returnErr error) {
 	preparation := restart.Preparation
 	var uploadedBytes int64
 	uploadedFiles := 0
@@ -203,7 +224,16 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 		pendingFiles = append(pendingFiles, file)
 	}
 	status := transfer.StatusPreparing
-	if err := transfers.Update(pid, transfer.Updates{Status: &status, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles, ClearError: true, ClearErrorCode: true}); err != nil {
+	if err := transfers.Update(
+		pid,
+		transfer.Updates{
+			Status:           &status,
+			TransferredSize:  &uploadedBytes,
+			TransferredFiles: &uploadedFiles,
+			ClearError:       true,
+			ClearErrorCode:   true,
+		},
+	); err != nil {
 		return d.reportUploadFailure(transfers, pid, "prepare", err)
 	}
 	tempDir := ""
@@ -213,8 +243,15 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 		}
 		if err := os.RemoveAll(tempDir); err != nil {
 			_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
-				Operation: "upload", Stage: "cleanup-sources",
-				Fields: map[string]any{"pid": pid, "destinationId": restart.Params.DestID, "inputPaths": restart.Params.Paths, "tempPath": tempDir, "cleanupCompleted": false},
+				Operation: "upload",
+				Stage:     "cleanup-sources",
+				Fields: map[string]any{
+					"pid":              pid,
+					"destinationId":    restart.Params.DestID,
+					"inputPaths":       restart.Params.Paths,
+					"tempPath":         tempDir,
+					"cleanupCompleted": false,
+				},
 			})
 		}
 	}()
@@ -261,7 +298,12 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 			var ok bool
 			parentID, ok = parentIDs[file.ParentPath]
 			if !ok {
-				return d.failUploadTransfer(transfers, pid, "resolve-parent", fmt.Errorf("created directory missing for %q", file.ParentPath))
+				return d.failUploadTransfer(
+					transfers,
+					pid,
+					"resolve-parent",
+					fmt.Errorf("created directory missing for %q", file.ParentPath),
+				)
 			}
 		}
 		sha256 := hashes[file.FID]
@@ -272,37 +314,55 @@ func (d *Drive) runUpload(ctx context.Context, transfers *transfer.Transfer, pid
 	}
 
 	progressStatus := transfer.StatusProgress
-	if err := transfers.Update(pid, transfer.Updates{Status: &progressStatus, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles}); err != nil {
+	if err := transfers.Update(
+		pid,
+		transfer.Updates{Status: &progressStatus, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles},
+	); err != nil {
 		return d.reportUploadFailure(transfers, pid, "prepare", err)
 	}
 	if len(incomplete) > 0 {
 		incomplete = redistributeUploadFiles(incomplete)
 		stage := "plan"
-		plan, planErr := d.planUploadV2(ctx, restart.Params.DestID, restart.RequestID, incomplete, func(progress UploadPlanProgress) {
-			if progress.Phase != "" {
-				stage = "plan/" + string(progress.Phase)
-			}
-			percentage := 0.0
-			if progress.Total > 0 {
-				percentage = float64(progress.Processed) / float64(progress.Total) * 100
-			}
-			_ = transfers.Update(pid, transfer.Updates{PlanPhase: &progress.Phase, PlanProgress: &percentage})
-		})
+		plan, planErr := d.planUploadV2(
+			ctx,
+			restart.Params.DestID,
+			restart.RequestID,
+			incomplete,
+			func(progress UploadPlanProgress) {
+				if progress.Phase != "" {
+					stage = "plan/" + string(progress.Phase)
+				}
+				percentage := 0.0
+				if progress.Total > 0 {
+					percentage = float64(progress.Processed) / float64(progress.Total) * 100
+				}
+				_ = transfers.Update(pid, transfer.Updates{PlanPhase: &progress.Phase, PlanProgress: &percentage})
+			},
+		)
 		if planErr != nil {
 			return d.failUploadTransfer(transfers, pid, stage, planErr)
 		}
 		_ = transfers.Update(pid, transfer.Updates{ClearPlanPhase: true, ClearPlanProgress: true})
-		executeErr := d.executeUploadPlanV2(ctx, incomplete, plan, d.uploadConcurrency(ctx), func(progress UploadExecutionProgress) {
-			state.mu.Lock()
-			defer state.mu.Unlock()
-			uploadedBytes += progress.Bytes
-			if progress.FileID != "" && !transfers.IsFileCompleted(pid, progress.FileID) {
-				if transfers.MarkFileCompleted(pid, progress.FileID) == nil {
-					uploadedFiles++
+		executeErr := d.executeUploadPlanV2(
+			ctx,
+			incomplete,
+			plan,
+			d.uploadConcurrency(ctx),
+			func(progress UploadExecutionProgress) {
+				state.mu.Lock()
+				defer state.mu.Unlock()
+				uploadedBytes += progress.Bytes
+				if progress.FileID != "" && !transfers.IsFileCompleted(pid, progress.FileID) {
+					if transfers.MarkFileCompleted(pid, progress.FileID) == nil {
+						uploadedFiles++
+					}
 				}
-			}
-			_ = transfers.Update(pid, transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles})
-		})
+				_ = transfers.Update(
+					pid,
+					transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles},
+				)
+			},
+		)
 		if executeErr != nil {
 			return d.failUploadTransfer(transfers, pid, "execute", executeErr)
 		}

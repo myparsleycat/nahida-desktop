@@ -279,6 +279,11 @@ func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 2 || completeRequests.Load() != 2 || progress != int64(len(content)) {
-		t.Fatalf("part requests = %d, complete requests = %d, progress = %d", partRequests.Load(), completeRequests.Load(), progress)
+		t.Fatalf(
+			"part requests = %d, complete requests = %d, progress = %d",
+			partRequests.Load(),
+			completeRequests.Load(),
+			progress,
+		)
 	}
 }

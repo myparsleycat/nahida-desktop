@@ -11,16 +11,25 @@ func TestInterleaveModelViewerBuffersRejectsInvalidLengthsAndCounts(t *testing.T
 	if _, _, _, err := interleaveModelViewerBuffers([][]byte{make([]byte, 41)}, []int{40}); err == nil {
 		t.Fatal("non-divisible position buffer length succeeded")
 	}
-	if _, _, _, err := interleaveModelViewerBuffers([][]byte{make([]byte, 80), make([]byte, 32)}, []int{40, 32}); err == nil {
+	if _, _, _, err := interleaveModelViewerBuffers(
+		[][]byte{make([]byte, 80), make([]byte, 32)},
+		[]int{40, 32},
+	); err == nil {
 		t.Fatal("mismatched vertex counts succeeded")
 	}
 }
 
 func TestModelViewerResourceGrouping(t *testing.T) {
-	if got := parseModelViewerMihoyoResourceName("BodyPosition.1"); got == nil || got.Key != "Body.1" || got.Kind != "position" {
+	if got := parseModelViewerMihoyoResourceName(
+		"BodyPosition.1",
+	); got == nil || got.Key != "Body.1" ||
+		got.Kind != "position" {
 		t.Fatalf("mihoyo = %#v", got)
 	}
-	if got := parseModelViewerWwmiResourceName("BodyTexCoordBuffer.2"); got == nil || got.Key != "BodyIndexBuffer.2" || got.Kind != "texcoord" {
+	if got := parseModelViewerWwmiResourceName(
+		"BodyTexCoordBuffer.2",
+	); got == nil || got.Key != "BodyIndexBuffer.2" ||
+		got.Kind != "texcoord" {
 		t.Fatalf("wwmi = %#v", got)
 	}
 	dir := t.TempDir()

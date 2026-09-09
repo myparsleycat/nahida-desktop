@@ -48,7 +48,8 @@ element[1]:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mesh == nil || len(mesh.Indices) != 6 || len(mesh.Position) != 9 || len(mesh.Normal) != 9 || mesh.Normal[2] != 1 {
+	if mesh == nil || len(mesh.Indices) != 6 || len(mesh.Position) != 9 || len(mesh.Normal) != 9 ||
+		mesh.Normal[2] != 1 {
 		t.Fatalf("mesh = %#v", mesh)
 	}
 }

@@ -17,7 +17,15 @@ import (
 func TestPaginateUploadFilesDoesNotSplitNTEBundle(t *testing.T) {
 	files := make([]FinalUploadFile, 0, 502)
 	for index := range 499 {
-		files = append(files, FinalUploadFile{UploadFile: UploadFile{FID: fmt.Sprintf("ordinary-%d", index), Name: fmt.Sprintf("ordinary-%d.ini", index)}})
+		files = append(
+			files,
+			FinalUploadFile{
+				UploadFile: UploadFile{
+					FID:  fmt.Sprintf("ordinary-%d", index),
+					Name: fmt.Sprintf("ordinary-%d.ini", index),
+				},
+			},
+		)
 	}
 	for _, name := range []string{"Game.pak", "Game.utoc", "Game_s1.ucas"} {
 		files = append(files, FinalUploadFile{UploadFile: UploadFile{FID: name, Name: name}, ParentID: "parent"})
@@ -57,11 +65,19 @@ func TestPlanUploadV2ConsumesProgressAndCompleteEvents(t *testing.T) {
 			t.Fatalf("plan body = %#v", body)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "event: progress\ndata: {\"phase\":\"file_validation\",\"processed\":1,\"total\":1}\n\n")
-		_, _ = io.WriteString(w, "event: complete\ndata: {\"items\":[{\"clientId\":\"client\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[{\"intentId\":\"intent\",\"url\":\"https://upload.example/intent\",\"method\":\"POST\",\"form\":{\"token\":\"token\",\"sha256\":\"hash\"}}],\"nteBundles\":[]}\n\n")
+		_, _ = io.WriteString(
+			w,
+			"event: progress\ndata: {\"phase\":\"file_validation\",\"processed\":1,\"total\":1}\n\n",
+		)
+		_, _ = io.WriteString(
+			w,
+			"event: complete\ndata: {\"items\":[{\"clientId\":\"client\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[{\"intentId\":\"intent\",\"url\":\"https://upload.example/intent\",\"method\":\"POST\",\"form\":{\"token\":\"token\",\"sha256\":\"hash\"}}],\"nteBundles\":[]}\n\n",
+		)
 	}))
 	defer server.Close()
-	client := infra.NewClientWithOptions(infra.ClientOptions{BackendURL: server.URL, HTTPClient: server.Client(), Status: infra.BackendOnline})
+	client := infra.NewClientWithOptions(
+		infra.ClientOptions{BackendURL: server.URL, HTTPClient: server.Client(), Status: infra.BackendOnline},
+	)
 	drive := NewWithOptions(Options{HTTP: client})
 	drive.setUploadRules(testUploadRules())
 	var progress UploadPlanProgress
@@ -96,7 +112,10 @@ func TestPlanUploadV2BoundsPageSizeToFileCount(t *testing.T) {
 			t.Fatalf("page size = %d, want 1", len(body.Files))
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "event: complete\ndata: {\"items\":[{\"clientId\":\"client\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[],\"nteBundles\":[]}\n\n")
+		_, _ = io.WriteString(
+			w,
+			"event: complete\ndata: {\"items\":[{\"clientId\":\"client\",\"status\":\"pending\",\"intentId\":\"intent\"}],\"uploads\":[],\"nteBundles\":[]}\n\n",
+		)
 	}))
 	defer server.Close()
 	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{

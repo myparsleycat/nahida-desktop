@@ -97,7 +97,10 @@ func analyzeInternal(input []byte, opts Options) (internalAnalysis, error) {
 	}
 	report := newReport(input, pe, opts)
 	if pe.hasCertificate() {
-		report.Warnings = append(report.Warnings, "Authenticode certificate table is present; byte changes invalidate the signature")
+		report.Warnings = append(
+			report.Warnings,
+			"Authenticode certificate table is present; byte changes invalidate the signature",
+		)
 	}
 	report.Warnings = append(report.Warnings, pe.Warnings...)
 	roots := collectCodeRoots(pe)
@@ -133,7 +136,8 @@ func patchesEqual(a, b []patch) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].CandidateID != b[i].CandidateID || a[i].RVA != b[i].RVA || a[i].FileOffset != b[i].FileOffset || a[i].Template != b[i].Template {
+		if a[i].CandidateID != b[i].CandidateID || a[i].RVA != b[i].RVA || a[i].FileOffset != b[i].FileOffset ||
+			a[i].Template != b[i].Template {
 			return false
 		}
 		if !bytes.Equal(a[i].Replacement, b[i].Replacement) {

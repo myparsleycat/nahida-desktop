@@ -54,9 +54,16 @@ func (m *Mod) DownloadFromURL(ctx context.Context, rawURL, groupPath string) (st
 	if head.size != nil {
 		size = *head.size
 	}
-	if err := m.queueDownload(pid, suggested, groupPath, head.finalURL, size, func(runCtx context.Context, transfers *transfer.Transfer) error {
-		return m.runGroupDownload(runCtx, transfers, pid, head, savePath, stagingPath, groupPath, suggested)
-	}); err != nil {
+	if err := m.queueDownload(
+		pid,
+		suggested,
+		groupPath,
+		head.finalURL,
+		size,
+		func(runCtx context.Context, transfers *transfer.Transfer) error {
+			return m.runGroupDownload(runCtx, transfers, pid, head, savePath, stagingPath, groupPath, suggested)
+		},
+	); err != nil {
 		return "", err
 	}
 	return "started", nil
@@ -80,10 +87,20 @@ func (m *Mod) DownloadGameBananaFile(ctx context.Context, props GameBananaDownlo
 		return "", fmtGBHead(err)
 	}
 	if !head.ok {
-		return "", errors.New("GAMEBANANA_DOWNLOAD_HEAD_FAILED:" + strconv.Itoa(head.status) + ":" + orUnknown(head.statusText))
+		return "", errors.New(
+			"GAMEBANANA_DOWNLOAD_HEAD_FAILED:" + strconv.Itoa(head.status) + ":" + orUnknown(head.statusText),
+		)
 	}
 	suggested := parseDownloadFileName(head.finalURL, m.sanitizeName, head.header.Get("Content-Disposition"))
-	result, err := m.paths.getSelectedPathWithModeModal(ctx, suggested, ptrString(payload.CategoryName), payload.ImporterKey, "gamebanana", nil, false)
+	result, err := m.paths.getSelectedPathWithModeModal(
+		ctx,
+		suggested,
+		ptrString(payload.CategoryName),
+		payload.ImporterKey,
+		"gamebanana",
+		nil,
+		false,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -101,9 +118,27 @@ func (m *Mod) DownloadGameBananaFile(ctx context.Context, props GameBananaDownlo
 		size = *head.size
 	}
 	pid := uuid.NewString()
-	if err := m.queueDownload(pid, finalName, destination, head.finalURL, size, func(runCtx context.Context, transfers *transfer.Transfer) error {
-		return m.runGameBananaDownload(runCtx, transfers, pid, head, payload, stagingPath, stagedDownloadPath, destination, suggested, finalName)
-	}); err != nil {
+	if err := m.queueDownload(
+		pid,
+		finalName,
+		destination,
+		head.finalURL,
+		size,
+		func(runCtx context.Context, transfers *transfer.Transfer) error {
+			return m.runGameBananaDownload(
+				runCtx,
+				transfers,
+				pid,
+				head,
+				payload,
+				stagingPath,
+				stagedDownloadPath,
+				destination,
+				suggested,
+				finalName,
+			)
+		},
+	); err != nil {
 		return "", err
 	}
 	return "started", nil
@@ -136,9 +171,26 @@ func (m *Mod) HuiDownload(ctx context.Context, title, fileURL string) (string, e
 		size = *head.size
 	}
 	pid := uuid.NewString()
-	if err := m.queueDownload(pid, finalName, destination, fileURL, size, func(runCtx context.Context, transfers *transfer.Transfer) error {
-		return m.runHuiCustomDownload(runCtx, transfers, pid, head, stagingPath, stagedDownloadPath, destination, sanitized, finalName)
-	}); err != nil {
+	if err := m.queueDownload(
+		pid,
+		finalName,
+		destination,
+		fileURL,
+		size,
+		func(runCtx context.Context, transfers *transfer.Transfer) error {
+			return m.runHuiCustomDownload(
+				runCtx,
+				transfers,
+				pid,
+				head,
+				stagingPath,
+				stagedDownloadPath,
+				destination,
+				sanitized,
+				finalName,
+			)
+		},
+	); err != nil {
 		return "", err
 	}
 	return "started", nil
@@ -277,7 +329,13 @@ func (m *Mod) runGroupDownload(
 		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
 	}
 	if html {
-		return m.finishDownloadError(ctx, transfers, pid, errors.New("DOWNLOAD_URL_HTML_PAGE"), "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(
+			ctx,
+			transfers,
+			pid,
+			errors.New("DOWNLOAD_URL_HTML_PAGE"),
+			"CustomDownloader:downloadToGroup",
+		)
 	}
 	if err := os.MkdirAll(stagingPath, 0o755); err != nil {
 		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
@@ -295,7 +353,16 @@ func (m *Mod) runGroupDownload(
 	}
 	entries, readErr := os.ReadDir(stagingPath)
 	if _, statErr := os.Stat(extractedPath); statErr != nil || len(entries) == 0 {
-		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(errors.New("downloaded file did not produce staged content"), errors.Join(readErr, statErr)), "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(
+			ctx,
+			transfers,
+			pid,
+			infra.WithCause(
+				errors.New("downloaded file did not produce staged content"),
+				errors.Join(readErr, statErr),
+			),
+			"CustomDownloader:downloadToGroup",
+		)
 	}
 	finalized, err := finalizeStagedDownload(stagingPath, groupPath)
 	if err != nil {
@@ -304,7 +371,13 @@ func (m *Mod) runGroupDownload(
 	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, map[string]any{
 		"source": "mod", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	}); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})), "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(
+			ctx,
+			transfers,
+			pid,
+			infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})),
+			"CustomDownloader:downloadToGroup",
+		)
 	}
 	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", groupPath)
 	return m.finishDownloadOK(transfers, pid, head, downloaded, groupPath, suggested, finalized.DestinationPaths)
@@ -345,7 +418,14 @@ func (m *Mod) runGameBananaDownload(
 	if payload.PreviewURL != nil && *payload.PreviewURL != "" {
 		previewPath := filepath.Join(getPreviewTargetDir(stagedPath), "preview.jpg")
 		previewHead := downloadHead{finalURL: *payload.PreviewURL, header: http.Header{}}
-		if err := m.downloadFileTo(ctx, previewHead, previewPath, pid+":preview", "gamebanana-preview", nil); err != nil {
+		if err := m.downloadFileTo(
+			ctx,
+			previewHead,
+			previewPath,
+			pid+":preview",
+			"gamebanana-preview",
+			nil,
+		); err != nil {
 			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
 		}
 	}
@@ -360,7 +440,13 @@ func (m *Mod) runGameBananaDownload(
 		"file":   map[string]any{"downloadUrl": payload.FileURL, "md5": payload.FileMD5},
 	}
 	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, metadata); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})), "GameBanana:downloadFromGB:context")
+		return m.finishDownloadError(
+			ctx,
+			transfers,
+			pid,
+			infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})),
+			"GameBanana:downloadFromGB:context",
+		)
 	}
 	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", destination)
 	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
@@ -391,7 +477,13 @@ func (m *Mod) runHuiCustomDownload(
 		if err != nil {
 			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
 		}
-		if _, err := applySelectedExtractedName(extracted, stagingPath, finalName, originalTitle, m.sanitizeName); err != nil {
+		if _, err := applySelectedExtractedName(
+			extracted,
+			stagingPath,
+			finalName,
+			originalTitle,
+			m.sanitizeName,
+		); err != nil {
 			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
 		}
 		m.reportDownloadStep(os.Remove(stagedDownloadPath), pid, "cleanup-archive", stagedDownloadPath)
@@ -514,7 +606,20 @@ func (m *Mod) finishDownloadOK(
 		transferred = *head.size
 	}
 	one := 1
-	m.reportDownloadStep(transfers.Update(pid, transfer.Updates{Status: &completed, Progress: &hundred, TransferredSize: &transferred, TransferredFiles: &one}), pid, "record-completion", dest)
+	m.reportDownloadStep(
+		transfers.Update(
+			pid,
+			transfer.Updates{
+				Status:           &completed,
+				Progress:         &hundred,
+				TransferredSize:  &transferred,
+				TransferredFiles: &one,
+			},
+		),
+		pid,
+		"record-completion",
+		dest,
+	)
 	directories := existingDownloadDirectories(inspectionPaths)
 	m.queueFixInspection(directories...)
 	if m.emit != nil {
@@ -533,7 +638,13 @@ func existingDownloadDirectories(paths []string) []string {
 	return directories
 }
 
-func (m *Mod) finishDownloadError(ctx context.Context, transfers *transfer.Transfer, pid string, err error, where string) error {
+func (m *Mod) finishDownloadError(
+	ctx context.Context,
+	transfers *transfer.Transfer,
+	pid string,
+	err error,
+	where string,
+) error {
 	canceled := ctx.Err() != nil || isAbortErr(err)
 	if canceled {
 		status := transfer.StatusCanceled
@@ -614,5 +725,10 @@ func (m *Mod) reportDownloadStep(err error, pid, stage, path string) {
 	if err == nil {
 		return
 	}
-	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{Operation: "custom-download", Stage: stage, Fields: map[string]any{"pid": pid, "path": path}})
+	_ = infra.ReportError(
+		m.log,
+		err,
+		"Mod",
+		infra.Diagnostic{Operation: "custom-download", Stage: stage, Fields: map[string]any{"pid": pid, "path": path}},
+	)
 }

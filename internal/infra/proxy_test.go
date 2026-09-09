@@ -203,7 +203,9 @@ func TestSOCKSDNSAndAuthentication(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer network.Transport.CloseIdleConnections()
-				response, err := (&http.Client{Transport: network.Transport, Timeout: 3 * time.Second}).Get("http://destination.invalid")
+				response, err := (&http.Client{Transport: network.Transport, Timeout: 3 * time.Second}).Get(
+					"http://destination.invalid",
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -226,7 +228,9 @@ func TestSOCKSDNSAndAuthentication(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer rejected.Transport.CloseIdleConnections()
-					if unexpected, err := (&http.Client{Transport: rejected.Transport, Timeout: time.Second}).Get(origin.URL); err == nil {
+					if unexpected, err := (&http.Client{Transport: rejected.Transport, Timeout: time.Second}).Get(
+						origin.URL,
+					); err == nil {
 						_ = unexpected.Body.Close()
 						t.Fatal("incorrect password accepted")
 					}
@@ -408,17 +412,24 @@ func TestProxyRelayAbortsTruncatedChunkedResponse(t *testing.T) {
 }
 
 func TestProxyIPv6AndTLSName(t *testing.T) {
-	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, r.TLS.ServerName) }))
+	origin := httptest.NewTLSServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, r.TLS.ServerName) }),
+	)
 	defer origin.Close()
 	address, destinations := socksTestServer(t, strings.TrimPrefix(origin.URL, "https://"), "", "")
-	network, err := newProxyNetwork(proxyConfigFor(address, "socks5"), func(context.Context, string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("::1")}}, nil
-	})
+	network, err := newProxyNetwork(
+		proxyConfigFor(address, "socks5"),
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("::1")}}, nil
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The test certificate is for example.com, not the resolved IP.
-	network.Transport.TLSClientConfig = &tls.Config{RootCAs: origin.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs}
+	network.Transport.TLSClientConfig = &tls.Config{
+		RootCAs: origin.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs,
+	}
 	defer network.Transport.CloseIdleConnections()
 	response, err := (&http.Client{Transport: network.Transport, Timeout: 3 * time.Second}).Get("https://example.com")
 	if err != nil {
@@ -465,7 +476,10 @@ func TestProxyApplicationDownloadRangeAndUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	multi := filepath.Join(t.TempDir(), "parallel.bin")
-	if err := parallel.Download(ctx, ParallelDownloadOptions{URL: target, SavePath: multi, FileSize: int64(len(data)), MaxChunks: 2}); err != nil {
+	if err := parallel.Download(
+		ctx,
+		ParallelDownloadOptions{URL: target, SavePath: multi, FileSize: int64(len(data)), MaxChunks: 2},
+	); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{single, multi} {
@@ -477,7 +491,14 @@ func TestProxyApplicationDownloadRangeAndUpload(t *testing.T) {
 	if ranges.Load() < 2 {
 		t.Fatalf("expected multiple Range requests, got %d", ranges.Load())
 	}
-	response, err := client.Stream(ctx, "http://upload.invalid/file", http.MethodPut, nil, strings.NewReader("upload"), 6)
+	response, err := client.Stream(
+		ctx,
+		"http://upload.invalid/file",
+		http.MethodPut,
+		nil,
+		strings.NewReader("upload"),
+		6,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +542,12 @@ func TestProxyRelayCloseTerminatesBothTunnelEnds(t *testing.T) {
 	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", listener.Addr(), listener.Addr()); err != nil {
+	if _, err := fmt.Fprintf(
+		conn,
+		"CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n",
+		listener.Addr(),
+		listener.Addr(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	response, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodConnect})

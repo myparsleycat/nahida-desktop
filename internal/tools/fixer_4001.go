@@ -187,8 +187,15 @@ func (t *Tools) get4001ProviderReleases(ctx context.Context, provider string, re
 	header := make(http.Header)
 	header.Set("Accept", "application/vnd.github+json")
 	header.Set("X-GitHub-Api-Version", "2026-03-10")
-	header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
-	response, err := t.http.Fetch(ctx, rawURL, infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true})
+	header.Set(
+		"User-Agent",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+	)
+	response, err := t.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	)
 	if err != nil {
 		return finish(nil, err)
 	}
@@ -240,7 +247,10 @@ func (t *Tools) FourThousandOneFixerGetBuildToolsPath(ctx context.Context) (stri
 	return strings.TrimSpace(*value), nil
 }
 
-func (t *Tools) FourThousandOneFixerSetBuildToolsPath(ctx context.Context, path string) (Fixer4001BuildToolsResult, error) {
+func (t *Tools) FourThousandOneFixerSetBuildToolsPath(
+	ctx context.Context,
+	path string,
+) (Fixer4001BuildToolsResult, error) {
 	resolved := resolveVSDevCmd(path)
 	if resolved == "" {
 		return Fixer4001BuildToolsResult{}, nil
@@ -365,7 +375,10 @@ func (t *Tools) FourThousandOneFixerBuildDll(ctx context.Context, input Fixer400
 	return Fixer4001Result{Success: true}
 }
 
-func (t *Tools) FourThousandOneFixerDiversifyDllPadding(ctx context.Context, input Fixer4001ImporterInput) (result Fixer4001Result) {
+func (t *Tools) FourThousandOneFixerDiversifyDllPadding(
+	ctx context.Context,
+	input Fixer4001ImporterInput,
+) (result Fixer4001Result) {
 	if !t.begin4001Task("diversify-dll") {
 		return result
 	}
@@ -428,7 +441,8 @@ func (t *Tools) FourThousandOneFixerDiversifyDllPadding(ctx context.Context, inp
 	if report.InputSHA256 != "" && !strings.EqualFold(report.InputSHA256, currentHash) {
 		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", errors.New("PE padding diversifier input hash mismatch"))
 	}
-	if report.OutputSHA256 != nil && diversifiedHash != "" && !strings.EqualFold(*report.OutputSHA256, diversifiedHash) {
+	if report.OutputSHA256 != nil && diversifiedHash != "" &&
+		!strings.EqualFold(*report.OutputSHA256, diversifiedHash) {
 		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", errors.New("PE padding diversifier output hash mismatch"))
 	}
 	if report.DiscoveredRegions == 0 {
@@ -450,20 +464,40 @@ func (t *Tools) FourThousandOneFixerDiversifyDllPadding(ctx context.Context, inp
 		return result
 	}
 	hashPrefix := diversifiedHash[:min(7, len(diversifiedHash))]
-	backupPath := filepath.Join(importerPath, fmt.Sprintf("%s%s-%d.bak", diversifierBackupPre, hashPrefix, time.Now().Unix()))
-	if err := installFileCopies([]fileCopy{{Source: target, Target: backupPath}, {Source: tempPath, Target: target}}, useElevated); err != nil {
+	backupPath := filepath.Join(
+		importerPath,
+		fmt.Sprintf("%s%s-%d.bak", diversifierBackupPre, hashPrefix, time.Now().Unix()),
+	)
+	if err := installFileCopies(
+		[]fileCopy{{Source: target, Target: backupPath}, {Source: tempPath, Target: target}},
+		useElevated,
+	); err != nil {
 		_ = removeFilePaths([]string{backupPath}, useElevated)
 		return t.failed4001Install(err, target, "XXMI_ERR_OBFUSCATE_FAILED")
 	}
 	t.enableUnsafeMode(ctx, input.ImporterKey)
 	t.update4001Progress("XXMI_OBFUSCATE_SUCCESS", "")
 	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Successfully diversified padding in %s; backup=%s; candidates=%d; mutations=%d; hashBefore=%s; hashAfter=%s", target, backupPath, report.DiscoveredRegions, report.ModifiedRegions, report.InputSHA256, hashAfter), "4001Fixer:diversifyD3D11DllPadding")
+		t.log.Info(
+			fmt.Sprintf(
+				"Successfully diversified padding in %s; backup=%s; candidates=%d; mutations=%d; hashBefore=%s; hashAfter=%s",
+				target,
+				backupPath,
+				report.DiscoveredRegions,
+				report.ModifiedRegions,
+				report.InputSHA256,
+				hashAfter,
+			),
+			"4001Fixer:diversifyD3D11DllPadding",
+		)
 	}
 	return Fixer4001Result{Success: true, BackupPath: stringPointer(backupPath)}
 }
 
-func (t *Tools) FourThousandOneFixerRestoreDiversifiedDll(ctx context.Context, input Fixer4001PathInput) (result Fixer4001Result) {
+func (t *Tools) FourThousandOneFixerRestoreDiversifiedDll(
+	ctx context.Context,
+	input Fixer4001PathInput,
+) (result Fixer4001Result) {
 	if !t.begin4001Task("restore-dll") {
 		return result
 	}
@@ -584,7 +618,10 @@ func (t *Tools) prepareD3DSource(ctx context.Context, tempDir, provider, version
 	header := make(http.Header)
 	header.Set("User-Agent", "nahida-desktop")
 	header.Set("Referer", fmt.Sprintf("https://github.com/%s/XXMI-Libs-Package", provider))
-	if err := t.download.File(ctx, infra.DownloadRequest{URL: rawURL, Destination: zipPath, Header: header}); err != nil {
+	if err := t.download.File(
+		ctx,
+		infra.DownloadRequest{URL: rawURL, Destination: zipPath, Header: header},
+	); err != nil {
 		return "", err
 	}
 	t.update4001Progress("XXMI_EXTRACT_REPO", "")
@@ -706,7 +743,10 @@ func vsDevCmdCandidates(root string) []string {
 	}
 	for _, version := range vsDevCmdVersions {
 		for _, edition := range vsDevCmdEditions {
-			candidates = append(candidates, filepath.Join(root, version, edition, "VC", "Auxiliary", "Build", vsDevCmdFileName))
+			candidates = append(
+				candidates,
+				filepath.Join(root, version, edition, "VC", "Auxiliary", "Build", vsDevCmdFileName),
+			)
 		}
 	}
 	return candidates
@@ -763,7 +803,8 @@ func (t *Tools) findDiversifierBackup(importerPath string) (*string, error) {
 	}
 	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasPrefix(entry.Name(), diversifierBackupPre) && strings.HasSuffix(entry.Name(), ".bak") {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), diversifierBackupPre) &&
+			strings.HasSuffix(entry.Name(), ".bak") {
 			names = append(names, entry.Name())
 		}
 	}

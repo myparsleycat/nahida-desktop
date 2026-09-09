@@ -191,7 +191,10 @@ func TestTransformationPreservesLayoutAndOnlyChangesPlannedRanges(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Output) != len(input) || !result.Report.Validation.ReparsedOutput || !result.Report.Validation.SectionLayoutUnchanged || !result.Report.Validation.OnlyPlannedRangesChanged || result.Report.ModifiedRegions == 0 {
+	if len(result.Output) != len(input) || !result.Report.Validation.ReparsedOutput ||
+		!result.Report.Validation.SectionLayoutUnchanged ||
+		!result.Report.Validation.OnlyPlannedRangesChanged ||
+		result.Report.ModifiedRegions == 0 {
 		t.Fatalf("report = %#v", result.Report)
 	}
 }
@@ -268,7 +271,8 @@ func TestDiversifyFileWritesOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.DiscoveredRegions == 0 || report.ModifiedRegions == 0 || len(report.Patches) == 0 || report.OutputSHA256 == nil {
+	if report.DiscoveredRegions == 0 || report.ModifiedRegions == 0 || len(report.Patches) == 0 ||
+		report.OutputSHA256 == nil {
 		t.Fatalf("report = %#v", report)
 	}
 	got, err := os.ReadFile(output)

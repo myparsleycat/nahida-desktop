@@ -11,7 +11,8 @@ type SettingsStore struct{ c *Client }
 func (s SettingsStore) Get(ctx context.Context, key string) (*SettingRow, error) {
 	var row SettingRow
 	var value sql.NullString
-	err := s.c.db.QueryRowContext(ctx, `SELECT "key", "value" FROM "setting" WHERE "key" = ? LIMIT 1`, key).Scan(&row.Key, &value)
+	err := s.c.db.QueryRowContext(ctx, `SELECT "key", "value" FROM "setting" WHERE "key" = ? LIMIT 1`, key).
+		Scan(&row.Key, &value)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -127,7 +128,11 @@ func (s AppStateStore) List(ctx context.Context) ([]AppStateRow, error) {
 }
 
 func (s AppStateStore) ListByPrefix(ctx context.Context, prefix string) ([]AppStateRow, error) {
-	return s.list(ctx, `SELECT "key", "value", "updated_at" FROM "app_state" WHERE "key" LIKE ? ORDER BY "key"`, prefix+"%")
+	return s.list(
+		ctx,
+		`SELECT "key", "value", "updated_at" FROM "app_state" WHERE "key" LIKE ? ORDER BY "key"`,
+		prefix+"%",
+	)
 }
 
 func (s AppStateStore) list(ctx context.Context, query string, args ...any) ([]AppStateRow, error) {
@@ -235,7 +240,10 @@ ORDER BY
 	return out, rows.Err()
 }
 
-func (s GamePathsStore) FindByGameOrModFolderPath(ctx context.Context, game, modFolderPath string) (*GamePathRow, error) {
+func (s GamePathsStore) FindByGameOrModFolderPath(
+	ctx context.Context,
+	game, modFolderPath string,
+) (*GamePathRow, error) {
 	row := s.c.db.QueryRowContext(ctx, `
 SELECT `+gamePathSelectCols+`, "order"
 FROM "game_paths"
@@ -248,7 +256,10 @@ LIMIT 1`, game, modFolderPath, modFolderPath)
 	return out, err
 }
 
-func (s GamePathsStore) FindByModFolderPathOtherGame(ctx context.Context, game, modFolderPath string) (*GamePathRow, error) {
+func (s GamePathsStore) FindByModFolderPathOtherGame(
+	ctx context.Context,
+	game, modFolderPath string,
+) (*GamePathRow, error) {
 	row := s.c.db.QueryRowContext(ctx, `
 SELECT `+gamePathSelectCols+`, "order"
 FROM "game_paths"
@@ -319,7 +330,12 @@ func (s GamePathsStore) SetNteLauncherPath(ctx context.Context, game, nteLaunche
 func (s GamePathsStore) Reorder(ctx context.Context, games []string) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		for i, game := range games {
-			if _, err := tx.ExecContext(ctx, `UPDATE "game_paths" SET "order" = ? WHERE "game" = ?`, i+1, game); err != nil {
+			if _, err := tx.ExecContext(
+				ctx,
+				`UPDATE "game_paths" SET "order" = ? WHERE "game" = ?`,
+				i+1,
+				game,
+			); err != nil {
 				return err
 			}
 		}
@@ -336,7 +352,16 @@ type ModPresetsStore struct{ c *Client }
 func scanModPreset(scanner interface{ Scan(dest ...any) error }) (*ModPresetRow, error) {
 	var row ModPresetRow
 	var desc sql.NullString
-	if err := scanner.Scan(&row.ID, &row.Game, &row.Name, &desc, &row.ItemCount, &row.CreatedAt, &row.UpdatedAt, &row.Version); err != nil {
+	if err := scanner.Scan(
+		&row.ID,
+		&row.Game,
+		&row.Name,
+		&desc,
+		&row.ItemCount,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+		&row.Version,
+	); err != nil {
 		return nil, err
 	}
 	row.Description = ptrString(desc)
@@ -385,11 +410,21 @@ FROM "mod_presets" WHERE "game" = ? AND "name" = ? LIMIT 1`, game, name)
 }
 
 func (s ModPresetsStore) Insert(ctx context.Context, row ModPresetRow) error {
-	return s.c.exec(ctx, `
+	return s.c.exec(
+		ctx,
+		`
 INSERT INTO "mod_presets"
 ("id", "game", "name", "description", "item_count", "created_at", "updated_at", "version")
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		row.ID, row.Game, row.Name, argString(row.Description), row.ItemCount, row.CreatedAt, row.UpdatedAt, row.Version)
+		row.ID,
+		row.Game,
+		row.Name,
+		argString(row.Description),
+		row.ItemCount,
+		row.CreatedAt,
+		row.UpdatedAt,
+		row.Version,
+	)
 }
 
 // InsertSnapshot persists a preset and all of its items in one immediate
@@ -444,7 +479,15 @@ FROM "mod_preset_items" WHERE "preset_id" = ? ORDER BY "item_order"`, presetID)
 	for rows.Next() {
 		var row ModPresetItemRow
 		var enabled any
-		if err := rows.Scan(&row.PresetID, &row.ModKey, &row.RelativePath, &row.GroupRelativePath, &row.FolderName, &enabled, &row.ItemOrder); err != nil {
+		if err := rows.Scan(
+			&row.PresetID,
+			&row.ModKey,
+			&row.RelativePath,
+			&row.GroupRelativePath,
+			&row.FolderName,
+			&enabled,
+			&row.ItemOrder,
+		); err != nil {
 			return nil, err
 		}
 		row.IsEnabled = toBool(enabled)
@@ -456,11 +499,20 @@ FROM "mod_preset_items" WHERE "preset_id" = ? ORDER BY "item_order"`, presetID)
 func (s ModPresetItemsStore) InsertMany(ctx context.Context, rows []ModPresetItemRow) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		for _, row := range rows {
-			if _, err := tx.ExecContext(ctx, `
+			if _, err := tx.ExecContext(
+				ctx,
+				`
 INSERT INTO "mod_preset_items"
 ("preset_id", "mod_key", "relative_path", "group_relative_path", "folder_name", "is_enabled", "item_order")
 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				row.PresetID, row.ModKey, row.RelativePath, row.GroupRelativePath, row.FolderName, boolToInt(row.IsEnabled), row.ItemOrder); err != nil {
+				row.PresetID,
+				row.ModKey,
+				row.RelativePath,
+				row.GroupRelativePath,
+				row.FolderName,
+				boolToInt(row.IsEnabled),
+				row.ItemOrder,
+			); err != nil {
 				return err
 			}
 		}
@@ -484,7 +536,13 @@ func (s ImageCacheStore) GetByHash(ctx context.Context, hash string) (*ImageCach
 }
 
 func (s ImageCacheStore) InsertIgnore(ctx context.Context, row ImageCacheRow) error {
-	return s.c.exec(ctx, `INSERT OR IGNORE INTO "image_cache" ("hash", "image", "size") VALUES (?, ?, ?)`, row.Hash, row.Image, row.Size)
+	return s.c.exec(
+		ctx,
+		`INSERT OR IGNORE INTO "image_cache" ("hash", "image", "size") VALUES (?, ?, ?)`,
+		row.Hash,
+		row.Image,
+		row.Size,
+	)
 }
 
 func (s ImageCacheStore) SumSize(ctx context.Context) (int64, error) {
@@ -687,14 +745,31 @@ func (s ScriptsStore) ListBasic(ctx context.Context) ([]ScriptBasicRow, error) {
 }
 
 func (s ScriptsStore) Insert(ctx context.Context, row ScriptRow) error {
-	return s.c.exec(ctx, `
+	return s.c.exec(
+		ctx,
+		`
 INSERT INTO "script"
 ("id", "name", "source", "is_src_zstd", "type", "size", "zstd_size", "sha256", "zstd_sha256")
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		row.ID, row.Name, row.Source, boolToInt(row.IsSrcZstd), string(row.Type), row.Size, argInt64(row.ZstdSize), row.SHA256, argString(row.ZstdSHA256))
+		row.ID,
+		row.Name,
+		row.Source,
+		boolToInt(row.IsSrcZstd),
+		string(row.Type),
+		row.Size,
+		argInt64(row.ZstdSize),
+		row.SHA256,
+		argString(row.ZstdSHA256),
+	)
 }
 
-func (s ScriptsStore) UpdateCompressedSource(ctx context.Context, id string, source []byte, zstdSHA256 string, zstdSize int64) error {
+func (s ScriptsStore) UpdateCompressedSource(
+	ctx context.Context,
+	id string,
+	source []byte,
+	zstdSHA256 string,
+	zstdSize int64,
+) error {
 	return s.c.exec(ctx, `
 UPDATE "script"
 SET "source" = ?, "is_src_zstd" = 1, "zstd_sha256" = ?, "zstd_size" = ?
@@ -725,7 +800,10 @@ func (s ScriptPresetsStore) ListWithScripts(ctx context.Context) ([]ScriptPreset
 		return nil, err
 	}
 
-	itemRows, err := s.c.query(ctx, `SELECT "preset_id", "script_id", "order" FROM "script_preset_item" ORDER BY "preset_id", "order"`)
+	itemRows, err := s.c.query(
+		ctx,
+		`SELECT "preset_id", "script_id", "order" FROM "script_preset_item" ORDER BY "preset_id", "order"`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -757,7 +835,8 @@ func (s ScriptPresetsStore) ListWithScripts(ctx context.Context) ([]ScriptPreset
 
 func (s ScriptPresetsStore) FindByID(ctx context.Context, id string) (*ScriptPresetRow, error) {
 	var row ScriptPresetRow
-	err := s.c.db.QueryRowContext(ctx, `SELECT "id", "name" FROM "script_preset" WHERE "id" = ? LIMIT 1`, id).Scan(&row.ID, &row.Name)
+	err := s.c.db.QueryRowContext(ctx, `SELECT "id", "name" FROM "script_preset" WHERE "id" = ? LIMIT 1`, id).
+		Scan(&row.ID, &row.Name)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -781,7 +860,8 @@ func (s ScriptPresetsStore) FindByIDWithScripts(ctx context.Context, id string) 
 
 func (s ScriptPresetsStore) FindByName(ctx context.Context, name string) (*ScriptPresetRow, error) {
 	var row ScriptPresetRow
-	err := s.c.db.QueryRowContext(ctx, `SELECT "id", "name" FROM "script_preset" WHERE "name" = ? LIMIT 1`, name).Scan(&row.ID, &row.Name)
+	err := s.c.db.QueryRowContext(ctx, `SELECT "id", "name" FROM "script_preset" WHERE "name" = ? LIMIT 1`, name).
+		Scan(&row.ID, &row.Name)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -797,14 +877,28 @@ func (s ScriptPresetsStore) Insert(ctx context.Context, row ScriptPresetRow) err
 
 // InsertSnapshot stores a preset and its ordered items as one atomic unit.
 // This prevents an interrupted create from leaving an empty preset behind.
-func (s ScriptPresetsStore) InsertSnapshot(ctx context.Context, row ScriptPresetRow, items []ScriptPresetItemRow) error {
+func (s ScriptPresetsStore) InsertSnapshot(
+	ctx context.Context,
+	row ScriptPresetRow,
+	items []ScriptPresetItemRow,
+) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO "script_preset" ("id", "name") VALUES (?, ?)`, row.ID, row.Name); err != nil {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO "script_preset" ("id", "name") VALUES (?, ?)`,
+			row.ID,
+			row.Name,
+		); err != nil {
 			return err
 		}
 		for _, item := range items {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO "script_preset_item" ("preset_id", "script_id", "order") VALUES (?, ?, ?)`,
-				item.PresetID, item.ScriptID, item.Order); err != nil {
+			if _, err := tx.ExecContext(
+				ctx,
+				`INSERT INTO "script_preset_item" ("preset_id", "script_id", "order") VALUES (?, ?, ?)`,
+				item.PresetID,
+				item.ScriptID,
+				item.Order,
+			); err != nil {
 				return err
 			}
 		}
@@ -837,7 +931,10 @@ FROM "script_preset_item" WHERE "preset_id" = ? ORDER BY "order"`, presetID)
 	return out, rows.Err()
 }
 
-func (s ScriptPresetItemsStore) FindUsageByScriptID(ctx context.Context, scriptID string) (*ScriptPresetItemUsage, error) {
+func (s ScriptPresetItemsStore) FindUsageByScriptID(
+	ctx context.Context,
+	scriptID string,
+) (*ScriptPresetItemUsage, error) {
 	var row ScriptPresetItemUsage
 	err := s.c.db.QueryRowContext(ctx, `
 SELECT spi."preset_id", spi."script_id", spi."order", sp."name"
@@ -857,8 +954,13 @@ LIMIT 1`, scriptID).Scan(&row.PresetID, &row.ScriptID, &row.Order, &row.PresetNa
 func (s ScriptPresetItemsStore) InsertMany(ctx context.Context, rows []ScriptPresetItemRow) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		for _, row := range rows {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO "script_preset_item" ("preset_id", "script_id", "order") VALUES (?, ?, ?)`,
-				row.PresetID, row.ScriptID, row.Order); err != nil {
+			if _, err := tx.ExecContext(
+				ctx,
+				`INSERT INTO "script_preset_item" ("preset_id", "script_id", "order") VALUES (?, ?, ?)`,
+				row.PresetID,
+				row.ScriptID,
+				row.Order,
+			); err != nil {
 				return err
 			}
 		}

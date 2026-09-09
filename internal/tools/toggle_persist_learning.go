@@ -82,7 +82,10 @@ func newTogglePersistLearner() *TogglePersistLearner {
 	return &TogglePersistLearner{files: map[string]*persistFileState{}}
 }
 
-func (l *TogglePersistLearner) RegisterLearnedVariables(targetINIPath string, variables map[string]TogglePersistLearnedVariable) {
+func (l *TogglePersistLearner) RegisterLearnedVariables(
+	targetINIPath string,
+	variables map[string]TogglePersistLearnedVariable,
+) {
 	file := l.requireFile(targetINIPath)
 	for varName, learned := range variables {
 		varKey := strings.ToLower(varName)
@@ -100,7 +103,11 @@ func (l *TogglePersistLearner) RegisterLearnedVariables(targetINIPath string, va
 	}
 }
 
-func (l *TogglePersistLearner) Observe(targetINIPath, varName, value string, revision int, at int64) TogglePersistObservationResult {
+func (l *TogglePersistLearner) Observe(
+	targetINIPath, varName, value string,
+	revision int,
+	at int64,
+) TogglePersistObservationResult {
 	file := l.requireFile(targetINIPath)
 	varKey := strings.ToLower(varName)
 	state, ok := file.variables[varKey]
@@ -159,7 +166,11 @@ func (l *TogglePersistLearner) Observe(targetINIPath, varName, value string, rev
 		state.pendingValue = nil
 		state.pendingDueAt = nil
 	}
-	return TogglePersistObservationResult{NewlySuppressed: newlySuppressed, NewlyLearned: newlyLearned, NextDueAt: nextDueAt(file)}
+	return TogglePersistObservationResult{
+		NewlySuppressed: newlySuppressed,
+		NewlyLearned:    newlyLearned,
+		NextDueAt:       nextDueAt(file),
+	}
 }
 
 func (l *TogglePersistLearner) TakeReady(targetINIPath string, at int64) TogglePersistReadyResult {
@@ -170,7 +181,8 @@ func (l *TogglePersistLearner) TakeReady(targetINIPath string, at int64) ToggleP
 	var updates [][2]string
 	for _, varName := range file.order {
 		state := file.variables[varName]
-		if state.status == "suppressed" || state.pendingValue == nil || state.pendingDueAt == nil || *state.pendingDueAt > at {
+		if state.status == "suppressed" || state.pendingValue == nil || state.pendingDueAt == nil ||
+			*state.pendingDueAt > at {
 			continue
 		}
 		updates = append(updates, [2]string{varName, *state.pendingValue})
@@ -231,7 +243,9 @@ func (l *TogglePersistLearner) evaluateSuppression(file *persistFileState) []str
 			*observedMedianInterval <= state.learnedProfile.MedianIntervalMs*2 &&
 			evidence.regularCadence
 		continuousThreshold := len(observations) >= 8 && span >= 15_000 && len(distinct) >= 6 && evidence.count >= 2
-		discreteThreshold := len(observations) >= 10 && span >= 30_000 && len(distinct) >= 2 && len(distinct) <= 4 && evidence.regularCadence && isDeterministicCycle(observations)
+		discreteThreshold := len(observations) >= 10 && span >= 30_000 && len(distinct) >= 2 && len(distinct) <= 4 &&
+			evidence.regularCadence &&
+			isDeterministicCycle(observations)
 		if learnedThreshold || continuousThreshold || discreteThreshold {
 			state.status = "suppressed"
 			count := len(state.observations)
@@ -323,10 +337,15 @@ func (l *TogglePersistLearner) evaluateLearning(file *persistFileState, at int64
 			continue
 		}
 		evidence := runtimeEvidence(file, state)
-		individuallyLearned := !state.cohortSuppressed && len(state.observations) >= 12 && observationSpan(state.observations) >= 30_000 && evidence.count >= 3
-		directCohortLearned := state.cohortSuppressed && !state.sparseCohortSuppressed && len(state.observations) >= 4 && observationSpan(state.observations) >= 30_000 &&
+		individuallyLearned := !state.cohortSuppressed && len(state.observations) >= 12 &&
+			observationSpan(state.observations) >= 30_000 &&
+			evidence.count >= 3
+		directCohortLearned := state.cohortSuppressed && !state.sparseCohortSuppressed &&
+			len(state.observations) >= 4 &&
+			observationSpan(state.observations) >= 30_000 &&
 			hasMatchingState(file, state, func(candidate *persistVariableState) bool {
-				return candidate.status == "suppressed" && !candidate.cohortSuppressed && conditionalCochangeRate(state, candidate) >= 0.9
+				return candidate.status == "suppressed" && !candidate.cohortSuppressed &&
+					conditionalCochangeRate(state, candidate) >= 0.9
 			})
 		sparseCohortLearned := state.sparseCohortSuppressed &&
 			len(state.observations) >= 5 &&
@@ -334,7 +353,8 @@ func (l *TogglePersistLearner) evaluateLearning(file *persistFileState, at int64
 			len(state.observations) > *state.suppressedObservationCount &&
 			observationSpan(state.observations) >= 30_000 &&
 			hasMatchingState(file, state, func(candidate *persistVariableState) bool {
-				return candidate.status == "suppressed" && candidate.sparseCohortSuppressed && isSparseRuntimePair(state, candidate)
+				return candidate.status == "suppressed" && candidate.sparseCohortSuppressed &&
+					isSparseRuntimePair(state, candidate)
 			}) &&
 			hasMatchingState(file, state, func(candidate *persistVariableState) bool {
 				return candidate.status == "suppressed" && !candidate.cohortSuppressed
@@ -410,15 +430,27 @@ func parseTogglePersistProfile(value any) (TogglePersistProfile, error) {
 		for varName, rawVariable := range variablesRaw {
 			variableObj, ok := asObject(rawVariable)
 			if !ok {
-				return TogglePersistProfile{}, fmt.Errorf("invalid toggle persist profile variable: %s:%s", fileName, varName)
+				return TogglePersistProfile{}, fmt.Errorf(
+					"invalid toggle persist profile variable: %s:%s",
+					fileName,
+					varName,
+				)
 			}
 			name, _ := variableObj["name"].(string)
 			median, medianOK := asFloat(variableObj["medianIntervalMs"])
 			learnedAt, _ := variableObj["learnedAt"].(string)
 			if name == "" || !medianOK || !isFinite(median) || median <= 0 || learnedAt == "" {
-				return TogglePersistProfile{}, fmt.Errorf("invalid toggle persist profile variable: %s:%s", fileName, varName)
+				return TogglePersistProfile{}, fmt.Errorf(
+					"invalid toggle persist profile variable: %s:%s",
+					fileName,
+					varName,
+				)
 			}
-			variables[strings.ToLower(varName)] = TogglePersistLearnedVariable{Name: name, MedianIntervalMs: median, LearnedAt: learnedAt}
+			variables[strings.ToLower(varName)] = TogglePersistLearnedVariable{
+				Name:             name,
+				MedianIntervalMs: median,
+				LearnedAt:        learnedAt,
+			}
 		}
 		files[fileName] = TogglePersistProfileFile{Fingerprint: fingerprint, Variables: variables}
 	}
@@ -784,7 +816,11 @@ func asFloat(value any) (float64, bool) {
 	}
 }
 
-func hasMatchingState(file *persistFileState, state *persistVariableState, match func(*persistVariableState) bool) bool {
+func hasMatchingState(
+	file *persistFileState,
+	state *persistVariableState,
+	match func(*persistVariableState) bool,
+) bool {
 	for _, varKey := range file.order {
 		candidate := file.variables[varKey]
 		if candidate != state && match(candidate) {

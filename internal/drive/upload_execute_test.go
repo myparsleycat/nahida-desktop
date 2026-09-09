@@ -101,7 +101,10 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 		if err := request.ParseMultipartForm(1024); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = io.WriteString(w, `{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"completed"}]}`)
+		_, _ = io.WriteString(
+			w,
+			`{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"completed"}]}`,
+		)
 	}))
 	defer server.Close()
 	directory := t.TempDir()
@@ -122,7 +125,9 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 2)
-	err := uploadTestDrive(server).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed = append(completed, progress.FileID)
@@ -188,7 +193,11 @@ func TestExecuteUploadPlanCompletesNTEBundleAtomically(t *testing.T) {
 		{UploadFile: UploadFile{FID: "utoc", Name: "mod.utoc", Size: 20}},
 		{UploadFile: UploadFile{FID: "ucas", Name: "mod.ucas", Size: 30}},
 	}
-	bundle := NTEBundle{ID: "bundle", MemberClientIDs: []string{"pak", "utoc", "ucas"}, CompleteURL: server.URL + "/bundle/complete"}
+	bundle := NTEBundle{
+		ID:              "bundle",
+		MemberClientIDs: []string{"pak", "utoc", "ucas"},
+		CompleteURL:     server.URL + "/bundle/complete",
+	}
 	bundle.Form.Token = "token"
 	plan := UploadPlan{
 		Items: []UploadPlanItem{
@@ -201,7 +210,9 @@ func TestExecuteUploadPlanCompletesNTEBundleAtomically(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 3)
-	if err := uploadTestDrive(server).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	if err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed = append(completed, progress.FileID)
@@ -245,7 +256,9 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	}
 	var bytes int64
 	completed := 0
-	err := uploadTestDrive(server).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed++
@@ -266,5 +279,7 @@ func uploadExecutionFile(t *testing.T, directory, id, name, content string) Fina
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return FinalUploadFile{UploadFile: UploadFile{FID: id, Name: name, Size: int64(len(content)), FullPath: filepath.ToSlash(path)}}
+	return FinalUploadFile{
+		UploadFile: UploadFile{FID: id, Name: name, Size: int64(len(content)), FullPath: filepath.ToSlash(path)},
+	}
 }

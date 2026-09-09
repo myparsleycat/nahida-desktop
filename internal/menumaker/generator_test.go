@@ -34,7 +34,8 @@ func TestGenerateUsesCycleFallback(t *testing.T) {
 	if defaultSettings().FallbackType != "cycle" {
 		t.Fatal("expected cycle fallback")
 	}
-	if !strings.Contains(output, "global $ks_step_KeySwap = 0") || !strings.Contains(output, "[CommandListCycleKeySwap]") {
+	if !strings.Contains(output, "global $ks_step_KeySwap = 0") ||
+		!strings.Contains(output, "[CommandListCycleKeySwap]") {
 		t.Fatalf("missing cycle output:\n%s", output)
 	}
 	if strings.Contains(output, "[CommandListActivateKeySwap]") {
@@ -100,7 +101,9 @@ func TestGeneratePreservesActivateKeys(t *testing.T) {
 
 func TestGenerateKeepsUserSectionsWithGeneratedPrefixes(t *testing.T) {
 	t.Parallel()
-	document := parseDocument("[KeySwap]\nkey = 1\ntype = cycle\n$x = 0,1\n[CommandListGuiCustom]\n$x = 9\n[ResourceGuiCustom]\nfilename = custom.png\n[CustomShaderGuiDrawCustom]\ndraw = 3,0")
+	document := parseDocument(
+		"[KeySwap]\nkey = 1\ntype = cycle\n$x = 0,1\n[CommandListGuiCustom]\n$x = 9\n[ResourceGuiCustom]\nfilename = custom.png\n[CustomShaderGuiDrawCustom]\ndraw = 3,0",
+	)
 	output := generateFrom(document, document.Slots, defaultSettings())
 	for _, snippet := range []string{
 		"[CommandListGuiCustom]\n$x = 9",
@@ -205,7 +208,9 @@ func TestGenerateMergeModesAndKeyDeletion(t *testing.T) {
 
 func TestCalculateGeometryDefaultsZeroColumnsToThree(t *testing.T) {
 	t.Parallel()
-	document := parseDocument("[KeyA]\nkey = 1\n$x = 0,1\n[KeyB]\nkey = 2\n$y = 0,1\n[KeyC]\nkey = 3\n$z = 0,1\n[KeyD]\nkey = 4\n$w = 0,1")
+	document := parseDocument(
+		"[KeyA]\nkey = 1\n$x = 0,1\n[KeyB]\nkey = 2\n$y = 0,1\n[KeyC]\nkey = 3\n$z = 0,1\n[KeyD]\nkey = 4\n$w = 0,1",
+	)
 	zero := defaultSettings()
 	zero.Columns = 0
 	got := calculateGeometry(document.Slots, zero)

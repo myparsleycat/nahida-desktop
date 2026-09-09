@@ -149,7 +149,10 @@ func applyPersistUpdates(iniPath string, updates map[string]string) (result []st
 	if len(updated) == 0 {
 		return []string{}, nil
 	}
-	tempPath := filepath.Join(filepath.Dir(iniPath), fmt.Sprintf(".%s.%d.%d.tmp", filepath.Base(iniPath), os.Getpid(), time.Now().UnixNano()))
+	tempPath := filepath.Join(
+		filepath.Dir(iniPath),
+		fmt.Sprintf(".%s.%d.%d.tmp", filepath.Base(iniPath), os.Getpid(), time.Now().UnixNano()),
+	)
 	if err := os.WriteFile(tempPath, []byte(strings.Join(lines, lineEnding)), info.Mode().Perm()); err != nil {
 		return nil, err
 	}

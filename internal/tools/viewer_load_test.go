@@ -60,7 +60,9 @@ vb1 = ResourceTc
 drawindexed = 3, 0, 0
 `+viewerBodyResources)
 
-	if result.Meshes == nil || result.Textures == nil || result.Variables == nil || result.DefaultState == nil || result.StateRules == nil || result.Animations == nil {
+	if result.Meshes == nil || result.Textures == nil || result.Variables == nil || result.DefaultState == nil ||
+		result.StateRules == nil ||
+		result.Animations == nil {
 		t.Fatalf("transport contains nil collections: %#v", result)
 	}
 }
@@ -101,7 +103,11 @@ endif
 
 func TestLoadModViewerLoadsMeshINIsFromSubfolders(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte("[Constants]\nglobal $swap = 0\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "mod.ini"),
+		[]byte("[Constants]\nglobal $swap = 0\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
@@ -155,10 +161,18 @@ format = DXGI_FORMAT_R32_UINT
 		t.Fatal(err)
 	}
 	writeViewerGeometryN(t, dir, 32)
-	if err := os.WriteFile(filepath.Join(dir, "head.ib"), modelViewerUint32Bytes([]uint32{10, 11, 12}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "head.ib"),
+		modelViewerUint32Bytes([]uint32{10, 11, 12}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "dress.ib"), modelViewerUint32Bytes([]uint32{20, 21, 22}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "dress.ib"),
+		modelViewerUint32Bytes([]uint32{20, 21, 22}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	fixture := loadViewerDir(t, dir)
@@ -202,7 +216,11 @@ else
 drawindexed = 3, 3, 0
 endif
 `+viewerBodyResources)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	fixture = loadViewerDir(t, dir)
@@ -275,16 +293,22 @@ filename = material.png
 		t.Fatalf("result = %#v", result)
 	}
 	mesh := result.Meshes[0]
-	if len(mesh.TextureVariants) < 3 || len(mesh.NormalMapVariants) < 2 || mesh.LightMapKey == nil || !strings.HasSuffix(*mesh.LightMapKey, "light.png") || len(mesh.MaterialMapVariants) < 1 || len(mesh.MaterialMapVariants[0].Conditions) == 0 {
+	if len(mesh.TextureVariants) < 3 || len(mesh.NormalMapVariants) < 2 || mesh.LightMapKey == nil ||
+		!strings.HasSuffix(*mesh.LightMapKey, "light.png") ||
+		len(mesh.MaterialMapVariants) < 1 ||
+		len(mesh.MaterialMapVariants[0].Conditions) == 0 {
 		t.Fatalf("mesh = %#v", mesh)
 	}
 	color0 := evaluateViewerTransport(result, map[string]any{"color": "0", "detail": "0", "metal": "0"})
 	color1 := evaluateViewerTransport(result, map[string]any{"color": "1", "detail": "1", "metal": "1"})
 	color2 := evaluateViewerTransport(result, map[string]any{"color": "2", "detail": "0", "metal": "0"})
-	if !strings.HasSuffix(color0.Meshes[0].TexKey, "diffuseA.png") || !strings.HasSuffix(color1.Meshes[0].TexKey, "diffuseB.png") || !strings.HasSuffix(color2.Meshes[0].TexKey, "diffuseC.png") {
+	if !strings.HasSuffix(color0.Meshes[0].TexKey, "diffuseA.png") ||
+		!strings.HasSuffix(color1.Meshes[0].TexKey, "diffuseB.png") ||
+		!strings.HasSuffix(color2.Meshes[0].TexKey, "diffuseC.png") {
 		t.Fatalf("texKeys %q %q %q", color0.Meshes[0].TexKey, color1.Meshes[0].TexKey, color2.Meshes[0].TexKey)
 	}
-	if !strings.HasSuffix(color0.Meshes[0].NormalMapKey, "normalA.png") || !strings.HasSuffix(color1.Meshes[0].NormalMapKey, "normalB.png") {
+	if !strings.HasSuffix(color0.Meshes[0].NormalMapKey, "normalA.png") ||
+		!strings.HasSuffix(color1.Meshes[0].NormalMapKey, "normalB.png") {
 		t.Fatalf("normals %q %q", color0.Meshes[0].NormalMapKey, color1.Meshes[0].NormalMapKey)
 	}
 	if color0.Meshes[0].MaterialMapKey != "" || !strings.HasSuffix(color1.Meshes[0].MaterialMapKey, "material.png") {
@@ -320,12 +344,14 @@ filename = diffuseB.png
 [ResourceDiffuseC]
 filename = missingC.png
 `)
-	if len(result.Meshes) != 1 || len(result.Meshes[0].TextureVariants) != 1 || modelViewerDNFIsTrue(result.Meshes[0].TextureVariants[0].Conditions) {
+	if len(result.Meshes) != 1 || len(result.Meshes[0].TextureVariants) != 1 ||
+		modelViewerDNFIsTrue(result.Meshes[0].TextureVariants[0].Conditions) {
 		t.Fatalf("mesh = %#v", result.Meshes[0])
 	}
 	color0 := evaluateViewerTransport(result, map[string]any{"color": "0"})
 	color1 := evaluateViewerTransport(result, map[string]any{"color": "1"})
-	if !strings.HasSuffix(color1.Meshes[0].TexKey, "diffuseB.png") || color0.Meshes[0].TexKey == color1.Meshes[0].TexKey {
+	if !strings.HasSuffix(color1.Meshes[0].TexKey, "diffuseB.png") ||
+		color0.Meshes[0].TexKey == color1.Meshes[0].TexKey {
 		t.Fatalf("color0=%q color1=%q", color0.Meshes[0].TexKey, color1.Meshes[0].TexKey)
 	}
 }
@@ -358,7 +384,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	fixture := loadViewerDir(t, dir)
@@ -377,7 +407,8 @@ endif
 	if modelViewerString(first.State["piece"]) != "0" || modelViewerString(second.State["piece"]) != "1" {
 		t.Fatalf("state first=%#v second=%#v", first.State, second.State)
 	}
-	if len(first.Meshes) != 2 || !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
+	if len(first.Meshes) != 2 || !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible ||
+		!second.Meshes[1].Visible {
 		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
 }
@@ -406,7 +437,10 @@ drawindexed = 3, 0, 0
 		t.Fatal("missing UVs")
 	}
 	uvs := readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].UVsURL)
-	if len(uvs) < 6 || uvs[0] != 0 || math.Abs(float64(uvs[1]-.75)) > 1e-6 || uvs[2] != 1 || math.Abs(float64(uvs[3]-.25)) > 1e-6 || math.Abs(float64(uvs[4]-.5)) > 1e-6 || math.Abs(float64(uvs[5]-.5)) > 1e-6 {
+	if len(uvs) < 6 || uvs[0] != 0 || math.Abs(float64(uvs[1]-.75)) > 1e-6 || uvs[2] != 1 ||
+		math.Abs(float64(uvs[3]-.25)) > 1e-6 ||
+		math.Abs(float64(uvs[4]-.5)) > 1e-6 ||
+		math.Abs(float64(uvs[5]-.5)) > 1e-6 {
 		t.Fatalf("uvs = %v", uvs)
 	}
 }
@@ -444,7 +478,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -496,7 +534,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -546,14 +588,21 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
 	baseline := evaluateViewerTransport(result, map[string]any{"top": "0", "resetvar": "0"})
 	reset := evaluateViewerTransport(result, map[string]any{"top": "0", "resetvar": "1"})
 	active := evaluateViewerTransport(result, map[string]any{"top": "1", "resetvar": "0"})
-	if baseline.Meshes[0].Visible || baseline.Meshes[1].Visible || reset.Meshes[0].Visible || !reset.Meshes[1].Visible || !active.Meshes[0].Visible || active.Meshes[1].Visible {
+	if baseline.Meshes[0].Visible || baseline.Meshes[1].Visible || reset.Meshes[0].Visible ||
+		!reset.Meshes[1].Visible ||
+		!active.Meshes[0].Visible ||
+		active.Meshes[1].Visible {
 		t.Fatalf("baseline=%#v reset=%#v active=%#v", baseline.Meshes, reset.Meshes, active.Meshes)
 	}
 }
@@ -585,7 +634,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -636,7 +689,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -687,7 +744,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -701,7 +762,9 @@ endif
 	if !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
 		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
-	if result.Meshes[0].PositionsURL != positions[0] || result.Meshes[1].PositionsURL != positions[1] || result.Meshes[0].IndicesURL != indices[0] || result.Meshes[1].IndicesURL != indices[1] {
+	if result.Meshes[0].PositionsURL != positions[0] || result.Meshes[1].PositionsURL != positions[1] ||
+		result.Meshes[0].IndicesURL != indices[0] ||
+		result.Meshes[1].IndicesURL != indices[1] {
 		t.Fatal("geometry URLs changed after evaluation")
 	}
 }
@@ -733,7 +796,11 @@ drawindexed = auto
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -768,7 +835,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result
@@ -847,7 +918,11 @@ endif
 		t.Fatal(err)
 	}
 	writeViewerGeometry(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := loadViewerDir(t, dir).result

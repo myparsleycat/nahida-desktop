@@ -183,7 +183,10 @@ func allocateStagePath(sourcePath string) (string, error) {
 	parent := filepath.Dir(sourcePath)
 	baseName := filepath.Base(sourcePath)
 	for counter := 1; counter <= 1000; counter++ {
-		candidate := filepath.Join(parent, fmt.Sprintf("__nhd_stage_%d_%d_%s", time.Now().UnixMilli(), counter, baseName))
+		candidate := filepath.Join(
+			parent,
+			fmt.Sprintf("__nhd_stage_%d_%d_%s", time.Now().UnixMilli(), counter, baseName),
+		)
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
 			return candidate, nil
 		}

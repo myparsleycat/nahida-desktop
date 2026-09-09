@@ -15,7 +15,11 @@ func RegisterNahidaURLProtocol(executable string) error {
 
 func registerURLProtocol(scheme, description, executable string) error {
 	executable = filepath.Clean(executable)
-	root, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+scheme, registry.SET_VALUE|registry.CREATE_SUB_KEY)
+	root, _, err := registry.CreateKey(
+		registry.CURRENT_USER,
+		`Software\Classes\`+scheme,
+		registry.SET_VALUE|registry.CREATE_SUB_KEY,
+	)
 	if err != nil {
 		return err
 	}

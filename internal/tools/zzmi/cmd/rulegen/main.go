@@ -11,7 +11,11 @@ import (
 
 func main() {
 	source := flag.String("source", "", "path to the upstream Source Codes directory")
-	output := flag.String("output", filepath.Join("internal", "tools", "zzmi", "default_rules.json.zst"), "output rule pack")
+	output := flag.String(
+		"output",
+		filepath.Join("internal", "tools", "zzmi", "default_rules.json.zst"),
+		"output rule pack",
+	)
 	tag := flag.String("tag", zzmi.EmbeddedTag, "upstream tag")
 	commit := flag.String("commit", zzmi.EmbeddedCommit, "upstream commit")
 	published := flag.String("published", "", "release publication timestamp")
@@ -34,5 +38,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("wrote %s: %d hashes, %d collisions, %d bytes\n", *output, len(pack.HashCommands), pack.Collisions, len(data))
+	fmt.Printf(
+		"wrote %s: %d hashes, %d collisions, %d bytes\n",
+		*output,
+		len(pack.HashCommands),
+		pack.Collisions,
+		len(data),
+	)
 }

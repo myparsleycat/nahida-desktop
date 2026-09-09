@@ -115,7 +115,14 @@ func runNteMutation(script, elevationError string, contractErrors map[int]string
 		return nil
 	}
 	if message, ok := contractErrors[code]; ok {
-		return infra.AnnotateError(infra.WithCause(errors.New(message), err), infra.Diagnostic{Operation: "nte-mutation", Stage: "execute", Fields: map[string]any{"exitCode": code, "elevated": false}})
+		return infra.AnnotateError(
+			infra.WithCause(errors.New(message), err),
+			infra.Diagnostic{
+				Operation: "nte-mutation",
+				Stage:     "execute",
+				Fields:    map[string]any{"exitCode": code, "elevated": false},
+			},
+		)
 	}
 	initialErr := err
 	code, err = executeNtePowerShell(script, true)
@@ -123,7 +130,14 @@ func runNteMutation(script, elevationError string, contractErrors map[int]string
 		return nil
 	}
 	if message, ok := contractErrors[code]; ok {
-		return infra.AnnotateError(infra.WithCause(errors.New(message), errors.Join(initialErr, err)), infra.Diagnostic{Operation: "nte-mutation", Stage: "execute", Fields: map[string]any{"exitCode": code, "elevated": true}})
+		return infra.AnnotateError(
+			infra.WithCause(errors.New(message), errors.Join(initialErr, err)),
+			infra.Diagnostic{
+				Operation: "nte-mutation",
+				Stage:     "execute",
+				Fields:    map[string]any{"exitCode": code, "elevated": true},
+			},
+		)
 	}
 	return infra.WithCause(fmt.Errorf("%s: %w", elevationError, err), initialErr)
 }
@@ -138,7 +152,14 @@ try {
   if ($null -eq $Process -or $null -eq $Process.ExitCode) { exit 1 }
   exit $Process.ExitCode
 } catch { exit 1 }`, encoded)
-		command = exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodeNtePowerShell(outer))
+		command = exec.Command(
+			"powershell.exe",
+			"-NoProfile",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-EncodedCommand",
+			encodeNtePowerShell(outer),
+		)
 	}
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := command.Run(); err != nil {

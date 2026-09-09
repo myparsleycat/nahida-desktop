@@ -2,7 +2,11 @@ package tools
 
 import "context"
 
-func prepareModelViewerPayload(ctx context.Context, prepared *modelViewerPreparedGeometry, transport *ModelViewerTransport) ([]modelViewerMeshPayload, map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
+func prepareModelViewerPayload(
+	ctx context.Context,
+	prepared *modelViewerPreparedGeometry,
+	transport *ModelViewerTransport,
+) ([]modelViewerMeshPayload, map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
 	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85}
 	meshPayloads := make([]modelViewerMeshPayload, 0)
 	texturePayloads := make(map[string]modelViewerTexturePayload)
@@ -31,7 +35,13 @@ func prepareModelViewerPayload(ctx context.Context, prepared *modelViewerPrepare
 			if err := ctx.Err(); err != nil {
 				return nil, nil, textureStats, err
 			}
-			item, payload := buildModelViewerDirectMeshPayload(mesh, work.bindings, textures, work.shapes, prepared.cache)
+			item, payload := buildModelViewerDirectMeshPayload(
+				mesh,
+				work.bindings,
+				textures,
+				work.shapes,
+				prepared.cache,
+			)
 			transport.Meshes = append(transport.Meshes, item)
 			meshPayloads = append(meshPayloads, payload)
 		}

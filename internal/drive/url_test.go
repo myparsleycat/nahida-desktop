@@ -49,14 +49,46 @@ func TestParseDriveSourceUrlFixtures(t *testing.T) {
 		url   string
 		want  DriveSource
 	}{
-		{"public folder", "https://nahida.live/akasha/link/qjsEdvLpcAxr", DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}},
-		{"private folder", "https://nahida.live/akasha/link/ZwgSTtFUXZGu", DriveSource{Type: "link", ID: "ZwgSTtFUXZGu"}},
-		{"public collection", "https://nahida.live/akasha/mod/WmVWMjAzthuFpKZiE-AKj", DriveSource{Type: "mod", ID: "WmVWMjAzthuFpKZiE-AKj"}},
-		{"private collection", "https://nahida.live/akasha/mod/-fpnEyi_nPNB-Mf97p5_k", DriveSource{Type: "mod", ID: "-fpnEyi_nPNB-Mf97p5_k"}},
-		{"Base64-encoded public folder", "aHR0cHM6Ly9uYWhpZGEubGl2ZS9ha2FzaGEvbGluay9xanNFZHZMcGNBeHI=", DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}},
-		{"multi-encoded public folder", stdBase64(stdBase64("https://nahida.live/akasha/link/qjsEdvLpcAxr")), DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}},
-		{"Base64-encoded Nahida host", stdBase64("nahida.live/akasha/link/qjsEdvLpcAxr"), DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}},
-		{"Base64-encoded www Nahida host", stdBase64("www.nahida.live/akasha/link/qjsEdvLpcAxr"), DriveSource{Type: "link", ID: "qjsEdvLpcAxr"}},
+		{
+			"public folder",
+			"https://nahida.live/akasha/link/qjsEdvLpcAxr",
+			DriveSource{Type: "link", ID: "qjsEdvLpcAxr"},
+		},
+		{
+			"private folder",
+			"https://nahida.live/akasha/link/ZwgSTtFUXZGu",
+			DriveSource{Type: "link", ID: "ZwgSTtFUXZGu"},
+		},
+		{
+			"public collection",
+			"https://nahida.live/akasha/mod/WmVWMjAzthuFpKZiE-AKj",
+			DriveSource{Type: "mod", ID: "WmVWMjAzthuFpKZiE-AKj"},
+		},
+		{
+			"private collection",
+			"https://nahida.live/akasha/mod/-fpnEyi_nPNB-Mf97p5_k",
+			DriveSource{Type: "mod", ID: "-fpnEyi_nPNB-Mf97p5_k"},
+		},
+		{
+			"Base64-encoded public folder",
+			"aHR0cHM6Ly9uYWhpZGEubGl2ZS9ha2FzaGEvbGluay9xanNFZHZMcGNBeHI=",
+			DriveSource{Type: "link", ID: "qjsEdvLpcAxr"},
+		},
+		{
+			"multi-encoded public folder",
+			stdBase64(stdBase64("https://nahida.live/akasha/link/qjsEdvLpcAxr")),
+			DriveSource{Type: "link", ID: "qjsEdvLpcAxr"},
+		},
+		{
+			"Base64-encoded Nahida host",
+			stdBase64("nahida.live/akasha/link/qjsEdvLpcAxr"),
+			DriveSource{Type: "link", ID: "qjsEdvLpcAxr"},
+		},
+		{
+			"Base64-encoded www Nahida host",
+			stdBase64("www.nahida.live/akasha/link/qjsEdvLpcAxr"),
+			DriveSource{Type: "link", ID: "qjsEdvLpcAxr"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {

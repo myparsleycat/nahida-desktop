@@ -111,7 +111,8 @@ func TestExclusiveToggleContinuesAfterSiblingFailureAndSkipsDotDirectory(t *test
 	if _, err := os.Stat(filepath.Join(group, ".Hidden")); err != nil {
 		t.Fatalf("dot-directory should be ignored: %v", err)
 	}
-	if !strings.Contains(logs.String(), "Mod:exclusiveToggle:disable:") || !strings.Contains(logs.String(), "simulated disable failure") {
+	if !strings.Contains(logs.String(), "Mod:exclusiveToggle:disable:") ||
+		!strings.Contains(logs.String(), "simulated disable failure") {
 		t.Fatalf("exclusive logs = %s", logs.String())
 	}
 }
@@ -146,7 +147,8 @@ func TestDisableAllContinuesAfterFailureAndSkipsDotDirectory(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(group, ".Hidden")); err != nil {
 		t.Fatalf("dot-directory should be ignored: %v", err)
 	}
-	if !strings.Contains(logs.String(), "Mod:disableAll:") || !strings.Contains(logs.String(), "simulated disable failure") {
+	if !strings.Contains(logs.String(), "Mod:disableAll:") ||
+		!strings.Contains(logs.String(), "simulated disable failure") {
 		t.Fatalf("disableAll logs = %s", logs.String())
 	}
 }
@@ -178,7 +180,8 @@ func TestEnableAllContinuesAfterFailure(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(group, "B")); err != nil {
 		t.Fatalf("later mod was not enabled: %v", err)
 	}
-	if !strings.Contains(logs.String(), "Mod:enableAll:") || !strings.Contains(logs.String(), "simulated enable failure") {
+	if !strings.Contains(logs.String(), "Mod:enableAll:") ||
+		!strings.Contains(logs.String(), "simulated enable failure") {
 		t.Fatalf("enableAll logs = %s", logs.String())
 	}
 }
@@ -251,15 +254,18 @@ func TestModActionStaysBlockedUntilDownloadRunnerFinalizes(t *testing.T) {
 	}
 	finalizing := make(chan struct{})
 	releaseRunner := make(chan struct{})
-	if err := service.transfer.RegisterRunner("finalizing", func(_ context.Context, transfers *transfer.Transfer, pid string) error {
-		completed := transfer.StatusCompleted
-		if err := transfers.Update(pid, transfer.Updates{Status: &completed}); err != nil {
-			return err
-		}
-		close(finalizing)
-		<-releaseRunner
-		return nil
-	}); err != nil {
+	if err := service.transfer.RegisterRunner(
+		"finalizing",
+		func(_ context.Context, transfers *transfer.Transfer, pid string) error {
+			completed := transfer.StatusCompleted
+			if err := transfers.Update(pid, transfer.Updates{Status: &completed}); err != nil {
+				return err
+			}
+			close(finalizing)
+			<-releaseRunner
+			return nil
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)

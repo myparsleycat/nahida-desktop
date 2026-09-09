@@ -11,13 +11,16 @@ func validateTransformation(original, output []byte, originalPE peImage, patches
 		return Validation{}, err
 	}
 	summary := Validation{
-		ReparsedOutput:           true,
-		FileLengthUnchanged:      len(original) == len(output),
-		SectionLayoutUnchanged:   reflect.DeepEqual(originalPE.Sections, outputPE.Sections),
-		EntryPointUnchanged:      originalPE.Headers.EntryPoint == outputPE.Headers.EntryPoint,
-		DataDirectoriesUnchanged: reflect.DeepEqual(originalPE.Headers.DataDirectories, outputPE.Headers.DataDirectories),
-		RelocationsUnchanged:     reflect.DeepEqual(originalPE.Relocations, outputPE.Relocations),
-		Deterministic:            true,
+		ReparsedOutput:         true,
+		FileLengthUnchanged:    len(original) == len(output),
+		SectionLayoutUnchanged: reflect.DeepEqual(originalPE.Sections, outputPE.Sections),
+		EntryPointUnchanged:    originalPE.Headers.EntryPoint == outputPE.Headers.EntryPoint,
+		DataDirectoriesUnchanged: reflect.DeepEqual(
+			originalPE.Headers.DataDirectories,
+			outputPE.Headers.DataDirectories,
+		),
+		RelocationsUnchanged: reflect.DeepEqual(originalPE.Relocations, outputPE.Relocations),
+		Deterministic:        true,
 	}
 	if !summary.FileLengthUnchanged {
 		return Validation{}, validationErr("file length changed during transformation")
@@ -81,7 +84,9 @@ func validateTransformation(original, output []byte, originalPE peImage, patches
 			return Validation{}, err
 		}
 		if end > len(output) || string(output[item.FileOffset:end]) != string(item.Replacement) {
-			return Validation{}, validationErr(fmt.Sprintf("patch bytes for candidate %d do not match the plan", item.CandidateID))
+			return Validation{}, validationErr(
+				fmt.Sprintf("patch bytes for candidate %d do not match the plan", item.CandidateID),
+			)
 		}
 	}
 	summary.ChangedRangesInsideCandidates = true
@@ -98,13 +103,16 @@ func inferPatchesFromDiff(original, output []byte, approved []approvedCandidate)
 		for i := range approved {
 			candidate := &approved[i]
 			candidateRange := newRange(uint32(candidate.FileOffset), uint32(candidate.Length))
-			if candidateRange.overlaps(rng) && candidateRange.Start <= rng.Start && rng.endU64() <= candidateRange.endU64() {
+			if candidateRange.overlaps(rng) && candidateRange.Start <= rng.Start &&
+				rng.endU64() <= candidateRange.endU64() {
 				match = candidate
 				break
 			}
 		}
 		if match == nil {
-			return nil, validationErr(fmt.Sprintf("changed range 0x%x+0x%x is not inside an approved padding candidate", rng.Start, rng.Len))
+			return nil, validationErr(
+				fmt.Sprintf("changed range 0x%x+0x%x is not inside an approved padding candidate", rng.Start, rng.Len),
+			)
 		}
 		start := int(rng.Start)
 		end := int(rng.end())

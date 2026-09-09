@@ -126,7 +126,13 @@ override_byte_stride = 40
 filename = Relative.buf
 `)
 	created := []mergeRollback{}
-	if err := writeClassicMergedINI(root, []classicSource{{path: aIni, index: 0}}, "vk_right", "", &created); err != nil {
+	if err := writeClassicMergedINI(
+		root,
+		[]classicSource{{path: aIni, index: 0}},
+		"vk_right",
+		"",
+		&created,
+	); err != nil {
 		t.Fatal(err)
 	}
 	text, err := os.ReadFile(filepath.Join(root, "merged.ini"))
@@ -136,7 +142,8 @@ filename = Relative.buf
 	if !regexp.MustCompile(`filename = \.\\A[\\/]Relative\.buf`).Match(text) {
 		t.Fatalf("filename = %s", text)
 	}
-	if !regexp.MustCompile(`\[TextureOverrideCharAVertexLimitRaise\]\nhash = fedcba98\noverride_vertex_count = 50000\noverride_byte_stride = 40`).Match(text) {
+	if !regexp.MustCompile(`\[TextureOverrideCharAVertexLimitRaise\]\nhash = fedcba98\noverride_vertex_count = 50000\noverride_byte_stride = 40`).
+		Match(text) {
 		t.Fatalf("vertex limit = %s", text)
 	}
 	if !strings.Contains(string(text), "handling = skip") || !strings.Contains(string(text), "ps-t0 = 1") ||
@@ -160,14 +167,21 @@ endif
 filename = A.buf
 `)
 	created := []mergeRollback{}
-	if err := writeClassicMergedINI(root, []classicSource{{path: aIni, index: 0}}, "vk_right", "", &created); err != nil {
+	if err := writeClassicMergedINI(
+		root,
+		[]classicSource{{path: aIni, index: 0}},
+		"vk_right",
+		"",
+		&created,
+	); err != nil {
 		t.Fatal(err)
 	}
 	text, err := os.ReadFile(filepath.Join(root, "merged.ini"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`\[CommandListCharAPosition\]\nif \$swapvar == 0\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\.0\n\tendif\nendif`).Match(text) {
+	if !regexp.MustCompile(`\[CommandListCharAPosition\]\nif \$swapvar == 0\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\.0\n\tendif\nendif`).
+		Match(text) {
 		t.Fatalf("command list = %s", text)
 	}
 	if strings.Contains(string(text), "if DRAW_TYPE = = 1") || strings.Contains(string(text), "if DRAW_TYPE = 1") {
@@ -207,7 +221,13 @@ stride = 40
 filename = CharCHairPosition.buf
 `)
 	created := []mergeRollback{}
-	if err := writeClassicMergedINI(root, []classicSource{{path: aIni, index: 0}}, "vk_right", "", &created); err != nil {
+	if err := writeClassicMergedINI(
+		root,
+		[]classicSource{{path: aIni, index: 0}},
+		"vk_right",
+		"",
+		&created,
+	); err != nil {
 		t.Fatal(err)
 	}
 	text, err := os.ReadFile(filepath.Join(root, "merged.ini"))
@@ -236,7 +256,13 @@ if $creditinfo == 0
 endif
 `)
 	created := []mergeRollback{}
-	if err := writeClassicMergedINI(root, []classicSource{{path: aIni, index: 0}}, "vk_right", "", &created); err != nil {
+	if err := writeClassicMergedINI(
+		root,
+		[]classicSource{{path: aIni, index: 0}},
+		"vk_right",
+		"",
+		&created,
+	); err != nil {
 		t.Fatal(err)
 	}
 	text, err := os.ReadFile(filepath.Join(root, "merged.ini"))
@@ -282,7 +308,8 @@ vb0 = ResourcePosition
 	if len(headerLines) != 1 {
 		t.Fatalf("headers = %#v", headerLines)
 	}
-	if !strings.Contains(headerLines[0], "CharA, (Red Dress)") || !strings.Contains(headerLines[0], "CharA, (Blue Dress)") {
+	if !strings.Contains(headerLines[0], "CharA, (Red Dress)") ||
+		!strings.Contains(headerLines[0], "CharA, (Blue Dress)") {
 		t.Fatalf("header = %s", headerLines[0])
 	}
 	got := extractMergedModPaths(string(text))
@@ -295,7 +322,11 @@ vb0 = ResourcePosition
 func TestParseClassicSectionsIgnoresCommentContainingEquals(t *testing.T) {
 	t.Parallel()
 
-	sections := parseClassicSections("[TextureOverrideBody]\n; vb0 = ResourceComment\nhash = abcdef01\nvb0 = ResourceBody\n", ".", 0)
+	sections := parseClassicSections(
+		"[TextureOverrideBody]\n; vb0 = ResourceComment\nhash = abcdef01\nvb0 = ResourceBody\n",
+		".",
+		0,
+	)
 	if len(sections) != 1 {
 		t.Fatalf("sections = %#v", sections)
 	}

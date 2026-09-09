@@ -13,7 +13,10 @@ func testSlowMonitor(now *time.Time) *SlowChunkMonitor {
 	})
 }
 
-func registerSlowTestChunk(monitor *SlowChunkMonitor, input SlowChunkRegistration) (SlowChunkSnapshot, context.Context) {
+func registerSlowTestChunk(
+	monitor *SlowChunkMonitor,
+	input SlowChunkRegistration,
+) (SlowChunkSnapshot, context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	input.AttemptContext = ctx
 	input.AttemptCancel = cancel
@@ -41,9 +44,18 @@ func TestSlowChunkMonitorAbortsRelativeSlowestAfterTwoTicks(t *testing.T) {
 	now := time.Unix(100, 0)
 	monitor := testSlowMonitor(&now)
 	defer monitor.Close()
-	peerA, _ := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: 10 * 1024 * 1024})
-	peerB, _ := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: 10 * 1024 * 1024})
-	slow, slowCtx := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 2, ChunkSize: 10 * 1024 * 1024})
+	peerA, _ := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: 10 * 1024 * 1024},
+	)
+	peerB, _ := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: 10 * 1024 * 1024},
+	)
+	slow, slowCtx := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 2, ChunkSize: 10 * 1024 * 1024},
+	)
 
 	now = now.Add(slowChunkMinObserve)
 	monitor.RecordSample(peerA.Key, 256*1024)
@@ -69,8 +81,14 @@ func TestSlowChunkMonitorRequiresTwoRelativePeers(t *testing.T) {
 	now := time.Unix(100, 0)
 	monitor := testSlowMonitor(&now)
 	defer monitor.Close()
-	peer, _ := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: 10 * 1024 * 1024})
-	slow, slowCtx := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: 10 * 1024 * 1024})
+	peer, _ := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: 10 * 1024 * 1024},
+	)
+	slow, slowCtx := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: 10 * 1024 * 1024},
+	)
 	now = now.Add(slowChunkMinObserve)
 	monitor.RecordSample(peer.Key, 256*1024)
 	monitor.RecordSample(slow.Key, 4*1024)
@@ -219,8 +237,14 @@ func TestSlowChunkMonitorSkipsRelativeAbortWhenNearComplete(t *testing.T) {
 	monitor := testSlowMonitor(&now)
 	defer monitor.Close()
 	chunkSize := int64(1024 * 1024)
-	peer, _ := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: chunkSize})
-	near, nearCtx := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: chunkSize})
+	peer, _ := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 0, ChunkSize: chunkSize},
+	)
+	near, nearCtx := registerSlowTestChunk(
+		monitor,
+		SlowChunkRegistration{FileID: "file-a", ChunkIndex: 1, ChunkSize: chunkSize},
+	)
 	now = now.Add(slowChunkMinObserve)
 	monitor.RecordSample(peer.Key, 256*1024)
 	monitor.RecordSample(near.Key, chunkSize*9/10)
@@ -293,7 +317,10 @@ func TestSlowChunkMonitorDoesNotCountNonNetworkPhasesTowardStall(t *testing.T) {
 			now := time.Unix(100, 0)
 			monitor := testSlowMonitor(&now)
 			defer monitor.Close()
-			entry, ctx := registerSlowTestChunk(monitor, SlowChunkRegistration{FileID: "file-a", ChunkSize: 1024 * 1024})
+			entry, ctx := registerSlowTestChunk(
+				monitor,
+				SlowChunkRegistration{FileID: "file-a", ChunkSize: 1024 * 1024},
+			)
 			monitor.SetPhase(entry.Key, phase)
 			now = now.Add(time.Minute)
 			monitor.EvaluateNow()

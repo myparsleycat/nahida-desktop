@@ -90,7 +90,12 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 			continue
 		}
 		if err != nil {
-			call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "validate-stored-cookie"})
+			call.err = infra.ReportError(
+				g.log,
+				infra.WithCause(classifyLoginError(err), err),
+				"GameBananaService.login",
+				infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "validate-stored-cookie"},
+			)
 			return
 		}
 		if !valid {
@@ -133,7 +138,12 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		return valid, verr
 	})
 	if err != nil {
-		call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "open-login"})
+		call.err = infra.ReportError(
+			g.log,
+			infra.WithCause(classifyLoginError(err), err),
+			"GameBananaService.login",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "open-login"},
+		)
 		return
 	}
 	rmc := cookieValue(cookie, "rmc")
@@ -147,7 +157,12 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 	}
 	applied, err := g.updateCookie(ctx, revision, merged)
 	if err != nil {
-		call.err = infra.ReportError(g.log, infra.WithCause(classifyLoginError(err), err), "GameBananaService.login", infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "persist-cookie"})
+		call.err = infra.ReportError(
+			g.log,
+			infra.WithCause(classifyLoginError(err), err),
+			"GameBananaService.login",
+			infra.Diagnostic{Severity: infra.DiagnosticWarn, Operation: "login", Stage: "persist-cookie"},
+		)
 		return
 	}
 	if !applied {

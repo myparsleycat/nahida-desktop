@@ -225,7 +225,11 @@ func (s *ShaderFixes) handleShadersLocked(modPath string, enable bool) ([]Shader
 		if err != nil {
 			return err
 		}
-		manifest := shaderFixesModManifest{Version: shaderFixesModMarkerVersion, ModKey: modKey, Files: []shaderFixesModManifestFile{}}
+		manifest := shaderFixesModManifest{
+			Version: shaderFixesModMarkerVersion,
+			ModKey:  modKey,
+			Files:   []shaderFixesModManifestFile{},
+		}
 		if err := os.MkdirAll(globalShaderPath, 0o755); err != nil {
 			return err
 		}
@@ -447,7 +451,11 @@ func (s *ShaderFixes) getShaderFixesManifestSearchRoots(modPath, globalShaderPat
 			if !strings.EqualFold(importer.Key, importerKey) {
 				continue
 			}
-			if normalizeModPath(filepath.Join(importer.ImporterFolder, shaderFixesDirName)) == normalizeModPath(globalShaderPath) {
+			if normalizeModPath(
+				filepath.Join(importer.ImporterFolder, shaderFixesDirName),
+			) == normalizeModPath(
+				globalShaderPath,
+			) {
 				addRoot(game.ModFolderPath)
 			}
 		}
@@ -500,7 +508,10 @@ func (s *ShaderFixes) rebuildShaderFixesOwnerIndex(modPath, globalShaderPath str
 			manifestPaths[normalizeModPath(manifestPath)] = manifestPath
 		}
 	}
-	index := shaderFixesOwnerIndex{Version: shaderFixesOwnerIndexVersion, Targets: map[string]shaderFixesOwnerIndexTarget{}}
+	index := shaderFixesOwnerIndex{
+		Version: shaderFixesOwnerIndexVersion,
+		Targets: map[string]shaderFixesOwnerIndexTarget{},
+	}
 	for _, manifestPath := range manifestPaths {
 		manifest, err := s.readShaderFixesModManifestFile(manifestPath)
 		if err != nil || manifest == nil {
@@ -513,7 +524,10 @@ func (s *ShaderFixes) rebuildShaderFixesOwnerIndex(modPath, globalShaderPath str
 			}
 			target, ok := index.Targets[*targetKey]
 			if !ok {
-				index.Targets[*targetKey] = shaderFixesOwnerIndexTarget{Hash: file.Hash, Owners: []string{manifest.ModKey}}
+				index.Targets[*targetKey] = shaderFixesOwnerIndexTarget{
+					Hash:   file.Hash,
+					Owners: []string{manifest.ModKey},
+				}
 				continue
 			}
 			if target.Hash == file.Hash && !containsOwner(target.Owners, manifest.ModKey) {
@@ -558,7 +572,11 @@ func (s *ShaderFixes) getShaderFixesModKey(modPath string, create bool) (string,
 }
 
 func (s *ShaderFixes) getShaderFixesFileCandidates(modPath string) ([]shaderFixesFileCandidate, error) {
-	directories, err := s.glob(filepath.ToSlash("**/"+shaderFixesDirName), modPath, shaderGlobOptions{onlyDirs: true, caseInsensitive: true})
+	directories, err := s.glob(
+		filepath.ToSlash("**/"+shaderFixesDirName),
+		modPath,
+		shaderGlobOptions{onlyDirs: true, caseInsensitive: true},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +618,9 @@ type shaderManifestGroup struct {
 	files            []shaderFixesModManifestFile
 }
 
-func (s *ShaderFixes) groupShaderFixesManifestFilesByImporter(files []shaderFixesModManifestFile) []shaderManifestGroup {
+func (s *ShaderFixes) groupShaderFixesManifestFilesByImporter(
+	files []shaderFixesModManifestFile,
+) []shaderManifestGroup {
 	index := map[string]int{}
 	var groups []shaderManifestGroup
 	for _, file := range files {
@@ -614,7 +634,10 @@ func (s *ShaderFixes) groupShaderFixesManifestFilesByImporter(files []shaderFixe
 			continue
 		}
 		index[key] = len(groups)
-		groups = append(groups, shaderManifestGroup{globalShaderPath: global, files: []shaderFixesModManifestFile{file}})
+		groups = append(
+			groups,
+			shaderManifestGroup{globalShaderPath: global, files: []shaderFixesModManifestFile{file}},
+		)
 	}
 	return groups
 }
@@ -631,7 +654,11 @@ func (s *ShaderFixes) getShaderFixesPathFromManifestFile(file shaderFixesModMani
 	if !strings.EqualFold(filepath.Base(globalShaderPath), shaderFixesDirName) {
 		return ""
 	}
-	if normalizeModPath(filepath.Join(globalShaderPath, filepath.FromSlash(*relativePath))) != normalizeModPath(mustAbs(file.TargetPath)) {
+	if normalizeModPath(
+		filepath.Join(globalShaderPath, filepath.FromSlash(*relativePath)),
+	) != normalizeModPath(
+		mustAbs(file.TargetPath),
+	) {
 		return ""
 	}
 	return globalShaderPath

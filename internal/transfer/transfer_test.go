@@ -403,7 +403,10 @@ func TestProcessQueueContinuesAfterRunnerError(t *testing.T) {
 		progress := 100.0
 		transferred := int64(100)
 		files := 1
-		return transfers.Update(pid, Updates{Status: &status, Progress: &progress, TransferredSize: &transferred, TransferredFiles: &files})
+		return transfers.Update(
+			pid,
+			Updates{Status: &status, Progress: &progress, TransferredSize: &transferred, TransferredFiles: &files},
+		)
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -463,7 +463,14 @@ func (u *Updater) translateCurrentReleaseNotes(ctx context.Context) {
 	}
 	go func() {
 		translated, translateErr := u.translateReleaseNotes(ctx, original, language)
-		current, shouldBroadcast := u.applyTranslationResult(serial, original, version, translated, language, translateErr)
+		current, shouldBroadcast := u.applyTranslationResult(
+			serial,
+			original,
+			version,
+			translated,
+			language,
+			translateErr,
+		)
 		if !current {
 			return
 		}

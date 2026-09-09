@@ -13,7 +13,13 @@ import (
 
 const modelViewerPackedFloatEncoding = "packed_f32_v1"
 
-func (t *Tools) prepareModelViewerComputeSources(ctx context.Context, sessionID string, transport *ModelViewerTransport, meshes []modelViewerMeshPayload, cache *modelViewerPositionCache) error {
+func (t *Tools) prepareModelViewerComputeSources(
+	ctx context.Context,
+	sessionID string,
+	transport *ModelViewerTransport,
+	meshes []modelViewerMeshPayload,
+	cache *modelViewerPositionCache,
+) error {
 	if len(meshes) != len(transport.Meshes) {
 		return fmt.Errorf("model viewer payload mesh count mismatch")
 	}
@@ -76,7 +82,12 @@ func (t *Tools) prepareModelViewerComputeSources(ctx context.Context, sessionID 
 					}
 					remapped[vertex] = lookup[source]
 				}
-				url, err := t.protocol.StoreMemoryBuffer(sessionID, deformer.ID+".indices."+id, modelViewerUint32Bytes(remapped), "application/octet-stream")
+				url, err := t.protocol.StoreMemoryBuffer(
+					sessionID,
+					deformer.ID+".indices."+id,
+					modelViewerUint32Bytes(remapped),
+					"application/octet-stream",
+				)
 				if err != nil {
 					return err
 				}
@@ -110,16 +121,34 @@ func (t *Tools) prepareModelViewerComputeSources(ctx context.Context, sessionID 
 			source.Stride, source.ByteLength = stride, int64(deformer.VertexCount)*int64(stride)
 			bufferID := fmt.Sprintf("%s.source.%d", deformer.ID, len(registered))
 			vertexCount := deformer.VertexCount
-			url, err := t.protocol.StoreMemoryLoader(sessionID, bufferID, func(ctx context.Context) (data []byte, err error) {
-				defer func() {
-					if err != nil && ctx.Err() == nil {
-						err = infra.ReportError(t.log, err, "Tools.ModelViewerComputeSource", infra.Diagnostic{Operation: "prepare-compute-source", Stage: "decode", Fields: map[string]any{"memorySessionId": sessionID, "sourcePath": original.sourcePath, "sourceBytes": original.ByteLength, "bufferId": bufferID}})
-					}
-				}()
-				return cache.load(ctx, bufferID, func(ctx context.Context) ([]byte, error) {
-					return readModelViewerComputeRecords(ctx, original, sources, vertexCount, packed)
-				})
-			})
+			url, err := t.protocol.StoreMemoryLoader(
+				sessionID,
+				bufferID,
+				func(ctx context.Context) (data []byte, err error) {
+					defer func() {
+						if err != nil && ctx.Err() == nil {
+							err = infra.ReportError(
+								t.log,
+								err,
+								"Tools.ModelViewerComputeSource",
+								infra.Diagnostic{
+									Operation: "prepare-compute-source",
+									Stage:     "decode",
+									Fields: map[string]any{
+										"memorySessionId": sessionID,
+										"sourcePath":      original.sourcePath,
+										"sourceBytes":     original.ByteLength,
+										"bufferId":        bufferID,
+									},
+								},
+							)
+						}
+					}()
+					return cache.load(ctx, bufferID, func(ctx context.Context) ([]byte, error) {
+						return readModelViewerComputeRecords(ctx, original, sources, vertexCount, packed)
+					})
+				},
+			)
 			if err != nil {
 				return err
 			}
@@ -151,13 +180,28 @@ func (t *Tools) prepareModelViewerComputeSources(ctx context.Context, sessionID 
 			deformer.Pose.Frames.URL = t.protocol.LocalFileURL(deformer.Pose.Frames.sourcePath, true)
 		}
 		if t.log != nil {
-			t.log.Info(fmt.Sprintf("Prepared compute inputs: deformer=%s vertices=%d compactVertices=%d packedDecoded=%t", deformer.ID, originalCount, deformer.VertexCount, packed), "Tools.ModelViewerComputeSource")
+			t.log.Info(
+				fmt.Sprintf(
+					"Prepared compute inputs: deformer=%s vertices=%d compactVertices=%d packedDecoded=%t",
+					deformer.ID,
+					originalCount,
+					deformer.VertexCount,
+					packed,
+				),
+				"Tools.ModelViewerComputeSource",
+			)
 		}
 	}
 	return ctx.Err()
 }
 
-func readModelViewerComputeRecords(ctx context.Context, source ModelViewerComputeBinarySource, sources []uint32, vertexCount int, packed bool) ([]byte, error) {
+func readModelViewerComputeRecords(
+	ctx context.Context,
+	source ModelViewerComputeBinarySource,
+	sources []uint32,
+	vertexCount int,
+	packed bool,
+) ([]byte, error) {
 	if source.Stride <= 0 || source.Stride > 64<<10 || (packed && source.Stride != 20) || vertexCount < 0 {
 		return nil, fmt.Errorf("invalid compute source stride")
 	}

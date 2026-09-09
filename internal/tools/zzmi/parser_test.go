@@ -92,7 +92,14 @@ VALID_BLEND_HASHES={'3d7e53cf'}
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := CompileZip(bytes.NewReader(buffer.Bytes()), int64(buffer.Len()), "tag", strings.Repeat("a", 40), "", expected)
+	pack, err := CompileZip(
+		bytes.NewReader(buffer.Bytes()),
+		int64(buffer.Len()),
+		"tag",
+		strings.Repeat("a", 40),
+		"",
+		expected,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +107,27 @@ VALID_BLEND_HASHES={'3d7e53cf'}
 		t.Fatalf("unexpected hash count: %d", len(pack.HashCommands))
 	}
 	expected["Source Codes/Assets/PlayerCharacterPYData/Missing.py"] = gitBlobSHA(module)
-	if _, err := CompileZip(bytes.NewReader(buffer.Bytes()), int64(buffer.Len()), "tag", strings.Repeat("a", 40), "", expected); err == nil || !strings.Contains(err.Error(), "is missing") {
+	if _, err := CompileZip(
+		bytes.NewReader(buffer.Bytes()),
+		int64(buffer.Len()),
+		"tag",
+		strings.Repeat("a", 40),
+		"",
+		expected,
+	); err == nil ||
+		!strings.Contains(err.Error(), "is missing") {
 		t.Fatalf("expected missing rule rejection, got %v", err)
 	}
 	delete(expected, "Source Codes/Assets/PlayerCharacterPYData/Missing.py")
 	expected["Source Codes/Jane.remapper.py"] = strings.Repeat("0", 40)
-	if _, err := CompileZip(bytes.NewReader(buffer.Bytes()), int64(buffer.Len()), "tag", strings.Repeat("a", 40), "", expected); err == nil {
+	if _, err := CompileZip(
+		bytes.NewReader(buffer.Bytes()),
+		int64(buffer.Len()),
+		"tag",
+		strings.Repeat("a", 40),
+		"",
+		expected,
+	); err == nil {
 		t.Fatal("expected blob mismatch rejection")
 	}
 }

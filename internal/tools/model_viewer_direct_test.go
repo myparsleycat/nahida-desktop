@@ -135,7 +135,11 @@ format = DXGI_FORMAT_R32_UINT`
 	if err := os.WriteFile(filepath.Join(modDir, "tc.buf"), make([]byte, 3*20), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(modDir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(modDir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,7 +155,8 @@ format = DXGI_FORMAT_R32_UINT`
 	}
 	firstVariant, secondVariant := result.Meshes[0].PositionVariants[0], result.Meshes[0].PositionVariants[1]
 
-	if !strings.HasPrefix(firstVariant.GeometryURL, "/protocol/memory/") || !strings.HasPrefix(secondVariant.GeometryURL, "/protocol/memory/") {
+	if !strings.HasPrefix(firstVariant.GeometryURL, "/protocol/memory/") ||
+		!strings.HasPrefix(secondVariant.GeometryURL, "/protocol/memory/") {
 		t.Fatalf("position variants must use lazy memory protocol: %#v", result.Meshes[0].PositionVariants)
 	}
 	if result.Meshes[0].SourceIndicesURL != "" {
@@ -159,7 +164,8 @@ format = DXGI_FORMAT_R32_UINT`
 	}
 	first := readModelViewerProtocolBytes(t, protocol, firstVariant.GeometryURL)
 	second := readModelViewerProtocolBytes(t, protocol, secondVariant.GeometryURL)
-	if len(first) != 152 || len(second) != 152 || math.Float32frombits(binary.LittleEndian.Uint32(first[80:])) != 0 || math.Float32frombits(binary.LittleEndian.Uint32(second[80:])) != 10 {
+	if len(first) != 152 || len(second) != 152 || math.Float32frombits(binary.LittleEndian.Uint32(first[80:])) != 0 ||
+		math.Float32frombits(binary.LittleEndian.Uint32(second[80:])) != 10 {
 		t.Fatalf("position variants do not contain the expected frames")
 	}
 }
@@ -179,7 +185,11 @@ func TestModelViewerPositionOverridesPruneMutuallyExclusiveMeshes(t *testing.T) 
 	ini.WriteString("endif\n")
 	for index := range 20 {
 		fmt.Fprintf(&ini, "[ResourcePos%d]\nfilename = pos%d.buf\nstride = 40\n", index, index)
-		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("pos%d.buf", index)), make([]byte, 40), 0o600); err != nil {
+		if err := os.WriteFile(
+			filepath.Join(dir, fmt.Sprintf("pos%d.buf", index)),
+			make([]byte, 40),
+			0o600,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -194,7 +204,14 @@ func TestModelViewerPositionOverridesPruneMutuallyExclusiveMeshes(t *testing.T) 
 			geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
 		}
 	}
-	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+	if err := attachModelViewerDirectPositionOverrides(
+		meshes,
+		sections,
+		collectModelViewerResources(sections),
+		dir,
+		variables,
+		newModelViewerBufferCache(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	for index, mesh := range meshes {
@@ -260,7 +277,14 @@ stride = 40`)
 			SourceIndices: []uint32{0, 1, 2},
 		},
 	}}
-	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+	if err := attachModelViewerDirectPositionOverrides(
+		meshes,
+		sections,
+		collectModelViewerResources(sections),
+		dir,
+		variables,
+		newModelViewerBufferCache(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(meshes[0].positionAssignments) != 0 {
@@ -305,7 +329,14 @@ stride = 40`)
 		conditions:   modelViewerDNFTrue(),
 		geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
 	}}
-	if err := attachModelViewerDirectPositionOverrides(meshes, sections, collectModelViewerResources(sections), dir, variables, newModelViewerBufferCache()); err != nil {
+	if err := attachModelViewerDirectPositionOverrides(
+		meshes,
+		sections,
+		collectModelViewerResources(sections),
+		dir,
+		variables,
+		newModelViewerBufferCache(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(meshes[0].positionAssignments) != 2 {
@@ -324,7 +355,10 @@ func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(
 	protocol := infra.NewProtocol()
 	service := NewWithOptions(Options{Protocol: protocol})
 	sessionID := protocol.CreateMemorySession()
-	transport := ModelViewerTransport{Meshes: []ModelViewerMeshTransport{{ID: "identity"}, {ID: "compact"}}, Textures: map[string]ModelViewerTextureTransport{}}
+	transport := ModelViewerTransport{
+		Meshes:   []ModelViewerMeshTransport{{ID: "identity"}, {ID: "compact"}},
+		Textures: map[string]ModelViewerTextureTransport{},
+	}
 	payloads := []modelViewerMeshPayload{
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{0, 1, 2}},
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{7, 3, 11}},
@@ -366,8 +400,13 @@ func TestModelViewerDirectConditionDomainExpansion(t *testing.T) {
 	if len(dnf) != 2 || dnf[0][0].Value != "0" || dnf[1][0].Value != "1" {
 		t.Fatalf("dnf = %#v", dnf)
 	}
-	inverse := modelViewerConditionsToDNF([]modelViewerConditionClause{{Expression: "$top < 2", Expected: false}}, variables)
-	if len(inverse) != 1 || len(inverse[0]) != 2 || inverse[0][0].Value != "0" || !inverse[0][0].Negate || inverse[0][1].Value != "1" || !inverse[0][1].Negate {
+	inverse := modelViewerConditionsToDNF(
+		[]modelViewerConditionClause{{Expression: "$top < 2", Expected: false}},
+		variables,
+	)
+	if len(inverse) != 1 || len(inverse[0]) != 2 || inverse[0][0].Value != "0" || !inverse[0][0].Negate ||
+		inverse[0][1].Value != "1" ||
+		!inverse[0][1].Negate {
 		t.Fatalf("inverse = %#v", inverse)
 	}
 }
@@ -395,7 +434,9 @@ $outfit = 0, 1
 $piece = 0`)
 	defaults := collectModelViewerDefaultVariables(sections)
 	variables := buildModelViewerDirectVariables(sections, collectModelViewerSlotBindings(sections, defaults), defaults)
-	if len(variables) != 1 || variables[0].ID != "outfit" || variables[0].Label != "Outfit" || len(variables[0].Effects) != 1 || variables[0].Effects[0].Var != "piece" {
+	if len(variables) != 1 || variables[0].ID != "outfit" || variables[0].Label != "Outfit" ||
+		len(variables[0].Effects) != 1 ||
+		variables[0].Effects[0].Var != "piece" {
 		t.Fatalf("variables = %#v", variables)
 	}
 }
@@ -412,7 +453,8 @@ $second = 2
 $first = 1`)
 	defaults := collectModelViewerDefaultVariables(sections)
 	variables := buildModelViewerDirectVariables(sections, collectModelViewerSlotBindings(sections, defaults), defaults)
-	if len(variables) != 1 || len(variables[0].Effects) != 2 || variables[0].Effects[0].Var != "second" || variables[0].Effects[1].Var != "first" {
+	if len(variables) != 1 || len(variables[0].Effects) != 2 || variables[0].Effects[0].Var != "second" ||
+		variables[0].Effects[1].Var != "first" {
 		t.Fatalf("variables = %#v", variables)
 	}
 }
@@ -462,7 +504,10 @@ endif`)
 	defaults := collectModelViewerDefaultVariables(sections)
 	bindings := collectModelViewerSlotBindings(sections, defaults)
 	variables := buildModelViewerDirectVariables(sections, bindings, defaults)
-	if len(variables) != 1 || variables[0].ID != "top" || len(variables[0].Effects) != 1 || variables[0].Effects[0].Var != "pasties" || variables[0].Effects[0].When == nil || variables[0].Effects[0].When.Value != "0" {
+	if len(variables) != 1 || variables[0].ID != "top" || len(variables[0].Effects) != 1 ||
+		variables[0].Effects[0].Var != "pasties" ||
+		variables[0].Effects[0].When == nil ||
+		variables[0].Effects[0].When.Value != "0" {
 		t.Fatalf("variables = %#v", variables)
 	}
 }
@@ -489,7 +534,9 @@ endif`)
 			top = &variables[index]
 		}
 	}
-	if top == nil || len(top.Effects) != 1 || top.Effects[0].Var != "pasties" || top.Effects[0].When == nil || top.Effects[0].When.Var != "top" || top.Effects[0].When.Value != "0" {
+	if top == nil || len(top.Effects) != 1 || top.Effects[0].Var != "pasties" || top.Effects[0].When == nil ||
+		top.Effects[0].When.Var != "top" ||
+		top.Effects[0].When.Value != "0" {
 		t.Fatalf("variables = %#v", variables)
 	}
 }
@@ -507,7 +554,12 @@ if $mode == 1
 $hidden = 1
 endif
 endif`)
-	if rules := extractModelViewerDirectStateRules(sections, collectModelViewerDefaultVariables(sections)); len(rules) != 0 {
+	if rules := extractModelViewerDirectStateRules(
+		sections,
+		collectModelViewerDefaultVariables(sections),
+	); len(
+		rules,
+	) != 0 {
 		t.Fatalf("rules = %#v", rules)
 	}
 }
@@ -568,8 +620,15 @@ format = DXGI_FORMAT_R32_UINT`
 	if len(meshes) != 2 {
 		t.Fatalf("meshes = %#v", meshes)
 	}
-	if len(meshes[0].geometry.Texcoord0) != 6 || math.Abs(float64(meshes[0].geometry.Texcoord0[1]-.75)) > 1e-6 || len(meshes[0].conditions) != 1 || len(meshes[1].conditions) != 1 {
-		t.Fatalf("uv=%v firstConditions=%#v secondConditions=%#v", meshes[0].geometry.Texcoord0, meshes[0].conditions, meshes[1].conditions)
+	if len(meshes[0].geometry.Texcoord0) != 6 || math.Abs(float64(meshes[0].geometry.Texcoord0[1]-.75)) > 1e-6 ||
+		len(meshes[0].conditions) != 1 ||
+		len(meshes[1].conditions) != 1 {
+		t.Fatalf(
+			"uv=%v firstConditions=%#v secondConditions=%#v",
+			meshes[0].geometry.Texcoord0,
+			meshes[0].conditions,
+			meshes[1].conditions,
+		)
 	}
 }
 
@@ -605,7 +664,11 @@ format = DXGI_FORMAT_R32_UINT`
 	if err := os.WriteFile(filepath.Join(dir, "tc.buf"), make([]byte, 3*20), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "body.ib"), modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "body.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 

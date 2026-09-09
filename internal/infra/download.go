@@ -143,7 +143,9 @@ func (d *Download) File(ctx context.Context, request DownloadRequest) error {
 			return nil
 		}
 		var httpErr *DownloadHTTPError
-		if errors.As(lastErr, &httpErr) && httpErr.Status >= 400 && httpErr.Status < 500 && httpErr.Status != http.StatusRequestTimeout && httpErr.Status != http.StatusTooManyRequests {
+		if errors.As(lastErr, &httpErr) && httpErr.Status >= 400 && httpErr.Status < 500 &&
+			httpErr.Status != http.StatusRequestTimeout &&
+			httpErr.Status != http.StatusTooManyRequests {
 			break
 		}
 		if attempt < retries {
@@ -208,7 +210,8 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 		drainAndClose(response.Body)
 		return &DownloadHTTPError{Status: response.StatusCode, StatusText: http.StatusText(response.StatusCode)}
 	}
-	if appendFile && (response.StatusCode != http.StatusPartialContent || !expectedContentRange(response.Header.Get("Content-Range"), resumeFrom, request.Size)) {
+	if appendFile &&
+		(response.StatusCode != http.StatusPartialContent || !expectedContentRange(response.Header.Get("Content-Range"), resumeFrom, request.Size)) {
 		drainAndClose(response.Body)
 		if err := os.Remove(temporaryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("reset invalid partial download: %w", err)

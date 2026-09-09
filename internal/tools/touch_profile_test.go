@@ -40,18 +40,36 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	}
 	channel := 0
 	label := "Chest"
-	draft, err := service.TouchProfileAnalyzeComponents(ctx, TouchProfileAnalyzeInput{SessionID: inspection.SessionID, ComponentIDs: []string{inspection.Components[0].ID}, BoneSelections: []TouchBoneComponentSelection{{ComponentID: inspection.Components[0].ID, Zones: []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}}}}})
+	draft, err := service.TouchProfileAnalyzeComponents(
+		ctx,
+		TouchProfileAnalyzeInput{
+			SessionID:    inspection.SessionID,
+			ComponentIDs: []string{inspection.Components[0].ID},
+			BoneSelections: []TouchBoneComponentSelection{
+				{
+					ComponentID: inspection.Components[0].ID,
+					Zones:       []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}},
+				},
+			},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !draft.CanAutoApply || len(draft.Components[0].Zones) != 1 {
 		t.Fatalf("unexpected draft: %#v", draft)
 	}
-	topology, err := service.TouchProfileGetMeshDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	topology, err := service.TouchProfileGetMeshDescriptor(
+		ctx,
+		TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := service.TouchProfileGetPreviewDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	preview, err := service.TouchProfileGetPreviewDescriptor(
+		ctx,
+		TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,20 +79,35 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	weightsResponse := httptest.NewRecorder()
 	service.protocol.ServeHTTP(weightsResponse, httptest.NewRequest(http.MethodGet, preview.WeightsURL, nil))
 	weights, decodeErr := decodeFloat32Bytes(weightsResponse.Body.Bytes())
-	if weightsResponse.Code != http.StatusOK || decodeErr != nil || len(weights) != 4 || preview.Zones[0].WeightOffset != 0 {
+	if weightsResponse.Code != http.StatusOK || decodeErr != nil || len(weights) != 4 ||
+		preview.Zones[0].WeightOffset != 0 {
 		t.Fatalf("packed weights = %d %#v %v", weightsResponse.Code, weights, decodeErr)
 	}
 	settings := draft.Components[0].Zones[0].Settings
 	settings.MaskStrength = .8
-	updated, err := service.TouchProfileUpdateZoneSettingsBatch(ctx, TouchProfileUpdateZoneSettingsBatchInput{SessionID: inspection.SessionID, Changes: []TouchProfileZoneSettingsChange{{ComponentID: inspection.Components[0].ID, ZoneID: draft.Components[0].Zones[0].ID, Settings: settings}}})
+	updated, err := service.TouchProfileUpdateZoneSettingsBatch(
+		ctx,
+		TouchProfileUpdateZoneSettingsBatchInput{
+			SessionID: inspection.SessionID,
+			Changes: []TouchProfileZoneSettingsChange{
+				{ComponentID: inspection.Components[0].ID, ZoneID: draft.Components[0].Zones[0].ID, Settings: settings},
+			},
+		},
+	)
 	if err != nil || !updated.OK || !updated.PreviewChanged {
 		t.Fatalf("batch update = %#v, %v", updated, err)
 	}
-	topologyAfter, err := service.TouchProfileGetMeshDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	topologyAfter, err := service.TouchProfileGetMeshDescriptor(
+		ctx,
+		TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID},
+	)
 	if err != nil || topologyAfter.PositionsURL != topology.PositionsURL {
 		t.Fatalf("topology changed = %#v, %v", topologyAfter, err)
 	}
-	previewAfter, err := service.TouchProfileGetPreviewDescriptor(ctx, TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID})
+	previewAfter, err := service.TouchProfileGetPreviewDescriptor(
+		ctx,
+		TouchProfilePreviewInput{SessionID: inspection.SessionID, ComponentID: inspection.Components[0].ID},
+	)
 	if err != nil || previewAfter.PreviewRevision <= preview.PreviewRevision {
 		t.Fatalf("preview revision = %#v, %v", previewAfter, err)
 	}
@@ -97,14 +130,26 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	if issues := touchINIStructureErrors(string(ini)); len(issues) != 0 {
 		t.Fatalf("generated INI structure errors: %v", issues)
 	}
-	if _, err = service.TouchProfileRegenerate(ctx, TouchProfileApplyInput{SessionID: inspection.SessionID}); err != nil {
+	if _, err = service.TouchProfileRegenerate(
+		ctx,
+		TouchProfileApplyInput{SessionID: inspection.SessionID},
+	); err != nil {
 		t.Fatal(err)
 	}
-	rolled, err := service.TouchProfileRollback(ctx, TouchProfileRollbackInput{SessionID: inspection.SessionID, OutputModRoot: applied.OutputModRoot, SourceModRoot: applied.SourceModRoot, ReenableSourceOnRollback: true})
+	rolled, err := service.TouchProfileRollback(
+		ctx,
+		TouchProfileRollbackInput{
+			SessionID:                inspection.SessionID,
+			OutputModRoot:            applied.OutputModRoot,
+			SourceModRoot:            applied.SourceModRoot,
+			ReenableSourceOnRollback: true,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rolled.RemovedOutput || !rolled.ReenabledSource || pathIsDirectory(applied.OutputModRoot) || !pathIsDirectory(source) {
+	if !rolled.RemovedOutput || !rolled.ReenabledSource || pathIsDirectory(applied.OutputModRoot) ||
+		!pathIsDirectory(source) {
 		t.Fatalf("unexpected rollback: %#v", rolled)
 	}
 }
@@ -121,7 +166,19 @@ func TestTouchProfileRegenerateRejectsChangedBlend(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := 0
-	draft, err := service.TouchProfileAnalyzeComponents(ctx, TouchProfileAnalyzeInput{SessionID: inspection.SessionID, ComponentIDs: []string{inspection.Components[0].ID}, BoneSelections: []TouchBoneComponentSelection{{ComponentID: inspection.Components[0].ID, Zones: []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}}}}})
+	draft, err := service.TouchProfileAnalyzeComponents(
+		ctx,
+		TouchProfileAnalyzeInput{
+			SessionID:    inspection.SessionID,
+			ComponentIDs: []string{inspection.Components[0].ID},
+			BoneSelections: []TouchBoneComponentSelection{
+				{
+					ComponentID: inspection.Components[0].ID,
+					Zones:       []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}},
+				},
+			},
+		},
+	)
 	if err != nil || !draft.CanAutoApply {
 		t.Fatalf("draft: %v %#v", err, draft)
 	}
@@ -138,7 +195,11 @@ func TestTouchProfileRegenerateRejectsChangedBlend(t *testing.T) {
 	if err = os.WriteFile(blend, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = service.TouchProfileRegenerate(ctx, TouchProfileApplyInput{SessionID: inspection.SessionID}); err == nil || !strings.Contains(err.Error(), "changed since analysis") {
+	if _, err = service.TouchProfileRegenerate(
+		ctx,
+		TouchProfileApplyInput{SessionID: inspection.SessionID},
+	); err == nil ||
+		!strings.Contains(err.Error(), "changed since analysis") {
 		t.Fatalf("expected source changed error, got %v", err)
 	}
 }
@@ -210,20 +271,30 @@ func TestTouchProfileSaveDraftPreservesClientDraft(t *testing.T) {
 	service := New()
 	previous := TouchDraft{SessionID: "session", Components: []TouchComponentDraft{{ComponentID: "old"}}}
 	service.touchSessions["session"] = &touchSession{
-		Dir:       dir,
-		Draft:     &previous,
-		Preview:   map[string]touchCachedPreview{"old": {descriptor: TouchProfilePreviewDescriptor{ComponentID: "old"}}},
+		Dir:   dir,
+		Draft: &previous,
+		Preview: map[string]touchCachedPreview{
+			"old": {descriptor: TouchProfilePreviewDescriptor{ComponentID: "old"}},
+		},
 		Operation: "apply",
 	}
 	draft := TouchDraft{
-		SessionID:      "session",
-		CreatedAt:      "client-created-at",
-		SourceModRoot:  "client-source",
-		Analysis:       TouchModAnalysis{ModRoot: "client-analysis", Components: []TouchComponentAnalysis{{ID: "analysis-only"}}},
-		Components:     []TouchComponentDraft{{ComponentID: "client-only", Interactive: true, Confidence: .8}},
-		VisionUsed:     true,
-		ModelName:      "client-model",
-		LLM:            TouchProfileLLMSettings{Protocol: "client", Endpoint: "endpoint", Model: "model", Reasoning: "reasoning"},
+		SessionID:     "session",
+		CreatedAt:     "client-created-at",
+		SourceModRoot: "client-source",
+		Analysis: TouchModAnalysis{
+			ModRoot:    "client-analysis",
+			Components: []TouchComponentAnalysis{{ID: "analysis-only"}},
+		},
+		Components: []TouchComponentDraft{{ComponentID: "client-only", Interactive: true, Confidence: .8}},
+		VisionUsed: true,
+		ModelName:  "client-model",
+		LLM: TouchProfileLLMSettings{
+			Protocol:  "client",
+			Endpoint:  "endpoint",
+			Model:     "model",
+			Reasoning: "reasoning",
+		},
 		PromptVersion:  "client-prompt",
 		RuntimeVersion: "client-runtime",
 		CanAutoApply:   false,
@@ -276,7 +347,9 @@ func TestTouchProfileAnalyzeProgressIsMonotonicForSelectedComponents(t *testing.
 		{ComponentID: second.ID, Zones: []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}}},
 	}
 	if _, err = service.TouchProfileAnalyzeComponents(ctx, TouchProfileAnalyzeInput{
-		SessionID: inspection.SessionID, ComponentIDs: []string{inspection.Components[0].ID, second.ID}, BoneSelections: selections,
+		SessionID:      inspection.SessionID,
+		ComponentIDs:   []string{inspection.Components[0].ID, second.ID},
+		BoneSelections: selections,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -443,12 +516,30 @@ func TestAnalyzeTouchComponentBones(t *testing.T) {
 	}
 	channel := 0
 	label := "Test"
-	draft := analyzeTouchComponentBones(component, positions, blend, 16, []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}}, [2]float64{0.01, 1}, 1)
-	if !draft.Interactive || len(draft.Zones) != 1 || draft.Zones[0].Channel != 0 || draft.Zones[0].Source != "bone" || draft.Zones[0].Label != "Test" || len(draft.Zones[0].Seeds) != 200 {
+	draft := analyzeTouchComponentBones(
+		component,
+		positions,
+		blend,
+		16,
+		[]TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}},
+		[2]float64{0.01, 1},
+		1,
+	)
+	if !draft.Interactive || len(draft.Zones) != 1 || draft.Zones[0].Channel != 0 || draft.Zones[0].Source != "bone" ||
+		draft.Zones[0].Label != "Test" ||
+		len(draft.Zones[0].Seeds) != 200 {
 		t.Fatalf("draft = %#v", draft)
 	}
 
-	empty := analyzeTouchComponentBones(component, positions, nil, 0, []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}}, [2]float64{0.01, 1}, 1)
+	empty := analyzeTouchComponentBones(
+		component,
+		positions,
+		nil,
+		0,
+		[]TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}},
+		[2]float64{0.01, 1},
+		1,
+	)
 	if empty.Interactive || len(empty.Zones) != 0 || len(empty.Warnings) == 0 {
 		t.Fatalf("no-blend = %#v", empty)
 	}
@@ -460,12 +551,28 @@ func TestAnalyzeTouchComponentBones(t *testing.T) {
 
 	gradeC := component
 	gradeC.SupportGrade = "C"
-	unsupported := analyzeTouchComponentBones(gradeC, positions, blend, 16, []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}}, [2]float64{0.01, 1}, 1)
+	unsupported := analyzeTouchComponentBones(
+		gradeC,
+		positions,
+		blend,
+		16,
+		[]TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}},
+		[2]float64{0.01, 1},
+		1,
+	)
 	if unsupported.Interactive || !strings.Contains(strings.Join(unsupported.Warnings, " "), "grade is C") {
 		t.Fatalf("grade C = %#v", unsupported)
 	}
 
-	outside := analyzeTouchComponentBones(component, positions, blend, 16, []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}}, [2]float64{0.5, 0.6}, 1)
+	outside := analyzeTouchComponentBones(
+		component,
+		positions,
+		blend,
+		16,
+		[]TouchBoneZoneSelection{{BoneID: 5, Channel: &channel}},
+		[2]float64{0.5, 0.6},
+		1,
+	)
 	if outside.Interactive || len(outside.Zones) != 0 {
 		t.Fatalf("threshold miss = %#v", outside)
 	}

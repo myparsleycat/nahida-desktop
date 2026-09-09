@@ -217,7 +217,13 @@ func (s *Setting) getStoredBounds(ctx context.Context, key string) (*Bounds, err
 	}
 	var bounds Bounds
 	if err := json.Unmarshal([]byte(*row.Value), &bounds); err != nil {
-		return nil, settingError(fmt.Errorf("decode %s bounds: %w", key, err), "bounds-get", "decode", key, infra.DiagnosticError)
+		return nil, settingError(
+			fmt.Errorf("decode %s bounds: %w", key, err),
+			"bounds-get",
+			"decode",
+			key,
+			infra.DiagnosticError,
+		)
 	}
 	return &bounds, nil
 }
@@ -269,14 +275,26 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 
 func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
 	if key == proxyStorageKey {
-		return settingError(fmt.Errorf("use network settings to change proxy configuration"), "advanced-set", "validate-key", key, infra.DiagnosticWarn)
+		return settingError(
+			fmt.Errorf("use network settings to change proxy configuration"),
+			"advanced-set",
+			"validate-key",
+			key,
+			infra.DiagnosticWarn,
+		)
 	}
 	existing, err := s.client.Settings.Get(ctx, key)
 	if err != nil {
 		return settingError(err, "advanced-set", "read", key, infra.DiagnosticError)
 	}
 	if existing == nil {
-		return settingError(fmt.Errorf("setting key %q not found", key), "advanced-set", "validate-key", key, infra.DiagnosticWarn)
+		return settingError(
+			fmt.Errorf("setting key %q not found", key),
+			"advanced-set",
+			"validate-key",
+			key,
+			infra.DiagnosticWarn,
+		)
 	}
 	stored := value
 	if key == definitionsByKey[KeyDebugOpenConsole].StorageKey {
@@ -549,14 +567,22 @@ func (s *Setting) GetToneMapping(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModelViewerToneMapping)
 }
 func (s *Setting) SetToneMapping(ctx context.Context, toneMapping string) error {
-	return s.Set(ctx, KeyModelViewerToneMapping, normalizeEnum(toneMapping, modelViewerToneMappings, defaultToneMapping))
+	return s.Set(
+		ctx,
+		KeyModelViewerToneMapping,
+		normalizeEnum(toneMapping, modelViewerToneMappings, defaultToneMapping),
+	)
 }
 
 func (s *Setting) GetEnvironment(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModelViewerEnvironment)
 }
 func (s *Setting) SetEnvironment(ctx context.Context, environment string) error {
-	return s.Set(ctx, KeyModelViewerEnvironment, normalizeEnum(environment, modelViewerEnvironments, defaultEnvironment))
+	return s.Set(
+		ctx,
+		KeyModelViewerEnvironment,
+		normalizeEnum(environment, modelViewerEnvironments, defaultEnvironment),
+	)
 }
 
 func (s *Setting) GetExposure(ctx context.Context) (float64, error) {

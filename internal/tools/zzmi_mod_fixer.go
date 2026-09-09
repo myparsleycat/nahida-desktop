@@ -153,7 +153,11 @@ type zzmiTreeResponse struct {
 	} `json:"tree"`
 }
 
-func (t *Tools) ZZMIFixerPrepare(ctx context.Context, targetPath string, forceRefresh bool) (ZZMIFixerPrepareResult, error) {
+func (t *Tools) ZZMIFixerPrepare(
+	ctx context.Context,
+	targetPath string,
+	forceRefresh bool,
+) (ZZMIFixerPrepareResult, error) {
 	target, _, err := t.zzmiRequireTarget(ctx, targetPath)
 	if err != nil {
 		return ZZMIFixerPrepareResult{}, err
@@ -204,7 +208,14 @@ func (t *Tools) ZZMIFixerActivateLatestRules(ctx context.Context) (ZZMIFixerRule
 	if err != nil {
 		return ZZMIFixerRuleStatus{}, fmt.Errorf("download ZZMI rules: %w", err)
 	}
-	pack, err := zzmiengine.CompileZip(bytes.NewReader(data), int64(len(data)), latest.Tag, latest.Commit, latest.Published, latest.Blobs)
+	pack, err := zzmiengine.CompileZip(
+		bytes.NewReader(data),
+		int64(len(data)),
+		latest.Tag,
+		latest.Commit,
+		latest.Published,
+		latest.Blobs,
+	)
 	if err != nil {
 		return ZZMIFixerRuleStatus{}, fmt.Errorf("validate ZZMI rules: %w", err)
 	}
@@ -215,7 +226,14 @@ func (t *Tools) ZZMIFixerActivateLatestRules(ctx context.Context) (ZZMIFixerRule
 	if err := t.zzmiStorePack(compressed, *pack); err != nil {
 		return ZZMIFixerRuleStatus{}, err
 	}
-	return ZZMIFixerRuleStatus{ActiveSource: "cached", ActiveTag: pack.UpstreamTag, ActiveCommit: pack.CommitSHA, LatestTag: &latest.Tag, LatestCommit: &latest.Commit, CheckedRemotely: true}, nil
+	return ZZMIFixerRuleStatus{
+		ActiveSource:    "cached",
+		ActiveTag:       pack.UpstreamTag,
+		ActiveCommit:    pack.CommitSHA,
+		LatestTag:       &latest.Tag,
+		LatestCommit:    &latest.Commit,
+		CheckedRemotely: true,
+	}, nil
 }
 
 func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMIFixerRunResult, error) {
@@ -232,13 +250,28 @@ func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMI
 		return ZZMIFixerRunResult{}, err
 	}
 	defer t.finishScriptRun(run)
-	t.emitFixToolLog(fmt.Sprintf("ZZMI %s started with rules %s (%s)", input.Tool, pack.UpstreamTag, pack.CommitSHA[:8]), false)
+	t.emitFixToolLog(
+		fmt.Sprintf("ZZMI %s started with rules %s (%s)", input.Tool, pack.UpstreamTag, pack.CommitSHA[:8]),
+		false,
+	)
 	stage := "scan"
-	result, err := zzmiengine.Run(runCtx, target, input.Tool, pack, func(message string) { t.emitFixToolLog(message, false) })
+	result, err := zzmiengine.Run(
+		runCtx,
+		target,
+		input.Tool,
+		pack,
+		func(message string) { t.emitFixToolLog(message, false) },
+	)
 	if err != nil {
 		return ZZMIFixerRunResult{}, t.zzmiLogRunError(err, input, stage, pack, "not-started")
 	}
-	output := ZZMIFixerRunResult{ScannedINI: result.ScannedINI, ChangedINI: result.ChangedINI, ChangedBUF: result.ChangedBUF, SkippedFiles: result.SkippedFiles, Warnings: result.Warnings}
+	output := ZZMIFixerRunResult{
+		ScannedINI:   result.ScannedINI,
+		ChangedINI:   result.ChangedINI,
+		ChangedBUF:   result.ChangedBUF,
+		SkippedFiles: result.SkippedFiles,
+		Warnings:     result.Warnings,
+	}
 	if len(result.Changes) == 0 {
 		t.emitFixToolLog("No changes were required.", false)
 		return output, nil
@@ -249,7 +282,10 @@ func (t *Tools) ZZMIFixerRun(ctx context.Context, input ZZMIFixerRunInput) (ZZMI
 		return ZZMIFixerRunResult{}, t.zzmiLogRunError(err, input, stage, pack, "automatic-rollback-attempted")
 	}
 	output.SessionID = &session.ID
-	t.emitFixToolLog(fmt.Sprintf("ZZMI fixer completed: %d INI, %d buffers changed.", result.ChangedINI, result.ChangedBUF), false)
+	t.emitFixToolLog(
+		fmt.Sprintf("ZZMI fixer completed: %d INI, %d buffers changed.", result.ChangedINI, result.ChangedBUF),
+		false,
+	)
 	return output, nil
 }
 
@@ -316,7 +352,15 @@ func (t *Tools) ZZMIFixerRestore(ctx context.Context, input ZZMIFixerRestoreInpu
 			continue
 		}
 		if currentHash != entry.SHA256After && !input.Force {
-			result.Conflicts = append(result.Conflicts, ZZMIFixerRestoreConflict{EntryID: entry.ID, OriginalPath: entry.OriginalPath, ExpectedHash: entry.SHA256After, CurrentHash: currentHash})
+			result.Conflicts = append(
+				result.Conflicts,
+				ZZMIFixerRestoreConflict{
+					EntryID:      entry.ID,
+					OriginalPath: entry.OriginalPath,
+					ExpectedHash: entry.SHA256After,
+					CurrentHash:  currentHash,
+				},
+			)
 			remaining = append(remaining, entry)
 			continue
 		}
@@ -366,7 +410,10 @@ func (t *Tools) ZZMIFixerDeleteBackup(ctx context.Context, input ZZMIFixerDelete
 	for _, entry := range session.Entries {
 		if entry.ID == *input.EntryID {
 			found = true
-			if err := os.Remove(filepath.Join(dir, "files", entry.BackupName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := os.Remove(
+				filepath.Join(dir, "files", entry.BackupName),
+			); err != nil &&
+				!errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 			continue
@@ -446,7 +493,10 @@ func (t *Tools) zzmiLoadActivePack() (*zzmiengine.RulePack, string, error) {
 		active, readErr := os.ReadFile(filepath.Join(dir, zzmiRulesActiveName))
 		digest := strings.TrimSpace(string(active))
 		if readErr == nil && validSHA256Hex(digest) {
-			if pack, loadErr := loadZZMIPackVersion(filepath.Join(dir, zzmiRulesCacheDirName, strings.ToLower(digest)), digest); loadErr == nil {
+			if pack, loadErr := loadZZMIPackVersion(
+				filepath.Join(dir, zzmiRulesCacheDirName, strings.ToLower(digest)),
+				digest,
+			); loadErr == nil {
 				return pack, "cached", nil
 			}
 		}
@@ -465,7 +515,17 @@ func (t *Tools) zzmiStorePack(data []byte, pack zzmiengine.RulePack) error {
 	if err := os.MkdirAll(versionDir, 0o755); err != nil {
 		return err
 	}
-	manifest, _ := json.MarshalIndent(map[string]any{"schemaVersion": pack.SchemaVersion, "tag": pack.UpstreamTag, "commit": pack.CommitSHA, "sha256": digest, "installedAt": time.Now().UTC().Format(time.RFC3339Nano)}, "", "  ")
+	manifest, _ := json.MarshalIndent(
+		map[string]any{
+			"schemaVersion": pack.SchemaVersion,
+			"tag":           pack.UpstreamTag,
+			"commit":        pack.CommitSHA,
+			"sha256":        digest,
+			"installedAt":   time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		"",
+		"  ",
+	)
 	if err := writeAtomicBytes(filepath.Join(versionDir, zzmiRulesFileName), data); err != nil {
 		return err
 	}
@@ -520,7 +580,8 @@ func (t *Tools) zzmiGetCachedLatestRelease(ctx context.Context) *zzmiLatestRelea
 		return nil
 	}
 	var release zzmiLatestRelease
-	if json.Unmarshal([]byte(*raw), &release) != nil || release.Tag == "" || release.Commit == "" || release.Zipball == "" {
+	if json.Unmarshal([]byte(*raw), &release) != nil || release.Tag == "" || release.Commit == "" ||
+		release.Zipball == "" {
 		return nil
 	}
 	return &release
@@ -609,7 +670,11 @@ func (t *Tools) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool, 
 		return nil, true, errors.New("latest ZZMI release has an invalid commit")
 	}
 	var tree zzmiTreeResponse
-	if err := t.zzmiFetchJSON(ctx, "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/git/trees/"+commit+"?recursive=1", &tree); err != nil {
+	if err := t.zzmiFetchJSON(
+		ctx,
+		"https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/git/trees/"+commit+"?recursive=1",
+		&tree,
+	); err != nil {
 		return nil, true, err
 	}
 	if tree.Truncated {
@@ -617,11 +682,18 @@ func (t *Tools) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool, 
 	}
 	blobs := map[string]string{}
 	for _, entry := range tree.Tree {
-		if entry.Type == "blob" && (strings.HasPrefix(entry.Path, "Source Codes/Assets/PlayerCharacterPYData/") || entry.Path == "Source Codes/Jane.remapper.py" || entry.Path == "Source Codes/Dialyn.remapper.py") {
+		if entry.Type == "blob" &&
+			(strings.HasPrefix(entry.Path, "Source Codes/Assets/PlayerCharacterPYData/") || entry.Path == "Source Codes/Jane.remapper.py" || entry.Path == "Source Codes/Dialyn.remapper.py") {
 			blobs[entry.Path] = entry.SHA
 		}
 	}
-	return &zzmiLatestRelease{Tag: release.TagName, Commit: commit, Zipball: release.ZipballURL, Published: release.PublishedAt, Blobs: blobs}, true, nil
+	return &zzmiLatestRelease{
+		Tag:       release.TagName,
+		Commit:    commit,
+		Zipball:   release.ZipballURL,
+		Published: release.PublishedAt,
+		Blobs:     blobs,
+	}, true, nil
 }
 
 func (t *Tools) zzmiFetchJSON(ctx context.Context, rawURL string, target any) error {
@@ -638,7 +710,15 @@ func (t *Tools) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte
 	if t.http == nil {
 		return nil, nil, errors.New("tools HTTP client is not configured")
 	}
-	response, err := t.http.Fetch(ctx, rawURL, infra.FetchOptions{Method: http.MethodGet, Header: http.Header{"Accept": []string{"application/vnd.github+json"}}, DisableHTTPErrors: true})
+	response, err := t.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{
+			Method:            http.MethodGet,
+			Header:            http.Header{"Accept": []string{"application/vnd.github+json"}},
+			DisableHTTPErrors: true,
+		},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -663,14 +743,16 @@ func (t *Tools) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte
 }
 func validateZZMIZipballURL(raw string) error {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") || !strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/zipball/") {
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") ||
+		!strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/zipball/") {
 		return infra.WithCause(errors.New("unsafe ZZMI zipball URL"), err)
 	}
 	return nil
 }
 func isGitHubAPIURL(raw string) bool {
 	parsed, err := url.Parse(raw)
-	return err == nil && parsed.Scheme == "https" && strings.EqualFold(parsed.Host, "api.github.com") && strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/git/")
+	return err == nil && parsed.Scheme == "https" && strings.EqualFold(parsed.Host, "api.github.com") &&
+		strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/git/")
 }
 
 func (t *Tools) zzmiBackupBase() (string, error) {
@@ -695,8 +777,22 @@ func (t *Tools) zzmiSessionDir(target, sessionID string) (string, error) {
 	return filepath.Join(base, sessionID), nil
 }
 
-func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmiengine.RulePack, changes []zzmiengine.Change) (ZZMIBackupSession, error) {
-	session := ZZMIBackupSession{SchemaVersion: 1, ID: uuid.NewString(), Tool: tool, TargetPath: target, RuleTag: pack.UpstreamTag, RuleCommit: pack.CommitSHA, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Status: "preparing"}
+func (t *Tools) zzmiCommit(
+	ctx context.Context,
+	target, tool string,
+	pack zzmiengine.RulePack,
+	changes []zzmiengine.Change,
+) (ZZMIBackupSession, error) {
+	session := ZZMIBackupSession{
+		SchemaVersion: 1,
+		ID:            uuid.NewString(),
+		Tool:          tool,
+		TargetPath:    target,
+		RuleTag:       pack.UpstreamTag,
+		RuleCommit:    pack.CommitSHA,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+		Status:        "preparing",
+	}
 	dir, err := t.zzmiSessionDir(target, session.ID)
 	if err != nil {
 		return session, err
@@ -740,7 +836,16 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 		if err != nil || sha256Hex(backup) != sha256Hex(original) {
 			return session, infra.WithCause(errors.New("ZZMI backup verification failed"), err)
 		}
-		entry := ZZMIBackupEntry{ID: entryID, OriginalPath: safe, RelativePath: relative, BackupName: backupName, Kind: change.Kind, Size: int64(len(original)), SHA256Before: sha256Hex(original), SHA256After: sha256Hex(change.Data)}
+		entry := ZZMIBackupEntry{
+			ID:           entryID,
+			OriginalPath: safe,
+			RelativePath: relative,
+			BackupName:   backupName,
+			Kind:         change.Kind,
+			Size:         int64(len(original)),
+			SHA256Before: sha256Hex(original),
+			SHA256After:  sha256Hex(change.Data),
+		}
 		session.Entries = append(session.Entries, entry)
 		session.Size += entry.Size
 	}
@@ -754,7 +859,13 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 				session.Status = "partial"
 				recordErr := writeZZMISession(dir, session)
 				keepSession = true
-				return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
+				return session, infra.WithCause(
+					errors.Join(err, rollbackErr),
+					infra.AnnotateError(
+						recordErr,
+						infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}},
+					),
+				)
 			}
 			return session, err
 		}
@@ -765,7 +876,13 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 				session.Status = "partial"
 				recordErr := writeZZMISession(dir, session)
 				keepSession = true
-				return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
+				return session, infra.WithCause(
+					errors.Join(err, rollbackErr),
+					infra.AnnotateError(
+						recordErr,
+						infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}},
+					),
+				)
 			}
 			return session, err
 		}
@@ -778,7 +895,13 @@ func (t *Tools) zzmiCommit(ctx context.Context, target, tool string, pack zzmien
 			session.Status = "partial"
 			recordErr := writeZZMISession(dir, session)
 			keepSession = true
-			return session, infra.WithCause(errors.Join(err, rollbackErr), infra.AnnotateError(recordErr, infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}}))
+			return session, infra.WithCause(
+				errors.Join(err, rollbackErr),
+				infra.AnnotateError(
+					recordErr,
+					infra.Diagnostic{Stage: "record-recovery", Fields: map[string]any{"path": dir}},
+				),
+			)
 		}
 		return session, err
 	}
@@ -948,7 +1071,8 @@ func (t *Tools) zzmiReadSession(target, sessionID string) (ZZMIBackupSession, er
 	if err := json.Unmarshal(data, &session); err != nil {
 		return session, err
 	}
-	if session.SchemaVersion != 1 || session.ID != sessionID || !strings.EqualFold(filepath.Clean(session.TargetPath), filepath.Clean(target)) {
+	if session.SchemaVersion != 1 || session.ID != sessionID ||
+		!strings.EqualFold(filepath.Clean(session.TargetPath), filepath.Clean(target)) {
 		return session, errors.New("invalid ZZMI backup manifest")
 	}
 	return session, nil
@@ -985,7 +1109,14 @@ func backupEntriesSize(entries []ZZMIBackupEntry) int64 {
 	}
 	return size
 }
-func (t *Tools) zzmiLogRunError(err error, input ZZMIFixerRunInput, stage string, pack *zzmiengine.RulePack, rollback string) error {
+
+func (t *Tools) zzmiLogRunError(
+	err error,
+	input ZZMIFixerRunInput,
+	stage string,
+	pack *zzmiengine.RulePack,
+	rollback string,
+) error {
 	if err == nil {
 		return nil
 	}

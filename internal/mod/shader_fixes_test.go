@@ -137,7 +137,11 @@ func TestShaderFixesMigratesManifestsByScanningCurrentImporterMods(t *testing.T)
 	if _, err := h.service.HandleShaders(first, false); err != nil {
 		t.Fatal(err)
 	}
-	assertGlobCalls(t, h.service.globCalls, []shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}})
+	assertGlobCalls(
+		t,
+		h.service.globCalls,
+		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
+	)
 	if !exists(target) {
 		t.Fatal("shared shader should remain")
 	}
@@ -184,7 +188,11 @@ func TestShaderFixesCleansOriginalImporterAfterMove(t *testing.T) {
 	if _, err := h.service.HandleShaders(moved, false); err != nil {
 		t.Fatal(err)
 	}
-	assertGlobCalls(t, h.service.globCalls, []shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}})
+	assertGlobCalls(
+		t,
+		h.service.globCalls,
+		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
+	)
 	if exists(originalTarget) {
 		t.Fatal("original shader should be removed")
 	}
@@ -219,7 +227,11 @@ func TestShaderFixesRebuildsCorruptedOwnerIndex(t *testing.T) {
 	if _, err := h.service.HandleShaders(modPath, false); err != nil {
 		t.Fatal(err)
 	}
-	assertGlobCalls(t, h.service.globCalls, []shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}})
+	assertGlobCalls(
+		t,
+		h.service.globCalls,
+		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
+	)
 	if exists(target) {
 		t.Fatal("legacy shader should be removed")
 	}

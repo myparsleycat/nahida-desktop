@@ -31,7 +31,11 @@ const maxModelViewerAnimationFrames = 4096
 
 var modelViewerPresentAssignmentRE = regexp.MustCompile(`(?i)^(?:post\s+)?\$([\w.]+)\s*=\s*(.+)$`)
 
-func detectModelViewerPresentAnimations(sections []modINISection, defaults map[string]any, slotBindings []modelViewerSlotBinding) []modelViewerPreparedAnimationClip {
+func detectModelViewerPresentAnimations(
+	sections []modINISection,
+	defaults map[string]any,
+	slotBindings []modelViewerSlotBinding,
+) []modelViewerPreparedAnimationClip {
 	manual := make(map[string]bool)
 	for _, binding := range slotBindings {
 		manual[modelViewerNormalizeKey(binding.Variable)] = true
@@ -58,12 +62,27 @@ func detectModelViewerPresentAnimations(sections []modINISection, defaults map[s
 			if fps == 0 {
 				continue
 			}
-			clip := modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: values[0], FrameEnd: values[len(values)-1], Loop: true}
+			clip := modelViewerPreparedAnimationClip{
+				ID:          variable,
+				Label:       humanizeModelViewerLabel(variable),
+				VariableIDs: []string{variable},
+				FPS:         fps,
+				FrameStart:  values[0],
+				FrameEnd:    values[len(values)-1],
+				Loop:        true,
+			}
 			if !validModelViewerAnimationRange(clip.FrameStart, clip.FrameEnd) {
 				continue
 			}
 			for frame := clip.FrameStart; frame <= clip.FrameEnd; frame++ {
-				clip.Frames = append(clip.Frames, modelViewerPreparedAnimationFrame{Index: frame, Time: float64(frame-clip.FrameStart) / fps, Values: map[string]any{variable: float64(frame)}})
+				clip.Frames = append(
+					clip.Frames,
+					modelViewerPreparedAnimationFrame{
+						Index:  frame,
+						Time:   float64(frame-clip.FrameStart) / fps,
+						Values: map[string]any{variable: float64(frame)},
+					},
+				)
 			}
 			discovered[variable] = clip
 		}
@@ -90,8 +109,14 @@ func detectModelViewerPresentAnimations(sections []modINISection, defaults map[s
 	return output
 }
 
-func detectModelViewerAccumulatorAnimations(sections []modINISection, defaults map[string]any, manual map[string]bool) []modelViewerPreparedAnimationClip {
-	accumulatorRE := regexp.MustCompile(`(?i)^if\s+\(\s*\$([\w.]+)\s*\+\s*\(?\s*1\s*/\s*(\$?[\w.-]+)\s*\)?\s*\)\s*<\s*(\$?[\w.-]+)\s*$`)
+func detectModelViewerAccumulatorAnimations(
+	sections []modINISection,
+	defaults map[string]any,
+	manual map[string]bool,
+) []modelViewerPreparedAnimationClip {
+	accumulatorRE := regexp.MustCompile(
+		`(?i)^if\s+\(\s*\$([\w.]+)\s*\+\s*\(?\s*1\s*/\s*(\$?[\w.-]+)\s*\)?\s*\)\s*<\s*(\$?[\w.-]+)\s*$`,
+	)
 	var clips []modelViewerPreparedAnimationClip
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "Present") {
@@ -103,7 +128,15 @@ func detectModelViewerAccumulatorAnimations(sections []modINISection, defaults m
 				continue
 			}
 			aux, speedToken, endToken := match[1], match[2], match[3]
-			incrementRE := regexp.MustCompile(`(?i)^\$` + regexp.QuoteMeta(aux) + `\s*=\s*\$` + regexp.QuoteMeta(aux) + `\s*\+\s*\(?\s*1\s*/\s*` + regexp.QuoteMeta(speedToken) + `\s*\)?$`)
+			incrementRE := regexp.MustCompile(
+				`(?i)^\$` + regexp.QuoteMeta(
+					aux,
+				) + `\s*=\s*\$` + regexp.QuoteMeta(
+					aux,
+				) + `\s*\+\s*\(?\s*1\s*/\s*` + regexp.QuoteMeta(
+					speedToken,
+				) + `\s*\)?$`,
+			)
 			assignmentRE := regexp.MustCompile(`(?i)^\$([\w.]+)\s*=\s*\$` + regexp.QuoteMeta(aux) + `\s*//\s*1$`)
 			resetRE := regexp.MustCompile(`(?i)^\$` + regexp.QuoteMeta(aux) + `\s*=\s*(\$?[\w.-]+)$`)
 			incremented, variable, startToken := false, "", ""
@@ -120,7 +153,8 @@ func detectModelViewerAccumulatorAnimations(sections []modINISection, defaults m
 					startToken = reset[1]
 				}
 			}
-			if !incremented || variable == "" || startToken == "" || manual[variable] || len(collectModelViewerDiscreteBranchValues(sections, variable)) < 2 {
+			if !incremented || variable == "" || startToken == "" || manual[variable] ||
+				len(collectModelViewerDiscreteBranchValues(sections, variable)) < 2 {
 				continue
 			}
 			start, startOK := resolveModelViewerNumericToken(startToken, defaults)
@@ -138,19 +172,42 @@ func detectModelViewerAccumulatorAnimations(sections []modINISection, defaults m
 	return clips
 }
 
-func buildModelViewerPreparedAnimationClip(variable string, fps float64, start, end int) *modelViewerPreparedAnimationClip {
+func buildModelViewerPreparedAnimationClip(
+	variable string,
+	fps float64,
+	start, end int,
+) *modelViewerPreparedAnimationClip {
 	fps = normalizeModelViewerAnimationFPS(fps)
 	if fps == 0 || !validModelViewerAnimationRange(start, end) {
 		return nil
 	}
-	clip := &modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: start, FrameEnd: end, Loop: true}
+	clip := &modelViewerPreparedAnimationClip{
+		ID:          variable,
+		Label:       humanizeModelViewerLabel(variable),
+		VariableIDs: []string{variable},
+		FPS:         fps,
+		FrameStart:  start,
+		FrameEnd:    end,
+		Loop:        true,
+	}
 	for frame := start; frame <= end; frame++ {
-		clip.Frames = append(clip.Frames, modelViewerPreparedAnimationFrame{Index: frame, Time: float64(frame-start) / fps, Values: map[string]any{variable: float64(frame)}})
+		clip.Frames = append(
+			clip.Frames,
+			modelViewerPreparedAnimationFrame{
+				Index:  frame,
+				Time:   float64(frame-start) / fps,
+				Values: map[string]any{variable: float64(frame)},
+			},
+		)
 	}
 	return clip
 }
 
-func detectModelViewerIncrementalAnimations(sections []modINISection, defaults map[string]any, manual map[string]bool) []modelViewerPreparedAnimationClip {
+func detectModelViewerIncrementalAnimations(
+	sections []modINISection,
+	defaults map[string]any,
+	manual map[string]bool,
+) []modelViewerPreparedAnimationClip {
 	var clips []modelViewerPreparedAnimationClip
 	moduloRE := regexp.MustCompile(`(?i)^if\s+\$([\w.]+)\s*%\s*(\$?[\w.-]+)\s*==\s*0$`)
 	compareRE := regexp.MustCompile(`(?i)^(?:if|elif|else if)\s+\$([\w.]+)\s*<\s*(\$?[\w.-]+)$`)
@@ -168,7 +225,8 @@ func detectModelViewerIncrementalAnimations(sections []modINISection, defaults m
 			incrementAux := false
 			for _, line := range lines {
 				normalized := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(line)), " ", "")
-				if normalized == "$"+strings.ToLower(aux)+"=$"+strings.ToLower(aux)+"+1" || normalized == "post$"+strings.ToLower(aux)+"=$"+strings.ToLower(aux)+"+1" {
+				if normalized == "$"+strings.ToLower(aux)+"=$"+strings.ToLower(aux)+"+1" ||
+					normalized == "post$"+strings.ToLower(aux)+"=$"+strings.ToLower(aux)+"+1" {
 					incrementAux = true
 				}
 			}
@@ -192,7 +250,8 @@ func detectModelViewerIncrementalAnimations(sections []modINISection, defaults m
 						continue
 					}
 					prefix := "$" + strings.ToLower(compare[1]) + "="
-					if strings.HasPrefix(normalized, prefix) && !strings.Contains(normalized, "+1") && startToken == "" {
+					if strings.HasPrefix(normalized, prefix) && !strings.Contains(normalized, "+1") &&
+						startToken == "" {
 						startToken = normalized[len(prefix):]
 					}
 				}
@@ -206,12 +265,28 @@ func detectModelViewerIncrementalAnimations(sections []modINISection, defaults m
 				if fps == 0 {
 					continue
 				}
-				clip := modelViewerPreparedAnimationClip{ID: variable, Label: humanizeModelViewerLabel(variable), VariableIDs: []string{variable}, FPS: fps, FrameStart: int(start), FrameEnd: int(end), Loop: true}
-				if start != math.Trunc(start) || end != math.Trunc(end) || !validModelViewerAnimationRange(clip.FrameStart, clip.FrameEnd) {
+				clip := modelViewerPreparedAnimationClip{
+					ID:          variable,
+					Label:       humanizeModelViewerLabel(variable),
+					VariableIDs: []string{variable},
+					FPS:         fps,
+					FrameStart:  int(start),
+					FrameEnd:    int(end),
+					Loop:        true,
+				}
+				if start != math.Trunc(start) || end != math.Trunc(end) ||
+					!validModelViewerAnimationRange(clip.FrameStart, clip.FrameEnd) {
 					continue
 				}
 				for frame := clip.FrameStart; frame <= clip.FrameEnd; frame++ {
-					clip.Frames = append(clip.Frames, modelViewerPreparedAnimationFrame{Index: frame, Time: float64(frame-clip.FrameStart) / fps, Values: map[string]any{variable: float64(frame)}})
+					clip.Frames = append(
+						clip.Frames,
+						modelViewerPreparedAnimationFrame{
+							Index:  frame,
+							Time:   float64(frame-clip.FrameStart) / fps,
+							Values: map[string]any{variable: float64(frame)},
+						},
+					)
 				}
 				clips = append(clips, clip)
 				break
@@ -233,7 +308,9 @@ func normalizeModelViewerAnimationFPS(fps float64) float64 {
 }
 
 func collectModelViewerDiscreteBranchValues(sections []modINISection, variable string) []int {
-	pattern := regexp.MustCompile(`(?i)^(?:if|elif|else if)\s+\$` + regexp.QuoteMeta(variable) + `\s*==\s*(-?\d+(?:\.\d+)?)$`)
+	pattern := regexp.MustCompile(
+		`(?i)^(?:if|elif|else if)\s+\$` + regexp.QuoteMeta(variable) + `\s*==\s*(-?\d+(?:\.\d+)?)$`,
+	)
 	seen := make(map[int]bool)
 	var values []int
 	for _, section := range sections {

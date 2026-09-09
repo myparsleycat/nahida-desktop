@@ -22,7 +22,16 @@ func (m *Mod) GetPreviousFocusedGame(ctx context.Context) (*string, error) {
 	games, err := m.GetGames(ctx)
 	if err != nil {
 		if m.log != nil {
-			_ = infra.ReportError(m.log, err, "Mod:previousFocusedGame", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "Mod:previousFocusedGame", Stage: "background"})
+			_ = infra.ReportError(
+				m.log,
+				err,
+				"Mod:previousFocusedGame",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "Mod:previousFocusedGame",
+					Stage:     "background",
+				},
+			)
 		}
 		return nil, nil
 	}

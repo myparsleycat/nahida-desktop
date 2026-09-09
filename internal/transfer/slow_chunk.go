@@ -326,14 +326,18 @@ func (m *SlowChunkMonitor) evaluateLocked(now time.Time) {
 		if entry.ChunkSize > 0 {
 			completion = float64(entry.TransferredBytes) / float64(entry.ChunkSize)
 		}
-		nearComplete := entry.ChunkSize > 0 && (completion >= slowChunkNearCompleteRatio || (completion >= 0.5 && remaining <= slowChunkNearCompleteRemaining))
+		nearComplete := entry.ChunkSize > 0 &&
+			(completion >= slowChunkNearCompleteRatio || (completion >= 0.5 && remaining <= slowChunkNearCompleteRemaining))
 		stallTimeout := slowChunkStallTimeout
 		if nearComplete {
 			stallTimeout = slowChunkNearCompleteStallTimeout
 		}
 		if now.Sub(entry.LastProgressAt) >= stallTimeout {
 			entry.SlowTickCount = 0
-			stallCandidates = append(stallCandidates, slowCandidate{entry: entry, speed: speed, detect: SlowChunkDetectStall})
+			stallCandidates = append(
+				stallCandidates,
+				slowCandidate{entry: entry, speed: speed, detect: SlowChunkDetectStall},
+			)
 			continue
 		}
 		estimatedRemaining := math.Inf(1)
@@ -350,12 +354,19 @@ func (m *SlowChunkMonitor) evaluateLocked(now time.Time) {
 		}
 		peerMedian := peerMedianBPS(scored, entry)
 		entry.SlowTickCount++
-		if peerMedian > 0 && *speed < peerMedian*SlowChunkThresholdRatio && entry.SlowTickCount >= slowChunkRequiredRelativeSlowTicks {
-			relativeCandidates = append(relativeCandidates, slowCandidate{entry: entry, speed: speed, peerMedian: peerMedian, detect: SlowChunkDetectRelative})
+		if peerMedian > 0 && *speed < peerMedian*SlowChunkThresholdRatio &&
+			entry.SlowTickCount >= slowChunkRequiredRelativeSlowTicks {
+			relativeCandidates = append(
+				relativeCandidates,
+				slowCandidate{entry: entry, speed: speed, peerMedian: peerMedian, detect: SlowChunkDetectRelative},
+			)
 			continue
 		}
 		if entry.AllowAbsolute && entry.SlowTickCount >= slowChunkRequiredAbsoluteSlowTicks {
-			absoluteCandidates = append(absoluteCandidates, slowCandidate{entry: entry, speed: speed, peerMedian: peerMedian, detect: SlowChunkDetectAbsolute})
+			absoluteCandidates = append(
+				absoluteCandidates,
+				slowCandidate{entry: entry, speed: speed, peerMedian: peerMedian, detect: SlowChunkDetectAbsolute},
+			)
 		}
 	}
 	pick := oldestCandidate(stallCandidates)
@@ -403,7 +414,10 @@ func peerMedianBPS(scored map[*slowChunkEntry]*float64, candidate *slowChunkEntr
 	positive := func(sameFile bool) []float64 {
 		values := make([]float64, 0)
 		for entry, speed := range scored {
-			if entry == candidate || entry.CohortKey != candidate.CohortKey || entry.Phase != SlowChunkPhaseNetwork || entry.AbortedSlowChunk || speed == nil || *speed <= 0 {
+			if entry == candidate || entry.CohortKey != candidate.CohortKey || entry.Phase != SlowChunkPhaseNetwork ||
+				entry.AbortedSlowChunk ||
+				speed == nil ||
+				*speed <= 0 {
 				continue
 			}
 			if sameFile && entry.FileID != candidate.FileID {

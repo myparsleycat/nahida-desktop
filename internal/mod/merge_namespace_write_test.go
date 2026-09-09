@@ -54,10 +54,12 @@ func TestWriteNamespaceMergeWrapsHashedSectionsAndWritesMasterStub(t *testing.T)
 	if !regexp.MustCompile(`namespace = CharA\\Master\n; Constants ---------------------------`).Match(master) {
 		t.Fatalf("master = %s", master)
 	}
-	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).
+		Match(master) {
 		t.Fatalf("master overlay = %s", master)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(child) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).
+		Match(child) {
 		t.Fatalf("child = %s", child)
 	}
 	if _, err := os.Stat(filepath.Join(root, "DISABLED_BACKUP_CharA.ini")); err != nil {
@@ -161,7 +163,8 @@ endif
 	if regexp.MustCompile(`\$\\CharD\\Master\\swapvar`).MatchString(unwrapped) {
 		t.Fatalf("swapvar leftover: %s", unwrapped)
 	}
-	if !strings.Contains(unwrapped, "match_index_count = 48909") || !strings.Contains(unwrapped, "$object_detected = 1") {
+	if !strings.Contains(unwrapped, "match_index_count = 48909") ||
+		!strings.Contains(unwrapped, "$object_detected = 1") {
 		t.Fatalf("unwrapped = %s", unwrapped)
 	}
 }
@@ -182,7 +185,8 @@ $object_detected = 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`\[TextureOverrideCharDComponent0\]\nhash = beef0003\nmatch_index_count = 48909\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`\[TextureOverrideCharDComponent0\]\nhash = beef0003\nmatch_index_count = 48909\n\$active = 1`).
+		Match(master) {
 		t.Fatalf("master = %s", master)
 	}
 	if regexp.MustCompile(`\[TextureOverrideCharDComponent0\]\nhash = beef0003\n\$active = 1`).Match(master) {
@@ -217,7 +221,8 @@ vb0 = ResourcePosition1
 	if regexp.MustCompile(`\$swapvar = 0,1`).Match(master) {
 		t.Fatalf("invented extra swap index: %s", master)
 	}
-	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\nendif`).Match(child) {
+	if !regexp.MustCompile(`if \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\nendif`).
+		Match(child) {
 		t.Fatalf("child = %s", child)
 	}
 	if regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar==1`).Match(child) {
@@ -267,19 +272,24 @@ func TestWriteNamespaceMergeRemastersTwoNamespacedChildren(t *testing.T) {
 	if !regexp.MustCompile(`\$swapvar = 0,1\n`).Match(master) {
 		t.Fatalf("master cycle = %s", master)
 	}
-	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).Match(master) {
+	if !regexp.MustCompile(`; Overrides ---------------------------\n\n\[TextureOverrideCharAPosition\]\nhash = abcdef01\n\$active = 1`).
+		Match(master) {
 		t.Fatalf("master overlay = %s", master)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).Match(alpha) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 0\nif \$\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif`).
+		Match(alpha) {
 		t.Fatalf("alpha = %s", alpha)
 	}
-	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 1\nif \$\\CharA\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif`).Match(beta) {
+	if !regexp.MustCompile(`hash = abcdef01\nmatch_priority = 1\nif \$\\CharA\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif`).
+		Match(beta) {
 		t.Fatalf("beta = %s", beta)
 	}
-	if regexp.MustCompile(`\$\\Alpha\\Master\\swapvar`).Match(alpha) || regexp.MustCompile(`\$\\Beta\\Master\\swapvar`).Match(beta) {
+	if regexp.MustCompile(`\$\\Alpha\\Master\\swapvar`).Match(alpha) ||
+		regexp.MustCompile(`\$\\Beta\\Master\\swapvar`).Match(beta) {
 		t.Fatalf("old namespace leftover")
 	}
-	if regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(alpha) || regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(beta) {
+	if regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(alpha) ||
+		regexp.MustCompile(`else if \$\\CharA\\Master\\swapvar`).Match(beta) {
 		t.Fatalf("else-if leftover")
 	}
 }
@@ -366,7 +376,12 @@ func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testin
 	if !strings.Contains(headerLines[0], rel1) || !strings.Contains(headerLines[0], rel2) {
 		t.Fatalf("header = %s", headerLines[0])
 	}
-	if got := extractMergedModPaths(string(masterContent)); !mergeStringSlicesEqual(got, []string{`.\` + rel1, `.\` + rel2}) {
+	if got := extractMergedModPaths(
+		string(masterContent),
+	); !mergeStringSlicesEqual(
+		got,
+		[]string{`.\` + rel1, `.\` + rel2},
+	) {
 		t.Fatalf("extracted = %#v", got)
 	}
 	discovered, err := collectNamespaceChildren(masterPath)
@@ -422,7 +437,10 @@ if ($\CharA\Master\swapvar == 0 && $foo == 1)
 	vb0 = ResourcePosition
 endif
 `
-	if _, err := unwrapNamespace(compound); err == nil || !strings.Contains(err.Error(), "NAMESPACE_UNWRAP_INCOMPLETE") {
+	if _, err := unwrapNamespace(
+		compound,
+	); err == nil ||
+		!strings.Contains(err.Error(), "NAMESPACE_UNWRAP_INCOMPLETE") {
 		t.Fatalf("unwrap err = %v", err)
 	}
 	root := t.TempDir()
@@ -455,7 +473,8 @@ endif
 	if regexp.MustCompile(`(?m)^else$`).MatchString(unwrapped) {
 		t.Fatalf("else leftover: %s", unwrapped)
 	}
-	if !strings.Contains(unwrapped, "vb0 = ResourcePosition0") || !strings.Contains(unwrapped, "vb0 = ResourcePosition1") {
+	if !strings.Contains(unwrapped, "vb0 = ResourcePosition0") ||
+		!strings.Contains(unwrapped, "vb0 = ResourcePosition1") {
 		t.Fatalf("unwrapped = %s", unwrapped)
 	}
 }
@@ -465,7 +484,11 @@ func TestCollectNamespaceChildrenScansWhenListedPathsAreMissing(t *testing.T) {
 	childPath := writeNamespaceChild(t, root, "CharA.ini", namespaceChildINI+
 		"if $\\CharA\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif\n")
 	masterPath := filepath.Join(root, "MasterCharA.ini")
-	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+filepath.Join(root, "missing", "gone.ini")+"\nnamespace = CharA\\Master\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		masterPath,
+		[]byte("; Merged Mod: "+filepath.Join(root, "missing", "gone.ini")+"\nnamespace = CharA\\Master\n"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	discovered, err := collectNamespaceChildren(masterPath)
@@ -483,7 +506,16 @@ func TestCollectNamespaceChildrenUnionsListedAndScanned(t *testing.T) {
 	scannedChild := writeNamespaceChild(t, root, "Scanned.ini", namespaceChildINI+
 		"if $\\CharA\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif\n")
 	masterPath := filepath.Join(root, "MasterCharA.ini")
-	if err := os.WriteFile(masterPath, []byte("; Merged Mod: "+listedChild+"\n; Merged Mod: "+filepath.Join(root, "missing.ini")+"\nnamespace = CharA\\Master\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		masterPath,
+		[]byte(
+			"; Merged Mod: "+listedChild+"\n; Merged Mod: "+filepath.Join(
+				root,
+				"missing.ini",
+			)+"\nnamespace = CharA\\Master\n",
+		),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	discovered, err := collectNamespaceChildren(masterPath)
@@ -527,7 +559,8 @@ endif
 	if !strings.Contains(unwrapped, "handling = skip") {
 		t.Fatalf("unwrapped = %s", unwrapped)
 	}
-	if !regexp.MustCompile(`if DRAW_TYPE == 1\n\tvb0 = ResourceBlackSwanHairPosition\n\tdraw = 5376, 0\nendif`).MatchString(unwrapped) {
+	if !regexp.MustCompile(`if DRAW_TYPE == 1\n\tvb0 = ResourceBlackSwanHairPosition\n\tdraw = 5376, 0\nendif`).
+		MatchString(unwrapped) {
 		t.Fatalf("draw type 1 = %s", unwrapped)
 	}
 	if !regexp.MustCompile(`elif DRAW_TYPE != 1\n\t\$_blend_ = 2\nendif`).MatchString(unwrapped) {
@@ -554,7 +587,8 @@ run = CommandList\global\ORFix
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") || !strings.Contains(string(master), "hash = abcdef01") {
+	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") ||
+		!strings.Contains(string(master), "hash = abcdef01") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = helper01") {
@@ -585,7 +619,8 @@ vb0 = ResourceCharHPosition
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideCharHMarkBoneDataCB]") || !strings.Contains(string(master), "hash = 98765432") {
+	if !strings.Contains(string(master), "[TextureOverrideCharHMarkBoneDataCB]") ||
+		!strings.Contains(string(master), "hash = 98765432") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = helper01") {
@@ -631,7 +666,8 @@ vb2 = ResourceHairBlend
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") || !strings.Contains(string(master), "hash = abcdef01") {
+	if !strings.Contains(string(master), "[TextureOverrideCharAPosition]") ||
+		!strings.Contains(string(master), "hash = abcdef01") {
 		t.Fatalf("master = %s", master)
 	}
 	if strings.Contains(string(master), "hash = hairblend01") {

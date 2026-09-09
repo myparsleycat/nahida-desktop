@@ -39,7 +39,10 @@ func TestProxyStartupBlocksDamagedSettingsAndFreezesArguments(t *testing.T) {
 	if !strings.Contains(joined, "--proxy-server=http://127.0.0.1:") || strings.Contains(joined, "direct://") {
 		t.Fatal("WebView not fail closed")
 	}
-	if err := settings.SetProxySettings(ctx, setting.ProxySettingsInput{Type: "http", PasswordAction: "clear"}); err != nil {
+	if err := settings.SetProxySettings(
+		ctx,
+		setting.ProxySettingsInput{Type: "http", PasswordAction: "clear"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := client.HTTPClient().Transport.(infra.BlockedProxyTransport); !ok {
@@ -58,7 +61,10 @@ func TestProxyStartupKeepsSharedClientIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = settings.Close() }()
-	if err := settings.SetProxySettings(ctx, setting.ProxySettingsInput{Enabled: true, Type: "socks5h", Host: "127.0.0.1", Port: 1, PasswordAction: "clear"}); err != nil {
+	if err := settings.SetProxySettings(
+		ctx,
+		setting.ProxySettingsInput{Enabled: true, Type: "socks5h", Host: "127.0.0.1", Port: 1, PasswordAction: "clear"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	client := infra.NewClient()

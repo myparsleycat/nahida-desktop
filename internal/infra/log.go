@@ -32,10 +32,16 @@ var (
 	logURLPattern        = regexp.MustCompile(`https?://[^\s"<>]+`)
 	logJSONStringPattern = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
 	urlUserInfoPattern   = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
-	jsonSecretPattern    = regexp.MustCompile(`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`)
-	authHeaderPattern    = regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`)
-	cookieHeaderPattern  = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
-	plainSecretPattern   = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`)
+	jsonSecretPattern    = regexp.MustCompile(
+		`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`,
+	)
+	authHeaderPattern = regexp.MustCompile(
+		`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`,
+	)
+	cookieHeaderPattern = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
+	plainSecretPattern  = regexp.MustCompile(
+		`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`,
+	)
 )
 
 var levelPriority = map[string]int{
@@ -233,7 +239,12 @@ func (l *Log) fileFailureLocked(err error, stage string) {
 	}
 	l.fileErr = true
 	if l.writer != nil {
-		record := map[string]any{"operation": "log-file", "stage": stage, "path": l.dest, "error": limitDiagnosticText(err.Error(), 4<<10)}
+		record := map[string]any{
+			"operation": "log-file",
+			"stage":     stage,
+			"path":      l.dest,
+			"error":     limitDiagnosticText(err.Error(), 4<<10),
+		}
 		causes, truncated, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
 		if len(causes) > 1 {
 			record["causes"] = causes
