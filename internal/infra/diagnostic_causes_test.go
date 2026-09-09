@@ -173,6 +173,21 @@ func TestDiagnosticServiceBoundaryIgnoresReportedMetadata(t *testing.T) {
 	}
 }
 
+func TestReportErrorHonorsDebugSeverity(t *testing.T) {
+	var output bytes.Buffer
+	log := NewLogWithOptions(LogOptions{Writer: &output, DisableFile: true})
+	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	if output.Len() != 0 {
+		t.Fatalf("debug leaked at default warn: %s", output.String())
+	}
+	log.SetLevel("debug")
+	_ = ReportError(log, errors.New("connection reset"), "HTTP", Diagnostic{Severity: DiagnosticDebug, Operation: "probe"})
+	got := output.String()
+	if !strings.Contains(got, " DEBUG ") || strings.Contains(got, " ERROR ") || strings.Contains(got, " WARN ") {
+		t.Fatalf("wrong level: %s", got)
+	}
+}
+
 func TestDiagnosticSeverityPreservesActivePolicies(t *testing.T) {
 	for _, test := range []struct {
 		name       string
@@ -188,6 +203,12 @@ func TestDiagnosticSeverityPreservesActivePolicies(t *testing.T) {
 		{name: "mixed-branches", failure: func(*Log) error {
 			return errors.Join(AnnotateError(errors.New("validation"), Diagnostic{Severity: DiagnosticWarn}), AnnotateError(errors.New("rollback failed"), Diagnostic{Severity: DiagnosticError}))
 		}, level: "ERROR"},
+		{name: "debug-then-warn", failure: func(*Log) error {
+			return errors.Join(AnnotateError(errors.New("debug"), Diagnostic{Severity: DiagnosticDebug}), AnnotateError(errors.New("warning"), Diagnostic{Severity: DiagnosticWarn}))
+		}, level: "WARN"},
+		{name: "warn-then-debug", failure: func(*Log) error {
+			return errors.Join(AnnotateError(errors.New("warning"), Diagnostic{Severity: DiagnosticWarn}), AnnotateError(errors.New("debug"), Diagnostic{Severity: DiagnosticDebug}))
+		}, level: "WARN"},
 		{name: "error-owner", failure: func(*Log) error { return AnnotateError(errors.New("validation"), Diagnostic{Severity: DiagnosticWarn}) }, diagnostic: Diagnostic{Severity: DiagnosticError}, level: "ERROR"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

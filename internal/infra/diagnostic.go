@@ -12,6 +12,7 @@ import (
 type DiagnosticSeverity string
 
 const (
+	DiagnosticDebug DiagnosticSeverity = "debug"
 	DiagnosticWarn  DiagnosticSeverity = "warn"
 	DiagnosticError DiagnosticSeverity = "error"
 )
@@ -109,9 +110,12 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 	if truncated {
 		record["causesTruncated"] = true
 	}
-	if severity == DiagnosticWarn {
+	switch severity {
+	case DiagnosticDebug:
+		log.Debug(record, where)
+	case DiagnosticWarn:
 		log.Warn(record, where)
-	} else {
+	default:
 		log.Error(record, where)
 	}
 	return &diagnosticError{err: err, diagnostic: merged, reported: true}

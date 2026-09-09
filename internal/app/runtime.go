@@ -24,6 +24,7 @@ type runtime struct {
 	log             *infra.Log
 	store           *infra.Store
 	http            *infra.Client
+	cdnTrace        *infra.CDNTrace
 	fs              *platform.FS
 	native          *platform.Native
 	updater         *infra.Updater
@@ -114,6 +115,7 @@ func newRuntime() *runtime {
 		log:      log,
 		store:    infra.NewStore(),
 		http:     httpClient,
+		cdnTrace: infra.NewCDNTrace(httpClient),
 		fs:       fs,
 		native:   native,
 		updater:  updaterService,
@@ -192,6 +194,7 @@ func emitAppEvent(name string, data ...any) {
 func (rt *runtime) services() []application.Service {
 	return []application.Service{
 		newLoggedService(rt, "Auth", rt.auth),
+		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
 		newLoggedService(rt, "Dialog", rt.dialog),
 		newLoggedService(rt, "Drive", rt.drive),
 		newLoggedService(rt, "FS", rt.fs),
