@@ -57,12 +57,12 @@ function expectVector(actual: Float32Array, expected: number[], precision = 3) {
 describe("packed dual-quaternion kernel", () => {
     it("preserves game coordinates and source tangent/UV while ignoring packed w", () => {
         const { deformer, buffers } = fixture();
-        const original = buffers.base.slice(0);
+        const original = new Uint8Array(buffers.base.slice(0));
         const result = computePackedDualQuaternionFrame(deformer, buffers, 0);
         expectVector(result.positions, [1, 2, 3]);
         expectVector(result.normals, [0, 0, 1]);
         expect(result.tangents).toBeUndefined();
-        expect(buffers.base).toEqual(original);
+        expect(new Uint8Array(buffers.base)).toEqual(original);
     });
 
     it("applies scale, bias and dual-quaternion translation in Blender axes", () => {
@@ -198,14 +198,18 @@ describe("packed dual-quaternion worker", () => {
         expect(scope.postMessage).toHaveBeenCalledWith(
             expect.objectContaining({
                 type: "frame",
-                meshes: [
-                    expect.objectContaining({
-                        positions: new Float32Array([1, 2, 3, 1, 2, 3]).buffer,
-                    }),
-                ],
+                meshes: [expect.objectContaining({ positions: expect.any(ArrayBuffer) })],
             }),
             expect.any(Array),
         );
+        const frame = scope.postMessage.mock.calls
+            .map(([message]) => message)
+            .find((message) => (message as { type?: string }).type === "frame");
+        expect(
+            new Float32Array(
+                (frame as { meshes: [{ positions: ArrayBuffer }] }).meshes[0].positions,
+            ),
+        ).toEqual(new Float32Array([1, 2, 3, 1, 2, 3]));
         scope.onmessage!({
             data: { type: "frame", generation: 1, id: 2, poseFrame: -1, phaseSeconds: 0 },
         });
