@@ -36,7 +36,7 @@ import {
   type IneffectiveSuggestion,
 } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -60,7 +60,9 @@ import {
   normalizeThreeToneMapping,
 } from "./model-viewer-dialog-utils";
 import { VariantSlider, VariantTile } from "./model-viewer-dialog-variants";
+import { ModelViewerFpsControl } from "./model-viewer-fps-control";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
+import { useModelViewerScrubPlayback } from "./model-viewer-scrub";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
@@ -105,6 +107,7 @@ export function ModelViewerWorkspace({
   const [animationPlaying, setAnimationPlaying] = useState(
     () => (source?.transport.animations[0]?.frames.length ?? 0) > 1,
   );
+  const [fpsOverride, setFpsOverride] = useState<number | null>(null);
   const animationFrameIndexRef = useRef(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
@@ -141,6 +144,7 @@ export function ModelViewerWorkspace({
     setActiveAnimationId(source?.transport.animations[0]?.id ?? null);
     setAnimationFrameIndex(0);
     setAnimationPlaying(false);
+    setFpsOverride(null);
   }
 
   useEffect(() => {
@@ -202,6 +206,11 @@ export function ModelViewerWorkspace({
     animationClips.find((animation) => animation.id === activeAnimationId) ??
     animationClips[0] ??
     null;
+  const effectiveAnimation = useMemo(
+    () =>
+      activeAnimation ? { ...activeAnimation, fps: fpsOverride ?? activeAnimation.fps } : null,
+    [activeAnimation, fpsOverride],
+  );
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
   const animationVariableIds = new Set(activeAnimation?.variableIds ?? []);
 
@@ -210,14 +219,20 @@ export function ModelViewerWorkspace({
     setPrevActiveAnimation(activeAnimation);
     setAnimationFrameIndex(0);
     setAnimationPlaying(Boolean(activeAnimation && activeAnimation.frames.length > 1));
+    setFpsOverride(null);
   }
 
   useModelViewerAnimationClock({
-    clip: activeAnimation,
+    clip: effectiveAnimation,
     frameIndex: animationFrameIndex,
     playing: open && animationPlaying,
     onFrame: setAnimationFrameIndex,
     onComplete: () => setAnimationPlaying(false),
+  });
+
+  const scrubPlayback = useModelViewerScrubPlayback({
+    playing: animationPlaying,
+    setPlaying: setAnimationPlaying,
   });
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
@@ -351,11 +366,6 @@ export function ModelViewerWorkspace({
     }
 
     setAnimationPlaying((current) => !current);
-  };
-
-  const handleAnimationReset = () => {
-    setAnimationFrameIndex(0);
-    setAnimationPlaying(false);
   };
 
   const effectiveState = previewState ?? activeState;
@@ -509,7 +519,7 @@ export function ModelViewerWorkspace({
                 payloadTransport={payloadTransport}
                 payloadEval={payloadEval ?? undefined}
                 orientation={modelOrientation}
-                animationClip={activeAnimation ?? undefined}
+                animationClip={effectiveAnimation ?? undefined}
                 threeToneMapping={threeToneMapping}
                 threeEnvironment={threeEnvironment}
                 threeExposure={threeExposure}
@@ -769,8 +779,12 @@ export function ModelViewerWorkspace({
                 <div className="text-sm font-medium">{activeAnimation.label}</div>
               )}
               <div className="text-xs whitespace-nowrap text-muted-foreground">
-                {activeAnimation.fps} FPS · Frame{" "}
-                {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
+                <ModelViewerFpsControl
+                  fps={fpsOverride ?? activeAnimation.fps}
+                  defaultFps={activeAnimation.fps}
+                  onFpsChange={setFpsOverride}
+                />{" "}
+                · Frame {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
                 {activeAnimation.frameEnd}
               </div>
             </div>
@@ -786,10 +800,9 @@ export function ModelViewerWorkspace({
                 step={1}
                 value={animationFrameIndex}
                 className="w-full accent-primary"
+                {...scrubPlayback}
                 onChange={(event) => {
-                  const index = Number(event.currentTarget.value);
-                  setAnimationPlaying(false);
-                  setAnimationFrameIndex(index);
+                  setAnimationFrameIndex(Number(event.currentTarget.value));
                 }}
               />
               <span className="text-right text-xs text-muted-foreground tabular-nums">
@@ -797,20 +810,16 @@ export function ModelViewerWorkspace({
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleAnimationTogglePlayback}
-                disabled={activeAnimation.frames.length <= 1}
-              >
-                {animationPlaying ? "Pause" : "Play"}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={handleAnimationReset}>
-                Reset
-              </Button>
-            </div>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={handleAnimationTogglePlayback}
+              disabled={activeAnimation.frames.length <= 1}
+              aria-label={animationPlaying ? "Pause" : "Play"}
+            >
+              {animationPlaying ? <PauseIcon /> : <PlayIcon />}
+            </Button>
           </div>
         ) : null}
       </div>
