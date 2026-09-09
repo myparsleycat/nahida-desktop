@@ -3,11 +3,14 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -36,11 +39,20 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	if t.protocol == nil {
 		return ModelViewerTransport{}, fmt.Errorf("protocol service is unavailable")
 	}
+	var windowID uint
+	if window, ok := ctx.Value(application.WindowKey).(application.Window); ok {
+		windowID = window.ID()
+	}
 	requestedPath := modPath
 	var absErr error
 	folder, absErr = filepath.Abs(requestedPath)
 	if absErr != nil {
 		return ModelViewerTransport{}, absErr
+	}
+	if info, statErr := os.Stat(folder); statErr != nil {
+		return ModelViewerTransport{}, statErr
+	} else if !info.IsDir() {
+		return ModelViewerTransport{}, contractError("Model viewer path must be a folder.")
 	}
 	discoveryStartedAt := time.Now()
 	diagnostics := &infra.DiagnosticBatch{}
@@ -85,6 +97,9 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	}
 	if requestedPath == "" {
 		transport.Name = ""
+	}
+	if t.findModelViewerPreview != nil {
+		transport.PreviewPath = t.findModelViewerPreview(folder)
 	}
 	stage = "prepare-geometry"
 	prepared, prepareErr := t.prepareModelViewerGeometry(ctx, folder, iniPaths, budget)
@@ -152,7 +167,11 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		t.modelViewerMu.Unlock()
 		return ModelViewerTransport{}, err
 	}
-	t.modelViewerSessions[sessionID] = &modelViewerSession{modPath: requestedPath}
+	if t.modelViewerClosedWindows[windowID] {
+		t.modelViewerMu.Unlock()
+		return ModelViewerTransport{}, context.Canceled
+	}
+	t.modelViewerSessions[sessionID] = &modelViewerSession{modPath: requestedPath, windowID: windowID}
 	t.modelViewerMu.Unlock()
 	keep = true
 	payloadWriteMs = time.Since(stageStartedAt).Milliseconds()

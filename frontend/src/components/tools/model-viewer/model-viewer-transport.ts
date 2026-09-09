@@ -80,6 +80,7 @@ export function normalizeModelViewerTransport(
 
     return {
         memorySessionId: value.memorySessionId,
+        previewPath: value.previewPath ?? undefined,
         iniPath: value.iniPath,
         modPath: value.modPath,
         name: value.name,

@@ -4,6 +4,7 @@ import { Transfer } from "@bindings/transfer";
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
+import { ThemeProvider } from "@renderer/components/theme-provider";
 import { TitlebarActivityBadges } from "@renderer/components/titlebar/titlebar-activity-badges";
 import { TitlebarWindowControls } from "@renderer/components/titlebar/titlebar-window-controls";
 import { use4001FixerTitlebarActivity } from "@renderer/components/titlebar/use-4001-fixer-titlebar-activity";
@@ -354,14 +355,44 @@ function ErrorComponent({ error }: ErrorComponentProps) {
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
 }>()({
-  component: () => {
-    return (
-      <RootProvider>
-        <RootComponent />
-      </RootProvider>
-    );
-  },
+  component: RootLayout,
   notFoundComponent: NotFoundComponent,
   pendingComponent: PendingComponent,
   errorComponent: ErrorComponent,
 });
+
+function RootLayout() {
+  const location = useLocation();
+  if (location.pathname === "/model-viewer-window") {
+    return (
+      <ThemeProvider>
+        <ModelViewerWindowLayout />
+      </ThemeProvider>
+    );
+  }
+  return (
+    <RootProvider>
+      <RootComponent />
+    </RootProvider>
+  );
+}
+
+function ModelViewerWindowLayout() {
+  const { i18n } = useTranslation();
+  useEffect(() => {
+    void getSetting("general.language")
+      .then((language) => {
+        if (language) return i18n.changeLanguage(language);
+      })
+      .catch((error: unknown) => Logger.capture("model-viewer:language", error));
+  }, [i18n]);
+  return (
+    <div className="flex h-screen flex-col overflow-hidden">
+      <Toaster position="bottom-right" richColors closeButton />
+      <AppTitlebar />
+      <main className="min-h-0 flex-1 overflow-hidden">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

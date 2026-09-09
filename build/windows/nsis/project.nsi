@@ -1,4 +1,4 @@
-Unicode true
+﻿Unicode true
 
 ####
 ## Please note: Template replacements don't work in this file. They are provided with default defines like
@@ -39,6 +39,28 @@ Unicode true
 # Keep this in sync with application.SingleInstanceOptions.UniqueID. Wails
 # creates this mutex before starting backend services.
 !define APP_SINGLE_INSTANCE_MUTEX "wails-app-com.nahida.desktop-sim"
+
+!define MODEL_VIEWER_KEY "Software\Classes\Directory\shell\nahida.live.ModelViewer"
+!if "${WAILS_INSTALL_SCOPE}" == "user"
+    !define MODEL_VIEWER_HIVE HKCU
+!else
+    !define MODEL_VIEWER_HIVE HKLM
+!endif
+
+!macro nahida.registerModelViewer
+    SetRegView 64
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "" "모델 뷰어로 보기"
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "Icon" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\",0'
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "MultiSelectModel" "Single"
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}\command" "" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" --model-viewer $\"%1$\"'
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
+!macro nahida.unregisterModelViewer
+    SetRegView 64
+    DeleteRegKey ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${NAHIDA_NUMERIC_VERSION}"
@@ -120,6 +142,7 @@ Section
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
+    !insertmacro nahida.registerModelViewer
     
     !insertmacro wails.writeUninstaller
 SectionEnd
@@ -142,6 +165,7 @@ Section "uninstall"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
+    !insertmacro nahida.unregisterModelViewer
 
     !insertmacro wails.deleteUninstaller
     RMDir "$INSTDIR"

@@ -241,6 +241,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
 };
 
 export type ModViewerTransport = {
+    previewPath?: string;
     memorySessionId: string;
     iniPath: string;
     modPath: string;

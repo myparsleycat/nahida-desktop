@@ -172,6 +172,7 @@ type ModelViewerTransport struct {
 	INIPath          string                                 `json:"iniPath"`
 	ModPath          string                                 `json:"modPath"`
 	Name             string                                 `json:"name"`
+	PreviewPath      *string                                `json:"previewPath,omitempty"`
 	MaterialProfile  string                                 `json:"materialProfile,omitempty"`
 	Meshes           []ModelViewerMeshTransport             `json:"meshes"`
 	Textures         map[string]ModelViewerTextureTransport `json:"textures"`
@@ -212,7 +213,26 @@ type modelViewerDirectPositionAssignment struct {
 }
 
 type modelViewerSession struct {
-	modPath string
+	modPath  string
+	windowID uint
+}
+
+// CleanupModelViewerWindow also fences loads completing after the native window closes.
+//
+//wails:ignore
+func (t *Tools) CleanupModelViewerWindow(windowID uint) {
+	t.modelViewerMu.Lock()
+	t.modelViewerClosedWindows[windowID] = true
+	var ids []string
+	for id, session := range t.modelViewerSessions {
+		if session.windowID == windowID {
+			ids = append(ids, id)
+		}
+	}
+	t.modelViewerMu.Unlock()
+	for _, id := range ids {
+		_, _ = t.CleanupModelViewer(context.Background(), id)
+	}
 }
 
 type modelViewerTextureSettings struct {

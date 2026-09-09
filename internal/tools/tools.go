@@ -39,18 +39,19 @@ type contractError string
 func (e contractError) Error() string { return string(e) }
 
 type Options struct {
-	Log        *infra.Log
-	EventEmit  func(string, ...any)
-	Notify     func(title, body string) error
-	Settings   BisectSettings
-	XXMI       *xxmi.XXMI
-	FS         *platform.FS
-	HTTP       *infra.Client
-	Download   *infra.Download
-	Archive    *infra.Archive
-	Protocol   *infra.Protocol
-	GitHubRate *infra.GitHubRateCoordinator
-	Mod        ModDisabler
+	Log                    *infra.Log
+	EventEmit              func(string, ...any)
+	Notify                 func(title, body string) error
+	Settings               BisectSettings
+	XXMI                   *xxmi.XXMI
+	FS                     *platform.FS
+	HTTP                   *infra.Client
+	Download               *infra.Download
+	Archive                *infra.Archive
+	Protocol               *infra.Protocol
+	GitHubRate             *infra.GitHubRateCoordinator
+	Mod                    ModDisabler
+	FindModelViewerPreview func(string) *string
 	// PEDiversifier diversifies packed executable content.
 	PEDiversifier PEDiversifier
 }
@@ -108,9 +109,11 @@ type Tools struct {
 	bodyShapeMu       sync.Mutex
 	bodyShapeSessions map[string]*bodyShapeSession
 
-	modelViewerMu       sync.Mutex
-	modelViewerSessions map[string]*modelViewerSession
-	persist             *persistEngine
+	modelViewerMu            sync.Mutex
+	modelViewerSessions      map[string]*modelViewerSession
+	modelViewerClosedWindows map[uint]bool
+	findModelViewerPreview   func(string) *string
+	persist                  *persistEngine
 
 	fixInspectors         *FixInspectorRegistry
 	fixInspectionRunMu    sync.Mutex
@@ -145,14 +148,16 @@ func NewWithOptions(opts Options) *Tools {
 		peDiversifier: opts.PEDiversifier,
 		textureState:  TextureResizeProgressEvent{Status: "idle"},
 		textureJobs:   make(map[uint64]TextureResizeProgressEvent), releaseCache: make(map[string]releaseCacheEntry), releaseCalls: make(map[string]*releaseFetchCall),
-		touchSessions:       make(map[string]*touchSession),
-		bodyShapeSessions:   make(map[string]*bodyShapeSession),
-		modelViewerSessions: make(map[string]*modelViewerSession),
-		persist:             newPersistEngine(),
-		fixInspectors:       NewFixInspectorRegistry(),
-		fixInspections:      make(map[string]*trackedFixInspection),
-		fixInspectionCtx:    fixInspectionCtx,
-		fixInspectionCancel: fixInspectionCancel,
+		touchSessions:            make(map[string]*touchSession),
+		bodyShapeSessions:        make(map[string]*bodyShapeSession),
+		modelViewerSessions:      make(map[string]*modelViewerSession),
+		modelViewerClosedWindows: make(map[uint]bool),
+		findModelViewerPreview:   opts.FindModelViewerPreview,
+		persist:                  newPersistEngine(),
+		fixInspectors:            NewFixInspectorRegistry(),
+		fixInspections:           make(map[string]*trackedFixInspection),
+		fixInspectionCtx:         fixInspectionCtx,
+		fixInspectionCancel:      fixInspectionCancel,
 	}
 	t.fixInspectors.Register(NewZZMIFixInspector(t))
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }

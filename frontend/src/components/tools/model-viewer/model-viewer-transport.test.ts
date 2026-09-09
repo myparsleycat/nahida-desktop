@@ -10,6 +10,7 @@ describe("normalizeModelViewerTransport", () => {
             iniPath: "mod.ini",
             modPath: "mod",
             name: "Example",
+            previewPath: "C:/모드 (1)/preview.png",
             meshes: [
                 {
                     id: "mesh",
@@ -65,6 +66,7 @@ describe("normalizeModelViewerTransport", () => {
         };
 
         const result = normalizeModelViewerTransport(input);
+        expect(result.previewPath).toBe(input.previewPath);
 
         expect(result.meshes[0]).toMatchObject({
             conditions: [],

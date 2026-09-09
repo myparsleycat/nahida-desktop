@@ -146,7 +146,8 @@ func newRuntime() *runtime {
 		mod:        modService,
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
-			Log: log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
+			FindModelViewerPreview: modService.FindModelViewerPreview,
+			Log:                    log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
 			FS: fs, HTTP: httpClient, Download: download, Archive: archive, Protocol: protocolService, GitHubRate: githubRate, Mod: modService,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
