@@ -8,6 +8,7 @@ import type {
     ViewerMaterialProfile,
     ViewerStateValue,
     ViewerTextureRole,
+    ViewerComputeBinarySource,
 } from "@shared/mod-viewer/types";
 
 import { normalizeAnimationFPS } from "./model-viewer-animation-clock";
@@ -57,11 +58,21 @@ function normalizeMaterialProfile(value?: string): ViewerMaterialProfile | undef
     return value === "zzmi" || value === "wuwa:rabbitfx" ? value : undefined;
 }
 
-function normalizeComputeSource(source: { url: string; byteLength: number; stride: number }) {
+function normalizeComputeSource(source: {
+    url: string;
+    byteLength: number;
+    stride: number;
+    encoding?: string;
+}): ViewerComputeBinarySource {
     if (!source.url || source.byteLength <= 0 || source.stride <= 0) {
         throw new TypeError("Invalid model viewer compute source.");
     }
-    return { url: source.url, byteLength: source.byteLength, stride: source.stride };
+    return {
+        url: source.url,
+        byteLength: source.byteLength,
+        stride: source.stride,
+        encoding: source.encoding === "packed_f32_v1" ? source.encoding : undefined,
+    };
 }
 
 export function normalizeModelViewerTransport(
@@ -94,6 +105,7 @@ export function normalizeModelViewerTransport(
             uvsUrl: mesh.uvsUrl,
             indicesUrl: mesh.indicesUrl,
             sourceIndicesUrl: mesh.sourceIndicesUrl,
+            bounds: mesh.bounds ?? undefined,
             conditions: normalizeDNF(mesh.conditions),
             texKey: mesh.texKey,
             textureVariants: (mesh.textureVariants ?? []).map((variant) => ({
@@ -123,9 +135,7 @@ export function normalizeModelViewerTransport(
             })),
             positionVariants: (mesh.positionVariants ?? []).map((variant) => ({
                 conditions: normalizeDNF(variant.conditions),
-                sourceUrl: variant.sourceUrl,
-                stride: variant.stride,
-                sourceBytes: variant.sourceBytes,
+                geometryUrl: variant.geometryUrl,
             })),
         })),
         textures,
@@ -187,6 +197,7 @@ export function normalizeModelViewerTransport(
                     kind: deformer.kind,
                     id: deformer.id,
                     meshIds: deformer.meshIds ?? [],
+                    meshSourceIndices: deformer.meshSourceIndices ?? undefined,
                     vertexCount: deformer.vertexCount,
                     base: normalizeComputeSource(deformer.base),
                     shapePasses: (deformer.shapePasses ?? []).map((pass) => ({

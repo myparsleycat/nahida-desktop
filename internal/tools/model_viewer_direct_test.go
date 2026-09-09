@@ -150,18 +150,16 @@ format = DXGI_FORMAT_R32_UINT`
 		t.Fatalf("result = %#v", result)
 	}
 	firstVariant, secondVariant := result.Meshes[0].PositionVariants[0], result.Meshes[0].PositionVariants[1]
-	if firstVariant.Stride != 40 || secondVariant.Stride != 40 || firstVariant.SourceBytes != 120 || secondVariant.SourceBytes != 120 {
-		t.Fatalf("position descriptors = %#v", result.Meshes[0].PositionVariants)
-	}
-	if !strings.HasPrefix(firstVariant.SourceURL, "/protocol/local?") || !strings.HasPrefix(secondVariant.SourceURL, "/protocol/local?") {
-		t.Fatalf("position sources must use local file protocol: %#v", result.Meshes[0].PositionVariants)
+
+	if !strings.HasPrefix(firstVariant.GeometryURL, "/protocol/memory/") || !strings.HasPrefix(secondVariant.GeometryURL, "/protocol/memory/") {
+		t.Fatalf("position variants must use lazy memory protocol: %#v", result.Meshes[0].PositionVariants)
 	}
 	if result.Meshes[0].SourceIndicesURL != "" {
 		t.Fatalf("identity source indices URL = %q", result.Meshes[0].SourceIndicesURL)
 	}
-	first := readModelViewerProtocolBytes(t, protocol, firstVariant.SourceURL)
-	second := readModelViewerProtocolBytes(t, protocol, secondVariant.SourceURL)
-	if len(first) < 4 || len(second) < 4 || math.Float32frombits(binary.LittleEndian.Uint32(first)) != 0 || math.Float32frombits(binary.LittleEndian.Uint32(second)) != 10 {
+	first := readModelViewerProtocolBytes(t, protocol, firstVariant.GeometryURL)
+	second := readModelViewerProtocolBytes(t, protocol, secondVariant.GeometryURL)
+	if len(first) != 152 || len(second) != 152 || math.Float32frombits(binary.LittleEndian.Uint32(first[80:])) != 0 || math.Float32frombits(binary.LittleEndian.Uint32(second[80:])) != 10 {
 		t.Fatalf("position variants do not contain the expected frames")
 	}
 }

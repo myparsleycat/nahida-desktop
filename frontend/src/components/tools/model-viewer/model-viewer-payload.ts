@@ -1,3 +1,4 @@
+import type { ModelViewerBounds } from "@bindings/tools";
 import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import type {
     EvaluatedViewerState,
@@ -5,6 +6,9 @@ import type {
     ViewerMeshTransport,
 } from "@shared/mod-viewer/types";
 import {
+    Box3,
+    Sphere,
+    Vector3,
     BufferAttribute,
     BufferGeometry,
     DataTexture,
@@ -22,11 +26,14 @@ import {
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
+import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
 type PayloadMeshUserData = {
     meshId: string;
     basePositions: Float32Array;
+    baseNormals: Float32Array;
+    baseBounds?: ModelViewerBounds;
     shapeTargets: Array<{
         var: string;
         positions: Float32Array;
@@ -35,7 +42,6 @@ type PayloadMeshUserData = {
     }>;
     positionVariants: ViewerMeshTransport["positionVariants"];
     sourceIndicesUrl?: string;
-    normalCache: Array<{ key: number; normal: Float32Array }>;
     materialProfile?: ModViewerTransport["materialProfile"];
     toonShadows: boolean;
     lastPositionVariantIndex?: number | null;
@@ -66,7 +72,7 @@ rabbitFXFallbackLightMap.needsUpdate = true;
 
 export type PreparedPayloadEval = {
     evalResult: EvaluatedViewerState;
-    positions: Map<string, { variantIndex: number; positions: Float32Array }>;
+    positions: Map<string, { variantIndex: number } & ModelViewerPositionGeometry>;
 };
 
 export async function buildPayloadModel(
@@ -109,6 +115,9 @@ export async function buildPayloadModel(
             object.userData = {
                 meshId: mesh.id,
                 basePositions: new Float32Array(geometry.attributes.position.array as Float32Array),
+                baseNormals: new Float32Array(geometry.attributes.normal.array as Float32Array),
+                baseBounds: mesh.bounds,
+                lastPositionVariantIndex: null,
                 shapeTargets: await Promise.all(
                     mesh.shapeTargets.map(async (target) => ({
                         var: target.var,
@@ -121,7 +130,6 @@ export async function buildPayloadModel(
                 ),
                 positionVariants: [...mesh.positionVariants],
                 sourceIndicesUrl: mesh.sourceIndicesUrl,
-                normalCache: [],
                 materialProfile: transport.materialProfile,
                 toonShadows,
             } satisfies PayloadMeshUserData;
@@ -164,8 +172,9 @@ export async function preparePayloadEval(
     forcePositions = false,
 ): Promise<PreparedPayloadEval> {
     const evaluatedById = new Map(evalResult.meshes.map((mesh) => [mesh.id, mesh]));
-    const requests: Array<Promise<[string, { variantIndex: number; positions: Float32Array }]>> =
-        [];
+    const requests: Array<
+        Promise<[string, { variantIndex: number } & ModelViewerPositionGeometry]>
+    > = [];
     root.traverse((object) => {
         if (!(object instanceof Mesh)) {
             return;
@@ -187,13 +196,8 @@ export async function preparePayloadEval(
         }
         requests.push(
             positionLoader
-                .load(
-                    descriptor,
-                    userData.sourceIndicesUrl,
-                    userData.basePositions.length / 3,
-                    signal,
-                )
-                .then((positions) => [userData.meshId, { variantIndex, positions }]),
+                .load(descriptor, userData.basePositions.length / 3, signal)
+                .then((geometry) => [userData.meshId, { variantIndex, ...geometry }]),
         );
     });
     return { evalResult, positions: new Map(await Promise.all(requests)) };
@@ -229,7 +233,8 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.basePositions = new Float32Array();
         userData.shapeTargets.length = 0;
         userData.positionVariants.length = 0;
-        userData.normalCache.length = 0;
+        userData.baseNormals = new Float32Array();
+        userData.baseBounds = undefined;
         userData.lastMaps = undefined;
         userData.lastPositionVariantIndex = undefined;
         userData.lastShapeSignature = undefined;
@@ -260,7 +265,7 @@ function applyEvaluatedMesh(
     object: Mesh,
     evaluated: EvaluatedViewerState["meshes"][number] | undefined,
     textures?: Map<string, Texture>,
-    preparedPosition?: { variantIndex: number; positions: Float32Array },
+    preparedPosition?: { variantIndex: number } & ModelViewerPositionGeometry,
 ): void {
     if (!evaluated) {
         return;
@@ -488,7 +493,7 @@ function applyPositionVariant(
     object: Mesh,
     userData: PayloadMeshUserData,
     variantIndex: number | null,
-    prepared?: { variantIndex: number; positions: Float32Array },
+    prepared?: { variantIndex: number } & ModelViewerPositionGeometry,
 ): void {
     if (userData.lastPositionVariantIndex === variantIndex) {
         return;
@@ -511,22 +516,13 @@ function applyPositionVariant(
         return;
     }
 
-    const cacheKey = variantIndex ?? -1;
-    const cached = userData.normalCache.find((entry) => entry.key === cacheKey)?.normal;
-    const normal = object.geometry.attributes.normal;
-    if (cached && normal) {
-        normal.array.set(cached);
-        normal.needsUpdate = true;
-        return;
+    const normals = variantIndex === null ? userData.baseNormals : prepared?.normals;
+    const bounds = variantIndex === null ? userData.baseBounds : prepared?.bounds;
+    if (normals) {
+        object.geometry.attributes.normal.array.set(normals);
+        object.geometry.attributes.normal.needsUpdate = true;
     }
-    // Animation frames reuse these meshes; cache normals instead of recomputing every tick.
-    object.geometry.computeVertexNormals();
-    if (normal) {
-        userData.normalCache = [
-            { key: cacheKey, normal: new Float32Array(normal.array as Float32Array) },
-            ...userData.normalCache.filter((entry) => entry.key !== cacheKey),
-        ].slice(0, 2);
-    }
+    if (bounds) applyGeometryBounds(object.geometry, bounds);
 }
 
 function applyShapeTargets(object: Mesh, weights: Record<string, number>): void {
@@ -554,6 +550,7 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
         return endpoint.length === base.length;
     });
     const divisor = midpointTargets.length || 1;
+    let deformed = false;
     for (const target of targets) {
         const weight = Number(weights[target.var] ?? 0);
         if (!Number.isFinite(weight)) {
@@ -566,6 +563,8 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
                 continue;
             }
             const factor = weight <= 0.5 ? 2 - weight * 4 : weight * 4 - 2;
+            if (factor === 0) continue;
+            deformed = true;
             for (let index = 0; index < attr.array.length; index++) {
                 const shaped = base[index] + (endpoint[index] - base[index]) * factor;
                 attr.array[index] += (shaped - base[index]) / divisor;
@@ -578,11 +577,19 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
         if (target.positions.length !== base.length) {
             continue;
         }
+        deformed = true;
         for (let index = 0; index < attr.array.length; index++) {
             attr.array[index] += (target.positions[index] - base[index]) * weight;
         }
     }
     attr.needsUpdate = true;
+    if (!deformed) {
+        object.geometry.attributes.normal.array.set(userData.baseNormals);
+        object.geometry.attributes.normal.needsUpdate = true;
+        if (userData.baseBounds) applyGeometryBounds(object.geometry, userData.baseBounds);
+        userData.lastShapeSignature = signature;
+        return;
+    }
     object.geometry.computeVertexNormals();
     object.geometry.computeBoundingBox();
     object.geometry.computeBoundingSphere();
@@ -618,8 +625,11 @@ async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry>
     if (!normals) {
         geometry.computeVertexNormals();
     }
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
+    if (mesh.bounds) applyGeometryBounds(geometry, mesh.bounds);
+    else {
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+    }
     return geometry;
 }
 
@@ -644,4 +654,13 @@ function loadTexture(
     });
     textureCache.set(url, request);
     return request;
+}
+
+function applyGeometryBounds(geometry: BufferGeometry, bounds: ModelViewerBounds): void {
+    geometry.boundingBox ??= new Box3();
+    geometry.boundingBox.min.fromArray(bounds.min);
+    geometry.boundingBox.max.fromArray(bounds.max);
+    geometry.boundingSphere ??= new Sphere(new Vector3());
+    geometry.boundingSphere.center.fromArray(bounds.center);
+    geometry.boundingSphere.radius = bounds.radius;
 }

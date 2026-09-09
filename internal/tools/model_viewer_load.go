@@ -162,6 +162,13 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 	if writeErr := writeModelViewerPayload(ctx, t, sessionID, &transport, meshPayloads, texturePayloads); writeErr != nil {
 		return ModelViewerTransport{}, writeErr
 	}
+	sessionContext, sessionCancel := context.WithCancel(context.Background())
+	defer func() {
+		if !keep {
+			sessionCancel()
+		}
+	}()
+	evaluator := newModelViewerEvaluator(sessionContext, transport)
 	t.modelViewerMu.Lock()
 	if err := ctx.Err(); err != nil {
 		t.modelViewerMu.Unlock()
@@ -171,7 +178,7 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (transport Mo
 		t.modelViewerMu.Unlock()
 		return ModelViewerTransport{}, context.Canceled
 	}
-	t.modelViewerSessions[sessionID] = &modelViewerSession{modPath: requestedPath, windowID: windowID}
+	t.modelViewerSessions[sessionID] = &modelViewerSession{modPath: requestedPath, windowID: windowID, evaluator: evaluator, cancel: sessionCancel}
 	t.modelViewerMu.Unlock()
 	keep = true
 	payloadWriteMs = time.Since(stageStartedAt).Milliseconds()
