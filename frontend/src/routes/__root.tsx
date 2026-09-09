@@ -311,6 +311,7 @@ function AppTitlebar({ children, trailing }: { children?: ReactNode; trailing?: 
 function ErrorComponent({ error }: ErrorComponentProps) {
   const { t } = useTranslation();
   const router = useRouter();
+  const message = error instanceof Error ? error.message : undefined;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-transparent">
@@ -323,13 +324,13 @@ function ErrorComponent({ error }: ErrorComponentProps) {
             <AlertDescription>{t("page.root.error.description")}</AlertDescription>
           </Alert>
 
-          {error?.message ? (
+          {message ? (
             <details className="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
               <summary className="cursor-pointer font-medium text-muted-foreground select-none">
                 {t("page.root.error.details")}
               </summary>
               <pre className="mt-2 max-h-48 overflow-auto font-mono wrap-break-word whitespace-pre-wrap text-destructive">
-                {error.message}
+                {message}
               </pre>
             </details>
           ) : null}
