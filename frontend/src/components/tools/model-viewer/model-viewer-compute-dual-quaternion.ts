@@ -4,7 +4,8 @@ import type { GIMIShapePoseBuffers, GIMIShapePoseFrame } from "./model-viewer-co
 
 import {
     normalizePackedVectors,
-    packedHalfToFloat,
+    preparedPackedVertices,
+    validatePackedVertexSource,
     validatePackedBuffer,
 } from "./model-viewer-packed-vertex";
 
@@ -30,8 +31,13 @@ export function validatePackedDualQuaternionBuffers(
     ) {
         throw new Error("Packed dual-quaternion descriptor is invalid.");
     }
+    validatePackedVertexSource(
+        "Packed dual-quaternion base",
+        deformer.base,
+        buffers.base,
+        deformer.vertexCount,
+    );
     for (const [label, source, buffer, stride, count] of [
-        ["base", deformer.base, buffers.base, 20, deformer.vertexCount],
         ["blend", pose.blend, buffers.blend, 32, deformer.vertexCount],
         ["pose", pose.frames, buffers.pose, 56, pose.boneCount * pose.frameCount],
     ] as const) {
@@ -61,7 +67,7 @@ export function computePackedDualQuaternionFrame(
     const frame0 = Math.floor(frame);
     const frame1 = Math.min(frame0 + 1, pose.frameCount - 1);
     const inter = frame - frame0;
-    const base = new DataView(buffers.base);
+    const base = preparedPackedVertices(deformer.base, buffers.base);
     const blend = new DataView(buffers.blend!);
     const palette = new Float32Array(buffers.pose!);
     const positions = new Float32Array(deformer.vertexCount * 3);
@@ -69,7 +75,7 @@ export function computePackedDualQuaternionFrame(
     const accumulated = new Float64Array(14);
     for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
         accumulated.fill(0);
-        const source = vertex * 20;
+        const source = vertex * 7;
         const blendOffset = vertex * 32;
         const referenceBone = blend.getInt32(blendOffset + 16, true);
         const reference = (frame0 * pose.boneCount + referenceBone) * 14 + 6;
@@ -125,16 +131,12 @@ export function computePackedDualQuaternionFrame(
         const m21 = 2 * (qy * qz + qw * qx);
         const m22 = 1 - 2 * qx * qx - 2 * qy * qy;
         // Packed game axes -> Blender axes; this shader forces position.w = 1.
-        const x =
-            packedHalfToFloat(base.getUint16(source, true)) * accumulated[0]! + accumulated[3]!;
-        const y =
-            -packedHalfToFloat(base.getUint16(source + 4, true)) * accumulated[1]! +
-            accumulated[4]!;
-        const z =
-            packedHalfToFloat(base.getUint16(source + 2, true)) * accumulated[2]! + accumulated[5]!;
-        const nx = base.getInt8(source + 8);
-        const ny = -base.getInt8(source + 10);
-        const nz = base.getInt8(source + 9);
+        const x = base[source]! * accumulated[0]! + accumulated[3]!;
+        const y = -base[source + 2]! * accumulated[1]! + accumulated[4]!;
+        const z = base[source + 1]! * accumulated[2]! + accumulated[5]!;
+        const nx = base[source + 4]!;
+        const ny = -base[source + 6]!;
+        const nz = base[source + 5]!;
         const destination = vertex * 3;
         positions[destination] = roundPackedPosition(
             m00 * x + m01 * y + m02 * z + 2 * (-dw * qx + dx * qw - dy * qz + dz * qy),

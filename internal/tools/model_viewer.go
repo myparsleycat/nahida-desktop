@@ -38,9 +38,14 @@ type ModelViewerShapeTarget struct {
 
 type ModelViewerPositionVariant struct {
 	Conditions  ModelViewerDNF `json:"conditions"`
-	SourceURL   string         `json:"sourceUrl"`
-	Stride      int            `json:"stride"`
-	SourceBytes int64          `json:"sourceBytes"`
+	GeometryURL string         `json:"geometryUrl"`
+}
+
+type ModelViewerBounds struct {
+	Min    [3]float64 `json:"min"`
+	Max    [3]float64 `json:"max"`
+	Center [3]float64 `json:"center"`
+	Radius float64    `json:"radius"`
 }
 
 type ModelViewerMeshTransport struct {
@@ -52,6 +57,7 @@ type ModelViewerMeshTransport struct {
 	UVsURL              string                       `json:"uvsUrl,omitempty"`
 	IndicesURL          string                       `json:"indicesUrl"`
 	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
+	Bounds              *ModelViewerBounds           `json:"bounds,omitempty"`
 	Conditions          ModelViewerDNF               `json:"conditions"`
 	TexKey              *string                      `json:"texKey"`
 	TextureVariants     []ModelViewerTextureVariant  `json:"textureVariants"`
@@ -123,6 +129,7 @@ type ModelViewerComputeBinarySource struct {
 	URL        string `json:"url"`
 	ByteLength int64  `json:"byteLength"`
 	Stride     int    `json:"stride"`
+	Encoding   string `json:"encoding,omitempty"`
 	sourcePath string
 }
 
@@ -157,14 +164,15 @@ type ModelViewerComputePoseSource struct {
 }
 
 type ModelViewerComputeDeformerTransport struct {
-	Kind        string                         `json:"kind"`
-	ID          string                         `json:"id"`
-	MeshIDs     []string                       `json:"meshIds"`
-	VertexCount int                            `json:"vertexCount"`
-	Base        ModelViewerComputeBinarySource `json:"base"`
-	ShapePasses []ModelViewerComputeShapePass  `json:"shapePasses"`
-	ShapeStages []ModelViewerComputeShapeStage `json:"shapeStages,omitempty"`
-	Pose        *ModelViewerComputePoseSource  `json:"pose,omitempty"`
+	MeshSourceIndices map[string]string              `json:"meshSourceIndices,omitempty"`
+	Kind              string                         `json:"kind"`
+	ID                string                         `json:"id"`
+	MeshIDs           []string                       `json:"meshIds"`
+	VertexCount       int                            `json:"vertexCount"`
+	Base              ModelViewerComputeBinarySource `json:"base"`
+	ShapePasses       []ModelViewerComputeShapePass  `json:"shapePasses"`
+	ShapeStages       []ModelViewerComputeShapeStage `json:"shapeStages,omitempty"`
+	Pose              *ModelViewerComputePoseSource  `json:"pose,omitempty"`
 }
 
 type ModelViewerTransport struct {
@@ -213,8 +221,10 @@ type modelViewerDirectPositionAssignment struct {
 }
 
 type modelViewerSession struct {
-	modPath  string
-	windowID uint
+	modPath   string
+	windowID  uint
+	evaluator *modelViewerEvaluator
+	cancel    context.CancelFunc
 }
 
 // CleanupModelViewerWindow also fences loads completing after the native window closes.
@@ -291,8 +301,11 @@ func (t *Tools) CleanupModelViewer(_ context.Context, memorySessionID string) (b
 		return false, nil
 	}
 	t.modelViewerMu.Lock()
-	_, exists := t.modelViewerSessions[memorySessionID]
+	session, exists := t.modelViewerSessions[memorySessionID]
 	if exists {
+		if session.cancel != nil {
+			session.cancel()
+		}
 		delete(t.modelViewerSessions, memorySessionID)
 	}
 	lastSession := exists && len(t.modelViewerSessions) == 0
@@ -317,6 +330,9 @@ func (t *Tools) shutdownModelViewer() error {
 	t.modelViewerMu.Lock()
 	ids := make([]string, 0, len(t.modelViewerSessions))
 	for id := range t.modelViewerSessions {
+		if session := t.modelViewerSessions[id]; session.cancel != nil {
+			session.cancel()
+		}
 		ids = append(ids, id)
 	}
 	clear(t.modelViewerSessions)
@@ -715,7 +731,7 @@ func buildModelViewerDirectMeshPayload(mesh modelViewerDirectMesh, textures []mo
 			if assignment.sourcePath == "" || assignment.stride <= 0 || assignment.sourceBytes <= 0 || len(assignment.conditions) == 0 {
 				continue
 			}
-			item.PositionVariants = append(item.PositionVariants, ModelViewerPositionVariant{Conditions: assignment.conditions, Stride: assignment.stride, SourceBytes: assignment.sourceBytes})
+			item.PositionVariants = append(item.PositionVariants, ModelViewerPositionVariant{Conditions: assignment.conditions})
 			payload.PositionSources = append(payload.PositionSources, assignment)
 		}
 	}
@@ -886,23 +902,11 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 		}
 		transport.Textures[key] = ModelViewerTextureTransport{URL: url, Role: texture.Role}
 	}
-	for deformerIndex := range transport.ComputeDeformers {
-		deformer := &transport.ComputeDeformers[deformerIndex]
-		deformer.Base.URL = t.protocol.LocalFileURL(deformer.Base.sourcePath, true)
-		for passIndex := range deformer.ShapePasses {
-			pass := &deformer.ShapePasses[passIndex]
-			pass.Target.URL = t.protocol.LocalFileURL(pass.Target.sourcePath, true)
-		}
-		for stageIndex := range deformer.ShapeStages {
-			stage := &deformer.ShapeStages[stageIndex]
-			stage.Base.URL = t.protocol.LocalFileURL(stage.Base.sourcePath, true)
-			stage.Target.URL = t.protocol.LocalFileURL(stage.Target.sourcePath, true)
-		}
-		if deformer.Pose != nil {
-			deformer.Pose.Blend.URL = t.protocol.LocalFileURL(deformer.Pose.Blend.sourcePath, true)
-			deformer.Pose.Frames.URL = t.protocol.LocalFileURL(deformer.Pose.Frames.sourcePath, true)
-		}
+	positionCache := &modelViewerPositionCache{limit: modelViewerPositionCacheBytes}
+	if err := t.prepareModelViewerComputeSources(ctx, sessionID, transport, meshes, positionCache); err != nil {
+		return err
 	}
+
 	if len(meshes) != len(transport.Meshes) {
 		return fmt.Errorf("model viewer payload mesh count mismatch")
 	}
@@ -917,6 +921,16 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 			return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
 		}
 		var err error
+		mesh.Bounds, err = modelViewerGeometryBounds(ctx, payload.Positions)
+		if err != nil {
+			return fmt.Errorf("mesh %s bounds: %w", mesh.ID, err)
+		}
+		if payload.Normals == nil {
+			payload.Normals, err = modelViewerVertexNormals(ctx, payload.Positions, payload.Indices)
+			if err != nil {
+				return fmt.Errorf("mesh %s normals: %w", mesh.ID, err)
+			}
+		}
 		mesh.PositionsURL, err = write(".pos", modelViewerFloat32Bytes(payload.Positions))
 		if err != nil {
 			return err
@@ -967,7 +981,10 @@ func writeModelViewerPayload(ctx context.Context, t *Tools, sessionID string, tr
 			return fmt.Errorf("model viewer position variant payload count mismatch for %s", mesh.ID)
 		}
 		for variantIndex := range mesh.PositionVariants {
-			mesh.PositionVariants[variantIndex].SourceURL = t.protocol.LocalFileURL(payload.PositionSources[variantIndex].sourcePath, true)
+			mesh.PositionVariants[variantIndex].GeometryURL, err = t.registerModelViewerPosition(sessionID, mesh.ID, variantIndex, payload.PositionSources[variantIndex], payload.Indices, payload.SourceIndices, len(payload.Positions)/3, positionCache)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	}

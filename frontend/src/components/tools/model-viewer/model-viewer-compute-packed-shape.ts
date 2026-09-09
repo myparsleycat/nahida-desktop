@@ -3,10 +3,9 @@ import type { ViewerComputeDeformer, ViewerComputeShapeStage } from "@shared/mod
 import type { GIMIShapePoseFrame } from "./model-viewer-compute-kernel";
 
 import {
-    PACKED_VERTEX_STRIDE,
     normalizePackedVectors,
-    packedHalfToFloat,
-    validatePackedBuffer,
+    preparedPackedVertices,
+    validatePackedVertexSource,
 } from "./model-viewer-packed-vertex";
 
 export type PackedShapeStageBuffers = Array<{ base: ArrayBuffer; target: ArrayBuffer }>;
@@ -29,26 +28,18 @@ export function validatePackedShapeBuffers(
     }
     deformer.shapeStages.forEach((stage, index) => {
         const buffers = stages[index]!;
-        validatePackedBuffer(
+        validatePackedVertexSource(
             `Packed shape stage ${index} base`,
-            stage.base.byteLength,
-            stage.base.stride,
+            stage.base,
             buffers.base,
+            deformer.vertexCount,
         );
-        validatePackedBuffer(
+        validatePackedVertexSource(
             `Packed shape stage ${index} target`,
-            stage.target.byteLength,
-            stage.target.stride,
+            stage.target,
             buffers.target,
+            deformer.vertexCount,
         );
-        if (
-            stage.base.stride !== PACKED_VERTEX_STRIDE ||
-            stage.target.stride !== PACKED_VERTEX_STRIDE ||
-            stage.base.byteLength !== deformer.vertexCount * PACKED_VERTEX_STRIDE ||
-            stage.target.byteLength !== stage.base.byteLength
-        ) {
-            throw new Error(`Packed shape stage ${index} must use a 20-byte vertex stride.`);
-        }
         if (!(stage.duration > 0)) {
             throw new Error(`Packed shape stage ${index} duration is invalid.`);
         }
@@ -69,21 +60,21 @@ export function computePackedShapeFrame(
                     stage.angularScale,
             ) +
         stage.bias;
-    const base = new DataView(stages[index]!.base);
-    const target = new DataView(stages[index]!.target);
+    const base = preparedPackedVertices(stage.base, stages[index]!.base);
+    const target = preparedPackedVertices(stage.target, stages[index]!.target);
     const positions = new Float32Array(deformer.vertexCount * 3);
     const normals = new Float32Array(deformer.vertexCount * 3);
     for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
-        const source = vertex * PACKED_VERTEX_STRIDE;
+        const source = vertex * 7;
         const dest = vertex * 3;
         for (let axis = 0; axis < 3; axis += 1) {
-            const from = packedHalfToFloat(base.getUint16(source + axis * 2, true));
-            const to = packedHalfToFloat(target.getUint16(source + axis * 2, true));
+            const from = base[source + axis]!;
+            const to = target[source + axis]!;
             positions[dest + axis] = from + (to - from) * weight;
         }
         for (let axis = 0; axis < 3; axis += 1) {
-            const from = base.getInt8(source + 8 + axis);
-            const to = target.getInt8(source + 8 + axis);
+            const from = base[source + 4 + axis]!;
+            const to = target[source + 4 + axis]!;
             normals[dest + axis] = from + (to - from) * weight;
         }
     }

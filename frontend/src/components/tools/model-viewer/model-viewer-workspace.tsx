@@ -28,13 +28,7 @@ import {
 import { Logger } from "@renderer/lib/logger";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
-import {
-  applyVariableSelection,
-  computeIneffectiveValues,
-  evaluateViewerState,
-  type IneffectiveMap,
-  type IneffectiveSuggestion,
-} from "@shared/mod-viewer/eval";
+import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
 import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -61,6 +55,10 @@ import {
 } from "./model-viewer-dialog-utils";
 import { VariantSlider, VariantTile } from "./model-viewer-dialog-variants";
 import { ModelViewerFpsControl } from "./model-viewer-fps-control";
+import {
+  useModelViewerIneffectiveValues,
+  type IneffectiveSuggestion,
+} from "./model-viewer-ineffective";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
 import { useModelViewerScrubPlayback } from "./model-viewer-scrub";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
@@ -373,9 +371,9 @@ export function ModelViewerWorkspace({
     () => (payloadTransport ? evaluateViewerState(payloadTransport, effectiveState) : null),
     [effectiveState, payloadTransport],
   );
-  const ineffectiveMap = useMemo<IneffectiveMap>(
-    () => (payloadTransport ? computeIneffectiveValues(payloadTransport, activeState) : new Map()),
-    [activeState, payloadTransport],
+  const ineffectiveMap = useModelViewerIneffectiveValues(
+    open && payloadTransport?.variables.length ? payloadTransport.memorySessionId : undefined,
+    activeState,
   );
   const variables = payloadTransport?.variables ?? [];
   const uiAssets = payloadTransport?.uiAssets;

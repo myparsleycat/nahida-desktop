@@ -88,7 +88,8 @@ export class ModelViewerComputeController {
                 .filter((mesh) => deformer.meshIds.includes(mesh.id))
                 .map((mesh) => ({
                     id: mesh.id,
-                    sourceIndicesUrl: mesh.sourceIndicesUrl,
+                    sourceIndicesUrl:
+                        deformer.meshSourceIndices?.[mesh.id] ?? mesh.sourceIndicesUrl,
                     vertexCount: this.baselines.get(mesh.id)?.positions.length
                         ? this.baselines.get(mesh.id)!.positions.length / 3
                         : 0,

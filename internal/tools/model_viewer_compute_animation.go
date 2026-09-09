@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ type modelViewerComputePass struct {
 	x88, x89           string
 	t50, t51, t52      string
 	shader, outputName string
+	equalities         []modelViewerStateEquality
 }
 
 type modelViewerKnownBoneKernel struct {
@@ -69,7 +71,7 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 		}
 		return detectModelViewerPackedShapeAnimation(root, shaderBaseDir, scopeID, sections, reachable, effective, defaults, meshes)
 	}
-	posePass, poseSection, kernel, ok := detectModelViewerKnownBonePass(root, shaderBaseDir, sections, reachable)
+	posePass, poseSection, kernel, ok := detectModelViewerKnownBonePass(root, shaderBaseDir, sections, reachable, effective)
 	if !ok {
 		return shapeOnly()
 	}
@@ -136,7 +138,41 @@ func detectModelViewerComputeAnimation(root, shaderBaseDir, scopeID string, sect
 		}
 		clips = []modelViewerPreparedAnimationClip{buildModelViewerComputeFallbackClip(deformerID, "Pose Animation", frameCount, fps)}
 	}
+	clips = bindModelViewerComputeBranch(clips, posePass.equalities)
+	if len(clips) == 0 {
+		return shapeOnly()
+	}
 	return deformer, clips
+}
+
+func bindModelViewerComputeBranch(clips []modelViewerPreparedAnimationClip, equalities []modelViewerStateEquality) []modelViewerPreparedAnimationClip {
+	for _, equality := range equalities {
+		value, err := strconv.ParseFloat(equality.value, 64)
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+			return nil
+		}
+		matching := clips[:0]
+		for _, clip := range clips {
+			if slices.ContainsFunc(clip.Frames, func(frame modelViewerPreparedAnimationFrame) bool {
+				current, exists := frame.Values[equality.variable]
+				return exists && modelViewerString(current) != modelViewerString(value)
+			}) {
+				continue
+			}
+			if !slices.Contains(clip.VariableIDs, equality.variable) {
+				clip.VariableIDs = append(clip.VariableIDs, equality.variable)
+			}
+			for frame := range clip.Frames {
+				if clip.Frames[frame].Values == nil {
+					clip.Frames[frame].Values = make(map[string]any)
+				}
+				clip.Frames[frame].Values[equality.variable] = value
+			}
+			matching = append(matching, clip)
+		}
+		clips = matching
+	}
+	return clips
 }
 
 func detectModelViewerShapeOnlyAnimation(root, shaderBaseDir, scopeID string, sections []modINISection, reachable map[string]bool, resources map[string]modelViewerResource, defaults map[string]any, meshes []modelViewerDirectMesh) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
@@ -237,13 +273,21 @@ func modelViewerComputeMeshIDs(meshes []modelViewerDirectMesh, filename string) 
 	return output
 }
 
-func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool) (modelViewerComputePass, modINISection, modelViewerKnownBoneKernel, bool) {
+func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modINISection, reachable map[string]bool, resources map[string]modelViewerResource) (modelViewerComputePass, modINISection, modelViewerKnownBoneKernel, bool) {
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CustomShader") || !reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
 			continue
 		}
-		for _, pass := range collectModelViewerComputePasses(section) {
+		equalitySets := collectModelViewerComputeDispatchEqualities(section)
+		for index, pass := range collectModelViewerComputePasses(section) {
 			if pass.t50 == "" || pass.t51 == "" || pass.t52 == "" || pass.x88 == "" || pass.x89 == "" || pass.outputName == "" {
+				continue
+			}
+			// Conditional dispatches can animate different buffers. Select the pass
+			// matching the resolved preview output before committing to a kernel.
+			base, baseOK := resources[modelViewerNormalizeKey(pass.t50)]
+			output, outputOK := resources[modelViewerNormalizeKey(pass.outputName)]
+			if !baseOK || !outputOK || base.Filename == "" || !samePathFold(output.Filename, base.Filename) {
 				continue
 			}
 			shader, ok := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
@@ -251,6 +295,7 @@ func detectModelViewerKnownBonePass(root, shaderBaseDir string, sections []modIN
 				continue
 			}
 			if kernel, known := modelViewerKnownBoneKernelForShader(shader); known {
+				pass.equalities = equalitySets[index]
 				return pass, section, kernel, true
 			}
 		}

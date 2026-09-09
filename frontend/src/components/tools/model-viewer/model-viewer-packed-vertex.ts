@@ -1,3 +1,5 @@
+import type { ViewerComputeBinarySource } from "@shared/mod-viewer/types";
+
 export const PACKED_VERTEX_STRIDE = 20;
 
 export function packedHalfToFloat(value: number): number {
@@ -38,4 +40,44 @@ export function validatePackedBuffer(
             `${label} size changed: expected ${byteLength}, received ${buffer.byteLength}.`,
         );
     }
+}
+
+export function validatePackedVertexSource(
+    label: string,
+    source: ViewerComputeBinarySource,
+    buffer: ArrayBuffer,
+    vertexCount: number,
+): void {
+    validatePackedBuffer(label, source.byteLength, source.stride, buffer);
+    const stride = source.encoding === "packed_f32_v1" ? 28 : PACKED_VERTEX_STRIDE;
+    if (source.stride !== stride || buffer.byteLength !== vertexCount * stride) {
+        throw new Error(
+            `${label} must use a ${stride}-byte vertex stride with the declared vertex count.`,
+        );
+    }
+}
+
+// Native payloads arrive decoded; standalone kernels also accept legacy packed inputs.
+export function preparedPackedVertices(
+    source: ViewerComputeBinarySource,
+    buffer: ArrayBuffer,
+): Float32Array {
+    const values =
+        source.encoding === "packed_f32_v1"
+            ? new Float32Array(buffer)
+            : new Float32Array((buffer.byteLength / PACKED_VERTEX_STRIDE) * 7);
+    if (source.encoding !== "packed_f32_v1") {
+        const view = new DataView(buffer);
+        for (let vertex = 0; vertex < values.length / 7; vertex++) {
+            for (let axis = 0; axis < 4; axis++)
+                values[vertex * 7 + axis] = packedHalfToFloat(
+                    view.getUint16(vertex * PACKED_VERTEX_STRIDE + axis * 2, true),
+                );
+            for (let axis = 0; axis < 3; axis++)
+                values[vertex * 7 + 4 + axis] = view.getInt8(
+                    vertex * PACKED_VERTEX_STRIDE + 8 + axis,
+                );
+        }
+    }
+    return values;
 }

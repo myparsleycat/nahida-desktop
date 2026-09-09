@@ -63,8 +63,8 @@ vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 `+viewerBodyResources)
-	if result.Meshes[0].NormalsURL != "" || result.Meshes[0].TangentsURL != "" {
-		t.Fatalf("zero padding was treated as authored TBN: %#v", result.Meshes[0])
+	if result.Meshes[0].NormalsURL == "" || result.Meshes[0].TangentsURL != "" {
+		t.Fatalf("expected generated normals without authored tangents: %#v", result.Meshes[0])
 	}
 }
 

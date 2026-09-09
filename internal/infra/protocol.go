@@ -2,6 +2,7 @@ package infra
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ const maxProtocolWebResponse = 64 << 20
 type memoryProtocolEntry struct {
 	data        []byte
 	contentType string
+	load        func(context.Context) ([]byte, error)
 }
 
 type memoryUploadEntry struct {
@@ -112,6 +114,24 @@ func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
 		delete(session.uploads, bufferID)
 	}
 	p.mu.Unlock()
+}
+
+// StoreMemoryLoader registers a lazy binary resource with the session's lifetime.
+// The loader owns any caching; responses keep their bytes alive even after eviction.
+//
+//wails:ignore
+func (p *Protocol) StoreMemoryLoader(sessionID, bufferID string, load func(context.Context) ([]byte, error)) (string, error) {
+	if p == nil || load == nil || bufferID == "" {
+		return "", errors.New("memory loader and buffer id are required")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session := p.sessions[sessionID]
+	if session == nil {
+		return "", fmt.Errorf("missing memory session: %s", sessionID)
+	}
+	session.buffers[bufferID] = memoryProtocolEntry{load: load, contentType: "application/octet-stream"}
+	return memoryProtocolURL(sessionID, bufferID), nil
 }
 
 //wails:ignore
@@ -255,6 +275,22 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 	if !exists {
 		http.NotFound(w, request)
 		return
+	}
+	if entry.load != nil {
+		data, err := entry.load(request.Context())
+		if err != nil {
+			p.reportProtocolFailure(err, request, "load-memory-buffer", map[string]any{"sessionId": sessionID, "bufferId": bufferID})
+			http.Error(w, "Failed to load binary buffer", http.StatusInternalServerError)
+			return
+		}
+		p.mu.RLock()
+		active := p.sessions[sessionID] == session
+		p.mu.RUnlock()
+		if !active {
+			http.NotFound(w, request)
+			return
+		}
+		entry.data = data
 	}
 	contentType := entry.contentType
 	if contentType == "" {

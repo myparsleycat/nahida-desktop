@@ -3,6 +3,7 @@ package tools
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -363,6 +364,110 @@ filename = pose.buf
 	}
 	if len(clips) != 1 || clips[0].DeformerID != deformer.ID || clips[0].FPS != 24 {
 		t.Fatalf("clips = %+v", clips)
+	}
+}
+
+func TestDetectModelViewerCyclicPackedSelectsMatchingBranch(t *testing.T) {
+	dir := t.TempDir()
+	for name, size := range map[string]int{"first.buf": 4 * 20, "base.buf": 3 * 20, "first-blend.buf": 4 * 32, "blend.buf": 3 * 32, "pose.buf": 4 * 2 * 48} {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, size), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedObjectAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ini := `[Constants]
+global $bones = 2
+global $freq = 0
+global $dt
+global $swap = 0
+global $start = 1
+global $end = 5
+post ResourcePosition = copy_desc ResourcePosition.1
+post run = CustomShaderAnim
+[CustomShaderAnim]
+$freq = $freq + 24 * $dt
+if $freq > $end-2
+    $freq = $start
+endif
+x88 = $freq
+x89 = $bones
+cs = anim.hlsl
+cs-t52 = ResourcePose
+if $swap == 0
+    cs-t50 = ResourcePosition.0
+    cs-t51 = ResourceBlend.0
+    cs-u5 = copy ResourcePosition.0
+    ResourcePosition = ref cs-u5
+    Dispatch = 4, 1, 1
+else if $swap == 1
+    cs-t50 = ResourcePosition.1
+    cs-t51 = ResourceBlend.1
+    cs-u5 = copy ResourcePosition.1
+    ResourcePosition = ref cs-u5
+    Dispatch = 3, 1, 1
+endif
+[ResourcePosition]
+[ResourcePosition.0]
+stride = 20
+filename = first.buf
+[ResourcePosition.1]
+stride = 20
+filename = base.buf
+[ResourceBlend.0]
+stride = 32
+filename = first-blend.buf
+[ResourceBlend.1]
+stride = 32
+filename = blend.buf
+[ResourcePose]
+stride = 48
+filename = pose.buf
+`
+	for _, test := range []struct {
+		name, output string
+		want         bool
+	}{{"later matching branch", "Position.1", true}, {"unmatched output", "Unmatched", false}} {
+		t.Run(test.name, func(t *testing.T) {
+			text := strings.Replace(ini, "copy_desc ResourcePosition.1", "copy_desc Resource"+test.output, 1)
+			text += "\n[ResourceUnmatched]\nstride = 20\nfilename = unmatched.buf\n"
+			sections, names := scopeModelViewerSections(parseModINI(text), 0, "")
+			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+			meshes := []modelViewerDirectMesh{{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}}}
+			deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+			if !test.want {
+				if deformer != nil || len(clips) != 0 {
+					t.Fatal("unmatched geometry enabled animation")
+				}
+				return
+			}
+			if deformer == nil || deformer.Kind != modelViewerPackedObjectKind || deformer.VertexCount != 3 || filepath.Base(deformer.Base.sourcePath) != "base.buf" || filepath.Base(deformer.Pose.Blend.sourcePath) != "blend.buf" {
+				t.Fatalf("matching branch was not selected: %+v", deformer)
+			}
+			if len(clips) != 1 || clips[0].FrameStart != 1 || clips[0].FrameEnd != 3 || clips[0].FPS != 24 {
+				t.Fatalf("matching branch clip: %+v", clips)
+			}
+			if !slices.Equal(clips[0].VariableIDs, []string{"mvscope0swap"}) {
+				t.Fatalf("branch selector is not owned by the clip: %v", clips[0].VariableIDs)
+			}
+			for _, frame := range clips[0].Frames {
+				if frame.Values["mvscope0swap"] != float64(1) {
+					t.Fatalf("frame does not activate its geometry branch: %+v", frame)
+				}
+			}
+		})
+	}
+}
+
+func TestBindModelViewerComputeBranchRejectsConflictingClips(t *testing.T) {
+	clips := []modelViewerPreparedAnimationClip{
+		{ID: "matching", VariableIDs: []string{"mode"}, Frames: []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(1)}}}},
+		{ID: "conflicting", VariableIDs: []string{"mode"}, Frames: []modelViewerPreparedAnimationFrame{{Values: map[string]any{"mode": float64(0)}}}},
+	}
+	bound := bindModelViewerComputeBranch(clips, []modelViewerStateEquality{{variable: "mode", value: "1"}})
+	if len(bound) != 1 || bound[0].ID != "matching" || !slices.Equal(bound[0].VariableIDs, []string{"mode"}) {
+		t.Fatalf("conflicting clip was rebound to another branch: %+v", bound)
 	}
 }
 

@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 import { describe, expect, it } from "vitest";
 
 import { computeCyclicPackedFrame } from "./model-viewer-compute-cyclic";
+import { preparedPackedVertices } from "./model-viewer-packed-vertex";
 
 function source(byteLength: number, stride: number) {
     return { url: "/fixture.buf", byteLength, stride };
@@ -113,3 +117,60 @@ describe("cyclic packed compute kernel", () => {
         expect([...frame.positions].map((value) => Number(value.toFixed(5)))).toEqual([0, 4, 1]);
     });
 });
+
+it("matches cyclic skinning with backend-decoded packed inputs", () => {
+    const deformer = descriptor();
+    const buffers = {
+        base: packedVertex(1, 2, 3, -128, 127, -1),
+        shapeTargets: [],
+        blend: blendBuffer(),
+        pose: concat([identityPose(), translatedPose(0, 2)]),
+    };
+    const reference = computeCyclicPackedFrame(deformer, buffers, 0.25);
+    const base = new Float32Array([1, 2, 3, 1, -128, 127, -1]).buffer;
+    const prepared = {
+        ...deformer,
+        base: { ...deformer.base, encoding: "packed_f32_v1" as const, stride: 28, byteLength: 28 },
+    };
+    expect(computeCyclicPackedFrame(prepared, { ...buffers, base }, 0.25)).toEqual(reference);
+});
+
+it.skipIf(!process.env.MODEL_VIEWER_CYCLIC_MOD)(
+    "animates start, middle and end frames of the local InazumaCloset mod",
+    () => {
+        const dir = process.env.MODEL_VIEWER_CYCLIC_MOD!;
+        const read = (name: string) => new Uint8Array(readFileSync(join(dir, name))).buffer;
+        const raw = read("InazumaCloset2.buf");
+        const blend = read("InazumaClosetBlend2.buf");
+        const pose = read("pose.buf");
+        const deformer = descriptor(1005);
+        deformer.vertexCount = raw.byteLength / 20;
+        deformer.base = source(raw.byteLength, 20);
+        deformer.pose!.boneCount = 406;
+        deformer.pose!.blend = source(blend.byteLength, 32);
+        deformer.pose!.frames = source(pose.byteLength, 48);
+        const base = preparedPackedVertices(deformer.base, raw).buffer as ArrayBuffer;
+        const prepared = {
+            ...deformer,
+            base: { ...source(base.byteLength, 28), encoding: "packed_f32_v1" as const },
+        };
+        const frames = [6, 505, 1004].map((frameIndex) => {
+            const frame = computeCyclicPackedFrame(
+                prepared,
+                { base, blend, pose, shapeTargets: [] },
+                frameIndex,
+            );
+            const reference = computeCyclicPackedFrame(
+                deformer,
+                { base: raw, blend, pose, shapeTargets: [] },
+                frameIndex,
+            );
+            expect(frame.positions.every(Number.isFinite)).toBe(true);
+            expect(frame.normals.every(Number.isFinite)).toBe(true);
+            expect(frame).toEqual(reference);
+            return frame;
+        });
+        expect(frames[0].positions).not.toEqual(frames[1].positions);
+        expect(frames[1].positions).not.toEqual(frames[2].positions);
+    },
+);

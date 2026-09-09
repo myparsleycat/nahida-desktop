@@ -249,3 +249,15 @@ it.skipIf(!process.env.MODEL_VIEWER_PACKED_DQ_MOD)(
         expect(frames[1]!.positions).not.toEqual(frames[2]!.positions);
     },
 );
+
+it("matches the packed dual-quaternion output with backend-decoded vertices", () => {
+    const { deformer, buffers } = fixture();
+    const reference = computePackedDualQuaternionFrame(deformer, buffers, 0.5);
+    const decoded = new Float32Array([1, 2, 3, 4, 0, 0, 127]).buffer;
+    const prepared = {
+        ...deformer,
+        base: { ...deformer.base, encoding: "packed_f32_v1" as const, stride: 28, byteLength: 28 },
+    };
+    const actual = computePackedDualQuaternionFrame(prepared, { ...buffers, base: decoded }, 0.5);
+    expect(actual).toEqual(reference);
+});

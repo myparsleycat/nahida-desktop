@@ -2,6 +2,7 @@ import type { EvaluatedViewerState } from "@shared/mod-viewer/types";
 import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 
+import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
 import {
@@ -30,7 +31,10 @@ function meshWithTargets(
         basePositions: new Float32Array(base),
         shapeTargets,
         positionVariants: [],
-        normalCache: [],
+        baseNormals: new Float32Array(
+            (geometry.attributes.normal?.array as Float32Array | undefined) ?? [],
+        ),
+        lastPositionVariantIndex: null,
     };
     return mesh;
 }
@@ -113,17 +117,13 @@ describe("applyPayloadEval midpoint targets", () => {
             [0, 0, 0],
             [{ var: "shape", positions: new Float32Array([2, 0, 0]) }],
         );
-        mesh.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/variant.buf", stride: 40, sourceBytes: 12 },
-        ];
+        mesh.userData.positionVariants = [{ conditions: [], geometryUrl: "/variant.buf" }];
         const root = new Group();
         root.add(mesh);
         applyPayloadEval(root, evalState({ shape: 1 }));
         commitPayloadEval(root, {
             evalResult: variantEval(0),
-            positions: new Map([
-                ["mesh", { variantIndex: 0, positions: new Float32Array([9, 0, 0]) }],
-            ]),
+            positions: new Map([["mesh", { variantIndex: 0, ...preparedGeometry([9, 0, 0]) }]]),
         });
         const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
 
@@ -218,7 +218,10 @@ describe("applyPayloadEval packed maps", () => {
             basePositions: new Float32Array(9),
             shapeTargets: [],
             positionVariants: [],
-            normalCache: [],
+            baseNormals: new Float32Array(
+                (geometry.attributes.normal?.array as Float32Array | undefined) ?? [],
+            ),
+            lastPositionVariantIndex: null,
             materialProfile: "zzmi",
         };
         const diffuse = new Texture();
@@ -308,7 +311,10 @@ describe("applyPayloadEval packed maps", () => {
             basePositions: new Float32Array(9),
             shapeTargets: [],
             positionVariants: [],
-            normalCache: [],
+            baseNormals: new Float32Array(
+                (geometry.attributes.normal?.array as Float32Array | undefined) ?? [],
+            ),
+            lastPositionVariantIndex: null,
             materialProfile: "wuwa:rabbitfx",
             toonShadows: false,
         };
@@ -352,7 +358,10 @@ describe("applyPayloadEval packed maps", () => {
             basePositions: new Float32Array(9),
             shapeTargets: [],
             positionVariants: [],
-            normalCache: [],
+            baseNormals: new Float32Array(
+                (geometry.attributes.normal?.array as Float32Array | undefined) ?? [],
+            ),
+            lastPositionVariantIndex: null,
             materialProfile: "wuwa:rabbitfx",
             toonShadows: true,
         };
@@ -474,21 +483,17 @@ describe("lazy payload position variants", () => {
     it("requests only the active variant of visible meshes and commits atomically", async () => {
         const visible = meshWithTargets([0, 0, 0], []);
         visible.userData.meshId = "visible";
-        visible.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/visible.buf", stride: 40, sourceBytes: 40 },
-        ];
+        visible.userData.positionVariants = [{ conditions: [], geometryUrl: "/visible.buf" }];
         const hidden = meshWithTargets([0, 0, 0], []);
         hidden.userData.meshId = "hidden";
-        hidden.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/hidden.buf", stride: 40, sourceBytes: 40 },
-        ];
+        hidden.userData.positionVariants = [{ conditions: [], geometryUrl: "/hidden.buf" }];
         const root = new Group();
         root.add(visible, hidden);
         const requested: string[] = [];
         const loader: PositionVariantLoader = {
             load: async (variant) => {
-                requested.push(variant.sourceUrl);
-                return new Float32Array([9, 8, 7]);
+                requested.push(variant.geometryUrl);
+                return preparedGeometry([9, 8, 7]);
             },
         };
         const evaluated: EvaluatedViewerState = {
@@ -525,14 +530,12 @@ describe("lazy payload position variants", () => {
         commitPayloadEval(root, prepared);
         expect(Array.from(visible.geometry.attributes.position.array)).toEqual([9, 8, 7]);
         expect(hidden.visible).toBe(false);
-        expect(visible.userData.normalCache).toHaveLength(1);
+        expect(Array.from(visible.geometry.attributes.normal.array)).toEqual([0, 0, 1]);
     });
 
     it("does not mutate geometry when loading the requested variant fails", async () => {
         const mesh = meshWithTargets([1, 2, 3], []);
-        mesh.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/broken.buf", stride: 40, sourceBytes: 40 },
-        ];
+        mesh.userData.positionVariants = [{ conditions: [], geometryUrl: "/broken.buf" }];
         const root = new Group();
         root.add(mesh);
         const loader: PositionVariantLoader = {
@@ -545,7 +548,7 @@ describe("lazy payload position variants", () => {
             "decode failed",
         );
         expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([1, 2, 3]);
-        expect(mesh.userData.lastPositionVariantIndex).toBeUndefined();
+        expect(mesh.userData.lastPositionVariantIndex).toBeNull();
     });
 
     it("ignores prepared positions whose length does not match the geometry", () => {
@@ -555,43 +558,50 @@ describe("lazy payload position variants", () => {
 
         commitPayloadEval(root, {
             evalResult: variantEval(0),
-            positions: new Map([
-                ["mesh", { variantIndex: 0, positions: new Float32Array([9, 8]) }],
-            ]),
+            positions: new Map([["mesh", { variantIndex: 0, ...preparedGeometry([9, 8]) }]]),
         });
 
         expect(Array.from(mesh.geometry.attributes.position.array)).toEqual([1, 2, 3]);
-        expect(mesh.userData.lastPositionVariantIndex).toBeUndefined();
-        expect(mesh.userData.normalCache).toHaveLength(0);
+        expect(mesh.userData.lastPositionVariantIndex).toBeNull();
+        expect(mesh.userData.baseNormals).toHaveLength(3);
     });
 
-    it("bounds each mesh normal cache to the current and previous position", () => {
+    it("applies prepared normals and bounds without recomputation across repeated variants", () => {
         const mesh = meshWithTargets([0, 0, 0], []);
-        mesh.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/0.buf", stride: 40, sourceBytes: 40 },
-            { conditions: [], sourceUrl: "/1.buf", stride: 40, sourceBytes: 40 },
-            { conditions: [], sourceUrl: "/2.buf", stride: 40, sourceBytes: 40 },
-        ];
         const root = new Group();
         root.add(mesh);
-        for (let variantIndex = 0; variantIndex < 3; variantIndex++) {
+        const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
+        const bounds = vi.spyOn(mesh.geometry, "computeBoundingSphere");
+        for (const variantIndex of [0, 1, 2, 0, 1, 2]) {
             commitPayloadEval(root, {
                 evalResult: variantEval(variantIndex),
                 positions: new Map([
-                    [
-                        "mesh",
-                        {
-                            variantIndex,
-                            positions: new Float32Array([variantIndex, 0, 0]),
-                        },
-                    ],
+                    ["mesh", { variantIndex, ...preparedGeometry([variantIndex, 0, 0]) }],
                 ]),
             });
         }
-        expect(mesh.userData.normalCache).toHaveLength(2);
-        expect(mesh.userData.normalCache.map((entry: { key: number }) => entry.key)).toEqual([
-            2, 1,
-        ]);
+        expect(normals).not.toHaveBeenCalled();
+        expect(bounds).not.toHaveBeenCalled();
+        expect(Array.from(mesh.geometry.attributes.normal.array)).toEqual([0, 0, 1]);
+        expect(mesh.geometry.boundingSphere?.radius).toBe(2);
+    });
+
+    it("preserves authored base normals on initial application and after restoring a variant", () => {
+        const mesh = meshWithTargets([0, 0, 0], []);
+        mesh.userData.baseNormals = new Float32Array([1, 0, 0]);
+        mesh.geometry.attributes.normal.array.set([1, 0, 0]);
+        const root = new Group();
+        root.add(mesh);
+        const compute = vi.spyOn(mesh.geometry, "computeVertexNormals");
+        applyPayloadEval(root, variantEval(null));
+        expect(Array.from(mesh.geometry.attributes.normal.array)).toEqual([1, 0, 0]);
+        commitPayloadEval(root, {
+            evalResult: variantEval(0),
+            positions: new Map([["mesh", { variantIndex: 0, ...preparedGeometry([2, 0, 0]) }]]),
+        });
+        applyPayloadEval(root, variantEval(null));
+        expect(Array.from(mesh.geometry.attributes.normal.array)).toEqual([1, 0, 0]);
+        expect(compute).not.toHaveBeenCalled();
     });
 
     it("clears payload arrays, caches, and every root texture during disposal", () => {
@@ -599,10 +609,8 @@ describe("lazy payload position variants", () => {
             [1, 2, 3],
             [{ var: "shape", positions: new Float32Array([4, 5, 6]) }],
         );
-        mesh.userData.positionVariants = [
-            { conditions: [], sourceUrl: "/0.buf", stride: 40, sourceBytes: 40 },
-        ];
-        mesh.userData.normalCache = [{ key: 0, normal: new Float32Array(3) }];
+        mesh.userData.positionVariants = [{ conditions: [], geometryUrl: "/0.buf" }];
+        mesh.userData.baseNormals = new Float32Array(3);
         mesh.userData.lastShapeSignature = "shape:1";
         const texture = new Texture();
         const dispose = vi.spyOn(texture, "dispose");
@@ -617,7 +625,44 @@ describe("lazy payload position variants", () => {
         expect(mesh.userData.basePositions).toHaveLength(0);
         expect(mesh.userData.shapeTargets).toHaveLength(0);
         expect(mesh.userData.positionVariants).toHaveLength(0);
-        expect(mesh.userData.normalCache).toHaveLength(0);
+        expect(mesh.userData.baseNormals).toHaveLength(0);
         expect(mesh.userData.lastShapeSignature).toBeUndefined();
     });
 });
+
+function preparedGeometry(values: number[]): ModelViewerPositionGeometry {
+    return {
+        positions: new Float32Array(values),
+        normals: Float32Array.from(values, (_, index) => (index % 3 === 2 ? 1 : 0)),
+        bounds: { min: [-2, -2, -2], max: [2, 2, 2], center: [0, 0, 0], radius: 2 },
+    };
+}
+
+it.each(["linear", "midpoint_pair"] as const)(
+    "preserves authored normals for neutral %s shape weights",
+    (mode) => {
+        const mesh = meshWithTargets(
+            [0, 0, 0],
+            [
+                {
+                    var: "shape",
+                    positions: new Float32Array([2, 0, 0]),
+                    mode: mode === "midpoint_pair" ? mode : undefined,
+                },
+            ],
+        );
+        mesh.userData.baseNormals = new Float32Array([1, 0, 0]);
+        mesh.geometry.attributes.normal.array.set([1, 0, 0]);
+        const root = new Group();
+        root.add(mesh);
+        const normal = vi.spyOn(mesh.geometry, "computeVertexNormals");
+        applyPayloadEval(root, evalState({ shape: mode === "midpoint_pair" ? 0.5 : 0 }));
+        expect(normal).not.toHaveBeenCalled();
+        expect(Array.from(mesh.geometry.attributes.normal.array)).toEqual([1, 0, 0]);
+        applyPayloadEval(root, evalState({ shape: 1 }));
+        normal.mockClear();
+        applyPayloadEval(root, evalState({ shape: mode === "midpoint_pair" ? 0.5 : 0 }));
+        expect(normal).not.toHaveBeenCalled();
+        expect(Array.from(mesh.geometry.attributes.normal.array)).toEqual([1, 0, 0]);
+    },
+);

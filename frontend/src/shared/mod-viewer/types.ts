@@ -1,3 +1,5 @@
+import type { ModelViewerBounds } from "@bindings/tools";
+
 export type DnfClause = {
     var: string;
     value: string;
@@ -122,6 +124,7 @@ export type ViewerAnimationClip = {
 };
 
 export type ViewerComputeBinarySource = {
+    encoding?: "packed_f32_v1";
     url: string;
     byteLength: number;
     stride: number;
@@ -158,6 +161,7 @@ export type ViewerComputeDeformerKind =
 
 export type ViewerComputeDeformer = {
     kind: ViewerComputeDeformerKind;
+    meshSourceIndices?: Record<string, string | undefined>;
     id: string;
     meshIds: string[];
     vertexCount: number;
@@ -230,15 +234,14 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
     uvsUrl?: string;
     indicesUrl: string;
     sourceIndicesUrl?: string;
+    bounds?: ModelViewerBounds;
     shapeTargets: Array<{
         var: string;
         positionsUrl: string;
         mode?: "midpoint_pair";
         lowPositionsUrl?: string;
     }>;
-    positionVariants: Array<
-        PositionVariant & { sourceUrl: string; stride: number; sourceBytes: number }
-    >;
+    positionVariants: Array<PositionVariant & { geometryUrl: string }>;
 };
 
 export type ModViewerTransport = {

@@ -102,3 +102,44 @@ describe("packed cyclic shapekey kernel", () => {
         expect(frame.positions[1]).toBeCloseTo(5);
     });
 });
+
+it("matches shape interpolation with backend-decoded stage endpoints", () => {
+    const shape = stage();
+    const deformer = descriptor([shape]);
+    const reference = computePackedShapeFrame(
+        deformer,
+        [{ base: packedVertex(0, 0, 0, -128, 0, 0), target: packedVertex(10, 0, 0, 0, 127, 0) }],
+        0.25,
+    );
+    const prepared = {
+        ...deformer,
+        shapeStages: [
+            {
+                ...shape,
+                base: {
+                    ...shape.base,
+                    encoding: "packed_f32_v1" as const,
+                    stride: 28,
+                    byteLength: 28,
+                },
+                target: {
+                    ...shape.target,
+                    encoding: "packed_f32_v1" as const,
+                    stride: 28,
+                    byteLength: 28,
+                },
+            },
+        ],
+    };
+    const result = computePackedShapeFrame(
+        prepared,
+        [
+            {
+                base: new Float32Array([0, 0, 0, 1, -128, 0, 0]).buffer,
+                target: new Float32Array([10, 0, 0, 1, 0, 127, 0]).buffer,
+            },
+        ],
+        0.25,
+    );
+    expect(result).toEqual(reference);
+});
