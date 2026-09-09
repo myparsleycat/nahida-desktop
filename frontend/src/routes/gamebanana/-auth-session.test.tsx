@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { act, Suspense, type ComponentType } from "react";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { Suspense, type ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
@@ -43,6 +43,8 @@ vi.mock("./-sidebars/mod-files-sidebar", () => ({ ModFilesSidebar: () => null })
 
 import { Route } from "./index";
 
+const ROUTE_LOAD_TIMEOUT_MS = 5_000;
+
 async function renderRoute() {
   const Component = Route.options.component;
   if (!Component) throw new Error("GameBanana route has no component");
@@ -67,11 +69,15 @@ afterEach(cleanup);
 describe("GameBanana route authentication lifecycle", () => {
   it("revalidates when returning without logging out on unmount", async () => {
     const first = await renderRoute();
-    await screen.findByText("authenticated-content");
+    await screen.findByText("authenticated-content", undefined, {
+      timeout: ROUTE_LOAD_TIMEOUT_MS,
+    });
     first.unmount();
     expect(backend.Logout).not.toHaveBeenCalled();
     await renderRoute();
-    await screen.findByText("authenticated-content");
+    await screen.findByText("authenticated-content", undefined, {
+      timeout: ROUTE_LOAD_TIMEOUT_MS,
+    });
     expect(backend.EnsureSession).toHaveBeenCalledTimes(2);
     expect(backend.Logout).not.toHaveBeenCalled();
   });

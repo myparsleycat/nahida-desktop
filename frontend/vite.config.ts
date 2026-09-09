@@ -13,7 +13,7 @@ export default defineConfig({
             "@renderer": resolve("src"),
             "@shared": resolve("src/shared"),
             "@": resolve("src"),
-            "@bindings": resolve(__dirname, "./bindings/nahida.live/desktop/internal"),
+            "@bindings": resolve(import.meta.dirname, "./bindings/nahida.live/desktop/internal"),
         },
     },
     server: {
