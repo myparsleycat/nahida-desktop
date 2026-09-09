@@ -5,6 +5,7 @@ package platform
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func TestUpdateModelViewerMenuSkipsWhenKeyAbsent(t *testing.T) {
 		}
 	})
 
-	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko")
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestUpdateModelViewerMenuRewritesLabel(t *testing.T) {
 	}
 	r = 0
 
-	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ja")
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ja", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,5 +90,89 @@ func TestUpdateModelViewerMenuRewritesLabel(t *testing.T) {
 	got, _, err := key.GetStringValue("")
 	if err != nil || got != modelViewerMenuLabel("ja") {
 		t.Fatalf("label = %q, want %q, error = %v", got, modelViewerMenuLabel("ja"), err)
+	}
+}
+
+func TestUpdateModelViewerMenuCreatesInstalledRegistration(t *testing.T) {
+	root := fmt.Sprintf(`Software\Classes\nahida-mv-test-%d`, time.Now().UnixNano())
+	path := root + `\shell\verb`
+	t.Cleanup(func() {
+		for _, suffix := range []string{`\shell\verb\command`, `\shell\verb`, `\shell`, ``} {
+			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
+		}
+	})
+	executable := filepath.Join(t.TempDir(), "Nahida Desktop.exe")
+
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko", executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated {
+		t.Fatal("installed registration must be created")
+	}
+	key, err := registry.OpenKey(registry.CURRENT_USER, path, registry.QUERY_VALUE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = key.Close() }()
+	for name, want := range map[string]string{
+		"":                 modelViewerMenuLabel("ko"),
+		"Icon":             fmt.Sprintf(`"%s",0`, filepath.Clean(executable)),
+		"MultiSelectModel": "Single",
+	} {
+		got, _, err := key.GetStringValue(name)
+		if err != nil || got != want {
+			t.Fatalf("%s = %q, want %q, error = %v", name, got, want, err)
+		}
+	}
+	commandKey, err := registry.OpenKey(registry.CURRENT_USER, path+`\command`, registry.QUERY_VALUE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = commandKey.Close() }()
+	command, _, err := commandKey.GetStringValue("")
+	wantCommand := fmt.Sprintf(`"%s" --model-viewer "%%1"`, filepath.Clean(executable))
+	if err != nil || command != wantCommand {
+		t.Fatalf("command = %q, want %q, error = %v", command, wantCommand, err)
+	}
+}
+
+func TestUpdateModelViewerMenuRepairsInstalledRegistration(t *testing.T) {
+	root := fmt.Sprintf(`Software\Classes\nahida-mv-test-%d`, time.Now().UnixNano())
+	path := root + `\shell\verb`
+	t.Cleanup(func() {
+		for _, suffix := range []string{`\shell\verb\command`, `\shell\verb`, `\shell`, ``} {
+			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
+		}
+	})
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, path, registry.SET_VALUE|registry.CREATE_SUB_KEY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := key.SetStringValue("", "stale label"); err != nil {
+		_ = key.Close()
+		t.Fatal(err)
+	}
+	if err := key.Close(); err != nil {
+		t.Fatal(err)
+	}
+	executable := filepath.Join(t.TempDir(), "Nahida Desktop.exe")
+
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "en", executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated {
+		t.Fatal("installed registration must be repaired")
+	}
+	commandKey, err := registry.OpenKey(registry.CURRENT_USER, path+`\command`, registry.QUERY_VALUE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = commandKey.Close() }()
+	command, _, err := commandKey.GetStringValue("")
+	wantCommand := fmt.Sprintf(`"%s" --model-viewer "%%1"`, filepath.Clean(executable))
+	if err != nil || command != wantCommand {
+		t.Fatalf("command = %q, want %q, error = %v", command, wantCommand, err)
 	}
 }
