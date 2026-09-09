@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -33,6 +34,10 @@ func isModelViewerPackedObjectStride(stride int) bool {
 }
 
 func modelViewerPackedObjectLayout(indexFormat string, stride int) modelViewerFmtLayout {
+	return modelViewerPackedObjectLayoutAt(indexFormat, stride, 12)
+}
+
+func modelViewerPackedObjectLayoutAt(indexFormat string, stride, texcoordOffset int) modelViewerFmtLayout {
 	if indexFormat == "" {
 		indexFormat = "DXGI_FORMAT_R32_UINT"
 	}
@@ -46,7 +51,7 @@ func modelViewerPackedObjectLayout(indexFormat string, stride int) modelViewerFm
 		Elements: []modelViewerFmtElement{
 			{SemanticName: "POSITION", Format: "DXGI_FORMAT_R16G16B16A16_FLOAT", AlignedByteOffset: 0, InputSlotClass: "per-vertex"},
 			{SemanticName: "NORMAL", Format: "DXGI_FORMAT_R8G8B8A8_SINT", AlignedByteOffset: 8, InputSlotClass: "per-vertex"},
-			{SemanticName: "TEXCOORD", Format: "DXGI_FORMAT_R16G16_FLOAT", AlignedByteOffset: 12, InputSlotClass: "per-vertex"},
+			{SemanticName: "TEXCOORD", Format: "DXGI_FORMAT_R16G16_FLOAT", AlignedByteOffset: texcoordOffset, InputSlotClass: "per-vertex"},
 		},
 	}
 }
@@ -75,12 +80,12 @@ func isKnownModelViewerGIMICyclicPackedBoneShader(shader string) bool {
 	return strings.Contains(compact, "int4indicies") || strings.Contains(compact, "int4indices")
 }
 
-func collectModelViewerPackedObjectResources(root, shaderBaseDir string, sections []modINISection) map[string]bool {
-	packed := map[string]bool{}
+func collectModelViewerPackedObjectResources(root, shaderBaseDir string, sections []modINISection) map[string]int {
+	packed := map[string]int{}
 	reachable := collectModelViewerReachableComputeSections(sections)
-	add := func(name string) {
+	add := func(name string, texcoordOffset int) {
 		if key := modelViewerNormalizeKey(name); key != "" {
-			packed[key] = true
+			packed[key] = texcoordOffset
 		}
 	}
 	for _, section := range sections {
@@ -89,11 +94,17 @@ func collectModelViewerPackedObjectResources(root, shaderBaseDir string, section
 		}
 		for _, pass := range collectModelViewerComputePasses(section) {
 			shader, ok := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
-			if !ok || !isKnownModelViewerPackedObjectShader(shader) {
+			if !ok {
 				continue
 			}
-			add(pass.outputName)
-			add(pass.t50)
+			texcoordOffset := 12
+			if isKnownModelViewerPackedDualQuaternionShader(shader) {
+				texcoordOffset = 16
+			} else if !isKnownModelViewerPackedObjectShader(shader) {
+				continue
+			}
+			add(pass.outputName, texcoordOffset)
+			add(pass.t50, texcoordOffset)
 		}
 	}
 	return packed
@@ -222,6 +233,7 @@ func modelViewerResourceVertexCount(modDir string, resource modelViewerResource,
 
 type modelViewerDrawVertexSource struct {
 	kind                           string
+	packedTexcoordOffset           int
 	ib, position, texcoord, vector modelViewerResource
 	packed                         []byte
 	packedStride                   int
@@ -234,7 +246,7 @@ func resolveModelViewerDrawVertexSource(
 	resourceMap map[string]modelViewerResource,
 	resources []modelViewerResource,
 	cache *modelViewerBufferCache,
-	packedResources map[string]bool,
+	packedResources map[string]int,
 ) modelViewerDrawVertexSource {
 	ib, ibOK := resourceMap[modelViewerNormalizeKey(state.ib)]
 	position, posOK := resourceMap[modelViewerNormalizeKey(state.vb0)]
@@ -253,7 +265,14 @@ func resolveModelViewerDrawVertexSource(
 		source.texcoord = texcoord
 		return source
 	}
-	shaderPacked := packedResources[modelViewerNormalizeKey(position.Name)] || packedResources[modelViewerNormalizeKey(state.vb0)]
+	source.packedTexcoordOffset = packedResources[modelViewerNormalizeKey(state.vb0)]
+	if source.packedTexcoordOffset == 0 {
+		source.packedTexcoordOffset = packedResources[modelViewerNormalizeKey(position.Name)]
+	}
+	shaderPacked := source.packedTexcoordOffset != 0
+	if !shaderPacked {
+		source.packedTexcoordOffset = 12
+	}
 	texcoord, tcOK := resourceMap[modelViewerNormalizeKey(state.vb1)]
 	if !tcOK || texcoord.Filename == "" {
 		if raw, packedStride, packed := readModelViewerPackedObjectBuffer(modDir, position, cache, shaderPacked); packed {
@@ -316,11 +335,15 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 		if stride <= 0 {
 			stride = modelViewerPackedObjectStride
 		}
+		texcoordOffset := source.packedTexcoordOffset
+		if texcoordOffset == 16 {
+			texcoordOffset = resolveModelViewerPackedTexcoordOffset(modDir, position, source.packed, stride, cache)
+		}
 		return modelViewerDrawVertexBuffers{
 			combined:  source.packed,
 			stride:    stride,
 			posStride: stride,
-			layout:    modelViewerPackedObjectLayout(source.ib.Format, stride),
+			layout:    modelViewerPackedObjectLayoutAt(source.ib.Format, stride, texcoordOffset),
 		}, true, nil
 	case modelViewerDrawVertexWWMI:
 		vectorStride := vector.Stride
@@ -372,6 +395,41 @@ func loadModelViewerDrawVertexBuffers(modDir string, source modelViewerDrawVerte
 	default:
 		return modelViewerDrawVertexBuffers{}, false, nil
 	}
+}
+
+// Some compute shaders name the untouched UV word "tangent". Only override
+// their declared layout when a separate UV stream matches every vertex byte.
+func resolveModelViewerPackedTexcoordOffset(modDir string, position modelViewerResource, packed []byte, stride int, cache *modelViewerBufferCache) int {
+	if stride < 20 || len(packed) == 0 || len(packed)%stride != 0 {
+		return 16
+	}
+	for _, filename := range modelViewerSiblingTexcoordFilenames(position) {
+		resolved, err := resolveModelViewerResourcePath(modDir, modDir, filename)
+		if err != nil || !modelViewerPathWithin(modDir, resolved) {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(packed)/stride)*4 {
+			continue
+		}
+		uv, err := cache.read(resolved)
+		if err != nil || len(uv) != len(packed)/stride*4 {
+			continue
+		}
+		for _, offset := range []int{16, 12} {
+			matches := true
+			for vertex := range len(uv) / 4 {
+				if !bytes.Equal(uv[vertex*4:vertex*4+4], packed[vertex*stride+offset:vertex*stride+offset+4]) {
+					matches = false
+					break
+				}
+			}
+			if matches {
+				return offset
+			}
+		}
+	}
+	return 16
 }
 
 func normalizeModelViewerPackedObjectNormals(normals []float32) {

@@ -176,6 +176,7 @@ export function normalizeModelViewerTransport(
         computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
             if (
                 deformer.kind !== "gimi_shape_pose_v1" &&
+                deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
                 deformer.kind !== "gimi_cyclic_packed_v1" &&
                 deformer.kind !== "gimi_cyclic_packed_shape_v1"
             ) {
