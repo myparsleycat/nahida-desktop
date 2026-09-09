@@ -26,13 +26,15 @@ func setInstalledVersionTestValue(t *testing.T, path, value string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		if err := key.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	if value != "" {
 		if err := key.SetStringValue("DisplayVersion", value); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := key.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
 
