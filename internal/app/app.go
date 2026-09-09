@@ -72,6 +72,9 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil && rt.log != nil {
 		_ = infra.ReportError(rt.log, err, "App:registerURLProtocol", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:registerURLProtocol", Stage: "background"})
 	}
+	if err := platform.SyncInstalledVersion(); err != nil && rt.log != nil {
+		_ = infra.ReportError(rt.log, err, "App:syncInstalledVersion", infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncInstalledVersion", Stage: "background"})
+	}
 	autostartSync := func(enabled bool) error {
 		return syncAutostart(app.Autostart, enabled)
 	}
