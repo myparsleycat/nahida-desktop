@@ -36,6 +36,9 @@
 - Go tests: `task test` (runs `go test ./...`)
 - Go lint: `task lint`
 - Go lint with fixes: `task lint:fix`
+- Go formatting: `task fmt -- <files-or-directories...>` (gofmt, goimports, golines; 120 columns)
+- Go formatting preview/check: `task fmt:check -- <paths...>` (defaults to the whole repository; writes nothing)
+- VS Code Go formatter setup: `task fmt:setup` (repeat after updating the pinned lint module)
 - Vulnerability scan: `task vuln`
 - Run frontend commands from the `frontend/` directory.
 - Frontend build: `pnpm build`
@@ -47,6 +50,15 @@
 - Release-script tests from the repository root: `pnpm test`
 
 Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks so the pinned tool versions are used.
+
+### Go formatting
+
+- Format changed Go files with `task fmt -- <files...>` and check them with `task fmt:check -- <files...>`.
+- Use the formatter settings in `.golangci.yml`. `golines` targets 120 columns with four-column tabs; it does not guarantee wrapping every string, comment, or expression.
+- `task fmt` requires explicit paths to avoid accidental repository-wide rewrites. Preview larger scopes with `task fmt:check` first.
+- Wrapping is enabled explicitly by the formatting tasks and VS Code. `task lint` and `task lint:fix` retain the existing gofmt/goimports checks while legacy files are migrated incrementally; `lint:fix` is not a substitute for `fmt`.
+- In VS Code, open the repository root, install the recommended Go extension, and run `task fmt:setup` once. Repeat setup after changing `golangci-lint.mod` or `golangci-lint.sum`.
+- Go saves use the project-pinned `.task/bin/golangci-lint.exe` through the Go extension, passing the current buffer to `fmt --stdin`. The same gofmt/goimports/golines pipeline handles standard formatting, imports, and wrapping. Go's separate organize-imports save action is disabled to avoid competing import rules.
 
 ## Code Generation
 

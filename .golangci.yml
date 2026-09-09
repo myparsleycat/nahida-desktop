@@ -22,6 +22,8 @@ linters:
       - examples$
 
 formatters:
+  # Keep existing lint checks while adopting wrapping incrementally.
+  # task fmt / fmt:check and VS Code explicitly enable gofmt,goimports,golines.
   enable:
     - gofmt
     - goimports
@@ -29,6 +31,11 @@ formatters:
     goimports:
       local-prefixes:
         - nahida.live/desktop
+    golines:
+      max-len: 120
+      tab-len: 4
+      shorten-comments: false
+      reformat-tags: false
   exclusions:
     generated: lax
     paths:

@@ -5,6 +5,27 @@
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
+  "go.formatTool": "custom",
+  "go.alternateTools": {
+    "customFormatter": "${workspaceFolder}/.task/bin/golangci-lint.exe"
+  },
+  "go.formatFlags": [
+    "fmt",
+    "--enable=gofmt,goimports,golines",
+    "--stdin",
+    "--config=${workspaceFolder}/.golangci.yml"
+  ],
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file",
+    "editor.rulers": [120],
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "never"
+    }
+  },
   "[javascript]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },

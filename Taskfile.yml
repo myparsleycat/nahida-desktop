@@ -77,6 +77,32 @@ tasks:
     cmds:
       - go tool -modfile="./golangci-lint.mod" golangci-lint run --fix ./...
 
+  fmt:
+    summary: Formats selected Go files with gofmt, goimports, and golines
+    desc: 'Pass explicit paths: task fmt -- internal/tools/model_viewer_derived_geometry.go'
+    preconditions:
+      - sh: '{{if .CLI_ARGS}}true{{else}}false{{end}}'
+        msg: "Pass Go files or directories after --. Use task fmt:check to preview the whole repository."
+    cmds:
+      - go tool -modfile="./golangci-lint.mod" golangci-lint fmt --enable=gofmt,goimports,golines {{.CLI_ARGS}}
+
+  fmt:check:
+    summary: Previews Go formatting changes without writing files
+    desc: 'Checks explicit paths, or the whole repository by default. Exits nonzero when formatting differs.'
+    cmds:
+      - go tool -modfile="./golangci-lint.mod" golangci-lint fmt --enable=gofmt,goimports,golines --diff {{.CLI_ARGS | default "./..."}}
+
+  fmt:setup:
+    summary: Builds the project-pinned formatter for VS Code
+    desc: 'Run once after cloning and again after updating golangci-lint.mod or golangci-lint.sum.'
+    sources:
+      - golangci-lint.mod
+      - golangci-lint.sum
+    generates:
+      - .task/bin/golangci-lint.exe
+    cmds:
+      - go build -modfile="./golangci-lint.mod" -o ./.task/bin/golangci-lint.exe github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
   vuln:
     summary: Runs govulncheck
     desc: |
