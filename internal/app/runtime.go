@@ -110,7 +110,7 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil))
 	rt := &runtime{
 		log:      log,
 		store:    infra.NewStore(),
@@ -182,7 +182,7 @@ func newRuntime() *runtime {
 			rt.drive.UseFixInspection(queueFixInspections)
 		}
 	}
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil))
 	return rt
 }
 

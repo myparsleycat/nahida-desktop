@@ -75,7 +75,13 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	autostartSync := func(enabled bool) error {
 		return syncAutostart(app.Autostart, enabled)
 	}
-	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent))
+	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
+	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent, syncModelViewerMenu))
+	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
+		syncModelViewerMenu(language)
+	} else if rt.log != nil {
+		_ = infra.ReportError(rt.log, langErr, "App:syncModelViewerMenu", infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "read-language"})
+	}
 	enabled, err := rt.setting.GetRunOnStartup(context.Background())
 	if err == nil {
 		err = autostartSync(enabled)
