@@ -149,9 +149,15 @@ func TestUpdateModelViewerMenuRepairsInstalledRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := key.SetStringValue("", "stale label"); err != nil {
-		_ = key.Close()
-		t.Fatal(err)
+	for name, value := range map[string]string{
+		"":                 "stale label",
+		"Icon":             "stale icon",
+		"MultiSelectModel": "stale selection mode",
+	} {
+		if err := key.SetStringValue(name, value); err != nil {
+			_ = key.Close()
+			t.Fatal(err)
+		}
 	}
 	if err := key.Close(); err != nil {
 		t.Fatal(err)
@@ -164,6 +170,21 @@ func TestUpdateModelViewerMenuRepairsInstalledRegistration(t *testing.T) {
 	}
 	if !updated {
 		t.Fatal("installed registration must be repaired")
+	}
+	key, err = registry.OpenKey(registry.CURRENT_USER, path, registry.QUERY_VALUE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = key.Close() }()
+	for name, want := range map[string]string{
+		"":                 modelViewerMenuLabel("en"),
+		"Icon":             fmt.Sprintf(`"%s",0`, filepath.Clean(executable)),
+		"MultiSelectModel": "Single",
+	} {
+		got, _, err := key.GetStringValue(name)
+		if err != nil || got != want {
+			t.Fatalf("%s = %q, want %q, error = %v", name, got, want, err)
+		}
 	}
 	commandKey, err := registry.OpenKey(registry.CURRENT_USER, path+`\command`, registry.QUERY_VALUE)
 	if err != nil {
