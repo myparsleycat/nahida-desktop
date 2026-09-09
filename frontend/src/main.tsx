@@ -36,6 +36,7 @@ const router = createRouter({
 });
 
 router.subscribe("onResolved", ({ toLocation }) => {
+  if (toLocation.pathname === "/model-viewer-window") return;
   void AppWindow.SyncRoute(toLocation.href);
 });
 

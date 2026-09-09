@@ -95,12 +95,12 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.setting == nil {
 		rt.setting = setting.NewWithOptions(store.DB, setting.Options{
 			Locale: platform.SystemLocale(),
-			Hooks:  runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent),
+			Hooks:  runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil),
 		})
 	} else {
 		rt.setting.UseClient(store.DB)
 		rt.setting.UseLocale(platform.SystemLocale())
-		rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent))
+		rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil))
 	}
 	if rt.transfer != nil {
 		rt.transfer.UseSettings(rt.setting)

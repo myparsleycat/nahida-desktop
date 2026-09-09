@@ -110,7 +110,7 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil))
 	rt := &runtime{
 		log:      log,
 		store:    infra.NewStore(),
@@ -146,7 +146,8 @@ func newRuntime() *runtime {
 		mod:        modService,
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
-			Log: log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
+			FindModelViewerPreview: modService.FindModelViewerPreview,
+			Log:                    log, EventEmit: eventEmit, Settings: settings, XXMI: xxmiService,
 			FS: fs, HTTP: httpClient, Download: download, Archive: archive, Protocol: protocolService, GitHubRate: githubRate, Mod: modService,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
@@ -181,7 +182,7 @@ func newRuntime() *runtime {
 			rt.drive.UseFixInspection(queueFixInspections)
 		}
 	}
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil))
 	return rt
 }
 

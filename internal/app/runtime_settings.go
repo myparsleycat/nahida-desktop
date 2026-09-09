@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
 	"nahida.live/desktop/internal/transfer"
 )
 
-func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *infra.Updater, toolsService *tools.Tools, windowService *Window, autostart func(bool) error, emit func(string, ...any)) setting.Hooks {
+func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *infra.Updater, toolsService *tools.Tools, windowService *Window, autostart func(bool) error, emit func(string, ...any), syncModelViewerMenu func(language string)) setting.Hooks {
 	return setting.Hooks{
 		AfterRunOnStartupChanged: autostart,
 		AfterSet: func(key string, value any) {
@@ -28,6 +29,9 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 			}
 			if updater != nil {
 				updater.HandleLanguageChanged(language)
+			}
+			if syncModelViewerMenu != nil {
+				syncModelViewerMenu(language)
 			}
 		},
 		AfterAutoUpdateModeChanged: func(mode string) {
@@ -62,5 +66,13 @@ func runtimeSettingHooks(log *infra.Log, transfers *transfer.Transfer, updater *
 			}
 			toolsService.StopPersistWatcher()
 		},
+	}
+}
+
+func modelViewerMenuSyncer(log *infra.Log) func(language string) {
+	return func(language string) {
+		if err := platform.UpdateModelViewerContextMenu(language); err != nil {
+			_ = infra.ReportError(log, err, "App:syncModelViewerMenu", infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "background"})
+		}
 	}
 }

@@ -1,4 +1,4 @@
-Unicode true
+﻿Unicode true
 
 ####
 ## Please note: Template replacements don't work in this file. They are provided with default defines like
@@ -28,17 +28,50 @@ Unicode true
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
 ####
-## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
-## !define WAILS_INSTALL_SCOPE     "user"             # Default "machine" - set to "user" for per-user install ($LOCALAPPDATA) without UAC prompt
+## Nahida supports per-user installation only, including Explorer label updates.
 ####
 ## Include the wails tools
 ####
+!ifndef WAILS_INSTALL_SCOPE
+    !define WAILS_INSTALL_SCOPE "user"
+!endif
+!if "${WAILS_INSTALL_SCOPE}" != "user"
+    !error "Nahida supports per-user installation only (WAILS_INSTALL_SCOPE=user)."
+!endif
+!ifndef REQUEST_EXECUTION_LEVEL
+    !define REQUEST_EXECUTION_LEVEL "user"
+!endif
+!if "${REQUEST_EXECUTION_LEVEL}" != "user"
+    !error "Nahida requires REQUEST_EXECUTION_LEVEL=user."
+!endif
 !include "wails_tools.nsh"
 !include "..\..\..\bin\release-version.nsh"
 
 # Keep this in sync with application.SingleInstanceOptions.UniqueID. Wails
 # creates this mutex before starting backend services.
 !define APP_SINGLE_INSTANCE_MUTEX "wails-app-com.nahida.desktop-sim"
+
+!define MODEL_VIEWER_KEY "Software\Classes\Directory\shell\nahida.live.ModelViewer"
+!if "${WAILS_INSTALL_SCOPE}" == "user"
+    !define MODEL_VIEWER_HIVE HKCU
+!else
+    !define MODEL_VIEWER_HIVE HKLM
+!endif
+
+!macro nahida.registerModelViewer
+    SetRegView 64
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "" "모델 뷰어로 보기"
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "Icon" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\",0'
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "MultiSelectModel" "Single"
+    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}\command" "" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" --model-viewer $\"%1$\"'
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
+!macro nahida.unregisterModelViewer
+    SetRegView 64
+    DeleteRegKey ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${NAHIDA_NUMERIC_VERSION}"
@@ -120,6 +153,7 @@ Section
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
+    !insertmacro nahida.registerModelViewer
     
     !insertmacro wails.writeUninstaller
 SectionEnd
@@ -142,6 +176,7 @@ Section "uninstall"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
+    !insertmacro nahida.unregisterModelViewer
 
     !insertmacro wails.deleteUninstaller
     RMDir "$INSTDIR"

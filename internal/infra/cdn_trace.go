@@ -46,7 +46,7 @@ func (t *CDNTrace) Get(ctx context.Context) (raw string, returnErr error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", c.userAgent())
+	req.Header.Set("User-Agent", c.UserAgent())
 
 	stage = "request"
 	resp, err := c.HTTPClient().Do(req)

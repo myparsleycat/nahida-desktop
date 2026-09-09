@@ -15,9 +15,7 @@ import (
 
 func Run(assets embed.FS, icon []byte) (runErr error) {
 	rt := newRuntime()
-	route := nahidaDeepLinkRoute(os.Args)
-	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "")
-	rt.window.SetInitialRoute(route)
+	launches := &launchDispatcher{}
 	app := newLockedApplication(application.Options{
 		Name:        "nahida-desktop",
 		Description: "Native app for nahida.live",
@@ -32,7 +30,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.nahida.desktop",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				rt.window.HandleArguments(data.Args)
+				launches.Enqueue(data)
 			},
 		},
 		Assets: application.AssetOptions{
@@ -51,6 +49,12 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if err != nil {
 		return err
 	}
+	route := ""
+	if modelViewerArgument(os.Args, in.Cwd) == "" {
+		route = nahidaDeepLinkRoute(os.Args)
+	}
+	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "")
+	rt.window.SetInitialRoute(route)
 	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
 	}
@@ -71,7 +75,13 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	autostartSync := func(enabled bool) error {
 		return syncAutostart(app.Autostart, enabled)
 	}
-	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent))
+	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
+	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, autostartSync, emitAppEvent, syncModelViewerMenu))
+	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
+		syncModelViewerMenu(language)
+	} else if rt.log != nil {
+		_ = infra.ReportError(rt.log, langErr, "App:syncModelViewerMenu", infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "read-language"})
+	}
 	enabled, err := rt.setting.GetRunOnStartup(context.Background())
 	if err == nil {
 		err = autostartSync(enabled)
@@ -81,6 +91,12 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)
+	app.Window.OnCreate(func(window application.Window) {
+		window.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
+			rt.tools.CleanupModelViewerWindow(window.ID())
+		})
+	})
+	viewers := newModelViewerWindows(app, rt)
 	if rt.gameBananaLogin != nil {
 		rt.gameBananaLogin.Configure(app, rt.window, rt.log)
 	}
@@ -99,7 +115,8 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		newWindow(app, rt.window)
+		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
+			newLaunchHandler(viewers.Open, func() { newWindow(app, rt.window) }, rt.window.HandleArguments))
 	})
 	newTray(app, rt, icon)
 	registerDeepLink(app, rt.window)

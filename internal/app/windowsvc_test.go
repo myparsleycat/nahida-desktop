@@ -129,7 +129,7 @@ func TestSetConsoleWindowEnabledRecreatesWindowAndPreservesRoute(t *testing.T) {
 	if current == nil {
 		t.Fatal("Create returned nil")
 	}
-	window.SyncRoute("/setting/gen?tab=advanced")
+	window.SyncRoute(context.WithValue(context.Background(), application.WindowKey, current), "/setting/gen?tab=advanced")
 
 	window.SetConsoleWindowEnabled(true)
 

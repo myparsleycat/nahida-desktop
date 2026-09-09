@@ -226,3 +226,13 @@ func findPreview(root string, searchSubfolders bool, reports ...func(error)) *st
 	}
 	return findGroupPreview(root, depth, reports...)
 }
+
+// FindModelViewerPreview reuses the mod scanner's preview ranking without requiring a registered game.
+//
+//wails:ignore
+func (m *Mod) FindModelViewerPreview(path string) *string {
+	if preview := findScannerPreviewWalk(path, previewSearchDepth); preview != nil {
+		return stringPointer(preview.path)
+	}
+	return nil
+}

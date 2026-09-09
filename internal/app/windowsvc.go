@@ -344,8 +344,11 @@ func (w *Window) OpenSetting() { w.FocusAndNavigate("/setting/gen") }
 
 // SyncRoute keeps the SPA route available when the native window must be
 // recreated to change WebView devtools availability.
-func (w *Window) SyncRoute(route string) {
+func (w *Window) SyncRoute(ctx context.Context, route string) {
 	if w == nil {
+		return
+	}
+	if window, ok := ctx.Value(application.WindowKey).(application.Window); !ok || window.Name() != "main" {
 		return
 	}
 	route = normalizeWindowRoute(route)

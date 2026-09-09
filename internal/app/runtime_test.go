@@ -55,6 +55,7 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 		data any
 	}
 	var got []event
+	var synced []string
 	hooks := runtimeSettingHooks(nil, nil, nil, nil, nil, nil, func(name string, data ...any) {
 		payload := any(nil)
 		if len(data) == 1 {
@@ -63,10 +64,16 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 			payload = data
 		}
 		got = append(got, event{name: name, data: payload})
+	}, func(language string) {
+		synced = append(synced, language)
 	})
 	hooks.AfterLanguageChanged("ko")
 	hooks.AfterSet(setting.KeyGeneralLanguage, "ko")
 	hooks.AfterRendererReload()
+
+	if len(synced) != 1 || synced[0] != "ko" {
+		t.Fatalf("model viewer menu sync = %v, want [ko]", synced)
+	}
 
 	if len(got) != 3 {
 		t.Fatalf("events = %#v, want 3", got)
@@ -85,7 +92,7 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 
 func TestRuntimeSettingHooksApplyOpenConsoleToWindow(t *testing.T) {
 	window := NewWindow()
-	hooks := runtimeSettingHooks(nil, nil, nil, nil, window, nil, nil)
+	hooks := runtimeSettingHooks(nil, nil, nil, nil, window, nil, nil, nil)
 
 	hooks.AfterOpenConsoleChanged(true)
 	window.mu.Lock()
