@@ -91,12 +91,12 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)
-	viewers := newModelViewerWindows(app, rt)
 	app.Window.OnCreate(func(window application.Window) {
 		window.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
 			rt.tools.CleanupModelViewerWindow(window.ID())
 		})
 	})
+	viewers := newModelViewerWindows(app, rt)
 	if rt.gameBananaLogin != nil {
 		rt.gameBananaLogin.Configure(app, rt.window, rt.log)
 	}

@@ -119,6 +119,7 @@ func newModelViewerWindows(app *application.App, rt *runtime) *modelViewerWindow
 		},
 	}
 	v.closed = modelViewerCloseHandler(rt.window, rt.setting.GetRunInBackground, func() { v.quitIfEmpty(app.Quit) }, rt.log)
+	app.Window.OnCreate(v.attach)
 	return v
 }
 
@@ -160,7 +161,7 @@ func modelViewerCloseHandler(main *Window, runInBackground func(context.Context)
 }
 
 func (v *modelViewerWindows) Open(path string) {
-	key := strings.ToLower(filepath.Clean(path))
+	key := fmt.Sprintf("model-viewer-%x", sha256.Sum256([]byte(strings.ToLower(filepath.Clean(path)))))
 	v.mu.Lock()
 	if v.stopping {
 		v.mu.Unlock()
@@ -175,7 +176,7 @@ func (v *modelViewerWindows) Open(path string) {
 		return
 	}
 	opts := application.WebviewWindowOptions{
-		Name:  fmt.Sprintf("model-viewer-%x", sha256.Sum256([]byte(key))),
+		Name:  key,
 		Title: filepath.Base(path) + " — Nahida Model Viewer",
 		URL:   "/#/model-viewer-window?" + url.Values{"path": {path}}.Encode(),
 		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
@@ -183,9 +184,21 @@ func (v *modelViewerWindows) Open(path string) {
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		Windows:          application.WindowsWindow{DisableMenu: true, NonClientRegionSupport: true, WebView2CompositionHosting: true},
 	}
-	window := v.create(opts)
-	entry := &modelViewerWindow{window: window}
-	v.windows[key] = entry
+	v.windows[key] = &modelViewerWindow{}
+	v.mu.Unlock()
+	v.create(opts)
+}
+
+// OnCreate runs before native startup, so even an immediately ready window is observed.
+func (v *modelViewerWindows) attach(window application.Window) {
+	key := window.Name()
+	v.mu.Lock()
+	entry := v.windows[key]
+	if entry == nil || entry.window != nil {
+		v.mu.Unlock()
+		return
+	}
+	entry.window = window
 	v.mu.Unlock()
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		v.mu.Lock()

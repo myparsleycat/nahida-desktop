@@ -177,7 +177,7 @@ export function ModelViewerWorkspace({
       })
       .catch((error) => {
         Logger.capture(
-          "components/tools/model-viewer/model-viewer-dialog.tsx",
+          "components/tools/model-viewer/model-viewer-workspace.tsx",
           "Failed to load model viewer rendering settings",
           error,
         );
@@ -224,7 +224,7 @@ export function ModelViewerWorkspace({
     setThreeToneMapping(value);
     void setSetting("modelViewer.toneMapping", value).catch((error) => {
       Logger.capture(
-        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to persist model viewer tone mapping",
         error,
       );
@@ -236,7 +236,7 @@ export function ModelViewerWorkspace({
     setThreeEnvironment(value);
     void setSetting("modelViewer.environment", value).catch((error) => {
       Logger.capture(
-        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to persist model viewer environment",
         error,
       );
@@ -249,7 +249,7 @@ export function ModelViewerWorkspace({
     setThreeExposure(nextValue);
     void setSetting("modelViewer.exposure", nextValue).catch((error) => {
       Logger.capture(
-        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to persist model viewer exposure",
         error,
       );
@@ -261,7 +261,7 @@ export function ModelViewerWorkspace({
     setToonShadows(value);
     void setSetting("modelViewer.toonShadows", value).catch((error) => {
       Logger.capture(
-        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to persist model viewer toon shadows",
         error,
       );
@@ -410,7 +410,7 @@ export function ModelViewerWorkspace({
       setAnimationPlaying(false);
       setIsViewerReady(false);
       Logger.capture(
-        "components/tools/model-viewer/model-viewer-dialog.tsx",
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to load model viewer source",
         error,
       );

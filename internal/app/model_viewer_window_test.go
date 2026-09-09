@@ -96,15 +96,15 @@ func TestModelViewerWindowsDeduplicateAndCloseIndependently(t *testing.T) {
 	var created []*viewerTestWindow
 	var focused []application.Window
 	var closed []bool
-	v := &modelViewerWindows{windows: make(map[string]*modelViewerWindow),
-		create: func(opts application.WebviewWindowOptions) application.Window {
-			w := &viewerTestWindow{options: opts}
-			created = append(created, w)
-			return w
-		},
-		focus:  func(w application.Window) { focused = append(focused, w) },
-		closed: func(last bool) { closed = append(closed, last) },
+	v := &modelViewerWindows{windows: make(map[string]*modelViewerWindow)}
+	v.create = func(opts application.WebviewWindowOptions) application.Window {
+		w := &viewerTestWindow{options: opts}
+		created = append(created, w)
+		v.attach(w)
+		return w
 	}
+	v.focus = func(w application.Window) { focused = append(focused, w) }
+	v.closed = func(last bool) { closed = append(closed, last) }
 	path := `C:\Mods\한글 (1) & #+%`
 	v.Open(path)
 	first := created[0]
@@ -144,6 +144,38 @@ func TestModelViewerWindowsDeduplicateAndCloseIndependently(t *testing.T) {
 	v.Open(path)
 	if len(created) != 3 || created[2].options.Name != first.options.Name {
 		t.Fatal("reopen name was not stable")
+	}
+}
+
+func TestModelViewerReadyBeforeCreateReturns(t *testing.T) {
+	var focused []application.Window
+	v := &modelViewerWindows{
+		windows: make(map[string]*modelViewerWindow),
+		focus:   func(w application.Window) { focused = append(focused, w) },
+		closed:  func(bool) {},
+	}
+	created := 0
+	v.create = func(opts application.WebviewWindowOptions) application.Window {
+		created++
+		w := &viewerTestWindow{options: opts}
+		v.attach(w)
+		if w.ready == nil || w.close == nil {
+			t.Fatal("lifecycle callbacks must be registered before native startup")
+		}
+		w.ready(nil)
+		return w
+	}
+	v.attach(&viewerTestWindow{options: application.WebviewWindowOptions{Name: "main"}})
+	v.Open(`C:\Mods\Fast`)
+	v.Open(`c:/mods/fast`)
+	if created != 1 || len(focused) != 2 || focused[0] != focused[1] {
+		t.Fatalf("ready window was lost: created=%d focused=%v", created, focused)
+	}
+	w := focused[0].(*viewerTestWindow)
+	w.close(nil)
+	w.ready(nil)
+	if len(v.windows) != 0 || len(focused) != 2 {
+		t.Fatal("late readiness resurrected a closed window")
 	}
 }
 
@@ -187,12 +219,13 @@ func TestModelViewerCloseKeepsWindowOpenedDuringSettingsRead(t *testing.T) {
 	var created []*viewerTestWindow
 	v := &modelViewerWindows{
 		windows: make(map[string]*modelViewerWindow),
-		create: func(opts application.WebviewWindowOptions) application.Window {
-			w := &viewerTestWindow{options: opts}
-			created = append(created, w)
-			return w
-		},
-		focus: func(application.Window) {},
+		focus:   func(application.Window) {},
+	}
+	v.create = func(opts application.WebviewWindowOptions) application.Window {
+		w := &viewerTestWindow{options: opts}
+		created = append(created, w)
+		v.attach(w)
+		return w
 	}
 	quit := false
 	v.closed = modelViewerCloseHandler(NewWindow(), func(context.Context) (bool, error) {

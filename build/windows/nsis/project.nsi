@@ -28,11 +28,22 @@
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
 ####
-## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
-## !define WAILS_INSTALL_SCOPE     "user"             # Default "machine" - set to "user" for per-user install ($LOCALAPPDATA) without UAC prompt
+## Nahida supports per-user installation only, including Explorer label updates.
 ####
 ## Include the wails tools
 ####
+!ifndef WAILS_INSTALL_SCOPE
+    !define WAILS_INSTALL_SCOPE "user"
+!endif
+!if "${WAILS_INSTALL_SCOPE}" != "user"
+    !error "Nahida supports per-user installation only (WAILS_INSTALL_SCOPE=user)."
+!endif
+!ifndef REQUEST_EXECUTION_LEVEL
+    !define REQUEST_EXECUTION_LEVEL "user"
+!endif
+!if "${REQUEST_EXECUTION_LEVEL}" != "user"
+    !error "Nahida requires REQUEST_EXECUTION_LEVEL=user."
+!endif
 !include "wails_tools.nsh"
 !include "..\..\..\bin\release-version.nsh"
 

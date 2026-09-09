@@ -36,8 +36,8 @@ func modelViewerMenuLabel(language string) string {
 
 // UpdateModelViewerContextMenu rewrites the installer-registered Explorer
 // verb label to the app language. It is a no-op when the key is absent
-// (portable run) or registered under HKLM by a machine-scope installer,
-// because the app never elevates to rewrite the installer's values.
+// (portable run). The NSIS entry point enforces per-user installation;
+// legacy HKLM values are left untouched and never require elevation.
 func UpdateModelViewerContextMenu(language string) error {
 	updated, err := updateModelViewerMenu(registry.CURRENT_USER, modelViewerMenuKeyPath, language)
 	if err == nil && updated {

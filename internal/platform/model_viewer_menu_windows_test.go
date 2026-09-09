@@ -58,17 +58,21 @@ func TestUpdateModelViewerMenuRewritesLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if r != 0 {
+			_ = r.Close()
+		}
+		for _, suffix := range []string{`\shell\verb`, `\shell`, ``} {
+			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
+		}
+	})
 	if err := r.SetStringValue("", "stale label"); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		for _, suffix := range []string{`\shell\verb`, `\shell`, ``} {
-			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
-		}
-	})
+	r = 0
 
 	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ja")
 	if err != nil {
