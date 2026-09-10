@@ -1,6 +1,6 @@
 module nahida.live/desktop
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
