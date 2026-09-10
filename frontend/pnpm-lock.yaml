@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@wailsio/runtime@3.0.0-beta.17': b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba
+
 importers:
 
   .:
@@ -37,7 +40,7 @@ importers:
         version: 3.14.11(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@wailsio/runtime':
         specifier: 3.0.0-beta.17
-        version: 3.0.0-beta.17
+        version: 3.0.0-beta.17(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -3127,7 +3130,7 @@ snapshots:
 
   '@vitest/spy@5.0.0': {}
 
-  '@wailsio/runtime@3.0.0-beta.17': {}
+  '@wailsio/runtime@3.0.0-beta.17(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)': {}
 
   ansi-regex@5.0.1: {}
 

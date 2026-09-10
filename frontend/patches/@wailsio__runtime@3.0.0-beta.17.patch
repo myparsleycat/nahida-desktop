@@ -1,0 +1,44 @@
+diff --git a/dist/drag.js b/dist/drag.js
+index b15d87a08cfc19cbb5f7082cf60299c368127030..3eebd6ee812799ad5a5b6c8bb9149ca4812eb298 100644
+--- a/dist/drag.js
++++ b/dist/drag.js
+@@ -242,25 +242,30 @@ function onMouseMove(event) {
+         }
+         return;
+     }
++    const configuredBorder = GetFlag("resizeBorderInside");
+     const resizeHandleHeight = GetFlag("system.resizeHandleHeight") || 5;
+     const resizeHandleWidth = GetFlag("system.resizeHandleWidth") || 5;
++    const leftWidth = configuredBorder?.left ?? resizeHandleWidth;
++    const rightWidth = configuredBorder?.right ?? resizeHandleWidth;
++    const topHeight = configuredBorder?.top ?? resizeHandleHeight;
++    const bottomHeight = configuredBorder?.bottom ?? resizeHandleHeight;
+     // Extra pixels for the corner areas.
+-    const cornerExtra = GetFlag("resizeCornerExtra") || 10;
++    const cornerExtra = configuredBorder ? 0 : GetFlag("resizeCornerExtra") || 10;
+     // When a scrollbar is present at the window edge it consumes mouse events in that strip.
+     // Shift the effective content edge inward so the resize zone sits just before the scrollbar.
+     const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+     const scrollbarHeight = Math.max(0, window.innerHeight - document.documentElement.clientHeight);
+     const rightContentEdge = window.innerWidth - scrollbarWidth;
+     const bottomContentEdge = window.innerHeight - scrollbarHeight;
+-    const rightBorder = event.clientX < rightContentEdge && (rightContentEdge - event.clientX) < resizeHandleWidth;
+-    const leftBorder = event.clientX < resizeHandleWidth;
+-    const topBorder = event.clientY < resizeHandleHeight;
+-    const bottomBorder = event.clientY < bottomContentEdge && (bottomContentEdge - event.clientY) < resizeHandleHeight;
++    const rightBorder = event.clientX < rightContentEdge && (rightContentEdge - event.clientX) < rightWidth;
++    const leftBorder = event.clientX < leftWidth;
++    const topBorder = event.clientY < topHeight;
++    const bottomBorder = event.clientY < bottomContentEdge && (bottomContentEdge - event.clientY) < bottomHeight;
+     // Adjust for corner areas.
+-    const rightCorner = event.clientX < rightContentEdge && (rightContentEdge - event.clientX) < (resizeHandleWidth + cornerExtra);
+-    const leftCorner = event.clientX < (resizeHandleWidth + cornerExtra);
+-    const topCorner = event.clientY < (resizeHandleHeight + cornerExtra);
+-    const bottomCorner = event.clientY < bottomContentEdge && (bottomContentEdge - event.clientY) < (resizeHandleHeight + cornerExtra);
++    const rightCorner = event.clientX < rightContentEdge && (rightContentEdge - event.clientX) < (rightWidth + cornerExtra);
++    const leftCorner = event.clientX < (leftWidth + cornerExtra);
++    const topCorner = event.clientY < (topHeight + cornerExtra);
++    const bottomCorner = event.clientY < bottomContentEdge && (bottomContentEdge - event.clientY) < (bottomHeight + cornerExtra);
+     if (!leftCorner && !topCorner && !bottomCorner && !rightCorner) {
+         // Optimisation: out of all corner areas implies out of borders.
+         setResize();
