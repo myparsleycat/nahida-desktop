@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
@@ -223,12 +223,19 @@ it.skipIf(!process.env.MODEL_VIEWER_PACKED_DQ_MOD)(
     "computes start, middle and end frames of the local mod",
     () => {
         const dir = process.env.MODEL_VIEWER_PACKED_DQ_MOD!;
+        const files = readdirSync(dir);
+        const blendName = files.find((name) => /blend\.buf$/i.test(name));
+        const poseName = files.find((name) => /pose\.buf$/i.test(name));
+        if (!blendName || !poseName) {
+            throw new Error("local mod is missing a packed dual-quaternion buffer set");
+        }
+        const baseName = blendName.replace(/blend\.buf$/i, ".buf");
         const read = (name: string) => new Uint8Array(readFileSync(join(dir, name))).buffer;
         const { deformer } = fixture();
         const buffers = {
-            base: read("NilouStandee.buf"),
-            blend: read("NilouStandeeBlend.buf"),
-            pose: read("pose.buf"),
+            base: read(baseName),
+            blend: read(blendName),
+            pose: read(poseName),
             shapeTargets: [],
         };
         deformer.vertexCount = 23775;

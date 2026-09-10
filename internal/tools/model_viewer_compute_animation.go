@@ -50,14 +50,15 @@ type modelViewerKnownBoneKernel struct {
 }
 
 func modelViewerKnownBoneKernelForShader(shader string) (modelViewerKnownBoneKernel, bool) {
-	switch {
-	case isKnownModelViewerPackedDualQuaternionShader(shader):
+	if baseStride, known := modelViewerPackedDualQuaternionBaseStride(shader); known {
 		return modelViewerKnownBoneKernel{
 			kind:        modelViewerPackedDualQuaternionKind,
-			baseStride:  20,
+			baseStride:  baseStride,
 			blendStride: 32,
 			poseStride:  56,
 		}, true
+	}
+	switch {
 	case isKnownModelViewerGIMIShapePoseBoneShader(shader):
 		return modelViewerKnownBoneKernel{
 			kind:        modelViewerGIMIShapePoseKind,
@@ -238,7 +239,7 @@ func detectModelViewerComputeAnimation(
 			return shapeOnly()
 		}
 		fps := 30.0
-		if rate, ok := modelViewerComputePoseFPS(poseSection, posePass.x88, defaults); ok {
+		if rate, ok := modelViewerComputePoseFPS(sections, poseSection, posePass.x88, defaults); ok {
 			fps = rate
 		}
 		clips = []modelViewerPreparedAnimationClip{
@@ -772,16 +773,39 @@ func findModelViewerAccumulatorWrapInLines(lines []string, variable string, defa
 	return 0
 }
 
-func modelViewerComputePoseFPS(section modINISection, frameExpression string, defaults map[string]any) (float64, bool) {
+func modelViewerComputePoseFPS(
+	sections []modINISection,
+	poseSection modINISection,
+	frameExpression string,
+	defaults map[string]any,
+) (float64, bool) {
 	variable, _, ok := parseModelViewerPhaseExpression(frameExpression)
 	if !ok {
 		return 0, false
 	}
-	fps, ok := findModelViewerAccumulatorRate([]modINISection{section}, variable, defaults)
+	if fps, ok := findModelViewerAccumulatorRateInLines(poseSection.Lines, variable, defaults); ok && fps > 0 {
+		return fps, true
+	}
+	fps, ok := findModelViewerAccumulatorRate(sections, variable, defaults)
 	if !ok || fps <= 0 {
 		return 0, false
 	}
 	return fps, true
+}
+
+// Mods that keep the frame accumulator and its wrap in [Present] leave the
+// compute pass with only the frame variable. Search the pose section first,
+// then every other section so both conventions resolve the same ranges.
+func modelViewerPoseFrameLogicLines(poseSection modINISection, sections []modINISection) [][]string {
+	lines := make([][]string, 0, len(sections)+1)
+	lines = append(lines, poseSection.Lines)
+	for _, section := range sections {
+		if strings.EqualFold(section.Header, poseSection.Header) && section.Name == poseSection.Name {
+			continue
+		}
+		lines = append(lines, section.Lines)
+	}
+	return lines
 }
 
 func detectModelViewerGIMIShapePoseClips(
@@ -798,7 +822,7 @@ func detectModelViewerGIMIShapePoseClips(
 	if !ok {
 		return nil, false
 	}
-	fps, ok := modelViewerComputePoseFPS(poseSection, frameExpression, defaults)
+	fps, ok := modelViewerComputePoseFPS(sections, poseSection, frameExpression, defaults)
 	if !ok {
 		fps = 30
 	}
@@ -807,20 +831,26 @@ func detectModelViewerGIMIShapePoseClips(
 	explicitRange, hasReset := false, false
 	endPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
 	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
-	for _, raw := range poseSection.Lines {
-		line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
-		if match := endPattern.FindStringSubmatch(line); match != nil {
-			explicitRange = true
-			var valid bool
-			endVariable, endOffset, valid = parseModelViewerComputeRangeToken(match[1])
-			if !valid {
-				return nil, true
+	for _, lines := range modelViewerPoseFrameLogicLines(poseSection, sections) {
+		for _, raw := range lines {
+			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
+			if !explicitRange {
+				if match := endPattern.FindStringSubmatch(line); match != nil {
+					explicitRange = true
+					var valid bool
+					endVariable, endOffset, valid = parseModelViewerComputeRangeToken(match[1])
+					if !valid {
+						return nil, true
+					}
+				}
 			}
-		}
-		if match := resetPattern.FindStringSubmatch(line); match != nil {
-			candidate, offset, valid := parseModelViewerComputeRangeToken(match[1])
-			if valid && candidate != frameVariable {
-				startVariable, startOffset, hasReset = candidate, offset, true
+			if match := resetPattern.FindStringSubmatch(line); match != nil {
+				candidate, offset, valid := parseModelViewerComputeRangeToken(match[1])
+				// A named start variable identifies a state machine; later
+				// literal entries are state entry frames, not the reset base.
+				if valid && candidate != frameVariable && (candidate != "" || startVariable == "") {
+					startVariable, startOffset, hasReset = candidate, offset, true
+				}
 			}
 		}
 	}

@@ -127,6 +127,173 @@ func writePackedDualQuaternionFixture(t *testing.T, dir, ini string) {
 	}
 }
 
+// A ZZMI object variant keeps the 24-byte packed base and moves the frame
+// accumulator and state ranges into [Present], leaving the compute pass with
+// only the frame variable.
+const packedDualQuaternion24Shader = `
+struct VertexAttributes { uint2 position; uint normal; uint tangent; uint texcoord0; uint texcoord1; };
+struct BlendAttributes { float4 weights; int4 indicies; };
+struct PoseAttributes { float3 S; float3 T; float4 QR; float4 QD; };
+RWStructuredBuffer<VertexAttributes> rw_buffer : register(u5);
+StructuredBuffer<VertexAttributes> base : register(t50);
+StructuredBuffer<BlendAttributes> blend : register(t51);
+StructuredBuffer<PoseAttributes> pose : register(t52);
+#define TIME IniParams[88].x
+#define VG_COUNT IniParams[89].x
+void main(uint3 threadID : SV_DispatchThreadID) {
+ uint i = threadID.x;
+ BlendAttributes b = blend[i];
+ float4 pos;
+ pos.x = f16tof32(base[i].position.x & 0xffff);
+ pos.z = f16tof32(base[i].position.x >> 16);
+ pos.y = f16tof32(base[i].position.y & 0xffff) * -1.0f;
+ pos.w = 1.0f;
+ float4 normal = float4(0, 0, 0, 0);
+ normal.x = float(i8toi32(base[i].normal.x & 0xff));
+ int frame = (int)TIME;
+ float inter = frac(TIME);
+ float inter_prev = 1.0f - inter;
+ int vg_count = (int)VG_COUNT;
+ int4 idx_prev = frame * vg_count + b.indicies;
+ int4 idx_next = (frame + 1) * vg_count + b.indicies;
+ PoseAttributes p0_prev = pose[idx_prev.x];
+ PoseAttributes p1_prev = pose[idx_prev.y];
+ float4 weights = b.weights;
+ float3 scale = (p0_prev.S * weights.x + p1_prev.S * weights.y) * inter_prev;
+ float3 bias = (p0_prev.T * weights.x + p1_prev.T * weights.y) * inter_prev;
+ pos.xyz = pos.xyz * scale + bias;
+ float4 qr = p0_prev.QR * weights.x;
+ float4 qd = p0_prev.QD * weights.x;
+ float sign1 = sign(dot(p0_prev.QR, p1_prev.QR));
+ qr += p1_prev.QR * weights.y * sign1;
+ qd += p1_prev.QD * weights.y * sign1;
+ float qr_len = length(qr);
+ qr /= qr_len;
+ qd /= qr_len;
+ float qx = qr.x, qy = qr.y, qz = qr.z, qw = qr.w;
+ float qdx = qd.x, qdy = qd.y, qdz = qd.z, qdw = qd.w;
+ float m00 = 1.0f - 2.0f*qy*qy - 2.0f*qz*qz;
+ float m01 = 2.0f*(qx*qy - qw*qz);
+ float m02 = 2.0f*(qx*qz + qw*qy);
+ float m10 = 2.0f*(qx*qy + qw*qz);
+ float m11 = 1.0f - 2.0f*qx*qx - 2.0f*qz*qz;
+ float m12 = 2.0f*(qy*qz - qw*qx);
+ float m20 = 2.0f*(qx*qz - qw*qy);
+ float m21 = 2.0f*(qy*qz + qw*qx);
+ float m22 = 1.0f - 2.0f*qx*qx - 2.0f*qy*qy;
+ float t0 = 2.0f*(-qdw*qx + qdx*qw - qdy*qz + qdz*qy);
+ float4 pos_result;
+ pos_result.x = m00*pos.x + m01*pos.y + m02*pos.z + t0*pos.w;
+ float4 normal_result;
+ normal_result.x = m00*normal.x + m01*normal.y + m02*normal.z;
+ rw_buffer[i].position.x = (uint)f32tof16(pos_result.z)<<16 | (uint)f32tof16(pos_result.x);
+ rw_buffer[i].normal.x = i32toi8(int(normal_result.x));
+}`
+
+const packedDualQuaternion24INI = `
+[Constants]
+global $freq = 0
+global $bones = 2
+global $start = 0
+global $end = 0
+global $dt
+global persist $state = 0
+post ResourcePosition = copy_desc ResourcePosition.1
+[Present]
+$freq = $freq + 24 * $dt
+if $freq > $end
+  $freq = $start
+endif
+if $state == 0
+  $start = 1
+  $end = 3
+elif $state == 1
+  $start = 3
+  $end = 5
+endif
+run = CustomShaderPose
+[CustomShaderPose]
+x88 = $freq
+x89 = $bones
+cs-t50 = copy ResourcePosition.1
+cs-t51 = copy ResourceBlend
+cs-t52 = copy ResourcePose
+cs = anim.hlsl
+cs-u5 = copy ResourcePosition.1
+ResourcePosition = ref cs-u5
+Dispatch = 3, 1, 1
+[TextureOverridePosition]
+hash = 12345678
+vb0 = ResourcePosition
+[TextureOverrideHead]
+hash = 23456789
+handling = skip
+ib = ResourceIB
+drawindexed = auto
+[ResourcePosition]
+[ResourcePosition.1]
+type = Buffer
+stride = 24
+filename = base.buf
+[ResourceBlend]
+type = Buffer
+stride = 32
+filename = blend.buf
+[ResourcePose]
+type = Buffer
+stride = 56
+filename = pose.buf
+[ResourceIB]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = head.ib
+`
+
+func TestPackedDualQuaternion24PresentStateClips(t *testing.T) {
+	dir := t.TempDir()
+	for name, data := range map[string][]byte{
+		"mod.ini": []byte(packedDualQuaternion24INI), "anim.hlsl": []byte(packedDualQuaternion24Shader),
+		"base.buf": make([]byte, 3*24), "blend.buf": make([]byte, 3*32),
+		"pose.buf": make([]byte, 8*2*56), "head.ib": make([]byte, 12),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if stride, known := modelViewerPackedDualQuaternionBaseStride(packedDualQuaternion24Shader); !known ||
+		stride != modelViewerPackedObjectStride24 {
+		t.Fatalf("24-byte variant not recognized: stride=%d known=%t", stride, known)
+	}
+	sections := parseModINI(packedDualQuaternion24INI)
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	deformer, clips := detectModelViewerComputeAnimation(
+		dir,
+		dir,
+		"",
+		sections,
+		resources,
+		[]modelViewerDirectMesh{
+			{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+		},
+		nil,
+	)
+	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
+		deformer.Base.Stride != modelViewerPackedObjectStride24 ||
+		deformer.VertexCount != 3 || deformer.Pose == nil ||
+		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 {
+		t.Fatalf("unexpected deformer: %+v", deformer)
+	}
+	if len(clips) != 2 ||
+		clips[0].FrameStart != 1 || clips[0].FrameEnd != 3 || clips[0].FPS != 24 ||
+		clips[1].FrameStart != 3 || clips[1].FrameEnd != 5 || clips[1].FPS != 24 {
+		t.Fatalf("unexpected present-derived clips: %+v", clips)
+	}
+	packed := collectModelViewerPackedObjectResources(dir, dir, sections)
+	if packed[modelViewerNormalizeKey("position")] != 16 {
+		t.Fatalf("packed UV layout: %v", packed)
+	}
+}
+
 func TestPackedDualQuaternionDetection(t *testing.T) {
 	for _, tc := range []struct {
 		name, from, to string
@@ -450,6 +617,30 @@ func TestComputePoseLiteralRangeAndFallback(t *testing.T) {
 	}
 }
 
+// readLocalSiblingTexcoord finds the separate UV stream a packed base may ship
+// next to its position buffer, using the same candidates the loader probes.
+func readLocalSiblingTexcoord(t *testing.T, dir, positionPath string, vertexCount int) []byte {
+	t.Helper()
+	relative, err := filepath.Rel(dir, positionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, filename := range modelViewerSiblingTexcoordFilenames(modelViewerResource{Filename: relative}) {
+		path := filepath.Join(dir, filepath.FromSlash(filename))
+		info, statErr := os.Stat(path)
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() != int64(vertexCount*4) {
+			continue
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return raw
+	}
+	t.Fatalf("sibling texcoord stream not found next to %s", relative)
+	return nil
+}
+
 // Opt-in integration test; no local mod assets or machine-specific paths enter CI.
 func TestPackedDualQuaternionLocalMod(t *testing.T) {
 	dir := os.Getenv("MODEL_VIEWER_PACKED_DQ_MOD")
@@ -490,10 +681,7 @@ func TestPackedDualQuaternionLocalMod(t *testing.T) {
 		c.FrameEnd,
 		c.FPS,
 	)
-	uv, err := os.ReadFile(filepath.Join(dir, "NilouStandeeTexcoord.buf"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	uv := readLocalSiblingTexcoord(t, dir, d.Base.sourcePath, d.VertexCount)
 	checked := 0
 	for _, work := range prepared.textures {
 		for _, mesh := range work.meshes {
@@ -523,4 +711,85 @@ func TestPackedDualQuaternionLocalMod(t *testing.T) {
 		t.Fatal("no local UVs checked")
 	}
 	t.Logf("verified UVs against original stream for %d mesh vertices", checked)
+}
+
+// Opt-in integration test for the 24-byte packed base variant, whose frame
+// accumulator and state ranges may live in [Present]; no local mod assets or
+// machine-specific paths enter CI.
+func TestPackedDualQuaternion24LocalMod(t *testing.T) {
+	dir := os.Getenv("MODEL_VIEWER_PACKED_DQ24_MOD")
+	if dir == "" {
+		t.Skip("set MODEL_VIEWER_PACKED_DQ24_MOD to the sample mod folder")
+	}
+	paths, err := filepath.Glob(filepath.Join(dir, "*.ini"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("INI discovery: %v", err)
+	}
+	budget, err := newModelViewerLoadBudget(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := (&Tools{}).prepareModelViewerGeometry(context.Background(), dir, paths, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.cache.releaseAll()
+	if len(prepared.computeDeformers) != 1 || len(prepared.computeAnimations) != 6 {
+		t.Fatalf(
+			"deformers=%d animations=%d",
+			len(prepared.computeDeformers),
+			len(prepared.computeAnimations),
+		)
+	}
+	d := prepared.computeDeformers[0]
+	if d.Kind != modelViewerPackedDualQuaternionKind || d.Base.Stride != modelViewerPackedObjectStride24 ||
+		d.VertexCount != 107249 || d.Pose == nil || d.Pose.BoneCount != 821 || d.Pose.FrameCount != 1606 {
+		t.Fatalf("unexpected local deformer: %+v", d)
+	}
+	first, last := prepared.computeAnimations[0], prepared.computeAnimations[len(prepared.computeAnimations)-1]
+	if first.FrameStart != 85 || first.FrameEnd != 1005 || first.FPS != 24 ||
+		last.FrameStart != 1545 || last.FrameEnd != 1605 || last.FPS != 24 {
+		t.Fatalf("unexpected local clips: %+v .. %+v", first, last)
+	}
+	base, err := os.ReadFile(d.Base.sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, work := range prepared.textures {
+		for _, mesh := range work.meshes {
+			geometry := mesh.geometry
+			if geometry == nil || len(geometry.Texcoord0) != geometry.VertexCount*2 {
+				t.Fatal("missing local mesh UVs")
+			}
+			for vertex := range geometry.VertexCount {
+				index := vertex
+				if len(geometry.SourceIndices) > 0 {
+					index = int(geometry.SourceIndices[vertex])
+				}
+				for axis := range 2 {
+					want := modelViewerHalfToFloat(
+						binary.LittleEndian.Uint16(base[index*d.Base.Stride+16+axis*2:]),
+					)
+					if axis == 1 {
+						want = 1 - want // Mesh construction flips V for renderer textures.
+					}
+					if geometry.Texcoord0[vertex*2+axis] != want {
+						t.Fatalf("local UV mismatch at source vertex %d axis %d", index, axis)
+					}
+				}
+				checked++
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no local UVs checked")
+	}
+	t.Logf(
+		"vertices=%d bones=%d poseFrames=%d clips=%d",
+		d.VertexCount,
+		d.Pose.BoneCount,
+		d.Pose.FrameCount,
+		len(prepared.computeAnimations),
+	)
 }
