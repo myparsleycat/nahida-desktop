@@ -15,8 +15,7 @@ describe("normalizeModelViewerTransport", () => {
                 {
                     id: "mesh",
                     component: "body",
-                    positionsUrl: "positions",
-                    indicesUrl: "indices",
+                    geometryUrl: "positions",
                     conditions: null,
                     texKey: null,
                     textureVariants: null,

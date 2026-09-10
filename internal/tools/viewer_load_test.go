@@ -41,8 +41,8 @@ filename = diffuse.png
 		t.Fatalf("meshes = %#v", fixture.result.Meshes)
 	}
 	mesh := fixture.result.Meshes[0]
-	positions := readViewerFloat32s(t, fixture.protocol, mesh.PositionsURL)
-	indices := readViewerUint32s(t, fixture.protocol, mesh.IndicesURL)
+	positions := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Positions
+	indices := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Indices
 	if len(positions) != 9 || len(indices) != 3 || indices[0] != 0 || indices[1] != 1 || indices[2] != 2 {
 		t.Fatalf("positions=%v indices=%v", positions, indices)
 	}
@@ -135,8 +135,8 @@ format = DXGI_FORMAT_R32_UINT
 	if len(fixture.result.Meshes) < 1 {
 		t.Fatalf("meshes = %#v", fixture.result.Meshes)
 	}
-	positions := readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].PositionsURL)
-	indices := readViewerUint32s(t, fixture.protocol, fixture.result.Meshes[0].IndicesURL)
+	positions := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).Positions
+	indices := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).Indices
 	if len(positions) != 9 || len(indices) != 3 {
 		t.Fatalf("positions=%v indices=%v", positions, indices)
 	}
@@ -181,8 +181,8 @@ format = DXGI_FORMAT_R32_UINT
 	}
 	sets := make([][]int, 2)
 	for index, mesh := range fixture.result.Meshes {
-		positions := readViewerFloat32s(t, fixture.protocol, mesh.PositionsURL)
-		indices := readViewerUint32s(t, fixture.protocol, mesh.IndicesURL)
+		positions := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Positions
+		indices := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Indices
 		values := make([]int, len(indices))
 		for i, vertex := range indices {
 			values[i] = int(math.Round(float64(positions[vertex*3])))
@@ -433,10 +433,10 @@ drawindexed = 3, 0, 0
 		t.Fatal(err)
 	}
 	fixture := loadViewerDir(t, dir)
-	if fixture.result.Meshes[0].UVsURL == "" {
+	if len(readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).UVs) == 0 {
 		t.Fatal("missing UVs")
 	}
-	uvs := readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].UVsURL)
+	uvs := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).UVs
 	if len(uvs) < 6 || uvs[0] != 0 || math.Abs(float64(uvs[1]-.75)) > 1e-6 || uvs[2] != 1 ||
 		math.Abs(float64(uvs[3]-.25)) > 1e-6 ||
 		math.Abs(float64(uvs[4]-.5)) > 1e-6 ||
@@ -755,16 +755,13 @@ endif
 	if len(result.Meshes) != 2 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
-	positions := []string{result.Meshes[0].PositionsURL, result.Meshes[1].PositionsURL}
-	indices := []string{result.Meshes[0].IndicesURL, result.Meshes[1].IndicesURL}
+	geometry := []string{result.Meshes[0].GeometryURL, result.Meshes[1].GeometryURL}
 	first := evaluateViewerTransport(result, map[string]any{"hat": "0"})
 	second := evaluateViewerTransport(result, map[string]any{"hat": "1"})
 	if !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
 		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
-	if result.Meshes[0].PositionsURL != positions[0] || result.Meshes[1].PositionsURL != positions[1] ||
-		result.Meshes[0].IndicesURL != indices[0] ||
-		result.Meshes[1].IndicesURL != indices[1] {
+	if result.Meshes[0].GeometryURL != geometry[0] || result.Meshes[1].GeometryURL != geometry[1] {
 		t.Fatal("geometry URLs changed after evaluation")
 	}
 }
@@ -938,24 +935,39 @@ endif
 	}
 }
 
-func readViewerFloat32s(t *testing.T, protocol *infra.Protocol, url string) []float32 {
+func readViewerMesh(t *testing.T, protocol *infra.Protocol, url string) modelViewerMeshPayload {
 	t.Helper()
 	raw := readModelViewerProtocolBytes(t, protocol, url)
-	output := make([]float32, len(raw)/4)
-	for index := range output {
-		output[index] = math.Float32frombits(binary.LittleEndian.Uint32(raw[index*4:]))
+	if len(raw) < 24 || string(raw[:4]) != "MVG1" {
+		t.Fatal("invalid mesh header")
 	}
-	return output
-}
-
-func readViewerUint32s(t *testing.T, protocol *infra.Protocol, url string) []uint32 {
-	t.Helper()
-	raw := readModelViewerProtocolBytes(t, protocol, url)
-	output := make([]uint32, len(raw)/4)
-	for index := range output {
-		output[index] = binary.LittleEndian.Uint32(raw[index*4:])
+	counts := make([]int, 5)
+	total := 24
+	for index := range counts {
+		counts[index] = int(binary.LittleEndian.Uint32(raw[4+index*4:]))
+		total += counts[index] * 4
 	}
-	return output
+	if len(raw) != total {
+		t.Fatalf("mesh bytes = %d, want %d", len(raw), total)
+	}
+	payload := modelViewerMeshPayload{}
+	offset := 24
+	for index, values := range []*[]float32{&payload.Positions, &payload.Normals, &payload.Tangents, &payload.UVs} {
+		if counts[index] == 0 {
+			continue
+		}
+		*values = make([]float32, counts[index])
+		for i := range *values {
+			(*values)[i] = math.Float32frombits(binary.LittleEndian.Uint32(raw[offset:]))
+			offset += 4
+		}
+	}
+	payload.Indices = make([]uint32, counts[4])
+	for i := range payload.Indices {
+		payload.Indices[i] = binary.LittleEndian.Uint32(raw[offset:])
+		offset += 4
+	}
+	return payload
 }
 
 func findViewerVariable(payload ModelViewerTransport, id string) *ModelViewerVariable {

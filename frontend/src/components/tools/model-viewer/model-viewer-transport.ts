@@ -99,11 +99,7 @@ export function normalizeModelViewerTransport(
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,
             component: mesh.component,
-            positionsUrl: mesh.positionsUrl,
-            normalsUrl: mesh.normalsUrl,
-            tangentsUrl: mesh.tangentsUrl,
-            uvsUrl: mesh.uvsUrl,
-            indicesUrl: mesh.indicesUrl,
+            geometryUrl: mesh.geometryUrl,
             sourceIndicesUrl: mesh.sourceIndicesUrl,
             bounds: mesh.bounds ?? undefined,
             conditions: normalizeDNF(mesh.conditions),

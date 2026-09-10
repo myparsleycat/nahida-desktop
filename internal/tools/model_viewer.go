@@ -51,11 +51,7 @@ type ModelViewerBounds struct {
 type ModelViewerMeshTransport struct {
 	ID                  string                       `json:"id"`
 	Component           string                       `json:"component"`
-	PositionsURL        string                       `json:"positionsUrl"`
-	NormalsURL          string                       `json:"normalsUrl,omitempty"`
-	TangentsURL         string                       `json:"tangentsUrl,omitempty"`
-	UVsURL              string                       `json:"uvsUrl,omitempty"`
-	IndicesURL          string                       `json:"indicesUrl"`
+	GeometryURL         string                       `json:"geometryUrl"`
 	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
 	Bounds              *ModelViewerBounds           `json:"bounds,omitempty"`
 	Conditions          ModelViewerDNF               `json:"conditions"`
@@ -1137,34 +1133,12 @@ func writeModelViewerPayload(
 				return fmt.Errorf("mesh %s normals: %w", mesh.ID, err)
 			}
 		}
-		mesh.PositionsURL, err = write(".pos", modelViewerFloat32Bytes(payload.Positions))
-		if err != nil {
-			return err
-		}
-		mesh.IndicesURL, err = write(".idx", modelViewerUint32Bytes(payload.Indices))
+		mesh.GeometryURL, err = write(".geometry", modelViewerMeshBytes(payload))
 		if err != nil {
 			return err
 		}
 		if !modelViewerSourceIndicesAreIdentity(payload.SourceIndices) {
 			mesh.SourceIndicesURL, err = write(".source-idx", modelViewerUint32Bytes(payload.SourceIndices))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.Normals != nil {
-			mesh.NormalsURL, err = write(".normal", modelViewerFloat32Bytes(payload.Normals))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.Tangents != nil {
-			mesh.TangentsURL, err = write(".tangent", modelViewerFloat32Bytes(payload.Tangents))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.UVs != nil {
-			mesh.UVsURL, err = write(".uv", modelViewerFloat32Bytes(payload.UVs))
 			if err != nil {
 				return err
 			}
