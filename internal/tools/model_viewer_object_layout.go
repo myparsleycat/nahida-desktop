@@ -278,6 +278,7 @@ func modelViewerResourceVertexCount(modDir string, resource modelViewerResource,
 type modelViewerDrawVertexSource struct {
 	kind                           string
 	packedTexcoordOffset           int
+	packedTexcoordDeclared         bool
 	ib, position, texcoord, vector modelViewerResource
 	packed                         []byte
 	packedStride                   int
@@ -313,10 +314,11 @@ func resolveModelViewerDrawVertexSource(
 	if source.packedTexcoordOffset == 0 {
 		source.packedTexcoordOffset = packedResources[modelViewerNormalizeKey(position.Name)]
 	}
-	shaderPacked := source.packedTexcoordOffset != 0
-	if !shaderPacked {
+	source.packedTexcoordDeclared = source.packedTexcoordOffset != 0
+	if !source.packedTexcoordDeclared {
 		source.packedTexcoordOffset = 12
 	}
+	shaderPacked := source.packedTexcoordDeclared
 	texcoord, tcOK := resourceMap[modelViewerNormalizeKey(state.vb1)]
 	if !tcOK || texcoord.Filename == "" {
 		if raw, packedStride, packed := readModelViewerPackedObjectBuffer(
@@ -394,6 +396,9 @@ func loadModelViewerDrawVertexBuffers(
 			stride = modelViewerPackedObjectStride
 		}
 		texcoordOffset := source.packedTexcoordOffset
+		if stride == modelViewerPackedObjectStride24 && !source.packedTexcoordDeclared {
+			texcoordOffset = detectModelViewerPackedTexcoordOffset(source.packed, stride)
+		}
 		if texcoordOffset == 16 {
 			texcoordOffset = resolveModelViewerPackedTexcoordOffset(modDir, position, source.packed, stride, cache)
 		}
@@ -501,6 +506,65 @@ func loadModelViewerDrawVertexBuffers(
 	default:
 		return modelViewerDrawVertexBuffers{}, false, nil
 	}
+}
+
+// detectModelViewerPackedTexcoordOffset picks the UV0 word for a packed object
+// buffer whose layout no compute shader declares; callers must not use it to
+// second-guess a declared layout. 24-byte dumps are not uniform: the cyclic
+// animation layout stores tangent before the two UV sets (UV0 at byte 16),
+// while older frame-swap dumps keep UV0 in the tangent slot (byte 12). Judge
+// from the data so both keep working.
+func detectModelViewerPackedTexcoordOffset(data []byte, stride int) int {
+	if stride != modelViewerPackedObjectStride24 {
+		return 12
+	}
+	if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12) {
+		return 16
+	}
+	return 12
+}
+
+// modelViewerPackedUVScore reports how much the 16-bit pair at a candidate
+// offset looks like a live UV stream. Non-finite and out-of-range pairs count
+// against the score, and a stream that never varies scores zero.
+func modelViewerPackedUVScore(data []byte, stride, offset int) float64 {
+	if stride <= 0 || offset+4 > stride {
+		return 0
+	}
+	vertexCount := len(data) / stride
+	if vertexCount == 0 {
+		return 0
+	}
+	step := max(1, vertexCount/1024)
+	sampled, inRange := 0, 0
+	minU, maxU, minV, maxV := float32(0), float32(0), float32(0), float32(0)
+	first := true
+	for vertex := 0; vertex < vertexCount; vertex += step {
+		base := vertex*stride + offset
+		if base+4 > len(data) {
+			break
+		}
+		u := modelViewerHalfToFloat(binary.LittleEndian.Uint16(data[base:]))
+		v := modelViewerHalfToFloat(binary.LittleEndian.Uint16(data[base+2:]))
+		sampled++
+		if math.IsNaN(float64(u)) || math.IsInf(float64(u), 0) ||
+			math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			continue
+		}
+		if first {
+			minU, maxU, minV, maxV = u, u, v, v
+			first = false
+		}
+		minU, maxU = min(minU, u), max(maxU, u)
+		minV, maxV = min(minV, v), max(maxV, v)
+		if u >= -0.01 && u <= 2 && v >= -0.01 && v <= 2 {
+			inRange++
+		}
+	}
+	if sampled == 0 || (maxU-minU)+(maxV-minV) < 1e-4 {
+		return 0
+	}
+	return float64(inRange) / float64(sampled)
 }
 
 // Some compute shaders name the untouched UV word "tangent". Only override

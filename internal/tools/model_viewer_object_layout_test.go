@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -205,6 +206,138 @@ filename = ObjectHead.ib`
 	}
 	if len(meshes) != 1 || meshes[0].geometry.Position[0] != 1 {
 		t.Fatalf("meshes = %#v", meshes)
+	}
+}
+
+func TestModelViewerStaticStride24ObjectKeepsTrailingUV0(t *testing.T) {
+	dir := t.TempDir()
+	position := make([]byte, 3*modelViewerPackedObjectStride24)
+	uvs := [][2]float32{{0.25, 0.75}, {0.5, 0.5}, {0, 1}}
+	for vertex := range 3 {
+		offset := vertex * modelViewerPackedObjectStride24
+		writePackedObjectVertex(position, offset, float32(vertex+1), 2, 3, 0, 0, 0, 0, 127)
+		binary.LittleEndian.PutUint32(position[offset+12:], 0x7f007f00)
+		binary.LittleEndian.PutUint16(position[offset+16:], modelViewerFloatToHalfBits(uvs[vertex][0]))
+		binary.LittleEndian.PutUint16(position[offset+18:], modelViewerFloatToHalfBits(uvs[vertex][1]))
+		binary.LittleEndian.PutUint16(position[offset+20:], modelViewerFloatToHalfBits(0.5))
+		binary.LittleEndian.PutUint16(position[offset+22:], modelViewerFloatToHalfBits(0.5))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Cafe.buf"), position, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "CafeA.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	iniText := `[TextureOverrideCafePosition]
+vb0 = ResourceCafePosition
+[TextureOverrideCafeA]
+ib = ResourceCafeAIB
+drawindexed = 3, 0, 0
+[ResourceCafePosition]
+stride = 24
+filename = Cafe.buf
+[ResourceCafeAIB]
+format = DXGI_FORMAT_R32_UINT
+filename = CafeA.ib`
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(iniText)
+	meshes, err := buildModelViewerDirectScannedMeshes(iniPath, sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 || meshes[0].geometry == nil {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+	uv := meshes[0].geometry.Texcoord0
+	want := []float32{0.25, 0.25, 0.5, 0.5, 0, 0}
+	if !slices.Equal(uv, want) {
+		t.Fatalf("diffuse UVs = %v; want the UV set after the tangent at byte 16", uv)
+	}
+}
+
+// makeStride24BufferWithTrailingUV builds 24-byte packed vertices whose tangent
+// word at byte 12 is non-finite, matching dumps from the cyclic animation
+// layout where UV0 sits at byte 16.
+func makeStride24BufferWithTrailingUV(vertexCount int) []byte {
+	buf := make([]byte, vertexCount*modelViewerPackedObjectStride24)
+	for vertex := range vertexCount {
+		offset := vertex * modelViewerPackedObjectStride24
+		writePackedObjectVertex(buf, offset, float32(vertex+1), 2, 3, 0, 0, 0, 0, 127)
+		binary.LittleEndian.PutUint32(buf[offset+12:], 0x7f007f00)
+		binary.LittleEndian.PutUint16(buf[offset+16:], modelViewerFloatToHalfBits(0.1+float32(vertex)*0.1))
+		binary.LittleEndian.PutUint16(buf[offset+18:], modelViewerFloatToHalfBits(0.9-float32(vertex)*0.1))
+	}
+	return buf
+}
+
+func TestModelViewerPackedUVScoreCountsNonFiniteWordsAgainstTheScore(t *testing.T) {
+	buf := makeStride24BufferWithTrailingUV(4)
+	for vertex := range 4 {
+		if vertex%2 == 1 {
+			continue
+		}
+		offset := vertex*modelViewerPackedObjectStride24 + 12
+		binary.LittleEndian.PutUint16(buf[offset:], modelViewerFloatToHalfBits(0.4+float32(vertex)*0.1))
+		binary.LittleEndian.PutUint16(buf[offset+2:], modelViewerFloatToHalfBits(0.6-float32(vertex)*0.1))
+	}
+
+	score := modelViewerPackedUVScore(buf, modelViewerPackedObjectStride24, 12)
+	if score <= 0 || score >= 1 {
+		t.Fatalf("half-non-finite tangent word score = %v; want a partial score", score)
+	}
+	if live := modelViewerPackedUVScore(buf, modelViewerPackedObjectStride24, 16); live != 1 {
+		t.Fatalf("UV0 word score = %v; want 1", live)
+	}
+	if got := detectModelViewerPackedTexcoordOffset(buf, modelViewerPackedObjectStride24); got != 16 {
+		t.Fatalf("detected offset = %d; want the UV0 word at byte 16", got)
+	}
+}
+
+func TestModelViewerDeclaredTexcoordOffsetSurvivesStride24Guess(t *testing.T) {
+	dir := t.TempDir()
+	position := makeStride24BufferWithTrailingUV(3)
+	if err := os.WriteFile(filepath.Join(dir, "Cafe.buf"), position, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cache := newModelViewerBufferCache()
+	declared := modelViewerDrawVertexSource{
+		kind: modelViewerDrawVertexPacked,
+		position: modelViewerResource{
+			Name:     "ResourceCafePosition",
+			Filename: "Cafe.buf",
+			Stride:   modelViewerPackedObjectStride24,
+		},
+		packedTexcoordOffset:   12,
+		packedTexcoordDeclared: true,
+		packed:                 position,
+		packedStride:           modelViewerPackedObjectStride24,
+	}
+
+	buffers, loaded, err := loadModelViewerDrawVertexBuffers(dir, declared, cache)
+	if err != nil || !loaded {
+		t.Fatalf("declared layout: loaded=%t err=%v", loaded, err)
+	}
+	if element := findModelViewerElement(buffers.layout, "TEXCOORD", -1); element == nil ||
+		element.AlignedByteOffset != 12 {
+		t.Fatalf("declared TEXCOORD element = %#v; want the declared byte 12", element)
+	}
+
+	undeclared := declared
+	undeclared.packedTexcoordDeclared = false
+	buffers, loaded, err = loadModelViewerDrawVertexBuffers(dir, undeclared, cache)
+	if err != nil || !loaded {
+		t.Fatalf("undeclared layout: loaded=%t err=%v", loaded, err)
+	}
+	if element := findModelViewerElement(buffers.layout, "TEXCOORD", -1); element == nil ||
+		element.AlignedByteOffset != 16 {
+		t.Fatalf("undeclared TEXCOORD element = %#v; want the data-derived byte 16", element)
 	}
 }
 
