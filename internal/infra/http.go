@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ const (
 	defaultHTTPTimeout = 100 * time.Second
 	defaultRetryLimit  = 2
 	defaultRetryWait   = 300 * time.Millisecond
+	maxRetryAfterWait  = 10 * time.Second
 	probeTimeout       = 5 * time.Second
 
 	sessionPath = "/api/auth/get-session"
@@ -381,14 +383,24 @@ func (c *Client) Fetch(
 	}
 
 	var resp *http.Response
+	var retryAfter time.Duration
+	var hasRetryAfter bool
 	for attempt := range attempts {
-		if attempt > 0 && c.retryWait > 0 {
-			timer := time.NewTimer(c.retryWait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, ctx.Err()
-			case <-timer.C:
+		if attempt > 0 {
+			wait := c.retryWait
+			if hasRetryAfter {
+				wait = retryAfter
+				retryAfter = 0
+				hasRetryAfter = false
+			}
+			if wait > 0 {
+				timer := time.NewTimer(wait)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil, ctx.Err()
+				case <-timer.C:
+				}
 			}
 		}
 		var body io.Reader
@@ -406,15 +418,16 @@ func (c *Client) Fetch(
 		resp, err = c.http.Do(req)
 		diagnosticResponse = resp
 		if err != nil {
-			if attempt+1 < attempts && isUnreachable(err) {
+			if attempt+1 < attempts && IsUnreachable(err) {
 				continue
 			}
-			if nhd && isUnreachable(err) {
+			if nhd && IsUnreachable(err) {
 				c.triggerProbe()
 			}
 			return nil, err
 		}
 		if attempt+1 < attempts && isRetryStatus(resp.StatusCode) {
+			retryAfter, hasRetryAfter = retryAfterWait(resp.Header.Get("Retry-After"))
 			drainClose(resp.Body)
 			continue
 		}
@@ -447,7 +460,7 @@ func (c *Client) Fetch(
 			resp, requestErr = c.http.Do(request)
 			diagnosticResponse = resp
 			if requestErr != nil {
-				if isUnreachable(requestErr) {
+				if IsUnreachable(requestErr) {
 					c.triggerProbe()
 				}
 				return nil, requestErr
@@ -508,7 +521,7 @@ func (c *Client) Stream(
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		if nhd && isUnreachable(err) {
+		if nhd && IsUnreachable(err) {
 			c.triggerProbe()
 		}
 		return nil, err
@@ -798,11 +811,42 @@ func canRetryMethod(method string) bool {
 	}
 }
 
-// isUnreachable reports transport-level unreachability. Application failures
+// retryAfterWait parses a Retry-After value (delay seconds or an HTTP-date)
+// into a wait hint capped at maxRetryAfterWait. The boolean reports whether
+// the value was valid; this keeps an explicit zero-second delay distinct from
+// an absent, unparseable, or past value.
+func retryAfterWait(raw string) (time.Duration, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	secs, err := strconv.Atoi(raw)
+	if err == nil || errors.Is(err, strconv.ErrRange) {
+		if secs < 0 {
+			return 0, false
+		}
+		if secs >= int(maxRetryAfterWait/time.Second) {
+			return maxRetryAfterWait, true
+		}
+		return time.Duration(secs) * time.Second, true
+	}
+	when, err := http.ParseTime(raw)
+	if err != nil {
+		return 0, false
+	}
+	delay := time.Until(when)
+	if delay <= 0 {
+		return 0, false
+	}
+	return min(delay, maxRetryAfterWait), true
+}
+
+// IsUnreachable reports transport-level unreachability. Application failures
 // such as TLS certificate validation and redirect policy failures are excluded
 // first; *url.Error implements net.Error, so that check must not run before
-// the exclusion.
-func isUnreachable(err error) bool {
+// the exclusion. Opaque errors from embedded browsers or platform transports
+// fall back to matching known transport message fragments.
+func IsUnreachable(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) || isRedirectPolicyError(err) {
 		return false
 	}
@@ -814,7 +858,30 @@ func isUnreachable(err error) bool {
 		return true
 	}
 	var netErr net.Error
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return hasUnreachableMessage(err)
+}
+
+func hasUnreachableMessage(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{
+		"connection refused",
+		"no such host",
+		"network is unreachable",
+		"i/o timeout",
+		"timeout",
+		"temporarily unavailable",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func isNonReachabilityURLCause(err error) bool {

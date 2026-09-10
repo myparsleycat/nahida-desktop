@@ -251,7 +251,7 @@ func classifyLoginError(err error) error {
 	if errors.As(err, &httpErr) && (httpErr.Status >= 500 || httpErr.Status == 429) {
 		return ErrServerUnreachable
 	}
-	if isUnreachable(err) {
+	if infra.IsUnreachable(err) {
 		return ErrServerUnreachable
 	}
 	return ErrAuthFailed
@@ -262,17 +262,4 @@ func errorCode(err error) string {
 		return ""
 	}
 	return strings.TrimSpace(err.Error())
-}
-
-func isUnreachable(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "no such host") ||
-		strings.Contains(msg, "network is unreachable") ||
-		strings.Contains(msg, "i/o timeout") ||
-		strings.Contains(msg, "timeout") ||
-		strings.Contains(msg, "temporarily unavailable")
 }

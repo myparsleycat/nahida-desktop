@@ -6,7 +6,7 @@ func (c *Client) reportProbe(err error, endpoint, stage string, response *http.R
 	diagnostic := HTTPDiagnostic(http.MethodGet, endpoint, stage, response)
 	diagnostic.Operation, diagnostic.Severity = "probe", DiagnosticWarn
 	// Transport failures are the probe's offline signal, not a user-facing defect.
-	if stage == "request" && isUnreachable(err) {
+	if stage == "request" && IsUnreachable(err) {
 		diagnostic.Severity = DiagnosticDebug
 	}
 	c.probeDiagnostic.Report(c.log, err, "HTTP", diagnostic)
