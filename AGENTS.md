@@ -24,7 +24,7 @@
 - Implement against the current Wails v3 API. Do not use Wails v2 APIs.
 - If documentation and the installed Wails v3 source/API disagree, follow the installed source/API.
 - Wails is a fork of `wailsapp/wails`, not vendored in this repository.
-- Fork repository: `https://github.com/myparsleycat/wails`, branch `v3-nahida`.
+- Fork repository: `https://github.com/myparsleycat/wails`, branch `master`.
 - Resolve the Wails source from the version selected by `go.mod` and the current Go environment. If a separate local checkout is needed, discover it from the workspace instead of assuming a machine-specific absolute path.
 - Pin the fork in `go.mod` with `replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 <tag>`. Do not copy the fork into `third_party`.
 
