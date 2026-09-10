@@ -294,6 +294,63 @@ func TestPackedDualQuaternion24PresentStateClips(t *testing.T) {
 	}
 }
 
+// Some 24-byte object ports append a second UV word without changing the pose
+// math, so the legacy interpolation body must be recognized with either record.
+var packedDualQuaternion24LegacyShader = strings.Replace(
+	packedDualQuaternionShader,
+	"uint2 position; uint normal; uint tangent; uint texcoord;",
+	"uint2 position; uint normal; uint tangent; uint texcoord; uint texcoord1;",
+	1,
+)
+
+func TestPackedDualQuaternion24LegacyBody(t *testing.T) {
+	if stride, known := modelViewerPackedDualQuaternionBaseStride(packedDualQuaternion24LegacyShader); !known ||
+		stride != modelViewerPackedObjectStride24 {
+		t.Fatalf("24-byte legacy variant not recognized: stride=%d known=%t", stride, known)
+	}
+	if stride, known := modelViewerPackedDualQuaternionBaseStride(packedDualQuaternionShader); !known ||
+		stride != modelViewerPackedObjectStride {
+		t.Fatalf("20-byte legacy variant misread: stride=%d known=%t", stride, known)
+	}
+	dir := t.TempDir()
+	ini := strings.Replace(packedDualQuaternionINI, "stride = 20", "stride = 24", 1)
+	ini = strings.Replace(ini, "stride = 52", "stride = 56", 1)
+	for name, data := range map[string][]byte{
+		"mod.ini":   []byte(ini),
+		"anim.hlsl": []byte(packedDualQuaternion24LegacyShader),
+		"base.buf":  make([]byte, 3*24),
+		"blend.buf": make([]byte, 3*32),
+		"pose.buf":  make([]byte, 5160*56),
+		"head.ib":   make([]byte, 12),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(ini)
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	deformer, clips := detectModelViewerComputeAnimation(
+		dir,
+		dir,
+		"",
+		sections,
+		resources,
+		[]modelViewerDirectMesh{
+			{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+		},
+		nil,
+	)
+	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
+		deformer.Base.Stride != modelViewerPackedObjectStride24 ||
+		deformer.VertexCount != 3 || deformer.Pose == nil ||
+		deformer.Pose.BoneCount != 1 || deformer.Pose.FrameCount != 5160 {
+		t.Fatalf("unexpected deformer: %+v", deformer)
+	}
+	if len(clips) != 1 || clips[0].FrameStart != 6 || clips[0].FrameEnd != 5157 || clips[0].FPS != 24 {
+		t.Fatalf("unexpected clips: %+v", clips)
+	}
+}
+
 func TestPackedDualQuaternion24CompoundGuardClips(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
