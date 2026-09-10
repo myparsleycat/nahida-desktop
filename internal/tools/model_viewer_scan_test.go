@@ -18,6 +18,162 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+func TestModelViewerSharedGeometryPreservesMeshState(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	sections := parseModINI(`[TextureOverrideBody]
+if $swap == 0
+ps-t0 = ResourceRedDiffuse
+run = CommandListDraw
+endif
+[TextureOverrideAlternate]
+if $swap == 1
+ps-t0 = ResourceBlueDiffuse
+run = CommandListDraw
+endif
+[CommandListDraw]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceRedDiffuse]
+filename = red.png
+[ResourceBlueDiffuse]
+filename = blue.png
+` + viewerBodyResources)
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+	timing := &modelViewerMeshBuildTiming{}
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		filepath.Join(dir, "mod.ini"),
+		dir,
+		sections,
+		nil,
+		cache,
+		timing,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 2 || timing.Geometries != 1 || meshes[0].geometry != meshes[1].geometry {
+		t.Fatalf("meshes=%d geometry extractions=%d", len(meshes), timing.Geometries)
+	}
+	if meshes[0].id == meshes[1].id || meshes[0].component != "Body" || meshes[1].component != "Alternate" {
+		t.Fatal("sharing geometry merged mesh identity")
+	}
+	available := map[string]modelViewerTexturePayload{
+		"reddiffuse": {Key: "reddiffuse"}, "bluediffuse": {Key: "bluediffuse"},
+	}
+	for index, mesh := range meshes {
+		for _, frame := range []string{"0", "1", "2"} {
+			if modelViewerDNFSatisfied(
+				mesh.conditions,
+				map[string]string{"swap": frame},
+			) != (frame == modelViewerString(index)) {
+				t.Fatalf("mesh %d changed visibility at frame %s", index, frame)
+			}
+		}
+		item, payload := buildModelViewerDirectMeshPayload(mesh, nil, available, nil, cache)
+		wantTexture := []string{"reddiffuse", "bluediffuse"}[index]
+		if item.TexKey == nil || *item.TexKey != wantTexture {
+			t.Fatalf("mesh %d texture = %v", index, item.TexKey)
+		}
+		if !slices.Equal(payload.UVs, []float32{0, 1, 0, 1, 0, 1}) ||
+			!slices.Equal(payload.Indices, []uint32{0, 1, 2}) {
+			t.Fatalf("shared geometry was transformed again: UVs=%v indices=%v", payload.UVs, payload.Indices)
+		}
+	}
+}
+
+func TestModelViewerSharedGeometryDistinguishesBaseVertex(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	sections := parseModINI(`[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideOther]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 3
+` + viewerBodyResources)
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+	timing := &modelViewerMeshBuildTiming{}
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		filepath.Join(dir, "mod.ini"),
+		dir,
+		sections,
+		nil,
+		cache,
+		timing,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 2 || timing.Geometries != 2 {
+		t.Fatalf("meshes=%d geometry extractions=%d", len(meshes), timing.Geometries)
+	}
+	for index, mesh := range meshes {
+		start := uint32(index * 3)
+		if mesh.geometry.Position[0] != float32(start) ||
+			!slices.Equal(mesh.geometry.SourceIndices, []uint32{start, start + 1, start + 2}) {
+			t.Fatalf(
+				"base vertex %d selected positions=%v sources=%v",
+				start,
+				mesh.geometry.Position,
+				mesh.geometry.SourceIndices,
+			)
+		}
+	}
+}
+
+func TestModelViewerSharedGeometryDistinguishesResourceFormats(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	sections := parseModINI(`[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideOther]
+ib = ResourceShortIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceShortIB]
+filename = body.ib
+format = DXGI_FORMAT_R16_UINT
+` + viewerBodyResources)
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+	timing := &modelViewerMeshBuildTiming{}
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		filepath.Join(dir, "mod.ini"),
+		dir,
+		sections,
+		nil,
+		cache,
+		timing,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 2 || timing.Geometries != 2 {
+		t.Fatalf("meshes=%d geometry extractions=%d", len(meshes), timing.Geometries)
+	}
+	if !slices.Equal(meshes[0].geometry.SourceIndices, []uint32{0, 1, 2}) ||
+		!slices.Equal(meshes[1].geometry.SourceIndices, []uint32{0, 1}) {
+		t.Fatalf(
+			"resource formats shared decoded data: %v / %v",
+			meshes[0].geometry.SourceIndices,
+			meshes[1].geometry.SourceIndices,
+		)
+	}
+}
+
 func TestModelViewerScannerForksConditionalBufferState(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $swap = 0
