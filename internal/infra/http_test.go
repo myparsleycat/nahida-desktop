@@ -1142,22 +1142,26 @@ func TestRetryAfterWait(t *testing.T) {
 		raw  string
 		min  time.Duration
 		max  time.Duration
+		ok   bool
 	}{
-		{"empty", "", 0, 0},
-		{"zero", "0", 0, 0},
-		{"negative", "-3", 0, 0},
-		{"garbage", "later", 0, 0},
-		{"seconds", "2", 2 * time.Second, 2 * time.Second},
-		{"seconds capped", "3600", maxRetryAfterWait, maxRetryAfterWait},
-		{"http-date", future, time.Second, maxRetryAfterWait},
-		{"http-date capped", farFuture, maxRetryAfterWait, maxRetryAfterWait},
-		{"past http-date", "Mon, 02 Jan 2006 15:04:05 GMT", 0, 0},
+		{"empty", "", 0, 0, false},
+		{"zero", "0", 0, 0, true},
+		{"negative", "-3", 0, 0, false},
+		{"garbage", "later", 0, 0, false},
+		{"seconds", "2", 2 * time.Second, 2 * time.Second, true},
+		{"seconds capped", "3600", maxRetryAfterWait, maxRetryAfterWait, true},
+		{"http-date", future, time.Second, maxRetryAfterWait, true},
+		{"http-date capped", farFuture, maxRetryAfterWait, maxRetryAfterWait, true},
+		{"past http-date", "Mon, 02 Jan 2006 15:04:05 GMT", 0, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := retryAfterWait(tt.raw)
+			got, ok := retryAfterWait(tt.raw)
 			if got < tt.min || got > tt.max {
 				t.Fatalf("retryAfterWait(%q) = %s, want [%s, %s]", tt.raw, got, tt.min, tt.max)
+			}
+			if ok != tt.ok {
+				t.Fatalf("retryAfterWait(%q) valid = %v, want %v", tt.raw, ok, tt.ok)
 			}
 		})
 	}
@@ -1224,6 +1228,37 @@ func TestFetchRetriesWithDefaultWaitWithoutRetryAfter(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
 		t.Fatalf("elapsed = %s, want the default retry wait", elapsed)
+	}
+}
+
+func TestFetchHonorsZeroRetryAfterHeader(t *testing.T) {
+	t.Parallel()
+
+	var n atomic.Int32
+	limit := 1
+	wait := 2 * time.Second
+	c := testClient(t, ClientOptions{
+		RetryLimit: &limit,
+		RetryWait:  &wait,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if n.Add(1) == 1 {
+				resp := textResp(r, http.StatusTooManyRequests, "slow down")
+				resp.Header.Set("Retry-After", "0")
+				return resp, nil
+			}
+			return textResp(r, http.StatusOK, "ok"), nil
+		}),
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	resp, err := c.Fetch(ctx, "https://api.nahida.live/api/drive", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	closeBody(t, resp)
+	if n.Load() != 2 {
+		t.Fatalf("attempts = %d", n.Load())
 	}
 }
 

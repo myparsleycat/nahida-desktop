@@ -384,12 +384,14 @@ func (c *Client) Fetch(
 
 	var resp *http.Response
 	var retryAfter time.Duration
+	var hasRetryAfter bool
 	for attempt := range attempts {
 		if attempt > 0 {
 			wait := c.retryWait
-			if retryAfter > 0 {
+			if hasRetryAfter {
 				wait = retryAfter
 				retryAfter = 0
+				hasRetryAfter = false
 			}
 			if wait > 0 {
 				timer := time.NewTimer(wait)
@@ -425,7 +427,7 @@ func (c *Client) Fetch(
 			return nil, err
 		}
 		if attempt+1 < attempts && isRetryStatus(resp.StatusCode) {
-			retryAfter = retryAfterWait(resp.Header.Get("Retry-After"))
+			retryAfter, hasRetryAfter = retryAfterWait(resp.Header.Get("Retry-After"))
 			drainClose(resp.Body)
 			continue
 		}
@@ -810,31 +812,32 @@ func canRetryMethod(method string) bool {
 }
 
 // retryAfterWait parses a Retry-After value (delay seconds or an HTTP-date)
-// into a wait hint capped at maxRetryAfterWait. Unparseable or past values
-// return zero so the caller's default retry wait applies.
-func retryAfterWait(raw string) time.Duration {
+// into a wait hint capped at maxRetryAfterWait. The boolean reports whether
+// the value was valid; this keeps an explicit zero-second delay distinct from
+// an absent, unparseable, or past value.
+func retryAfterWait(raw string) (time.Duration, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return 0
+		return 0, false
 	}
 	if secs, err := strconv.Atoi(raw); err == nil {
-		if secs <= 0 {
-			return 0
+		if secs < 0 {
+			return 0, false
 		}
 		if secs >= int(maxRetryAfterWait/time.Second) {
-			return maxRetryAfterWait
+			return maxRetryAfterWait, true
 		}
-		return time.Duration(secs) * time.Second
+		return time.Duration(secs) * time.Second, true
 	}
 	when, err := http.ParseTime(raw)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	delay := time.Until(when)
 	if delay <= 0 {
-		return 0
+		return 0, false
 	}
-	return min(delay, maxRetryAfterWait)
+	return min(delay, maxRetryAfterWait), true
 }
 
 // IsUnreachable reports transport-level unreachability. Application failures
