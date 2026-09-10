@@ -986,9 +986,13 @@ func buildModelViewerDirectMeshPayload(
 		}
 		candidates := append([]string(nil), binding.TextureResourceNames...)
 		candidates = appendUniqueModelViewer(candidates, binding.DiffuseResourceName)
+		sort.Strings(candidates)
 		bestByRole := make(map[string]string)
 		for _, name := range candidates {
-			role := classifyModelViewerTextureRole(name)
+			role := binding.TextureRoles[modelViewerNormalizeKey(name)]
+			if role == "" {
+				role = classifyModelViewerTextureRole(name)
+			}
 			existing := bestByRole[role]
 			if existing == "" || modelViewerTextureNamePriority(name) > modelViewerTextureNamePriority(existing) {
 				bestByRole[role] = name

@@ -67,6 +67,45 @@ drawindexed = 3, 0, 0
 	}
 }
 
+func TestLoadModViewerBindsUnlabeledPsTexturesBySlotRoles(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"objectAPst8.png", "objectAPst9.png", "objectAPst12.png", "objectAPst14.png"} {
+		writeTextureFile(t, dir, name, encodeTinyPNG())
+	}
+	fixture := loadViewerFixture(t, dir, `[TextureOverrideObjectA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t9 = ref ResourceObjectAPst8
+ps-t10 = ref ResourceObjectAPst9
+ps-t13 = ref ResourceObjectAPst12
+ps-t15 = ref ResourceObjectAPst14
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceObjectAPst8]
+filename = objectAPst8.png
+[ResourceObjectAPst9]
+filename = objectAPst9.png
+[ResourceObjectAPst12]
+filename = objectAPst12.png
+[ResourceObjectAPst14]
+filename = objectAPst14.png
+`)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("meshes = %#v", fixture.result.Meshes)
+	}
+	mesh := fixture.result.Meshes[0]
+	if !strings.HasSuffix(texKey(mesh), "objectAPst8.png") ||
+		mesh.NormalMapKey == nil || !strings.HasSuffix(*mesh.NormalMapKey, "objectAPst9.png") ||
+		mesh.LightMapKey == nil || !strings.HasSuffix(*mesh.LightMapKey, "objectAPst12.png") ||
+		mesh.MaterialMapKey == nil || !strings.HasSuffix(*mesh.MaterialMapKey, "objectAPst14.png") {
+		t.Fatalf("mesh textures = %#v", mesh)
+	}
+	if len(fixture.result.Textures) != 4 {
+		t.Fatalf("textures = %#v", fixture.result.Textures)
+	}
+}
+
 func TestLoadModViewerIgnoresRuntimeGuardsButKeepsToggleConditions(t *testing.T) {
 	dir := t.TempDir()
 	result := loadViewerMod(t, dir, `[Constants]

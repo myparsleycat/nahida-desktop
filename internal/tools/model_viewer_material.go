@@ -16,6 +16,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/myparsleycat/ddsutil"
@@ -33,6 +35,11 @@ type modelViewerTextureBinding struct {
 	TextureResourceNames []string
 	TextureRoles         map[string]string
 	OverrideHash         string
+}
+
+type modelViewerTextureSlotCandidate struct {
+	slot     int
+	resource string
 }
 
 type modelViewerPreparedTexture struct {
@@ -90,6 +97,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		var textureNames []string
 		textureRoles := make(map[string]string)
 		semanticDiffuse := ""
+		var slotTextures []modelViewerTextureSlotCandidate
 		for key, value := range assignments {
 			lowerValue := strings.ToLower(value)
 			_, semantic := modelViewerSemanticTextureRole(key)
@@ -109,8 +117,40 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 						if role == "diffuse" {
 							semanticDiffuse = resolved
 						}
+					} else if slot, ok := modelViewerPsSlotNumber(key); ok {
+						slotTextures = append(
+							slotTextures,
+							modelViewerTextureSlotCandidate{slot: slot, resource: resolved},
+						)
 					}
 				}
+			}
+		}
+		// Dump-style overrides bind unlabeled textures at ps-tN slots. The game
+		// orders those slots diffuse, normal, light, material, so the ascending
+		// slot order recovers roles the resource names do not carry. Without it a
+		// helper map can be promoted to diffuse on one load and another on the
+		// next, because the assignment map has no stable iteration order.
+		if len(textureRoles) == 0 && len(slotTextures) > 0 {
+			sort.SliceStable(slotTextures, func(i, j int) bool {
+				return slotTextures[i].slot < slotTextures[j].slot
+			})
+			canonicalRoles := []string{"diffuse", "normal_map", "light_map", "material_map"}
+			roleIndex := 0
+			for _, candidate := range slotTextures {
+				if roleIndex >= len(canonicalRoles) {
+					break
+				}
+				resourceKey := modelViewerNormalizeKey(candidate.resource)
+				if _, exists := textureRoles[resourceKey]; exists {
+					continue
+				}
+				role := canonicalRoles[roleIndex]
+				textureRoles[resourceKey] = role
+				if role == "diffuse" {
+					semanticDiffuse = candidate.resource
+				}
+				roleIndex++
 			}
 		}
 		direct := ""
@@ -153,6 +193,18 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		}
 	}
 	return bindings
+}
+
+func modelViewerPsSlotNumber(key string) (int, bool) {
+	normalized := modelViewerNormalizeKey(key)
+	if !strings.HasPrefix(normalized, "pst") {
+		return 0, false
+	}
+	slot, err := strconv.Atoi(strings.TrimPrefix(normalized, "pst"))
+	if err != nil {
+		return 0, false
+	}
+	return slot, true
 }
 
 func resolveModelViewerAssignments(

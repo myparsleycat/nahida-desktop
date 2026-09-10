@@ -92,6 +92,90 @@ filename = material.dds`)
 	}
 }
 
+func TestModelViewerUnlabeledPsSlotsInferCanonicalRoles(t *testing.T) {
+	sections := parseModINI(`[TextureOverrideObjectA]
+ib = ResourceObjectAIB
+ps-t13 = ref ResourceObjectAPst12
+ps-t15 = ref ResourceObjectAPst14
+ps-t9 = ref ResourceObjectAPst8
+ps-t10 = ref ResourceObjectAPst9
+
+[ResourceObjectAIB]
+filename = objectA.ib
+format = DXGI_FORMAT_R32_UINT
+
+[ResourceObjectAPst8]
+filename = objectAPst8.dds
+
+[ResourceObjectAPst9]
+filename = objectAPst9.dds
+
+[ResourceObjectAPst12]
+filename = objectAPst12.dds
+
+[ResourceObjectAPst14]
+filename = objectAPst14.dds`)
+	want := map[string]string{
+		"objectapst8":  "diffuse",
+		"objectapst9":  "normal_map",
+		"objectapst12": "light_map",
+		"objectapst14": "material_map",
+	}
+	for run := range 32 {
+		bindings := collectModelViewerTextureBindings(sections, nil)
+		if len(bindings) != 1 {
+			t.Fatalf("run %d bindings = %#v", run, bindings)
+		}
+		binding := bindings[0]
+		if binding.DiffuseResourceName != "ObjectAPst8" {
+			t.Fatalf("run %d diffuse = %q, want ObjectAPst8", run, binding.DiffuseResourceName)
+		}
+		for key, role := range want {
+			if binding.TextureRoles[key] != role {
+				t.Fatalf(
+					"run %d role[%q] = %q, want %q; roles=%v",
+					run,
+					key,
+					binding.TextureRoles[key],
+					role,
+					binding.TextureRoles,
+				)
+			}
+		}
+	}
+}
+
+func TestModelViewerSemanticRolesWinOverSlotOrder(t *testing.T) {
+	sections := parseModINI(`[TextureOverrideObjectA]
+ib = ResourceObjectAIB
+Resource\ZZMI\LightMap = ref ResourceObjectALight
+ps-t9 = ref ResourceObjectAGlow
+ps-t10 = ref ResourceObjectAPst8
+
+[ResourceObjectAIB]
+filename = objectA.ib
+format = DXGI_FORMAT_R32_UINT
+
+[ResourceObjectALight]
+filename = objectLight.dds
+
+[ResourceObjectAGlow]
+filename = objectGlow.dds
+
+[ResourceObjectAPst8]
+filename = objectAPst8.dds`)
+	bindings := collectModelViewerTextureBindings(sections, nil)
+	if len(bindings) != 1 {
+		t.Fatalf("bindings = %#v", bindings)
+	}
+	if role := bindings[0].TextureRoles[modelViewerNormalizeKey("ObjectALight")]; role != "light_map" {
+		t.Fatalf("semantic light role = %q", role)
+	}
+	if role, exists := bindings[0].TextureRoles[modelViewerNormalizeKey("ObjectAPst8")]; exists {
+		t.Fatalf("unlabeled slot was role-assigned over a semantic binding: %q", role)
+	}
+}
+
 func TestDetectModelViewerMaterialProfile(t *testing.T) {
 	tests := []struct {
 		name, ini, want string
