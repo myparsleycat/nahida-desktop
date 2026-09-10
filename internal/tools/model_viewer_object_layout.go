@@ -15,6 +15,7 @@ import (
 const (
 	modelViewerPackedObjectStride   = 20
 	modelViewerPackedObjectStride24 = 24
+	modelViewerPackedObjectStride28 = 28
 	modelViewerPackedObjectKind     = "gimi_cyclic_packed_v1"
 	modelViewerPackedObjectWEpsilon = 0.05
 
@@ -29,7 +30,8 @@ var (
 )
 
 func isModelViewerPackedObjectStride(stride int) bool {
-	return stride == modelViewerPackedObjectStride || stride == modelViewerPackedObjectStride24
+	return stride == modelViewerPackedObjectStride || stride == modelViewerPackedObjectStride24 ||
+		stride == modelViewerPackedObjectStride28
 }
 
 func modelViewerPackedObjectLayout(indexFormat string, stride int) modelViewerFmtLayout {
@@ -77,6 +79,11 @@ func modelViewerPackedObjectShaderLayout(shader string) (stride, texcoordOffset 
 		return modelViewerPackedObjectStride, 12, true
 	case strings.Contains(compact, "structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord;uinttexcoord1;}"):
 		return modelViewerPackedObjectStride24, 16, true
+	case strings.Contains(
+		compact,
+		"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord;uinttexcoord1;}",
+	):
+		return modelViewerPackedObjectStride28, 20, true
 	default:
 		return 0, 0, false
 	}
@@ -163,6 +170,10 @@ func modelViewerPackedObjectStrideOf(declared int, data []byte) (int, bool) {
 	if len(data) >= modelViewerPackedObjectStride && len(data)%modelViewerPackedObjectStride == 0 &&
 		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride) {
 		return modelViewerPackedObjectStride, true
+	}
+	if len(data) >= modelViewerPackedObjectStride28 && len(data)%modelViewerPackedObjectStride28 == 0 &&
+		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride28) {
+		return modelViewerPackedObjectStride28, true
 	}
 	return 0, false
 }
