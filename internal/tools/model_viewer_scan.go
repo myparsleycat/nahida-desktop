@@ -332,6 +332,7 @@ type modelViewerResolvedDraw struct {
 // their own visibility, textures, position overrides, and instance counts.
 type modelViewerDrawGeometryKey struct {
 	ib, position, vector, texcoord     string
+	ibFormat                           string
 	kind                               string
 	packedTexcoordOffset               int
 	packedTexcoordDeclared             bool
@@ -457,7 +458,11 @@ func buildModelViewerDirectScannedMeshesAt(
 		timing.SetupMs += time.Since(stageStartedAt).Milliseconds()
 	}
 	var output []modelViewerDirectMesh
-	geometryIndexes := make(map[string]int)
+	type geometryIndexKey struct {
+		sectionName string
+		source      modelViewerDrawGeometryKey
+	}
+	geometryIndexes := make(map[geometryIndexKey]int)
 	geometries := make(map[modelViewerDrawGeometryKey]*modelViewerGeometry)
 	for _, draw := range draws {
 		record := draw.record
@@ -477,17 +482,15 @@ func buildModelViewerDirectScannedMeshesAt(
 			continue
 		}
 		ib, position := source.ib, source.position
-		geometryKey := fmt.Sprintf(
-			"%s|%s|%s|%s|%s|%d|%d|%t",
-			record.sectionName,
-			ib.Filename,
-			position.Filename,
-			source.vector.Filename,
-			source.texcoord.Filename,
-			record.draw.IndexCount,
-			record.draw.StartIndex,
-			record.auto,
-		)
+		sourceKey := modelViewerDrawGeometryKey{
+			ib: ib.Name, position: position.Name, vector: source.vector.Name, texcoord: source.texcoord.Name,
+			ibFormat: ib.Format,
+			kind:     source.kind, packedTexcoordOffset: source.packedTexcoordOffset,
+			packedTexcoordDeclared: source.packedTexcoordDeclared,
+			indexCount:             record.draw.IndexCount, startIndex: record.draw.StartIndex,
+			baseVertex: record.draw.BaseVertex, auto: record.auto,
+		}
+		geometryKey := geometryIndexKey{sectionName: record.sectionName, source: sourceKey}
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, draw.conditions)
@@ -548,13 +551,6 @@ func buildModelViewerDirectScannedMeshesAt(
 					InputSlotClass:    "per-vertex",
 				},
 			)
-		}
-		sourceKey := modelViewerDrawGeometryKey{
-			ib: ib.Name, position: position.Name, vector: source.vector.Name, texcoord: source.texcoord.Name,
-			kind: source.kind, packedTexcoordOffset: source.packedTexcoordOffset,
-			packedTexcoordDeclared: source.packedTexcoordDeclared,
-			indexCount:             record.draw.IndexCount, startIndex: record.draw.StartIndex,
-			baseVertex: record.draw.BaseVertex, auto: record.auto,
 		}
 		geometry := geometries[sourceKey]
 		if geometry == nil {

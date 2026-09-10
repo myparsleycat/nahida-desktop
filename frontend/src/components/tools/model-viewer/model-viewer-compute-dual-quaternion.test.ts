@@ -268,12 +268,17 @@ it.skipIf(!process.env.MODEL_VIEWER_PACKED_DQ_MOD)(
     () => {
         const dir = process.env.MODEL_VIEWER_PACKED_DQ_MOD!;
         const files = readdirSync(dir);
-        const blendName = files.find((name) => /blend\.buf$/i.test(name));
-        const poseName = files.find((name) => /pose\.buf$/i.test(name));
-        if (!blendName || !poseName) {
-            throw new Error("local mod is missing a packed dual-quaternion buffer set");
+        const blendNames = files.filter((name) => /blend\.buf$/i.test(name));
+        const poseNames = files.filter((name) => /pose\.buf$/i.test(name));
+        if (blendNames.length !== 1 || poseNames.length !== 1) {
+            throw new Error("local mod must contain exactly one packed dual-quaternion buffer set");
         }
+        const blendName = blendNames[0]!;
+        const poseName = poseNames[0]!;
         const baseName = blendName.replace(/blend\.buf$/i, ".buf");
+        if (poseName.replace(/pose\.buf$/i, ".buf").toLowerCase() !== baseName.toLowerCase()) {
+            throw new Error("local mod blend and pose buffers must belong to the same set");
+        }
         const read = (name: string) => new Uint8Array(readFileSync(join(dir, name))).buffer;
         const { deformer } = fixture();
         const buffers = {

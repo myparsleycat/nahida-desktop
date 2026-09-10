@@ -68,6 +68,7 @@ describe("normalizeModelViewerTransport", () => {
         expect(result.previewPath).toBe(input.previewPath);
 
         expect(result.meshes[0]).toMatchObject({
+            geometryUrl: "positions",
             conditions: [],
             textureVariants: [],
             normalMapVariants: [],

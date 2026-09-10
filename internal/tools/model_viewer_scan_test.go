@@ -174,6 +174,74 @@ format = DXGI_FORMAT_R16_UINT
 	}
 }
 
+func TestModelViewerSameSectionGeometryPreservesConditionalDraws(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		draws   string
+		sources [][]uint32
+	}{
+		{
+			name: "base vertices",
+			draws: `ib = ResourceBodyIB
+if $swap == 0
+drawindexed = 3, 0, 0
+else
+drawindexed = 3, 0, 3
+endif`,
+			sources: [][]uint32{{0, 1, 2}, {3, 4, 5}},
+		},
+		{
+			name: "index formats",
+			draws: `if $swap == 0
+ib = ResourceBodyIB
+else
+ib = ResourceShortIB
+endif
+drawindexed = 3, 0, 0`,
+			sources: [][]uint32{{0, 1, 2}, {0, 1}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometry(t, dir)
+			sections := parseModINI(`[TextureOverrideBody]
+vb0 = ResourcePos
+vb1 = ResourceTc
+` + tc.draws + `
+[ResourceShortIB]
+filename = body.ib
+format = DXGI_FORMAT_R16_UINT
+` + viewerBodyResources)
+			cache := newModelViewerBufferCache()
+			defer cache.releaseAll()
+			timing := &modelViewerMeshBuildTiming{}
+			meshes, err := buildModelViewerDirectScannedMeshesAt(
+				filepath.Join(dir, "mod.ini"), dir, sections, nil, cache, timing,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(meshes) != 2 || timing.Geometries != 2 {
+				t.Fatalf("meshes=%d geometry extractions=%d", len(meshes), timing.Geometries)
+			}
+			if meshes[0].id == meshes[1].id || meshes[0].geometry == meshes[1].geometry {
+				t.Fatal("different conditional draws share mesh identity or geometry")
+			}
+			for index, mesh := range meshes {
+				if mesh.component != "Body" || !slices.Equal(mesh.geometry.SourceIndices, tc.sources[index]) {
+					t.Fatalf("mesh %d component=%s sources=%v", index, mesh.component, mesh.geometry.SourceIndices)
+				}
+				for _, swap := range []string{"0", "1"} {
+					if modelViewerDNFSatisfied(mesh.conditions, map[string]string{"swap": swap}) !=
+						(swap == modelViewerString(index)) {
+						t.Fatalf("mesh %d changed visibility at swap %s", index, swap)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestModelViewerScannerForksConditionalBufferState(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $swap = 0

@@ -1012,7 +1012,7 @@ endif
 	}
 }
 
-func TestLoadModViewerDeduplicatesDrawsThatDifferOnlyByBaseVertex(t *testing.T) {
+func TestLoadModViewerPreservesDrawsThatDifferOnlyByBaseVertex(t *testing.T) {
 	dir := t.TempDir()
 	result := loadViewerMod(t, dir, `[Constants]
 global $mode = 0
@@ -1029,8 +1029,17 @@ elif $mode == 1
 drawindexed = 3, 0, 1
 endif
 `+viewerBodyResources)
-	if len(result.Meshes) != 1 || len(result.Meshes[0].PositionVariants) != 0 {
+	if len(result.Meshes) != 2 || len(result.Meshes[0].PositionVariants) != 0 ||
+		len(result.Meshes[1].PositionVariants) != 0 {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.Meshes[0].GeometryURL == result.Meshes[1].GeometryURL {
+		t.Fatal("different base vertices share geometry")
+	}
+	first := evaluateViewerTransport(result, map[string]any{"mode": "0"})
+	second := evaluateViewerTransport(result, map[string]any{"mode": "1"})
+	if !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
+		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
 }
 

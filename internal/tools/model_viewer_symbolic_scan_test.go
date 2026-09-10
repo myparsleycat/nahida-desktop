@@ -110,6 +110,34 @@ drawindexed = 3, 3, 0`)
 	}
 }
 
+func TestModelViewerHashImageSlotsRejectNestedDraws(t *testing.T) {
+	for _, draw := range []string{"", "drawindexed = 3, 0, 0", "drawindexedinstanced = 3, 2, 0, 0, 0"} {
+		t.Run(draw, func(t *testing.T) {
+			sections := parseModINI(`[TextureOverrideImage]
+run = CommandListOuter
+[CommandListOuter]
+run = CommandListInner
+[CommandListInner]
+this = ResourceDiffuse
+if $swap == 1
+` + draw + `
+endif`)
+			slots := collectHashImageSlots(sections, map[string]modelViewerResource{
+				"diffuse": {Name: "Diffuse", Filename: "diffuse.png"},
+			}, nil, t.TempDir())
+			if draw != "" {
+				if len(slots) != 0 {
+					t.Fatalf("nested draw became a hash-image slot: %+v", slots)
+				}
+				return
+			}
+			if len(slots) != 1 || len(slots[0].files) != 1 || slots[0].files[0].file != "diffuse.png" {
+				t.Fatalf("nested image assignment was lost: %+v", slots)
+			}
+		})
+	}
+}
+
 func modelViewerAnimatedDrawSections(frames, draws int) []modINISection {
 	var ini strings.Builder
 	ini.WriteString("[TextureOverrideBody]\nrun = CommandListFrames\n[CommandListFrames]\n")
