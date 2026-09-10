@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ const (
 	defaultHTTPTimeout = 100 * time.Second
 	defaultRetryLimit  = 2
 	defaultRetryWait   = 300 * time.Millisecond
+	maxRetryAfterWait  = 10 * time.Second
 	probeTimeout       = 5 * time.Second
 
 	sessionPath = "/api/auth/get-session"
@@ -381,14 +383,22 @@ func (c *Client) Fetch(
 	}
 
 	var resp *http.Response
+	var retryAfter time.Duration
 	for attempt := range attempts {
-		if attempt > 0 && c.retryWait > 0 {
-			timer := time.NewTimer(c.retryWait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, ctx.Err()
-			case <-timer.C:
+		if attempt > 0 {
+			wait := c.retryWait
+			if retryAfter > 0 {
+				wait = retryAfter
+				retryAfter = 0
+			}
+			if wait > 0 {
+				timer := time.NewTimer(wait)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil, ctx.Err()
+				case <-timer.C:
+				}
 			}
 		}
 		var body io.Reader
@@ -406,15 +416,16 @@ func (c *Client) Fetch(
 		resp, err = c.http.Do(req)
 		diagnosticResponse = resp
 		if err != nil {
-			if attempt+1 < attempts && isUnreachable(err) {
+			if attempt+1 < attempts && IsUnreachable(err) {
 				continue
 			}
-			if nhd && isUnreachable(err) {
+			if nhd && IsUnreachable(err) {
 				c.triggerProbe()
 			}
 			return nil, err
 		}
 		if attempt+1 < attempts && isRetryStatus(resp.StatusCode) {
+			retryAfter = retryAfterWait(resp.Header.Get("Retry-After"))
 			drainClose(resp.Body)
 			continue
 		}
@@ -447,7 +458,7 @@ func (c *Client) Fetch(
 			resp, requestErr = c.http.Do(request)
 			diagnosticResponse = resp
 			if requestErr != nil {
-				if isUnreachable(requestErr) {
+				if IsUnreachable(requestErr) {
 					c.triggerProbe()
 				}
 				return nil, requestErr
@@ -508,7 +519,7 @@ func (c *Client) Stream(
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		if nhd && isUnreachable(err) {
+		if nhd && IsUnreachable(err) {
 			c.triggerProbe()
 		}
 		return nil, err
@@ -798,11 +809,39 @@ func canRetryMethod(method string) bool {
 	}
 }
 
-// isUnreachable reports transport-level unreachability. Application failures
+// retryAfterWait parses a Retry-After value (delay seconds or an HTTP-date)
+// into a wait hint capped at maxRetryAfterWait. Unparseable or past values
+// return zero so the caller's default retry wait applies.
+func retryAfterWait(raw string) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(raw); err == nil {
+		if secs <= 0 {
+			return 0
+		}
+		if secs >= int(maxRetryAfterWait/time.Second) {
+			return maxRetryAfterWait
+		}
+		return time.Duration(secs) * time.Second
+	}
+	when, err := http.ParseTime(raw)
+	if err != nil {
+		return 0
+	}
+	delay := time.Until(when)
+	if delay <= 0 {
+		return 0
+	}
+	return min(delay, maxRetryAfterWait)
+}
+
+// IsUnreachable reports transport-level unreachability. Application failures
 // such as TLS certificate validation and redirect policy failures are excluded
 // first; *url.Error implements net.Error, so that check must not run before
 // the exclusion.
-func isUnreachable(err error) bool {
+func IsUnreachable(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) || isRedirectPolicyError(err) {
 		return false
 	}

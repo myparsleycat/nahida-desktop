@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -599,6 +601,56 @@ func TestConcurrentEnsureSessionOpensOnce(t *testing.T) {
 	}
 	if opens.Load() != 1 {
 		t.Fatalf("opens = %d", opens.Load())
+	}
+}
+
+func TestClassifyLoginErrorTransportFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{
+			"dial refused",
+			&url.Error{
+				Op:  "Get",
+				URL: "https://gamebanana.com/api",
+				Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")},
+			},
+			ErrServerUnreachable,
+		},
+		{
+			"dns miss",
+			&url.Error{
+				Op:  "Get",
+				URL: "https://gamebanana.com/api",
+				Err: &net.DNSError{Err: "no such host", Name: "gamebanana.com"},
+			},
+			ErrServerUnreachable,
+		},
+		{"deadline", context.DeadlineExceeded, ErrServerUnreachable},
+		{
+			"malformed response",
+			&url.Error{Op: "Get", URL: "https://gamebanana.com/api", Err: errors.New("malformed HTTP response")},
+			ErrServerUnreachable,
+		},
+		{
+			"redirect loop",
+			&url.Error{Op: "Get", URL: "https://gamebanana.com/api", Err: errors.New("stopped after 10 redirects")},
+			ErrAuthFailed,
+		},
+		{"http status", &gameBananaHTTPError{Status: http.StatusBadGateway}, ErrServerUnreachable},
+		{"rate limited", &gameBananaHTTPError{Status: http.StatusTooManyRequests}, ErrServerUnreachable},
+		{"auth failure", errors.New("invalid rmc cookie"), ErrAuthFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyLoginError(tt.err); !errors.Is(got, tt.want) {
+				t.Fatalf("classify(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }
 

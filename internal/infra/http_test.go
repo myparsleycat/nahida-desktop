@@ -1132,6 +1132,101 @@ func TestFetchRetryLimitOverrideMakesOneShotRequest(t *testing.T) {
 	waitClosed(t, probed)
 }
 
+func TestRetryAfterWait(t *testing.T) {
+	t.Parallel()
+
+	future := time.Now().Add(2 * time.Second).UTC().Format(http.TimeFormat)
+	farFuture := time.Now().Add(time.Hour).UTC().Format(http.TimeFormat)
+	tests := []struct {
+		name string
+		raw  string
+		min  time.Duration
+		max  time.Duration
+	}{
+		{"empty", "", 0, 0},
+		{"zero", "0", 0, 0},
+		{"negative", "-3", 0, 0},
+		{"garbage", "later", 0, 0},
+		{"seconds", "2", 2 * time.Second, 2 * time.Second},
+		{"seconds capped", "3600", maxRetryAfterWait, maxRetryAfterWait},
+		{"http-date", future, time.Second, maxRetryAfterWait},
+		{"http-date capped", farFuture, maxRetryAfterWait, maxRetryAfterWait},
+		{"past http-date", "Mon, 02 Jan 2006 15:04:05 GMT", 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := retryAfterWait(tt.raw)
+			if got < tt.min || got > tt.max {
+				t.Fatalf("retryAfterWait(%q) = %s, want [%s, %s]", tt.raw, got, tt.min, tt.max)
+			}
+		})
+	}
+}
+
+func TestFetchHonorsRetryAfterHeader(t *testing.T) {
+	t.Parallel()
+
+	var n atomic.Int32
+	limit := 1
+	wait := 5 * time.Second
+	c := testClient(t, ClientOptions{
+		RetryLimit: &limit,
+		RetryWait:  &wait,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if n.Add(1) == 1 {
+				resp := textResp(r, http.StatusTooManyRequests, "slow down")
+				resp.Header.Set("Retry-After", "1")
+				return resp, nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+
+	start := time.Now()
+	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	closeBody(t, resp)
+	if n.Load() != 2 {
+		t.Fatalf("attempts = %d", n.Load())
+	}
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond || elapsed >= 5*time.Second {
+		t.Fatalf("elapsed = %s, want the ~1s Retry-After wait instead of the 5s default", elapsed)
+	}
+}
+
+func TestFetchRetriesWithDefaultWaitWithoutRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	var n atomic.Int32
+	limit := 1
+	wait := 200 * time.Millisecond
+	c := testClient(t, ClientOptions{
+		RetryLimit: &limit,
+		RetryWait:  &wait,
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if n.Add(1) == 1 {
+				return textResp(r, http.StatusTooManyRequests, "slow down"), nil
+			}
+			return textResp(r, 200, "ok"), nil
+		}),
+	})
+
+	start := time.Now()
+	resp, err := c.Fetch(context.Background(), "https://api.nahida.live/api/drive", FetchOptions{})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	closeBody(t, resp)
+	if n.Load() != 2 {
+		t.Fatalf("attempts = %d", n.Load())
+	}
+	if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
+		t.Fatalf("elapsed = %s, want the default retry wait", elapsed)
+	}
+}
+
 func TestProbeSetsMaintenanceFromBody(t *testing.T) {
 	t.Parallel()
 
