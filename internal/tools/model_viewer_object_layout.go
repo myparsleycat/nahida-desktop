@@ -129,10 +129,16 @@ func collectModelViewerPackedObjectResources(root, shaderBaseDir string, section
 			if !ok {
 				continue
 			}
+			// Dual-quaternion records move the diffuse UV with their vertex
+			// layout; the generic object layout cannot tell the 24-byte and
+			// 28-byte records apart by stride alone.
+			if _, texcoordOffset, known := modelViewerPackedDualQuaternionLayout(shader); known {
+				add(pass.outputName, texcoordOffset)
+				add(pass.t50, texcoordOffset)
+				continue
+			}
 			_, texcoordOffset, known := modelViewerPackedObjectShaderLayout(shader)
-			if isKnownModelViewerPackedDualQuaternionShader(shader) {
-				texcoordOffset = 16
-			} else if !known {
+			if !known {
 				continue
 			}
 			add(pass.outputName, texcoordOffset)

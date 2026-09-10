@@ -6,15 +6,18 @@ import (
 )
 
 // Packed dual-quaternion armature shaders pose game vertices with Blender-space
-// dual quaternions. Their base records come in two packed layouts: the 20-byte
-// record and the 24-byte object record with an explicit UV0/UV1 pair. Most
+// dual quaternions. Their base records come in three packed layouts: the 20-byte
+// record, the 24-byte object record with an explicit UV0/UV1 pair, and the
+// 28-byte object record that keeps a vertex color word before the pair. Most
 // exports keep the legacy interpolation body; the newer object build replaces
-// the pose math as well. Every variant reports the stride later stages decode.
+// the pose math as well. Every variant reports the stride and diffuse UV offset
+// later stages decode.
 
 type modelViewerPackedDualQuaternionVariant struct {
-	baseStride    int
-	vertexStructs []string
-	required      []string
+	baseStride     int
+	texcoordOffset int
+	vertexStructs  []string
+	required       []string
 }
 
 // modelViewerPackedDualQuaternionLegacyBody is shared by exports that differ
@@ -50,21 +53,32 @@ var modelViewerPackedDualQuaternionLegacyBody = []string{
 
 var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionVariant{
 	{
-		baseStride: modelViewerPackedObjectStride,
+		baseStride:     modelViewerPackedObjectStride,
+		texcoordOffset: 16,
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord;}",
 		},
 		required: modelViewerPackedDualQuaternionLegacyBody,
 	},
 	{
-		baseStride: modelViewerPackedObjectStride24,
+		baseStride:     modelViewerPackedObjectStride24,
+		texcoordOffset: 16,
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord;uinttexcoord1;}",
 		},
 		required: modelViewerPackedDualQuaternionLegacyBody,
 	},
 	{
-		baseStride: modelViewerPackedObjectStride24,
+		baseStride:     modelViewerPackedObjectStride28,
+		texcoordOffset: 20,
+		vertexStructs: []string{
+			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord;uinttexcoord1;}",
+		},
+		required: modelViewerPackedDualQuaternionLegacyBody,
+	},
+	{
+		baseStride:     modelViewerPackedObjectStride24,
+		texcoordOffset: 16,
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord0;uinttexcoord1;}",
 		},
@@ -91,12 +105,12 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 	},
 }
 
-// modelViewerPackedDualQuaternionBaseStride reports the packed vertex stride a
-// recognized dual-quaternion armature shader consumes.
-func modelViewerPackedDualQuaternionBaseStride(shader string) (int, bool) {
+// modelViewerPackedDualQuaternionLayout reports the packed vertex stride and
+// diffuse UV offset a recognized dual-quaternion armature shader consumes.
+func modelViewerPackedDualQuaternionLayout(shader string) (int, int, bool) {
 	compact := compactModelViewerShader(shader)
 	if !strings.Contains(compact, "structblendattributes{float4weights;int4indicies;}") {
-		return 0, false
+		return 0, 0, false
 	}
 	for _, variant := range modelViewerPackedDualQuaternionVariants {
 		if !slices.ContainsFunc(variant.vertexStructs, func(signature string) bool {
@@ -105,10 +119,17 @@ func modelViewerPackedDualQuaternionBaseStride(shader string) (int, bool) {
 			continue
 		}
 		if modelViewerShaderContainsAll(compact, variant.required) {
-			return variant.baseStride, true
+			return variant.baseStride, variant.texcoordOffset, true
 		}
 	}
-	return 0, false
+	return 0, 0, false
+}
+
+// modelViewerPackedDualQuaternionBaseStride reports the packed vertex stride a
+// recognized dual-quaternion armature shader consumes.
+func modelViewerPackedDualQuaternionBaseStride(shader string) (int, bool) {
+	stride, _, known := modelViewerPackedDualQuaternionLayout(shader)
+	return stride, known
 }
 
 func isKnownModelViewerPackedDualQuaternionShader(shader string) bool {
