@@ -16,6 +16,7 @@ import (
 type modelViewerPackedDualQuaternionVariant struct {
 	baseStride     int
 	texcoordOffset int
+	poseVariant    string
 	vertexStructs  []string
 	required       []string
 }
@@ -105,7 +106,8 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord0;uinttexcoord1;}",
 		},
-		required: modelViewerPackedDualQuaternionObjectBody,
+		poseVariant: "object",
+		required:    modelViewerPackedDualQuaternionObjectBody,
 	},
 	{
 		baseStride:     modelViewerPackedObjectStride28,
@@ -113,16 +115,22 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
 		},
-		required: modelViewerPackedDualQuaternionObjectBody,
+		poseVariant: "object",
+		required:    modelViewerPackedDualQuaternionObjectBody,
 	},
 }
 
 // modelViewerPackedDualQuaternionLayout reports the packed vertex stride and
 // diffuse UV offset a recognized dual-quaternion armature shader consumes.
 func modelViewerPackedDualQuaternionLayout(shader string) (int, int, bool) {
+	variant, known := modelViewerPackedDualQuaternionVariantForShader(shader)
+	return variant.baseStride, variant.texcoordOffset, known
+}
+
+func modelViewerPackedDualQuaternionVariantForShader(shader string) (modelViewerPackedDualQuaternionVariant, bool) {
 	compact := compactModelViewerShader(shader)
 	if !strings.Contains(compact, "structblendattributes{float4weights;int4indicies;}") {
-		return 0, 0, false
+		return modelViewerPackedDualQuaternionVariant{}, false
 	}
 	for _, variant := range modelViewerPackedDualQuaternionVariants {
 		if !slices.ContainsFunc(variant.vertexStructs, func(signature string) bool {
@@ -131,10 +139,10 @@ func modelViewerPackedDualQuaternionLayout(shader string) (int, int, bool) {
 			continue
 		}
 		if modelViewerShaderContainsAll(compact, variant.required) {
-			return variant.baseStride, variant.texcoordOffset, true
+			return variant, true
 		}
 	}
-	return 0, 0, false
+	return modelViewerPackedDualQuaternionVariant{}, false
 }
 
 // modelViewerPackedDualQuaternionBaseStride reports the packed vertex stride a

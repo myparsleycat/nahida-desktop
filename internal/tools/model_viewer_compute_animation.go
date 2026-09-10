@@ -42,20 +42,22 @@ type modelViewerComputePass struct {
 }
 
 type modelViewerKnownBoneKernel struct {
-	kind        string
-	baseStride  int
-	blendStride int
-	poseStride  int
-	shapePasses bool
+	kind                  string
+	dualQuaternionVariant string
+	baseStride            int
+	blendStride           int
+	poseStride            int
+	shapePasses           bool
 }
 
 func modelViewerKnownBoneKernelForShader(shader string) (modelViewerKnownBoneKernel, bool) {
-	if baseStride, known := modelViewerPackedDualQuaternionBaseStride(shader); known {
+	if variant, known := modelViewerPackedDualQuaternionVariantForShader(shader); known {
 		return modelViewerKnownBoneKernel{
-			kind:        modelViewerPackedDualQuaternionKind,
-			baseStride:  baseStride,
-			blendStride: 32,
-			poseStride:  56,
+			kind:                  modelViewerPackedDualQuaternionKind,
+			dualQuaternionVariant: variant.poseVariant,
+			baseStride:            variant.baseStride,
+			blendStride:           32,
+			poseStride:            56,
 		}, true
 	}
 	switch {
@@ -191,7 +193,8 @@ func detectModelViewerComputeAnimation(
 		VertexCount: vertexCount,
 		Base:        baseSource,
 		Pose: &ModelViewerComputePoseSource{
-			Blend: blendSource, Frames: poseSource, BoneCount: boneCount, FrameCount: frameCount,
+			DualQuaternionVariant: kernel.dualQuaternionVariant,
+			Blend:                 blendSource, Frames: poseSource, BoneCount: boneCount, FrameCount: frameCount,
 		},
 	}
 	if kernel.shapePasses {
@@ -832,27 +835,49 @@ func detectModelViewerGIMIShapePoseClips(
 	endPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
 	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
 	for _, lines := range modelViewerPoseFrameLogicLines(poseSection, sections) {
+		depth, rangeDepth := 0, 0
 		for _, raw := range lines {
 			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
-			if !explicitRange {
-				if match := endPattern.FindStringSubmatch(line); match != nil {
-					explicitRange = true
-					expression := modelViewerComputeRangeClause(match[1])
-					var valid bool
-					endVariable, endOffset, valid = parseModelViewerComputeRangeToken(expression)
-					if !valid {
-						return nil, true
+			lower := strings.ToLower(line)
+			if strings.HasPrefix(lower, "if ") {
+				depth++
+				if !explicitRange {
+					if match := endPattern.FindStringSubmatch(line); match != nil {
+						explicitRange, rangeDepth = true, depth
+						expression := modelViewerComputeRangeClause(match[1])
+						var valid bool
+						endVariable, endOffset, valid = parseModelViewerComputeRangeToken(expression)
+						if !valid {
+							return nil, true
+						}
 					}
 				}
+				continue
+			}
+
+			// A reset belongs to the selected loop guard, not a key binding,
+			// state-entry assignment, or the guard's else branch.
+			if rangeDepth > 0 && depth == rangeDepth && (lower == "endif" || lower == "else" ||
+				strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if ")) {
+				break
+			}
+			if lower == "endif" {
+				depth--
+				continue
+			}
+			if rangeDepth == 0 {
+				continue
 			}
 			if match := resetPattern.FindStringSubmatch(line); match != nil {
 				candidate, offset, valid := parseModelViewerComputeRangeToken(match[1])
-				// A named start variable identifies a state machine; later
-				// literal entries are state entry frames, not the reset base.
-				if valid && candidate != frameVariable && (candidate != "" || startVariable == "") {
+				if valid && candidate != frameVariable {
 					startVariable, startOffset, hasReset = candidate, offset, true
+					break
 				}
 			}
+		}
+		if explicitRange {
+			break
 		}
 	}
 	if !explicitRange {

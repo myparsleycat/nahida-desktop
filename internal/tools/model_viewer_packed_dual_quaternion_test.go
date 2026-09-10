@@ -280,7 +280,7 @@ func TestPackedDualQuaternion24PresentStateClips(t *testing.T) {
 	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
 		deformer.Base.Stride != modelViewerPackedObjectStride24 ||
 		deformer.VertexCount != 3 || deformer.Pose == nil ||
-		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 {
+		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 || deformer.Pose.DualQuaternionVariant != "object" {
 		t.Fatalf("unexpected deformer: %+v", deformer)
 	}
 	if len(clips) != 2 ||
@@ -343,7 +343,7 @@ func TestPackedDualQuaternion24LegacyBody(t *testing.T) {
 	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
 		deformer.Base.Stride != modelViewerPackedObjectStride24 ||
 		deformer.VertexCount != 3 || deformer.Pose == nil ||
-		deformer.Pose.BoneCount != 1 || deformer.Pose.FrameCount != 5160 {
+		deformer.Pose.BoneCount != 1 || deformer.Pose.FrameCount != 5160 || deformer.Pose.DualQuaternionVariant != "" {
 		t.Fatalf("unexpected deformer: %+v", deformer)
 	}
 	if len(clips) != 1 || clips[0].FrameStart != 6 || clips[0].FrameEnd != 5157 || clips[0].FPS != 24 {
@@ -396,7 +396,7 @@ func TestPackedDualQuaternion28LegacyBody(t *testing.T) {
 	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
 		deformer.Base.Stride != modelViewerPackedObjectStride28 ||
 		deformer.VertexCount != 3 || deformer.Pose == nil ||
-		deformer.Pose.BoneCount != 1 || deformer.Pose.FrameCount != 5160 {
+		deformer.Pose.BoneCount != 1 || deformer.Pose.FrameCount != 5160 || deformer.Pose.DualQuaternionVariant != "" {
 		t.Fatalf("unexpected deformer: %+v", deformer)
 	}
 	if len(clips) != 1 || clips[0].FrameStart != 6 || clips[0].FrameEnd != 5157 || clips[0].FPS != 24 {
@@ -483,7 +483,7 @@ func TestPackedDualQuaternion28ObjectBody(t *testing.T) {
 	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
 		deformer.Base.Stride != modelViewerPackedObjectStride28 ||
 		deformer.VertexCount != 3 || deformer.Pose == nil ||
-		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 {
+		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 || deformer.Pose.DualQuaternionVariant != "object" {
 		t.Fatalf("unexpected deformer: %+v", deformer)
 	}
 	if len(clips) != 2 ||
@@ -859,6 +859,58 @@ func TestComputePoseInvalidStatePreservesValidClips(t *testing.T) {
 				!strings.Contains(diagnostics[0], "pose.buf") ||
 				!strings.Contains(diagnostics[0], "anim.hlsl") {
 				t.Fatalf("missing invalid-state diagnostic: %v", diagnostics)
+			}
+		})
+	}
+}
+
+func TestComputePoseRangeUsesGuardedReset(t *testing.T) {
+	for _, tc := range []struct {
+		name, ini string
+		valid     bool
+	}{
+		{
+			name: "pose before key reset",
+			ini: "[CustomShaderPose]\nif $freq > 9\n$freq=2\nendif\n" +
+				"[KeyReset]\nkey=r\n$freq=0",
+			valid: true,
+		},
+		{
+			name: "present after key reset",
+			ini: "[CustomShaderPose]\nx88=$freq\n[KeyReset]\n$freq=$entry\n" +
+				"[Present]\n$freq=0\nif $freq > 9\n$freq=2\nendif\n$freq=7",
+			valid: true,
+		},
+		{
+			name:  "named reset outside guard",
+			ini:   "[CustomShaderPose]\nif $freq > 9\n$freq=2\nendif\n$freq=$entry",
+			valid: true,
+		},
+		{
+			name: "nested guard",
+			ini: "[CustomShaderPose]\nif $playing\nif $freq > 9\n" +
+				"if $enabled\n$freq=2\nendif\nendif\n$freq=7\nendif",
+			valid: true,
+		},
+		{
+			name: "unrelated reset cannot supply missing loop reset",
+			ini:  "[CustomShaderPose]\nif $freq > 9\n$done=1\nendif\n[KeyReset]\n$freq=2",
+		},
+		{
+			name: "reset in else is not loop reset",
+			ini:  "[CustomShaderPose]\nif $freq > 9\n$done=1\nelse\n$freq=2\nendif",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sections := parseModINI(tc.ini)
+			clips, explicit := detectModelViewerGIMIShapePoseClips(
+				sections, sections[0], "$freq", map[string]any{"entry": 0}, nil, "test", 11,
+			)
+			if !explicit || (len(clips) == 1) != tc.valid {
+				t.Fatalf("explicit=%t clips=%d valid=%t", explicit, len(clips), tc.valid)
+			}
+			if tc.valid && (clips[0].FrameStart != 2 || clips[0].FrameEnd != 9) {
+				t.Fatalf("clip=%d..%d, want 2..9", clips[0].FrameStart, clips[0].FrameEnd)
 			}
 		})
 	}

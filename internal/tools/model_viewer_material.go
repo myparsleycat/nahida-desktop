@@ -129,6 +129,21 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 				}
 			}
 		}
+
+		// Named roles are stronger evidence than slot order; only wholly
+		// unlabeled dumps can use the canonical slot sequence below.
+		for _, candidate := range slotTextures {
+			key := modelViewerNormalizeKey(candidate.resource)
+			if _, exists := textureRoles[key]; exists {
+				continue
+			}
+			role := classifyModelViewerTextureRole(candidate.resource)
+			if role != "diffuse" || strings.Contains(key, "diffuse") ||
+				strings.Contains(key, "basecolor") || strings.Contains(key, "albedo") {
+				textureRoles[key] = role
+			}
+		}
+
 		// Dump-style overrides bind unlabeled textures at ps-tN slots. The game
 		// orders those slots diffuse, normal, light, material, so the ascending
 		// slot order recovers roles the resource names do not carry. Without it a

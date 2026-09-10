@@ -153,10 +153,12 @@ type ModelViewerComputeShapeStage struct {
 }
 
 type ModelViewerComputePoseSource struct {
-	Blend      ModelViewerComputeBinarySource `json:"blend"`
-	Frames     ModelViewerComputeBinarySource `json:"frames"`
-	BoneCount  int                            `json:"boneCount"`
-	FrameCount int                            `json:"frameCount"`
+	// Empty keeps the legacy packed dual-quaternion interpolation behavior.
+	DualQuaternionVariant string                         `json:"dualQuaternionVariant,omitempty"`
+	Blend                 ModelViewerComputeBinarySource `json:"blend"`
+	Frames                ModelViewerComputeBinarySource `json:"frames"`
+	BoneCount             int                            `json:"boneCount"`
+	FrameCount            int                            `json:"frameCount"`
 }
 
 type ModelViewerComputeDeformerTransport struct {

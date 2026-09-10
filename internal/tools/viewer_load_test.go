@@ -67,6 +67,39 @@ drawindexed = 3, 0, 0
 	}
 }
 
+func TestLoadModViewerPreservesNamedPsTextureRoles(t *testing.T) {
+	for _, bindings := range []string{
+		"ps-t0 = ResourceBodyDiffuse\nps-t1 = ResourceBodyLightMap",
+		"ps-t5 = ResourceBodyLightMap\nps-t9 = ResourceBodyDiffuse",
+	} {
+		t.Run(bindings, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "diffuse.png", encodeTinyPNG())
+			writeTextureFile(t, dir, "light.png", encodeTinyPNG())
+			fixture := loadViewerFixture(t, dir, `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+`+bindings+`
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceBodyDiffuse]
+filename = diffuse.png
+[ResourceBodyLightMap]
+filename = light.png
+`)
+			if len(fixture.result.Meshes) != 1 {
+				t.Fatalf("meshes = %d", len(fixture.result.Meshes))
+			}
+			mesh := fixture.result.Meshes[0]
+			if texKey(mesh) != "diffuse::diffuse.png" || mesh.LightMapKey == nil ||
+				*mesh.LightMapKey != "light_map::light.png" || mesh.NormalMapKey != nil || mesh.MaterialMapKey != nil {
+				t.Fatalf("named texture roles changed: %+v", mesh)
+			}
+		})
+	}
+}
+
 func TestLoadModViewerBindsUnlabeledPsTexturesBySlotRoles(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"objectAPst8.png", "objectAPst9.png", "objectAPst12.png", "objectAPst14.png"} {

@@ -163,9 +163,13 @@ describe("normalizeModelViewerTransport", () => {
         ]);
     });
 
-    it.each(["gimi_cyclic_packed_v1", "gimi_packed_dual_quaternion_v1"] as const)(
-        "keeps a %s compute descriptor",
-        (kind) => {
+    it.each([
+        ["gimi_cyclic_packed_v1", undefined],
+        ["gimi_packed_dual_quaternion_v1", undefined],
+        ["gimi_packed_dual_quaternion_v1", "object"],
+    ] as const)(
+        "keeps a %s compute descriptor with %s pose variant",
+        (kind, dualQuaternionVariant) => {
             const poseStride = kind === "gimi_packed_dual_quaternion_v1" ? 56 : 48;
             const source = { url: "/source", byteLength: 20, stride: 20 };
             const input = {
@@ -189,6 +193,7 @@ describe("normalizeModelViewerTransport", () => {
                         base: source,
                         shapePasses: null,
                         pose: {
+                            dualQuaternionVariant,
                             blend: { url: "/blend", byteLength: 32, stride: 32 },
                             frames: {
                                 url: "/pose",
@@ -203,7 +208,11 @@ describe("normalizeModelViewerTransport", () => {
             } satisfies WailsModelViewerTransport;
 
             expect(normalizeModelViewerTransport(input).computeDeformers).toEqual([
-                expect.objectContaining({ kind, id: "closet" }),
+                expect.objectContaining({
+                    kind,
+                    id: "closet",
+                    pose: expect.objectContaining({ dualQuaternionVariant }),
+                }),
             ]);
         },
     );
