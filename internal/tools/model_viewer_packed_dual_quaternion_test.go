@@ -417,6 +417,7 @@ func TestPackedDualQuaternion28LegacyBody(t *testing.T) {
 		resources,
 		cache,
 		packed,
+		nil,
 	)
 	buffers, _, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 	if err != nil || len(buffers.layout.Elements) < 3 || buffers.layout.Elements[2].AlignedByteOffset != 20 {
@@ -506,6 +507,7 @@ func TestPackedDualQuaternion28ObjectBody(t *testing.T) {
 		resources,
 		cache,
 		packed,
+		nil,
 	)
 	buffers, _, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 	if err != nil || len(buffers.layout.Elements) < 3 || buffers.layout.Elements[2].AlignedByteOffset != 20 {
@@ -630,6 +632,7 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 				resources,
 				cache,
 				packed,
+				nil,
 			)
 			buffers, _, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 			if err != nil || len(buffers.layout.Elements) < 3 || buffers.layout.Elements[2].AlignedByteOffset != 16 {
@@ -732,6 +735,7 @@ func TestPackedDualQuaternionUVStreamEvidence(t *testing.T) {
 				resources,
 				cache,
 				collectModelViewerPackedObjectResources(dir, dir, sections),
+				nil,
 			)
 			buffers, ok, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
 			if err != nil || !ok {

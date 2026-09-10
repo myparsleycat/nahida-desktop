@@ -202,6 +202,7 @@ export function normalizeModelViewerTransport(
                         target: normalizeComputeSource(pass.target),
                         phaseRate: pass.phaseRate,
                         wrapAt: pass.wrapAt,
+                        phaseStart: pass.phaseStart,
                         phaseOffset: pass.phaseOffset,
                         angularScale: pass.angularScale,
                         amplitude: pass.amplitude,

@@ -328,8 +328,8 @@ func detectModelViewerShapeOnlyAnimation(
 		ShapePasses: passes,
 	}
 	duration := 1.0
-	if passes[0].WrapAt > 0 && passes[0].PhaseRate > 0 {
-		duration = passes[0].WrapAt / passes[0].PhaseRate
+	if passes[0].WrapAt > passes[0].PhaseStart && passes[0].PhaseRate > 0 {
+		duration = (passes[0].WrapAt - passes[0].PhaseStart) / passes[0].PhaseRate
 	} else if passes[0].AngularScale > 0 && passes[0].PhaseRate > 0 {
 		duration = 2 * math.Pi / (passes[0].AngularScale * passes[0].PhaseRate)
 	}
@@ -352,13 +352,14 @@ func findModelViewerKnownShapeBase(
 		}
 		for _, pass := range collectModelViewerComputePasses(section) {
 			shader, shaderOK := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
-			if _, _, _, known := knownModelViewerShapeShaderParameters(shader); !shaderOK || !known {
+			stride, strideOK := modelViewerShapeShaderStride(shader)
+			if _, _, _, known := knownModelViewerShapeShaderParameters(shader); !shaderOK || !strideOK || !known {
 				continue
 			}
 			base, exists := resources[modelViewerNormalizeKey(pass.t50)]
 			source, sourceOK := modelViewerComputeSource(root, base)
-			if exists && sourceOK && source.Stride == 40 && source.ByteLength%40 == 0 {
-				return base, source, int(source.ByteLength / 40), true
+			if exists && sourceOK && source.Stride == stride && source.ByteLength%int64(stride) == 0 {
+				return base, source, int(source.ByteLength / int64(stride)), true
 			}
 		}
 	}
@@ -483,6 +484,11 @@ func detectModelViewerKnownShapePasses(
 	var output []ModelViewerComputeShapePass
 	phaseVariable := ""
 	hasLinkedOutput := false
+	resourceList := make([]modelViewerResource, 0, len(resources))
+	for _, resource := range resources {
+		resourceList = append(resourceList, resource)
+	}
+	aliases := collectModelViewerResourceAliases(sections, resourceList)
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "CustomShader") ||
 			!reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
@@ -523,9 +529,7 @@ func detectModelViewerKnownShapePasses(
 					Bias:         bias,
 				},
 			)
-			if outputResource, exists := resources[modelViewerNormalizeKey(pass.outputName)]; exists &&
-				outputResource.Filename != "" &&
-				samePathFold(outputResource.Filename, base.Filename) {
+			if modelViewerComputeOutputMatchesBase(resources, aliases, pass.outputName, base.Filename) {
 				hasLinkedOutput = true
 			}
 		}
@@ -538,11 +542,36 @@ func detectModelViewerKnownShapePasses(
 		return nil
 	}
 	wrap := findModelViewerAccumulatorWrap(sections, phaseVariable, defaults)
+	phaseStart := 0.0
+	if reset, ok := findModelViewerAccumulatorReset(sections, phaseVariable); ok {
+		phaseStart = reset
+	}
 	for index := range output {
 		output[index].PhaseRate = rate
 		output[index].WrapAt = wrap
+		output[index].PhaseStart = phaseStart
 	}
 	return output
+}
+
+// modelViewerComputeOutputMatchesBase accepts the declared output resource
+// alias as well as the named resource: object mods commonly alias an unnamed
+// output to the shader UAV inside the compute section.
+func modelViewerComputeOutputMatchesBase(
+	resources map[string]modelViewerResource,
+	aliases modelViewerResourceAliases,
+	outputName, baseFilename string,
+) bool {
+	if outputName == "" || baseFilename == "" {
+		return false
+	}
+	if resource, exists := resources[modelViewerNormalizeKey(outputName)]; exists &&
+		resource.Filename != "" &&
+		samePathFold(resource.Filename, baseFilename) {
+		return true
+	}
+	resolved, ok := aliases.resolve(outputName)
+	return ok && resolved.Filename != "" && samePathFold(resolved.Filename, baseFilename)
 }
 
 func collectModelViewerReachableComputeSections(sections []modINISection) map[string]bool {
@@ -677,14 +706,41 @@ func isKnownModelViewerGIMIShapePoseBoneShader(shader string) bool {
 	return strings.Contains(compact, "int4indicies") || strings.Contains(compact, "int4indices")
 }
 
+// modelViewerShapeShaderStride reports the vertex record size for known
+// cyclic shapekey shaders. The 40-byte form blends position, normal, and
+// tangent; the 44-byte object form blends position and normal and keeps a
+// packed texcoord where the tangent would sit.
+func modelViewerShapeShaderStride(shader string) (int, bool) {
+	compact := compactModelViewerShader(shader)
+	switch {
+	case strings.Contains(compact, "structvertexattributes{float3position;float3normal;float4tangent;}"):
+		return 40, true
+	case strings.Contains(
+		compact,
+		"structvertexattributes{float3position;float3normal;uinttexcoord0;float2texcoord1;uint2tangent;}",
+	):
+		return 44, true
+	default:
+		return 0, false
+	}
+}
+
 func knownModelViewerShapeShaderParameters(shader string) (float64, float64, float64, bool) {
 	compact := compactModelViewerShader(shader)
+	stride, known := modelViewerShapeShaderStride(shader)
+	if !known {
+		return 0, 0, 0, false
+	}
 	required := []string{
-		"structvertexattributes{float3position;float3normal;float4tangent;}",
 		"structuredbuffer<vertexattributes>", "register(t50)", "register(t51)",
 		"shapekey[i].position-base[i].position", "shapekey[i].normal-base[i].normal",
-		"shapekey[i].tangent-base[i].tangent", ".position+=diff.position*",
-		".normal+=diff.normal*", ".tangent+=diff.tangent*",
+		".position+=diff.position*", ".normal+=diff.normal*",
+	}
+	if stride == 40 {
+		required = append(
+			required,
+			"shapekey[i].tangent-base[i].tangent", ".tangent+=diff.tangent*",
+		)
 	}
 	for _, signature := range required {
 		if !strings.Contains(compact, signature) {
@@ -751,6 +807,15 @@ func findModelViewerAccumulatorRateInLines(lines []string, variable string, defa
 	for _, raw := range lines {
 		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
 			return resolveModelViewerNumericToken(match[1], defaults)
+		}
+	}
+	return 0, false
+}
+
+func findModelViewerAccumulatorReset(sections []modINISection, variable string) (float64, bool) {
+	for _, section := range sections {
+		if value, ok := findModelViewerAccumulatorResetInLines(section.Lines, variable); ok {
+			return value, true
 		}
 	}
 	return 0, false

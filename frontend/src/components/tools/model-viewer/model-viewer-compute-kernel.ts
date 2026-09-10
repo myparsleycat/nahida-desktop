@@ -13,13 +13,27 @@ export type GIMIShapePoseFrame = {
     tangents?: Float32Array;
 };
 
+// Character shape/pose records pack position, normal, and a float4 tangent;
+// object shape records keep position and normal and store a packed texcoord
+// where the tangent would sit, so their tangent stream must stay untouched.
+const MODEL_VIEWER_SHAPE_POSE_STRIDE = 40;
+const MODEL_VIEWER_INLINE_OBJECT_STRIDE = 44;
+
 export function validateGIMIShapePoseBuffers(
     deformer: ViewerComputeDeformer,
     buffers: GIMIShapePoseBuffers,
 ): void {
     validateSource("base", deformer.base.byteLength, deformer.base.stride, buffers.base);
-    if (deformer.base.stride !== 40 || buffers.base.byteLength !== deformer.vertexCount * 40) {
-        throw new Error("GIMI shape/pose base buffer must use a 40-byte vertex stride.");
+    const baseStride = deformer.base.stride;
+    if (
+        (baseStride !== MODEL_VIEWER_SHAPE_POSE_STRIDE &&
+            baseStride !== MODEL_VIEWER_INLINE_OBJECT_STRIDE) ||
+        buffers.base.byteLength !== deformer.vertexCount * baseStride
+    ) {
+        throw new Error("GIMI shape/pose base buffer must use a 40-byte or 44-byte vertex stride.");
+    }
+    if (deformer.pose && baseStride !== MODEL_VIEWER_SHAPE_POSE_STRIDE) {
+        throw new Error("GIMI shape/pose buffers with pose data must use a 40-byte vertex stride.");
     }
     if (buffers.shapeTargets.length !== deformer.shapePasses.length) {
         throw new Error("GIMI shape/pose target count does not match the descriptor.");
@@ -31,7 +45,10 @@ export function validateGIMIShapePoseBuffers(
             pass.target.stride,
             buffers.shapeTargets[index]!,
         );
-        if (pass.target.stride !== 40 || pass.target.byteLength !== buffers.base.byteLength) {
+        if (
+            pass.target.stride !== baseStride ||
+            pass.target.byteLength !== buffers.base.byteLength
+        ) {
             throw new Error(
                 `GIMI shape/pose target ${index} is incompatible with the base buffer.`,
             );
@@ -80,41 +97,50 @@ export function computeGIMIShapePoseFrame(
         throw new Error(`Invalid GIMI shape/pose frame: ${poseFrame}`);
     }
     const base = new Float32Array(buffers.base);
+    const strideFloats = deformer.base.stride / 4;
     const positions = new Float32Array(deformer.vertexCount * 3);
     const normals = new Float32Array(deformer.vertexCount * 3);
-    const tangents = new Float32Array(deformer.vertexCount * 4);
+    const tangents =
+        deformer.base.stride === MODEL_VIEWER_SHAPE_POSE_STRIDE
+            ? new Float32Array(deformer.vertexCount * 4)
+            : undefined;
     for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
-        const source = vertex * 10;
+        const source = vertex * strideFloats;
         positions.set(base.subarray(source, source + 3), vertex * 3);
         normals.set(base.subarray(source + 3, source + 6), vertex * 3);
-        tangents.set(base.subarray(source + 6, source + 10), vertex * 4);
+        tangents?.set(base.subarray(source + 6, source + 10), vertex * 4);
     }
 
     for (let passIndex = 0; passIndex < deformer.shapePasses.length; passIndex += 1) {
         const pass = deformer.shapePasses[passIndex]!;
         const target = new Float32Array(buffers.shapeTargets[passIndex]!);
         const rawPhase = Math.max(phaseSeconds, 0) * pass.phaseRate;
-        const phase = pass.wrapAt && pass.wrapAt > 0 ? rawPhase % pass.wrapAt : rawPhase;
+        const phaseStart = pass.phaseStart ?? 0;
+        const wrapAt = pass.wrapAt ?? 0;
+        const phase =
+            wrapAt > phaseStart ? phaseStart + (rawPhase % (wrapAt - phaseStart)) : rawPhase;
         const weight =
             pass.amplitude * Math.sin((phase + pass.phaseOffset) * pass.angularScale) + pass.bias;
         for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
-            const source = vertex * 10;
+            const source = vertex * strideFloats;
             const position = vertex * 3;
-            const tangent = vertex * 4;
             for (let axis = 0; axis < 3; axis += 1) {
                 positions[position + axis] +=
                     (target[source + axis]! - base[source + axis]!) * weight;
                 normals[position + axis] +=
                     (target[source + 3 + axis]! - base[source + 3 + axis]!) * weight;
             }
-            for (let axis = 0; axis < 4; axis += 1) {
-                tangents[tangent + axis] +=
-                    (target[source + 6 + axis]! - base[source + 6 + axis]!) * weight;
+            if (tangents) {
+                const tangent = vertex * 4;
+                for (let axis = 0; axis < 4; axis += 1) {
+                    tangents[tangent + axis] +=
+                        (target[source + 6 + axis]! - base[source + 6 + axis]!) * weight;
+                }
             }
         }
     }
 
-    if (!deformer.pose || !buffers.blend || !buffers.pose) {
+    if (!deformer.pose || !buffers.blend || !buffers.pose || !tangents) {
         normalizeVectors(normals);
         return { positions, normals, tangents };
     }
