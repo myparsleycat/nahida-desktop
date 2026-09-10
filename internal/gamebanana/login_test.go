@@ -630,6 +630,17 @@ func TestClassifyLoginErrorTransportFailures(t *testing.T) {
 			},
 			ErrServerUnreachable,
 		},
+		{
+			"plain dial refused",
+			errors.New("dial tcp 127.0.0.1:443: connect: connection refused"),
+			ErrServerUnreachable,
+		},
+		{
+			"plain dns miss",
+			errors.New("dial tcp: lookup gamebanana.com: no such host"),
+			ErrServerUnreachable,
+		},
+		{"plain timeout", errors.New("read tcp 10.0.0.1:443: i/o timeout"), ErrServerUnreachable},
 		{"deadline", context.DeadlineExceeded, ErrServerUnreachable},
 		{
 			"malformed response",

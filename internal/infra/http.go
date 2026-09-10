@@ -820,7 +820,8 @@ func retryAfterWait(raw string) (time.Duration, bool) {
 	if raw == "" {
 		return 0, false
 	}
-	if secs, err := strconv.Atoi(raw); err == nil {
+	secs, err := strconv.Atoi(raw)
+	if err == nil || errors.Is(err, strconv.ErrRange) {
 		if secs < 0 {
 			return 0, false
 		}
@@ -843,7 +844,8 @@ func retryAfterWait(raw string) (time.Duration, bool) {
 // IsUnreachable reports transport-level unreachability. Application failures
 // such as TLS certificate validation and redirect policy failures are excluded
 // first; *url.Error implements net.Error, so that check must not run before
-// the exclusion.
+// the exclusion. Opaque errors from embedded browsers or platform transports
+// fall back to matching known transport message fragments.
 func IsUnreachable(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || isNonReachabilityURLCause(err) || isRedirectPolicyError(err) {
 		return false
@@ -856,7 +858,30 @@ func IsUnreachable(err error) bool {
 		return true
 	}
 	var netErr net.Error
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return hasUnreachableMessage(err)
+}
+
+func hasUnreachableMessage(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{
+		"connection refused",
+		"no such host",
+		"network is unreachable",
+		"i/o timeout",
+		"timeout",
+		"temporarily unavailable",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func isNonReachabilityURLCause(err error) bool {

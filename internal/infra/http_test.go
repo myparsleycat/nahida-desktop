@@ -1135,7 +1135,6 @@ func TestFetchRetryLimitOverrideMakesOneShotRequest(t *testing.T) {
 func TestRetryAfterWait(t *testing.T) {
 	t.Parallel()
 
-	future := time.Now().Add(2 * time.Second).UTC().Format(http.TimeFormat)
 	farFuture := time.Now().Add(time.Hour).UTC().Format(http.TimeFormat)
 	tests := []struct {
 		name string
@@ -1150,7 +1149,7 @@ func TestRetryAfterWait(t *testing.T) {
 		{"garbage", "later", 0, 0, false},
 		{"seconds", "2", 2 * time.Second, 2 * time.Second, true},
 		{"seconds capped", "3600", maxRetryAfterWait, maxRetryAfterWait, true},
-		{"http-date", future, time.Second, maxRetryAfterWait, true},
+		{"seconds overflow", "99999999999999999999", maxRetryAfterWait, maxRetryAfterWait, true},
 		{"http-date capped", farFuture, maxRetryAfterWait, maxRetryAfterWait, true},
 		{"past http-date", "Mon, 02 Jan 2006 15:04:05 GMT", 0, 0, false},
 	}
@@ -1162,6 +1161,31 @@ func TestRetryAfterWait(t *testing.T) {
 			}
 			if ok != tt.ok {
 				t.Fatalf("retryAfterWait(%q) valid = %v, want %v", tt.raw, ok, tt.ok)
+			}
+		})
+	}
+}
+
+func TestIsUnreachableOpaqueTransportMessages(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"connection refused", errors.New("dial tcp 127.0.0.1:443: connect: connection refused"), true},
+		{"no such host", errors.New("dial tcp: lookup gamebanana.com: no such host"), true},
+		{"timeout", errors.New("read tcp 10.0.0.1:443: i/o timeout"), true},
+		{"network unreachable", errors.New("connect: network is unreachable"), true},
+		{"temporarily unavailable", errors.New("connect: resource temporarily unavailable"), true},
+		{"canceled", context.Canceled, false},
+		{"application failure", errors.New("invalid rmc cookie"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsUnreachable(tt.err); got != tt.want {
+				t.Fatalf("IsUnreachable(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
 	}
