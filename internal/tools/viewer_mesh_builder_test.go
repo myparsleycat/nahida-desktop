@@ -42,11 +42,8 @@ drawindexed = 3, 0, 0
 	}
 	fixture := loadViewerDir(t, dir)
 	mesh := fixture.result.Meshes[0]
-	if mesh.NormalsURL == "" || mesh.TangentsURL == "" {
-		t.Fatalf("authored TBN missing: %#v", mesh)
-	}
-	normals := readViewerFloat32s(t, fixture.protocol, mesh.NormalsURL)
-	tangents := readViewerFloat32s(t, fixture.protocol, mesh.TangentsURL)
+	normals := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Normals
+	tangents := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Tangents
 	if len(normals) != 9 || normals[0] != 0 || normals[1] != 1 || normals[2] != 0 {
 		t.Fatalf("normals = %v", normals)
 	}
@@ -57,14 +54,15 @@ drawindexed = 3, 0, 0
 
 func TestLoadModViewerDoesNotTreatZeroPaddedFramesAsAuthoredTBN(t *testing.T) {
 	dir := t.TempDir()
-	result := loadViewerMod(t, dir, `[TextureOverrideBody]
+	fixture := loadViewerFixture(t, dir, `[TextureOverrideBody]
 ib = ResourceBodyIB
 vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 0
 `+viewerBodyResources)
-	if result.Meshes[0].NormalsURL == "" || result.Meshes[0].TangentsURL != "" {
-		t.Fatalf("expected generated normals without authored tangents: %#v", result.Meshes[0])
+	mesh := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL)
+	if len(mesh.Normals) == 0 || len(mesh.Tangents) != 0 {
+		t.Fatalf("expected generated normals without authored tangents: %#v", mesh)
 	}
 }
 

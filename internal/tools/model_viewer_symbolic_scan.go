@@ -19,21 +19,23 @@ type modelViewerSymbolicBranchFrame struct {
 }
 
 type modelViewerSymbolicSectionState struct {
-	buffers      map[string][]modelViewerSymbolicAssignment
-	textures     map[string][]modelViewerSymbolicAssignment
-	thisHistory  []modelViewerSymbolicAssignment
-	nonDiffuse   []string
-	draws        []modelViewerDirectDrawRecord
-	explicitDraw bool
+	buffers         map[string][]modelViewerSymbolicAssignment
+	resolvedBuffers map[string][]modelViewerSymbolicAssignment
+	textures        map[string][]modelViewerSymbolicAssignment
+	thisHistory     []modelViewerSymbolicAssignment
+	nonDiffuse      []string
+	draws           []modelViewerDirectDrawRecord
+	explicitDraw    bool
 }
 
 type modelViewerSymbolicScanContext struct {
-	lookup      map[string]modINISection
-	variables   map[string]any
-	expansions  int
-	draws       int
-	seq         int
-	sectionName string
+	lookup        map[string]modINISection
+	variables     map[string]any
+	expansions    int
+	draws         int
+	seq           int
+	sectionName   string
+	resourcesOnly bool
 }
 
 func scanModelViewerSymbolicRoot(
@@ -46,7 +48,11 @@ func scanModelViewerSymbolicRoot(
 		lookup[modelViewerNormalizeKey(candidate.Header+candidate.Name)] = candidate
 	}
 	variables := modelViewerDirectConditionVariables(sections, defaults)
-	ctx := &modelViewerSymbolicScanContext{lookup: lookup, variables: variables, sectionName: section.Name}
+
+	// These callers inspect resource histories, so draw snapshots would be discarded.
+	ctx := &modelViewerSymbolicScanContext{
+		lookup: lookup, variables: variables, sectionName: section.Name, resourcesOnly: true,
+	}
 	state := &modelViewerSymbolicSectionState{
 		buffers:  make(map[string][]modelViewerSymbolicAssignment),
 		textures: make(map[string][]modelViewerSymbolicAssignment),
@@ -105,11 +111,11 @@ func collectModelViewerSymbolicDrawRecords(
 				state.draws = append(state.draws, records...)
 			}
 		}
-		if len(effectiveModelViewerSymbolicAssignments(state.buffers["ib"])) == 0 {
+		if len(state.bufferAssignments("ib")) == 0 {
 			fallback = appendModelViewerFallbackVertexBuffers(
 				fallback,
 				seenFallback,
-				effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]),
+				state.bufferAssignments("vb0"),
 			)
 		}
 		output = append(output, state.draws...)
@@ -219,6 +225,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 						sequence:   sequence,
 					},
 				)
+				delete(state.resolvedBuffers, strings.ToLower(key))
 			}
 		case "drawindexed", "drawindexedinstanced":
 			draw, ok := parseModelViewerDrawIndexed(key, value, c.variables)
@@ -232,7 +239,9 @@ func (c *modelViewerSymbolicScanContext) scan(
 					fmt.Sprintf("Mod has too many draws (%d; limit %d).", c.draws, maxModelViewerDraws),
 				)
 			}
-			state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
+			if !c.resourcesOnly {
+				state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
+			}
 		default:
 			resource := modelViewerTrimTextureValue(value)
 			if resource == "" {
@@ -275,7 +284,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 ) []modelViewerDirectDrawRecord {
 	states := []modelViewerSymbolicBufferVariant{{conditions: cloneModelViewerDNF(drawConditions)}}
 	for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
-		assignments := effectiveModelViewerSymbolicAssignments(state.buffers[slot])
+		assignments := state.bufferAssignments(slot)
 		if len(assignments) == 0 {
 			continue
 		}
@@ -446,6 +455,21 @@ func uniqueModelViewerFallbackResource(hits []modelViewerSymbolicAssignment) str
 		}
 	}
 	return resource
+}
+
+func (s *modelViewerSymbolicSectionState) bufferAssignments(slot string) []modelViewerSymbolicAssignment {
+	if assignments, cached := s.resolvedBuffers[slot]; cached {
+		return assignments
+	}
+	if len(s.buffers[slot]) == 0 {
+		return nil
+	}
+	if s.resolvedBuffers == nil {
+		s.resolvedBuffers = make(map[string][]modelViewerSymbolicAssignment)
+	}
+	assignments := effectiveModelViewerSymbolicAssignments(s.buffers[slot])
+	s.resolvedBuffers[slot] = assignments
+	return assignments
 }
 
 func effectiveModelViewerSymbolicAssignments(input []modelViewerSymbolicAssignment) []modelViewerSymbolicAssignment {

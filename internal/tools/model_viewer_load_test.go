@@ -168,7 +168,7 @@ func TestModelViewerFailedLoadPreservesExistingSession(t *testing.T) {
 	if len(fixture.service.modelViewerSessions) != 1 {
 		t.Fatal("failed load changed existing session ownership")
 	}
-	if len(readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].PositionsURL)) == 0 {
+	if len(readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).Positions) == 0 {
 		t.Fatal("existing buffers were released")
 	}
 }

@@ -1,5 +1,5 @@
 import type { ModelViewerBounds } from "@bindings/tools";
-import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
+import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type {
     EvaluatedViewerState,
     ModViewerTransport,
@@ -28,6 +28,8 @@ import type { WebGLProgramParametersWithUniforms } from "three";
 
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
+
+import { decodeModelViewerMesh } from "./model-viewer-mesh-codec";
 
 type PayloadMeshUserData = {
     meshId: string;
@@ -81,65 +83,136 @@ export async function buildPayloadModel(
     doubleSided: boolean,
     positionLoader: PositionVariantLoader,
     toonShadows = false,
+    loadSignal?: AbortSignal,
 ): Promise<Group> {
+    const controller = new AbortController();
+    const signal = loadSignal
+        ? AbortSignal.any([loadSignal, controller.signal])
+        : controller.signal;
+    signal.throwIfAborted();
     const textureCache = new Map<string, Promise<Texture | null>>();
     const textures = new Map<string, Texture>();
-    await Promise.all(
-        Object.entries(transport.textures).map(async ([key, entry]) => {
-            const texture = await loadTexture(entry.url, textureCache);
+    const group = new Group();
+    group.userData.payloadTextures = textures;
+    const built: Mesh[] = [];
+    const objects = new Array<Mesh>(transport.meshes.length);
+
+    // Bound active work while overlapping image decoding with geometry transfers.
+    const jobs = [
+        loadItems(transport.meshes, 8, async (mesh, index) => {
+            objects[index] = await buildPayloadMesh(
+                mesh,
+                transport.materialProfile,
+                doubleSided,
+                toonShadows,
+                built,
+                signal,
+            );
+        }),
+        loadItems(Object.entries(transport.textures), 4, async ([key, entry]) => {
+            const texture = await loadTexture(entry.url, textureCache, signal);
+            if (signal.aborted) {
+                texture?.dispose();
+                signal.throwIfAborted();
+            }
             if (texture) {
                 texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
                 textures.set(key, texture);
             }
         }),
-    );
-
-    const group = new Group();
-    group.userData.payloadTextures = textures;
-    const evalById = new Map(evalResult.meshes.map((mesh) => [mesh.id, mesh]));
+    ];
     try {
-        for (const mesh of transport.meshes) {
-            const geometry = await buildGeometry(mesh);
-            const rabbitFX = transport.materialProfile === "wuwa:rabbitfx";
-            const material = new MeshStandardMaterial({
-                color: 0xffffff,
-                metalness: rabbitFX ? 0 : 0.05,
-                roughness: rabbitFX ? 1 : 0.65,
-                side: doubleSided ? DoubleSide : undefined,
-            });
-            const object = new Mesh(geometry, material);
-            object.name = mesh.id;
-            const evaluated = evalById.get(mesh.id);
-            object.visible = evaluated?.visible ?? true;
+        await Promise.all(jobs);
+        signal.throwIfAborted();
+        for (const object of objects) {
             group.add(object);
-            object.userData = {
-                meshId: mesh.id,
-                basePositions: new Float32Array(geometry.attributes.position.array as Float32Array),
-                baseNormals: new Float32Array(geometry.attributes.normal.array as Float32Array),
-                baseBounds: mesh.bounds,
-                lastPositionVariantIndex: null,
-                shapeTargets: await Promise.all(
-                    mesh.shapeTargets.map(async (target) => ({
-                        var: target.var,
-                        positions: await fetchFloat32(target.positionsUrl),
-                        mode: target.mode,
-                        lowPositions: target.lowPositionsUrl
-                            ? await fetchFloat32(target.lowPositionsUrl)
-                            : undefined,
-                    })),
-                ),
-                positionVariants: [...mesh.positionVariants],
-                sourceIndicesUrl: mesh.sourceIndicesUrl,
-                materialProfile: transport.materialProfile,
-                toonShadows,
-            } satisfies PayloadMeshUserData;
         }
-        commitPayloadEval(group, await preparePayloadEval(group, evalResult, positionLoader));
+        const prepared = await preparePayloadEval(group, evalResult, positionLoader, signal);
+        signal.throwIfAborted();
+        commitPayloadEval(group, prepared);
         return group;
     } catch (error) {
+        controller.abort(error);
+
+        // Let active jobs settle before disposing resources they may still own.
+        await Promise.allSettled(jobs);
+        for (const object of built) {
+            if (!object.parent) {
+                disposeMeshObject(object);
+            }
+        }
         disposeIncompletePayloadModel(group);
         throw error;
     }
+
+    async function loadItems<T>(
+        items: readonly T[],
+        concurrency: number,
+        load: (item: T, index: number) => Promise<void>,
+    ): Promise<void> {
+        let next = 0;
+        await Promise.all(
+            Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+                try {
+                    while (next < items.length) {
+                        signal.throwIfAborted();
+                        const index = next++;
+                        await load(items[index], index);
+                    }
+                } catch (error) {
+                    controller.abort(error);
+                }
+            }),
+        );
+        signal.throwIfAborted();
+    }
+}
+
+async function buildPayloadMesh(
+    mesh: ViewerMeshTransport,
+    materialProfile: ModViewerTransport["materialProfile"],
+    doubleSided: boolean,
+    toonShadows: boolean,
+    built: Mesh[],
+    signal: AbortSignal,
+): Promise<Mesh> {
+    const geometry = await buildGeometry(mesh, signal);
+    const rabbitFX = materialProfile === "wuwa:rabbitfx";
+    const material = new MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: rabbitFX ? 0 : 0.05,
+        roughness: rabbitFX ? 1 : 0.65,
+        side: doubleSided ? DoubleSide : undefined,
+    });
+    const object = new Mesh(geometry, material);
+    object.name = mesh.id;
+    built.push(object);
+    const shapeTargets: PayloadMeshUserData["shapeTargets"] = [];
+
+    // Keep a mesh with many shape targets from bypassing the geometry work limit.
+    for (const target of mesh.shapeTargets) {
+        signal.throwIfAborted();
+        const [positions, lowPositions] = await Promise.all([
+            fetchFloat32(target.positionsUrl, undefined, signal),
+            target.lowPositionsUrl
+                ? fetchFloat32(target.lowPositionsUrl, undefined, signal)
+                : undefined,
+        ]);
+        shapeTargets.push({ var: target.var, positions, mode: target.mode, lowPositions });
+    }
+    object.userData = {
+        meshId: mesh.id,
+        basePositions: new Float32Array(geometry.attributes.position.array as Float32Array),
+        baseNormals: new Float32Array(geometry.attributes.normal.array as Float32Array),
+        baseBounds: mesh.bounds,
+        lastPositionVariantIndex: null,
+        shapeTargets,
+        positionVariants: [...mesh.positionVariants],
+        sourceIndicesUrl: mesh.sourceIndicesUrl,
+        materialProfile,
+        toonShadows,
+    } satisfies PayloadMeshUserData;
+    return object;
 }
 
 export function applyPayloadEval(root: Object3D, evalResult: EvaluatedViewerState): void {
@@ -246,19 +319,21 @@ function disposeIncompletePayloadModel(root: Object3D): void {
         if (!(object instanceof Mesh)) {
             return;
         }
-        object.geometry.dispose();
-        for (const material of Array.isArray(object.material)
-            ? object.material
-            : [object.material]) {
-            for (const value of Object.values(material)) {
-                if (value instanceof Texture) {
-                    value.dispose();
-                }
-            }
-            material.dispose();
-        }
+        disposeMeshObject(object);
     });
     clearPayloadModelData(root);
+}
+
+function disposeMeshObject(object: Mesh): void {
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        for (const value of Object.values(material)) {
+            if (value instanceof Texture) {
+                value.dispose();
+            }
+        }
+        material.dispose();
+    }
 }
 
 function applyEvaluatedMesh(
@@ -602,14 +677,15 @@ function normalizeShapeWeight(value: number | undefined): string {
     return String(Object.is(numeric, -0) ? 0 : numeric);
 }
 
-async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry> {
-    const [positions, normals, tangents, uvs, indices] = await Promise.all([
-        fetchFloat32(mesh.positionsUrl),
-        mesh.normalsUrl ? fetchFloat32(mesh.normalsUrl) : Promise.resolve(undefined),
-        mesh.tangentsUrl ? fetchFloat32(mesh.tangentsUrl) : Promise.resolve(undefined),
-        mesh.uvsUrl ? fetchFloat32(mesh.uvsUrl) : Promise.resolve(undefined),
-        fetchUint32(mesh.indicesUrl),
-    ]);
+async function buildGeometry(
+    mesh: ViewerMeshTransport,
+    signal: AbortSignal,
+): Promise<BufferGeometry> {
+    const bytes = await fetchBinaryBytes(mesh.geometryUrl, undefined, signal);
+    signal.throwIfAborted();
+    const { positions, normals, tangents, uvs, indices } = decodeModelViewerMesh(
+        bytes.buffer as ArrayBuffer,
+    );
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(positions, 3));
     if (normals) {
@@ -636,24 +712,52 @@ async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry>
 function loadTexture(
     url: string,
     textureCache: Map<string, Promise<Texture | null>>,
+    signal: AbortSignal,
 ): Promise<Texture | null> {
     const cached = textureCache.get(url);
     if (cached) {
         return cached;
     }
-    const request = new Promise<Texture | null>((resolve) => {
-        textureLoader.load(
-            url,
-            (texture) => {
-                // TextureLoader default flipY=true matches the mesh-builder 1-v UV flip.
-                resolve(texture);
-            },
-            undefined,
-            () => resolve(null),
-        );
+    const request = loadPayloadTexture(url, signal).catch(() => {
+        signal.throwIfAborted();
+        return null;
     });
     textureCache.set(url, request);
     return request;
+}
+
+async function loadPayloadTexture(url: string, signal: AbortSignal): Promise<Texture | null> {
+    const response = await fetch(url, { signal, cache: "no-store" });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    signal.throwIfAborted();
+    const objectUrl = URL.createObjectURL(blob);
+    let onAbort: (() => void) | undefined;
+    try {
+        return await new Promise<Texture>((resolve, reject) => {
+            onAbort = () => reject(signal.reason);
+            signal.addEventListener("abort", onAbort, { once: true });
+            textureLoader.load(
+                objectUrl,
+                (texture) => {
+                    // Image decoding may finish after cancellation; it must not retain a texture.
+                    if (signal.aborted) {
+                        texture.dispose();
+                        reject(signal.reason);
+                        return;
+                    }
+
+                    // TextureLoader's default flipY matches the mesh-builder 1-v UV flip.
+                    resolve(texture);
+                },
+                undefined,
+                reject,
+            );
+        });
+    } finally {
+        if (onAbort) signal.removeEventListener("abort", onAbort);
+        URL.revokeObjectURL(objectUrl);
+    }
 }
 
 function applyGeometryBounds(geometry: BufferGeometry, bounds: ModelViewerBounds): void {

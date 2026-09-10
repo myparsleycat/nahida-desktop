@@ -150,7 +150,7 @@ filename = Texture/809f7872-114840-0-DiffuseMap.png
 	if texKey(mesh) == "" || fixture.result.Textures[texKey(mesh)].Role != "diffuse" {
 		t.Fatalf("texKey=%q textures=%#v", texKey(mesh), fixture.result.Textures)
 	}
-	uvs := readViewerFloat32s(t, fixture.protocol, mesh.UVsURL)
+	uvs := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).UVs
 	if len(uvs) < 2 || math.Abs(float64(uvs[1]-.75)) > 1e-5 {
 		t.Fatalf("uvs = %v", uvs)
 	}

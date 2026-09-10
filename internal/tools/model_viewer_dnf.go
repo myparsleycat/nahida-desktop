@@ -325,7 +325,7 @@ func simplifyModelViewerDNFGroup(group []ModelViewerDNFClause) ([]ModelViewerDNF
 		key := modelViewerNormalizeKey(clause.Var)
 		clause.Var = key
 		if clause.Negate {
-			if positive[key] == clause.Value {
+			if value, exists := positive[key]; exists && value == clause.Value {
 				return nil, false
 			}
 			if negative[key] == nil {
@@ -342,7 +342,17 @@ func simplifyModelViewerDNFGroup(group []ModelViewerDNFClause) ([]ModelViewerDNF
 			output = append(output, clause)
 		}
 	}
-	return output, true
+
+	// Once a variable equals one value, exclusions of other values add no constraint.
+	// Keeping them makes long else-if chains expensive to negate and intersect.
+	kept := output[:0]
+	for _, clause := range output {
+		if _, fixed := positive[clause.Var]; clause.Negate && fixed {
+			continue
+		}
+		kept = append(kept, clause)
+	}
+	return kept, true
 }
 
 func cloneModelViewerDNF(input ModelViewerDNF) ModelViewerDNF {

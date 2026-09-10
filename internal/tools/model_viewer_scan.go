@@ -228,7 +228,7 @@ func collectModelViewerDirectResourceConditions(
 			continue
 		}
 		for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
-			for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers[slot]) {
+			for _, assignment := range state.bufferAssignments(slot) {
 				resource := assignment.resource
 				key := modelViewerNormalizeKey(resource)
 				if key == "" {
@@ -325,6 +325,19 @@ type modelViewerResolvedDraw struct {
 	record     modelViewerDirectDrawRecord
 	state      modelViewerDirectBufferState
 	conditions ModelViewerDNF
+}
+
+// Resource names identify immutable stride/format declarations within one INI scan.
+// Keep section identity outside this key: meshes can share geometry while retaining
+// their own visibility, textures, position overrides, and instance counts.
+type modelViewerDrawGeometryKey struct {
+	ib, position, vector, texcoord     string
+	ibFormat                           string
+	kind                               string
+	packedTexcoordOffset               int
+	packedTexcoordDeclared             bool
+	indexCount, startIndex, baseVertex int
+	auto                               bool
 }
 
 func completeModelViewerResolvedDraws(
@@ -445,7 +458,12 @@ func buildModelViewerDirectScannedMeshesAt(
 		timing.SetupMs += time.Since(stageStartedAt).Milliseconds()
 	}
 	var output []modelViewerDirectMesh
-	geometryIndexes := make(map[string]int)
+	type geometryIndexKey struct {
+		sectionName string
+		source      modelViewerDrawGeometryKey
+	}
+	geometryIndexes := make(map[geometryIndexKey]int)
+	geometries := make(map[modelViewerDrawGeometryKey]*modelViewerGeometry)
 	for _, draw := range draws {
 		record := draw.record
 		source := resolveModelViewerDrawVertexSource(
@@ -464,17 +482,15 @@ func buildModelViewerDirectScannedMeshesAt(
 			continue
 		}
 		ib, position := source.ib, source.position
-		geometryKey := fmt.Sprintf(
-			"%s|%s|%s|%s|%s|%d|%d|%t",
-			record.sectionName,
-			ib.Filename,
-			position.Filename,
-			source.vector.Filename,
-			source.texcoord.Filename,
-			record.draw.IndexCount,
-			record.draw.StartIndex,
-			record.auto,
-		)
+		sourceKey := modelViewerDrawGeometryKey{
+			ib: ib.Name, position: position.Name, vector: source.vector.Name, texcoord: source.texcoord.Name,
+			ibFormat: ib.Format,
+			kind:     source.kind, packedTexcoordOffset: source.packedTexcoordOffset,
+			packedTexcoordDeclared: source.packedTexcoordDeclared,
+			indexCount:             record.draw.IndexCount, startIndex: record.draw.StartIndex,
+			baseVertex: record.draw.BaseVertex, auto: record.auto,
+		}
+		geometryKey := geometryIndexKey{sectionName: record.sectionName, source: sourceKey}
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, draw.conditions)
@@ -536,34 +552,32 @@ func buildModelViewerDirectScannedMeshesAt(
 				},
 			)
 		}
-		stageStartedAt = time.Now()
-		geometry, geometryErr := extractModelViewerGeometry(
-			buffers.combined,
-			buffers.stride,
-			buffers.layout,
-			active,
-			true,
-			false,
-			true,
-			nil,
-		)
-		if timing != nil {
-			timing.GeometryMs += time.Since(stageStartedAt).Milliseconds()
-		}
-		if geometryErr != nil {
-			return nil, geometryErr
-		}
+		geometry := geometries[sourceKey]
 		if geometry == nil {
-			continue
-		}
-		if source.kind == modelViewerDrawVertexPacked {
-			normalizeModelViewerPackedObjectNormals(geometry.Normal)
-		}
-		if timing != nil {
-			timing.Geometries++
-		}
-		for offset := 1; offset < len(geometry.Texcoord0); offset += 2 {
-			geometry.Texcoord0[offset] = 1 - geometry.Texcoord0[offset]
+			stageStartedAt = time.Now()
+			var geometryErr error
+			geometry, geometryErr = extractModelViewerGeometry(
+				buffers.combined, buffers.stride, buffers.layout, active, true, false, true, nil,
+			)
+			if timing != nil {
+				timing.GeometryMs += time.Since(stageStartedAt).Milliseconds()
+			}
+			if geometryErr != nil {
+				return nil, geometryErr
+			}
+			if geometry == nil {
+				continue
+			}
+			if source.kind == modelViewerDrawVertexPacked {
+				normalizeModelViewerPackedObjectNormals(geometry.Normal)
+			}
+			if timing != nil {
+				timing.Geometries++
+			}
+			for offset := 1; offset < len(geometry.Texcoord0); offset += 2 {
+				geometry.Texcoord0[offset] = 1 - geometry.Texcoord0[offset]
+			}
+			geometries[sourceKey] = geometry
 		}
 		component := record.sectionName
 		if component == "" {
@@ -659,7 +673,7 @@ func collectModelViewerGlobalBuffers(
 			continue
 		}
 		unconditional := func(slot string) string {
-			for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers[slot]) {
+			for _, assignment := range state.bufferAssignments(slot) {
 				if modelViewerDNFIsTrue(assignment.conditions) {
 					return assignment.resource
 				}
@@ -715,7 +729,7 @@ func attachModelViewerDirectPositionOverrides(
 		if err != nil {
 			return err
 		}
-		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.buffers["vb0"]) {
+		for _, assignment := range state.bufferAssignments("vb0") {
 			if len(assignment.conditions) > 0 {
 				assignments = append(
 					assignments,

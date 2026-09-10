@@ -51,11 +51,7 @@ type ModelViewerBounds struct {
 type ModelViewerMeshTransport struct {
 	ID                  string                       `json:"id"`
 	Component           string                       `json:"component"`
-	PositionsURL        string                       `json:"positionsUrl"`
-	NormalsURL          string                       `json:"normalsUrl,omitempty"`
-	TangentsURL         string                       `json:"tangentsUrl,omitempty"`
-	UVsURL              string                       `json:"uvsUrl,omitempty"`
-	IndicesURL          string                       `json:"indicesUrl"`
+	GeometryURL         string                       `json:"geometryUrl"`
 	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
 	Bounds              *ModelViewerBounds           `json:"bounds,omitempty"`
 	Conditions          ModelViewerDNF               `json:"conditions"`
@@ -157,10 +153,12 @@ type ModelViewerComputeShapeStage struct {
 }
 
 type ModelViewerComputePoseSource struct {
-	Blend      ModelViewerComputeBinarySource `json:"blend"`
-	Frames     ModelViewerComputeBinarySource `json:"frames"`
-	BoneCount  int                            `json:"boneCount"`
-	FrameCount int                            `json:"frameCount"`
+	// Empty keeps the legacy packed dual-quaternion interpolation behavior.
+	DualQuaternionVariant string                         `json:"dualQuaternionVariant,omitempty"`
+	Blend                 ModelViewerComputeBinarySource `json:"blend"`
+	Frames                ModelViewerComputeBinarySource `json:"frames"`
+	BoneCount             int                            `json:"boneCount"`
+	FrameCount            int                            `json:"frameCount"`
 }
 
 type ModelViewerComputeDeformerTransport struct {
@@ -990,9 +988,13 @@ func buildModelViewerDirectMeshPayload(
 		}
 		candidates := append([]string(nil), binding.TextureResourceNames...)
 		candidates = appendUniqueModelViewer(candidates, binding.DiffuseResourceName)
+		sort.Strings(candidates)
 		bestByRole := make(map[string]string)
 		for _, name := range candidates {
-			role := classifyModelViewerTextureRole(name)
+			role := binding.TextureRoles[modelViewerNormalizeKey(name)]
+			if role == "" {
+				role = classifyModelViewerTextureRole(name)
+			}
 			existing := bestByRole[role]
 			if existing == "" || modelViewerTextureNamePriority(name) > modelViewerTextureNamePriority(existing) {
 				bestByRole[role] = name
@@ -1137,34 +1139,12 @@ func writeModelViewerPayload(
 				return fmt.Errorf("mesh %s normals: %w", mesh.ID, err)
 			}
 		}
-		mesh.PositionsURL, err = write(".pos", modelViewerFloat32Bytes(payload.Positions))
-		if err != nil {
-			return err
-		}
-		mesh.IndicesURL, err = write(".idx", modelViewerUint32Bytes(payload.Indices))
+		mesh.GeometryURL, err = write(".geometry", modelViewerMeshBytes(payload))
 		if err != nil {
 			return err
 		}
 		if !modelViewerSourceIndicesAreIdentity(payload.SourceIndices) {
 			mesh.SourceIndicesURL, err = write(".source-idx", modelViewerUint32Bytes(payload.SourceIndices))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.Normals != nil {
-			mesh.NormalsURL, err = write(".normal", modelViewerFloat32Bytes(payload.Normals))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.Tangents != nil {
-			mesh.TangentsURL, err = write(".tangent", modelViewerFloat32Bytes(payload.Tangents))
-			if err != nil {
-				return err
-			}
-		}
-		if payload.UVs != nil {
-			mesh.UVsURL, err = write(".uv", modelViewerFloat32Bytes(payload.UVs))
 			if err != nil {
 				return err
 			}

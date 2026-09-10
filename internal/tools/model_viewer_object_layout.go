@@ -15,6 +15,7 @@ import (
 const (
 	modelViewerPackedObjectStride   = 20
 	modelViewerPackedObjectStride24 = 24
+	modelViewerPackedObjectStride28 = 28
 	modelViewerPackedObjectKind     = "gimi_cyclic_packed_v1"
 	modelViewerPackedObjectWEpsilon = 0.05
 
@@ -24,15 +25,13 @@ const (
 )
 
 var (
-	modelViewerPackedVertexStructRE = regexp.MustCompile(
-		`structvertexattributes\{uint2position;uintnormal;uinttexcoord;uinttangent;\}`,
-	)
 	modelViewerFilenamePositionRE     = regexp.MustCompile(`(?i)position`)
 	modelViewerPackedPositionAbsLimit = 1e5
 )
 
 func isModelViewerPackedObjectStride(stride int) bool {
-	return stride == modelViewerPackedObjectStride || stride == modelViewerPackedObjectStride24
+	return stride == modelViewerPackedObjectStride || stride == modelViewerPackedObjectStride24 ||
+		stride == modelViewerPackedObjectStride28
 }
 
 func modelViewerPackedObjectLayout(indexFormat string, stride int) modelViewerFmtLayout {
@@ -73,14 +72,34 @@ func modelViewerPackedObjectLayoutAt(indexFormat string, stride, texcoordOffset 
 	}
 }
 
-func isKnownModelViewerPackedObjectShader(shader string) bool {
-	return modelViewerPackedVertexStructRE.MatchString(compactModelViewerShader(shader))
+func modelViewerPackedObjectShaderLayout(shader string) (stride, texcoordOffset int, known bool) {
+	compact := compactModelViewerShader(shader)
+	switch {
+	case strings.Contains(compact, "structvertexattributes{uint2position;uintnormal;uinttexcoord;uinttangent;}"):
+		return modelViewerPackedObjectStride, 12, true
+	case strings.Contains(compact, "structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord;uinttexcoord1;}"):
+		return modelViewerPackedObjectStride24, 16, true
+	case strings.Contains(
+		compact,
+		"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord;uinttexcoord1;}",
+	):
+		return modelViewerPackedObjectStride28, 20, true
+	case strings.Contains(
+		compact,
+		"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
+	):
+		return modelViewerPackedObjectStride28, 20, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func isKnownModelViewerGIMICyclicPackedBoneShader(shader string) bool {
+	if _, _, known := modelViewerPackedObjectShaderLayout(shader); !known {
+		return false
+	}
 	compact := compactModelViewerShader(shader)
 	required := []string{
-		"structvertexattributes{uint2position;uintnormal;uinttexcoord;uinttangent;}",
 		"structposeattributes{float4x;float4y;float4z;}",
 		"structuredbuffer<vertexattributes>", "register(t50)",
 		"structuredbuffer<blendattributes>", "register(t51)",
@@ -115,10 +134,16 @@ func collectModelViewerPackedObjectResources(root, shaderBaseDir string, section
 			if !ok {
 				continue
 			}
-			texcoordOffset := 12
-			if isKnownModelViewerPackedDualQuaternionShader(shader) {
-				texcoordOffset = 16
-			} else if !isKnownModelViewerPackedObjectShader(shader) {
+			// Dual-quaternion records move the diffuse UV with their vertex
+			// layout; the generic object layout cannot tell the 24-byte and
+			// 28-byte records apart by stride alone.
+			if _, texcoordOffset, known := modelViewerPackedDualQuaternionLayout(shader); known {
+				add(pass.outputName, texcoordOffset)
+				add(pass.t50, texcoordOffset)
+				continue
+			}
+			_, texcoordOffset, known := modelViewerPackedObjectShaderLayout(shader)
+			if !known {
 				continue
 			}
 			add(pass.outputName, texcoordOffset)
@@ -156,6 +181,10 @@ func modelViewerPackedObjectStrideOf(declared int, data []byte) (int, bool) {
 	if len(data) >= modelViewerPackedObjectStride && len(data)%modelViewerPackedObjectStride == 0 &&
 		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride) {
 		return modelViewerPackedObjectStride, true
+	}
+	if len(data) >= modelViewerPackedObjectStride28 && len(data)%modelViewerPackedObjectStride28 == 0 &&
+		modelViewerPositionLooksPackedObject(data, modelViewerPackedObjectStride28) {
+		return modelViewerPackedObjectStride28, true
 	}
 	return 0, false
 }
@@ -271,6 +300,7 @@ func modelViewerResourceVertexCount(modDir string, resource modelViewerResource,
 type modelViewerDrawVertexSource struct {
 	kind                           string
 	packedTexcoordOffset           int
+	packedTexcoordDeclared         bool
 	ib, position, texcoord, vector modelViewerResource
 	packed                         []byte
 	packedStride                   int
@@ -306,10 +336,11 @@ func resolveModelViewerDrawVertexSource(
 	if source.packedTexcoordOffset == 0 {
 		source.packedTexcoordOffset = packedResources[modelViewerNormalizeKey(position.Name)]
 	}
-	shaderPacked := source.packedTexcoordOffset != 0
-	if !shaderPacked {
+	source.packedTexcoordDeclared = source.packedTexcoordOffset != 0
+	if !source.packedTexcoordDeclared {
 		source.packedTexcoordOffset = 12
 	}
+	shaderPacked := source.packedTexcoordDeclared
 	texcoord, tcOK := resourceMap[modelViewerNormalizeKey(state.vb1)]
 	if !tcOK || texcoord.Filename == "" {
 		if raw, packedStride, packed := readModelViewerPackedObjectBuffer(
@@ -387,6 +418,9 @@ func loadModelViewerDrawVertexBuffers(
 			stride = modelViewerPackedObjectStride
 		}
 		texcoordOffset := source.packedTexcoordOffset
+		if isModelViewerPackedObjectStride(stride) && !source.packedTexcoordDeclared {
+			texcoordOffset = detectModelViewerPackedTexcoordOffset(source.packed, stride)
+		}
 		if texcoordOffset == 16 {
 			texcoordOffset = resolveModelViewerPackedTexcoordOffset(modDir, position, source.packed, stride, cache)
 		}
@@ -494,6 +528,74 @@ func loadModelViewerDrawVertexBuffers(
 	default:
 		return modelViewerDrawVertexBuffers{}, false, nil
 	}
+}
+
+// detectModelViewerPackedTexcoordOffset picks the UV0 word for a packed object
+// buffer whose layout no compute shader declares; callers must not use it to
+// second-guess a declared layout. 24-byte dumps are not uniform: the cyclic
+// animation layout stores tangent before the two UV sets (UV0 at byte 16),
+// while older frame-swap dumps keep UV0 in the tangent slot (byte 12). Judge
+// from the data so both keep working. 28-byte dumps normally keep UV0 behind
+// tangent (byte 12) and color (byte 16) at byte 20; the mirrored UV1 word at
+// byte 24 must never be mistaken for the diffuse set.
+func detectModelViewerPackedTexcoordOffset(data []byte, stride int) int {
+	switch stride {
+	case modelViewerPackedObjectStride24:
+		if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12) {
+			return 16
+		}
+		return 12
+	case modelViewerPackedObjectStride28:
+		if modelViewerPackedUVScore(data, stride, 20) >= modelViewerPackedUVScore(data, stride, 12) {
+			return 20
+		}
+		return 12
+	default:
+		return 12
+	}
+}
+
+// modelViewerPackedUVScore reports how much the 16-bit pair at a candidate
+// offset looks like a live UV stream. Non-finite and out-of-range pairs count
+// against the score, and a stream that never varies scores zero.
+func modelViewerPackedUVScore(data []byte, stride, offset int) float64 {
+	if stride <= 0 || offset+4 > stride {
+		return 0
+	}
+	vertexCount := len(data) / stride
+	if vertexCount == 0 {
+		return 0
+	}
+	step := max(1, vertexCount/1024)
+	sampled, inRange := 0, 0
+	minU, maxU, minV, maxV := float32(0), float32(0), float32(0), float32(0)
+	first := true
+	for vertex := 0; vertex < vertexCount; vertex += step {
+		base := vertex*stride + offset
+		if base+4 > len(data) {
+			break
+		}
+		u := modelViewerHalfToFloat(binary.LittleEndian.Uint16(data[base:]))
+		v := modelViewerHalfToFloat(binary.LittleEndian.Uint16(data[base+2:]))
+		sampled++
+		if math.IsNaN(float64(u)) || math.IsInf(float64(u), 0) ||
+			math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			continue
+		}
+		if first {
+			minU, maxU, minV, maxV = u, u, v, v
+			first = false
+		}
+		minU, maxU = min(minU, u), max(maxU, u)
+		minV, maxV = min(minV, v), max(maxV, v)
+		if u >= -0.01 && u <= 2 && v >= -0.01 && v <= 2 {
+			inRange++
+		}
+	}
+	if sampled == 0 || (maxU-minU)+(maxV-minV) < 1e-4 {
+		return 0
+	}
+	return float64(inRange) / float64(sampled)
 }
 
 // Some compute shaders name the untouched UV word "tangent". Only override

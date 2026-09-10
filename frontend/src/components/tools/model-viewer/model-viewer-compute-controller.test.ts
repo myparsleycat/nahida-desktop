@@ -59,8 +59,7 @@ describe("ModelViewerComputeController", () => {
                 {
                     id: "mesh",
                     component: "mesh",
-                    positionsUrl: "",
-                    indicesUrl: "",
+                    geometryUrl: "",
                     conditions: [],
                     texKey: null,
                     textureVariants: [],

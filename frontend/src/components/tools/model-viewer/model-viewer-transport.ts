@@ -99,11 +99,7 @@ export function normalizeModelViewerTransport(
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,
             component: mesh.component,
-            positionsUrl: mesh.positionsUrl,
-            normalsUrl: mesh.normalsUrl,
-            tangentsUrl: mesh.tangentsUrl,
-            uvsUrl: mesh.uvsUrl,
-            indicesUrl: mesh.indicesUrl,
+            geometryUrl: mesh.geometryUrl,
             sourceIndicesUrl: mesh.sourceIndicesUrl,
             bounds: mesh.bounds ?? undefined,
             conditions: normalizeDNF(mesh.conditions),
@@ -184,11 +180,13 @@ export function normalizeModelViewerTransport(
             })),
         })),
         computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
+            const dualQuaternionVariant = deformer.pose?.dualQuaternionVariant;
             if (
-                deformer.kind !== "gimi_shape_pose_v1" &&
-                deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
-                deformer.kind !== "gimi_cyclic_packed_v1" &&
-                deformer.kind !== "gimi_cyclic_packed_shape_v1"
+                (dualQuaternionVariant && dualQuaternionVariant !== "object") ||
+                (deformer.kind !== "gimi_shape_pose_v1" &&
+                    deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
+                    deformer.kind !== "gimi_cyclic_packed_v1" &&
+                    deformer.kind !== "gimi_cyclic_packed_shape_v1")
             ) {
                 return [];
             }
@@ -223,6 +221,9 @@ export function normalizeModelViewerTransport(
                     })),
                     pose: deformer.pose
                         ? {
+                              dualQuaternionVariant: dualQuaternionVariant
+                                  ? ("object" as const)
+                                  : undefined,
                               blend: normalizeComputeSource(deformer.pose.blend),
                               frames: normalizeComputeSource(deformer.pose.frames),
                               boneCount: deformer.pose.boneCount,

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
@@ -81,27 +81,71 @@ describe("packed dual-quaternion kernel", () => {
         expectVector(result.normals, [1, 0, 0]);
     });
 
-    it("interpolates adjacent poses and resolves opposite quaternion signs", () => {
-        const first = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
-        const second = [1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -2, 0, 0, 0];
-        const { deformer, buffers } = fixture([...first, ...second]);
-        expectVector(computePackedDualQuaternionFrame(deformer, buffers, 0.5).positions, [3, 2, 3]);
-        expectVector(computePackedDualQuaternionFrame(deformer, buffers, 1).positions, [5, 2, 3]);
-    });
+    it.each([undefined, "object"] as const)(
+        "interpolates opposite quaternion signs for %s",
+        (variant) => {
+            const first = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+            const second = [1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -2, 0, 0, 0];
+            const { deformer, buffers } = fixture([...first, ...second]);
+            deformer.pose!.dualQuaternionVariant = variant;
+            expectVector(
+                computePackedDualQuaternionFrame(deformer, buffers, 0.5).positions,
+                [3, 2, 3],
+            );
+            expectVector(
+                computePackedDualQuaternionFrame(deformer, buffers, 1).positions,
+                [5, 2, 3],
+            );
+        },
+    );
 
-    it("keeps orthogonal quaternion contributions at dot zero across multiple bones", () => {
-        const identity = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
-        const halfTurn = [1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
-        const { deformer, buffers } = fixture(
-            [...identity, ...halfTurn, ...identity, ...halfTurn],
-            2,
-        );
-        const blend = new DataView(buffers.blend!);
-        blend.setFloat32(0, 0.5, true);
-        blend.setFloat32(4, 0.5, true);
-        blend.setInt32(20, 1, true);
-        expectVector(computePackedDualQuaternionFrame(deformer, buffers, 0).positions, [3, 2, -1]);
-    });
+    it.each([
+        [undefined, [3, 2, -1]],
+        ["object", [1, 2, 3]],
+    ] as const)(
+        "matches %s quaternion contributions at dot zero across bones",
+        (variant, expected) => {
+            const identity = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+            const halfTurn = [1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
+            const { deformer, buffers } = fixture(
+                [...identity, ...halfTurn, ...identity, ...halfTurn],
+                2,
+            );
+            const blend = new DataView(buffers.blend!);
+            deformer.pose!.dualQuaternionVariant = variant;
+            blend.setFloat32(0, 0.5, true);
+            blend.setFloat32(4, 0.5, true);
+            blend.setInt32(20, 1, true);
+            expectVector(computePackedDualQuaternionFrame(deformer, buffers, 0).positions, [
+                ...expected,
+            ]);
+        },
+    );
+
+    it.each([
+        [undefined, [3, 2, -1]],
+        ["object", [1, 2, 3]],
+    ] as const)(
+        "matches %s quaternion contributions at dot zero between frames",
+        (variant, expected) => {
+            const identity = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+            const halfTurn = [1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
+            const { deformer, buffers } = fixture([...identity, ...halfTurn]);
+            deformer.pose!.dualQuaternionVariant = variant;
+            const decoded = new Float32Array([1, 2, 3, 1, 0, 0, 127]).buffer;
+            deformer.base = {
+                ...deformer.base,
+                encoding: "packed_f32_v1",
+                stride: 28,
+                byteLength: 28,
+            };
+            expectVector(
+                computePackedDualQuaternionFrame(deformer, { ...buffers, base: decoded }, 0.5)
+                    .positions,
+                [...expected],
+            );
+        },
+    );
 
     it("rounds float16 ties to even and preserves half subnormals", () => {
         const { deformer, buffers } = fixture();
@@ -223,12 +267,24 @@ it.skipIf(!process.env.MODEL_VIEWER_PACKED_DQ_MOD)(
     "computes start, middle and end frames of the local mod",
     () => {
         const dir = process.env.MODEL_VIEWER_PACKED_DQ_MOD!;
+        const files = readdirSync(dir);
+        const blendNames = files.filter((name) => /blend\.buf$/i.test(name));
+        const poseNames = files.filter((name) => /pose\.buf$/i.test(name));
+        if (blendNames.length !== 1 || poseNames.length !== 1) {
+            throw new Error("local mod must contain exactly one packed dual-quaternion buffer set");
+        }
+        const blendName = blendNames[0]!;
+        const poseName = poseNames[0]!;
+        const baseName = blendName.replace(/blend\.buf$/i, ".buf");
+        if (poseName.replace(/pose\.buf$/i, ".buf").toLowerCase() !== baseName.toLowerCase()) {
+            throw new Error("local mod blend and pose buffers must belong to the same set");
+        }
         const read = (name: string) => new Uint8Array(readFileSync(join(dir, name))).buffer;
         const { deformer } = fixture();
         const buffers = {
-            base: read("NilouStandee.buf"),
-            blend: read("NilouStandeeBlend.buf"),
-            pose: read("pose.buf"),
+            base: read(baseName),
+            blend: read(blendName),
+            pose: read(poseName),
             shapeTargets: [],
         };
         deformer.vertexCount = 23775;

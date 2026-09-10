@@ -16,6 +16,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/myparsleycat/ddsutil"
@@ -33,6 +35,11 @@ type modelViewerTextureBinding struct {
 	TextureResourceNames []string
 	TextureRoles         map[string]string
 	OverrideHash         string
+}
+
+type modelViewerTextureSlotCandidate struct {
+	slot     int
+	resource string
 }
 
 type modelViewerPreparedTexture struct {
@@ -81,6 +88,9 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		}
 		assignments := resolveModelViewerAssignments(section, wanted, lookup, variables, make(map[string]bool))
 		ibNames := collectModelViewerSectionIBNames(section)
+		if len(ibNames) == 0 {
+			ibNames = collectModelViewerScopeIBNames(section, lookup, make(map[string]bool))
+		}
 		if len(ibNames) == 0 && assignments["ib"] != "" {
 			ibNames = append(ibNames, modelViewerTrimResourcePrefix(assignments["ib"]))
 		}
@@ -90,6 +100,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		var textureNames []string
 		textureRoles := make(map[string]string)
 		semanticDiffuse := ""
+		var slotTextures []modelViewerTextureSlotCandidate
 		for key, value := range assignments {
 			lowerValue := strings.ToLower(value)
 			_, semantic := modelViewerSemanticTextureRole(key)
@@ -109,8 +120,55 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 						if role == "diffuse" {
 							semanticDiffuse = resolved
 						}
+					} else if slot, ok := modelViewerPsSlotNumber(key); ok {
+						slotTextures = append(
+							slotTextures,
+							modelViewerTextureSlotCandidate{slot: slot, resource: resolved},
+						)
 					}
 				}
+			}
+		}
+
+		// Named roles are stronger evidence than slot order; only wholly
+		// unlabeled dumps can use the canonical slot sequence below.
+		for _, candidate := range slotTextures {
+			key := modelViewerNormalizeKey(candidate.resource)
+			if _, exists := textureRoles[key]; exists {
+				continue
+			}
+			role := classifyModelViewerTextureRole(candidate.resource)
+			if role != "diffuse" || strings.Contains(key, "diffuse") ||
+				strings.Contains(key, "basecolor") || strings.Contains(key, "albedo") {
+				textureRoles[key] = role
+			}
+		}
+
+		// Dump-style overrides bind unlabeled textures at ps-tN slots. The game
+		// orders those slots diffuse, normal, light, material, so the ascending
+		// slot order recovers roles the resource names do not carry. Without it a
+		// helper map can be promoted to diffuse on one load and another on the
+		// next, because the assignment map has no stable iteration order.
+		if len(textureRoles) == 0 && len(slotTextures) > 0 {
+			sort.SliceStable(slotTextures, func(i, j int) bool {
+				return slotTextures[i].slot < slotTextures[j].slot
+			})
+			canonicalRoles := []string{"diffuse", "normal_map", "light_map", "material_map"}
+			roleIndex := 0
+			for _, candidate := range slotTextures {
+				if roleIndex >= len(canonicalRoles) {
+					break
+				}
+				resourceKey := modelViewerNormalizeKey(candidate.resource)
+				if _, exists := textureRoles[resourceKey]; exists {
+					continue
+				}
+				role := canonicalRoles[roleIndex]
+				textureRoles[resourceKey] = role
+				if role == "diffuse" {
+					semanticDiffuse = candidate.resource
+				}
+				roleIndex++
 			}
 		}
 		direct := ""
@@ -153,6 +211,18 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		}
 	}
 	return bindings
+}
+
+func modelViewerPsSlotNumber(key string) (int, bool) {
+	normalized := modelViewerNormalizeKey(key)
+	if !strings.HasPrefix(normalized, "pst") {
+		return 0, false
+	}
+	slot, err := strconv.Atoi(strings.TrimPrefix(normalized, "pst"))
+	if err != nil {
+		return 0, false
+	}
+	return slot, true
 }
 
 func resolveModelViewerAssignments(
@@ -280,6 +350,48 @@ func collectModelViewerSectionIBNames(section modINISection) []string {
 		key, value, ok := strings.Cut(line, "=")
 		if ok && modelViewerNormalizeKey(key) == "ib" {
 			names = appendUniqueModelViewer(names, modelViewerTrimResourcePrefix(value))
+		}
+	}
+	return names
+}
+
+// collectModelViewerScopeIBNames walks the section's run targets and returns
+// every IB they reference, including branches the default state does not
+// select. Present animations swap the IB per frame inside one command list, so
+// resolving a single default-state IB would drop the section's textures on the
+// remaining frames.
+func collectModelViewerScopeIBNames(
+	section modINISection,
+	lookup map[string]modINISection,
+	visited map[string]bool,
+) []string {
+	name := modelViewerNormalizeKey(section.Header + section.Name)
+	if visited[name] {
+		return nil
+	}
+	visited = cloneModelViewerVisited(visited)
+	visited[name] = true
+	var names []string
+	for _, raw := range section.Lines {
+		key, value, ok := strings.Cut(strings.TrimSpace(raw), "=")
+		if !ok {
+			continue
+		}
+		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+		if strings.EqualFold(key, "run") {
+			if nested, exists := lookup[modelViewerNormalizeKey(value)]; exists {
+				for _, nestedName := range collectModelViewerScopeIBNames(nested, lookup, visited) {
+					names = appendUniqueModelViewer(names, nestedName)
+				}
+			}
+			continue
+		}
+		if modelViewerNormalizeKey(key) == "ib" {
+			resource := modelViewerTrimResourcePrefix(value)
+			if resource == "" || strings.EqualFold(resource, "null") {
+				continue
+			}
+			names = appendUniqueModelViewer(names, resource)
 		}
 	}
 	return names

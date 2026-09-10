@@ -17,6 +17,7 @@ export function validatePackedDualQuaternionBuffers(
     if (
         deformer.kind !== "gimi_packed_dual_quaternion_v1" ||
         !pose ||
+        (pose.dualQuaternionVariant !== undefined && pose.dualQuaternionVariant !== "object") ||
         !buffers.pose ||
         !buffers.blend ||
         !Number.isSafeInteger(deformer.vertexCount) ||
@@ -96,8 +97,14 @@ export function computePackedDualQuaternionFrame(
                     palette[reference + 1]! * palette[offset + 7]! +
                     palette[reference + 2]! * palette[offset + 8]! +
                     palette[reference + 3]! * palette[offset + 9]!;
-                // Unlike Math.sign(dot), the shader preserves contributions at dot == 0.
-                const signedFactor = dot < 0 ? -factor : factor;
+                // Legacy exports keep orthogonal contributions; object exports
+                // multiply by sign(dot), dropping them when the dot is zero.
+                const signedFactor =
+                    pose.dualQuaternionVariant === "object"
+                        ? factor * Math.sign(dot)
+                        : dot < 0
+                          ? -factor
+                          : factor;
                 for (let component = 0; component < 14; component += 1) {
                     accumulated[component] +=
                         palette[offset + component]! * (component < 6 ? factor : signedFactor);

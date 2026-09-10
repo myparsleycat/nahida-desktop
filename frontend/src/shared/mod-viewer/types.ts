@@ -169,6 +169,7 @@ export type ViewerComputeDeformer = {
     shapePasses: ViewerComputeShapePass[];
     shapeStages: ViewerComputeShapeStage[];
     pose?: {
+        dualQuaternionVariant?: "object";
         blend: ViewerComputeBinarySource;
         frames: ViewerComputeBinarySource;
         boneCount: number;
@@ -228,11 +229,7 @@ export type ViewerEvalInput = {
 
 export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positionVariants"> & {
     component: string;
-    positionsUrl: string;
-    normalsUrl?: string;
-    tangentsUrl?: string;
-    uvsUrl?: string;
-    indicesUrl: string;
+    geometryUrl: string;
     sourceIndicesUrl?: string;
     bounds?: ModelViewerBounds;
     shapeTargets: Array<{

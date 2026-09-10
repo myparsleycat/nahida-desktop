@@ -444,6 +444,7 @@ function ThreeModelScene({
     }
 
     if (payloadTransport) {
+      const loadController = new AbortController();
       const positionLoader = new ModelViewerPositionLoader();
       positionLoaderRef.current = positionLoader;
       void buildPayloadModel(
@@ -452,6 +453,7 @@ function ThreeModelScene({
         true,
         positionLoader,
         toonShadowsRef.current,
+        loadController.signal,
       )
         .then((nextRoot) => {
           if (disposed || pendingLoadIdRef.current !== loadId) {
@@ -480,6 +482,7 @@ function ThreeModelScene({
         });
       return () => {
         disposed = true;
+        loadController.abort();
         if (positionLoaderRef.current === positionLoader) {
           positionLoaderRef.current = null;
           positionLoader.dispose();

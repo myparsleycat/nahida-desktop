@@ -570,7 +570,7 @@ func collectHashImageSlots(
 			continue
 		}
 		state, _, err := scanModelViewerSymbolicRoot(sections, section, variables)
-		if err != nil || len(state.draws) > 0 {
+		if err != nil || state.explicitDraw {
 			continue
 		}
 		var files []hashImageFile

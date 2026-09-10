@@ -2,8 +2,49 @@ package tools
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
+
+func TestModelViewerDNFRemovesRedundantExclusions(t *testing.T) {
+	for _, expression := range []string{
+		"$frame != 0 && $frame != 1 && $FRAME == 2 && $hat != 0",
+		"$frame == 2 && $frame != 0 && $hat != 0 && $frame != 1",
+		"$frame != 0 && $hat != 0 && $frame == 2 && $frame == 2",
+	} {
+		dnf := parseModelViewerConditionDNF(expression, nil, nil)
+		if len(dnf) != 1 || len(dnf[0]) != 2 ||
+			!slices.Contains(dnf[0], ModelViewerDNFClause{Var: "frame", Value: "2"}) ||
+			!slices.Contains(dnf[0], ModelViewerDNFClause{Var: "hat", Value: "0", Negate: true}) {
+			t.Fatalf("%s = %#v", expression, dnf)
+		}
+		for _, frame := range []string{"0", "1", "2", "3", ""} {
+			for _, hat := range []string{"0", "1"} {
+				state := map[string]string{"frame": frame, "hat": hat}
+				if modelViewerDNFSatisfied(dnf, state) != (frame == "2" && hat != "0") {
+					t.Fatalf("%s: state %v changed meaning", expression, state)
+				}
+			}
+		}
+	}
+	for _, expression := range []string{
+		"$frame != 2 && $frame == 2",
+		"$frame == 2 && $frame != 2",
+		"$frame != 0 && $frame == 2 && $frame == 3",
+	} {
+		if dnf := parseModelViewerConditionDNF(expression, nil, nil); len(dnf) != 0 {
+			t.Fatalf("contradiction %s = %#v", expression, dnf)
+		}
+	}
+}
+
+func TestModelViewerDNFExclusionPreservesEmptyValue(t *testing.T) {
+	input := []ModelViewerDNFClause{{Var: "frame", Value: "", Negate: true}}
+	group, possible := simplifyModelViewerDNFGroup(input)
+	if !possible || !slices.Equal(group, input) {
+		t.Fatalf("empty-value exclusion = %#v, %t", group, possible)
+	}
+}
 
 func TestModelViewerDNFDistinguishesTrueAndFalse(t *testing.T) {
 	trueDNF := parseModelViewerConditionDNF("1", nil, nil)

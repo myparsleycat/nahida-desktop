@@ -79,8 +79,7 @@ format = DXGI_FORMAT_R16_UINT`
 	if result.MemorySessionID == "" || len(result.Meshes) != 1 || len(result.Variables) != 1 {
 		t.Fatalf("result = %#v", result)
 	}
-	assertModelViewerProtocolOK(t, protocol, result.Meshes[0].PositionsURL)
-	assertModelViewerProtocolOK(t, protocol, result.Meshes[0].IndicesURL)
+	assertModelViewerProtocolOK(t, protocol, result.Meshes[0].GeometryURL)
 	if removed, err := service.CleanupModelViewer(ctx, result.MemorySessionID); err != nil || !removed {
 		t.Fatalf("cleanup = %v, %v", removed, err)
 	}

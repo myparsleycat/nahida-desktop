@@ -41,8 +41,8 @@ filename = diffuse.png
 		t.Fatalf("meshes = %#v", fixture.result.Meshes)
 	}
 	mesh := fixture.result.Meshes[0]
-	positions := readViewerFloat32s(t, fixture.protocol, mesh.PositionsURL)
-	indices := readViewerUint32s(t, fixture.protocol, mesh.IndicesURL)
+	positions := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Positions
+	indices := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Indices
 	if len(positions) != 9 || len(indices) != 3 || indices[0] != 0 || indices[1] != 1 || indices[2] != 2 {
 		t.Fatalf("positions=%v indices=%v", positions, indices)
 	}
@@ -64,6 +64,140 @@ drawindexed = 3, 0, 0
 		result.StateRules == nil ||
 		result.Animations == nil {
 		t.Fatalf("transport contains nil collections: %#v", result)
+	}
+}
+
+func TestLoadModViewerPreservesNamedPsTextureRoles(t *testing.T) {
+	for _, bindings := range []string{
+		"ps-t0 = ResourceBodyDiffuse\nps-t1 = ResourceBodyLightMap",
+		"ps-t5 = ResourceBodyLightMap\nps-t9 = ResourceBodyDiffuse",
+	} {
+		t.Run(bindings, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "diffuse.png", encodeTinyPNG())
+			writeTextureFile(t, dir, "light.png", encodeTinyPNG())
+			fixture := loadViewerFixture(t, dir, `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+`+bindings+`
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceBodyDiffuse]
+filename = diffuse.png
+[ResourceBodyLightMap]
+filename = light.png
+`)
+			if len(fixture.result.Meshes) != 1 {
+				t.Fatalf("meshes = %d", len(fixture.result.Meshes))
+			}
+			mesh := fixture.result.Meshes[0]
+			if texKey(mesh) != "diffuse::diffuse.png" || mesh.LightMapKey == nil ||
+				*mesh.LightMapKey != "light_map::light.png" || mesh.NormalMapKey != nil || mesh.MaterialMapKey != nil {
+				t.Fatalf("named texture roles changed: %+v", mesh)
+			}
+		})
+	}
+}
+
+func TestLoadModViewerBindsUnlabeledPsTexturesBySlotRoles(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"objectAPst8.png", "objectAPst9.png", "objectAPst12.png", "objectAPst14.png"} {
+		writeTextureFile(t, dir, name, encodeTinyPNG())
+	}
+	fixture := loadViewerFixture(t, dir, `[TextureOverrideObjectA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t9 = ref ResourceObjectAPst8
+ps-t10 = ref ResourceObjectAPst9
+ps-t13 = ref ResourceObjectAPst12
+ps-t15 = ref ResourceObjectAPst14
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceObjectAPst8]
+filename = objectAPst8.png
+[ResourceObjectAPst9]
+filename = objectAPst9.png
+[ResourceObjectAPst12]
+filename = objectAPst12.png
+[ResourceObjectAPst14]
+filename = objectAPst14.png
+`)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("meshes = %#v", fixture.result.Meshes)
+	}
+	mesh := fixture.result.Meshes[0]
+	if !strings.HasSuffix(texKey(mesh), "objectAPst8.png") ||
+		mesh.NormalMapKey == nil || !strings.HasSuffix(*mesh.NormalMapKey, "objectAPst9.png") ||
+		mesh.LightMapKey == nil || !strings.HasSuffix(*mesh.LightMapKey, "objectAPst12.png") ||
+		mesh.MaterialMapKey == nil || !strings.HasSuffix(*mesh.MaterialMapKey, "objectAPst14.png") {
+		t.Fatalf("mesh textures = %#v", mesh)
+	}
+	if len(fixture.result.Textures) != 4 {
+		t.Fatalf("textures = %#v", fixture.result.Textures)
+	}
+}
+
+func TestLoadModViewerBindsTexturesAcrossPresentIBFrames(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "body.png", encodeTinyPNG())
+	fixture := loadViewerFixture(t, dir, `[Constants]
+global $fps = 30
+global $swapvar = 0
+[Present]
+$swapvar = (time * $fps % 2) // 1
+[TextureOverrideBody]
+run = CommandListBodyFrames
+if ps-t5 == 1
+ps-t5 = Resource-1
+else
+ps-t2 = Resource-1
+endif
+[CommandListBodyFrames]
+if $swapvar == 0
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+elif $swapvar == 1
+ib = ResourceBodyIBB
+vb0 = ResourcePos
+vb1 = ResourceTc
+endif
+`+viewerBodyResources+`
+[ResourceBodyIBB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource-1]
+filename = body.png
+`)
+	if len(fixture.result.Meshes) != 2 {
+		t.Fatalf("meshes = %#v", fixture.result.Meshes)
+	}
+	if len(fixture.result.Animations) != 1 || len(fixture.result.Animations[0].Frames) != 2 {
+		t.Fatalf("animations = %#v", fixture.result.Animations)
+	}
+	for _, mesh := range fixture.result.Meshes {
+		if !strings.HasSuffix(texKey(mesh), "body.png") {
+			t.Fatalf("frame mesh lost its texture: %#v", mesh)
+		}
+	}
+	first := evaluateViewerTransport(fixture.result, map[string]any{"swapvar": "0"})
+	second := evaluateViewerTransport(fixture.result, map[string]any{"swapvar": "1"})
+	for frame, evaluated := range []viewerEvalState{first, second} {
+		visible := 0
+		for _, mesh := range evaluated.Meshes {
+			if !mesh.Visible {
+				continue
+			}
+			visible++
+			if !strings.HasSuffix(mesh.TexKey, "body.png") {
+				t.Fatalf("frame %d visible mesh lost its texture: %#v", frame, mesh)
+			}
+		}
+		if visible != 1 {
+			t.Fatalf("frame %d visible meshes = %d", frame, visible)
+		}
 	}
 }
 
@@ -135,8 +269,8 @@ format = DXGI_FORMAT_R32_UINT
 	if len(fixture.result.Meshes) < 1 {
 		t.Fatalf("meshes = %#v", fixture.result.Meshes)
 	}
-	positions := readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].PositionsURL)
-	indices := readViewerUint32s(t, fixture.protocol, fixture.result.Meshes[0].IndicesURL)
+	positions := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).Positions
+	indices := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).Indices
 	if len(positions) != 9 || len(indices) != 3 {
 		t.Fatalf("positions=%v indices=%v", positions, indices)
 	}
@@ -181,8 +315,8 @@ format = DXGI_FORMAT_R32_UINT
 	}
 	sets := make([][]int, 2)
 	for index, mesh := range fixture.result.Meshes {
-		positions := readViewerFloat32s(t, fixture.protocol, mesh.PositionsURL)
-		indices := readViewerUint32s(t, fixture.protocol, mesh.IndicesURL)
+		positions := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Positions
+		indices := readViewerMesh(t, fixture.protocol, mesh.GeometryURL).Indices
 		values := make([]int, len(indices))
 		for i, vertex := range indices {
 			values[i] = int(math.Round(float64(positions[vertex*3])))
@@ -433,10 +567,10 @@ drawindexed = 3, 0, 0
 		t.Fatal(err)
 	}
 	fixture := loadViewerDir(t, dir)
-	if fixture.result.Meshes[0].UVsURL == "" {
+	if len(readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).UVs) == 0 {
 		t.Fatal("missing UVs")
 	}
-	uvs := readViewerFloat32s(t, fixture.protocol, fixture.result.Meshes[0].UVsURL)
+	uvs := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL).UVs
 	if len(uvs) < 6 || uvs[0] != 0 || math.Abs(float64(uvs[1]-.75)) > 1e-6 || uvs[2] != 1 ||
 		math.Abs(float64(uvs[3]-.25)) > 1e-6 ||
 		math.Abs(float64(uvs[4]-.5)) > 1e-6 ||
@@ -755,16 +889,13 @@ endif
 	if len(result.Meshes) != 2 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
-	positions := []string{result.Meshes[0].PositionsURL, result.Meshes[1].PositionsURL}
-	indices := []string{result.Meshes[0].IndicesURL, result.Meshes[1].IndicesURL}
+	geometry := []string{result.Meshes[0].GeometryURL, result.Meshes[1].GeometryURL}
 	first := evaluateViewerTransport(result, map[string]any{"hat": "0"})
 	second := evaluateViewerTransport(result, map[string]any{"hat": "1"})
 	if !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
 		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
-	if result.Meshes[0].PositionsURL != positions[0] || result.Meshes[1].PositionsURL != positions[1] ||
-		result.Meshes[0].IndicesURL != indices[0] ||
-		result.Meshes[1].IndicesURL != indices[1] {
+	if result.Meshes[0].GeometryURL != geometry[0] || result.Meshes[1].GeometryURL != geometry[1] {
 		t.Fatal("geometry URLs changed after evaluation")
 	}
 }
@@ -881,7 +1012,7 @@ endif
 	}
 }
 
-func TestLoadModViewerDeduplicatesDrawsThatDifferOnlyByBaseVertex(t *testing.T) {
+func TestLoadModViewerPreservesDrawsThatDifferOnlyByBaseVertex(t *testing.T) {
 	dir := t.TempDir()
 	result := loadViewerMod(t, dir, `[Constants]
 global $mode = 0
@@ -898,8 +1029,17 @@ elif $mode == 1
 drawindexed = 3, 0, 1
 endif
 `+viewerBodyResources)
-	if len(result.Meshes) != 1 || len(result.Meshes[0].PositionVariants) != 0 {
+	if len(result.Meshes) != 2 || len(result.Meshes[0].PositionVariants) != 0 ||
+		len(result.Meshes[1].PositionVariants) != 0 {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.Meshes[0].GeometryURL == result.Meshes[1].GeometryURL {
+		t.Fatal("different base vertices share geometry")
+	}
+	first := evaluateViewerTransport(result, map[string]any{"mode": "0"})
+	second := evaluateViewerTransport(result, map[string]any{"mode": "1"})
+	if !first.Meshes[0].Visible || first.Meshes[1].Visible || second.Meshes[0].Visible || !second.Meshes[1].Visible {
+		t.Fatalf("first=%#v second=%#v", first.Meshes, second.Meshes)
 	}
 }
 
@@ -938,24 +1078,39 @@ endif
 	}
 }
 
-func readViewerFloat32s(t *testing.T, protocol *infra.Protocol, url string) []float32 {
+func readViewerMesh(t *testing.T, protocol *infra.Protocol, url string) modelViewerMeshPayload {
 	t.Helper()
 	raw := readModelViewerProtocolBytes(t, protocol, url)
-	output := make([]float32, len(raw)/4)
-	for index := range output {
-		output[index] = math.Float32frombits(binary.LittleEndian.Uint32(raw[index*4:]))
+	if len(raw) < 24 || string(raw[:4]) != "MVG1" {
+		t.Fatal("invalid mesh header")
 	}
-	return output
-}
-
-func readViewerUint32s(t *testing.T, protocol *infra.Protocol, url string) []uint32 {
-	t.Helper()
-	raw := readModelViewerProtocolBytes(t, protocol, url)
-	output := make([]uint32, len(raw)/4)
-	for index := range output {
-		output[index] = binary.LittleEndian.Uint32(raw[index*4:])
+	counts := make([]int, 5)
+	total := 24
+	for index := range counts {
+		counts[index] = int(binary.LittleEndian.Uint32(raw[4+index*4:]))
+		total += counts[index] * 4
 	}
-	return output
+	if len(raw) != total {
+		t.Fatalf("mesh bytes = %d, want %d", len(raw), total)
+	}
+	payload := modelViewerMeshPayload{}
+	offset := 24
+	for index, values := range []*[]float32{&payload.Positions, &payload.Normals, &payload.Tangents, &payload.UVs} {
+		if counts[index] == 0 {
+			continue
+		}
+		*values = make([]float32, counts[index])
+		for i := range *values {
+			(*values)[i] = math.Float32frombits(binary.LittleEndian.Uint32(raw[offset:]))
+			offset += 4
+		}
+	}
+	payload.Indices = make([]uint32, counts[4])
+	for i := range payload.Indices {
+		payload.Indices[i] = binary.LittleEndian.Uint32(raw[offset:])
+		offset += 4
+	}
+	return payload
 }
 
 func findViewerVariable(payload ModelViewerTransport, id string) *ModelViewerVariable {
