@@ -24,9 +24,6 @@ const (
 )
 
 var (
-	modelViewerPackedVertexStructRE = regexp.MustCompile(
-		`structvertexattributes\{uint2position;uintnormal;uinttexcoord;uinttangent;\}`,
-	)
 	modelViewerFilenamePositionRE     = regexp.MustCompile(`(?i)position`)
 	modelViewerPackedPositionAbsLimit = 1e5
 )
@@ -73,14 +70,24 @@ func modelViewerPackedObjectLayoutAt(indexFormat string, stride, texcoordOffset 
 	}
 }
 
-func isKnownModelViewerPackedObjectShader(shader string) bool {
-	return modelViewerPackedVertexStructRE.MatchString(compactModelViewerShader(shader))
+func modelViewerPackedObjectShaderLayout(shader string) (stride, texcoordOffset int, known bool) {
+	compact := compactModelViewerShader(shader)
+	switch {
+	case strings.Contains(compact, "structvertexattributes{uint2position;uintnormal;uinttexcoord;uinttangent;}"):
+		return modelViewerPackedObjectStride, 12, true
+	case strings.Contains(compact, "structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord;uinttexcoord1;}"):
+		return modelViewerPackedObjectStride24, 16, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func isKnownModelViewerGIMICyclicPackedBoneShader(shader string) bool {
+	if _, _, known := modelViewerPackedObjectShaderLayout(shader); !known {
+		return false
+	}
 	compact := compactModelViewerShader(shader)
 	required := []string{
-		"structvertexattributes{uint2position;uintnormal;uinttexcoord;uinttangent;}",
 		"structposeattributes{float4x;float4y;float4z;}",
 		"structuredbuffer<vertexattributes>", "register(t50)",
 		"structuredbuffer<blendattributes>", "register(t51)",
@@ -115,10 +122,10 @@ func collectModelViewerPackedObjectResources(root, shaderBaseDir string, section
 			if !ok {
 				continue
 			}
-			texcoordOffset := 12
+			_, texcoordOffset, known := modelViewerPackedObjectShaderLayout(shader)
 			if isKnownModelViewerPackedDualQuaternionShader(shader) {
 				texcoordOffset = 16
-			} else if !isKnownModelViewerPackedObjectShader(shader) {
+			} else if !known {
 				continue
 			}
 			add(pass.outputName, texcoordOffset)

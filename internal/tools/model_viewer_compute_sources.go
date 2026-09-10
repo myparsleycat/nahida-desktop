@@ -202,7 +202,8 @@ func readModelViewerComputeRecords(
 	vertexCount int,
 	packed bool,
 ) ([]byte, error) {
-	if source.Stride <= 0 || source.Stride > 64<<10 || (packed && source.Stride != 20) || vertexCount < 0 {
+	if source.Stride <= 0 || source.Stride > 64<<10 ||
+		(packed && !isModelViewerPackedObjectStride(source.Stride)) || vertexCount < 0 {
 		return nil, fmt.Errorf("invalid compute source stride")
 	}
 	file, err := os.Open(source.sourcePath)

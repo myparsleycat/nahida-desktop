@@ -67,9 +67,10 @@ func modelViewerKnownBoneKernelForShader(shader string) (modelViewerKnownBoneKer
 			shapePasses: true,
 		}, true
 	case isKnownModelViewerGIMICyclicPackedBoneShader(shader):
+		stride, _, _ := modelViewerPackedObjectShaderLayout(shader)
 		return modelViewerKnownBoneKernel{
 			kind:        modelViewerPackedObjectKind,
-			baseStride:  modelViewerPackedObjectStride,
+			baseStride:  stride,
 			blendStride: 32,
 			poseStride:  48,
 		}, true
