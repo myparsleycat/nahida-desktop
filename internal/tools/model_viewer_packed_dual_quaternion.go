@@ -51,6 +51,29 @@ var modelViewerPackedDualQuaternionLegacyBody = []string{
 	"i32toi8(int(normal_result.y*-1.0f))<<16",
 }
 
+// modelViewerPackedDualQuaternionObjectBody is the newer object build of the
+// S/T + QR/QD armature skinning, shared by the 24-byte and 28-byte records.
+var modelViewerPackedDualQuaternionObjectBody = []string{
+	"structposeattributes{float3s;float3t;float4qr;float4qd;}",
+	"rwstructuredbuffer<vertexattributes>", "register(u5)",
+	"structuredbuffer<vertexattributes>base:register(t50)",
+	"structuredbuffer<blendattributes>blend:register(t51)",
+	"structuredbuffer<poseattributes>pose:register(t52)",
+	"#definetimeiniparams[88].x", "#definevg_countiniparams[89].x",
+	"(int)time", "frac(time)",
+	"idx_prev=frame*vg_count+b.indicies",
+	"idx_next=(frame+1)*vg_count+b.indicies",
+	"p0_prev.s*weights.x", "p0_prev.t*weights.x",
+	"pos.xyz=pos.xyz*scale+bias",
+	"sign(dot(p0_prev.qr,", "p0_prev.qd*weights.x",
+	"qr/=qr_len", "qd/=qr_len",
+	"-qdw*qx+qdx*qw-qdy*qz+qdz*qy",
+	"m00*pos.x+m01*pos.y+m02*pos.z",
+	"m00*normal.x+m01*normal.y+m02*normal.z",
+	"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
+	"i32toi8(int(normal_result",
+}
+
 var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionVariant{
 	{
 		baseStride:     modelViewerPackedObjectStride,
@@ -82,26 +105,15 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord0;uinttexcoord1;}",
 		},
-		required: []string{
-			"structposeattributes{float3s;float3t;float4qr;float4qd;}",
-			"rwstructuredbuffer<vertexattributes>", "register(u5)",
-			"structuredbuffer<vertexattributes>base:register(t50)",
-			"structuredbuffer<blendattributes>blend:register(t51)",
-			"structuredbuffer<poseattributes>pose:register(t52)",
-			"#definetimeiniparams[88].x", "#definevg_countiniparams[89].x",
-			"(int)time", "frac(time)",
-			"idx_prev=frame*vg_count+b.indicies",
-			"idx_next=(frame+1)*vg_count+b.indicies",
-			"p0_prev.s*weights.x", "p0_prev.t*weights.x",
-			"pos.xyz=pos.xyz*scale+bias",
-			"sign(dot(p0_prev.qr,", "p0_prev.qd*weights.x",
-			"qr/=qr_len", "qd/=qr_len",
-			"-qdw*qx+qdx*qw-qdy*qz+qdz*qy",
-			"m00*pos.x+m01*pos.y+m02*pos.z",
-			"m00*normal.x+m01*normal.y+m02*normal.z",
-			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
-			"i32toi8(int(normal_result",
+		required: modelViewerPackedDualQuaternionObjectBody,
+	},
+	{
+		baseStride:     modelViewerPackedObjectStride28,
+		texcoordOffset: 20,
+		vertexStructs: []string{
+			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
 		},
+		required: modelViewerPackedDualQuaternionObjectBody,
 	},
 }
 

@@ -424,6 +424,95 @@ func TestPackedDualQuaternion28LegacyBody(t *testing.T) {
 	}
 }
 
+// The VRMachine-style object build keeps the newer interpolation body but
+// inserts a vertex color word, so the packed record grows to 28 bytes and the
+// diffuse UV word moves to byte 20.
+var packedDualQuaternion28ObjectShader = strings.Replace(
+	packedDualQuaternion24Shader,
+	"uint2 position; uint normal; uint tangent; uint texcoord0; uint texcoord1;",
+	"uint2 position; uint normal; uint tangent; uint color; uint texcoord0; uint texcoord1;",
+	1,
+)
+
+func TestPackedDualQuaternion28ObjectBody(t *testing.T) {
+	if stride, offset, known := modelViewerPackedDualQuaternionLayout(packedDualQuaternion28ObjectShader); !known ||
+		stride != modelViewerPackedObjectStride28 || offset != 20 {
+		t.Fatalf(
+			"28-byte color object variant not recognized: stride=%d offset=%d known=%t",
+			stride,
+			offset,
+			known,
+		)
+	}
+	if stride, offset, known := modelViewerPackedObjectShaderLayout(packedDualQuaternion28ObjectShader); !known ||
+		stride != modelViewerPackedObjectStride28 || offset != 20 {
+		t.Fatalf(
+			"generic packed object layout: stride=%d offset=%d known=%t",
+			stride,
+			offset,
+			known,
+		)
+	}
+	dir := t.TempDir()
+	ini := strings.Replace(packedDualQuaternion24INI, "stride = 24", "stride = 28", 1)
+	for name, data := range map[string][]byte{
+		"mod.ini":   []byte(ini),
+		"anim.hlsl": []byte(packedDualQuaternion28ObjectShader),
+		"base.buf":  make([]byte, 3*28),
+		"blend.buf": make([]byte, 3*32),
+		"pose.buf":  make([]byte, 8*2*56),
+		"head.ib":   make([]byte, 12),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(ini)
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	deformer, clips := detectModelViewerComputeAnimation(
+		dir,
+		dir,
+		"",
+		sections,
+		resources,
+		[]modelViewerDirectMesh{
+			{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+		},
+		nil,
+	)
+	if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
+		deformer.Base.Stride != modelViewerPackedObjectStride28 ||
+		deformer.VertexCount != 3 || deformer.Pose == nil ||
+		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 8 {
+		t.Fatalf("unexpected deformer: %+v", deformer)
+	}
+	if len(clips) != 2 ||
+		clips[0].FrameStart != 1 || clips[0].FrameEnd != 3 || clips[0].FPS != 24 ||
+		clips[1].FrameStart != 3 || clips[1].FrameEnd != 5 || clips[1].FPS != 24 {
+		t.Fatalf("unexpected present-derived clips: %+v", clips)
+	}
+	packed := collectModelViewerPackedObjectResources(dir, dir, sections)
+	if packed[modelViewerNormalizeKey("position")] != 20 ||
+		packed[modelViewerNormalizeKey("position1")] != 20 {
+		t.Fatalf("packed UV layout: %v", packed)
+	}
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+	source := resolveModelViewerDrawVertexSource(
+		dir,
+		"mihoyo",
+		modelViewerDirectBufferState{vb0: "Position", ib: "IB"},
+		modelViewerResourceMap(resources),
+		resources,
+		cache,
+		packed,
+	)
+	buffers, _, err := loadModelViewerDrawVertexBuffers(dir, source, cache)
+	if err != nil || len(buffers.layout.Elements) < 3 || buffers.layout.Elements[2].AlignedByteOffset != 20 {
+		t.Fatalf("UV layout: %+v %v source=%+v", buffers.layout, err, source)
+	}
+}
+
 func TestPackedDualQuaternion24CompoundGuardClips(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

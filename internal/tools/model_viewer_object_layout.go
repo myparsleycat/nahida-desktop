@@ -84,6 +84,11 @@ func modelViewerPackedObjectShaderLayout(shader string) (stride, texcoordOffset 
 		"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord;uinttexcoord1;}",
 	):
 		return modelViewerPackedObjectStride28, 20, true
+	case strings.Contains(
+		compact,
+		"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
+	):
+		return modelViewerPackedObjectStride28, 20, true
 	default:
 		return 0, 0, false
 	}
