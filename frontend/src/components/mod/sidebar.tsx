@@ -263,7 +263,7 @@ export default function ModSidebar({
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize mod sidebar"
-        className="group absolute inset-y-0 -right-1 z-30 flex w-2 cursor-col-resize touch-none items-center justify-center"
+        className="group absolute inset-y-0 -right-[1.5px] z-30 flex w-[3px] cursor-col-resize touch-none items-center justify-center"
         onPointerDown={handleResizePointerDown}
       >
         <div className="h-full w-px bg-border/60 transition-colors group-hover:bg-primary/70" />
