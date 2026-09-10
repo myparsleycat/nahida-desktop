@@ -22,8 +22,8 @@ jobs:
 
           DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
-          config.model: "deepseek/deepseek-v4-flash"
-          config.fallback_models: '["deepseek/deepseek-v4-flash"]'
+          config.model: "deepseek/deepseek-flash"
+          config.fallback_models: '["deepseek/deepseek-flash"]'
 
           github_action_config.auto_describe: "true"
           github_action_config.auto_review: "false"
