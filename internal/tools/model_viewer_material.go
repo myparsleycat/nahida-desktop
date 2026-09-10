@@ -88,6 +88,9 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		}
 		assignments := resolveModelViewerAssignments(section, wanted, lookup, variables, make(map[string]bool))
 		ibNames := collectModelViewerSectionIBNames(section)
+		if len(ibNames) == 0 {
+			ibNames = collectModelViewerScopeIBNames(section, lookup, make(map[string]bool))
+		}
 		if len(ibNames) == 0 && assignments["ib"] != "" {
 			ibNames = append(ibNames, modelViewerTrimResourcePrefix(assignments["ib"]))
 		}
@@ -332,6 +335,48 @@ func collectModelViewerSectionIBNames(section modINISection) []string {
 		key, value, ok := strings.Cut(line, "=")
 		if ok && modelViewerNormalizeKey(key) == "ib" {
 			names = appendUniqueModelViewer(names, modelViewerTrimResourcePrefix(value))
+		}
+	}
+	return names
+}
+
+// collectModelViewerScopeIBNames walks the section's run targets and returns
+// every IB they reference, including branches the default state does not
+// select. Present animations swap the IB per frame inside one command list, so
+// resolving a single default-state IB would drop the section's textures on the
+// remaining frames.
+func collectModelViewerScopeIBNames(
+	section modINISection,
+	lookup map[string]modINISection,
+	visited map[string]bool,
+) []string {
+	name := modelViewerNormalizeKey(section.Header + section.Name)
+	if visited[name] {
+		return nil
+	}
+	visited = cloneModelViewerVisited(visited)
+	visited[name] = true
+	var names []string
+	for _, raw := range section.Lines {
+		key, value, ok := strings.Cut(strings.TrimSpace(raw), "=")
+		if !ok {
+			continue
+		}
+		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+		if strings.EqualFold(key, "run") {
+			if nested, exists := lookup[modelViewerNormalizeKey(value)]; exists {
+				for _, nestedName := range collectModelViewerScopeIBNames(nested, lookup, visited) {
+					names = appendUniqueModelViewer(names, nestedName)
+				}
+			}
+			continue
+		}
+		if modelViewerNormalizeKey(key) == "ib" {
+			resource := modelViewerTrimResourcePrefix(value)
+			if resource == "" || strings.EqualFold(resource, "null") {
+				continue
+			}
+			names = appendUniqueModelViewer(names, resource)
 		}
 	}
 	return names

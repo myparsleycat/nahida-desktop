@@ -106,6 +106,68 @@ filename = objectAPst14.png
 	}
 }
 
+func TestLoadModViewerBindsTexturesAcrossPresentIBFrames(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "body.png", encodeTinyPNG())
+	fixture := loadViewerFixture(t, dir, `[Constants]
+global $fps = 30
+global $swapvar = 0
+[Present]
+$swapvar = (time * $fps % 2) // 1
+[TextureOverrideBody]
+run = CommandListBodyFrames
+if ps-t5 == 1
+ps-t5 = Resource-1
+else
+ps-t2 = Resource-1
+endif
+[CommandListBodyFrames]
+if $swapvar == 0
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+elif $swapvar == 1
+ib = ResourceBodyIBB
+vb0 = ResourcePos
+vb1 = ResourceTc
+endif
+`+viewerBodyResources+`
+[ResourceBodyIBB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource-1]
+filename = body.png
+`)
+	if len(fixture.result.Meshes) != 2 {
+		t.Fatalf("meshes = %#v", fixture.result.Meshes)
+	}
+	if len(fixture.result.Animations) != 1 || len(fixture.result.Animations[0].Frames) != 2 {
+		t.Fatalf("animations = %#v", fixture.result.Animations)
+	}
+	for _, mesh := range fixture.result.Meshes {
+		if !strings.HasSuffix(texKey(mesh), "body.png") {
+			t.Fatalf("frame mesh lost its texture: %#v", mesh)
+		}
+	}
+	first := evaluateViewerTransport(fixture.result, map[string]any{"swapvar": "0"})
+	second := evaluateViewerTransport(fixture.result, map[string]any{"swapvar": "1"})
+	for frame, evaluated := range []viewerEvalState{first, second} {
+		visible := 0
+		for _, mesh := range evaluated.Meshes {
+			if !mesh.Visible {
+				continue
+			}
+			visible++
+			if !strings.HasSuffix(mesh.TexKey, "body.png") {
+				t.Fatalf("frame %d visible mesh lost its texture: %#v", frame, mesh)
+			}
+		}
+		if visible != 1 {
+			t.Fatalf("frame %d visible meshes = %d", frame, visible)
+		}
+	}
+}
+
 func TestLoadModViewerIgnoresRuntimeGuardsButKeepsToggleConditions(t *testing.T) {
 	dir := t.TempDir()
 	result := loadViewerMod(t, dir, `[Constants]
