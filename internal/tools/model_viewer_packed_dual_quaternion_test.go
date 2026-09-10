@@ -294,6 +294,52 @@ func TestPackedDualQuaternion24PresentStateClips(t *testing.T) {
 	}
 }
 
+func TestPackedDualQuaternion24CompoundGuardClips(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		guard string
+	}{
+		{"or guard", "if $freq > $end || $freq < $start"},
+		{"and guard", "if $freq > $end && $pause == 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ini := strings.Replace(packedDualQuaternion24INI, "if $freq > $end", tc.guard, 1)
+			for name, data := range map[string][]byte{
+				"mod.ini": []byte(ini), "anim.hlsl": []byte(packedDualQuaternion24Shader),
+				"base.buf": make([]byte, 3*24), "blend.buf": make([]byte, 3*32),
+				"pose.buf": make([]byte, 8*2*56), "head.ib": make([]byte, 12),
+			} {
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			sections := parseModINI(ini)
+			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+			deformer, clips := detectModelViewerComputeAnimation(
+				dir,
+				dir,
+				"",
+				sections,
+				resources,
+				[]modelViewerDirectMesh{
+					{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+				},
+				nil,
+			)
+			if deformer == nil || deformer.Kind != modelViewerPackedDualQuaternionKind ||
+				deformer.Pose == nil || deformer.Pose.FrameCount != 8 {
+				t.Fatalf("unexpected deformer: %+v", deformer)
+			}
+			if len(clips) != 2 ||
+				clips[0].FrameStart != 1 || clips[0].FrameEnd != 3 || clips[0].FPS != 24 ||
+				clips[1].FrameStart != 3 || clips[1].FrameEnd != 5 || clips[1].FPS != 24 {
+				t.Fatalf("unexpected compound-guard clips: %+v", clips)
+			}
+		})
+	}
+}
+
 func TestPackedDualQuaternionDetection(t *testing.T) {
 	for _, tc := range []struct {
 		name, from, to string

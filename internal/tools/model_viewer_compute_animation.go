@@ -837,8 +837,9 @@ func detectModelViewerGIMIShapePoseClips(
 			if !explicitRange {
 				if match := endPattern.FindStringSubmatch(line); match != nil {
 					explicitRange = true
+					expression := modelViewerComputeRangeClause(match[1])
 					var valid bool
-					endVariable, endOffset, valid = parseModelViewerComputeRangeToken(match[1])
+					endVariable, endOffset, valid = parseModelViewerComputeRangeToken(expression)
 					if !valid {
 						return nil, true
 					}
@@ -943,6 +944,13 @@ func parseModelViewerComputeRangeToken(expression string) (string, float64, bool
 	}
 	value, err := strconv.ParseFloat(strings.TrimSpace(expression), 64)
 	return "", value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func modelViewerComputeRangeClause(expression string) string {
+	if index := strings.IndexAny(expression, "|&"); index >= 0 {
+		return strings.TrimSpace(expression[:index])
+	}
+	return strings.TrimSpace(expression)
 }
 
 func validModelViewerComputePoseRange(start, end float64, frameCount int) bool {
