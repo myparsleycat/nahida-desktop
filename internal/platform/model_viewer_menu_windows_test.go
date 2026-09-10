@@ -100,6 +100,60 @@ func TestUpdateModelViewerMenuRewritesLabel(t *testing.T) {
 	}
 }
 
+func TestUpdateModelViewerMenuSkipsWhenLabelCurrent(t *testing.T) {
+	root := fmt.Sprintf(`Software\Classes\nahida-mv-test-%d`, time.Now().UnixNano())
+	path := root + `\shell\verb`
+	r, _, err := registry.CreateKey(registry.CURRENT_USER, path, registry.SET_VALUE|registry.CREATE_SUB_KEY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if r != 0 {
+			_ = r.Close()
+		}
+		for _, suffix := range []string{`\shell\verb`, `\shell`, ``} {
+			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
+		}
+	})
+	if err := r.SetStringValue("", modelViewerMenuLabel("ko")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r = 0
+
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated {
+		t.Fatal("matching label must be skipped")
+	}
+}
+
+func TestUpdateModelViewerMenuSkipsWhenInstalledCurrent(t *testing.T) {
+	root := fmt.Sprintf(`Software\Classes\nahida-mv-test-%d`, time.Now().UnixNano())
+	path := root + `\shell\verb`
+	t.Cleanup(func() {
+		for _, suffix := range []string{`\shell\verb\command`, `\shell\verb`, `\shell`, ``} {
+			_ = registry.DeleteKey(registry.CURRENT_USER, root+suffix)
+		}
+	})
+	executable := filepath.Join(t.TempDir(), "Nahida Desktop.exe")
+	if _, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko", executable); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := updateModelViewerMenu(registry.CURRENT_USER, path, "ko", executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated {
+		t.Fatal("matching installed registration must be skipped")
+	}
+}
+
 func TestUpdateModelViewerMenuCreatesInstalledRegistration(t *testing.T) {
 	root := fmt.Sprintf(`Software\Classes\nahida-mv-test-%d`, time.Now().UnixNano())
 	path := root + `\shell\verb`

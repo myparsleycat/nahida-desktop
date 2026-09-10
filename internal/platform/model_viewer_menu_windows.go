@@ -55,6 +55,14 @@ func UpdateModelViewerContextMenu(language string) error {
 }
 
 func updateModelViewerMenu(hive registry.Key, path, language, executable string) (bool, error) {
+	label := modelViewerMenuLabel(language)
+	icon := ""
+	command := ""
+	if executable != "" {
+		executable = filepath.Clean(executable)
+		icon = fmt.Sprintf(`"%s",0`, executable)
+		command = fmt.Sprintf(`"%s" --model-viewer "%%1"`, executable)
+	}
 	key, err := registry.OpenKey(hive, path, registry.QUERY_VALUE|registry.SET_VALUE|registry.CREATE_SUB_KEY)
 	if errors.Is(err, registry.ErrNotExist) {
 		if executable == "" {
@@ -66,29 +74,53 @@ func updateModelViewerMenu(hive registry.Key, path, language, executable string)
 		return false, fmt.Errorf("open or create model viewer context menu key: %w", err)
 	}
 	defer func() { _ = key.Close() }()
-	if err := key.SetStringValue("", modelViewerMenuLabel(language)); err != nil {
+	if modelViewerMenuMatches(key, label, icon, command) {
+		return false, nil
+	}
+	if err := key.SetStringValue("", label); err != nil {
 		return false, fmt.Errorf("set model viewer context menu label: %w", err)
 	}
 	if executable == "" {
 		return true, nil
 	}
-	executable = filepath.Clean(executable)
-	if err := key.SetStringValue("Icon", fmt.Sprintf(`"%s",0`, executable)); err != nil {
+	if err := key.SetStringValue("Icon", icon); err != nil {
 		return false, fmt.Errorf("set model viewer context menu icon: %w", err)
 	}
 	if err := key.SetStringValue("MultiSelectModel", "Single"); err != nil {
 		return false, fmt.Errorf("set model viewer context menu selection mode: %w", err)
 	}
-	command, _, err := registry.CreateKey(key, "command", registry.SET_VALUE)
+	commandKey, _, err := registry.CreateKey(key, "command", registry.SET_VALUE)
 	if err != nil {
 		return false, fmt.Errorf("create model viewer context menu command key: %w", err)
 	}
-	if err := command.SetStringValue("", fmt.Sprintf(`"%s" --model-viewer "%%1"`, executable)); err != nil {
-		_ = command.Close()
+	if err := commandKey.SetStringValue("", command); err != nil {
+		_ = commandKey.Close()
 		return false, fmt.Errorf("set model viewer context menu command: %w", err)
 	}
-	if err := command.Close(); err != nil {
+	if err := commandKey.Close(); err != nil {
 		return false, fmt.Errorf("close model viewer context menu command key: %w", err)
 	}
 	return true, nil
+}
+
+// modelViewerMenuMatches reports whether the stored registration already
+// matches the values this version would write. Read failures and missing
+// values count as mismatches so registration is repaired conservatively.
+// icon is empty for portable runs, where only the label is managed.
+func modelViewerMenuMatches(key registry.Key, label, icon, command string) bool {
+	if !stringValueEquals(key, "", label) {
+		return false
+	}
+	if icon == "" {
+		return true
+	}
+	if !stringValueEquals(key, "Icon", icon) || !stringValueEquals(key, "MultiSelectModel", "Single") {
+		return false
+	}
+	commandKey, err := registry.OpenKey(key, "command", registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = commandKey.Close() }()
+	return stringValueEquals(commandKey, "", command)
 }
