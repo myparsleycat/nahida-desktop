@@ -407,7 +407,7 @@ func loadModelViewerDrawVertexBuffers(
 			stride = modelViewerPackedObjectStride
 		}
 		texcoordOffset := source.packedTexcoordOffset
-		if stride == modelViewerPackedObjectStride24 && !source.packedTexcoordDeclared {
+		if isModelViewerPackedObjectStride(stride) && !source.packedTexcoordDeclared {
 			texcoordOffset = detectModelViewerPackedTexcoordOffset(source.packed, stride)
 		}
 		if texcoordOffset == 16 {
@@ -524,15 +524,24 @@ func loadModelViewerDrawVertexBuffers(
 // second-guess a declared layout. 24-byte dumps are not uniform: the cyclic
 // animation layout stores tangent before the two UV sets (UV0 at byte 16),
 // while older frame-swap dumps keep UV0 in the tangent slot (byte 12). Judge
-// from the data so both keep working.
+// from the data so both keep working. 28-byte dumps normally keep UV0 behind
+// tangent (byte 12) and color (byte 16) at byte 20; the mirrored UV1 word at
+// byte 24 must never be mistaken for the diffuse set.
 func detectModelViewerPackedTexcoordOffset(data []byte, stride int) int {
-	if stride != modelViewerPackedObjectStride24 {
+	switch stride {
+	case modelViewerPackedObjectStride24:
+		if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12) {
+			return 16
+		}
+		return 12
+	case modelViewerPackedObjectStride28:
+		if modelViewerPackedUVScore(data, stride, 20) >= modelViewerPackedUVScore(data, stride, 12) {
+			return 20
+		}
+		return 12
+	default:
 		return 12
 	}
-	if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12) {
-		return 16
-	}
-	return 12
 }
 
 // modelViewerPackedUVScore reports how much the 16-bit pair at a candidate

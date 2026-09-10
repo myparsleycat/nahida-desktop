@@ -262,6 +262,60 @@ filename = CafeA.ib`
 	}
 }
 
+func TestModelViewerStaticStride28ObjectKeepsTrailingUV0(t *testing.T) {
+	dir := t.TempDir()
+	position := make([]byte, 3*modelViewerPackedObjectStride28)
+	uvs := [][2]float32{{0.25, 0.75}, {0.5, 0.5}, {0, 1}}
+	for vertex := range 3 {
+		offset := vertex * modelViewerPackedObjectStride28
+		writePackedObjectVertex(position, offset, float32(vertex+1), 2, 3, 0, 0, 0, 0, 127)
+		binary.LittleEndian.PutUint32(position[offset+12:], 0x7f007f00)
+		binary.LittleEndian.PutUint32(position[offset+16:], 0xff000000)
+		binary.LittleEndian.PutUint16(position[offset+20:], modelViewerFloatToHalfBits(uvs[vertex][0]))
+		binary.LittleEndian.PutUint16(position[offset+22:], modelViewerFloatToHalfBits(uvs[vertex][1]))
+		binary.LittleEndian.PutUint16(position[offset+24:], modelViewerFloatToHalfBits(0.5))
+		binary.LittleEndian.PutUint16(position[offset+26:], modelViewerFloatToHalfBits(0.5))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Cafe.buf"), position, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "CafeA.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	iniText := `[TextureOverrideCafePosition]
+vb0 = ResourceCafePosition
+[TextureOverrideCafeA]
+ib = ResourceCafeAIB
+drawindexed = 3, 0, 0
+[ResourceCafePosition]
+stride = 28
+filename = Cafe.buf
+[ResourceCafeAIB]
+format = DXGI_FORMAT_R32_UINT
+filename = CafeA.ib`
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(iniText)
+	meshes, err := buildModelViewerDirectScannedMeshes(iniPath, sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 || meshes[0].geometry == nil {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+	uv := meshes[0].geometry.Texcoord0
+	want := []float32{0.25, 0.25, 0.5, 0.5, 0, 0}
+	if !slices.Equal(uv, want) {
+		t.Fatalf("diffuse UVs = %v; want the UV set after tangent and color at byte 20", uv)
+	}
+}
+
 // makeStride24BufferWithTrailingUV builds 24-byte packed vertices whose tangent
 // word at byte 12 is non-finite, matching dumps from the cyclic animation
 // layout where UV0 sits at byte 16.
