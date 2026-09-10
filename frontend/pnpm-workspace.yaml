@@ -1,2 +1,5 @@
 minimumReleaseAgeExclude:
   - "@wailsio/runtime@3.0.0-beta.14 || 3.0.0-beta.15 || 3.0.0-beta.16 || 3.0.0-beta.17"
+# Mirrors resize-border support from the pinned Wails fork until the npm runtime includes it.
+patchedDependencies:
+  "@wailsio/runtime@3.0.0-beta.17": patches/@wailsio__runtime@3.0.0-beta.17.patch

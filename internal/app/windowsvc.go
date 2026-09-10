@@ -129,6 +129,16 @@ func (w *Window) Create() application.Window {
 			DisableMenu:                true,
 			NonClientRegionSupport:     true,
 			WebView2CompositionHosting: true,
+			ResizeBorder: &application.WindowsWindowResizeBorder{
+				Inside: application.LRTB{
+					Top: 8,
+				},
+				Outside: application.LRTB{
+					Left:   8,
+					Right:  8,
+					Bottom: 8,
+				},
+			},
 		},
 	}
 	if route != "" {
