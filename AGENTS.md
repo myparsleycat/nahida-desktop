@@ -130,6 +130,42 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - Use a consistent one- or two-letter receiver derived from the type.
 - Keep the exported surface minimal, especially for methods that become Wails bindings.
 
+## Blank Lines
+
+Treat a blank line as a paragraph break: one blank line ends one topic. These rules apply to Go and TypeScript code.
+
+- Always separate top-level declarations, such as functions, types, and const blocks, with a single blank line.
+- Inside a function, insert a blank line only when the topic changes: validation, preparation, transformation, output.
+- Keep tightly coupled lines together, such as an error check with its immediate handling or an assignment with its next use.
+- Put a blank line above a comment that introduces a new step.
+- Never write two consecutive blank lines or blank lines at the start or end of a block. Both gofmt and oxfmt collapse multiples to one, and both strip blank lines at the start or end of a block.
+- Formatters never add meaningful blank lines, so paragraphing is a human decision. oxfmt preserves single blank lines, so paragraphs survive formatting.
+- Prefer blank-line paragraphs inside one function over extracting single-use helpers.
+
+```go
+func (s *service) sync(ctx context.Context, id string) error {
+	mod, err := s.repo.get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("load mod %s: %w", id, err)
+	}
+
+	items, err := s.fetch(ctx, mod)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", mod.Name, err)
+	}
+	cleaned := lo.Filter(items, func(f file, _ int) bool {
+		return f.valid
+	})
+
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return s.store.save(ctx, mod, cleaned)
+}
+```
+
+Three paragraphs: load, fetch and filter, save.
+
 ## TypeScript and React Style
 
 ### General principles
