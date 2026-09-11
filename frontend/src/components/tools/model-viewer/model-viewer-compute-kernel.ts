@@ -118,7 +118,7 @@ export function computeGIMIShapePoseFrame(
         const phaseStart = pass.phaseStart ?? 0;
         const wrapAt = pass.wrapAt ?? 0;
         const phase =
-            wrapAt > phaseStart
+            wrapAt !== 0 && wrapAt > phaseStart
                 ? phaseStart + (rawPhase % (wrapAt - phaseStart))
                 : phaseStart + rawPhase;
         const weight =

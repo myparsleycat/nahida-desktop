@@ -908,15 +908,91 @@ filename = key.buf
 	}
 }
 
-func TestFindModelViewerAccumulatorResetResolvesDefaultVariables(t *testing.T) {
+func TestFindModelViewerAccumulatorLoopResolvesDefaultVariables(t *testing.T) {
 	sections := parseModINI(`[CustomShaderComputeAnim]
 $Freq = $Freq + 0.2 * $dt
 if $Freq > 5.18364
     $Freq = $start
 endif`)
-	reset, ok := findModelViewerAccumulatorReset(sections, "Freq", map[string]any{"start": -0.05236})
-	if !ok || reset != -0.05236 {
-		t.Fatalf("reset = %v ok = %t; want the $start default", reset, ok)
+	wrap, reset := findModelViewerAccumulatorLoop(sections, "Freq", map[string]any{"start": -0.05236})
+	if wrap != 5.18364 || reset != -0.05236 {
+		t.Fatalf("wrap = %v reset = %v; want the $start default", wrap, reset)
+	}
+}
+
+func TestFindModelViewerAccumulatorLoopKeepsResetInsideSelectedGuard(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		ini   string
+		wrap  float64
+		reset float64
+	}{
+		{
+			name: "ignore key and state entry assignments",
+			ini: `[KeySeek]
+$Freq = 1
+[CustomShaderComputeAnim]
+$Freq = 2
+if $Freq > 5 ; loop boundary
+    $Freq = 0 ; loop reset
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "ignore nested assignments",
+			ini: `[CustomShaderComputeAnim]
+if $enabled
+    if $Freq > 5
+        if $mode
+            $Freq = 2
+        endif
+        $Freq = -0.5
+    endif
+endif`,
+			wrap:  5,
+			reset: -0.5,
+		},
+		{
+			name: "ignore else branch",
+			ini: `[CustomShaderComputeAnim]
+if $Freq > 5
+    $unrelated = 1
+else
+    $Freq = 2
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "do not borrow reset from another loop",
+			ini: `[CustomShaderComputeAnim]
+if $Freq > 5
+    $unrelated = 1
+endif
+[CustomShaderOther]
+if $Freq > 10
+    $Freq = 3
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "no loop guard",
+			ini: `[KeySeek]
+$Freq = -0.5`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			wrap, reset := findModelViewerAccumulatorLoop(parseModINI(test.ini), "Freq", nil)
+			if wrap != test.wrap || reset != test.reset {
+				t.Fatalf("loop = (%v, %v); want (%v, %v)", wrap, reset, test.wrap, test.reset)
+			}
+		})
+	}
+}
+
+func TestModelViewerPackedShapeDurationWithoutWrap(t *testing.T) {
+	stage := ModelViewerComputeShapeStage{PhaseStart: -0.5, PhaseRate: 1, AngularScale: 1}
+	if duration := modelViewerPackedShapeStageDuration(stage); math.Abs(duration-2*math.Pi) > 1e-9 {
+		t.Fatalf("duration = %v; want a complete sine period without a wrap boundary", duration)
 	}
 }
 

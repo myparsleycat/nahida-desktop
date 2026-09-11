@@ -77,6 +77,10 @@ global $dt
 post ResourceStove = copy_desc ResourceStove.1
 post run = CustomShaderComputeAnim
 
+[KeySeek]
+key = VK_F6
+$Freq = 1
+
 [Present]
 run = CustomShaderComputeAnim
 

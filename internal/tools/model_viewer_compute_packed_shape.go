@@ -347,7 +347,7 @@ func modelViewerComputeBranchLines(section modINISection, variable, value string
 }
 
 func modelViewerPackedShapeStageDuration(stage ModelViewerComputeShapeStage) float64 {
-	if stage.WrapAt > stage.PhaseStart && stage.PhaseRate > 0 {
+	if stage.WrapAt != 0 && stage.WrapAt > stage.PhaseStart && stage.PhaseRate > 0 {
 		return (stage.WrapAt - stage.PhaseStart) / stage.PhaseRate
 	}
 	if stage.AngularScale > 0 && stage.PhaseRate > 0 {

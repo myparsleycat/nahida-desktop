@@ -328,7 +328,7 @@ func detectModelViewerShapeOnlyAnimation(
 		ShapePasses: passes,
 	}
 	duration := 1.0
-	if passes[0].WrapAt > passes[0].PhaseStart && passes[0].PhaseRate > 0 {
+	if passes[0].WrapAt != 0 && passes[0].WrapAt > passes[0].PhaseStart && passes[0].PhaseRate > 0 {
 		duration = (passes[0].WrapAt - passes[0].PhaseStart) / passes[0].PhaseRate
 	} else if passes[0].AngularScale > 0 && passes[0].PhaseRate > 0 {
 		duration = 2 * math.Pi / (passes[0].AngularScale * passes[0].PhaseRate)
@@ -541,11 +541,7 @@ func detectModelViewerKnownShapePasses(
 	if !rateOK {
 		return nil
 	}
-	wrap := findModelViewerAccumulatorWrap(sections, phaseVariable, defaults)
-	phaseStart := 0.0
-	if reset, ok := findModelViewerAccumulatorReset(sections, phaseVariable, defaults); ok {
-		phaseStart = reset
-	}
+	wrap, phaseStart := findModelViewerAccumulatorLoop(sections, phaseVariable, defaults)
 	for index := range output {
 		output[index].PhaseRate = rate
 		output[index].WrapAt = wrap
@@ -812,26 +808,56 @@ func findModelViewerAccumulatorRateInLines(lines []string, variable string, defa
 	return 0, false
 }
 
-func findModelViewerAccumulatorReset(
+func findModelViewerAccumulatorLoop(
 	sections []modINISection,
 	variable string,
 	defaults map[string]any,
-) (float64, bool) {
+) (float64, float64) {
+	guardPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
+	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
 	for _, section := range sections {
-		if value, ok := findModelViewerAccumulatorResetInLines(section.Lines, variable, defaults); ok {
-			return value, true
-		}
-	}
-	return 0, false
-}
+		depth, guardDepth := 0, 0
+		wrap := 0.0
+		for _, raw := range section.Lines {
+			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
+			lower := strings.ToLower(line)
+			if strings.HasPrefix(lower, "if ") {
+				depth++
+				if guardDepth == 0 {
+					if match := guardPattern.FindStringSubmatch(line); match != nil {
+						if value, ok := resolveModelViewerNumericToken(match[1], defaults); ok && value != 0 {
+							wrap, guardDepth = value, depth
+						}
+					}
+				}
+				continue
+			}
 
-func findModelViewerAccumulatorWrap(sections []modINISection, variable string, defaults map[string]any) float64 {
-	for _, section := range sections {
-		if value := findModelViewerAccumulatorWrapInLines(section.Lines, variable, defaults); value != 0 {
-			return value
+			// Only a direct reset in this guard belongs to its loop; key bindings,
+			// nested conditions, and else branches must not supply the start value.
+			if guardDepth > 0 && depth == guardDepth && (lower == "endif" || lower == "else" ||
+				strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if ")) {
+				return wrap, 0
+			}
+			if lower == "endif" {
+				depth--
+				continue
+			}
+			if guardDepth == 0 || depth != guardDepth {
+				continue
+			}
+			if match := resetPattern.FindStringSubmatch(line); match != nil &&
+				modelViewerNormalizeKey(match[1]) != modelViewerNormalizeKey(variable) {
+				if reset, ok := resolveModelViewerNumericToken(match[1], defaults); ok {
+					return wrap, reset
+				}
+			}
+		}
+		if guardDepth > 0 {
+			return wrap, 0
 		}
 	}
-	return 0
+	return 0, 0
 }
 
 func findModelViewerAccumulatorWrapInLines(lines []string, variable string, defaults map[string]any) float64 {
