@@ -195,6 +195,38 @@ describe("GIMI shape/pose compute kernel", () => {
         expect([...atStart.positions]).toEqual([...atLoop.positions]);
     });
 
+    it("applies the accumulator reset when no wrap range exists", () => {
+        const deformer: ViewerComputeDeformer = {
+            kind: "gimi_shape_pose_v1",
+            id: "stove",
+            meshIds: ["mesh"],
+            vertexCount: 1,
+            base: source(44, 44),
+            shapePasses: [
+                {
+                    target: source(44, 44),
+                    phaseRate: 1,
+                    wrapAt: 0,
+                    phaseStart: Math.PI / 2,
+                    phaseOffset: 0,
+                    angularScale: 1,
+                    amplitude: 1,
+                    bias: 0,
+                },
+            ],
+            shapeStages: [],
+            pose: undefined,
+        };
+        const frame = computeGIMIShapePoseFrame(
+            deformer,
+            { base: objectVertex([1, 0, 0]), shapeTargets: [objectVertex([3, 0, 0])] },
+            0,
+            0,
+        );
+        // sin(phaseStart) = 1, so a nonzero reset must survive the no-wrap path.
+        expect([...frame.positions]).toEqual([3, 0, 0]);
+    });
+
     it("rejects pose buffers on 44-byte object shape records", () => {
         const deformer: ViewerComputeDeformer = {
             kind: "gimi_shape_pose_v1",

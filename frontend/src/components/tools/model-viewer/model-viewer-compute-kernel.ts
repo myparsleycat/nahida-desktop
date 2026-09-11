@@ -118,7 +118,9 @@ export function computeGIMIShapePoseFrame(
         const phaseStart = pass.phaseStart ?? 0;
         const wrapAt = pass.wrapAt ?? 0;
         const phase =
-            wrapAt > phaseStart ? phaseStart + (rawPhase % (wrapAt - phaseStart)) : rawPhase;
+            wrapAt > phaseStart
+                ? phaseStart + (rawPhase % (wrapAt - phaseStart))
+                : phaseStart + rawPhase;
         const weight =
             pass.amplitude * Math.sin((phase + pass.phaseOffset) * pass.angularScale) + pass.bias;
         for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {

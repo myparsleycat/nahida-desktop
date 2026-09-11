@@ -543,7 +543,7 @@ func detectModelViewerKnownShapePasses(
 	}
 	wrap := findModelViewerAccumulatorWrap(sections, phaseVariable, defaults)
 	phaseStart := 0.0
-	if reset, ok := findModelViewerAccumulatorReset(sections, phaseVariable); ok {
+	if reset, ok := findModelViewerAccumulatorReset(sections, phaseVariable, defaults); ok {
 		phaseStart = reset
 	}
 	for index := range output {
@@ -812,9 +812,13 @@ func findModelViewerAccumulatorRateInLines(lines []string, variable string, defa
 	return 0, false
 }
 
-func findModelViewerAccumulatorReset(sections []modINISection, variable string) (float64, bool) {
+func findModelViewerAccumulatorReset(
+	sections []modINISection,
+	variable string,
+	defaults map[string]any,
+) (float64, bool) {
 	for _, section := range sections {
-		if value, ok := findModelViewerAccumulatorResetInLines(section.Lines, variable); ok {
+		if value, ok := findModelViewerAccumulatorResetInLines(section.Lines, variable, defaults); ok {
 			return value, true
 		}
 	}

@@ -448,12 +448,19 @@ func resolveModelViewerDrawVertexSource(
 	return source
 }
 
-func readModelViewerInlineObjectBuffer(
+// readModelViewerObjectBuffer resolves an object buffer inside modDir before
+// the cache touches the filesystem: resource filenames come from mod INI files
+// and must not escape the mod folder.
+func readModelViewerObjectBuffer(
 	modDir string,
 	position modelViewerResource,
 	cache *modelViewerBufferCache,
 ) ([]byte, bool) {
-	raw, err := cache.read(filepath.Join(modDir, filepath.FromSlash(position.Filename)))
+	path, err := resolveModelViewerResourcePath(modDir, modDir, position.Filename)
+	if err != nil || !modelViewerPathWithin(modDir, path) {
+		return nil, false
+	}
+	raw, err := cache.read(path)
 	if err != nil {
 		return nil, false
 	}
@@ -466,8 +473,8 @@ func readModelViewerPackedObjectBuffer(
 	cache *modelViewerBufferCache,
 	shaderPacked bool,
 ) ([]byte, int, bool) {
-	raw, err := cache.read(filepath.Join(modDir, filepath.FromSlash(position.Filename)))
-	if err != nil {
+	raw, ok := readModelViewerObjectBuffer(modDir, position, cache)
+	if !ok {
 		return nil, 0, false
 	}
 	stride, packed := modelViewerUsePackedObjectLayout(position, raw, shaderPacked)
@@ -502,7 +509,7 @@ func loadModelViewerDrawVertexBuffers(
 		if stride <= 0 {
 			return modelViewerDrawVertexBuffers{}, false, nil
 		}
-		raw, ok := readModelViewerInlineObjectBuffer(modDir, position, cache)
+		raw, ok := readModelViewerObjectBuffer(modDir, position, cache)
 		if !ok {
 			return modelViewerDrawVertexBuffers{}, false, nil
 		}

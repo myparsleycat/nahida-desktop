@@ -209,6 +209,41 @@ filename = ObjectHead.ib`
 	}
 }
 
+func TestModelViewerObjectBufferRejectsParentDirectoryTraversal(t *testing.T) {
+	dir := t.TempDir()
+	outsideName := filepath.Base(dir) + "-sensitive.buf"
+	outside := filepath.Join(filepath.Dir(dir), outsideName)
+	if err := os.WriteFile(outside, make([]byte, 3*44), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+	cache := newModelViewerBufferCache()
+	position := modelViewerResource{
+		Name:     "ResourceStovePosition",
+		Filename: `..\` + outsideName,
+		Stride:   44,
+	}
+	if _, ok := readModelViewerObjectBuffer(dir, position, cache); ok {
+		t.Fatal("inline object buffer read a file outside the mod folder")
+	}
+	if _, _, ok := readModelViewerPackedObjectBuffer(dir, position, cache, true); ok {
+		t.Fatal("packed object buffer read a file outside the mod folder")
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, "Resources"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	inside := make([]byte, 3*44)
+	if err := os.WriteFile(filepath.Join(dir, "Resources", "Stove.buf"), inside, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	position.Filename = `Resources\Stove.buf`
+	raw, ok := readModelViewerObjectBuffer(dir, position, cache)
+	if !ok || len(raw) != len(inside) {
+		t.Fatalf("in-mod buffer rejected: ok=%t len=%d", ok, len(raw))
+	}
+}
+
 func TestModelViewerStaticStride24ObjectKeepsTrailingUV0(t *testing.T) {
 	dir := t.TempDir()
 	position := make([]byte, 3*modelViewerPackedObjectStride24)
