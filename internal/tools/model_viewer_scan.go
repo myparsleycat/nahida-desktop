@@ -336,6 +336,7 @@ type modelViewerDrawGeometryKey struct {
 	kind                               string
 	packedTexcoordOffset               int
 	packedTexcoordDeclared             bool
+	inlineTexcoordOffset               int
 	indexCount, startIndex, baseVertex int
 	auto                               bool
 }
@@ -440,8 +441,10 @@ func buildModelViewerDirectScannedMeshesAt(
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
 	var packedResources map[string]int
+	var inlineResources map[string]modelViewerInlineObjectLayout
 	if layoutName != "wwmi" {
 		packedResources = collectModelViewerPackedObjectResources(modDir, filepath.Dir(iniPath), sections)
+		inlineResources = collectModelViewerInlineObjectResources(modDir, filepath.Dir(iniPath), sections)
 	}
 	draws := completeModelViewerResolvedDraws(
 		records,
@@ -474,6 +477,7 @@ func buildModelViewerDirectScannedMeshesAt(
 			resources,
 			cache,
 			packedResources,
+			inlineResources,
 		)
 		if source.kind == "" {
 			if source.missingTexcoord && timing != nil {
@@ -487,6 +491,7 @@ func buildModelViewerDirectScannedMeshesAt(
 			ibFormat: ib.Format,
 			kind:     source.kind, packedTexcoordOffset: source.packedTexcoordOffset,
 			packedTexcoordDeclared: source.packedTexcoordDeclared,
+			inlineTexcoordOffset:   source.inlineTexcoordOffset,
 			indexCount:             record.draw.IndexCount, startIndex: record.draw.StartIndex,
 			baseVertex: record.draw.BaseVertex, auto: record.auto,
 		}

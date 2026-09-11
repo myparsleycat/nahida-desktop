@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -51,7 +50,7 @@ func detectModelViewerPackedShapeAnimation(
 	if len(meshIDs) == 0 {
 		return nil, nil
 	}
-	incomingStarts := collectModelViewerPackedShapeIncomingStarts(selected, stateVariable)
+	incomingStarts := collectModelViewerPackedShapeIncomingStarts(selected, stateVariable, defaults)
 	stages := make([]ModelViewerComputeShapeStage, 0, len(selected))
 	duration := 0.0
 	for _, item := range selected {
@@ -348,7 +347,7 @@ func modelViewerComputeBranchLines(section modINISection, variable, value string
 }
 
 func modelViewerPackedShapeStageDuration(stage ModelViewerComputeShapeStage) float64 {
-	if stage.WrapAt > stage.PhaseStart && stage.PhaseRate > 0 {
+	if stage.WrapAt != 0 && stage.WrapAt > stage.PhaseStart && stage.PhaseRate > 0 {
 		return (stage.WrapAt - stage.PhaseStart) / stage.PhaseRate
 	}
 	if stage.AngularScale > 0 && stage.PhaseRate > 0 {
@@ -360,6 +359,7 @@ func modelViewerPackedShapeStageDuration(stage ModelViewerComputeShapeStage) flo
 func collectModelViewerPackedShapeIncomingStarts(
 	selected []modelViewerPackedShapeCandidate,
 	stateVariable string,
+	defaults map[string]any,
 ) map[string]float64 {
 	incoming := map[string]float64{}
 	if stateVariable == "" {
@@ -372,7 +372,7 @@ func collectModelViewerPackedShapeIncomingStarts(
 			continue
 		}
 		lines := modelViewerComputeBranchLines(item.section, stateVariable, value)
-		reset, hasReset := findModelViewerAccumulatorResetInLines(lines, phaseVariable)
+		reset, hasReset := findModelViewerAccumulatorResetInLines(lines, phaseVariable, defaults)
 		next, hasNext := findModelViewerNumericAssignmentInLines(lines, stateVariable)
 		if !hasReset || !hasNext {
 			continue
@@ -392,7 +392,7 @@ func modelViewerPackedShapePhaseStart(
 		return start
 	}
 	if stateVariable == "" {
-		if reset, ok := findModelViewerAccumulatorResetInLines(branchLines, phaseVariable); ok {
+		if reset, ok := findModelViewerAccumulatorResetInLines(branchLines, phaseVariable, defaults); ok {
 			return reset
 		}
 	}
@@ -412,16 +412,18 @@ func findModelViewerNumericAssignmentInLines(lines []string, variable string) (s
 	return "", false
 }
 
-func findModelViewerAccumulatorResetInLines(lines []string, variable string) (float64, bool) {
-	text, ok := findModelViewerNumericAssignmentInLines(lines, variable)
-	if !ok {
-		return 0, false
+func findModelViewerAccumulatorResetInLines(
+	lines []string,
+	variable string,
+	defaults map[string]any,
+) (float64, bool) {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
+	for _, raw := range lines {
+		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
+			return resolveModelViewerNumericToken(match[1], defaults)
+		}
 	}
-	value, err := strconv.ParseFloat(text, 64)
-	if err != nil {
-		return 0, false
-	}
-	return value, true
+	return 0, false
 }
 
 func isKnownModelViewerPackedShapeShader(shader string) bool {

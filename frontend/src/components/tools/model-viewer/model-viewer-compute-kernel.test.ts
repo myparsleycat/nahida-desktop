@@ -14,6 +14,16 @@ function vertex(position: number[], normal = [0, 1, 0], tangent = [1, 0, 0, 1]):
     return new Float32Array([...position, ...normal, ...tangent]).buffer;
 }
 
+function objectVertex(position: number[], normal = [0, 1, 0]): ArrayBuffer {
+    const values = new Float32Array(11);
+    values.set(position, 0);
+    values.set(normal, 3);
+    values[6] = 0.25;
+    values[7] = 0.5;
+    values[8] = 0.75;
+    return values.buffer;
+}
+
 function poseBuffer(
     scale = [1, 1, 1],
     translation = [0, 0, 0],
@@ -112,6 +122,144 @@ describe("GIMI shape/pose compute kernel", () => {
         expect(frame.tangents[1]).toBeCloseTo(1);
         expect(frame.tangents[2]).toBeCloseTo(0);
         expect(frame.tangents[3]).toBe(1);
+    });
+
+    it("blends 44-byte object shape records without touching the tangent stream", () => {
+        const deformer: ViewerComputeDeformer = {
+            kind: "gimi_shape_pose_v1",
+            id: "stove",
+            meshIds: ["mesh"],
+            vertexCount: 1,
+            base: source(44, 44),
+            shapePasses: [
+                {
+                    target: source(44, 44),
+                    phaseRate: 2,
+                    wrapAt: 5.18364,
+                    phaseStart: -0.05236,
+                    phaseOffset: 0,
+                    angularScale: 30,
+                    amplitude: 0.5,
+                    bias: 0.5,
+                },
+            ],
+            shapeStages: [],
+            pose: undefined,
+        };
+        const frame = computeGIMIShapePoseFrame(
+            deformer,
+            { base: objectVertex([1, 0, 0]), shapeTargets: [objectVertex([3, 2, -1])] },
+            0,
+            // phase = -0.05236 + 0.10472 => sin(phase * 30) = 1, so the full delta applies.
+            0.05236,
+        );
+        expect([...frame.positions]).toEqual([3, 2, -1]);
+        expect([...frame.normals]).toEqual([0, 1, 0]);
+        expect(frame.tangents).toBeUndefined();
+    });
+
+    it("wraps 44-byte object shape phases back to the accumulator reset", () => {
+        const deformer: ViewerComputeDeformer = {
+            kind: "gimi_shape_pose_v1",
+            id: "stove",
+            meshIds: ["mesh"],
+            vertexCount: 1,
+            base: source(44, 44),
+            shapePasses: [
+                {
+                    target: source(44, 44),
+                    phaseRate: 2,
+                    wrapAt: 5.18364,
+                    phaseStart: -0.05236,
+                    phaseOffset: 0,
+                    angularScale: 30,
+                    amplitude: 0.5,
+                    bias: 0.5,
+                },
+            ],
+            shapeStages: [],
+            pose: undefined,
+        };
+        const atStart = computeGIMIShapePoseFrame(
+            deformer,
+            { base: objectVertex([1, 0, 0]), shapeTargets: [objectVertex([3, 0, 0])] },
+            0,
+            0,
+        );
+        const atLoop = computeGIMIShapePoseFrame(
+            deformer,
+            { base: objectVertex([1, 0, 0]), shapeTargets: [objectVertex([3, 0, 0])] },
+            0,
+            (5.18364 + 0.05236) / 2,
+        );
+        expect([...atStart.positions]).toEqual([...atLoop.positions]);
+    });
+
+    it.each([
+        { wrapAt: undefined, phaseStart: Math.PI / 2 },
+        { wrapAt: 0, phaseStart: Math.PI / 2 },
+        { wrapAt: undefined, phaseStart: -Math.PI / 2 },
+        { wrapAt: 0, phaseStart: -Math.PI / 2 },
+    ])(
+        "advances without wrapping from $phaseStart with wrapAt=$wrapAt",
+        ({ wrapAt, phaseStart }) => {
+            const deformer: ViewerComputeDeformer = {
+                kind: "gimi_shape_pose_v1",
+                id: "stove",
+                meshIds: ["mesh"],
+                vertexCount: 1,
+                base: source(44, 44),
+                shapePasses: [
+                    {
+                        target: source(44, 44),
+                        phaseRate: 1,
+                        wrapAt,
+                        phaseStart,
+                        phaseOffset: 0,
+                        angularScale: 1,
+                        amplitude: 1,
+                        bias: 0,
+                    },
+                ],
+                shapeStages: [],
+                pose: undefined,
+            };
+            for (const time of [0, 1, 2]) {
+                const frame = computeGIMIShapePoseFrame(
+                    deformer,
+                    { base: objectVertex([1, 0, 0]), shapeTargets: [objectVertex([3, 0, 0])] },
+                    0,
+                    time,
+                );
+                expect(frame.positions[0]).toBeCloseTo(1 + 2 * Math.sin(phaseStart + time), 6);
+            }
+        },
+    );
+
+    it("rejects pose buffers on 44-byte object shape records", () => {
+        const deformer: ViewerComputeDeformer = {
+            kind: "gimi_shape_pose_v1",
+            id: "stove",
+            meshIds: ["mesh"],
+            vertexCount: 1,
+            base: source(44, 44),
+            shapePasses: [],
+            shapeStages: [],
+            pose: {
+                blend: source(32, 32),
+                frames: source(56, 56),
+                boneCount: 1,
+                frameCount: 1,
+            },
+        };
+        expect(() =>
+            computeGIMIShapePoseFrame(
+                deformer,
+                { base: objectVertex([1, 0, 0]), shapeTargets: [] },
+                0,
+                0,
+            ),
+        ).toThrow("40-byte");
     });
 
     it("rejects invalid bone indices and source-index mappings", () => {

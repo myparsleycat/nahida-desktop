@@ -134,6 +134,7 @@ export type ViewerComputeShapePass = {
     target: ViewerComputeBinarySource;
     phaseRate: number;
     wrapAt?: number;
+    phaseStart?: number;
     phaseOffset: number;
     angularScale: number;
     amplitude: number;

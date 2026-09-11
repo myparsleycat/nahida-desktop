@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -739,6 +740,73 @@ filename = key.buf
 	}
 }
 
+func TestDetectModelViewerPackedShapeIncomingVariableReset(t *testing.T) {
+	dir := t.TempDir()
+	writePackedShapeBuffer(t, dir, "base.buf")
+	writePackedShapeBuffer(t, dir, "key.buf")
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $start = 1
+global $next = 3
+global $Freq = 0
+global $dt
+global $anime_state = 0
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+if $anime_state == 0
+    $Freq = $Freq + 1 * $dt
+    if $Freq > 10
+        $Freq = $next
+        $anime_state = 1
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.1
+    cs-t51 = copy ResourceKimono.2
+    cs = anim.hlsl
+    cs-u5 = copy ResourceKimono.1
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+else if $anime_state == 1
+    $Freq = $Freq + 1 * $dt
+    if $Freq > 9
+        $Freq = $start
+        $anime_state = 0
+    endif
+    x88 = $Freq
+    cs-t50 = copy ResourceKimono.2
+    cs-t51 = copy ResourceKimono.1
+    cs = anim.hlsl
+    cs-u5 = copy ResourceKimono.2
+    ResourceKimono = ref cs-u5
+    Dispatch = 3, 1, 1
+endif
+[ResourceKimono.1]
+stride = 20
+filename = base.buf
+[ResourceKimono.2]
+stride = 20
+filename = key.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
+	deformer, _ := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || len(deformer.ShapeStages) != 2 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	stage0, stage1 := deformer.ShapeStages[0], deformer.ShapeStages[1]
+	if stage0.PhaseStart != 1 || stage0.WrapAt != 10 || stage0.Duration != 9 {
+		t.Fatalf("stage0 = %+v; want the $start-backed incoming reset", stage0)
+	}
+	if stage1.PhaseStart != 3 || stage1.WrapAt != 9 || stage1.Duration != 6 {
+		t.Fatalf("stage1 = %+v; want the $next-backed incoming reset", stage1)
+	}
+}
+
 func TestDetectModelViewerPackedShapeSinglePass(t *testing.T) {
 	dir := t.TempDir()
 	writePackedShapeBuffer(t, dir, "base.buf")
@@ -784,6 +852,147 @@ filename = key.buf
 		deformer.ShapeStages[0].Duration <= 0 ||
 		len(clips) != 1 {
 		t.Fatalf("stage=%+v clips=%+v", deformer.ShapeStages[0], clips)
+	}
+}
+
+func TestDetectModelViewerPackedShapeVariableBackedReset(t *testing.T) {
+	dir := t.TempDir()
+	writePackedShapeBuffer(t, dir, "base.buf")
+	writePackedShapeBuffer(t, dir, "key.buf")
+	if err := os.WriteFile(filepath.Join(dir, "anim.hlsl"), []byte(packedShapeAnimShader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseModelViewerINI(`[Constants]
+global $start = -0.05236
+global $Freq = 0
+global $dt
+global $speed = 0.5
+post run = CustomShaderComputeAnim
+[CustomShaderComputeAnim]
+$Freq = $Freq + $speed * $dt
+if $Freq > 10
+    $Freq = $start
+endif
+x88 = $Freq
+cs-t50 = copy ResourceKimono.1
+cs-t51 = copy ResourceKimono.2
+cs = anim.hlsl
+cs-u5 = copy ResourceKimono.1
+ResourceKimono = ref cs-u5
+Dispatch = 3, 1, 1
+[ResourceKimono.1]
+stride = 20
+filename = base.buf
+[ResourceKimono.2]
+stride = 20
+filename = key.buf
+`, filepath.Join(dir, "mod.ini"))
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	meshes := []modelViewerDirectMesh{
+		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
+	}
+	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
+	if deformer == nil || len(deformer.ShapeStages) != 1 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+	stage := deformer.ShapeStages[0]
+	if stage.PhaseStart != -0.05236 {
+		t.Fatalf("phase start = %v; want the $start default", stage.PhaseStart)
+	}
+	if want := (10 + 0.05236) / 0.5; math.Abs(stage.Duration-want) > 1e-9 {
+		t.Fatalf("duration = %v; want %v", stage.Duration, want)
+	}
+	if len(clips) != 1 {
+		t.Fatalf("clips = %+v", clips)
+	}
+}
+
+func TestFindModelViewerAccumulatorLoopResolvesDefaultVariables(t *testing.T) {
+	sections := parseModINI(`[CustomShaderComputeAnim]
+$Freq = $Freq + 0.2 * $dt
+if $Freq > 5.18364
+    $Freq = $start
+endif`)
+	wrap, reset := findModelViewerAccumulatorLoop(sections, "Freq", map[string]any{"start": -0.05236})
+	if wrap != 5.18364 || reset != -0.05236 {
+		t.Fatalf("wrap = %v reset = %v; want the $start default", wrap, reset)
+	}
+}
+
+func TestFindModelViewerAccumulatorLoopKeepsResetInsideSelectedGuard(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		ini   string
+		wrap  float64
+		reset float64
+	}{
+		{
+			name: "ignore key and state entry assignments",
+			ini: `[KeySeek]
+$Freq = 1
+[CustomShaderComputeAnim]
+$Freq = 2
+if $Freq > 5 ; loop boundary
+    $Freq = 0 ; loop reset
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "ignore nested assignments",
+			ini: `[CustomShaderComputeAnim]
+if $enabled
+    if $Freq > 5
+        if $mode
+            $Freq = 2
+        endif
+        $Freq = -0.5
+    endif
+endif`,
+			wrap:  5,
+			reset: -0.5,
+		},
+		{
+			name: "ignore else branch",
+			ini: `[CustomShaderComputeAnim]
+if $Freq > 5
+    $unrelated = 1
+else
+    $Freq = 2
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "do not borrow reset from another loop",
+			ini: `[CustomShaderComputeAnim]
+if $Freq > 5
+    $unrelated = 1
+endif
+[CustomShaderOther]
+if $Freq > 10
+    $Freq = 3
+endif`,
+			wrap: 5,
+		},
+		{
+			name: "no loop guard",
+			ini: `[KeySeek]
+$Freq = -0.5`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			wrap, reset := findModelViewerAccumulatorLoop(parseModINI(test.ini), "Freq", nil)
+			if wrap != test.wrap || reset != test.reset {
+				t.Fatalf("loop = (%v, %v); want (%v, %v)", wrap, reset, test.wrap, test.reset)
+			}
+		})
+	}
+}
+
+func TestModelViewerPackedShapeDurationWithoutWrap(t *testing.T) {
+	stage := ModelViewerComputeShapeStage{PhaseStart: -0.5, PhaseRate: 1, AngularScale: 1}
+	if duration := modelViewerPackedShapeStageDuration(stage); math.Abs(duration-2*math.Pi) > 1e-9 {
+		t.Fatalf("duration = %v; want a complete sine period without a wrap boundary", duration)
 	}
 }
 

@@ -133,6 +133,7 @@ type ModelViewerComputeShapePass struct {
 	Target       ModelViewerComputeBinarySource `json:"target"`
 	PhaseRate    float64                        `json:"phaseRate"`
 	WrapAt       float64                        `json:"wrapAt,omitempty"`
+	PhaseStart   float64                        `json:"phaseStart,omitempty"`
 	PhaseOffset  float64                        `json:"phaseOffset"`
 	AngularScale float64                        `json:"angularScale"`
 	Amplitude    float64                        `json:"amplitude"`

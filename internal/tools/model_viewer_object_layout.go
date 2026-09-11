@@ -19,9 +19,10 @@ const (
 	modelViewerPackedObjectKind     = "gimi_cyclic_packed_v1"
 	modelViewerPackedObjectWEpsilon = 0.05
 
-	modelViewerDrawVertexMihoyo = "mihoyo"
-	modelViewerDrawVertexWWMI   = "wwmi"
-	modelViewerDrawVertexPacked = "packed"
+	modelViewerDrawVertexMihoyo       = "mihoyo"
+	modelViewerDrawVertexWWMI         = "wwmi"
+	modelViewerDrawVertexPacked       = "packed"
+	modelViewerDrawVertexInlineObject = "inline_object"
 )
 
 var (
@@ -92,6 +93,58 @@ func modelViewerPackedObjectShaderLayout(shader string) (stride, texcoordOffset 
 	default:
 		return 0, 0, false
 	}
+}
+
+// modelViewerInlineObjectShaderLayout recognizes unpacked GIMI object vertex
+// records that keep the diffuse texcoord inside the same buffer. Stride alone
+// cannot identify the layout, so only compute shaders that declare the exact
+// record are trusted.
+func modelViewerInlineObjectShaderLayout(shader string) (stride, texcoordOffset int, known bool) {
+	compact := compactModelViewerShader(shader)
+	switch {
+	case strings.Contains(
+		compact,
+		"structvertexattributes{float3position;float3normal;uinttexcoord0;float2texcoord1;uint2tangent;}",
+	):
+		return 44, 24, true
+	default:
+		return 0, 0, false
+	}
+}
+
+type modelViewerInlineObjectLayout struct {
+	stride         int
+	texcoordOffset int
+}
+
+func collectModelViewerInlineObjectResources(
+	root, shaderBaseDir string,
+	sections []modINISection,
+) map[string]modelViewerInlineObjectLayout {
+	inline := map[string]modelViewerInlineObjectLayout{}
+	reachable := collectModelViewerReachableComputeSections(sections)
+	for _, section := range sections {
+		if !strings.EqualFold(section.Header, "CustomShader") ||
+			!reachable[modelViewerNormalizeKey(section.Header+section.Name)] {
+			continue
+		}
+		for _, pass := range collectModelViewerComputePasses(section) {
+			shader, ok := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
+			if !ok {
+				continue
+			}
+			stride, texcoordOffset, known := modelViewerInlineObjectShaderLayout(shader)
+			if !known {
+				continue
+			}
+			for _, name := range []string{pass.outputName, pass.t50} {
+				if key := modelViewerNormalizeKey(name); key != "" {
+					inline[key] = modelViewerInlineObjectLayout{stride: stride, texcoordOffset: texcoordOffset}
+				}
+			}
+		}
+	}
+	return inline
 }
 
 func isKnownModelViewerGIMICyclicPackedBoneShader(shader string) bool {
@@ -301,10 +354,23 @@ type modelViewerDrawVertexSource struct {
 	kind                           string
 	packedTexcoordOffset           int
 	packedTexcoordDeclared         bool
+	inlineTexcoordOffset           int
 	ib, position, texcoord, vector modelViewerResource
 	packed                         []byte
 	packedStride                   int
 	missingTexcoord                bool
+}
+
+func modelViewerInlineObjectForResource(
+	inline map[string]modelViewerInlineObjectLayout,
+	names ...string,
+) (modelViewerInlineObjectLayout, bool) {
+	for _, name := range names {
+		if layout, ok := inline[modelViewerNormalizeKey(name)]; ok {
+			return layout, true
+		}
+	}
+	return modelViewerInlineObjectLayout{}, false
 }
 
 func resolveModelViewerDrawVertexSource(
@@ -314,6 +380,7 @@ func resolveModelViewerDrawVertexSource(
 	resources []modelViewerResource,
 	cache *modelViewerBufferCache,
 	packedResources map[string]int,
+	inlineResources map[string]modelViewerInlineObjectLayout,
 ) modelViewerDrawVertexSource {
 	ib, ibOK := resourceMap[modelViewerNormalizeKey(state.ib)]
 	position, posOK := resourceMap[modelViewerNormalizeKey(state.vb0)]
@@ -321,6 +388,12 @@ func resolveModelViewerDrawVertexSource(
 		return modelViewerDrawVertexSource{}
 	}
 	source := modelViewerDrawVertexSource{ib: ib, position: position}
+	if offset, ok := modelViewerInlineObjectForResource(inlineResources, state.vb0, position.Name); ok &&
+		position.Stride == offset.stride {
+		source.kind = modelViewerDrawVertexInlineObject
+		source.inlineTexcoordOffset = offset.texcoordOffset
+		return source
+	}
 	if layoutName == "wwmi" {
 		vector, vectorOK := resourceMap[modelViewerNormalizeKey(state.vb1)]
 		texcoord, tcOK := resourceMap[modelViewerNormalizeKey(state.vb2)]
@@ -375,14 +448,33 @@ func resolveModelViewerDrawVertexSource(
 	return source
 }
 
+// readModelViewerObjectBuffer resolves an object buffer inside modDir before
+// the cache touches the filesystem: resource filenames come from mod INI files
+// and must not escape the mod folder.
+func readModelViewerObjectBuffer(
+	modDir string,
+	position modelViewerResource,
+	cache *modelViewerBufferCache,
+) ([]byte, bool) {
+	path, err := resolveModelViewerResourcePath(modDir, modDir, position.Filename)
+	if err != nil || !modelViewerPathWithin(modDir, path) {
+		return nil, false
+	}
+	raw, err := cache.read(path)
+	if err != nil {
+		return nil, false
+	}
+	return raw, true
+}
+
 func readModelViewerPackedObjectBuffer(
 	modDir string,
 	position modelViewerResource,
 	cache *modelViewerBufferCache,
 	shaderPacked bool,
 ) ([]byte, int, bool) {
-	raw, err := cache.read(filepath.Join(modDir, filepath.FromSlash(position.Filename)))
-	if err != nil {
+	raw, ok := readModelViewerObjectBuffer(modDir, position, cache)
+	if !ok {
 		return nil, 0, false
 	}
 	stride, packed := modelViewerUsePackedObjectLayout(position, raw, shaderPacked)
@@ -412,6 +504,45 @@ func loadModelViewerDrawVertexBuffers(
 		tcStride = 20
 	}
 	switch source.kind {
+	case modelViewerDrawVertexInlineObject:
+		stride := position.Stride
+		if stride <= 0 {
+			return modelViewerDrawVertexBuffers{}, false, nil
+		}
+		raw, ok := readModelViewerObjectBuffer(modDir, position, cache)
+		if !ok {
+			return modelViewerDrawVertexBuffers{}, false, nil
+		}
+		return modelViewerDrawVertexBuffers{
+			combined:  raw,
+			stride:    stride,
+			posStride: stride,
+			layout: modelViewerFmtLayout{
+				Stride:      stride,
+				Topology:    "trianglelist",
+				IndexFormat: source.ib.Format,
+				Elements: []modelViewerFmtElement{
+					{
+						SemanticName:      "POSITION",
+						Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+						AlignedByteOffset: 0,
+						InputSlotClass:    "per-vertex",
+					},
+					{
+						SemanticName:      "NORMAL",
+						Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+						AlignedByteOffset: 12,
+						InputSlotClass:    "per-vertex",
+					},
+					{
+						SemanticName:      "TEXCOORD",
+						Format:            "DXGI_FORMAT_R16G16_FLOAT",
+						AlignedByteOffset: source.inlineTexcoordOffset,
+						InputSlotClass:    "per-vertex",
+					},
+				},
+			},
+		}, true, nil
 	case modelViewerDrawVertexPacked:
 		stride := source.packedStride
 		if stride <= 0 {

@@ -33,7 +33,7 @@ func resolveModelViewerEffectiveResources(
 	output := append([]modelViewerResource(nil), resources...)
 	for index := range output {
 		resource := output[index]
-		if resource.Filename != "" || parseModelViewerMihoyoResourceName(resource.Name) == nil {
+		if resource.Filename != "" {
 			continue
 		}
 		resolved, ok := aliases.resolve(resource.Name)
