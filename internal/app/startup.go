@@ -367,7 +367,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 	})
 	rt.runStartupSteps(ctx, []startupStep{
 		{"bisect-recovery", rt.tools.RecoverBisects},
-		{"compression", rt.mod.StartCompression},
+		{"compression", rt.runCompressionMaintenance},
 		{"persist-watcher", rt.tools.StartPersistWatcher},
 	})
 	if ctx.Err() != nil {
@@ -389,6 +389,16 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 		}
 	}()
 	rt.tools.StartWuwaAutoUpdateCheck()
+}
+
+// runCompressionMaintenance starts continuous reconciliation and waits for the
+// initial pass, so the readiness gate cannot open while mod files are being
+// rewritten.
+func (rt *runtime) runCompressionMaintenance(ctx context.Context) error {
+	if err := rt.mod.StartCompression(ctx); err != nil {
+		return err
+	}
+	return rt.mod.WaitCompressionPass(ctx)
 }
 
 func (rt *runtime) runStartupSteps(ctx context.Context, steps []startupStep) {
