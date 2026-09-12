@@ -162,10 +162,13 @@ func TestDisabledProxyIgnoresEnvironmentProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer network.Transport.CloseIdleConnections()
-	if network.Transport.Proxy != nil {
-		t.Fatal("disabled proxy still has a Proxy func")
+	if network.system == nil {
+		t.Fatal("disabled app proxy did not install the system resolver")
 	}
-	response, err := (&http.Client{Transport: network.Transport, Timeout: time.Second}).Get(origin.URL)
+	// Resolve DIRECT explicitly so the test ignores the host's Windows proxy
+	// settings while still exercising the system-proxy transport.
+	network.system.resolve = func(*http.Request) ([]*url.URL, error) { return []*url.URL{nil}, nil }
+	response, err := (&http.Client{Transport: network.HTTPTransport(), Timeout: time.Second}).Get(origin.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +206,7 @@ func TestSOCKSDNSAndAuthentication(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer network.Transport.CloseIdleConnections()
-				response, err := (&http.Client{Transport: network.Transport, Timeout: 3 * time.Second}).Get(
+				response, err := (&http.Client{Transport: network.HTTPTransport(), Timeout: 3 * time.Second}).Get(
 					"http://destination.invalid",
 				)
 				if err != nil {
@@ -431,7 +434,9 @@ func TestProxyIPv6AndTLSName(t *testing.T) {
 		RootCAs: origin.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs,
 	}
 	defer network.Transport.CloseIdleConnections()
-	response, err := (&http.Client{Transport: network.Transport, Timeout: 3 * time.Second}).Get("https://example.com")
+	response, err := (&http.Client{Transport: network.HTTPTransport(), Timeout: 3 * time.Second}).Get(
+		"https://example.com",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

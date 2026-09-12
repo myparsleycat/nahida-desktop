@@ -16,7 +16,7 @@ func (rt *runtime) initProxy(ctx context.Context, configureBrowserArguments func
 		_ = infra.ReportError(rt.log, err, "Proxy", infra.Diagnostic{Operation: "startup", Stage: "load-configuration"})
 		rt.http.UseTransport(infra.BlockedProxyTransport{})
 	} else {
-		rt.http.UseTransport(network.Transport)
+		rt.http.UseTransport(network.HTTPTransport())
 	}
 	relay, err := infra.StartProxyRelay(network, rt.log)
 	if err != nil {

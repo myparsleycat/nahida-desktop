@@ -3,6 +3,7 @@ package infra
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -74,10 +75,19 @@ func (p ProxyConfig) Validate() error {
 
 type proxyDial func(context.Context, string, string) (net.Conn, error)
 
-// ProxyNetwork owns an immutable upstream policy for one application run.
+// ProxyNetwork uses either the app's fixed proxy or the current Windows policy.
 type ProxyNetwork struct {
 	Transport *http.Transport
 	dial      proxyDial
+	system    *systemProxyTransport
+}
+
+// HTTPTransport includes system proxy selection and connection failover.
+func (n *ProxyNetwork) HTTPTransport() http.RoundTripper {
+	if n.system != nil {
+		return n.system
+	}
+	return n.Transport
 }
 
 func NewProxyNetwork(config ProxyConfig) (*ProxyNetwork, error) {
@@ -94,9 +104,11 @@ func newProxyNetwork(
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	direct := (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	n := &ProxyNetwork{Transport: transport, dial: direct}
-	// Disabled still means "this process's policy", not the environment or OS proxy.
+	// The app's explicit proxy overrides Windows; otherwise follow the active
+	// connection's system settings, including changes made by VPN clients.
 	transport.Proxy = nil
 	if !config.Enabled {
+		n.useSystemProxy(systemProxyResolver{readWindowsProxyConfig, resolveWindowsAutoProxy}.proxiesForRequest)
 		return n, nil
 	}
 	address := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
@@ -106,45 +118,7 @@ func newProxyNetwork(
 			endpoint.User = url.UserPassword(config.Username, config.Password)
 		}
 		transport.Proxy = http.ProxyURL(endpoint)
-		n.dial = func(ctx context.Context, _, target string) (net.Conn, error) {
-			conn, err := direct(ctx, "tcp", address)
-			if err != nil {
-				return nil, err
-			}
-			stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
-			defer stop()
-			_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
-			request := &http.Request{
-				Method: http.MethodConnect,
-				URL:    &url.URL{Opaque: target},
-				Host:   target,
-				Header: make(http.Header),
-			}
-			if config.Username != "" {
-				request.Header.Set(
-					"Proxy-Authorization",
-					"Basic "+base64.StdEncoding.EncodeToString([]byte(config.Username+":"+config.Password)),
-				)
-			}
-			if err = request.Write(conn); err != nil {
-				_ = conn.Close()
-				return nil, err
-			}
-			reader := bufio.NewReader(conn)
-			// A successful CONNECT transfers ownership to the tunnel; closing its
-			// HTTP body would consume or close the tunnel before TLS starts.
-			response, err := http.ReadResponse(reader, request) //nolint:bodyclose
-			if err != nil {
-				_ = conn.Close()
-				return nil, err
-			}
-			if response.StatusCode != http.StatusOK {
-				_ = conn.Close()
-				return nil, fmt.Errorf("proxy CONNECT status %d", response.StatusCode)
-			}
-			_ = conn.SetDeadline(time.Time{})
-			return &bufferedProxyConn{Conn: conn, reader: reader}, nil
-		}
+		n.dial = httpProxyDial(direct, endpoint)
 	} else {
 		var auth *proxy.Auth
 		if config.Username != "" {
@@ -193,6 +167,59 @@ func newProxyNetwork(
 		transport.DialContext = n.dial
 	}
 	return n, nil
+}
+
+func httpProxyDial(direct proxyDial, endpoint *url.URL) proxyDial {
+	return func(ctx context.Context, _, target string) (net.Conn, error) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		conn, err := direct(ctx, "tcp", endpoint.Host)
+		if err != nil {
+			return nil, err
+		}
+		if endpoint.Scheme == "https" {
+			tunnel := tls.Client(conn, &tls.Config{ServerName: endpoint.Hostname(), MinVersion: tls.VersionTLS12})
+			if err := tunnel.HandshakeContext(ctx); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			conn = tunnel
+		}
+		stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+		defer stop()
+		_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+		request := &http.Request{
+			Method: http.MethodConnect,
+			URL:    &url.URL{Opaque: target},
+			Host:   target,
+			Header: make(http.Header),
+		}
+		if endpoint.User != nil {
+			password, _ := endpoint.User.Password()
+			request.Header.Set(
+				"Proxy-Authorization",
+				"Basic "+base64.StdEncoding.EncodeToString([]byte(endpoint.User.Username()+":"+password)),
+			)
+		}
+		if err = request.Write(conn); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		reader := bufio.NewReader(conn)
+		// A successful CONNECT transfers ownership to the tunnel; closing its
+		// HTTP body would consume or close the tunnel before TLS starts.
+		response, err := http.ReadResponse(reader, request) //nolint:bodyclose
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		if response.StatusCode != http.StatusOK {
+			_ = conn.Close()
+			return nil, fmt.Errorf("proxy CONNECT status %d", response.StatusCode)
+		}
+		_ = conn.SetDeadline(time.Time{})
+		return &bufferedProxyConn{Conn: conn, reader: reader}, nil
+	}
 }
 
 type bufferedProxyConn struct {
