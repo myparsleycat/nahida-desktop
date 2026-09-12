@@ -121,3 +121,5 @@ jobs:
           # pull_request_target the action resolves them from the event.
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
+          effort: high
+          llm_reasoning_effort: high
