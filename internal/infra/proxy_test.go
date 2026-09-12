@@ -165,6 +165,9 @@ func TestDisabledProxyIgnoresEnvironmentProxy(t *testing.T) {
 	if network.system == nil {
 		t.Fatal("disabled app proxy did not install the system resolver")
 	}
+	// Resolve DIRECT explicitly so the test ignores the host's Windows proxy
+	// settings while still exercising the system-proxy transport.
+	network.system.resolve = func(*http.Request) ([]*url.URL, error) { return []*url.URL{nil}, nil }
 	response, err := (&http.Client{Transport: network.HTTPTransport(), Timeout: time.Second}).Get(origin.URL)
 	if err != nil {
 		t.Fatal(err)

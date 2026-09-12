@@ -188,6 +188,12 @@ func windowsAutoProxy(ctx context.Context, target string, config systemProxyConf
 		}
 		if errors.Is(err, syscall.Errno(12015)) && options.autoLogon == 0 {
 			options.autoLogon = 1
+			// A resolver handle serves one request, so the retry needs a new one.
+			_, _, _ = winHTTPCloseHandle.Call(resolver)
+			code, _, _ = winHTTPCreateResolver.Call(session, uintptr(unsafe.Pointer(&resolver)))
+			if code != 0 {
+				return "", syscall.Errno(code)
+			}
 			continue
 		}
 		if errors.Is(err, syscall.Errno(12180)) {

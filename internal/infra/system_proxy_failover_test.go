@@ -130,6 +130,52 @@ func TestSystemProxyPACFailover(t *testing.T) {
 	}
 }
 
+func TestSystemProxyDirectFailureTriesNextCandidate(t *testing.T) {
+	var proxyHits atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyHits.Add(1)
+		_, _ = io.Copy(w, r.Body)
+	}))
+	defer proxy.Close()
+	endpoint, _ := url.Parse(proxy.URL)
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadAddress := dead.Addr().String()
+	_ = dead.Close()
+
+	var directDials atomic.Int32
+	network := directProxyTestNetwork()
+	network.Transport.DialContext = func(ctx context.Context, protocol, address string) (net.Conn, error) {
+		if strings.HasPrefix(address, "destination.invalid:") {
+			directDials.Add(1)
+			address = deadAddress
+		}
+		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, protocol, address)
+	}
+	// A PAC list may prefer DIRECT and still name a proxy for when it fails.
+	network.useSystemProxy(func(*http.Request) ([]*url.URL, error) { return []*url.URL{nil, endpoint}, nil })
+	defer network.system.CloseIdleConnections()
+	request, _ := http.NewRequest(
+		http.MethodPost,
+		"http://destination.invalid/upload",
+		&failoverTestBody{Reader: strings.NewReader("upload payload")},
+	)
+	response, err := (&http.Client{Transport: network.HTTPTransport(), Timeout: 5 * time.Second}).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil || string(data) != "upload payload" {
+		t.Fatalf("body=%q err=%v", data, err)
+	}
+	if directDials.Load() != 1 || proxyHits.Load() != 1 {
+		t.Fatalf("direct dials=%d proxy hits=%d", directDials.Load(), proxyHits.Load())
+	}
+}
+
 type failoverTestBody struct {
 	*strings.Reader
 	closed atomic.Bool

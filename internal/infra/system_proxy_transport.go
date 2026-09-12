@@ -54,7 +54,9 @@ func (s *systemProxyTransport) RoundTrip(request *http.Request) (*http.Response,
 		if connected.Load() {
 			return nil, errors.Join(failures...)
 		}
-		if endpoint == nil || request.Context().Err() != nil || !proxyDialFailed(err) {
+		// DIRECT is skipped once a proxy failed, but a failed DIRECT dial still
+		// leaves the remaining candidates worth trying.
+		if request.Context().Err() != nil || !proxyDialFailed(err) {
 			break
 		}
 	}
