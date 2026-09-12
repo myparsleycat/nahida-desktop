@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -15,17 +16,20 @@ const legacyModelViewerTempPrefix = "nhd-model-viewer-"
 // can retain old directories in the Windows temp root.
 //
 //wails:ignore
-func (t *Tools) CleanupStaleModelViewerDirs() error {
-	return cleanupStaleModelViewerDirs(os.TempDir())
+func (t *Tools) CleanupStaleModelViewerDirs(ctx context.Context) error {
+	return cleanupStaleModelViewerDirs(ctx, os.TempDir())
 }
 
-func cleanupStaleModelViewerDirs(tempRoot string) error {
+func cleanupStaleModelViewerDirs(ctx context.Context, tempRoot string) error {
 	entries, err := os.ReadDir(tempRoot)
 	if err != nil {
 		return fmt.Errorf("read model viewer temp root: %w", err)
 	}
 	var cleanupErrs []error
 	for _, entry := range entries {
+		if ctx.Err() != nil {
+			return errors.Join(ctx.Err(), errors.Join(cleanupErrs...))
+		}
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), legacyModelViewerTempPrefix) {
 			continue
 		}

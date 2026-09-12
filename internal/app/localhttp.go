@@ -26,6 +26,11 @@ func (rt *runtime) handleLocalHTTPMessage(ctx context.Context, payload []byte) (
 	if err := cbor.Unmarshal(payload, &message); err != nil {
 		return "invalid data", fmt.Errorf("decode extension message: %w", err)
 	}
+	if message.Type == "live" || message.Type == "hui" {
+		if err := rt.startup.wait(ctx); err != nil {
+			return "download error", err
+		}
+	}
 	switch message.Type {
 	case "live":
 		return rt.handleLiveDownload(ctx, message)

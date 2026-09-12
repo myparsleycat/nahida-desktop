@@ -149,66 +149,12 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.mod != nil {
 		rt.mod.UseClient(store.DB)
 		rt.mod.UseSettings(rt.setting)
-		if err := rt.mod.StartCompression(ctx); err != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"Mod:compression:start",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticError,
-					Operation: "Mod:compression:start",
-					Stage:     "background",
-				},
-			)
-		}
 	}
 	if rt.native != nil {
 		rt.native.StartFocusTracking()
 	}
 	if rt.tools != nil {
 		rt.tools.UseClient(store.DB)
-		if err := rt.tools.CleanupStaleModelViewerDirs(); err != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"StaticGlb.cleanupStaleViewerTempDirs",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticWarn,
-					Operation: "StaticGlb.cleanupStaleViewerTempDirs",
-					Stage:     "background",
-				},
-			)
-		}
-		if err := rt.tools.CleanupStaleD3DBuilds(ctx); err != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"4001Fixer:cleanupStaleBuildDirs",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticWarn,
-					Operation: "4001Fixer:cleanupStaleBuildDirs",
-					Stage:     "background",
-				},
-			)
-		}
-		rt.tools.Start4001ReleasePrefetch()
-		if err := rt.tools.RecoverBisects(ctx); err != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"ModBisect",
-				infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "ModBisect", Stage: "background"},
-			)
-		}
-		rt.tools.StartWuwaAutoUpdateCheck()
-		if err := rt.tools.StartPersistWatcher(ctx); err != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"TogglePersist",
-				infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "TogglePersist", Stage: "background"},
-			)
-		}
 	}
 	return nil
 }
@@ -217,6 +163,7 @@ func (rt *runtime) Close() error {
 	if rt == nil {
 		return nil
 	}
+	rt.startup.stop()
 	if rt.gameBananaLogin != nil {
 		rt.gameBananaLogin.Close()
 	}

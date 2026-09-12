@@ -951,7 +951,8 @@ func secureSessionOriginal(target, candidate string) (string, error) {
 	return candidateAbs, nil
 }
 
-func (t *Tools) zzmiCleanupAbandonedStaging() error {
+//wails:ignore
+func (t *Tools) CleanupZZMIAbandonedStaging(ctx context.Context) error {
 	if t == nil || t.appData == nil {
 		return nil
 	}
@@ -967,6 +968,9 @@ func (t *Tools) zzmiCleanupAbandonedStaging() error {
 		return err
 	}
 	for _, target := range targets {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if !target.IsDir() || target.Type()&os.ModeSymlink != 0 {
 			continue
 		}
@@ -975,6 +979,9 @@ func (t *Tools) zzmiCleanupAbandonedStaging() error {
 			return readErr
 		}
 		for _, entry := range sessions {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 				continue
 			}
@@ -1008,6 +1015,7 @@ func (t *Tools) zzmiCleanupAbandonedStaging() error {
 	}
 	return nil
 }
+
 func writeSyncFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

@@ -165,7 +165,7 @@ func TestZZMICleanupMarksInterruptedSessionPartial(t *testing.T) {
 	if err := writeZZMISession(dir, session); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.zzmiCleanupAbandonedStaging(); err != nil {
+	if err := service.CleanupZZMIAbandonedStaging(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "staging")); !os.IsNotExist(err) {
