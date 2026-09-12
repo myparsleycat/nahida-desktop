@@ -26,22 +26,23 @@ func TestStartupWorkStopsBeforeReleasingDependencies(t *testing.T) {
 	s := newStartupWork()
 	started := make(chan struct{})
 	finish := make(chan struct{})
+	t.Cleanup(func() { closeFinish(finish) })
 	s.start(func(ctx context.Context) {
 		close(started)
 		<-ctx.Done()
 		<-finish
 	})
-	<-started
+	waitClosed(t, started, finish, "startup work did not start")
 	stopped := make(chan struct{})
 	go func() { s.stop(); close(stopped) }()
-	<-s.ctx.Done()
+	waitClosed(t, s.ctx.Done(), finish, "shutdown did not cancel maintenance")
 	select {
 	case <-stopped:
 		t.Fatal("shutdown returned while maintenance still owned dependencies")
 	default:
 	}
-	close(finish)
-	<-stopped
+	closeFinish(finish)
+	waitClosed(t, stopped, nil, "shutdown did not finish after maintenance released dependencies")
 	s.stop()
 	if !errors.Is(s.wait(context.Background()), context.Canceled) {
 		t.Fatal("stopped startup released a waiting operation")
@@ -60,6 +61,7 @@ func TestStartupPrefetchDoesNotHoldReadinessButIsJoinedOnStop(t *testing.T) {
 	s := newStartupWork()
 	finish := make(chan struct{})
 	prefetchDone := make(chan struct{})
+	t.Cleanup(func() { closeFinish(finish) })
 	s.start(func(ctx context.Context) {
 		s.prefetchDone = prefetchDone
 		go func() {
@@ -68,19 +70,17 @@ func TestStartupPrefetchDoesNotHoldReadinessButIsJoinedOnStop(t *testing.T) {
 			<-finish
 		}()
 	})
-	if err := s.wait(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	waitStartupReady(t, s, finish)
 	stopped := make(chan struct{})
 	go func() { s.stop(); close(stopped) }()
-	<-s.ctx.Done()
+	waitClosed(t, s.ctx.Done(), finish, "shutdown did not cancel prefetch")
 	select {
 	case <-stopped:
 		t.Fatal("shutdown did not join release prefetch")
 	default:
 	}
-	close(finish)
-	<-stopped
+	closeFinish(finish)
+	waitClosed(t, stopped, nil, "shutdown did not finish after prefetch released dependencies")
 }
 
 func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
@@ -189,7 +189,7 @@ func TestStartupMiddlewareProtectsFileServices(t *testing.T) {
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(body)))
 		close(done)
 	}()
-	waitStartupPending(t, rt.startup, "startup-toggle")
+	waitStartupPending(t, rt.startup, "", "startup-toggle")
 	if calls.Load() != 0 {
 		t.Fatal("file operation ran before maintenance")
 	}
@@ -234,15 +234,14 @@ func TestStartupMiddlewareCancellationDoesNotRunQueuedActions(t *testing.T) {
 			response := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() { handler.ServeHTTP(response, request); close(done) }()
-			waitStartupPending(t, rt.startup, "cancel-me")
+			waitStartupPending(t, rt.startup, "7", "cancel-me")
 			switch kind {
 			case "call":
-				handler.ServeHTTP(
-					httptest.NewRecorder(),
-					httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
-						`{"object":10,"method":0,"args":{"call-id":"cancel-me"}}`,
-					)),
-				)
+				cancel := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+					`{"object":10,"method":0,"args":{"call-id":"cancel-me"}}`,
+				))
+				cancel.Header.Set("x-wails-window-id", "7")
+				handler.ServeHTTP(httptest.NewRecorder(), cancel)
 			case "window":
 				rt.startup.cancelWindow(7, "main")
 			case "request":
@@ -263,12 +262,21 @@ func TestStartupMiddlewareCancellationDoesNotRunQueuedActions(t *testing.T) {
 	}
 }
 
-func waitStartupPending(t *testing.T, s *startupWork, id string) {
+func windowRequest(windowID string) *http.Request {
+	request := httptest.NewRequest(http.MethodPost, "/wails/runtime", nil)
+	if windowID != "" {
+		request.Header.Set("x-wails-window-id", windowID)
+	}
+	return request
+}
+
+func waitStartupPending(t *testing.T, s *startupWork, window, id string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
+	key := requestCallKey(windowRequest(window), id)
 	for time.Now().Before(deadline) {
 		s.mu.Lock()
-		pending := s.pending[id] != nil
+		pending := s.pending[key] != nil
 		s.mu.Unlock()
 		if pending {
 			return
@@ -276,6 +284,196 @@ func waitStartupPending(t *testing.T, s *startupWork, id string) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("request did not enter startup gate")
+}
+
+func waitClosed(t *testing.T, ch <-chan struct{}, finish chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		closeFinish(finish)
+		t.Fatal(msg)
+	}
+}
+
+func waitStartupReady(t *testing.T, s *startupWork, finish chan struct{}) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.wait(ctx); err != nil {
+		closeFinish(finish)
+		t.Fatal(err)
+	}
+}
+
+func closeFinish(ch chan struct{}) {
+	if ch == nil {
+		return
+	}
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
+func TestStartupMiddlewareRejectsWhenBodyBudgetExhausted(t *testing.T) {
+	t.Parallel()
+	s := newStartupWork()
+	t.Cleanup(s.stop)
+	var calls int
+	handler := s.middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	s.mu.Lock()
+	s.heldBytes = maxRuntimeBodyBytes
+	s.mu.Unlock()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+		`{"object":6,"method":0,"args":{}}`,
+	)))
+	if calls != 0 || response.Code != http.StatusServiceUnavailable {
+		t.Fatal("request ran after startup body budget was exhausted")
+	}
+	s.mu.Lock()
+	s.heldBytes = 0
+	s.mu.Unlock()
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+		`{"object":6,"method":0,"args":{}}`,
+	)))
+	if calls != 1 {
+		t.Fatal("request stayed blocked after startup body budget was released")
+	}
+}
+
+func TestStartupMiddlewareScopesCallIDsByWindow(t *testing.T) {
+	application.New(application.Options{Name: "startup-call-id-scope-test"})
+	rt := newRuntime()
+	t.Cleanup(rt.startup.stop)
+	if err := rt.configureStartupBindings(); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	handler := rt.startup.middleware(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }),
+	)
+	startGated := func(windowID, callID string) (<-chan struct{}, *httptest.ResponseRecorder) {
+		request := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+			`{"object":0,"method":0,"args":{"methodName":"nahida.live/desktop/internal/mod.Mod.Toggle","call-id":"`+
+				callID+`","args":["mod"]}}`,
+		))
+		request.Header.Set("x-wails-window-id", windowID)
+		response := httptest.NewRecorder()
+		done := make(chan struct{})
+		go func() { handler.ServeHTTP(response, request); close(done) }()
+		waitStartupPending(t, rt.startup, windowID, callID)
+		return done, response
+	}
+	doneA, responseA := startGated("1", "shared")
+	doneB, _ := startGated("2", "shared")
+
+	cancel := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+		`{"object":10,"method":0,"args":{"call-id":"shared"}}`,
+	))
+	cancel.Header.Set("x-wails-window-id", "1")
+	handler.ServeHTTP(httptest.NewRecorder(), cancel)
+	select {
+	case <-doneA:
+	case <-time.After(2 * time.Second):
+		t.Fatal("same-window cancel did not release the queued call")
+	}
+	if responseA.Code != http.StatusServiceUnavailable {
+		t.Fatal("cancelled call reached the service")
+	}
+	rt.startup.mu.Lock()
+	otherPending := rt.startup.pending[requestCallKey(windowRequest("2"), "shared")] != nil
+	rt.startup.mu.Unlock()
+	if !otherPending {
+		t.Fatal("cancel from another window released the queued call")
+	}
+
+	rt.startup.start(func(context.Context) {})
+	select {
+	case <-doneB:
+	case <-time.After(2 * time.Second):
+		t.Fatal("other window's call was not released after maintenance")
+	}
+	if calls.Load() != 1 {
+		t.Fatal("expected only the uncancelled window's call to run")
+	}
+}
+
+func TestStartupMiddlewareWindowIDAndNameDoNotShareCallKeys(t *testing.T) {
+	application.New(application.Options{Name: "startup-call-id-namespace-test"})
+	rt := newRuntime()
+	t.Cleanup(rt.startup.stop)
+	if err := rt.configureStartupBindings(); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	handler := rt.startup.middleware(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }),
+	)
+	startGated := func(setHeader func(*http.Request), window, callID string) <-chan struct{} {
+		request := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+			`{"object":0,"method":0,"args":{"methodName":"nahida.live/desktop/internal/mod.Mod.Toggle","call-id":"`+
+				callID+`","args":["mod"]}}`,
+		))
+		setHeader(request)
+		done := make(chan struct{})
+		go func() { handler.ServeHTTP(httptest.NewRecorder(), request); close(done) }()
+		waitStartupPending(t, rt.startup, window, callID)
+		return done
+	}
+	doneID := startGated(func(r *http.Request) { r.Header.Set("x-wails-window-id", "1") }, "1", "shared")
+	named := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+		`{"object":0,"method":0,"args":{"methodName":"nahida.live/desktop/internal/mod.Mod.Toggle","call-id":"shared","args":["mod"]}}`,
+	))
+	named.Header.Set("x-wails-window-name", "1")
+	doneName := make(chan struct{})
+	go func() { handler.ServeHTTP(httptest.NewRecorder(), named); close(doneName) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		rt.startup.mu.Lock()
+		pending := rt.startup.pending[requestCallKey(named, "shared")] != nil
+		rt.startup.mu.Unlock()
+		if pending {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	rt.startup.mu.Lock()
+	idPending := rt.startup.pending[requestCallKey(windowRequest("1"), "shared")] != nil
+	namePending := rt.startup.pending[requestCallKey(named, "shared")] != nil
+	rt.startup.mu.Unlock()
+	if !idPending || !namePending {
+		t.Fatal("window ID 1 and window name 1 must not share a call key")
+	}
+
+	cancel := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+		`{"object":10,"method":0,"args":{"call-id":"shared"}}`,
+	))
+	cancel.Header.Set("x-wails-window-id", "1")
+	handler.ServeHTTP(httptest.NewRecorder(), cancel)
+	select {
+	case <-doneID:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ID-scoped cancel did not release the ID-keyed call")
+	}
+	rt.startup.mu.Lock()
+	namePending = rt.startup.pending[requestCallKey(named, "shared")] != nil
+	rt.startup.mu.Unlock()
+	if !namePending {
+		t.Fatal("cancelling window ID 1 cancelled a call keyed by window name 1")
+	}
+
+	rt.startup.start(func(context.Context) {})
+	select {
+	case <-doneName:
+	case <-time.After(2 * time.Second):
+		t.Fatal("name-keyed call was not released after maintenance")
+	}
+	if calls.Load() != 1 {
+		t.Fatal("expected only the name-keyed call to run")
+	}
 }
 
 func TestStartupMiddlewareDoesNotForwardUninspectableSubmissions(t *testing.T) {

@@ -38,9 +38,15 @@ type startupWork struct {
 	gatedIDs     map[uint32]struct{}
 	gatedNames   map[string]struct{}
 	mu           sync.Mutex
-	pending      map[string]*startupCall
+	pending      map[startupCallKey]*startupCall
+	heldBytes    int64
 	launched     time.Time
 	prefetchDone <-chan struct{}
+}
+
+type startupCallKey struct {
+	window string
+	callID string
 }
 
 type startupCall struct {
@@ -60,7 +66,7 @@ func newStartupWork() *startupWork {
 		ctx:      ctx,
 		cancel:   cancel,
 		done:     make(chan struct{}),
-		pending:  make(map[string]*startupCall),
+		pending:  make(map[startupCallKey]*startupCall),
 		launched: time.Now(),
 	}
 }
@@ -174,6 +180,57 @@ func (s *startupWork) needsWait(options application.CallOptions) bool {
 	return ok
 }
 
+func requestWindowKey(r *http.Request) string {
+	if id := r.Header.Get("x-wails-window-id"); id != "" {
+		return "id:" + id
+	}
+	return "name:" + r.Header.Get("x-wails-window-name")
+}
+
+func requestCallKey(r *http.Request, callID string) startupCallKey {
+	return startupCallKey{window: requestWindowKey(r), callID: callID}
+}
+
+func (s *startupWork) holdRuntimeBody(n int64) (int64, bool) {
+	if n < 0 || n > maxRuntimeBodyBytes {
+		n = maxRuntimeBodyBytes
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n == 0 {
+		return 0, true
+	}
+	if s.heldBytes+n > maxRuntimeBodyBytes {
+		return 0, false
+	}
+	s.heldBytes += n
+	return n, true
+}
+
+func (s *startupWork) releaseRuntimeBody(n int64) {
+	s.replaceRuntimeBody(n, 0)
+}
+
+func (s *startupWork) replaceRuntimeBody(from, to int64) bool {
+	if to < 0 {
+		to = 0
+	}
+	if to > maxRuntimeBodyBytes {
+		to = maxRuntimeBodyBytes
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.heldBytes - from + to
+	if next > maxRuntimeBodyBytes {
+		return false
+	}
+	if next < 0 {
+		next = 0
+	}
+	s.heldBytes = next
+	return true
+}
+
 func (s *startupWork) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/wails/runtime" {
@@ -199,10 +256,33 @@ func (s *startupWork) middleware(next http.Handler) http.Handler {
 			)
 			return
 		}
+
+		held, ok := s.holdRuntimeBody(r.ContentLength)
+		if !ok {
+			http.Error(
+				w,
+				"Application maintenance is still running; retry after startup",
+				http.StatusServiceUnavailable,
+			)
+			return
+		}
+		defer func() { s.releaseRuntimeBody(held) }()
+
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRuntimeBodyBytes))
 		if err != nil {
 			http.Error(w, "Unable to read runtime request", http.StatusRequestEntityTooLarge)
 			return
+		}
+		if actual := int64(len(body)); actual != held {
+			if !s.replaceRuntimeBody(held, actual) {
+				http.Error(
+					w,
+					"Application maintenance is still running; retry after startup",
+					http.StatusServiceUnavailable,
+				)
+				return
+			}
+			held = actual
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		var request struct {
@@ -223,9 +303,10 @@ func (s *startupWork) middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		key := requestCallKey(r, request.Args.CallID)
 		if *request.Object == wailsCancelCallObject {
 			s.mu.Lock()
-			call := s.pending[request.Args.CallID]
+			call := s.pending[key]
 			if call != nil {
 				call.cancel()
 			}
@@ -250,16 +331,16 @@ func (s *startupWork) middleware(next http.Handler) http.Handler {
 			windowName: r.Header.Get("x-wails-window-name"),
 		}
 		s.mu.Lock()
-		if s.pending[request.Args.CallID] != nil {
+		if s.pending[key] != nil {
 			s.mu.Unlock()
 			http.Error(w, "Ambiguous runtime call ID", http.StatusUnprocessableEntity)
 			return
 		}
-		s.pending[request.Args.CallID] = call
+		s.pending[key] = call
 		s.mu.Unlock()
 		err = s.wait(ctx)
 		s.mu.Lock()
-		delete(s.pending, request.Args.CallID)
+		delete(s.pending, key)
 		s.mu.Unlock()
 		if err != nil || ctx.Err() != nil {
 			http.Error(w, "Startup request cancelled", http.StatusServiceUnavailable)
