@@ -1569,7 +1569,7 @@
     "setting": {
       "network": {
         "title": "Proxy",
-        "description": "Route all in-app external requests through this proxy. Changes apply after restarting the app. External browsers, games and scripts are excluded.",
+        "description": "Route all in-app external requests through this proxy. When disabled, the app follows Windows system proxy settings and network routing. Changes to this app setting apply after restarting. External browsers, games and scripts are excluded.",
         "enabled": "Enable proxy",
         "type": "Type",
         "host": "Host (without scheme)",

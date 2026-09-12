@@ -36,7 +36,7 @@ func StartProxyRelay(network *ProxyNetwork, log *Log) (*ProxyRelay, error) {
 		tunnels:   make(map[net.Conn]io.Closer),
 	}
 	if network != nil {
-		r.transport, r.dial = network.Transport, network.dial
+		r.transport, r.dial = network.HTTPTransport(), network.dial
 	}
 	r.server = &http.Server{
 		Handler:           r,
@@ -71,7 +71,7 @@ func (r *ProxyRelay) Close() error {
 		_ = upstream.Close()
 	}
 	r.mu.Unlock()
-	if transport, ok := r.transport.(*http.Transport); ok {
+	if transport, ok := r.transport.(interface{ CloseIdleConnections() }); ok {
 		transport.CloseIdleConnections()
 	}
 	return err

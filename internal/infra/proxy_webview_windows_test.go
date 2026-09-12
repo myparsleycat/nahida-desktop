@@ -29,7 +29,7 @@ import (
 func TestProxyNativeWebView(t *testing.T) {
 	kind := os.Getenv("NAHIDA_PROXY_WEBVIEW_TEST")
 	if kind == "" {
-		for _, kind := range []string{"http", "socks5", "socks5h"} {
+		for _, kind := range []string{"http", "socks5", "socks5h", "system"} {
 			t.Run(kind, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
@@ -119,12 +119,8 @@ func TestProxyNativeWebView(t *testing.T) {
 	var err error
 	var proxyHits atomic.Int32
 	var destinations <-chan string
-	if kind == "http" {
-		var direct *ProxyNetwork
-		direct, err = NewProxyNetwork(ProxyConfig{Type: "http"})
-		if err != nil {
-			t.Fatal(err)
-		}
+	if kind == "http" || kind == "system" {
+		direct := directProxyTestNetwork()
 		var upstream *ProxyRelay
 		upstream, err = StartProxyRelay(direct, nil)
 		if err != nil {
@@ -145,9 +141,23 @@ func TestProxyNativeWebView(t *testing.T) {
 			upstream.ServeHTTP(w, r)
 		}))
 		defer proxyServer.Close()
-		config := proxyConfigFor(strings.TrimPrefix(proxyServer.URL, "http://"), kind)
+		config := proxyConfigFor(strings.TrimPrefix(proxyServer.URL, "http://"), "http")
 		config.Username, config.Password = "user", "pass"
 		network, err = NewProxyNetwork(config)
+		if kind == "system" {
+			network, err = NewProxyNetwork(ProxyConfig{Type: "http"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolver := systemProxyResolver{readConfig: func() (systemProxyConfig, error) {
+				return systemProxyConfig{
+					proxy:  strings.Replace(proxyServer.URL, "://", "://user:pass@", 1),
+					bypass: "<-loopback>",
+				}, nil
+			}}
+			// Replace only the OS reader; the process's real Windows settings are untouched.
+			network.system.resolve = resolver.proxiesForRequest
+		}
 	} else {
 		address, seen := socksTestServer(t, strings.TrimPrefix(origin.URL, "http://"), "user", "pass")
 		destinations = seen
@@ -201,7 +211,7 @@ func TestProxyNativeWebView(t *testing.T) {
 	if failed.Load() || completed.Load() != 2 {
 		t.Fatalf("completed=%d failed=%v", completed.Load(), failed.Load())
 	}
-	if kind == "http" && proxyHits.Load() < 9 {
+	if (kind == "http" || kind == "system") && proxyHits.Load() < 9 {
 		t.Fatalf("too few proxied requests: %d", proxyHits.Load())
 	}
 	if destinations != nil {
