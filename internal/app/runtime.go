@@ -19,6 +19,7 @@ import (
 )
 
 type runtime struct {
+	startup         *startupWork
 	proxyRelay      *infra.ProxyRelay
 	appData         *appdata.Store
 	log             *infra.Log
@@ -117,6 +118,7 @@ func newRuntime() *runtime {
 	updaterService := infra.NewUpdater()
 	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil))
 	rt := &runtime{
+		startup:  newStartupWork(),
 		log:      log,
 		store:    infra.NewStore(),
 		http:     httpClient,
@@ -228,6 +230,20 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "Updater", rt.updater),
 		newLoggedService(rt, "Window", rt.window),
 		newLoggedService(rt, "XXMI", rt.xxmi),
+	}
+}
+
+// fileMutatingServices are Wails services whose bindings wait for startup
+// maintenance. Add a service here when it writes user files.
+func (rt *runtime) fileMutatingServices() []application.Service {
+	return []application.Service{
+		application.NewService(rt.drive),
+		application.NewService(rt.fs),
+		application.NewService(rt.menuMaker),
+		application.NewService(rt.mod),
+		application.NewService(rt.tools),
+		application.NewService(rt.transfer),
+		application.NewService(rt.xxmi),
 	}
 }
 

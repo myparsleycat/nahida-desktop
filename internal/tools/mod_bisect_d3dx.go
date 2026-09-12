@@ -198,6 +198,9 @@ func (t *Tools) recoverD3dxBackupLocked(ctx context.Context, game db.GamePathRow
 		} else if err != nil {
 			return err
 		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err := os.WriteFile(path, backup, 0o600); err != nil {
 			return err
 		}

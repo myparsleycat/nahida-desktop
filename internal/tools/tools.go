@@ -75,9 +75,10 @@ type Tools struct {
 	runMu sync.Mutex
 	run   *toolRun
 
-	bisectMu sync.Mutex
-	bisect   *bisectSession
-	d3dx     *d3dxGuard
+	bisectMu         sync.Mutex
+	bisect           *bisectSession
+	bisectRecovering bool
+	d3dx             *d3dxGuard
 
 	fixerMu       sync.Mutex
 	fixerTask     *string
@@ -212,9 +213,6 @@ func (t *Tools) UseClient(client *db.Client) {
 //wails:ignore
 func (t *Tools) UseAppData(data *appdata.Store) {
 	t.appData = data
-	if err := t.zzmiCleanupAbandonedStaging(); err != nil {
-		t.logError(err, "ZZMIFixerCleanup")
-	}
 }
 
 func (t *Tools) appDataPath(relative string) (string, error) {

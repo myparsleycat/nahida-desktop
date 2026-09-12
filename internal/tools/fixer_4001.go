@@ -225,20 +225,6 @@ func (t *Tools) FourThousandOneFixerUpdateReleases(ctx context.Context) error {
 	return err
 }
 
-// Start4001ReleasePrefetch mirrors the Electron service constructor's
-// best-effort release warmup without delaying application startup.
-//
-//wails:ignore
-func (t *Tools) Start4001ReleasePrefetch() {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := t.FourThousandOneFixerUpdateReleases(ctx); err != nil && t.log != nil {
-			t.log.Warn("Automatic XXMI libs release prefetch failed: "+err.Error(), "4001Fixer:updateReleases")
-		}
-	}()
-}
-
 func (t *Tools) FourThousandOneFixerGetBuildToolsPath(ctx context.Context) (string, error) {
 	value, err := t.getAppState(ctx, fixer4001VSDevCmdPathKey)
 	if err != nil || value == nil {
@@ -785,6 +771,9 @@ func (t *Tools) CleanupStaleD3DBuilds(ctx context.Context) error {
 	}
 	root := filepath.Join(os.TempDir(), d3dBuildTempDirName)
 	for _, state := range states {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		id := strings.TrimPrefix(state.Key, d3dBuildStatePrefix)
 		if d3dBuildIDRE.MatchString(id) {
 			t.reportCleanup(os.RemoveAll(filepath.Join(root, id)), "CleanupStaleD3DBuilds")

@@ -109,6 +109,18 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 	return nil
 }
 
+// WaitCompressionPass waits for the reconciliation run started by
+// StartCompression to stop before returning. Startup uses it to keep
+// file-mutating calls gated while mod files are being rewritten.
+//
+//wails:ignore
+func (m *Mod) WaitCompressionPass(ctx context.Context) error {
+	if m == nil || m.compression == nil {
+		return nil
+	}
+	return m.compression.waitForRun(ctx)
+}
+
 func (m *Mod) GetCompressionState(ctx context.Context) (CompressionState, error) {
 	if m == nil || m.compression == nil {
 		return CompressionState{}, errors.New("mod compression is not configured")
@@ -367,6 +379,23 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 		c.deriveCapabilitiesLocked()
 		c.mu.Unlock()
 		c.publish()
+	}
+}
+
+// waitForRun blocks until the reconciliation run that is active when it is
+// called stops. Runs started later by watcher events are not awaited.
+func (c *compressionCoordinator) waitForRun(ctx context.Context) error {
+	c.mu.Lock()
+	done := c.done
+	c.mu.Unlock()
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

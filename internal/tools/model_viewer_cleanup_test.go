@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +26,7 @@ func TestCleanupStaleModelViewerDirsOnlyRemovesMatchingDirectories(t *testing.T)
 		t.Fatal(err)
 	}
 
-	if err := cleanupStaleModelViewerDirs(root); err != nil {
+	if err := cleanupStaleModelViewerDirs(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"os"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -34,13 +35,19 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			},
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler:    application.AssetFileServerFS(assets),
+			Middleware: rt.startup.middleware,
 		},
 		// Closing the last window must not tear down the process. Tray and
 		// background work stay alive; WindowClosing still calls Quit when
 		// runInBackground is off.
 		Windows: windowsApplicationOptions(),
 	})
+	defer rt.startup.stop()
+	if err := rt.configureStartupBindings(); err != nil {
+		return err
+	}
+	app.OnShutdown(rt.startup.stop)
 	// newLockedApplication waits for a relaunch parent, then application.New
 	// acquires Wails' single-instance lock. Keep all database,
 	// local HTTP, watcher, and cleanup startup work after it so a forwarding
@@ -58,6 +65,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
 	}
+	rt.logStartupMilestone("essential-ready")
 	defer func() {
 		runErr = errors.Join(runErr, rt.Close())
 	}()
@@ -147,8 +155,14 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)
+	var windowCreated, windowReady sync.Once
 	app.Window.OnCreate(func(window application.Window) {
+		windowCreated.Do(func() { rt.logStartupMilestone("window-created") })
+		window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+			windowReady.Do(func() { rt.logStartupMilestone("window-runtime-ready") })
+		})
 		window.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
+			rt.startup.cancelWindow(window.ID(), window.Name())
 			rt.tools.CleanupModelViewerWindow(window.ID())
 		})
 	})
@@ -171,6 +185,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		rt.startup.start(rt.runStartupWork)
 		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
 			newLaunchHandler(viewers.Open, func() { newWindow(app, rt.window) }, rt.window.HandleArguments))
 	})

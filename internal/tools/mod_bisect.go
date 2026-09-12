@@ -104,6 +104,12 @@ func (t *Tools) BisectValidateExcludePath(ctx context.Context, game, inputPath s
 func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []string) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
+	if t.bisectRecovering {
+		//nolint:staticcheck // Electron contract text.
+		return BisectSnapshot{}, errors.New(
+			"Cannot start a bisect session while recovery is running.",
+		)
+	}
 	if t.bisect != nil && t.bisect.finalBadPath == nil {
 		//nolint:staticcheck // Electron contract text.
 		return BisectSnapshot{}, errors.New(
@@ -381,29 +387,33 @@ func (t *Tools) BisectCancel(ctx context.Context) (BisectSnapshot, error) {
 }
 
 func (t *Tools) BisectRecover(ctx context.Context, game string) (int, error) {
-	t.bisectMu.Lock()
-	defer t.bisectMu.Unlock()
-	if t.bisect != nil {
+	if err := t.beginBisectRecovery(); err != nil {
 		//nolint:staticcheck // Electron contract text.
 		return 0, errors.New(
 			"Cannot recover while a bisect session is active.",
 		)
 	}
+	defer t.endBisectRecovery()
 	config, err := t.requireBisectGame(ctx, game)
 	if err != nil {
 		return 0, err
 	}
-	paths, err := listBisectOrphans(config.ModFolderPath)
+	paths, err := listBisectOrphans(ctx, config.ModFolderPath)
 	if err != nil {
 		return 0, err
 	}
-	return t.recoverINIs(paths), nil
+	return t.recoverINIs(ctx, paths), ctx.Err()
 }
 
 // RecoverBisects restores interrupted sessions for every configured non-NTE game.
 //
 //wails:ignore
 func (t *Tools) RecoverBisects(ctx context.Context) error {
+	if err := t.beginBisectRecovery(); err != nil {
+		return err
+	}
+	defer t.endBisectRecovery()
+
 	client, err := t.requireClient()
 	if err != nil {
 		return err
@@ -413,19 +423,38 @@ func (t *Tools) RecoverBisects(ctx context.Context) error {
 		return err
 	}
 	for _, game := range games {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if game.ModFolderPath == "" || game.Importer != nil && *game.Importer == "NTE" {
 			continue
 		}
 		if err := t.recoverD3dxBackupLocked(ctx, game); err != nil {
 			t.logError(err, "ModBisect:d3dxRecover")
 		}
-		orphans, err := listBisectOrphans(game.ModFolderPath)
+		orphans, err := listBisectOrphans(ctx, game.ModFolderPath)
 		if err != nil {
 			return err
 		}
-		t.recoverINIs(orphans)
+		t.recoverINIs(ctx, orphans)
 	}
+	return ctx.Err()
+}
+
+func (t *Tools) beginBisectRecovery() error {
+	t.bisectMu.Lock()
+	defer t.bisectMu.Unlock()
+	if t.bisect != nil || t.bisectRecovering {
+		return errors.New("cannot recover while a bisect session is active")
+	}
+	t.bisectRecovering = true
 	return nil
+}
+
+func (t *Tools) endBisectRecovery() {
+	t.bisectMu.Lock()
+	t.bisectRecovering = false
+	t.bisectMu.Unlock()
 }
 
 func (t *Tools) requireBisectGame(ctx context.Context, game string) (db.GamePathRow, error) {
@@ -487,9 +516,12 @@ func (t *Tools) shutdownBisect() error {
 	return t.cancelBisectLocked()
 }
 
-func (t *Tools) recoverINIs(paths []string) int {
+func (t *Tools) recoverINIs(ctx context.Context, paths []string) int {
 	restored := 0
 	for _, original := range paths {
+		if ctx.Err() != nil {
+			break
+		}
 		disabled := bisectDisabledPath(original)
 		if _, err := os.Stat(original); err == nil {
 			if err := os.Remove(disabled); err == nil || errors.Is(err, os.ErrNotExist) {
@@ -753,9 +785,12 @@ func keepBisectINIDisabled(originalPath, style string) error {
 	return nil
 }
 
-func listBisectOrphans(root string) ([]string, error) {
+func listBisectOrphans(ctx context.Context, root string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			return err
 		}

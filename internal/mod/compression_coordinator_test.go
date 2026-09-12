@@ -810,6 +810,85 @@ func TestCompressionWatcherMergesMultipleModScopes(t *testing.T) {
 	t.Fatal("watcher did not process every changed mod scope")
 }
 
+type blockingReconcileImporterSource struct {
+	inner   compressionImporterSource
+	mu      sync.Mutex
+	calls   int
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+// GetEnabledImporters lets the first call (watcher setup) through and blocks
+// the second one (the reconcile pass) until the test releases it.
+func (s *blockingReconcileImporterSource) GetEnabledImporters(
+	ctx context.Context,
+) ([]xxmi.EnabledImporter, error) {
+	s.mu.Lock()
+	s.calls++
+	blocking := s.calls > 1
+	s.mu.Unlock()
+	if !blocking {
+		return s.inner.GetEnabledImporters(ctx)
+	}
+	s.once.Do(func() { close(s.started) })
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.release:
+	}
+	return s.inner.GetEnabledImporters(ctx)
+}
+
+func TestWaitCompressionPassWaitsForInitialReconcile(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	importer := filepath.Join(base, "Importer")
+	if err := os.MkdirAll(filepath.Join(importer, "Mods"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := &blockingReconcileImporterSource{
+		inner:   compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	m := NewWithOptions(Options{Settings: settings, XXMI: source})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	awaitZstdSignal(t, source.started)
+
+	waited := make(chan error, 1)
+	go func() { waited <- m.WaitCompressionPass(ctx) }()
+	select {
+	case err := <-waited:
+		t.Fatalf("wait returned before reconciliation finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := m.WaitCompressionPass(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("wait with canceled context = %v", err)
+	}
+	close(source.release)
+	if err := awaitZstdResult(t, waited); err != nil {
+		t.Fatal(err)
+	}
+	if state := m.compression.snapshot(); state.Status != "idle" {
+		t.Fatalf("state = %+v", state)
+	}
+}
+
 func waitForCompression(t *testing.T, coordinator *compressionCoordinator) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
