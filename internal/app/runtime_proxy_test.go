@@ -2,13 +2,10 @@ package app
 
 import (
 	"context"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
@@ -89,16 +86,6 @@ func TestProxyStartupDisabledUsesSystemProxyAndIgnoresEnvironment(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer func() { _ = settings.Close() }()
-	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "direct")
-	}))
-	defer origin.Close()
-	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
-	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
-	t.Setenv("http_proxy", "http://127.0.0.1:1")
-	t.Setenv("https_proxy", "http://127.0.0.1:1")
-	t.Setenv("NO_PROXY", "")
-	t.Setenv("no_proxy", "")
 	var args []string
 	client := infra.NewClient()
 	rt := &runtime{setting: settings, http: client}
@@ -113,17 +100,12 @@ func TestProxyStartupDisabledUsesSystemProxyAndIgnoresEnvironment(t *testing.T) 
 	if !strings.Contains(joined, "--proxy-server=http://127.0.0.1:") {
 		t.Fatal("WebView is not using the shared system proxy resolver")
 	}
+	// The shared client resolves the current user's Windows settings per request
+	// and never consults the environment, so this test must not depend on the
+	// host's proxy configuration. Requests through the resolver are covered in
+	// internal/infra, where the OS boundary is pinned.
 	transport := client.HTTPClient().Transport
 	if _, direct := transport.(*http.Transport); direct {
 		t.Fatal("Go client is missing the system proxy resolver")
-	}
-	response, err := (&http.Client{Transport: transport, Timeout: time.Second}).Get(origin.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(response.Body)
-	_ = response.Body.Close()
-	if err != nil || string(body) != "direct" {
-		t.Fatalf("body=%s err=%v", body, err)
 	}
 }
