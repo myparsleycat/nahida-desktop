@@ -1,4 +1,4 @@
-package tools
+package togglepersist
 
 import (
 	"encoding/json"

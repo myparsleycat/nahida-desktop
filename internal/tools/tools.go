@@ -13,6 +13,7 @@ import (
 	"nahida.live/desktop/internal/platform"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 	"nahida.live/desktop/internal/tools/texture"
+	togglepersist "nahida.live/desktop/internal/tools/toggle_persist"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -89,8 +90,6 @@ type Tools struct {
 	releaseCache  map[string]releaseCacheEntry
 	releaseCalls  map[string]*releaseFetchCall
 
-	persistMu sync.Mutex
-
 	wuwaDiagnostic infra.DiagnosticThrottle
 	wuwaMu         sync.Mutex
 	wuwaInstallMu  sync.Mutex
@@ -107,7 +106,7 @@ type Tools struct {
 
 	modelViewer *modelviewer.Service
 	texture     *texture.Service
-	persist     *persistEngine
+	persist     *togglepersist.Service
 
 	fixInspectors         *FixInspectorRegistry
 	fixInspectionRunMu    sync.Mutex
@@ -165,37 +164,18 @@ func NewWithOptions(opts Options) *Tools {
 			Download:  opts.Download,
 			Archive:   opts.Archive,
 		}),
-		persist:             newPersistEngine(),
+		persist: togglepersist.NewWithOptions(togglepersist.Options{
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			Settings:  opts.Settings,
+			XXMI:      opts.XXMI,
+		}),
 		fixInspectors:       NewFixInspectorRegistry(),
 		fixInspections:      make(map[string]*trackedFixInspection),
 		fixInspectionCtx:    fixInspectionCtx,
 		fixInspectionCancel: fixInspectionCancel,
 	}
 	t.fixInspectors.Register(NewZZMIFixInspector(t))
-	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }
-	t.persist.infoFn = func(message string) {
-		if t.log != nil {
-			t.log.Info(message, "TogglePersist")
-		}
-	}
-	var persistDiagnostics infra.DiagnosticThrottle
-	t.persist.diagnosticFn = func(err error, message string) {
-		persistDiagnostics.Report(
-			t.log,
-			err,
-			"TogglePersist",
-			infra.Diagnostic{
-				Operation: "toggle-persist",
-				Stage:     "background",
-				Fields:    map[string]any{"context": message},
-			},
-		)
-	}
-	t.persist.errorFn = func(message string) {
-		if t.log != nil {
-			t.log.Error(message, "TogglePersist")
-		}
-	}
 	return t
 }
 
