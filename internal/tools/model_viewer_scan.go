@@ -412,6 +412,18 @@ func buildModelViewerDirectScannedMeshesAt(
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, error) {
+	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
+	return buildModelViewerDirectScannedMeshesPrepared(iniPath, modDir, sections, variables, resources, cache, timing)
+}
+
+func buildModelViewerDirectScannedMeshesPrepared(
+	iniPath, modDir string,
+	sections []modINISection,
+	variables map[string]any,
+	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
+	timing *modelViewerMeshBuildTiming,
+) ([]modelViewerDirectMesh, error) {
 	stageStartedAt := time.Now()
 	records, fallbackVB0, err := collectModelViewerSymbolicDrawRecords(sections, variables)
 	if err != nil {
@@ -430,7 +442,6 @@ func buildModelViewerDirectScannedMeshesAt(
 		)
 	}
 	stageStartedAt = time.Now()
-	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
 	layoutName := detectModelViewerLayout(sections, resources)
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {

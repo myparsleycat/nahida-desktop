@@ -37,9 +37,7 @@ func modelViewerDNFAnd(left, right ModelViewerDNF) ModelViewerDNF {
 	var output ModelViewerDNF
 	for _, leftGroup := range left {
 		for _, rightGroup := range right {
-			merged, possible := simplifyModelViewerDNFGroup(
-				append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...),
-			)
+			merged, possible := mergeModelViewerDNFGroup(leftGroup, rightGroup)
 			if possible && !containsModelViewerDNFGroup(output, merged) {
 				output = append(output, merged)
 			}
@@ -58,14 +56,35 @@ func modelViewerDNFIntersects(left, right ModelViewerDNF) bool {
 	}
 	for _, leftGroup := range left {
 		for _, rightGroup := range right {
-			if _, possible := simplifyModelViewerDNFGroup(
-				append(append([]ModelViewerDNFClause(nil), leftGroup...), rightGroup...),
-			); possible {
+			if modelViewerDNFGroupsCompatible(leftGroup, rightGroup) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// Intersection only needs a contradiction check, not a materialized group.
+func modelViewerDNFGroupsCompatible(left, right []ModelViewerDNFClause) bool {
+	groups := [2][]ModelViewerDNFClause{left, right}
+	for gi, group := range groups {
+		for i, clause := range group {
+			key := modelViewerNormalizeKey(clause.Var)
+			for gj := gi; gj < len(groups); gj++ {
+				start := 0
+				if gi == gj {
+					start = i + 1
+				}
+				for _, other := range groups[gj][start:] {
+					if key == modelViewerNormalizeKey(other.Var) &&
+						(!clause.Negate && !other.Negate && clause.Value != other.Value || clause.Negate != other.Negate && clause.Value == other.Value) {
+						return false
+					}
+				}
+			}
+		}
+	}
+	return true
 }
 
 func modelViewerDNFOr(left, right ModelViewerDNF) ModelViewerDNF {
@@ -318,6 +337,58 @@ func buildModelViewerBoolAliases(sections []modINISection, variables map[string]
 }
 
 func simplifyModelViewerDNFGroup(group []ModelViewerDNFClause) ([]ModelViewerDNFClause, bool) {
+	return mergeModelViewerDNFGroup(group, nil)
+}
+
+func mergeModelViewerDNFGroup(left, right []ModelViewerDNFClause) ([]ModelViewerDNFClause, bool) {
+	// Small groups dominate draw conditions. Avoid temporary concatenation and
+	// nested maps while preserving the original clause order and normalization.
+	if len(left)+len(right) <= 8 {
+		var scratch [8]ModelViewerDNFClause
+		count := 0
+		for _, group := range [][]ModelViewerDNFClause{left, right} {
+			for _, clause := range group {
+				clause.Var = modelViewerNormalizeKey(clause.Var)
+				duplicate := false
+				for _, previous := range scratch[:count] {
+					if previous.Var != clause.Var {
+						continue
+					}
+					if previous == clause {
+						duplicate = true
+						break
+					}
+					if !previous.Negate && !clause.Negate ||
+						previous.Negate != clause.Negate && previous.Value == clause.Value {
+						return nil, false
+					}
+				}
+				if !duplicate {
+					scratch[count] = clause
+					count++
+				}
+			}
+		}
+		var output []ModelViewerDNFClause
+		for _, clause := range scratch[:count] {
+			fixed := false
+			if clause.Negate {
+				for _, other := range scratch[:count] {
+					if other.Var == clause.Var && !other.Negate {
+						fixed = true
+						break
+					}
+				}
+			}
+			if !fixed {
+				output = append(output, clause)
+			}
+		}
+		return output, true
+	}
+	group := make([]ModelViewerDNFClause, 0, len(left)+len(right))
+	group = append(group, left...)
+	group = append(group, right...)
 	var output []ModelViewerDNFClause
 	positive := make(map[string]string)
 	negative := make(map[string]map[string]bool)

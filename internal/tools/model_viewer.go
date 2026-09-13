@@ -405,9 +405,27 @@ func buildModelViewerDirectMeshesAt(
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
 	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
+	return buildModelViewerDirectMeshesPrepared(iniPath, modDir, assetPath, sections, resources, cache, timing)
+}
+
+func buildModelViewerDirectMeshesPrepared(
+	iniPath, modDir, assetPath string,
+	sections []modINISection,
+	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
+	timing *modelViewerMeshBuildTiming,
+) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
 	variables := collectModelViewerDefaultVariables(sections)
 	textures := collectModelViewerTextureBindings(sections, variables)
-	scanned, scanErr := buildModelViewerDirectScannedMeshesAt(iniPath, modDir, sections, variables, cache, timing)
+	scanned, scanErr := buildModelViewerDirectScannedMeshesPrepared(
+		iniPath,
+		modDir,
+		sections,
+		variables,
+		resources,
+		cache,
+		timing,
+	)
 	if scanErr != nil {
 		return nil, nil, nil, nil, scanErr
 	}

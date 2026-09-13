@@ -190,6 +190,42 @@ func readModelViewerAttribute(
 }
 
 func modelViewerCompactIndices(indices []uint32, vertexCount int, warn func(string)) ([]uint32, []uint32, bool) {
+	// Dense sources avoid two hash tables and sorting. Sparse sources retain
+	// the map path so a small draw cannot allocate for an enormous source VB.
+	if vertexCount > 0 && vertexCount <= 1<<20 && vertexCount <= len(indices)*2 {
+		lookup := make([]uint32, vertexCount)
+		count := 0
+		for _, source := range indices {
+			if uint64(source) >= uint64(vertexCount) {
+				if warn != nil {
+					warn(
+						fmt.Sprintf(
+							"Skipping compacted animation geometry: index %d exceeds vertex count %d",
+							source,
+							vertexCount,
+						),
+					)
+				}
+				return nil, nil, false
+			}
+			if lookup[source] == 0 {
+				count++
+				lookup[source] = 1
+			}
+		}
+		sources := make([]uint32, 0, count)
+		for source, used := range lookup {
+			if used != 0 {
+				lookup[source] = uint32(len(sources))
+				sources = append(sources, uint32(source))
+			}
+		}
+		remapped := make([]uint32, len(indices))
+		for index, source := range indices {
+			remapped[index] = lookup[source]
+		}
+		return remapped, sources, true
+	}
 	seen := make(map[uint32]bool)
 	sources := make([]uint32, 0, len(indices))
 	for _, source := range indices {

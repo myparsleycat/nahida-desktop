@@ -2,25 +2,29 @@ import { serializeDiagnostic } from "@shared/diagnostic";
 import type { ViewerComputeBinarySource, ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
 import {
-    computeCyclicPackedFrame,
+    createCyclicPackedComputer,
     validateCyclicPackedBuffers,
 } from "./model-viewer-compute-cyclic";
 import {
-    computePackedDualQuaternionFrame,
+    createPackedDualQuaternionComputer,
     validatePackedDualQuaternionBuffers,
 } from "./model-viewer-compute-dual-quaternion";
 import {
+    collectUsedVertices,
     compactGIMIShapePoseFrame,
-    computeGIMIShapePoseFrame,
+    createGIMIShapePoseComputer,
+    ensureGIMIShapePoseFrame,
+    type GIMIComputeOptions,
     type GIMIShapePoseBuffers,
     type GIMIShapePoseFrame,
-    validateGIMIShapePoseBuffers,
+    remapSourceIndices,
 } from "./model-viewer-compute-kernel";
 import {
     computePackedShapeFrame,
     type PackedShapeStageBuffers,
     validatePackedShapeBuffers,
 } from "./model-viewer-compute-packed-shape";
+import { decodePackedVertexSource } from "./model-viewer-packed-vertex";
 
 type ComputeMesh = {
     id: string;
@@ -43,8 +47,24 @@ type FrameRequest = {
     phaseSeconds: number;
 };
 
+type RecycleRequest = {
+    type: "recycle";
+    generation: number;
+    meshes: Array<{
+        meshId: string;
+        positions: ArrayBuffer;
+        normals: ArrayBuffer;
+        tangents?: ArrayBuffer;
+    }>;
+};
+
+type ActiveMesh = ComputeMesh & {
+    compactIndices: Uint32Array;
+    pool: GIMIShapePoseFrame[];
+};
+
 type WorkerScope = {
-    onmessage: ((event: MessageEvent<InitRequest | FrameRequest>) => void) | null;
+    onmessage: ((event: MessageEvent<InitRequest | FrameRequest | RecycleRequest>) => void) | null;
     postMessage(message: unknown, transfer?: Transferable[]): void;
 };
 
@@ -52,8 +72,16 @@ const scope = self as unknown as WorkerScope;
 let active:
     | {
           generation: number;
-          meshes: Array<ComputeMesh & { sourceIndices: Uint32Array }>;
-          compute: (poseFrame: number, phaseSeconds: number) => GIMIShapePoseFrame;
+          meshes: Map<string, ActiveMesh>;
+          vertexCount: number;
+          vertices?: Uint32Array;
+          scratch?: GIMIShapePoseFrame;
+          hasTangents: boolean;
+          compute: (
+              poseFrame: number,
+              phaseSeconds: number,
+              options?: GIMIComputeOptions,
+          ) => GIMIShapePoseFrame;
       }
     | undefined;
 
@@ -61,6 +89,10 @@ scope.onmessage = (event) => {
     const message = event.data;
     if (message.type === "init") {
         void initialize(message);
+        return;
+    }
+    if (message.type === "recycle") {
+        recycleBuffers(message);
         return;
     }
     computeFrame(message);
@@ -84,8 +116,39 @@ async function initialize(request: InitRequest): Promise<void> {
                 );
             }
         }
+        const usedVertices = collectUsedVertices(
+            meshes.map((mesh) => mesh.sourceIndices),
+            request.deformer.vertexCount,
+        );
+        const subset =
+            usedVertices.length === request.deformer.vertexCount ? undefined : usedVertices;
+        const compactIndices = subset
+            ? remapSourceIndices(
+                  meshes.map((mesh) => mesh.sourceIndices),
+                  usedVertices,
+                  request.deformer.vertexCount,
+              )
+            : meshes.map((mesh) => mesh.sourceIndices);
         const compute = await bindDeformerCompute(request.deformer);
-        active = { generation, meshes, compute };
+        active = {
+            generation,
+            vertexCount: request.deformer.vertexCount,
+            vertices: subset,
+            hasTangents:
+                request.deformer.kind === "gimi_shape_pose_v1" &&
+                request.deformer.base.stride === 40,
+            meshes: new Map(
+                meshes.map((mesh, index) => [
+                    mesh.id,
+                    {
+                        ...mesh,
+                        compactIndices: compactIndices[index]!,
+                        pool: [],
+                    },
+                ]),
+            ),
+            compute,
+        };
         scope.postMessage({ type: "ready", generation });
     } catch (error) {
         postError(generation, undefined, "initialize", error, request.deformer.base.url);
@@ -98,9 +161,18 @@ function computeFrame(request: FrameRequest): void {
         return;
     }
     try {
-        const frame = current.compute(request.poseFrame, request.phaseSeconds);
-        const meshes = current.meshes.map((mesh) => {
-            const compact = compactGIMIShapePoseFrame(frame, mesh.sourceIndices);
+        current.scratch = ensureGIMIShapePoseFrame(
+            current.vertices?.length ?? current.vertexCount,
+            current.hasTangents,
+            current.scratch,
+        );
+        const frame = current.compute(request.poseFrame, request.phaseSeconds, {
+            vertices: current.vertices,
+            out: current.scratch,
+        });
+        current.scratch = frame;
+        const meshes = Array.from(current.meshes.values(), (mesh) => {
+            const compact = compactGIMIShapePoseFrame(frame, mesh.compactIndices, mesh.pool.pop());
             return {
                 meshId: mesh.id,
                 positions: compact.positions.buffer,
@@ -121,33 +193,86 @@ function computeFrame(request: FrameRequest): void {
     }
 }
 
+function recycleBuffers(request: RecycleRequest): void {
+    const current = active;
+    if (!current || current.generation !== request.generation) {
+        return;
+    }
+    for (const mesh of request.meshes) {
+        const target = current.meshes.get(mesh.meshId);
+        if (!target) {
+            continue;
+        }
+        target.pool.push({
+            positions: new Float32Array(mesh.positions),
+            normals: new Float32Array(mesh.normals),
+            tangents: mesh.tangents ? new Float32Array(mesh.tangents) : undefined,
+        });
+    }
+}
+
 async function bindDeformerCompute(
     deformer: ViewerComputeDeformer,
-): Promise<(poseFrame: number, phaseSeconds: number) => GIMIShapePoseFrame> {
+): Promise<
+    (poseFrame: number, phaseSeconds: number, options?: GIMIComputeOptions) => GIMIShapePoseFrame
+> {
     switch (deformer.kind) {
         case "gimi_cyclic_packed_shape_v1": {
             const stages = await loadPackedShapeStages(deformer);
             validatePackedShapeBuffers(deformer, stages);
-            return (_poseFrame, phaseSeconds) =>
-                computePackedShapeFrame(deformer, stages, phaseSeconds);
+            const prepared = preparePackedShapeStages(deformer, stages);
+            return (_poseFrame, phaseSeconds, options) =>
+                computePackedShapeFrame(prepared.deformer, prepared.stages, phaseSeconds, options);
         }
         case "gimi_cyclic_packed_v1": {
             const buffers = await loadShapePoseBuffers(deformer);
             validateCyclicPackedBuffers(deformer, buffers);
-            return (poseFrame) => computeCyclicPackedFrame(deformer, buffers, poseFrame);
+            const prepared = prepareShapePoseBuffers(deformer, buffers);
+            const compute = createCyclicPackedComputer(prepared.deformer, prepared.buffers);
+            return (poseFrame, _phaseSeconds, options) => compute(poseFrame, options);
         }
         case "gimi_packed_dual_quaternion_v1": {
             const buffers = await loadShapePoseBuffers(deformer);
             validatePackedDualQuaternionBuffers(deformer, buffers);
-            return (poseFrame) => computePackedDualQuaternionFrame(deformer, buffers, poseFrame);
+            const prepared = prepareShapePoseBuffers(deformer, buffers);
+            const compute = createPackedDualQuaternionComputer(prepared.deformer, prepared.buffers);
+            return (poseFrame, _phaseSeconds, options) => compute(poseFrame, options);
         }
         case "gimi_shape_pose_v1": {
             const buffers = await loadShapePoseBuffers(deformer);
-            validateGIMIShapePoseBuffers(deformer, buffers);
-            return (poseFrame, phaseSeconds) =>
-                computeGIMIShapePoseFrame(deformer, buffers, poseFrame, phaseSeconds);
+            return createGIMIShapePoseComputer(deformer, buffers);
         }
     }
+}
+
+function prepareShapePoseBuffers(
+    deformer: ViewerComputeDeformer,
+    buffers: GIMIShapePoseBuffers,
+): { deformer: ViewerComputeDeformer; buffers: GIMIShapePoseBuffers } {
+    const base = decodePackedVertexSource(deformer.base, buffers.base);
+    return {
+        deformer: { ...deformer, base: base.source },
+        buffers: { ...buffers, base: base.buffer },
+    };
+}
+
+function preparePackedShapeStages(
+    deformer: ViewerComputeDeformer,
+    stages: PackedShapeStageBuffers,
+): { deformer: ViewerComputeDeformer; stages: PackedShapeStageBuffers } {
+    const prepared = stages.map((buffers, index) => {
+        const stage = deformer.shapeStages[index]!;
+        const base = decodePackedVertexSource(stage.base, buffers.base);
+        const target = decodePackedVertexSource(stage.target, buffers.target);
+        return {
+            stage: { ...stage, base: base.source, target: target.source },
+            buffers: { base: base.buffer, target: target.buffer },
+        };
+    });
+    return {
+        deformer: { ...deformer, shapeStages: prepared.map((entry) => entry.stage) },
+        stages: prepared.map((entry) => entry.buffers),
+    };
 }
 
 async function loadShapePoseBuffers(

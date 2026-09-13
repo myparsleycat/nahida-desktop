@@ -87,6 +87,20 @@ function descriptor(frameCount = 2): ViewerComputeDeformer {
 }
 
 describe("cyclic packed compute kernel", () => {
+    it("does not read a zero-weight sample from the next frame", () => {
+        const frame = computeCyclicPackedFrame(
+            descriptor(),
+            {
+                base: packedVertex(1, 2, 3),
+                shapeTargets: [],
+                blend: blendBuffer(),
+                pose: concat([identityPose(), new Float32Array(12).fill(Number.NaN).buffer]),
+            },
+            0,
+        );
+        expect([...frame.positions]).toEqual([1, 2, 3]);
+        expect(frame.normals.every(Number.isFinite)).toBe(true);
+    });
     it("keeps bind-pose game coordinates through an identity palette", () => {
         const frame = computeCyclicPackedFrame(
             descriptor(),

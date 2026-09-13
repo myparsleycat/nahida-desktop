@@ -19,13 +19,15 @@ type modelViewerSymbolicBranchFrame struct {
 }
 
 type modelViewerSymbolicSectionState struct {
-	buffers         map[string][]modelViewerSymbolicAssignment
-	resolvedBuffers map[string][]modelViewerSymbolicAssignment
-	textures        map[string][]modelViewerSymbolicAssignment
-	thisHistory     []modelViewerSymbolicAssignment
-	nonDiffuse      []string
-	draws           []modelViewerDirectDrawRecord
-	explicitDraw    bool
+	buffers          map[string][]modelViewerSymbolicAssignment
+	resolvedBuffers  map[string][]modelViewerSymbolicAssignment
+	textures         map[string][]modelViewerSymbolicAssignment
+	resolvedTextures map[string][]modelViewerSymbolicAssignment
+	thisHistory      []modelViewerSymbolicAssignment
+	resolvedThis     []modelViewerSymbolicAssignment
+	nonDiffuse       []string
+	draws            []modelViewerDirectDrawRecord
+	explicitDraw     bool
 }
 
 type modelViewerSymbolicScanContext struct {
@@ -248,6 +250,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 				continue
 			}
 			if modelViewerNormalizeKey(key) == "this" {
+				state.resolvedThis = nil
 				state.thisHistory = append(
 					state.thisHistory,
 					modelViewerSymbolicAssignment{
@@ -261,6 +264,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 				state.nonDiffuse = appendUniqueModelViewer(state.nonDiffuse, resource)
 			}
 			if role, resource, authored, texture := modelViewerTextureAssignment(key, value, c.sectionName); texture {
+				delete(state.resolvedTextures, role)
 				state.textures[role] = append(
 					state.textures[role],
 					modelViewerSymbolicAssignment{
@@ -317,7 +321,10 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 	for _, assignment := range textures {
 		authored = authored || assignment.authored && assignment.role == "diffuse"
 	}
-	thisFiles := modelViewerSymbolicResourceFiles(state.thisHistory, drawConditions)
+	if state.resolvedThis == nil && len(state.thisHistory) != 0 {
+		state.resolvedThis = effectiveModelViewerSymbolicAssignments(state.thisHistory)
+	}
+	thisFiles := modelViewerSymbolicResolvedResourceFiles(state.resolvedThis, drawConditions)
 	records := make([]modelViewerDirectDrawRecord, 0, len(states))
 	for _, variant := range states {
 		recordDraw := draw
@@ -506,7 +513,15 @@ func modelViewerSymbolicTextureHistory(
 ) []modelViewerDirectTextureAssignment {
 	var output []modelViewerDirectTextureAssignment
 	for role, history := range state.textures {
-		for _, assignment := range effectiveModelViewerSymbolicAssignments(history) {
+		resolved, cached := state.resolvedTextures[role]
+		if !cached {
+			resolved = effectiveModelViewerSymbolicAssignments(history)
+			if state.resolvedTextures == nil {
+				state.resolvedTextures = make(map[string][]modelViewerSymbolicAssignment)
+			}
+			state.resolvedTextures[role] = resolved
+		}
+		for _, assignment := range resolved {
 			conditions := modelViewerDNFAnd(drawConditions, assignment.conditions)
 			if len(conditions) == 0 {
 				continue
@@ -525,9 +540,12 @@ func modelViewerSymbolicTextureHistory(
 	return output
 }
 
-func modelViewerSymbolicResourceFiles(history []modelViewerSymbolicAssignment, conditions ModelViewerDNF) []string {
+func modelViewerSymbolicResolvedResourceFiles(
+	history []modelViewerSymbolicAssignment,
+	conditions ModelViewerDNF,
+) []string {
 	var output []string
-	for _, assignment := range effectiveModelViewerSymbolicAssignments(history) {
+	for _, assignment := range history {
 		if len(modelViewerDNFAnd(conditions, assignment.conditions)) > 0 {
 			output = appendUniqueModelViewer(output, assignment.resource)
 		}

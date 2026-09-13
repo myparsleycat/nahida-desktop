@@ -112,6 +112,9 @@ func (e *modelViewerEvaluator) evaluate(
 	}
 	resolved := viewerEvalApplyStateRules(mergeViewerEvalState(e.payload.DefaultState, state), e.payload.StateRules)
 	baseline := evaluateViewerTransport(e.payload, resolved)
+	// A blocking variable's alternative is identical across tested values.
+	// Bound retention to one candidate per variable for this request.
+	alternatives := make(map[string]modelViewerAlternative)
 	result := make([]ModelViewerIneffectiveValue, 0)
 	for _, variable := range e.payload.Variables {
 		if variable.ControlType == "slider" || len(variable.Values) == 0 {
@@ -138,7 +141,14 @@ func (e *modelViewerEvaluator) evaluate(
 			if viewerEvalStatesDiffer(baseline, next) {
 				continue
 			}
-			suggestions, err := e.suggestions(ctx, variable, modelViewerString(entry.Value), resolved, baseline)
+			suggestions, err := e.suggestions(
+				ctx,
+				variable,
+				modelViewerString(entry.Value),
+				resolved,
+				baseline,
+				alternatives,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -156,12 +166,19 @@ func (e *modelViewerEvaluator) evaluate(
 	return result, ctx.Err()
 }
 
+type modelViewerAlternative struct {
+	index     int
+	state     map[string]any
+	evaluated viewerEvalState
+}
+
 func (e *modelViewerEvaluator) suggestions(
 	ctx context.Context,
 	tested ModelViewerVariable,
 	value string,
 	state map[string]any,
 	baseline viewerEvalState,
+	alternatives map[string]modelViewerAlternative,
 ) ([]ModelViewerResolutionSuggestion, error) {
 	result := make([]ModelViewerResolutionSuggestion, 0)
 	for _, blocking := range e.blocking[tested.ID] {
@@ -169,17 +186,25 @@ func (e *modelViewerEvaluator) suggestions(
 		if !ok {
 			continue
 		}
-		for _, entry := range blocking.Values {
+		for entryIndex, entry := range blocking.Values {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 			if modelViewerString(current) == modelViewerString(entry.Value) {
 				continue
 			}
-			alternative := applyViewerVariableSelection(state, blocking, entry.Value)
-			testState := applyViewerVariableSelection(alternative, tested, value)
+			candidate, cached := alternatives[blocking.ID]
+			if !cached || candidate.index != entryIndex {
+				candidate = modelViewerAlternative{
+					index: entryIndex,
+					state: applyViewerVariableSelection(state, blocking, entry.Value),
+				}
+				candidate.evaluated = evaluateViewerTransport(e.payload, candidate.state)
+				alternatives[blocking.ID] = candidate
+			}
+			testState := applyViewerVariableSelection(candidate.state, tested, value)
 			testEval := evaluateViewerTransport(e.payload, testState)
-			if !viewerEvalStatesDiffer(evaluateViewerTransport(e.payload, alternative), testEval) ||
+			if !viewerEvalStatesDiffer(candidate.evaluated, testEval) ||
 				!viewerEvalStatesDiffer(baseline, testEval) {
 				continue
 			}

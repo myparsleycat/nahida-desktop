@@ -1,7 +1,11 @@
 import type { ViewerComputeDeformer, ViewerComputeShapeStage } from "@shared/mod-viewer/types";
 
-import type { GIMIShapePoseFrame } from "./model-viewer-compute-kernel";
-
+import {
+    ensureGIMIShapePoseFrame,
+    forEachComputeVertex,
+    type GIMIComputeOptions,
+    type GIMIShapePoseFrame,
+} from "./model-viewer-compute-kernel";
 import {
     normalizePackedVectors,
     preparedPackedVertices,
@@ -50,6 +54,7 @@ export function computePackedShapeFrame(
     deformer: ViewerComputeDeformer,
     stages: PackedShapeStageBuffers,
     phaseSeconds: number,
+    options?: GIMIComputeOptions,
 ): GIMIShapePoseFrame {
     validatePackedShapeBuffers(deformer, stages);
     const { stage, index, localTime } = packedShapeStageAt(deformer, phaseSeconds);
@@ -62,11 +67,15 @@ export function computePackedShapeFrame(
         stage.bias;
     const base = preparedPackedVertices(stage.base, stages[index]!.base);
     const target = preparedPackedVertices(stage.target, stages[index]!.target);
-    const positions = new Float32Array(deformer.vertexCount * 3);
-    const normals = new Float32Array(deformer.vertexCount * 3);
-    for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
+    const vertices = options?.vertices;
+    const { positions, normals } = ensureGIMIShapePoseFrame(
+        vertices?.length ?? deformer.vertexCount,
+        false,
+        options?.out,
+    );
+    forEachComputeVertex(deformer.vertexCount, vertices, (vertex, destIndex) => {
         const source = vertex * 7;
-        const dest = vertex * 3;
+        const dest = destIndex * 3;
         for (let axis = 0; axis < 3; axis += 1) {
             const from = base[source + axis]!;
             const to = target[source + axis]!;
@@ -77,7 +86,7 @@ export function computePackedShapeFrame(
             const to = target[source + 4 + axis]!;
             normals[dest + axis] = from + (to - from) * weight;
         }
-    }
+    });
     normalizePackedVectors(normals);
     return { positions, normals };
 }

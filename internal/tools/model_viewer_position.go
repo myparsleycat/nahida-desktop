@@ -22,6 +22,7 @@ type modelViewerPositionCacheEntry struct {
 
 type modelViewerPositionCache struct {
 	mu      sync.Mutex
+	decode  chan struct{}
 	entries map[string]*list.Element
 	order   list.List
 	bytes   int
@@ -33,16 +34,39 @@ func (c *modelViewerPositionCache) load(
 	key string,
 	read func(context.Context) ([]byte, error),
 ) ([]byte, error) {
-	// Serialize misses to bound transient decode memory as well as retained bytes.
+	// Keep cache hits independent of disk I/O and decoding. Misses still share
+	// one execution slot, preserving the existing transient memory bound.
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if err := ctx.Err(); err != nil {
+		c.mu.Unlock()
 		return nil, err
 	}
 	if hit := c.entries[key]; hit != nil {
 		c.order.MoveToFront(hit)
+		c.mu.Unlock()
 		return hit.Value.(modelViewerPositionCacheEntry).data, nil
 	}
+	if c.decode == nil {
+		c.decode = make(chan struct{}, 1)
+	}
+	decode := c.decode
+	c.mu.Unlock()
+	select {
+	case decode <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-decode }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if hit := c.entries[key]; hit != nil {
+		c.order.MoveToFront(hit)
+		c.mu.Unlock()
+		return hit.Value.(modelViewerPositionCacheEntry).data, nil
+	}
+	c.mu.Unlock()
 	data, err := read(ctx)
 	if err != nil {
 		return nil, err
@@ -50,6 +74,8 @@ func (c *modelViewerPositionCache) load(
 	if len(data) > c.limit {
 		return data, nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for c.bytes+len(data) > c.limit {
 		oldest := c.order.Back()
 		entry := oldest.Value.(modelViewerPositionCacheEntry)

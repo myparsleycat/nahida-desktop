@@ -382,13 +382,20 @@ type modelViewerInterleavedBuffers struct {
 }
 
 type modelViewerBufferCache struct {
-	mu          sync.Mutex
-	files       map[string][]byte
-	indices     map[string][]uint32
-	geometries  map[string]*modelViewerGeometry
-	pairs       map[string]modelViewerPairedBuffers
-	fmts        map[string]modelViewerFmtCacheEntry
-	interleaved map[string]modelViewerInterleavedBuffers
+	mu              sync.Mutex
+	geometryPending map[string]*modelViewerGeometryPending
+	files           map[string][]byte
+	indices         map[string][]uint32
+	geometries      map[string]*modelViewerGeometry
+	pairs           map[string]modelViewerPairedBuffers
+	fmts            map[string]modelViewerFmtCacheEntry
+	interleaved     map[string]modelViewerInterleavedBuffers
+}
+
+type modelViewerGeometryPending struct {
+	done     chan struct{}
+	geometry *modelViewerGeometry
+	err      error
 }
 
 type modelViewerPairedBuffers struct {
@@ -487,17 +494,27 @@ func (c *modelViewerBufferCache) geometry(
 		c.mu.Unlock()
 		return cached, nil
 	}
+	if pending := c.geometryPending[key]; pending != nil {
+		c.mu.Unlock()
+		<-pending.done
+		return pending.geometry, pending.err
+	}
+	if c.geometryPending == nil {
+		c.geometryPending = make(map[string]*modelViewerGeometryPending)
+	}
+	pending := &modelViewerGeometryPending{done: make(chan struct{})}
+	c.geometryPending[key] = pending
 	c.mu.Unlock()
 	geometry, err := build()
-	if err != nil {
-		return nil, err
-	}
-	if geometry != nil {
-		c.mu.Lock()
+	c.mu.Lock()
+	if err == nil && geometry != nil {
 		c.geometries[key] = geometry
-		c.mu.Unlock()
 	}
-	return geometry, nil
+	pending.geometry, pending.err = geometry, err
+	delete(c.geometryPending, key)
+	close(pending.done)
+	c.mu.Unlock()
+	return geometry, err
 }
 
 func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
@@ -603,6 +620,17 @@ func (c *modelViewerBufferCache) paired(
 }
 
 func modelViewerNormalizeKey(value string) string {
+	// Most internal identifiers are already normalized.
+	clean := true
+	for i := range len(value) {
+		if c := value[i]; (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return value
+	}
 	var builder strings.Builder
 	for _, char := range strings.ToLower(value) {
 		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
