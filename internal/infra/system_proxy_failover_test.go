@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,9 +47,19 @@ func TestSystemProxyPACFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = proxyRelay.Close() }()
-	var proxyHits atomic.Int32
+	var (
+		proxyHits atomic.Int32
+		hitMu     sync.Mutex
+		hitLogs   []string
+	)
 	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		proxyHits.Add(1)
+		count := proxyHits.Add(1)
+		hitMu.Lock()
+		hitLogs = append(
+			hitLogs,
+			fmt.Sprintf("#%d: %s %s (Host: %s, Proto: %s)", count, r.Method, r.URL.String(), r.Host, r.Proto),
+		)
+		hitMu.Unlock()
 		if r.Method == http.MethodConnect {
 			proxyRelay.ServeHTTP(w, r)
 			return
@@ -64,16 +75,17 @@ func TestSystemProxyPACFailover(t *testing.T) {
 	_ = dead.Close()
 	pac := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
-		_, _ = fmt.Fprintf(
-			w,
+		body := fmt.Sprintf(
 			`function FindProxyForURL(url,host){return "PROXY %s; PROXY %s; DIRECT";}`,
 			deadAddress,
 			strings.TrimPrefix(healthy.URL, "http://"),
 		)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer pac.Close()
+	pacURL := fmt.Sprintf("%s/proxy-%d.pac", pac.URL, time.Now().UnixNano())
 	resolver := systemProxyResolver{readConfig: func() (systemProxyConfig, error) {
-		return systemProxyConfig{autoConfigURL: pac.URL + "/proxy.pac", bypass: "<-loopback>"}, nil
+		return systemProxyConfig{autoConfigURL: pacURL, bypass: "<-loopback>"}, nil
 	}, resolveAuto: resolveWindowsAutoProxy}
 	network := directProxyTestNetwork()
 	network.Transport.TLSClientConfig = origin.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
@@ -88,11 +100,12 @@ func TestSystemProxyPACFailover(t *testing.T) {
 	endpoint, _ := url.Parse("http://" + relay.listener.Addr().String())
 	browser.Proxy = http.ProxyURL(endpoint)
 	defer browser.CloseIdleConnections()
+	host := fmt.Sprintf("pac-%d.invalid", time.Now().UnixNano())
 	for _, transport := range []http.RoundTripper{network.HTTPTransport(), browser} {
 		for _, scheme := range []string{"http", "https"} {
 			// A non-rewindable body must survive a failed first dial without being consumed.
 			body := &failoverTestBody{Reader: strings.NewReader("upload payload")}
-			request, _ := http.NewRequest(http.MethodPost, scheme+"://destination.invalid/upload", body)
+			request, _ := http.NewRequest(http.MethodPost, scheme+"://"+host+"/upload", body)
 			response, err := (&http.Client{Transport: transport, Timeout: 5 * time.Second}).Do(request)
 			if err != nil {
 				t.Fatal(err)
@@ -100,22 +113,29 @@ func TestSystemProxyPACFailover(t *testing.T) {
 			data, err := io.ReadAll(response.Body)
 			_ = response.Body.Close()
 			if err != nil || string(data) != "upload payload" {
-				t.Fatalf("body=%q err=%v", data, err)
+				t.Fatalf(
+					"scheme=%s transport=%T status=%d body=%q err=%v",
+					scheme,
+					transport,
+					response.StatusCode,
+					data,
+					err,
+				)
 			}
 		}
 	}
 	if proxyHits.Load() != 4 {
-		t.Fatalf("healthy proxy hits=%d", proxyHits.Load())
+		t.Fatalf("healthy proxy hits=%d:\n%s", proxyHits.Load(), strings.Join(hitLogs, "\n"))
 	}
-	healthy.Close()
 	// WinHTTP implicitly bypasses loopback during PAC evaluation. Freeze the
 	// already resolved external-host candidates to test DIRECT fallback against
 	// a reachable origin without relying on that native exception.
-	external, _ := http.NewRequest(http.MethodGet, "https://destination.invalid/file", nil)
+	external, _ := http.NewRequest(http.MethodGet, "https://"+host+"/file", nil)
 	candidates, err := resolver.proxiesForRequest(external)
 	if err != nil {
 		t.Fatal(err)
 	}
+	healthy.Close()
 	network.system.resolve = func(*http.Request) ([]*url.URL, error) { return candidates, nil }
 	network.system.CloseIdleConnections()
 	browser.CloseIdleConnections()

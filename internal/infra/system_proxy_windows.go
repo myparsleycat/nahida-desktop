@@ -154,6 +154,9 @@ func windowsAutoProxy(ctx context.Context, target string, config systemProxyConf
 		options.flags = 1           // WINHTTP_AUTOPROXY_AUTO_DETECT
 		options.autoDetectFlags = 3 // DHCP | DNS_A
 	}
+	// Do not let stale PAC downloads or cached evaluation results in the AutoProxy
+	// service persist across dynamic network configuration changes or unit test cycles.
+	options.flags |= 0x00080000 | 0x00100000 // WINHTTP_AUTOPROXY_NO_CACHE_CLIENT | WINHTTP_AUTOPROXY_NO_CACHE_SVC
 
 	// Register a single process callback; IDs prevent late callbacks from using
 	// released Go objects or a subsequently reused Windows handle.
