@@ -12,6 +12,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
+	"nahida.live/desktop/internal/tools/texture"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -96,13 +97,6 @@ type Tools struct {
 	wuwaAutoCancel context.CancelFunc
 	wuwaAutoDone   chan struct{}
 
-	textureRuntimeMu sync.Mutex
-	textureEventMu   sync.Mutex
-	textureMu        sync.Mutex
-	textureNextJob   uint64
-	textureState     TextureResizeProgressEvent
-	textureJobs      map[uint64]TextureResizeProgressEvent
-
 	peDiversifier PEDiversifier
 
 	touchMu       sync.Mutex
@@ -112,6 +106,7 @@ type Tools struct {
 	bodyShapeSessions map[string]*bodyShapeSession
 
 	modelViewer *modelviewer.Service
+	texture     *texture.Service
 	persist     *persistEngine
 
 	fixInspectors         *FixInspectorRegistry
@@ -142,23 +137,19 @@ func NewWithOptions(opts Options) *Tools {
 	}
 	fixInspectionCtx, fixInspectionCancel := context.WithCancel(context.Background())
 	t := &Tools{
-		log:           opts.Log,
-		emit:          opts.EventEmit,
-		notify:        opts.Notify,
-		settings:      opts.Settings,
-		xxmi:          opts.XXMI,
-		fs:            opts.FS,
-		http:          opts.HTTP,
-		download:      opts.Download,
-		archive:       opts.Archive,
-		protocol:      opts.Protocol,
-		githubRate:    opts.GitHubRate,
-		mod:           opts.Mod,
-		peDiversifier: opts.PEDiversifier,
-		textureState:  TextureResizeProgressEvent{Status: "idle"},
-		textureJobs: make(
-			map[uint64]TextureResizeProgressEvent,
-		),
+		log:               opts.Log,
+		emit:              opts.EventEmit,
+		notify:            opts.Notify,
+		settings:          opts.Settings,
+		xxmi:              opts.XXMI,
+		fs:                opts.FS,
+		http:              opts.HTTP,
+		download:          opts.Download,
+		archive:           opts.Archive,
+		protocol:          opts.Protocol,
+		githubRate:        opts.GitHubRate,
+		mod:               opts.Mod,
+		peDiversifier:     opts.PEDiversifier,
 		releaseCache:      make(map[string]releaseCacheEntry),
 		releaseCalls:      make(map[string]*releaseFetchCall),
 		touchSessions:     make(map[string]*touchSession),
@@ -167,6 +158,12 @@ func NewWithOptions(opts Options) *Tools {
 			Log:                    opts.Log,
 			Protocol:               opts.Protocol,
 			FindModelViewerPreview: opts.FindModelViewerPreview,
+		}),
+		texture: texture.NewWithOptions(texture.Options{
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			Download:  opts.Download,
+			Archive:   opts.Archive,
 		}),
 		persist:             newPersistEngine(),
 		fixInspectors:       NewFixInspectorRegistry(),
@@ -208,11 +205,17 @@ func (t *Tools) UseClient(client *db.Client) {
 	if t.githubRate != nil && client != nil {
 		t.githubRate.UseAppState(client.AppState)
 	}
+	if t.texture != nil {
+		t.texture.UseClient(client)
+	}
 }
 
 //wails:ignore
 func (t *Tools) UseAppData(data *appdata.Store) {
 	t.appData = data
+	if t.texture != nil {
+		t.texture.UseAppData(data)
+	}
 }
 
 func (t *Tools) appDataPath(relative string) (string, error) {

@@ -78,6 +78,11 @@ func copyFileOverwrite(source, target string) (returnErr error) {
 	return replaceAtomic(tempPath, target)
 }
 
+func regularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func removeFilePaths(paths []string, elevated bool) error {
 	if len(paths) == 0 {
 		return nil

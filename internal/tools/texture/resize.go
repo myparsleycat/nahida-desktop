@@ -1,4 +1,4 @@
-package tools
+package texture
 
 import (
 	"bytes"
@@ -86,13 +86,13 @@ type textureEncodedMetadata struct {
 	BackupCreated bool   `json:"backupCreated"`
 }
 
-func (t *Tools) GetTextureResizeState() TextureResizeProgressEvent {
+func (t *Service) GetTextureResizeState() TextureResizeProgressEvent {
 	t.textureMu.Lock()
 	defer t.textureMu.Unlock()
 	return t.textureState
 }
 
-func (t *Tools) ResizeTextureFolder(ctx context.Context, input TextureResizeRunInput) (TextureResizeResult, error) {
+func (t *Service) ResizeTextureFolder(ctx context.Context, input TextureResizeRunInput) (TextureResizeResult, error) {
 	target := strings.TrimSpace(input.TargetPath)
 	if target == "" {
 		return TextureResizeResult{}, contractError("Target path is required.")
@@ -119,7 +119,7 @@ func (t *Tools) ResizeTextureFolder(ctx context.Context, input TextureResizeRunI
 	)
 }
 
-func (t *Tools) ResizeTextureMod(
+func (t *Service) ResizeTextureMod(
 	ctx context.Context,
 	modPath string,
 	input TextureResizeModInput,
@@ -127,7 +127,7 @@ func (t *Tools) ResizeTextureMod(
 	return t.ResizeTextureFolder(ctx, TextureResizeRunInput{TargetPath: modPath, Settings: input.Settings})
 }
 
-func (t *Tools) ResizeTextureFile(ctx context.Context, input TextureResizeFileRunInput) (TextureResizeResult, error) {
+func (t *Service) ResizeTextureFile(ctx context.Context, input TextureResizeFileRunInput) (TextureResizeResult, error) {
 	filePath := strings.TrimSpace(input.FilePath)
 	if filePath == "" {
 		return TextureResizeResult{}, contractError("File path is required.")
@@ -154,7 +154,7 @@ func (t *Tools) ResizeTextureFile(ctx context.Context, input TextureResizeFileRu
 	)
 }
 
-func (t *Tools) saveFullTextureResizeSettings(
+func (t *Service) saveFullTextureResizeSettings(
 	ctx context.Context,
 	settings TextureResizeSettings,
 ) (TextureResizeSettings, error) {
@@ -166,7 +166,7 @@ func (t *Tools) saveFullTextureResizeSettings(
 	})
 }
 
-func (t *Tools) runTextureResizeJob(
+func (t *Service) runTextureResizeJob(
 	ctx context.Context,
 	path string,
 	settings TextureResizeSettings,
@@ -198,7 +198,7 @@ func (t *Tools) runTextureResizeJob(
 	return result, nil
 }
 
-func (t *Tools) beginTextureJob(running TextureResizeProgressEvent) uint64 {
+func (t *Service) beginTextureJob(running TextureResizeProgressEvent) uint64 {
 	t.textureEventMu.Lock()
 	defer t.textureEventMu.Unlock()
 	t.textureMu.Lock()
@@ -211,7 +211,7 @@ func (t *Tools) beginTextureJob(running TextureResizeProgressEvent) uint64 {
 	return jobID
 }
 
-func (t *Tools) settleTextureJob(jobID uint64, terminal TextureResizeProgressEvent) {
+func (t *Service) settleTextureJob(jobID uint64, terminal TextureResizeProgressEvent) {
 	t.textureEventMu.Lock()
 	defer t.textureEventMu.Unlock()
 	t.textureMu.Lock()
@@ -239,7 +239,7 @@ func (t *Tools) settleTextureJob(jobID uint64, terminal TextureResizeProgressEve
 	}
 }
 
-func (t *Tools) runTextureResize(
+func (t *Service) runTextureResize(
 	ctx context.Context,
 	target string,
 	settings TextureResizeSettings,
@@ -251,7 +251,7 @@ func (t *Tools) runTextureResize(
 	})
 }
 
-func (t *Tools) upscaleTextureFile(
+func (t *Service) upscaleTextureFile(
 	ctx context.Context,
 	path string,
 	settings TextureResizeSettings,
@@ -353,7 +353,7 @@ func (t *Tools) upscaleTextureFile(
 	}, nil
 }
 
-func (t *Tools) runNCNNUpscaler(
+func (t *Service) runNCNNUpscaler(
 	parent context.Context,
 	engine, binaryPath, modelsPath, inputPath, outputPath string,
 	settings TextureResizeSettings,
@@ -456,7 +456,7 @@ func buildNCNNUpscalerArgs(engine, modelsPath, inputPath, outputPath string, set
 	}
 }
 
-func (t *Tools) emitTextureUpscaleProgress(phase string, percent *float64, message *string, path string) {
+func (t *Service) emitTextureUpscaleProgress(phase string, percent *float64, message *string, path string) {
 	event := TextureUpscaleProgressEvent{
 		Phase:    phase,
 		Percent:  percent,

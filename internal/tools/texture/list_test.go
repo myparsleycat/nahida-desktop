@@ -1,4 +1,4 @@
-package tools
+package texture
 
 import (
 	"context"

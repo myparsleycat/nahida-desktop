@@ -1,4 +1,4 @@
-package tools
+package texture
 
 import (
 	"context"
@@ -176,7 +176,7 @@ func defaultTextureSettings() TextureResizeSettings {
 	}
 }
 
-func (t *Tools) GetTextureResizeSettings(ctx context.Context) (TextureResizeSettings, error) {
+func (t *Service) GetTextureResizeSettings(ctx context.Context) (TextureResizeSettings, error) {
 	client, err := t.requireClient()
 	if err != nil {
 		return TextureResizeSettings{}, err
@@ -227,7 +227,7 @@ func (t *Tools) GetTextureResizeSettings(ctx context.Context) (TextureResizeSett
 	return s, nil
 }
 
-func (t *Tools) SaveTextureResizeSettings(
+func (t *Service) SaveTextureResizeSettings(
 	ctx context.Context,
 	patch TextureResizeSettingsPatch,
 ) (TextureResizeSettings, error) {
@@ -286,7 +286,7 @@ func (t *Tools) SaveTextureResizeSettings(
 	return current, nil
 }
 
-func (t *Tools) ListTextureFolder(
+func (t *Service) ListTextureFolder(
 	ctx context.Context,
 	targetPath string,
 	patch *TextureResizeSettingsPatch,
@@ -336,7 +336,7 @@ func (t *Tools) ListTextureFolder(
 	return items, nil
 }
 
-func (t *Tools) ListTextureMod(
+func (t *Service) ListTextureMod(
 	ctx context.Context,
 	modPath string,
 	patch *TextureResizeSettingsPatch,

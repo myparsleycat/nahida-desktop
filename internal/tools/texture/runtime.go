@@ -1,4 +1,4 @@
-package tools
+package texture
 
 import (
 	"context"
@@ -81,7 +81,7 @@ var realcuganSpec = textureRuntimeSpec{
 	},
 }
 
-func (t *Tools) GetTextureUpscaleRuntimeStatus(ctx context.Context) (TextureUpscaleRuntimeStatuses, error) {
+func (t *Service) GetTextureUpscaleRuntimeStatus(ctx context.Context) (TextureUpscaleRuntimeStatuses, error) {
 	realesrgan, err := t.textureRuntimeStatus(ctx, realesrganSpec)
 	if err != nil {
 		return TextureUpscaleRuntimeStatuses{}, err
@@ -93,7 +93,7 @@ func (t *Tools) GetTextureUpscaleRuntimeStatus(ctx context.Context) (TextureUpsc
 	return TextureUpscaleRuntimeStatuses{Realesrgan: realesrgan, Realcugan: realcugan}, nil
 }
 
-func (t *Tools) textureRuntimeStatus(
+func (t *Service) textureRuntimeStatus(
 	ctx context.Context,
 	spec textureRuntimeSpec,
 ) (TextureUpscaleRuntimeStatus, error) {
@@ -141,7 +141,7 @@ func (t *Tools) textureRuntimeStatus(
 // installTextureUpscaleRuntime downloads and atomically promotes one pinned
 // ncnn-vulkan runtime. It is intentionally internal: Electron installed it on
 // demand from the file-upscale operation rather than exposing a separate IPC.
-func (t *Tools) installTextureUpscaleRuntime(
+func (t *Service) installTextureUpscaleRuntime(
 	ctx context.Context,
 	engine string,
 	progress func(string, *float64),
@@ -153,7 +153,7 @@ func (t *Tools) installTextureUpscaleRuntime(
 	return t.installTextureRuntime(ctx, spec, progress)
 }
 
-func (t *Tools) installTextureRuntime(
+func (t *Service) installTextureRuntime(
 	ctx context.Context,
 	spec textureRuntimeSpec,
 	progress func(string, *float64),
@@ -252,7 +252,7 @@ func (t *Tools) installTextureRuntime(
 	return status, nil
 }
 
-func (t *Tools) downloadTextureRuntimeArchive(
+func (t *Service) downloadTextureRuntimeArchive(
 	ctx context.Context,
 	spec textureRuntimeSpec,
 	archivePath string,
@@ -559,7 +559,7 @@ func regularFile(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-func (t *Tools) reportTextureCleanup(err error, path string) {
+func (t *Service) reportTextureCleanup(err error, path string) {
 	_ = infra.ReportError(
 		t.log,
 		err,

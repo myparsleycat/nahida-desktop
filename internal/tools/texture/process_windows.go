@@ -1,6 +1,6 @@
 //go:build windows
 
-package tools
+package texture
 
 import (
 	"os/exec"
