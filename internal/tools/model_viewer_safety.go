@@ -12,6 +12,7 @@ const (
 	maxModelViewerDraws            = 10_000
 	maxModelViewerBufferFileBytes  = int64(512 * 1024 * 1024)
 	maxModelViewerTotalBufferBytes = int64(2 * 1024 * 1024 * 1024)
+	maxModelViewerLinkHops         = 32
 )
 
 type modelViewerLoadBudget struct {
@@ -156,6 +157,16 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 	if !modelViewerPathWithin(ceiling, target) {
 		return "", contractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
+	// A filename authored inside the mod folder must also resolve there: a
+	// symlink or junction inside it must not redirect a read to a sibling
+	// folder.
+	if modelViewerPathWithin(root, target) {
+		realRoot, rootOK := resolveModelViewerLinkPath(root)
+		realTarget, targetOK := resolveModelViewerLinkPath(target)
+		if rootOK && targetOK && !modelViewerPathWithin(realRoot, realTarget) {
+			return "", contractError(fmt.Sprintf("Model Viewer resource link escapes the mod folder: %s", relative))
+		}
+	}
 	if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil {
 		resolvedCeiling := ceiling
 		if realCeiling, ceilingErr := filepath.EvalSymlinks(ceiling); ceilingErr == nil {
@@ -166,6 +177,58 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 		}
 	}
 	return filepath.Clean(target), nil
+}
+
+// resolveModelViewerLinkPath resolves symlinks and Windows junctions in path.
+// filepath.EvalSymlinks stops below a junction, so reparse points are
+// substituted component by component here instead. The second result reports
+// whether the path could be resolved.
+func resolveModelViewerLinkPath(path string) (string, bool) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", false
+	}
+	separator := string(filepath.Separator)
+	volume := filepath.VolumeName(absolute)
+	resolved := volume + separator
+	pending := strings.Split(strings.TrimPrefix(absolute[len(volume):], separator), separator)
+	hops := 0
+	for len(pending) > 0 {
+		component := pending[0]
+		pending = pending[1:]
+		candidate := filepath.Join(resolved, component)
+		link, linkErr := os.Readlink(candidate)
+		if linkErr != nil {
+			resolved = candidate
+			continue
+		}
+		hops++
+		if hops > maxModelViewerLinkHops {
+			return "", false
+		}
+		// Junction targets are stored as NT object paths.
+		target := strings.TrimPrefix(link, `\??\`)
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(candidate), target)
+		}
+		targetVolume := filepath.VolumeName(target)
+		resolved = targetVolume + separator
+		pending = append(
+			strings.Split(strings.TrimPrefix(target[len(targetVolume):], separator), separator),
+			pending...,
+		)
+	}
+	return filepath.Clean(resolved), true
+}
+
+// resolveModelViewerModBufferPath resolves a mod INI buffer filename and keeps
+// it inside modDir, so callers can read or key the file without re-checking.
+func resolveModelViewerModBufferPath(modDir, filename string) (string, bool) {
+	path, err := resolveModelViewerResourcePath(modDir, modDir, filename)
+	if err != nil || !modelViewerPathWithin(modDir, path) {
+		return "", false
+	}
+	return path, true
 }
 
 func modelViewerPathWithin(root, target string) bool {

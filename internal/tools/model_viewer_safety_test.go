@@ -3,7 +3,9 @@ package tools
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -21,6 +23,89 @@ func TestModelViewerSafetyAllowsOneParentAndRejectsFurtherEscape(t *testing.T) {
 	inside, err := resolveModelViewerResourcePath(root, filepath.Join(root, "parts"), `..\inside.buf`)
 	if err != nil || inside != filepath.Join(root, "inside.buf") {
 		t.Fatalf("inside=%q err=%v", inside, err)
+	}
+}
+
+func TestModelViewerSafetyRejectsDirectoryLinkEscape(t *testing.T) {
+	for _, kind := range []string{"junction", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			base := t.TempDir()
+			modDir := filepath.Join(base, "MyMod")
+			outsideDir := filepath.Join(base, "Outside")
+			for _, dir := range []string{modDir, outsideDir} {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(outsideDir, "position.buf"), make([]byte, 3*40), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(modDir, "linked")
+			createViewerDirectoryLink(t, kind, outsideDir, link)
+			if _, err := os.ReadFile(filepath.Join(link, "position.buf")); err != nil {
+				t.Fatalf("directory link does not redirect reads: %v", err)
+			}
+
+			if _, err := resolveModelViewerResourcePath(modDir, modDir, `linked\position.buf`); err == nil {
+				t.Fatal("directory link escaping the mod folder was resolved")
+			}
+			if path, ok := resolveModelViewerModBufferPath(modDir, `linked\position.buf`); ok {
+				t.Fatalf("directory link escape was accepted as a mod buffer path: %s", path)
+			}
+		})
+	}
+}
+
+func TestModelViewerSafetyKeepsDirectoryLinkedModFiles(t *testing.T) {
+	for _, kind := range []string{"junction", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			base := t.TempDir()
+			modDir := filepath.Join(base, "MyMod")
+			meshDir := filepath.Join(modDir, "meshes")
+			if err := os.MkdirAll(meshDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(meshDir, "position.buf"), make([]byte, 3*40), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			createViewerDirectoryLink(t, kind, meshDir, filepath.Join(modDir, "linked"))
+			path, ok := resolveModelViewerModBufferPath(modDir, `linked\position.buf`)
+			if !ok {
+				t.Fatal("directory link inside the mod folder was rejected")
+			}
+			if data, err := os.ReadFile(path); err != nil || len(data) != 3*40 {
+				t.Fatalf("resolved path %q is not readable: %v", path, err)
+			}
+
+			alias := filepath.Join(base, "Alias")
+			createViewerDirectoryLink(t, kind, modDir, alias)
+			path, ok = resolveModelViewerModBufferPath(alias, `linked\position.buf`)
+			if !ok {
+				t.Fatal("mod folder reached through a directory link was rejected")
+			}
+			if data, err := os.ReadFile(path); err != nil || len(data) != 3*40 {
+				t.Fatalf("resolved path %q is not readable: %v", path, err)
+			}
+		})
+	}
+}
+
+// createViewerDirectoryLink links target into link as the requested kind.
+// Windows junctions need no symbolic link privilege, unlike directory symlinks,
+// so tests that cover both skip when the platform cannot create one.
+func createViewerDirectoryLink(t *testing.T, kind, target, link string) {
+	t.Helper()
+	if kind == "symlink" {
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("directory symlinks unavailable: %v", err)
+		}
+		return
+	}
+	if runtime.GOOS != "windows" {
+		t.Skip("junctions are Windows only")
+	}
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("junction creation unavailable: %v (%s)", err, out)
 	}
 }
 

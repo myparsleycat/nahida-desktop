@@ -411,6 +411,45 @@ stride = 20`
 	}
 }
 
+func TestModelViewerScannedMeshesRejectIndexBufferOutsideModFolder(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	name := filepath.Base(dir) + "-outside.ib"
+	outside := filepath.Join(filepath.Dir(dir), name)
+	if err := os.WriteFile(outside, modelViewerUint32Bytes([]uint32{0, 1, 2}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+	iniText := `[TextureOverrideBody]
+ib = ResourceEscapingIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceEscapingIB]
+filename = ..\` + name + `
+format = DXGI_FORMAT_R32_UINT
+` + viewerBodyResources
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(iniText)
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		iniPath,
+		dir,
+		sections,
+		collectModelViewerDefaultVariables(sections),
+		newModelViewerBufferCache(),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 0 {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+}
+
 func TestModelViewerScannedMeshesPropagatePairedReadErrors(t *testing.T) {
 	dir := t.TempDir()
 	iniText := `[TextureOverrideBody]

@@ -440,6 +440,7 @@ func buildModelViewerDirectScannedMeshesAt(
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
+	streamOutputs := collectModelViewerStreamOutputs(modDir, sections, resourceMap, cache)
 	var packedResources map[string]int
 	var inlineResources map[string]modelViewerInlineObjectLayout
 	if layoutName != "wwmi" {
@@ -479,6 +480,21 @@ func buildModelViewerDirectScannedMeshesAt(
 			packedResources,
 			inlineResources,
 		)
+		if source.kind == "" && layoutName != "wwmi" {
+			resource := modelViewerNormalizeKey(draw.state.vb0)
+			if stream, ok := streamOutputs[resource]; ok {
+				ib := resourceMap[modelViewerNormalizeKey(draw.state.ib)]
+				tc := resourceMap[modelViewerNormalizeKey(draw.state.vb1)]
+				if ib.Filename != "" && tc.Filename != "" {
+					source = modelViewerDrawVertexSource{
+						kind: modelViewerDrawVertexMihoyo, ib: ib, texcoord: tc,
+						position:     modelViewerResource{Name: draw.state.vb0, Stride: stream.stride},
+						positionData: stream.data,
+						streamKey:    iniPath + "|" + resource,
+					}
+				}
+			}
+		}
 		if source.kind == "" {
 			if source.missingTexcoord && timing != nil {
 				timing.SkippedMissingTexcoord = true
@@ -507,7 +523,10 @@ func buildModelViewerDirectScannedMeshesAt(
 			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
 			continue
 		}
-		ibPath := filepath.Join(modDir, filepath.FromSlash(ib.Filename))
+		ibPath, ibOK := resolveModelViewerModBufferPath(modDir, ib.Filename)
+		if !ibOK {
+			continue
+		}
 		ibRaw, err := cache.read(ibPath)
 		if err != nil {
 			continue
