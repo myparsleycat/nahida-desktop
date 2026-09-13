@@ -523,7 +523,10 @@ func buildModelViewerDirectScannedMeshesAt(
 			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
 			continue
 		}
-		ibPath := filepath.Join(modDir, filepath.FromSlash(ib.Filename))
+		ibPath, ibOK := resolveModelViewerModBufferPath(modDir, ib.Filename)
+		if !ibOK {
+			continue
+		}
 		ibRaw, err := cache.read(ibPath)
 		if err != nil {
 			continue
