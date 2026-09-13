@@ -168,6 +168,16 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 	return filepath.Clean(target), nil
 }
 
+// resolveModelViewerModBufferPath resolves a mod INI buffer filename and keeps
+// it inside modDir, so callers can read or key the file without re-checking.
+func resolveModelViewerModBufferPath(modDir, filename string) (string, bool) {
+	path, err := resolveModelViewerResourcePath(modDir, modDir, filename)
+	if err != nil || !modelViewerPathWithin(modDir, path) {
+		return "", false
+	}
+	return path, true
+}
+
 func modelViewerPathWithin(root, target string) bool {
 	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||

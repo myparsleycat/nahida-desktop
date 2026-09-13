@@ -99,6 +99,98 @@ filename = diffuse.png
 	}
 }
 
+func TestModelViewerStreamOutputFinalizesTrailingDraw(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometryN(t, dir, 3)
+	second := make([]byte, 3*40)
+	for i := range 3 {
+		binary.LittleEndian.PutUint32(second[i*40:], math.Float32bits(float32(10+i)))
+	}
+	writeTextureFile(t, dir, "second.buf", second)
+	writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $ready = 0
+[TextureOverrideBody]
+if $ready == 0
+ib = ResourceBodyIB
+vb0 = ResourceCurrent
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+endif
+[ResourceCurrent]
+stride = 40
+[ResourceSO]
+stride = 40
+[ResourceSecondPosition]
+filename = second.buf
+stride = 40
+[CommandListReplay]
+if $ready == 0
+so0 = ResourceSO
+vb0 = ResourceSecondPosition
+draw = 3, 0
+ResourceCurrent = copy ResourceSO
+endif
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("meshes=%d", len(fixture.result.Meshes))
+	}
+	geometry := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL)
+	if len(geometry.Positions) != 9 || len(geometry.Indices) != 3 || geometry.Positions[0] != 10 {
+		t.Fatalf("positions=%v indices=%v", geometry.Positions, geometry.Indices)
+	}
+}
+
+func TestModelViewerStreamOutputRejectsTexcoordOutsideModFolder(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometryN(t, dir, 3)
+	outsideName := filepath.Base(dir) + "-stream-tc.buf"
+	outside := filepath.Join(filepath.Dir(dir), outsideName)
+	if err := os.WriteFile(outside, make([]byte, 3*20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+	writeTextureFile(t, dir, "second.buf", make([]byte, 3*40))
+	writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $ready = 0
+[TextureOverrideBody]
+if $ready == 0
+ib = ResourceBodyIB
+vb0 = ResourceCurrent
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+endif
+[TextureOverrideEscaping]
+if $ready == 0
+ib = ResourceBodyIB
+vb0 = ResourceCurrent
+vb1 = ResourceEscapingTc
+drawindexed = 3, 0, 0
+endif
+[ResourceCurrent]
+stride = 40
+[ResourceSO]
+stride = 40
+[ResourceSecondPosition]
+filename = second.buf
+stride = 40
+[ResourceEscapingTc]
+filename = ..\`+outsideName+`
+stride = 20
+[CommandListReplay]
+if $ready == 0
+so0 = ResourceSO
+vb0 = ResourceSecondPosition
+draw = 3, 0
+ResourceCurrent = copy ResourceSO
+endif
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("meshes=%d", len(fixture.result.Meshes))
+	}
+}
+
 func TestModelViewerStreamOutputRejectsUnsupportedReplay(t *testing.T) {
 	for _, test := range []struct{ name, old, replacement string }{
 		{"nested draw", "draw = 3, 0", "if $choice\ndraw = 3, 0\nendif"},
@@ -107,6 +199,10 @@ func TestModelViewerStreamOutputRejectsUnsupportedReplay(t *testing.T) {
 		{"shader callback", "draw = 3, 0", "run = CustomShaderUnknown\ndraw = 3, 0"},
 		{"stride mismatch", "[ResourceSO]\ntype = Buffer\nstride = 40", "[ResourceSO]\ntype = Buffer\nstride = 48"},
 		{"escaping source", "filename = pos.buf", "filename = ../outside.buf"},
+		{
+			"conflicting replay", "draw = 3, 0",
+			"draw = 3, 0\nso0 = ResourceSO\nvb0 = ResourceSecondPosition\ndraw = 3, 0",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()

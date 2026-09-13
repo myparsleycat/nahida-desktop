@@ -481,15 +481,16 @@ func buildModelViewerDirectScannedMeshesAt(
 			inlineResources,
 		)
 		if source.kind == "" && layoutName != "wwmi" {
-			if stream, ok := streamOutputs[modelViewerNormalizeKey(draw.state.vb0)]; ok {
+			resource := modelViewerNormalizeKey(draw.state.vb0)
+			if stream, ok := streamOutputs[resource]; ok {
 				ib := resourceMap[modelViewerNormalizeKey(draw.state.ib)]
 				tc := resourceMap[modelViewerNormalizeKey(draw.state.vb1)]
 				if ib.Filename != "" && tc.Filename != "" {
 					source = modelViewerDrawVertexSource{
 						kind: modelViewerDrawVertexMihoyo, ib: ib, texcoord: tc,
-						position:      modelViewerResource{Name: draw.state.vb0, Stride: stream.stride},
-						positionData:  stream.data,
-						positionScope: iniPath,
+						position:     modelViewerResource{Name: draw.state.vb0, Stride: stream.stride},
+						positionData: stream.data,
+						streamKey:    iniPath + "|" + resource,
 					}
 				}
 			}

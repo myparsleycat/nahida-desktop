@@ -538,15 +538,19 @@ func (c *modelViewerBufferCache) decodeIndices(path, format string, raw []byte) 
 	return decoded, nil
 }
 
+// paired interleaves a draw's position and texcoord buffers. Replayed
+// stream-output positions have no file of their own, so their callers pass the
+// stream identity as posSource and the positions in memory; that identity is
+// namespaced below so it can never answer for a file-backed pair.
 func (c *modelViewerBufferCache) paired(
-	posPath string,
+	posSource string,
 	posStride int,
 	tcPath string,
 	tcStride int,
 	positionData []byte,
 ) (modelViewerPairedBuffers, error) {
 	key := strings.ToLower(
-		posPath,
+		posSource,
 	) + "|" + strconv.Itoa(
 		posStride,
 	) + "|" + strings.ToLower(
@@ -566,7 +570,7 @@ func (c *modelViewerBufferCache) paired(
 	posRaw := positionData
 	if posRaw == nil {
 		var err error
-		posRaw, err = c.read(posPath)
+		posRaw, err = c.read(posSource)
 		if err != nil {
 			return modelViewerPairedBuffers{}, err
 		}

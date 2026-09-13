@@ -359,8 +359,10 @@ type modelViewerDrawVertexSource struct {
 	packed                         []byte
 	packedStride                   int
 	missingTexcoord                bool
-	positionData                   []byte
-	positionScope                  string
+	// positionData carries replayed stream-output positions; streamKey identifies
+	// that stream for caching, because it has no buffer file of its own.
+	positionData []byte
+	streamKey    string
 }
 
 func modelViewerInlineObjectForResource(
@@ -458,8 +460,8 @@ func readModelViewerObjectBuffer(
 	position modelViewerResource,
 	cache *modelViewerBufferCache,
 ) ([]byte, bool) {
-	path, err := resolveModelViewerResourcePath(modDir, modDir, position.Filename)
-	if err != nil || !modelViewerPathWithin(modDir, path) {
+	path, ok := resolveModelViewerModBufferPath(modDir, position.Filename)
+	if !ok {
 		return nil, false
 	}
 	raw, err := cache.read(path)
@@ -621,18 +623,19 @@ func loadModelViewerDrawVertexBuffers(
 		}
 		return modelViewerDrawVertexBuffers{}, false, nil
 	case modelViewerDrawVertexMihoyo:
-		buffers, buffersErr := cache.paired(
-			filepath.Join(
-				modDir,
-				filepath.FromSlash(
-					firstModelViewerString(position.Filename, "stream-output:"+source.positionScope+":"+position.Name),
-				),
-			),
-			posStride,
-			filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)),
-			tcStride,
-			source.positionData,
-		)
+		posSource := source.streamKey
+		if source.positionData == nil {
+			path, ok := resolveModelViewerModBufferPath(modDir, position.Filename)
+			if !ok {
+				return modelViewerDrawVertexBuffers{}, false, nil
+			}
+			posSource = path
+		}
+		tcPath, ok := resolveModelViewerModBufferPath(modDir, texcoord.Filename)
+		if !ok {
+			return modelViewerDrawVertexBuffers{}, false, nil
+		}
+		buffers, buffersErr := cache.paired(posSource, posStride, tcPath, tcStride, source.positionData)
 		if buffersErr != nil {
 			if isModelViewerInterleaveValidationError(buffersErr) {
 				return modelViewerDrawVertexBuffers{}, false, nil

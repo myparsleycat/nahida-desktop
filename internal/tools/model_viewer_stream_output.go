@@ -65,6 +65,20 @@ func collectModelViewerStreamOutputs(
 		invalid := false
 		stream := modelViewerStreamOutput{}
 		var branches []modelViewerStreamBranch
+		// A stream is kept only when every draw ran at the depth that bound it and
+		// the branch around that binding closed; a replay that is not a plain
+		// linear list would make the recovered positions guesswork.
+		release := func(closed bool) {
+			if target == "" {
+				return
+			}
+			if invalid || !closed {
+				ambiguous[target] = true
+			} else if len(stream.data) > 0 {
+				store(target, stream)
+			}
+			target, stream, invalid = "", modelViewerStreamOutput{}, false
+		}
 		for _, raw := range section.Lines {
 			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
 			lower := strings.ToLower(line)
@@ -131,15 +145,8 @@ func collectModelViewerStreamOutputs(
 			}
 			switch key {
 			case "so0":
-				if target != "" {
-					if invalid || depth != bindDepth {
-						ambiguous[target] = true
-					} else if len(stream.data) > 0 {
-						store(target, stream)
-					}
-				}
+				release(depth == bindDepth)
 				target, bindDepth = resource, depth
-				stream, invalid = modelViewerStreamOutput{}, false
 			case "vb0":
 				position = resource
 				for index := range branches {
@@ -187,13 +194,21 @@ func collectModelViewerStreamOutputs(
 				stream.data = append(stream.data, data[start*input.Stride:(start+count)*input.Stride]...)
 			}
 		}
+		// A command list may end on the draw itself: the stream is complete once
+		// no branch opened after the binding is still open.
+		release(depth <= bindDepth)
 	}
-	// Copies of the completed stream (including previous-frame buffers) retain
-	// the same bind-pose layout. Cycles and conflicting sources stay unresolved.
+	// Ambiguity is resolved before aliasing so a conflicting replay can never be
+	// propagated through a copy, then copies of the completed stream (including
+	// previous-frame buffers) retain the same bind-pose layout. Cycles stay
+	// unresolved.
+	for name := range ambiguous {
+		delete(outputs, name)
+	}
 	for range maxModelViewerResourceAliasDepth {
 		changed := false
 		for name, sources := range aliases {
-			if _, exists := outputs[name]; exists || len(sources) != 1 || ambiguous[sources[0]] {
+			if _, exists := outputs[name]; exists || ambiguous[name] || len(sources) != 1 {
 				continue
 			}
 			if stream, ok := outputs[sources[0]]; ok {
@@ -204,9 +219,6 @@ func collectModelViewerStreamOutputs(
 		if !changed {
 			break
 		}
-	}
-	for name := range ambiguous {
-		delete(outputs, name)
 	}
 	return outputs
 }
