@@ -67,7 +67,7 @@ func TestSidecarExportsPinImplicitNamespace(t *testing.T) {
 	}
 	archive := filepath.Join(exportDir, "menu.zip")
 	_, err = New().SaveZIP(context.Background(), MenuMakerSaveZIPRequest{
-		SourcePath: source, SourceText: text, DestinationPath: archive,
+		SourcePath: source, SourceText: text, DestinationPath: archive, OutputININame: "menu.ini",
 		Slots: slots, Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
 	})
 	if err != nil {
@@ -103,8 +103,8 @@ func TestSidecarExportIncludesBothINIs(t *testing.T) {
 	slots := parseDocument(sidecarFixture).Slots
 	archive := filepath.Join(root, "export.zip")
 	_, err := New().SaveZIP(context.Background(), MenuMakerSaveZIPRequest{
-		SourcePath: source, SourceText: sidecarFixture, DestinationPath: archive, Slots: slots,
-		Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+		SourcePath: source, SourceText: sidecarFixture, DestinationPath: archive, OutputININame: "menu.ini",
+		Slots: slots, Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -303,6 +303,39 @@ func TestSidecarApplyRejectsUnrelatedMenu(t *testing.T) {
 	}
 	assertFile(t, path, []byte(sidecarFixture))
 	assertFile(t, filepath.Join(root, "menu.ini"), []byte("user menu"))
+}
+
+func TestSidecarRejectsRuntimeMenuINISource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "menu.txt")
+	mustWrite(t, path, []byte(sidecarFixture))
+	_, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: path, SourceSHA256: sha256Hex([]byte(sidecarFixture)), OutputININame: "menu.ini",
+		Slots: parseDocument(sidecarFixture).Slots, Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+	})
+	if err == nil {
+		t.Fatal("menu.txt source was accepted")
+	}
+	assertFile(t, path, []byte(sidecarFixture))
+	if _, statErr := os.Stat(filepath.Join(root, "menu.ini")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("generated menu collided with the source: %v", statErr)
+	}
+}
+
+func TestSidecarExportRequiresMenuININame(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	source := filepath.Join(root, "Master.ini")
+	mustWrite(t, source, []byte(sidecarFixture))
+	_, err := New().SaveZIP(context.Background(), MenuMakerSaveZIPRequest{
+		SourcePath: source, SourceText: sidecarFixture, DestinationPath: filepath.Join(root, "menu.zip"),
+		OutputININame: "Custom.ini", Slots: parseDocument(sidecarFixture).Slots,
+		Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+	})
+	if err == nil || !strings.Contains(err.Error(), "menu.ini") {
+		t.Fatalf("expected fixed menu name rejection, got %v", err)
+	}
 }
 
 // Opt-in read-only compatibility survey. Never applies generated files to mods.

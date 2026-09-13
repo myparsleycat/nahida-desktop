@@ -9,21 +9,19 @@ import (
 
 func defaultSettings() MenuMakerSettings {
 	return MenuMakerSettings{
-		Title:                "",
-		MenuKey:              "alt",
-		ClickModifier:        "alt",
-		Columns:              3,
-		Gap:                  14,
-		BaseWidth:            1920,
-		BaseHeight:           1080,
-		PanelScale:           1,
-		SlotAlignment:        "center",
-		FallbackType:         "cycle",
-		RemoveOriginalKeys:   false,
-		HideUploadLabel:      true,
-		UseOriginalININame:   true,
-		ResetActiveOnPresent: false,
-		ShowKeyHint:          true,
+		Title:              "",
+		MenuKey:            "alt",
+		ClickModifier:      "alt",
+		Columns:            3,
+		Gap:                14,
+		BaseWidth:          1920,
+		BaseHeight:         1080,
+		PanelScale:         1,
+		SlotAlignment:      "center",
+		FallbackType:       "cycle",
+		RemoveOriginalKeys: false,
+		HideUploadLabel:    true,
+		ShowKeyHint:        true,
 	}
 }
 
@@ -229,6 +227,20 @@ func TestGenerateMergeModesAndKeyDeletion(t *testing.T) {
 	}
 	if !strings.Contains(deleted, "[CommandListCycleKeySwap]") {
 		t.Fatalf("missing generated cycle after key deletion:\n%s", deleted)
+	}
+}
+
+func TestGenerateRemovesOriginalKeysWithPrologue(t *testing.T) {
+	t.Parallel()
+	document := parseDocument("; prologue\n[KeySwap]\nkey = 5\n$swap = 0, 1")
+	settings := defaultSettings()
+	settings.RemoveOriginalKeys = true
+	output := generateFrom(document, document.Slots, settings)
+	if !strings.Contains(output, "; prologue\n") {
+		t.Fatalf("leading section was lost:\n%s", output)
+	}
+	if strings.Contains(output, "[KeySwap]") || !strings.Contains(output, disabledKeyPrefix) {
+		t.Fatalf("original keys were not removed:\n%s", output)
 	}
 }
 

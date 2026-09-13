@@ -120,7 +120,7 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 	}
 }
 
-func TestApplyBundleOriginalNameBacksUpAndPreservesUnmanagedResources(t *testing.T) {
+func TestApplyBundleBacksUpAndPreservesUnmanagedResources(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	sourcePath := filepath.Join(root, "mod.ini")
@@ -140,7 +140,6 @@ func TestApplyBundleOriginalNameBacksUpAndPreservesUnmanagedResources(t *testing
 			{RelativePath: "res_gui/draw_2d.hlsl", Data: []byte("shader")},
 			{RelativePath: "res_gui/slot_01.png", Data: []byte("png")},
 		},
-		useOriginalININame: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -167,14 +166,13 @@ func TestApplyBundleSidecarKeepsOriginalINIEnabled(t *testing.T) {
 	mustWrite(t, sourcePath, original)
 
 	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           original,
-		outputININame:      "menu.ini",
-		iniText:            sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText:      "patched",
-		encoding:           "utf8",
-		newline:            "lf",
-		useOriginalININame: false,
+		sourcePath:    sourcePath,
+		original:      original,
+		outputININame: "menu.ini",
+		iniText:       sidecarMarker + "mod.ini\ngenerated",
+		sourceINIText: "patched",
+		encoding:      "utf8",
+		newline:       "lf",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -196,14 +194,13 @@ func TestApplyBundleUsesTimestampedBackupWhenTXTNameExists(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "mod.txt"), []byte("existing"))
 
 	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           original,
-		outputININame:      "menu.ini",
-		iniText:            sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText:      "patched",
-		encoding:           "utf8",
-		newline:            "lf",
-		useOriginalININame: true,
+		sourcePath:    sourcePath,
+		original:      original,
+		outputININame: "menu.ini",
+		iniText:       sidecarMarker + "mod.ini\ngenerated",
+		sourceINIText: "patched",
+		encoding:      "utf8",
+		newline:       "lf",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -224,14 +221,13 @@ func TestApplyBundleTXTAlwaysPreservesSource(t *testing.T) {
 	mustWrite(t, sourcePath, original)
 
 	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           original,
-		outputININame:      "menu.ini",
-		iniText:            sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText:      "patched",
-		encoding:           "utf8",
-		newline:            "lf",
-		useOriginalININame: true,
+		sourcePath:    sourcePath,
+		original:      original,
+		outputININame: "menu.ini",
+		iniText:       sidecarMarker + "mod.ini\ngenerated",
+		sourceINIText: "patched",
+		encoding:      "utf8",
+		newline:       "lf",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -250,22 +246,21 @@ func TestApplyBundleRejectsChangedSourceAndAssetTraversal(t *testing.T) {
 	mustWrite(t, sourcePath, []byte("changed"))
 	_, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
 		SourcePath: sourcePath, SourceSHA256: sha256Hex([]byte("old")), OutputININame: "menu.ini",
-		Encoding: "utf8", Newline: "lf", UseOriginalININame: true,
+		Encoding: "utf8", Newline: "lf",
 	})
 	if !errors.Is(err, ErrSourceChanged) {
 		t.Fatalf("expected source changed error, got %v", err)
 	}
 
 	_, err = New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           []byte("changed"),
-		outputININame:      "menu.ini",
-		iniText:            sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText:      "patched",
-		encoding:           "utf8",
-		newline:            "lf",
-		useOriginalININame: true,
-		assets:             []MenuMakerGeneratedAsset{{RelativePath: "res_gui/../evil.png", Data: []byte("evil")}},
+		sourcePath:    sourcePath,
+		original:      []byte("changed"),
+		outputININame: "menu.ini",
+		iniText:       sidecarMarker + "mod.ini\ngenerated",
+		sourceINIText: "patched",
+		encoding:      "utf8",
+		newline:       "lf",
+		assets:        []MenuMakerGeneratedAsset{{RelativePath: "res_gui/../evil.png", Data: []byte("evil")}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "invalid menu maker asset path") {
 		t.Fatalf("expected traversal rejection, got %v", err)
@@ -281,15 +276,14 @@ func TestApplyBundleRollsBackPromotedINIWhenResourceCommitFails(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "res_gui"), []byte("directory blocker"))
 
 	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           original,
-		outputININame:      "menu.ini",
-		iniText:            sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText:      "patched",
-		encoding:           "utf8",
-		newline:            "lf",
-		useOriginalININame: true,
-		assets:             []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
+		sourcePath:    sourcePath,
+		original:      original,
+		outputININame: "menu.ini",
+		iniText:       sidecarMarker + "mod.ini\ngenerated",
+		sourceINIText: "patched",
+		encoding:      "utf8",
+		newline:       "lf",
+		assets:        []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
 	})
 	if err == nil {
 		t.Fatal("expected resource promotion failure")
@@ -315,7 +309,7 @@ func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
 	first, err := svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
 		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), OutputININame: "menu.ini",
 		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
-		Encoding: "utf8", Newline: "lf", UseOriginalININame: true,
+		Encoding: "utf8", Newline: "lf",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -336,7 +330,7 @@ func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
 	if _, err = svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
 		SourcePath: sourcePath, SourceSHA256: first.SourceSHA256, OutputININame: "menu.ini",
 		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
-		Encoding: "utf8", Newline: "lf", UseOriginalININame: true,
+		Encoding: "utf8", Newline: "lf",
 	}); err != nil {
 		t.Fatalf("reapply with returned hash failed: %v", err)
 	}

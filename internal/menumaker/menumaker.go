@@ -22,7 +22,10 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-const maxSourceBytes = 32 << 20
+const (
+	maxSourceBytes = 32 << 20
+	menuININame    = "menu.ini"
+)
 
 var (
 	ErrSourceChanged = errors.New("MENU_MAKER_SOURCE_CHANGED")
@@ -222,16 +225,15 @@ func (m *MenuMaker) ApplyBundle(
 		return result, err
 	}
 	return m.applyGenerated(ctx, applyGeneratedRequest{
-		sourcePath:         sourcePath,
-		original:           original,
-		outputININame:      req.OutputININame,
-		iniText:            generated.INIText,
-		sourceINIText:      generated.SourceINIText,
-		encoding:           req.Encoding,
-		hasBOM:             req.HasBOM,
-		newline:            req.Newline,
-		assets:             req.Assets,
-		useOriginalININame: req.UseOriginalININame,
+		sourcePath:    sourcePath,
+		original:      original,
+		outputININame: req.OutputININame,
+		iniText:       generated.INIText,
+		sourceINIText: generated.SourceINIText,
+		encoding:      req.Encoding,
+		hasBOM:        req.HasBOM,
+		newline:       req.Newline,
+		assets:        req.Assets,
 	}, &stage, &cleanupState, &writtenPaths, &rollbackError)
 }
 
@@ -244,16 +246,15 @@ func (m *MenuMaker) writeGenerated(ctx context.Context, req applyGeneratedReques
 }
 
 type applyGeneratedRequest struct {
-	sourcePath         string
-	original           []byte
-	outputININame      string
-	iniText            string
-	sourceINIText      string
-	encoding           string
-	hasBOM             bool
-	newline            string
-	assets             []MenuMakerGeneratedAsset
-	useOriginalININame bool
+	sourcePath    string
+	original      []byte
+	outputININame string
+	iniText       string
+	sourceINIText string
+	encoding      string
+	hasBOM        bool
+	newline       string
+	assets        []MenuMakerGeneratedAsset
 }
 
 func (m *MenuMaker) applyGenerated(
@@ -264,7 +265,7 @@ func (m *MenuMaker) applyGenerated(
 	writtenPaths *[]string,
 	rollbackError *string,
 ) (result MenuMakerWriteResult, err error) {
-	outputName, err := expectedOutputName(req.sourcePath, req.useOriginalININame)
+	outputName, err := expectedOutputName(req.sourcePath)
 	if err != nil {
 		return result, err
 	}
@@ -438,8 +439,8 @@ func (m *MenuMaker) SaveINI(ctx context.Context, req MenuMakerSaveINIRequest) (r
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
-	if !strings.EqualFold(filepath.Base(destination), "menu.ini") {
-		return MenuMakerWriteResult{}, errors.New("save the menu as menu.ini")
+	if err = requireMenuININame(filepath.Base(destination)); err != nil {
+		return MenuMakerWriteResult{}, err
 	}
 	generated, err := generateExportSidecar(req.SourcePath, req.SourceText, req.Slots, req.Settings)
 	if err != nil {
@@ -452,7 +453,7 @@ func (m *MenuMaker) SaveINI(ctx context.Context, req MenuMakerSaveINIRequest) (r
 	}
 	return m.writeGenerated(ctx, applyGeneratedRequest{
 		sourcePath: filepath.Join(filepath.Dir(destination), filepath.Base(req.SourcePath)),
-		original:   original, outputININame: "menu.ini", iniText: generated.INIText,
+		original:   original, outputININame: menuININame, iniText: generated.INIText,
 		sourceINIText: generated.SourceINIText, encoding: req.Encoding, hasBOM: req.HasBOM, newline: req.Newline,
 	})
 }
@@ -471,6 +472,9 @@ func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (res
 			})
 		}
 	}()
+	if err = requireMenuININame(req.OutputININame); err != nil {
+		return MenuMakerWriteResult{}, err
+	}
 	generated, err := generateExportSidecar(req.SourcePath, req.SourceText, req.Slots, req.Settings)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
@@ -481,7 +485,7 @@ func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (res
 		return MenuMakerWriteResult{}, err
 	}
 	sourceName := strings.TrimSuffix(filepath.Base(req.SourcePath), filepath.Ext(req.SourcePath)) + ".ini"
-	return saveZIPBytes(req.DestinationPath, "menu.ini", generated.INIText, encoding, req.Assets,
+	return saveZIPBytes(req.DestinationPath, menuININame, generated.INIText, encoding, req.Assets,
 		&MenuMakerGeneratedAsset{RelativePath: sourceName, Data: sourceData}, m.reportCleanup)
 }
 
@@ -610,11 +614,20 @@ func validateAssets(input []MenuMakerGeneratedAsset) ([]MenuMakerGeneratedAsset,
 	return out, nil
 }
 
-func expectedOutputName(source string, _ bool) (string, error) {
-	if strings.EqualFold(filepath.Base(source), "menu.ini") {
+func expectedOutputName(source string) (string, error) {
+	if strings.EqualFold(filepath.Base(source), menuININame) {
 		return "", errors.New("menu.ini cannot be the original mod INI")
 	}
-	return "menu.ini", nil
+	return menuININame, nil
+}
+
+// requireMenuININame keeps the generated menu name fixed: the mod loader only
+// picks up menu.ini, so the UI no longer offers a custom name.
+func requireMenuININame(name string) error {
+	if !strings.EqualFold(strings.TrimSpace(name), menuININame) {
+		return errors.New("save the menu as menu.ini")
+	}
+	return nil
 }
 
 func nextBackupPath(source string) (string, error) {

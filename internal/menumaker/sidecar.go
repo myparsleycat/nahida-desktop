@@ -17,10 +17,10 @@ func generateSidecar(
 	slots []MenuMakerSlot,
 	settings MenuMakerSettings,
 ) (MenuMakerGenerateResult, error) {
-	if strings.EqualFold(filepath.Base(sourcePath), "menu.ini") || strings.Contains(text, sidecarMarker) {
+	runtimePath := strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath)) + ".ini"
+	if strings.EqualFold(filepath.Base(runtimePath), menuININame) || strings.Contains(text, sidecarMarker) {
 		return MenuMakerGenerateResult{}, errors.New("select the original mod INI, not menu.ini")
 	}
-	runtimePath := strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath)) + ".ini"
 	namespace, err := sourceNamespace(runtimePath, text)
 	if err != nil {
 		return MenuMakerGenerateResult{}, err

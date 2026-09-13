@@ -40,16 +40,15 @@ type MenuMakerGeneratedAsset struct {
 }
 
 type MenuMakerApplyRequest struct {
-	SourcePath         string                    `json:"sourcePath"`
-	SourceSHA256       string                    `json:"sourceSHA256"`
-	OutputININame      string                    `json:"outputININame"`
-	Slots              []MenuMakerSlot           `json:"slots"`
-	Settings           MenuMakerSettings         `json:"settings"`
-	Encoding           string                    `json:"encoding"`
-	HasBOM             bool                      `json:"hasBOM"`
-	Newline            string                    `json:"newline"`
-	Assets             []MenuMakerGeneratedAsset `json:"assets"`
-	UseOriginalININame bool                      `json:"useOriginalININame"`
+	SourcePath    string                    `json:"sourcePath"`
+	SourceSHA256  string                    `json:"sourceSHA256"`
+	OutputININame string                    `json:"outputININame"`
+	Slots         []MenuMakerSlot           `json:"slots"`
+	Settings      MenuMakerSettings         `json:"settings"`
+	Encoding      string                    `json:"encoding"`
+	HasBOM        bool                      `json:"hasBOM"`
+	Newline       string                    `json:"newline"`
+	Assets        []MenuMakerGeneratedAsset `json:"assets"`
 }
 
 type MenuMakerSaveINIRequest struct {
@@ -157,22 +156,20 @@ type MenuMakerPalette struct {
 }
 
 type MenuMakerSettings struct {
-	Title                string           `json:"title"`
-	MenuKey              string           `json:"menuKey"`
-	ClickModifier        string           `json:"clickModifier"`
-	Columns              int              `json:"columns"`
-	Gap                  int              `json:"gap"`
-	BaseWidth            int              `json:"baseWidth"`
-	BaseHeight           int              `json:"baseHeight"`
-	PanelScale           float64          `json:"panelScale"`
-	SlotAlignment        string           `json:"slotAlignment"`
-	FallbackType         string           `json:"fallbackType"`
-	RemoveOriginalKeys   bool             `json:"removeOriginalKeys"`
-	ShowKeyHint          bool             `json:"showKeyHint"`
-	HideUploadLabel      bool             `json:"hideUploadLabel"`
-	UseOriginalININame   bool             `json:"useOriginalININame"`
-	ResetActiveOnPresent bool             `json:"resetActiveOnPresent"`
-	Palette              MenuMakerPalette `json:"palette"`
+	Title              string           `json:"title"`
+	MenuKey            string           `json:"menuKey"`
+	ClickModifier      string           `json:"clickModifier"`
+	Columns            int              `json:"columns"`
+	Gap                int              `json:"gap"`
+	BaseWidth          int              `json:"baseWidth"`
+	BaseHeight         int              `json:"baseHeight"`
+	PanelScale         float64          `json:"panelScale"`
+	SlotAlignment      string           `json:"slotAlignment"`
+	FallbackType       string           `json:"fallbackType"`
+	RemoveOriginalKeys bool             `json:"removeOriginalKeys"`
+	ShowKeyHint        bool             `json:"showKeyHint"`
+	HideUploadLabel    bool             `json:"hideUploadLabel"`
+	Palette            MenuMakerPalette `json:"palette"`
 }
 
 type MenuMakerSlotPosition struct {

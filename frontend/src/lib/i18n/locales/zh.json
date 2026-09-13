@@ -974,7 +974,7 @@
         "merge_all_keys": "全部按键",
         "reset": "重置",
         "auto_icon": "自动图标",
-        "ini_preview": "生成的 INI 预览",
+        "ini_preview": "menu.ini 与原始文件改动预览",
         "no_preview": "加载源文件后生成预览。",
         "panel": "面板与行为",
         "panel_image": "面板图片",

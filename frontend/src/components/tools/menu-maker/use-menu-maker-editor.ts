@@ -192,7 +192,6 @@ export function useMenuMakerEditor({
                 hasBOM: state.source.hasBOM,
                 newline: state.source.newline,
                 assets,
-                useOriginalININame: state.settings.useOriginalININame,
             });
             toast.success(t("page.tools.menu_maker.applied", { path: result.outputINIPath }));
             if (result.sourceSHA256) {
