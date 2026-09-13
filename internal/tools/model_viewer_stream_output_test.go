@@ -312,6 +312,85 @@ so0 = null
 	}
 }
 
+func TestModelViewerStreamOutputRejectsLinkedSourceOutsideModFolder(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometryN(t, dir, 3)
+	outsideDir := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-linked")
+	if err := os.MkdirAll(outsideDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
+	other := make([]byte, 3*40)
+	binary.LittleEndian.PutUint32(other, math.Float32bits(10))
+	if err := os.WriteFile(filepath.Join(outsideDir, "other.buf"), other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	createViewerDirectoryLink(t, "junction", outsideDir, filepath.Join(dir, "linked"))
+	ini := viewerBodyResources + `
+[ResourceOther]
+filename = linked\other.buf
+stride = 40
+[ResourceSO]
+stride = 40
+[CommandListReplay]
+so0 = ResourceSO
+vb0 = ResourceOther
+draw = 3, 0
+so0 = null
+`
+	sections := parseModelViewerINI(ini, "mod.ini").Sections
+	resources := make(map[string]modelViewerResource)
+	for _, resource := range collectModelViewerResources(sections) {
+		resources[modelViewerNormalizeKey(resource.Name)] = resource
+	}
+	outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+	if len(outputs) != 0 {
+		t.Fatalf("directory link outside the mod folder produced %d streams", len(outputs))
+	}
+}
+
+func TestModelViewerStreamOutputKeepsStreamAcrossInactiveElse(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometryN(t, dir, 3)
+	other := make([]byte, 3*40)
+	binary.LittleEndian.PutUint32(other, math.Float32bits(10))
+	writeTextureFile(t, dir, "other.buf", other)
+	ini := viewerBodyResources + `
+[ResourceOther]
+filename = other.buf
+stride = 40
+[ResourceSO]
+stride = 40
+[CommandListReplay]
+if $ready == 0
+if 1
+so0 = ResourceSO
+vb0 = ResourcePos
+draw = 3, 0
+else
+vb0 = ResourceOther
+draw = 3, 0
+endif
+endif
+`
+	sections := parseModelViewerINI(ini, "mod.ini").Sections
+	resources := make(map[string]modelViewerResource)
+	for _, resource := range collectModelViewerResources(sections) {
+		resources[modelViewerNormalizeKey(resource.Name)] = resource
+	}
+	outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+	output, exists := outputs["so"]
+	if !exists {
+		t.Fatal("the inactive else arm discarded the bound stream")
+	}
+	if output.stride != 40 || len(output.data) != 3*40 {
+		t.Fatalf("stream = %d bytes stride %d", len(output.data), output.stride)
+	}
+	if first := math.Float32frombits(binary.LittleEndian.Uint32(output.data)); first != 0 {
+		t.Fatalf("stream reused the position of the inactive else arm: %v", first)
+	}
+}
+
 func TestModelViewerClaretLocal(t *testing.T) {
 	dir := os.Getenv("MODEL_VIEWER_CLARET_PATH")
 	if dir == "" {

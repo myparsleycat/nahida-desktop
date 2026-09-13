@@ -120,7 +120,10 @@ func collectModelViewerStreamOutputs(
 				if frame.uncertain {
 					position = frame.position
 				}
-				if target != "" && depth <= bindDepth {
+				// Only an unresolved condition can change which draws ran
+				// around the binding: a deterministic arm switch, such as the
+				// inactive else of a constant if, keeps the stream valid.
+				if target != "" && depth <= bindDepth && frame.uncertain {
 					invalid = true
 				}
 				continue
