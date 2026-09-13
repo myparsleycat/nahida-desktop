@@ -47,11 +47,16 @@ func TestSystemProxyPACFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = proxyRelay.Close() }()
+	host := fmt.Sprintf("pac-%d.invalid", time.Now().UnixNano())
 	var (
-		proxyHits atomic.Int32
-		hitMu     sync.Mutex
-		hitLogs   []string
+		proxyHits   atomic.Int32
+		uploadHits  atomic.Int32
+		connectHits atomic.Int32
+		hitMu       sync.Mutex
+		hitLogs     []string
 	)
+	// Unrelated local clients can reach this port, so only the requests issued
+	// below prove that both transports reached the healthy candidate.
 	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := proxyHits.Add(1)
 		hitMu.Lock()
@@ -60,6 +65,12 @@ func TestSystemProxyPACFailover(t *testing.T) {
 			fmt.Sprintf("#%d: %s %s (Host: %s, Proto: %s)", count, r.Method, r.URL.String(), r.Host, r.Proto),
 		)
 		hitMu.Unlock()
+		switch {
+		case r.Method == http.MethodConnect && r.Host == host+":443":
+			connectHits.Add(1)
+		case r.Method == http.MethodPost && r.URL.Host == host:
+			uploadHits.Add(1)
+		}
 		if r.Method == http.MethodConnect {
 			proxyRelay.ServeHTTP(w, r)
 			return
@@ -67,6 +78,13 @@ func TestSystemProxyPACFailover(t *testing.T) {
 		_, _ = io.Copy(w, r.Body)
 	}))
 	defer healthy.Close()
+	// A local probe of the proxy port, like the ones seen in CI, must not count.
+	probe, _ := http.NewRequest(http.MethodHead, healthy.URL+"/", nil)
+	response, err := (&http.Client{Transport: new(http.Transport), Timeout: 5 * time.Second}).Do(probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
 	dead, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +118,6 @@ func TestSystemProxyPACFailover(t *testing.T) {
 	endpoint, _ := url.Parse("http://" + relay.listener.Addr().String())
 	browser.Proxy = http.ProxyURL(endpoint)
 	defer browser.CloseIdleConnections()
-	host := fmt.Sprintf("pac-%d.invalid", time.Now().UnixNano())
 	for _, transport := range []http.RoundTripper{network.HTTPTransport(), browser} {
 		for _, scheme := range []string{"http", "https"} {
 			// A non-rewindable body must survive a failed first dial without being consumed.
@@ -124,8 +141,14 @@ func TestSystemProxyPACFailover(t *testing.T) {
 			}
 		}
 	}
-	if proxyHits.Load() != 4 {
-		t.Fatalf("healthy proxy hits=%d:\n%s", proxyHits.Load(), strings.Join(hitLogs, "\n"))
+	if uploadHits.Load() != 2 || connectHits.Load() != 2 {
+		t.Fatalf(
+			"healthy proxy uploads=%d connects=%d hits=%d:\n%s",
+			uploadHits.Load(),
+			connectHits.Load(),
+			proxyHits.Load(),
+			strings.Join(hitLogs, "\n"),
+		)
 	}
 	// WinHTTP implicitly bypasses loopback during PAC evaluation. Freeze the
 	// already resolved external-host candidates to test DIRECT fallback against
