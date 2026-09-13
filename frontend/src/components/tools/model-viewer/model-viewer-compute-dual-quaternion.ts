@@ -1,7 +1,12 @@
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
-import type { GIMIShapePoseBuffers, GIMIShapePoseFrame } from "./model-viewer-compute-kernel";
-
+import {
+    ensureGIMIShapePoseFrame,
+    forEachComputeVertex,
+    type GIMIComputeOptions,
+    type GIMIShapePoseBuffers,
+    type GIMIShapePoseFrame,
+} from "./model-viewer-compute-kernel";
 import {
     normalizePackedVectors,
     preparedPackedVertices,
@@ -52,14 +57,34 @@ export function validatePackedDualQuaternionBuffers(
             throw new Error(`Packed dual-quaternion ${label} dimensions are invalid.`);
         }
     }
+    validatePackedDualQuaternionInfluences(buffers.blend, deformer.vertexCount, pose.boneCount);
 }
 
 export function computePackedDualQuaternionFrame(
     deformer: ViewerComputeDeformer,
     buffers: GIMIShapePoseBuffers,
     poseFrame: number,
+    options?: GIMIComputeOptions,
 ): GIMIShapePoseFrame {
+    return createPackedDualQuaternionComputer(deformer, buffers)(poseFrame, options);
+}
+
+// Inputs remain immutable while this computer is in use.
+export function createPackedDualQuaternionComputer(
+    deformer: ViewerComputeDeformer,
+    buffers: GIMIShapePoseBuffers,
+) {
     validatePackedDualQuaternionBuffers(deformer, buffers);
+    return (poseFrame: number, options?: GIMIComputeOptions) =>
+        computeValidatedPackedDualQuaternionFrame(deformer, buffers, poseFrame, options);
+}
+
+function computeValidatedPackedDualQuaternionFrame(
+    deformer: ViewerComputeDeformer,
+    buffers: GIMIShapePoseBuffers,
+    poseFrame: number,
+    options?: GIMIComputeOptions,
+): GIMIShapePoseFrame {
     if (!Number.isFinite(poseFrame) || poseFrame < 0) {
         throw new Error(`Invalid packed dual-quaternion frame: ${poseFrame}`);
     }
@@ -71,10 +96,14 @@ export function computePackedDualQuaternionFrame(
     const base = preparedPackedVertices(deformer.base, buffers.base);
     const blend = new DataView(buffers.blend!);
     const palette = new Float32Array(buffers.pose!);
-    const positions = new Float32Array(deformer.vertexCount * 3);
-    const normals = new Float32Array(deformer.vertexCount * 3);
+    const vertices = options?.vertices;
+    const { positions, normals } = ensureGIMIShapePoseFrame(
+        vertices?.length ?? deformer.vertexCount,
+        false,
+        options?.out,
+    );
     const accumulated = new Float64Array(14);
-    for (let vertex = 0; vertex < deformer.vertexCount; vertex += 1) {
+    forEachComputeVertex(deformer.vertexCount, vertices, (vertex, destIndex) => {
         accumulated.fill(0);
         const source = vertex * 7;
         const blendOffset = vertex * 32;
@@ -144,7 +173,7 @@ export function computePackedDualQuaternionFrame(
         const nx = base[source + 4]!;
         const ny = -base[source + 6]!;
         const nz = base[source + 5]!;
-        const destination = vertex * 3;
+        const destination = destIndex * 3;
         positions[destination] = roundPackedPosition(
             m00 * x + m01 * y + m02 * z + 2 * (-dw * qx + dx * qw - dy * qz + dz * qy),
         );
@@ -166,9 +195,29 @@ export function computePackedDualQuaternionFrame(
             -128,
             Math.min(127, Math.trunc(-(m10 * nx + m11 * ny + m12 * nz))),
         );
-    }
+    });
     normalizePackedVectors(normals);
     return { positions, normals };
+}
+
+function validatePackedDualQuaternionInfluences(
+    blend: ArrayBuffer,
+    vertexCount: number,
+    boneCount: number,
+): void {
+    const view = new DataView(blend);
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        const blendOffset = vertex * 32;
+        for (let influence = 0; influence < 4; influence += 1) {
+            const bone = view.getInt32(blendOffset + 16 + influence * 4, true);
+            const weight = view.getFloat32(blendOffset + influence * 4, true);
+            if (bone < 0 || bone >= boneCount || !Number.isFinite(weight)) {
+                throw new Error(
+                    `Invalid packed dual-quaternion influence at vertex ${vertex}: bone=${bone}`,
+                );
+            }
+        }
+    }
 }
 
 // f32tof16 output is rounded to nearest, ties to even, then decoded for Three.js.

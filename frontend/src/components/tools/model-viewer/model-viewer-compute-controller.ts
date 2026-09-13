@@ -153,6 +153,12 @@ export class ModelViewerComputeController {
             this.fail(new Error(message.message, { cause: message.diagnostic }));
             return;
         }
+        const recycled: Array<{
+            meshId: string;
+            positions: ArrayBuffer;
+            normals: ArrayBuffer;
+            tangents?: ArrayBuffer;
+        }> = [];
         for (const result of message.meshes) {
             const baseline = this.baselines.get(result.meshId);
             if (!baseline) {
@@ -165,11 +171,34 @@ export class ModelViewerComputeController {
             } else if (this.deformer.kind !== "gimi_packed_dual_quaternion_v1") {
                 baseline.mesh.geometry.deleteAttribute("tangent");
             }
+            recycled.push(result);
         }
+        this.recycle(recycled);
         this.inFlight = false;
         this.activeRequest = undefined;
         this.invalidate();
         this.dispatchLatest();
+    }
+
+    private recycle(
+        meshes: Array<{
+            meshId: string;
+            positions: ArrayBuffer;
+            normals: ArrayBuffer;
+            tangents?: ArrayBuffer;
+        }>,
+    ): void {
+        if (this.disposed || meshes.length === 0) {
+            return;
+        }
+        this.worker.postMessage(
+            { type: "recycle", generation: this.generation, meshes },
+            meshes.flatMap((mesh) =>
+                mesh.tangents
+                    ? [mesh.positions, mesh.normals, mesh.tangents]
+                    : [mesh.positions, mesh.normals],
+            ),
+        );
     }
 
     private fail(error: Error): void {
@@ -226,7 +255,7 @@ function setAttribute(mesh: Mesh, name: string, values: Float32Array, itemSize: 
         attribute.needsUpdate = true;
         return;
     }
-    mesh.geometry.setAttribute(name, new BufferAttribute(values, itemSize));
+    mesh.geometry.setAttribute(name, new BufferAttribute(values.slice(), itemSize));
 }
 
 type ComputeMessage =

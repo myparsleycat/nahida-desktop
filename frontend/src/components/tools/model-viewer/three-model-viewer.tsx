@@ -79,6 +79,7 @@ const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
+const SMOOTH_ZOOM_MAX_DELTA = 1 / 30;
 const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
   alpha: true,
@@ -177,6 +178,7 @@ export const ThreeModelViewer = memo(
     return (
       <div className={cn("h-full w-full", className)}>
         <Canvas
+          frameloop="demand"
           style={{ background: "transparent" }}
           camera={{
             far: 1000,
@@ -274,6 +276,7 @@ function ThreeModelScene({
   const lastAppliedAnimationSignatureRef = useRef<string | null>(null);
   const bodyShapeBaselineRef = useRef<WeakMap<Mesh, BodyShapeBaseline>>(new WeakMap());
   const desiredCameraDistanceRef = useRef<number | null>(null);
+  const zoomActiveRef = useRef(false);
   const hasBodyShapeOverrides = !!bodyShapeOverrides?.length;
 
   const rotation = useMemo(() => {
@@ -661,6 +664,7 @@ function ThreeModelScene({
           camera,
           controlsRef.current,
         );
+        invalidate();
       },
       setDoubleSided: (doubleSided) => {
         for (const material of materialRef.current) {
@@ -758,15 +762,20 @@ function ThreeModelScene({
       return;
     }
 
-    const step = 1 - Math.pow(1 - SMOOTH_ZOOM_DAMPING, delta * 60);
+    // Cap only the first delta after idle; active zoom still follows elapsed
+    // time at low frame rates, matching continuous rendering.
+    const zoomDelta = zoomActiveRef.current ? delta : Math.min(delta, SMOOTH_ZOOM_MAX_DELTA);
+    const step = 1 - Math.pow(1 - SMOOTH_ZOOM_DAMPING, zoomDelta * 60);
     const nextDistance = MathUtils.lerp(currentDistance, desiredDistance, step);
     if (Math.abs(nextDistance - currentDistance) < 0.0001) {
+      zoomActiveRef.current = false;
       if (Math.abs(desiredDistance - currentDistance) < 0.0001) {
         desiredCameraDistanceRef.current = currentDistance;
       }
       return;
     }
 
+    zoomActiveRef.current = true;
     camera.position.copy(
       controls.target.clone().add(offset.normalize().multiplyScalar(nextDistance)),
     );
@@ -837,7 +846,15 @@ function ThreeModelScene({
       });
       return [{ evaluated, signature: payloadEvalSignature(evaluated) }];
     });
+    const seen = new Set<string>();
     for (const { evaluated, signature } of upcoming) {
+      if (
+        seen.has(signature) ||
+        preparedAnimationRingRef.current.some((entry) => entry.signature === signature)
+      ) {
+        continue;
+      }
+      seen.add(signature);
       void preparePayloadEval(root, evaluated, loader, controller.signal, true)
         .then((prepared) => {
           if (
@@ -1842,7 +1859,9 @@ async function captureSquareCanvasPngDataUrl(
 
 function waitForNextFrame(): Promise<void> {
   return new Promise((resolve) => {
-    requestAnimationFrame(() => resolve());
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
   });
 }
 

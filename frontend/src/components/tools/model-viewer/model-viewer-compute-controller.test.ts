@@ -10,8 +10,9 @@ class FakeWorker {
     messages: unknown[] = [];
     terminate = vi.fn();
 
-    postMessage(message: unknown) {
-        this.messages.push(message);
+    postMessage(message: unknown, transfer: Transferable[] = []) {
+        // Exercise actual buffer detachment, not just the message shape.
+        this.messages.push(structuredClone(message, { transfer }));
     }
 }
 
@@ -172,6 +173,14 @@ describe("ModelViewerComputeController", () => {
         );
         expect(mesh.geometry.getAttribute("normal")).toBeDefined();
         expect(mesh.geometry.getAttribute("tangent")).toBeDefined();
+        expect([...mesh.geometry.getAttribute("position").array]).toEqual([9, 9, 9]);
+        expect([...mesh.geometry.getAttribute("normal").array]).toEqual([0, 0, 1]);
+        expect([...mesh.geometry.getAttribute("tangent").array]).toEqual([0, 1, 0, 1]);
+        expect(worker.messages.at(-1)).toMatchObject({
+            type: "recycle",
+            generation: init.generation,
+            meshes: [{ meshId: "mesh" }],
+        });
         controller.dispose();
         expect([...(mesh.geometry.getAttribute("position").array as Float32Array)]).toEqual([
             1, 2, 3,

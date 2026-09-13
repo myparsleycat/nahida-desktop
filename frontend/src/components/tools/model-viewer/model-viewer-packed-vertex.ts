@@ -81,3 +81,22 @@ export function preparedPackedVertices(
     }
     return values;
 }
+
+export function decodePackedVertexSource(
+    source: ViewerComputeBinarySource,
+    buffer: ArrayBuffer,
+): { source: ViewerComputeBinarySource; buffer: ArrayBuffer } {
+    if (source.encoding === "packed_f32_v1") {
+        return { source, buffer };
+    }
+    const values = preparedPackedVertices(source, buffer);
+    return {
+        source: {
+            ...source,
+            encoding: "packed_f32_v1",
+            stride: 28,
+            byteLength: values.byteLength,
+        },
+        buffer: values.buffer as ArrayBuffer,
+    };
+}

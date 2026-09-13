@@ -409,11 +409,12 @@ func (t *Tools) prepareModelViewerGeometry(
 		prepared.sections = append(prepared.sections, sections...)
 		prepared.parseMs += time.Since(parseStartedAt).Milliseconds()
 		stageStartedAt = time.Now()
-		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesAt(
+		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesPrepared(
 			iniPath,
 			folder,
 			"",
 			sections,
+			resources,
 			prepared.cache,
 			prepared.timing,
 		)

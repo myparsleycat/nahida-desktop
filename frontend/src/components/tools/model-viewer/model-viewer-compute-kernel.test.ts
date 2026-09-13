@@ -2,8 +2,10 @@ import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 import { describe, expect, it } from "vitest";
 
 import {
+    collectUsedVertices,
     compactGIMIShapePoseFrame,
     computeGIMIShapePoseFrame,
+    remapSourceIndices,
 } from "./model-viewer-compute-kernel";
 
 function source(byteLength: number, stride: number) {
@@ -283,6 +285,7 @@ describe("GIMI shape/pose compute kernel", () => {
                 new Uint32Array([1]),
             ),
         ).toThrow("source index 1");
+        expect(() => collectUsedVertices([new Uint32Array([1])], 1)).toThrow("source index 1");
         expect(
             compactGIMIShapePoseFrame(
                 { positions: new Float32Array([1, 2, 3]), normals: new Float32Array([0, 0, 1]) },
@@ -290,4 +293,71 @@ describe("GIMI shape/pose compute kernel", () => {
             ).tangents,
         ).toBeUndefined();
     });
+
+    it("computes only the used original vertices and keeps compact mapping", () => {
+        const deformer = descriptor(1, false);
+        deformer.vertexCount = 2;
+        deformer.base = source(80, 40);
+        deformer.shapePasses[0]!.target = source(80, 40);
+        const base = concatVertices([vertex([1, 0, 0]), vertex([5, 0, 0])]);
+        const target = concatVertices([vertex([3, 0, 0]), vertex([9, 0, 0])]);
+        const sourceIndices = new Uint32Array([1, 1]);
+        const full = computeGIMIShapePoseFrame(deformer, { base, shapeTargets: [target] }, 0, 0);
+        const compact = compactGIMIShapePoseFrame(full, sourceIndices);
+        const used = collectUsedVertices([sourceIndices], 2);
+        expect([...used]).toEqual([1]);
+        const subset = computeGIMIShapePoseFrame(deformer, { base, shapeTargets: [target] }, 0, 0, {
+            vertices: used,
+        });
+        expect(subset.positions).toHaveLength(3);
+        expect([...subset.positions]).toEqual([...full.positions.subarray(3, 6)]);
+        const [remapped] = remapSourceIndices([sourceIndices], used, 2);
+        expect([...remapped]).toEqual([0, 0]);
+        expect([...compactGIMIShapePoseFrame(subset, remapped).positions]).toEqual([
+            ...compact.positions,
+        ]);
+    });
+
+    it("still rejects unused vertices with invalid blend bones", () => {
+        const deformer = descriptor();
+        deformer.vertexCount = 2;
+        deformer.base = source(80, 40);
+        deformer.pose = {
+            blend: source(64, 32),
+            frames: source(56, 56),
+            boneCount: 1,
+            frameCount: 1,
+        };
+        const blend = concatBuffers([blendBuffer(), blendBuffer()]);
+        new DataView(blend).setInt32(16, 2, true);
+        expect(() =>
+            computeGIMIShapePoseFrame(
+                deformer,
+                {
+                    base: concatVertices([vertex([0, 0, 0]), vertex([1, 0, 0])]),
+                    shapeTargets: [],
+                    blend,
+                    pose: poseBuffer(),
+                },
+                0,
+                0,
+                { vertices: new Uint32Array([1]) },
+            ),
+        ).toThrow("bone index 2");
+    });
 });
+
+function concatVertices(records: ArrayBuffer[]): ArrayBuffer {
+    return concatBuffers(records);
+}
+
+function concatBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
+    const size = buffers.reduce((total, buffer) => total + buffer.byteLength, 0);
+    const output = new Uint8Array(size);
+    let offset = 0;
+    for (const buffer of buffers) {
+        output.set(new Uint8Array(buffer), offset);
+        offset += buffer.byteLength;
+    }
+    return output.buffer;
+}
