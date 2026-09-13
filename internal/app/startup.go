@@ -19,7 +19,7 @@ import (
 )
 
 // Wails objectNames.Call / objectNames.CancelCall. CancelCall is unexported in
-// the v3 beta.20 application package.
+// the v3 application package.
 const (
 	wailsCallObject       = 0
 	wailsCancelCallObject = 10
