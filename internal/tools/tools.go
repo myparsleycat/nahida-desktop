@@ -11,6 +11,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -110,11 +111,8 @@ type Tools struct {
 	bodyShapeMu       sync.Mutex
 	bodyShapeSessions map[string]*bodyShapeSession
 
-	modelViewerMu            sync.Mutex
-	modelViewerSessions      map[string]*modelViewerSession
-	modelViewerClosedWindows map[uint]bool
-	findModelViewerPreview   func(string) *string
-	persist                  *persistEngine
+	modelViewer *modelviewer.Service
+	persist     *persistEngine
 
 	fixInspectors         *FixInspectorRegistry
 	fixInspectionRunMu    sync.Mutex
@@ -161,18 +159,20 @@ func NewWithOptions(opts Options) *Tools {
 		textureJobs: make(
 			map[uint64]TextureResizeProgressEvent,
 		),
-		releaseCache:             make(map[string]releaseCacheEntry),
-		releaseCalls:             make(map[string]*releaseFetchCall),
-		touchSessions:            make(map[string]*touchSession),
-		bodyShapeSessions:        make(map[string]*bodyShapeSession),
-		modelViewerSessions:      make(map[string]*modelViewerSession),
-		modelViewerClosedWindows: make(map[uint]bool),
-		findModelViewerPreview:   opts.FindModelViewerPreview,
-		persist:                  newPersistEngine(),
-		fixInspectors:            NewFixInspectorRegistry(),
-		fixInspections:           make(map[string]*trackedFixInspection),
-		fixInspectionCtx:         fixInspectionCtx,
-		fixInspectionCancel:      fixInspectionCancel,
+		releaseCache:      make(map[string]releaseCacheEntry),
+		releaseCalls:      make(map[string]*releaseFetchCall),
+		touchSessions:     make(map[string]*touchSession),
+		bodyShapeSessions: make(map[string]*bodyShapeSession),
+		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{
+			Log:                    opts.Log,
+			Protocol:               opts.Protocol,
+			FindModelViewerPreview: opts.FindModelViewerPreview,
+		}),
+		persist:             newPersistEngine(),
+		fixInspectors:       NewFixInspectorRegistry(),
+		fixInspections:      make(map[string]*trackedFixInspection),
+		fixInspectionCtx:    fixInspectionCtx,
+		fixInspectionCancel: fixInspectionCancel,
 	}
 	t.fixInspectors.Register(NewZZMIFixInspector(t))
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }

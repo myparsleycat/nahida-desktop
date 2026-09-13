@@ -1,4 +1,4 @@
-import type { ModelViewerBounds } from "@bindings/tools";
+import type { ModelViewerBounds } from "@bindings/tools/model_viewer";
 
 export type ModelViewerPositionGeometry = {
     positions: Float32Array;

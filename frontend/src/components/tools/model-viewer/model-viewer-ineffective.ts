@@ -1,8 +1,8 @@
-import {
-    Tools,
-    type ModelViewerBlockingVariable,
-    type ModelViewerResolutionSuggestion,
-} from "@bindings/tools";
+import { Tools } from "@bindings/tools";
+import type {
+    ModelViewerBlockingVariable,
+    ModelViewerResolutionSuggestion,
+} from "@bindings/tools/model_viewer";
 import { Logger } from "@renderer/lib/logger";
 import type { ViewerStateValue } from "@shared/mod-viewer/types";
 import { useEffect, useState } from "react";

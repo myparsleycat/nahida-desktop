@@ -1,7 +1,7 @@
 import type {
     ModelViewerDNF,
     ModelViewerTransport as WailsModelViewerTransport,
-} from "@bindings/tools";
+} from "@bindings/tools/model_viewer";
 import type {
     Dnf,
     ModViewerTransport,

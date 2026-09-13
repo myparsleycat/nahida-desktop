@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 
 describe("generated Wails binding contract", () => {
     it("does not expose large numeric or base64 mesh payloads", () => {
-        const models = readFileSync(
+        const models = [
             "bindings/nahida.live/desktop/internal/tools/models.ts",
-            "utf8",
-        );
-        expect(models).not.toMatch(/"(?:positions|indices|weights)": number\[\]/);
-        expect(models).not.toMatch(/"blendBytes": string/);
+            "bindings/nahida.live/desktop/internal/tools/model_viewer/models.ts",
+        ].map((path) => readFileSync(path, "utf8"));
+        for (const source of models) {
+            expect(source).not.toMatch(/"(?:positions|indices|weights)": number\[\]/);
+            expect(source).not.toMatch(/"blendBytes": string/);
+        }
     });
 
     it("keeps protocol memory session internals out of Wails bindings", () => {

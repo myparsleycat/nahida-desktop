@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { Mod } from "@bindings/mod";
-import { Tools, type ModelViewerTransport } from "@bindings/tools";
+import { Tools } from "@bindings/tools";
+import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useImperativeHandle, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";

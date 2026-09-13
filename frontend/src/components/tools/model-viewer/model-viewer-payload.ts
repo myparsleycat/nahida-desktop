@@ -1,4 +1,4 @@
-import type { ModelViewerBounds } from "@bindings/tools";
+import type { ModelViewerBounds } from "@bindings/tools/model_viewer";
 import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type {
     EvaluatedViewerState,

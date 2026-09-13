@@ -6,7 +6,10 @@ import { decodeModelViewerMesh } from "./model-viewer-mesh-codec";
 
 const fixture = Buffer.from(
     readFileSync(
-        new URL("../../../../../internal/tools/testdata/model_viewer_mesh.hex", import.meta.url),
+        new URL(
+            "../../../../../internal/tools/model_viewer/testdata/model_viewer_mesh.hex",
+            import.meta.url,
+        ),
         "utf8",
     ).trim(),
     "hex",

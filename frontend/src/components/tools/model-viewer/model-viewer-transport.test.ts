@@ -1,4 +1,4 @@
-import type { ModelViewerTransport as WailsModelViewerTransport } from "@bindings/tools";
+import type { ModelViewerTransport as WailsModelViewerTransport } from "@bindings/tools/model_viewer";
 import { describe, expect, it } from "vitest";
 
 import { normalizeModelViewerTransport } from "./model-viewer-transport";

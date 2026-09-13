@@ -44,20 +44,3 @@ func TestBisectStartRejectedDuringRecovery(t *testing.T) {
 		t.Fatal("bisect started while recovery was marked in progress")
 	}
 }
-
-func TestCancelledTempCleanupPreservesPendingDirectory(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	stale := filepath.Join(root, legacyModelViewerTempPrefix+"old")
-	if err := os.Mkdir(stale, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := cleanupStaleModelViewerDirs(ctx, root); !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled cleanup = %v", err)
-	}
-	if _, err := os.Stat(stale); err != nil {
-		t.Fatal("cancelled cleanup removed a directory")
-	}
-}
