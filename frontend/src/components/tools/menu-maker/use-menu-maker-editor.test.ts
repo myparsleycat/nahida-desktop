@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
     generate: vi.fn(),
     parse: vi.fn(),
     saveINI: vi.fn(),
+    apply: vi.fn(),
+    assets: vi.fn(),
     saveFile: vi.fn(),
     loadBlobs: vi.fn(),
     saveBlobs: vi.fn(),
@@ -27,11 +29,12 @@ vi.mock("@bindings/menumaker", () => ({
         Generate: mocks.generate,
         Parse: mocks.parse,
         SaveINI: mocks.saveINI,
+        ApplyBundle: mocks.apply,
     },
 }));
 vi.mock("@bindings/platform", () => ({ Dialog: { SaveFile: mocks.saveFile } }));
 vi.mock("@renderer/lib/logger", () => ({ Logger: { error: vi.fn(), capture: vi.fn() } }));
-vi.mock("@shared/menu-maker/resources", () => ({ renderMenuMakerAssets: vi.fn() }));
+vi.mock("@shared/menu-maker/resources", () => ({ renderMenuMakerAssets: mocks.assets }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: mocks.t }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: mocks.error } }));
 vi.mock("@shared/menu-maker/drafts", async (importOriginal) => ({
@@ -53,6 +56,7 @@ const source: MenuMakerSource = {
 };
 const generated = {
     iniText: "generated",
+    sourceINIText: "patched original",
     geometry: emptyMenuMakerGeometry(),
     slotStates: [],
     assetPaths: [],
@@ -86,6 +90,11 @@ beforeEach(() => {
     mocks.saveBlobs.mockResolvedValue(undefined);
     mocks.deleteBlobs.mockResolvedValue(undefined);
     mocks.saveINI.mockResolvedValue({});
+    mocks.assets.mockResolvedValue([]);
+    mocks.apply.mockResolvedValue({
+        sourceSHA256: "patched-hash",
+        outputINIPath: "C:\\mods\\menu.ini",
+    });
     mocks.saveFile.mockResolvedValue({ canceled: false, filePath: "C:\\output.ini" });
 });
 afterEach(() => {
@@ -99,6 +108,17 @@ function useEditor() {
 }
 
 describe("Menu Maker editor boundaries", () => {
+    it("keeps the patched source editable after applying a separate menu", async () => {
+        const hook = renderHook(useEditor);
+        await act(async () => hook.result.current.loadSource(source.path));
+        await act(async () => hook.result.current.applyBundle());
+        expect(mocks.apply).toHaveBeenCalledWith(
+            expect.objectContaining({ outputININame: "menu.ini" }),
+        );
+        expect(hook.result.current.state.source?.text).toBe("patched original");
+        expect(hook.result.current.state.source?.sha256).toBe("patched-hash");
+        expect(hook.result.current.state.sourceAvailable).toBe(true);
+    });
     it("keeps source/busy updates separate from edits that change the document revision", () => {
         const initial: EditorState = {
             slots: [],
@@ -216,6 +236,7 @@ describe("Menu Maker editor boundaries", () => {
         await act(async () => hook.result.current.saveINI());
         expect(mocks.saveINI).toHaveBeenCalledWith({
             destinationPath: "C:\\output.ini",
+            sourcePath: source.path,
             sourceText: source.text,
             slots: [],
             settings: hook.result.current.state.settings,

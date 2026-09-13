@@ -45,8 +45,6 @@ export const DEFAULT_MENU_MAKER_SETTINGS: MenuMakerSettings = {
     removeOriginalKeys: false,
     showKeyHint: true,
     hideUploadLabel: true,
-    useOriginalININame: true,
-    resetActiveOnPresent: false,
     palette: {
         accent: "#ff4fb3",
         panelBackground: "#11131a",

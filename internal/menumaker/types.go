@@ -40,19 +40,19 @@ type MenuMakerGeneratedAsset struct {
 }
 
 type MenuMakerApplyRequest struct {
-	SourcePath         string                    `json:"sourcePath"`
-	SourceSHA256       string                    `json:"sourceSHA256"`
-	OutputININame      string                    `json:"outputININame"`
-	Slots              []MenuMakerSlot           `json:"slots"`
-	Settings           MenuMakerSettings         `json:"settings"`
-	Encoding           string                    `json:"encoding"`
-	HasBOM             bool                      `json:"hasBOM"`
-	Newline            string                    `json:"newline"`
-	Assets             []MenuMakerGeneratedAsset `json:"assets"`
-	UseOriginalININame bool                      `json:"useOriginalININame"`
+	SourcePath    string                    `json:"sourcePath"`
+	SourceSHA256  string                    `json:"sourceSHA256"`
+	OutputININame string                    `json:"outputININame"`
+	Slots         []MenuMakerSlot           `json:"slots"`
+	Settings      MenuMakerSettings         `json:"settings"`
+	Encoding      string                    `json:"encoding"`
+	HasBOM        bool                      `json:"hasBOM"`
+	Newline       string                    `json:"newline"`
+	Assets        []MenuMakerGeneratedAsset `json:"assets"`
 }
 
 type MenuMakerSaveINIRequest struct {
+	SourcePath      string            `json:"sourcePath"`
 	DestinationPath string            `json:"destinationPath"`
 	SourceText      string            `json:"sourceText"`
 	Slots           []MenuMakerSlot   `json:"slots"`
@@ -63,6 +63,7 @@ type MenuMakerSaveINIRequest struct {
 }
 
 type MenuMakerSaveZIPRequest struct {
+	SourcePath      string                    `json:"sourcePath"`
 	DestinationPath string                    `json:"destinationPath"`
 	OutputININame   string                    `json:"outputININame"`
 	SourceText      string                    `json:"sourceText"`
@@ -75,6 +76,7 @@ type MenuMakerSaveZIPRequest struct {
 }
 
 type MenuMakerWriteResult struct {
+	SourceINIPath string   `json:"sourceINIPath,omitempty"`
 	OutputINIPath string   `json:"outputINIPath,omitempty"`
 	ArchivePath   string   `json:"archivePath,omitempty"`
 	BackupPath    string   `json:"backupPath,omitempty"`
@@ -154,22 +156,20 @@ type MenuMakerPalette struct {
 }
 
 type MenuMakerSettings struct {
-	Title                string           `json:"title"`
-	MenuKey              string           `json:"menuKey"`
-	ClickModifier        string           `json:"clickModifier"`
-	Columns              int              `json:"columns"`
-	Gap                  int              `json:"gap"`
-	BaseWidth            int              `json:"baseWidth"`
-	BaseHeight           int              `json:"baseHeight"`
-	PanelScale           float64          `json:"panelScale"`
-	SlotAlignment        string           `json:"slotAlignment"`
-	FallbackType         string           `json:"fallbackType"`
-	RemoveOriginalKeys   bool             `json:"removeOriginalKeys"`
-	ShowKeyHint          bool             `json:"showKeyHint"`
-	HideUploadLabel      bool             `json:"hideUploadLabel"`
-	UseOriginalININame   bool             `json:"useOriginalININame"`
-	ResetActiveOnPresent bool             `json:"resetActiveOnPresent"`
-	Palette              MenuMakerPalette `json:"palette"`
+	Title              string           `json:"title"`
+	MenuKey            string           `json:"menuKey"`
+	ClickModifier      string           `json:"clickModifier"`
+	Columns            int              `json:"columns"`
+	Gap                int              `json:"gap"`
+	BaseWidth          int              `json:"baseWidth"`
+	BaseHeight         int              `json:"baseHeight"`
+	PanelScale         float64          `json:"panelScale"`
+	SlotAlignment      string           `json:"slotAlignment"`
+	FallbackType       string           `json:"fallbackType"`
+	RemoveOriginalKeys bool             `json:"removeOriginalKeys"`
+	ShowKeyHint        bool             `json:"showKeyHint"`
+	HideUploadLabel    bool             `json:"hideUploadLabel"`
+	Palette            MenuMakerPalette `json:"palette"`
 }
 
 type MenuMakerSlotPosition struct {
@@ -204,14 +204,16 @@ type MenuMakerSlotStateGroup struct {
 }
 
 type MenuMakerGenerateRequest struct {
+	SourcePath string            `json:"sourcePath"`
 	SourceText string            `json:"sourceText"`
 	Slots      []MenuMakerSlot   `json:"slots"`
 	Settings   MenuMakerSettings `json:"settings"`
 }
 
 type MenuMakerGenerateResult struct {
-	INIText    string                    `json:"iniText"`
-	Geometry   MenuMakerGeometry         `json:"geometry"`
-	SlotStates []MenuMakerSlotStateGroup `json:"slotStates"`
-	AssetPaths []string                  `json:"assetPaths"`
+	SourceINIText string                    `json:"sourceINIText"`
+	INIText       string                    `json:"iniText"`
+	Geometry      MenuMakerGeometry         `json:"geometry"`
+	SlotStates    []MenuMakerSlotStateGroup `json:"slotStates"`
+	AssetPaths    []string                  `json:"assetPaths"`
 }

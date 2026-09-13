@@ -9,21 +9,19 @@ import (
 
 func defaultSettings() MenuMakerSettings {
 	return MenuMakerSettings{
-		Title:                "",
-		MenuKey:              "alt",
-		ClickModifier:        "alt",
-		Columns:              3,
-		Gap:                  14,
-		BaseWidth:            1920,
-		BaseHeight:           1080,
-		PanelScale:           1,
-		SlotAlignment:        "center",
-		FallbackType:         "cycle",
-		RemoveOriginalKeys:   false,
-		HideUploadLabel:      true,
-		UseOriginalININame:   true,
-		ResetActiveOnPresent: false,
-		ShowKeyHint:          true,
+		Title:              "",
+		MenuKey:            "alt",
+		ClickModifier:      "alt",
+		Columns:            3,
+		Gap:                14,
+		BaseWidth:          1920,
+		BaseHeight:         1080,
+		PanelScale:         1,
+		SlotAlignment:      "center",
+		FallbackType:       "cycle",
+		RemoveOriginalKeys: false,
+		HideUploadLabel:    true,
+		ShowKeyHint:        true,
 	}
 }
 
@@ -43,12 +41,38 @@ func TestGenerateUsesCycleFallback(t *testing.T) {
 	}
 }
 
+func TestGenerateUsesDeclaredActiveWithoutKeyCondition(t *testing.T) {
+	t.Parallel()
+	for _, declaration := range []string{"global $active = 0", "global $active", "GLOBAL $ACTIVE = 0 ; visibility"} {
+		for _, present := range []string{"[Present]\npost $active = 0\n"} {
+			document := parseDocument("[Constants]\n" + declaration + "\nglobal $swap = 0\n" + present +
+				"[KeySwap]\nkey = 5\n$swap = 0, 1\n[TextureOverrideBody]\nhash = abcdef01\n$active = 1")
+			output := generateFrom(document, document.Slots, defaultSettings())
+			for _, snippet := range []string{
+				"[KeyGuiMenu]\ncondition = $active == 1\nkey = alt",
+				"if $gui_menu && ($active == 1)\n  run = CommandListGuiMenu\nendif",
+				"[KeyGuiHold]\ncondition = $gui_menu == 1 && ($active == 1) && $gui_hover == 0",
+				"[KeyGuiClick]\ncondition = $gui_menu == 1 && ($active == 1) && $gui_hover == 1",
+				"[KeyGuiRightClick]\ncondition = $gui_menu == 1 && ($active == 1) && $gui_hover == 1",
+			} {
+				if !strings.Contains(output, snippet) {
+					t.Fatalf("missing %q for %q:\n%s", snippet, declaration, output)
+				}
+			}
+			reparsed := parseDocument(output)
+			if next := generateFrom(reparsed, reparsed.Slots, defaultSettings()); next != output {
+				t.Fatalf("active guard changed on regeneration for %q", declaration)
+			}
+		}
+	}
+}
+
 func TestGenerateRightClickRunsBackWithoutOriginalBackKey(t *testing.T) {
 	t.Parallel()
 	document := parseDocument("[Constants]\nglobal $swap = 0\n[KeySwap]\nkey = 5\n$swap = 0, 1, 2")
 	output := generateFrom(document, document.Slots, defaultSettings())
 	for _, snippet := range []string{
-		"[KeyGuiRightClick]\ncondition = $gui_menu == 1 && $gui_hover == 1\nkey = no_ctrl no_shift alt VK_RBUTTON\nrun = CommandListGuiRightClick",
+		"[KeyGuiRightClick]\ncondition = $gui_menu == 1 && (0) && $gui_hover == 1\nkey = no_ctrl no_shift alt VK_RBUTTON\nrun = CommandListGuiRightClick",
 		"[CommandListGuiClick]\n$gui_clicked = $gui_hovered\nif $gui_clicked == 1\n  ; swap\n  run = CommandListCycleKeySwap\nendif",
 		"[CommandListGuiRightClick]\n$gui_right_clicked = $gui_hovered\nif $gui_right_clicked == 1\n  ; swap\n  run = CommandListCycleKeySwapBack\nendif",
 		"[CommandListCycleKeySwapBack]\n$ks_step_KeySwap = $ks_step_KeySwap - 1",
@@ -203,6 +227,20 @@ func TestGenerateMergeModesAndKeyDeletion(t *testing.T) {
 	}
 	if !strings.Contains(deleted, "[CommandListCycleKeySwap]") {
 		t.Fatalf("missing generated cycle after key deletion:\n%s", deleted)
+	}
+}
+
+func TestGenerateRemovesOriginalKeysWithPrologue(t *testing.T) {
+	t.Parallel()
+	document := parseDocument("; prologue\n[KeySwap]\nkey = 5\n$swap = 0, 1")
+	settings := defaultSettings()
+	settings.RemoveOriginalKeys = true
+	output := generateFrom(document, document.Slots, settings)
+	if !strings.Contains(output, "; prologue\n") {
+		t.Fatalf("leading section was lost:\n%s", output)
+	}
+	if strings.Contains(output, "[KeySwap]") || !strings.Contains(output, disabledKeyPrefix) {
+		t.Fatalf("original keys were not removed:\n%s", output)
 	}
 }
 
@@ -401,7 +439,8 @@ func TestGenerateAssetPathsSkipAndTitle(t *testing.T) {
 
 func generateFrom(document MenuMakerDocument, slots []MenuMakerSlot, settings MenuMakerSettings) string {
 	geometry := calculateGeometry(slots, settings)
-	return generateINI(document, slots, settings, geometry, parseInitialConstants(document.Sections))
+	source, menu := generateINI(document, slots, settings, geometry, parseInitialConstants(document.Sections))
+	return source + "\n" + menu
 }
 
 func mergeSlots(slots []MenuMakerSlot, selectedIDs []string, mode string) []MenuMakerSlot {

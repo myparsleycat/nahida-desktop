@@ -88,19 +88,6 @@ func TestParseDocumentGroupsNormalizedKeys(t *testing.T) {
 	}
 }
 
-func TestExtractActiveInputsNormalizesComparisons(t *testing.T) {
-	t.Parallel()
-	got := extractActiveInputs("1 == $black_active && $active == 0 || $form_active")
-	want := []string{"$black_active == 1", "$active == 0", "$form_active"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("extractActiveInputs: %v", got)
-	}
-	sections := parseSections("[KeyA]\ncondition = $active == 0 && $active\n$swap = 0,1")
-	if collected := collectActiveInputs(sections); !slices.Equal(collected, []string{"$active == 0"}) {
-		t.Fatalf("collectActiveInputs: %v", collected)
-	}
-}
-
 func TestParseRejectsEmptyKeySections(t *testing.T) {
 	t.Parallel()
 	_, err := New().Parse(context.Background(), "[Constants]\nglobal $x = 0\n")

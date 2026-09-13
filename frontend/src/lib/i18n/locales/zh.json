@@ -941,6 +941,8 @@
         }
       },
       "menu_maker": {
+        "no_visibility": "未找到可判断显示状态的变量或 Position 绑定。请检查原始 INI 的渲染条件。",
+        "generate_failed": "无法生成菜单。请检查原始 namespace 及现有菜单冲突。",
         "title": "XXMI 菜单制作器",
         "loaded": "已加载源文件",
         "draft_restored": "已恢复匹配的草稿",
@@ -972,7 +974,7 @@
         "merge_all_keys": "全部按键",
         "reset": "重置",
         "auto_icon": "自动图标",
-        "ini_preview": "生成的 INI 预览",
+        "ini_preview": "menu.ini 与原始文件改动预览",
         "no_preview": "加载源文件后生成预览。",
         "panel": "面板与行为",
         "panel_image": "面板图片",

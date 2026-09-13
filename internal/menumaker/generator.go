@@ -30,7 +30,6 @@ var (
 	ifLineRe    = regexp.MustCompile(`(?i)^if\b`)
 	endifLineRe = regexp.MustCompile(`(?i)^endif\b`)
 	guiMenuRe   = regexp.MustCompile(`(?i)\$gui_menu\b`)
-	activeVarRe = regexp.MustCompile(`(?i)\$[A-Za-z0-9_]*active[A-Za-z0-9_]*`)
 	legacyVarRe = func() []*regexp.Regexp {
 		out := make([]*regexp.Regexp, 0, 5)
 		for _, name := range []string{"$gui_menu", "$gui_hover", "$gui_slot", "$gui_mx", "$gui_my"} {
@@ -45,7 +44,7 @@ func generatePreview(sourceText string, slots []MenuMakerSlot, settings MenuMake
 	document := parseDocument(sourceText)
 	geometry := calculateGeometry(slots, settings)
 	constants := parseInitialConstants(document.Sections)
-	iniText := generateINI(document, slots, settings, geometry, constants)
+	sourceINIText, iniText := generateINI(document, slots, settings, geometry, constants)
 	groups := make([]MenuMakerSlotStateGroup, 0, len(slots))
 	for _, slot := range slots {
 		groups = append(groups, MenuMakerSlotStateGroup{
@@ -54,10 +53,11 @@ func generatePreview(sourceText string, slots []MenuMakerSlot, settings MenuMake
 		})
 	}
 	return MenuMakerGenerateResult{
-		INIText:    iniText,
-		Geometry:   geometry,
-		SlotStates: groups,
-		AssetPaths: assetPaths(slots, settings, constants),
+		INIText:       iniText,
+		SourceINIText: sourceINIText,
+		Geometry:      geometry,
+		SlotStates:    groups,
+		AssetPaths:    assetPaths(slots, settings, constants),
 	}
 }
 
@@ -67,40 +67,46 @@ func generateINI(
 	settings MenuMakerSettings,
 	geometry MenuMakerGeometry,
 	constants map[string]string,
-) string {
+) (string, string) {
 	handlers := uniqueHandlers(slots)
-	activeInputs := collectActiveInputs(document.Sections)
-	activeCondition := strings.Join(activeInputs, " || ")
-	activeVariables := []string{}
-	for _, input := range activeInputs {
-		if match := variablePrefixRe.FindString(input); match != "" {
-			activeVariables = append(activeVariables, match)
+	sections := document.Sections
+	legacy := strings.Contains(document.Text, generatedBegin)
+	for _, section := range sections {
+		legacy = legacy || isLegacyGeneratedConstants(section)
+	}
+	if legacy {
+		sections = stripGeneratedSections(stripMarkedGeneratedBlock(sections), document.Handlers)
+	}
+	cleaned := []MenuMakerSection{}
+	for _, section := range sections {
+		reverse := false
+		for _, line := range section.Lines {
+			reverse = reverse || strings.TrimSpace(line) == generatedReverseMarker
+		}
+		if !reverse {
+			cleaned = append(cleaned, section)
 		}
 	}
-	activeVariables = uniqueStrings(activeVariables)
-	sections := stripGeneratedSections(stripMarkedGeneratedBlock(document.Sections), document.Handlers)
+	sections = cleaned
+	sections, activeInputs, generatedVariable := prepareVisibility(sections)
+	activeCondition := strings.Join(activeInputs, " || ")
+	if activeCondition == "" {
+		activeCondition = "0"
+	}
 	sections = rewriteKeySections(sections, slots, settings)
-	injected := injectPresent(
-		sections,
-		activeCondition,
-		activeVariables,
-		settings.ResetActiveOnPresent,
-		handlers,
-		settings,
-	)
-	originalParts := make([]string, 0, len(injected.sections))
-	for _, section := range injected.sections {
+	originalParts := make([]string, 0, len(sections))
+	for _, section := range sections {
 		originalParts = append(originalParts, strings.Join(section.Lines, "\n"))
 	}
-	original := strings.TrimSpace(strings.Join(originalParts, "\n"))
-	return original + "\n\n" + buildGeneratedBlock(
+	original := strings.TrimSpace(strings.Join(originalParts, "\n")) + "\n"
+	return original, buildGeneratedBlock(
 		slots,
 		handlers,
 		geometry,
 		settings,
 		activeCondition,
 		constants,
-		injected.hasPresent,
+		generatedVariable,
 	) + "\n"
 }
 
@@ -260,7 +266,7 @@ func buildGeneratedBlock(
 	settings MenuMakerSettings,
 	activeCondition string,
 	constants map[string]string,
-	hasPresent bool,
+	generatedVariable string,
 ) string {
 	activeSlots := []MenuMakerSlot{}
 	for _, slot := range slots {
@@ -274,35 +280,18 @@ func buildGeneratedBlock(
 		"; Source and third-party notices: internal/menumaker/NOTICE.md",
 		"",
 	}
-	if !hasPresent {
-		if activeCondition != "" {
-			lines = append(
-				lines,
-				"[Present]",
-				"if $gui_menu && ("+activeCondition+")",
-				"  run = CommandListGuiMenu",
-				"endif",
-			)
-		} else {
-			lines = append(lines, "[Present]", "if $gui_menu", "  run = CommandListGuiMenu", "endif")
-		}
-		if settings.ResetActiveOnPresent {
-			for _, variable := range activeVariablesFrom(activeCondition) {
-				lines = append(lines, "post "+variable+" = 0")
-			}
-		}
-		needsActivate := false
-		for _, handler := range handlers {
-			if effectiveType(handler, settings) == "activate" && len(handler.Assignments) > 0 {
-				needsActivate = true
-				break
-			}
-		}
-		if needsActivate {
-			lines = append(lines, "post run = CommandListGuiActivateReset")
-		}
-		lines = append(lines, "")
+	lines = append(lines, "[Present]", "if $gui_menu && ("+activeCondition+")", "  run = CommandListGuiMenu", "endif")
+	if generatedVariable != "" {
+		lines = append(lines, "post "+generatedVariable+" = 0")
 	}
+	for _, handler := range handlers {
+		if effectiveType(handler, settings) == "activate" && len(handler.Assignments) > 0 {
+			lines = append(lines, "post run = CommandListGuiActivateReset")
+			break
+		}
+	}
+	lines = append(lines, "")
+
 	lines = append(lines,
 		"[Constants]",
 		"global $gui_menu = 0",
@@ -322,6 +311,9 @@ func buildGeneratedBlock(
 		"global persist $gui_mx = 0.05",
 		"global persist $gui_my = 0.20",
 	)
+	if generatedVariable != "" {
+		lines = append(lines, "global "+generatedVariable+" = 0")
+	}
 	for _, handler := range handlers {
 		typeName := effectiveType(handler, settings)
 		if isCycleType(typeName) && len(handler.Assignments) > 0 {
@@ -339,6 +331,10 @@ func buildGeneratedBlock(
 	if activeCondition != "" {
 		lines = append(lines, "condition = "+activeCondition)
 	}
+	interactionCondition := "$gui_menu == 1"
+	if activeCondition != "" {
+		interactionCondition += " && (" + activeCondition + ")"
+	}
 	lines = append(
 		lines,
 		"key = "+menuKey,
@@ -346,18 +342,18 @@ func buildGeneratedBlock(
 		"$gui_menu = 1",
 		"",
 		"[KeyGuiHold]",
-		"condition = $gui_menu == 1 && $gui_hover == 0",
+		"condition = "+interactionCondition+" && $gui_hover == 0",
 		"key = "+clickKey(settings.ClickModifier, false),
 		"type = hold",
 		"$gui_hold = 1",
 		"",
 		"[KeyGuiClick]",
-		"condition = $gui_menu == 1 && $gui_hover == 1",
+		"condition = "+interactionCondition+" && $gui_hover == 1",
 		"key = "+clickKey(settings.ClickModifier, false),
 		"run = CommandListGuiClick",
 		"",
 		"[KeyGuiRightClick]",
-		"condition = $gui_menu == 1 && $gui_hover == 1",
+		"condition = "+interactionCondition+" && $gui_hover == 1",
 		"key = "+clickKey(settings.ClickModifier, true),
 		"run = CommandListGuiRightClick",
 		"",
@@ -621,13 +617,14 @@ func rewriteKeySections(
 			continue
 		}
 		typeName := effectiveType(item.handler, settings)
-		if typeName == "activate" {
-			if !settings.RemoveOriginalKeys {
-				out = append(out, section)
-			}
+		if settings.RemoveOriginalKeys {
+			original := append([]string{"[" + *section.Name + "]"}, originalSemanticLines(section)...)
+			section.Lines = []string{disabledKeyPrefix + encodeURIComponent(marshalJSON(original))}
+			out = append(out, section)
 			continue
 		}
-		if settings.RemoveOriginalKeys {
+		if typeName == "activate" {
+			out = append(out, section)
 			continue
 		}
 		if item.slot.MergeMode == "guiOnly" {
@@ -698,7 +695,7 @@ func preservedLines(section MenuMakerSection) []string {
 		return nil
 	}
 	out := []string{}
-	for _, line := range section.Lines[1:] {
+	for _, line := range originalSemanticLines(section) {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToLower(trimmed), originalLinesPrefix) {
 			continue
@@ -762,77 +759,6 @@ func originalSemanticLines(section MenuMakerSection) []string {
 		out = append(out, line)
 	}
 	return out
-}
-
-type presentInjection struct {
-	sections   []MenuMakerSection
-	hasPresent bool
-}
-
-func injectPresent(
-	sections []MenuMakerSection,
-	activeCondition string,
-	activeVariables []string,
-	resetActive bool,
-	handlers []MenuMakerHandler,
-	settings MenuMakerSettings,
-) presentInjection {
-	hasPresent := false
-	needsActivateReset := false
-	for _, handler := range handlers {
-		if effectiveType(handler, settings) == "activate" && len(handler.Assignments) > 0 {
-			needsActivateReset = true
-			break
-		}
-	}
-	output := make([]MenuMakerSection, 0, len(sections))
-	for _, section := range sections {
-		if section.Name == nil || strings.ToLower(*section.Name) != "present" {
-			output = append(output, section)
-			continue
-		}
-		hasPresent = true
-		lines := stripGeneratedPresent(section.Lines)
-		inserted := []string{"if $gui_menu", "  run = CommandListGuiMenu", "endif", ""}
-		if activeCondition != "" {
-			inserted[0] = "if $gui_menu && (" + activeCondition + ")"
-		}
-		if len(lines) == 0 {
-			lines = appendedAt(lines, 0, inserted)
-		} else {
-			lines = appendedAt(lines, 1, inserted)
-		}
-		if resetActive {
-			for _, variable := range activeVariables {
-				reset := "post " + variable + " = 0"
-				found := false
-				for _, line := range lines {
-					if strings.EqualFold(strings.TrimSpace(line), reset) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					lines = append(lines, reset)
-				}
-			}
-		}
-		if needsActivateReset {
-			found := false
-			for _, line := range lines {
-				if strings.EqualFold(strings.TrimSpace(line), "post run = commandlistguiactivatereset") {
-					found = true
-					break
-				}
-			}
-			if !found {
-				lines = append(lines, "post run = CommandListGuiActivateReset")
-			}
-		}
-		section.Lines = lines
-		output = append(output, section)
-	}
-	return presentInjection{sections: output, hasPresent: hasPresent}
 }
 
 func appendedAt(lines []string, index int, inserted []string) []string {
@@ -1230,11 +1156,6 @@ func uniqueNormalizedKeys(values []string) []string {
 		out = append(out, value)
 	}
 	return out
-}
-
-func activeVariablesFrom(condition string) []string {
-	matches := activeVarRe.FindAllString(condition, -1)
-	return uniqueStrings(matches)
 }
 
 func escapeComment(value string) string {

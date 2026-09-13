@@ -38,6 +38,7 @@ export function useMenuMakerEditor({
     const { t } = useTranslation();
     const [state, dispatch] = useReducer(reducer, initialState);
     const [preview, setPreview] = useState<MenuMakerGenerateResult>();
+    const [generationError, setGenerationError] = useState("");
     const initialized = useRef(false);
     const loadSource = useCallback(
         async (filePath: string) => {
@@ -102,22 +103,31 @@ export function useMenuMakerEditor({
         if (!state.source?.text) return;
         let cancelled = false;
         void MenuMaker.Generate({
+            sourcePath: state.source.path,
             sourceText: state.source.text,
             slots: state.slots,
             settings: state.settings,
         })
             .then((result) => {
-                if (!cancelled) setPreview(result);
+                if (!cancelled) {
+                    setPreview(result);
+                    setGenerationError("");
+                }
             })
             .catch((error) => {
                 if (cancelled) return;
                 Logger.error({ error, sourcePath: state.source?.path }, "MenuMakerPage:generate");
                 setPreview(undefined);
+                setGenerationError(
+                    String(error).includes("MENU_MAKER_NO_VISIBILITY")
+                        ? t("page.tools.menu_maker.no_visibility")
+                        : t("page.tools.menu_maker.generate_failed"),
+                );
             });
         return () => {
             cancelled = true;
         };
-    }, [state.settings, state.slots, state.source]);
+    }, [state.settings, state.slots, state.source, t]);
     const chooseFile = async () => {
         const result = await Dialog.ShowOpenDialog({
             title: t("page.tools.menu_maker.choose_file"),
@@ -132,13 +142,12 @@ export function useMenuMakerEditor({
         const result = await Dialog.SelectDirectory();
         if (!result.canceled && result.filePath) await scanFolder(result.filePath);
     };
-    const outputName = state.source
-        ? buildOutputName(state.source.fileName, state.settings.useOriginalININame)
-        : "menu_gui.ini";
+    const outputName = "menu.ini";
     const generateCurrent = async () => {
         if (!state.source) return null;
         try {
             const result = await MenuMaker.Generate({
+                sourcePath: state.source.path,
                 sourceText: state.source.text,
                 slots: state.slots,
                 settings: state.settings,
@@ -183,20 +192,16 @@ export function useMenuMakerEditor({
                 hasBOM: state.source.hasBOM,
                 newline: state.source.newline,
                 assets,
-                useOriginalININame: state.settings.useOriginalININame,
             });
             toast.success(t("page.tools.menu_maker.applied", { path: result.outputINIPath }));
             if (result.sourceSHA256) {
                 dispatch({
                     type: "sourceContent",
-                    text: generated.iniText,
+                    text: generated.sourceINIText,
                     sha256: result.sourceSHA256,
                 });
-            } else if (
-                /\.ini$/i.test(state.source.fileName) &&
-                !state.settings.useOriginalININame
-            ) {
-                dispatch({ type: "sourceAvailable", value: false });
+            } else if (result.sourceINIPath) {
+                await loadSource(result.sourceINIPath);
             }
         } catch (error) {
             Logger.error(
@@ -223,6 +228,7 @@ export function useMenuMakerEditor({
         try {
             await MenuMaker.SaveINI({
                 destinationPath: selection.filePath,
+                sourcePath: state.source.path,
                 sourceText: state.source.text,
                 slots: state.slots,
                 settings: state.settings,
@@ -257,6 +263,7 @@ export function useMenuMakerEditor({
             await MenuMaker.SaveZIP({
                 destinationPath: selection.filePath,
                 outputININame: outputName,
+                sourcePath: state.source.path,
                 sourceText: state.source.text,
                 slots: state.slots,
                 settings: state.settings,
@@ -288,6 +295,7 @@ export function useMenuMakerEditor({
         state,
         dispatch,
         preview,
+        generationError,
         chooseFile,
         chooseFolder,
         applyBundle,
@@ -299,9 +307,4 @@ export function useMenuMakerEditor({
         scanFolder,
         restoreDraft,
     };
-}
-
-function buildOutputName(fileName: string, original: boolean): string {
-    const base = fileName.replace(/\.(?:ini|txt)$/i, "");
-    return `${base}${original ? "" : "_gui"}.ini`;
 }

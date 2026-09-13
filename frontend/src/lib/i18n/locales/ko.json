@@ -960,6 +960,8 @@
         }
       },
       "menu_maker": {
+        "no_visibility": "모드 표시 상태를 확인할 활성 변수나 Position 연결을 찾지 못했습니다. 원본 INI의 렌더링 조건을 확인해 주세요.",
+        "generate_failed": "메뉴를 생성하지 못했습니다. 원본 INI의 namespace와 기존 메뉴 충돌 여부를 확인해 주세요.",
         "title": "XXMI 메뉴 메이커",
         "loaded": "원본을 불러왔습니다",
         "draft_restored": "일치하는 초안을 복원했습니다",
@@ -991,7 +993,7 @@
         "merge_all_keys": "모든 키",
         "reset": "초기화",
         "auto_icon": "자동 아이콘",
-        "ini_preview": "생성 INI 미리보기",
+        "ini_preview": "menu.ini 및 원본 변경 미리보기",
         "no_preview": "원본 파일을 불러오면 미리보기가 생성됩니다.",
         "panel": "패널 및 동작",
         "panel_image": "패널 이미지",
