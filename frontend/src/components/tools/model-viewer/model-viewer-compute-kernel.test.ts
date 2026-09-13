@@ -318,6 +318,18 @@ describe("GIMI shape/pose compute kernel", () => {
         ]);
     });
 
+    it("rejects an out-of-range compute subset vertex", () => {
+        expect(() =>
+            computeGIMIShapePoseFrame(
+                descriptor(0, false),
+                { base: vertex([0, 0, 0]), shapeTargets: [] },
+                0,
+                0,
+                { vertices: new Uint32Array([1]) },
+            ),
+        ).toThrow("source index 1");
+    });
+
     it("still rejects unused vertices with invalid blend bones", () => {
         const deformer = descriptor();
         deformer.vertexCount = 2;

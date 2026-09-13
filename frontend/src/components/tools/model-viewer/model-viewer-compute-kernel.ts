@@ -323,7 +323,11 @@ export function forEachComputeVertex(
         return;
     }
     for (let dest = 0; dest < vertices.length; dest += 1) {
-        visit(vertices[dest]!, dest);
+        const source = vertices[dest]!;
+        if (source >= vertexCount) {
+            throw new Error(`GIMI shape/pose source index ${source} is outside the vertex buffer.`);
+        }
+        visit(source, dest);
     }
 }
 
