@@ -359,6 +359,8 @@ type modelViewerDrawVertexSource struct {
 	packed                         []byte
 	packedStride                   int
 	missingTexcoord                bool
+	positionData                   []byte
+	positionScope                  string
 }
 
 func modelViewerInlineObjectForResource(
@@ -620,10 +622,16 @@ func loadModelViewerDrawVertexBuffers(
 		return modelViewerDrawVertexBuffers{}, false, nil
 	case modelViewerDrawVertexMihoyo:
 		buffers, buffersErr := cache.paired(
-			filepath.Join(modDir, filepath.FromSlash(position.Filename)),
+			filepath.Join(
+				modDir,
+				filepath.FromSlash(
+					firstModelViewerString(position.Filename, "stream-output:"+source.positionScope+":"+position.Name),
+				),
+			),
 			posStride,
 			filepath.Join(modDir, filepath.FromSlash(texcoord.Filename)),
 			tcStride,
+			source.positionData,
 		)
 		if buffersErr != nil {
 			if isModelViewerInterleaveValidationError(buffersErr) {

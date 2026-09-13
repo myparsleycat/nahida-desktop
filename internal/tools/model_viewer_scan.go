@@ -440,6 +440,7 @@ func buildModelViewerDirectScannedMeshesAt(
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
+	streamOutputs := collectModelViewerStreamOutputs(modDir, sections, resourceMap, cache)
 	var packedResources map[string]int
 	var inlineResources map[string]modelViewerInlineObjectLayout
 	if layoutName != "wwmi" {
@@ -479,6 +480,20 @@ func buildModelViewerDirectScannedMeshesAt(
 			packedResources,
 			inlineResources,
 		)
+		if source.kind == "" && layoutName != "wwmi" {
+			if stream, ok := streamOutputs[modelViewerNormalizeKey(draw.state.vb0)]; ok {
+				ib := resourceMap[modelViewerNormalizeKey(draw.state.ib)]
+				tc := resourceMap[modelViewerNormalizeKey(draw.state.vb1)]
+				if ib.Filename != "" && tc.Filename != "" {
+					source = modelViewerDrawVertexSource{
+						kind: modelViewerDrawVertexMihoyo, ib: ib, texcoord: tc,
+						position:      modelViewerResource{Name: draw.state.vb0, Stride: stream.stride},
+						positionData:  stream.data,
+						positionScope: iniPath,
+					}
+				}
+			}
+		}
 		if source.kind == "" {
 			if source.missingTexcoord && timing != nil {
 				timing.SkippedMissingTexcoord = true

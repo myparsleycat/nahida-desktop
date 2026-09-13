@@ -543,6 +543,7 @@ func (c *modelViewerBufferCache) paired(
 	posStride int,
 	tcPath string,
 	tcStride int,
+	positionData []byte,
 ) (modelViewerPairedBuffers, error) {
 	key := strings.ToLower(
 		posPath,
@@ -553,19 +554,31 @@ func (c *modelViewerBufferCache) paired(
 	) + "|" + strconv.Itoa(
 		tcStride,
 	)
+	if positionData != nil {
+		key = "stream-output|" + key
+	}
 	c.mu.Lock()
 	if entry, ok := c.pairs[key]; ok {
 		c.mu.Unlock()
 		return entry, nil
 	}
 	c.mu.Unlock()
-	posRaw, err := c.read(posPath)
-	if err != nil {
-		return modelViewerPairedBuffers{}, err
+	posRaw := positionData
+	if posRaw == nil {
+		var err error
+		posRaw, err = c.read(posPath)
+		if err != nil {
+			return modelViewerPairedBuffers{}, err
+		}
 	}
 	tcRaw, err := c.read(tcPath)
 	if err != nil {
 		return modelViewerPairedBuffers{}, err
+	}
+	if positionData != nil && posStride > 0 && tcStride > 0 && len(tcRaw)%tcStride == 0 &&
+		len(tcRaw)/tcStride <= len(posRaw)/posStride {
+		// A draw may bind a UV buffer covering only the first stream-output segment.
+		posRaw = posRaw[:len(tcRaw)/tcStride*posStride]
 	}
 	combined, stride, _, err := interleaveModelViewerBuffers([][]byte{posRaw, tcRaw}, []int{posStride, tcStride})
 	if err != nil {
