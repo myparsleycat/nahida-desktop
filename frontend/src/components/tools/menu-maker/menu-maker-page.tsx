@@ -61,6 +61,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
     state,
     dispatch,
     preview,
+    generationError,
     chooseFile,
     chooseFolder,
     applyBundle,
@@ -77,7 +78,9 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
     onSourceLoaded: () => setSelected([]),
     onDraftRestored: () => setDialog(null),
   });
-  const generatedINI = preview?.iniText ?? "";
+  const generatedINI = preview
+    ? `; menu.ini\n${preview.iniText}\n; ${state.source?.fileName ?? "Source INI"}\n${preview.sourceINIText}`
+    : "";
   const geometry = preview?.geometry ?? emptyMenuMakerGeometry();
   const previewResolutionScale = calculateMenuMakerPreviewScale(state.settings);
   const previewTitle = menuMakerTitleText(state.settings);
@@ -199,6 +202,11 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
         </ButtonGroup>
       </div>
 
+      {generationError && (
+        <p role="alert" className="px-4 py-2 text-sm text-destructive">
+          {generationError}
+        </p>
+      )}
       <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[290px_minmax(360px,1fr)_minmax(300px,38%)]">
         <aside
           className={cn(
@@ -464,7 +472,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
             </div>
           ) : (
             <pre className="scroll-area min-h-0 flex-1 overflow-auto p-3 font-mono text-[11px] leading-5 whitespace-pre select-text">
-              {generatedINI || t("page.tools.menu_maker.no_preview")}
+              {generationError || generatedINI || t("page.tools.menu_maker.no_preview")}
             </pre>
           )}
         </aside>

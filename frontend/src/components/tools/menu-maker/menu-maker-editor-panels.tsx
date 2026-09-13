@@ -139,16 +139,6 @@ export function Inspector({
           value={settings.hideUploadLabel}
           onChange={(value) => set("hideUploadLabel", value)}
         />
-        <Toggle
-          label={t("page.tools.menu_maker.original_name")}
-          value={settings.useOriginalININame}
-          onChange={(value) => set("useOriginalININame", value)}
-        />
-        <Toggle
-          label={t("page.tools.menu_maker.active_reset")}
-          value={settings.resetActiveOnPresent}
-          onChange={(value) => set("resetActiveOnPresent", value)}
-        />
       </FieldSet>
       <FieldSet className="gap-2">
         <FieldLegend className="mb-2 text-xs font-semibold text-muted-foreground uppercase">

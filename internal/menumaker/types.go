@@ -53,6 +53,7 @@ type MenuMakerApplyRequest struct {
 }
 
 type MenuMakerSaveINIRequest struct {
+	SourcePath      string            `json:"sourcePath"`
 	DestinationPath string            `json:"destinationPath"`
 	SourceText      string            `json:"sourceText"`
 	Slots           []MenuMakerSlot   `json:"slots"`
@@ -63,6 +64,7 @@ type MenuMakerSaveINIRequest struct {
 }
 
 type MenuMakerSaveZIPRequest struct {
+	SourcePath      string                    `json:"sourcePath"`
 	DestinationPath string                    `json:"destinationPath"`
 	OutputININame   string                    `json:"outputININame"`
 	SourceText      string                    `json:"sourceText"`
@@ -75,6 +77,7 @@ type MenuMakerSaveZIPRequest struct {
 }
 
 type MenuMakerWriteResult struct {
+	SourceINIPath string   `json:"sourceINIPath,omitempty"`
 	OutputINIPath string   `json:"outputINIPath,omitempty"`
 	ArchivePath   string   `json:"archivePath,omitempty"`
 	BackupPath    string   `json:"backupPath,omitempty"`
@@ -204,14 +207,16 @@ type MenuMakerSlotStateGroup struct {
 }
 
 type MenuMakerGenerateRequest struct {
+	SourcePath string            `json:"sourcePath"`
 	SourceText string            `json:"sourceText"`
 	Slots      []MenuMakerSlot   `json:"slots"`
 	Settings   MenuMakerSettings `json:"settings"`
 }
 
 type MenuMakerGenerateResult struct {
-	INIText    string                    `json:"iniText"`
-	Geometry   MenuMakerGeometry         `json:"geometry"`
-	SlotStates []MenuMakerSlotStateGroup `json:"slotStates"`
-	AssetPaths []string                  `json:"assetPaths"`
+	SourceINIText string                    `json:"sourceINIText"`
+	INIText       string                    `json:"iniText"`
+	Geometry      MenuMakerGeometry         `json:"geometry"`
+	SlotStates    []MenuMakerSlotStateGroup `json:"slotStates"`
+	AssetPaths    []string                  `json:"assetPaths"`
 }

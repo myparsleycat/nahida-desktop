@@ -976,6 +976,8 @@
         }
       },
       "menu_maker": {
+        "no_visibility": "No render visibility flag or Position binding was found. Check the rendering conditions in the original INI.",
+        "generate_failed": "Could not generate the menu. Check the original namespace and existing menu conflicts.",
         "title": "XXMI Menu Maker",
         "loaded": "Source loaded",
         "draft_restored": "Matching draft restored",
@@ -1007,7 +1009,7 @@
         "merge_all_keys": "All keys",
         "reset": "Reset",
         "auto_icon": "Auto icon",
-        "ini_preview": "Generated INI preview",
+        "ini_preview": "menu.ini and source changes",
         "no_preview": "Load a source file to generate a preview.",
         "panel": "Panel and behavior",
         "panel_image": "Panel image",

@@ -15,21 +15,18 @@ import (
 
 const (
 	originalLinesPrefix    = "; nahida-menu-maker-original="
+	disabledKeyPrefix      = "; nahida-menu-maker-disabled-key="
 	generatedReverseMarker = "; nahida-menu-maker-generated-reverse"
 )
 
 var (
-	sectionRe       = regexp.MustCompile(`^\s*\[([^\]]+)\]\s*$`)
-	assignRe        = regexp.MustCompile(`(?i)^\s*(\$[A-Za-z0-9_]+|[xyzw](?:\d+)?)\s*=\s*([^;]+?)\s*$`)
-	generatedKeyRe  = regexp.MustCompile(`(?i)^KeyGui(?:Menu|Hold|Click|RightClick)$`)
-	keyPrefixRe     = regexp.MustCompile(`(?i)^Key`)
-	keyLineRe       = regexp.MustCompile(`(?i)^\s*key\s*=`)
-	conditionLineRe = regexp.MustCompile(`(?i)^\s*condition\s*=`)
-	commentTailRe   = regexp.MustCompile(`\s+;.*`)
-	activeNameRe    = regexp.MustCompile(`(?i)\$[A-Za-z0-9_]*active[A-Za-z0-9_]*`)
-	activeCompareRe = regexp.MustCompile(
-		`(?i)(\$[A-Za-z0-9_]*active[A-Za-z0-9_]*)\s*(==|=|!=|>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*(==|=|!=|>=|<=|>|<)\s*(\$[A-Za-z0-9_]*active[A-Za-z0-9_]*)`,
-	)
+	sectionRe         = regexp.MustCompile(`^\s*\[([^\]]+)\]\s*$`)
+	assignRe          = regexp.MustCompile(`(?i)^\s*(\$[A-Za-z0-9_]+|[xyzw](?:\d+)?)\s*=\s*([^;]+?)\s*$`)
+	generatedKeyRe    = regexp.MustCompile(`(?i)^KeyGui(?:Menu|Hold|Click|RightClick)$`)
+	keyPrefixRe       = regexp.MustCompile(`(?i)^Key`)
+	keyLineRe         = regexp.MustCompile(`(?i)^\s*key\s*=`)
+	conditionLineRe   = regexp.MustCompile(`(?i)^\s*condition\s*=`)
+	commentTailRe     = regexp.MustCompile(`\s+;.*`)
 	variablePrefixRe  = regexp.MustCompile(`^\$[A-Za-z0-9_]+`)
 	keyAssignRe       = regexp.MustCompile(`(?i)^key\s*=`)
 	conditionAssignRe = regexp.MustCompile(`(?i)^condition\s*=`)
@@ -39,7 +36,6 @@ var (
 	runAssignRe       = regexp.MustCompile(`(?i)^run\s*=`)
 	skipMetaAssignRe  = regexp.MustCompile(`(?i)^(smart|transition|transition_type|delay|release_delay)\s*=`)
 	wrapFalseRe       = regexp.MustCompile(`(?i)^(false|0|no|off)$`)
-	strictZeroRe      = regexp.MustCompile(`(?i)\s==\s0$`)
 	spaceRe           = regexp.MustCompile(`\s+`)
 	noModifiersRe     = regexp.MustCompile(`(?i)\bno_modifiers\b`)
 	identifierRe      = regexp.MustCompile(`[^A-Za-z0-9_]`)
@@ -62,7 +58,18 @@ func parseSections(text string) []MenuMakerSection {
 	lines := []string{}
 	index := 0
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	inputLines := []string{}
 	for _, line := range strings.Split(normalized, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), disabledKeyPrefix) {
+			encoded := strings.TrimPrefix(strings.TrimSpace(line), disabledKeyPrefix)
+			if decoded, ok := readOriginalLines([]string{originalLinesPrefix + encoded}); ok {
+				inputLines = append(inputLines, decoded...)
+				continue
+			}
+		}
+		inputLines = append(inputLines, line)
+	}
+	for _, line := range inputLines {
 		if match := sectionRe.FindStringSubmatch(line); match != nil {
 			sections = append(sections, MenuMakerSection{Name: name, Lines: lines, Index: index})
 			index++
@@ -123,7 +130,7 @@ func parseHandlers(sections []MenuMakerSection) []MenuMakerHandler {
 			case keyAssignRe.MatchString(trimmed):
 				keys = append(keys, parseValue(trimmed))
 			case conditionAssignRe.MatchString(trimmed):
-				condition = strings.TrimSpace(afterEquals(trimmed))
+				condition = stripComment(afterEquals(trimmed))
 			case typeAssignRe.MatchString(trimmed):
 				typeName = strings.ToLower(strings.TrimSpace(afterEquals(stripComment(trimmed))))
 			case backAssignRe.MatchString(trimmed):
@@ -279,68 +286,6 @@ func normalizeMenuMakerKey(key string) string {
 	return strings.ToLower(strings.TrimSpace(normalized))
 }
 
-func extractActiveInputs(condition string) []string {
-	inputs := []string{}
-	covered := [][2]int{}
-	for _, match := range activeCompareRe.FindAllStringSubmatchIndex(condition, -1) {
-		groups := make([]string, 7)
-		for i := range 6 {
-			start, end := match[(i+1)*2], match[(i+1)*2+1]
-			if start >= 0 && end >= 0 {
-				groups[i+1] = condition[start:end]
-			}
-		}
-		if groups[1] != "" {
-			inputs = append(inputs, groups[1]+" "+normalizeOperator(groups[2])+" "+groups[3])
-		} else {
-			inputs = append(inputs, groups[6]+" "+reverseOperator(groups[5])+" "+groups[4])
-		}
-		covered = append(covered, [2]int{match[0], match[1]})
-	}
-	for _, match := range activeNameRe.FindAllStringIndex(condition, -1) {
-		inside := false
-		for _, span := range covered {
-			if match[0] >= span[0] && match[0] < span[1] {
-				inside = true
-				break
-			}
-		}
-		if !inside {
-			inputs = append(inputs, condition[match[0]:match[1]])
-		}
-	}
-	return uniqueCaseInsensitive(inputs)
-}
-
-func collectActiveInputs(sections []MenuMakerSection) []string {
-	inputs := []string{}
-	for _, section := range sections {
-		if section.Name == nil || !strings.HasPrefix(strings.ToLower(*section.Name), "key") {
-			continue
-		}
-		for _, line := range section.Lines {
-			trimmed := strings.TrimSpace(line)
-			if !conditionAssignRe.MatchString(trimmed) {
-				continue
-			}
-			inputs = append(inputs, extractActiveInputs(strings.TrimSpace(afterEquals(trimmed)))...)
-		}
-	}
-	strictZero := map[string]bool{}
-	for _, input := range inputs {
-		if strictZeroRe.MatchString(input) {
-			strictZero[strings.ToLower(strings.Fields(input)[0])] = true
-		}
-	}
-	filtered := []string{}
-	for _, input := range uniqueCaseInsensitive(inputs) {
-		if strings.Contains(input, " ") || !strictZero[strings.ToLower(input)] {
-			filtered = append(filtered, input)
-		}
-	}
-	return filtered
-}
-
 func filterLines(lines []string, pattern *regexp.Regexp) []string {
 	out := []string{}
 	for _, line := range lines {
@@ -379,29 +324,6 @@ func safeIdentifier(value string) string {
 		return "active"
 	}
 	return value
-}
-
-func normalizeOperator(operator string) string {
-	if operator == "=" {
-		return "=="
-	}
-	return operator
-}
-
-func reverseOperator(operator string) string {
-	operator = normalizeOperator(operator)
-	switch operator {
-	case ">":
-		return "<"
-	case "<":
-		return ">"
-	case ">=":
-		return "<="
-	case "<=":
-		return ">="
-	default:
-		return operator
-	}
 }
 
 func uniqueCaseInsensitive(values []string) []string {

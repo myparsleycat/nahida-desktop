@@ -942,6 +942,8 @@
         }
       },
       "menu_maker": {
+        "no_visibility": "表示状態を判定する変数やPositionバインディングが見つかりません。元のINIの描画条件を確認してください。",
+        "generate_failed": "メニューを生成できませんでした。元のnamespaceと既存メニューとの競合を確認してください。",
         "title": "XXMI メニューメーカー",
         "loaded": "ソースを読み込みました",
         "draft_restored": "一致する下書きを復元しました",
