@@ -36,10 +36,17 @@ type FixInspectionSnapshot struct {
 }
 
 type trackedFixInspection struct {
-	record         FixInspectionRecord
-	identity       fs.FileInfo
-	contentWatcher *watcher.Watcher
-	parentWatcher  *watcher.Watcher
+	// dismissedResult hides the warning for as long as the tracked result still equals it.
+	dismissedResult *FixInspectionResult
+	record          FixInspectionRecord
+	identity        fs.FileInfo
+	contentWatcher  *watcher.Watcher
+	parentWatcher   *watcher.Watcher
+}
+
+// warningHidden reports whether the user dismissed the warning currently tracked for this mod.
+func (t *trackedFixInspection) warningHidden() bool {
+	return t.dismissedResult != nil && equalFixInspectionResult(*t.dismissedResult, t.record.Result)
 }
 
 // Only actionable results are retained and watched for changes.
@@ -101,6 +108,42 @@ func (t *Tools) RefreshFixInspections(ctx context.Context) FixInspectionSnapshot
 		t.emitFixInspectionSnapshot()
 	}
 	return t.fixInspectionSnapshot()
+}
+
+// DismissFixInspection hides the warning for a mod until its inspection result changes.
+// The warning keeps being watched, so a mod that is repaired later stops being tracked.
+func (t *Tools) DismissFixInspection(modPath string) {
+	if t == nil {
+		return
+	}
+
+	t.fixInspectionMu.Lock()
+	tracked := t.fixInspections[fixInspectionKey(modPath)]
+	if t.fixInspectionClosed || tracked == nil || tracked.warningHidden() {
+		t.fixInspectionMu.Unlock()
+		return
+	}
+	dismissed := cloneFixInspectionResult(tracked.record.Result)
+	tracked.dismissedResult = &dismissed
+	t.fixInspectionRevision++
+	t.fixInspectionMu.Unlock()
+
+	t.emitFixInspectionSnapshot()
+}
+
+// carryFixInspectionDismissal hands a dismissal to the record stored under a new key, so a renamed
+// mod keeps its warning hidden while the inspection result does not change.
+func (t *Tools) carryFixInspectionDismissal(key string, dismissed *FixInspectionResult) {
+	if dismissed == nil {
+		return
+	}
+
+	t.fixInspectionMu.Lock()
+	defer t.fixInspectionMu.Unlock()
+	// A dismissal already recorded for the new key is at least as new as the carried one.
+	if tracked := t.fixInspections[key]; tracked != nil && tracked.dismissedResult == nil {
+		tracked.dismissedResult = dismissed
+	}
 }
 
 //wails:ignore
@@ -360,12 +403,10 @@ func (t *Tools) refreshFixInspectionLocked(
 			if renamedPath == "" {
 				return t.removeFixInspection(record.ModPath)
 			}
-			_, stopped = t.removeFixInspection(record.ModPath)
-			record.ModPath = renamedPath
-			record.DisplayName = filepath.Base(renamedPath)
-			_, watchErr := t.storeFixInspection(record)
-			t.logError(watchErr, "FixInspector.watch")
-			key = fixInspectionKey(renamedPath)
+			var migrationStopped []*trackedFixInspection
+			record, migrationStopped = t.migrateFixInspectionRename(record, renamedPath)
+			key = fixInspectionKey(record.ModPath)
+			stopped = append(stopped, migrationStopped...)
 			changed = true
 		} else {
 			if err == nil {
@@ -410,6 +451,23 @@ func (t *Tools) refreshFixInspectionLocked(
 	}
 	t.fixInspectionMu.Unlock()
 	return changed || recordChanged, stopped
+}
+
+// migrateFixInspectionRename re-keys a tracked record after a disabled-folder rename. The dismissal
+// state comes from the same critical section that drops the old key, so a dismissal recorded while
+// the refresh was running is carried over instead of the value the refresh read earlier.
+func (t *Tools) migrateFixInspectionRename(
+	record FixInspectionRecord,
+	renamedPath string,
+) (FixInspectionRecord, []*trackedFixInspection) {
+	dismissed, stopped := t.removeFixInspectionWithDismissal(record.ModPath)
+
+	record.ModPath = renamedPath
+	record.DisplayName = filepath.Base(renamedPath)
+	_, watchErr := t.storeFixInspection(record)
+	t.logError(watchErr, "FixInspector.watch")
+	t.carryFixInspectionDismissal(fixInspectionKey(renamedPath), dismissed)
+	return record, stopped
 }
 
 func findDisabledFixInspectionRename(previousPath string, identity fs.FileInfo) string {
@@ -457,20 +515,27 @@ func isDisabledFixInspectionRename(previousName, candidateName string) bool {
 }
 
 func (t *Tools) removeFixInspection(modPath string) (bool, []*trackedFixInspection) {
-	key := fixInspectionKey(modPath)
-	t.fixInspectionMu.Lock()
-	tracked := t.fixInspections[key]
-	if tracked != nil {
-		delete(t.fixInspections, key)
-		t.fixInspectionRevision++
-	}
-	t.fixInspectionMu.Unlock()
-	if tracked == nil {
-		return false, nil
-	}
-	return true, []*trackedFixInspection{tracked}
+	_, stopped := t.removeFixInspectionWithDismissal(modPath)
+	return stopped != nil, stopped
 }
 
+// removeFixInspectionWithDismissal drops the tracked record for modPath and returns its dismissal
+// state from the same critical section, so a rename migration re-storing the record under a new key
+// cannot overwrite a dismissal that landed while the refresh was running.
+func (t *Tools) removeFixInspectionWithDismissal(modPath string) (*FixInspectionResult, []*trackedFixInspection) {
+	key := fixInspectionKey(modPath)
+	t.fixInspectionMu.Lock()
+	defer t.fixInspectionMu.Unlock()
+	tracked := t.fixInspections[key]
+	if tracked == nil {
+		return nil, nil
+	}
+	delete(t.fixInspections, key)
+	t.fixInspectionRevision++
+	return tracked.dismissedResult, []*trackedFixInspection{tracked}
+}
+
+// Dismissed warnings are tracked and watched like any other record, but stay out of the snapshot.
 func (t *Tools) fixInspectionSnapshot() FixInspectionSnapshot {
 	if t == nil {
 		return FixInspectionSnapshot{Inspections: []FixInspectionRecord{}}
@@ -479,6 +544,9 @@ func (t *Tools) fixInspectionSnapshot() FixInspectionSnapshot {
 	defer t.fixInspectionMu.Unlock()
 	items := make([]FixInspectionRecord, 0, len(t.fixInspections))
 	for _, tracked := range t.fixInspections {
+		if tracked.warningHidden() {
+			continue
+		}
 		items = append(items, cloneFixInspectionRecord(tracked.record))
 	}
 	slices.SortFunc(items, func(left, right FixInspectionRecord) int {
@@ -551,11 +619,15 @@ func cloneFixInspectionResult(result FixInspectionResult) FixInspectionResult {
 func equalFixInspectionRecord(left, right FixInspectionRecord) bool {
 	return left.ModPath == right.ModPath &&
 		left.DisplayName == right.DisplayName &&
-		left.Result.NeedsFix == right.Result.NeedsFix &&
-		left.Result.Importer == right.Result.Importer &&
-		left.Result.ToolName == right.Result.ToolName &&
-		left.Result.Summary == right.Result.Summary &&
-		left.Result.ActionTool == right.Result.ActionTool &&
-		slices.Equal(left.Result.Details, right.Result.Details) &&
-		slices.Equal(left.Result.AffectedFiles, right.Result.AffectedFiles)
+		equalFixInspectionResult(left.Result, right.Result)
+}
+
+func equalFixInspectionResult(left, right FixInspectionResult) bool {
+	return left.NeedsFix == right.NeedsFix &&
+		left.Importer == right.Importer &&
+		left.ToolName == right.ToolName &&
+		left.Summary == right.Summary &&
+		left.ActionTool == right.ActionTool &&
+		slices.Equal(left.Details, right.Details) &&
+		slices.Equal(left.AffectedFiles, right.AffectedFiles)
 }

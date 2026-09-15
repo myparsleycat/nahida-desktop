@@ -11,6 +11,11 @@ import { useTranslation } from "react-i18next";
 const fixInspectionEvent = "tools:fix-inspections";
 const fixActivityPrefix = "mod-fix:";
 
+type FixInspectionHandlers = {
+    onOpenFixer: (record: FixInspectionRecord) => void;
+    onDismissFix: (record: FixInspectionRecord) => void;
+};
+
 export function useModFixInspectionTitlebarActivity() {
     const navigate = useNavigate();
     const { t } = useTranslation();
@@ -24,13 +29,23 @@ export function useModFixInspectionTitlebarActivity() {
             latestRevision.current = snapshot.revision;
             syncFixInspectionActivities(
                 snapshot,
-                (record) => {
-                    modStore.getState().setPendingModFixerRequest({
-                        modPath: record.modPath,
-                        importer: record.result.importer,
-                        actionTool: record.result.actionTool || undefined,
-                    });
-                    void navigate({ to: "/mod" });
+                {
+                    onOpenFixer: (record) => {
+                        modStore.getState().setPendingModFixerRequest({
+                            modPath: record.modPath,
+                            importer: record.result.importer,
+                            actionTool: record.result.actionTool || undefined,
+                        });
+                        void navigate({ to: "/mod" });
+                    },
+                    onDismissFix: (record) => {
+                        void Tools.DismissFixInspection(record.modPath).catch((error: unknown) => {
+                            Logger.error(
+                                { error, modPath: record.modPath },
+                                "ModFixInspection:dismiss",
+                            );
+                        });
+                    },
                 },
                 t,
             );
@@ -62,7 +77,7 @@ export function useModFixInspectionTitlebarActivity() {
 
 export function syncFixInspectionActivities(
     snapshot: FixInspectionSnapshot,
-    onOpenFixer: (record: FixInspectionRecord) => void,
+    handlers: FixInspectionHandlers,
     t: (key: string, opts?: Record<string, unknown>) => string,
 ) {
     const records = snapshot.inspections ?? [];
@@ -81,7 +96,8 @@ export function syncFixInspectionActivities(
                 modPath: record.modPath,
                 displayName: record.displayName,
                 result: record.result,
-                onOpenFixer: () => onOpenFixer(record),
+                onOpenFixer: () => handlers.onOpenFixer(record),
+                onDismissFix: () => handlers.onDismissFix(record),
                 t,
             }),
         );
