@@ -294,6 +294,61 @@ func TestDismissalSurvivesDisabledFolderRename(t *testing.T) {
 	}
 }
 
+func TestRenameMigrationCarriesDismissalRecordedDuringRefresh(t *testing.T) {
+	service := newMarkerInspectionService()
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	root := t.TempDir()
+	previous := filepath.Join(root, "ModA")
+	renamed := filepath.Join(root, "DISABLED ModA")
+	if err := os.Mkdir(renamed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(renamed, "needs-fix"), []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	record := FixInspectionRecord{
+		ModPath:     previous,
+		DisplayName: filepath.Base(previous),
+		Result: FixInspectionResult{
+			NeedsFix:   true,
+			Importer:   "TEST",
+			ToolName:   "Test Fixer",
+			Summary:    "marker requires a fix",
+			ActionTool: "marker",
+		},
+	}
+	service.fixInspections[fixInspectionKey(previous)] = &trackedFixInspection{record: record}
+
+	// The refresh already snapshotted the record before this dismissal lands, so the migration has to
+	// move the latest dismissal state rather than the value it read earlier.
+	service.DismissFixInspection(previous)
+	dismissed, stopped := service.removeFixInspectionWithDismissal(previous)
+	if len(stopped) != 1 || dismissed == nil {
+		t.Fatalf(
+			"removal returned %d watchers and dismissal %v, want one watcher and a dismissal",
+			len(stopped),
+			dismissed,
+		)
+	}
+
+	renamedRecord := cloneFixInspectionRecord(record)
+	renamedRecord.ModPath = renamed
+	renamedRecord.DisplayName = filepath.Base(renamed)
+	if _, err := service.storeFixInspection(renamedRecord); err != nil {
+		t.Fatal(err)
+	}
+	service.carryFixInspectionDismissal(fixInspectionKey(renamed), dismissed)
+
+	if snapshot := service.fixInspectionSnapshot(); len(snapshot.Inspections) != 0 {
+		t.Fatalf("dismissed warning reappeared after the rename: %+v", snapshot.Inspections)
+	}
+}
+
 func TestDismissFixInspectionHidesWarning(t *testing.T) {
 	service := newMarkerInspectionService()
 	t.Cleanup(func() {

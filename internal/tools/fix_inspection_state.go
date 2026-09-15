@@ -140,7 +140,8 @@ func (t *Tools) carryFixInspectionDismissal(key string, dismissed *FixInspection
 
 	t.fixInspectionMu.Lock()
 	defer t.fixInspectionMu.Unlock()
-	if tracked := t.fixInspections[key]; tracked != nil {
+	// A dismissal already recorded for the new key is at least as new as the carried one.
+	if tracked := t.fixInspections[key]; tracked != nil && tracked.dismissedResult == nil {
 		tracked.dismissedResult = dismissed
 	}
 }
@@ -391,7 +392,6 @@ func (t *Tools) refreshFixInspectionLocked(
 	}
 	record := cloneFixInspectionRecord(tracked.record)
 	identity := tracked.identity
-	dismissed := tracked.dismissedResult
 	t.fixInspectionMu.Unlock()
 
 	var changed bool
@@ -403,7 +403,9 @@ func (t *Tools) refreshFixInspectionLocked(
 			if renamedPath == "" {
 				return t.removeFixInspection(record.ModPath)
 			}
-			_, stopped = t.removeFixInspection(record.ModPath)
+			var dismissed *FixInspectionResult
+			dismissed, stopped = t.removeFixInspectionWithDismissal(record.ModPath)
+
 			record.ModPath = renamedPath
 			record.DisplayName = filepath.Base(renamedPath)
 			_, watchErr := t.storeFixInspection(record)
@@ -501,18 +503,24 @@ func isDisabledFixInspectionRename(previousName, candidateName string) bool {
 }
 
 func (t *Tools) removeFixInspection(modPath string) (bool, []*trackedFixInspection) {
+	_, stopped := t.removeFixInspectionWithDismissal(modPath)
+	return stopped != nil, stopped
+}
+
+// removeFixInspectionWithDismissal drops the tracked record for modPath and returns its dismissal
+// state from the same critical section, so a rename migration re-storing the record under a new key
+// cannot overwrite a dismissal that landed while the refresh was running.
+func (t *Tools) removeFixInspectionWithDismissal(modPath string) (*FixInspectionResult, []*trackedFixInspection) {
 	key := fixInspectionKey(modPath)
 	t.fixInspectionMu.Lock()
+	defer t.fixInspectionMu.Unlock()
 	tracked := t.fixInspections[key]
-	if tracked != nil {
-		delete(t.fixInspections, key)
-		t.fixInspectionRevision++
-	}
-	t.fixInspectionMu.Unlock()
 	if tracked == nil {
-		return false, nil
+		return nil, nil
 	}
-	return true, []*trackedFixInspection{tracked}
+	delete(t.fixInspections, key)
+	t.fixInspectionRevision++
+	return tracked.dismissedResult, []*trackedFixInspection{tracked}
 }
 
 // Dismissed warnings are tracked and watched like any other record, but stay out of the snapshot.
