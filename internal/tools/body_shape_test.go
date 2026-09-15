@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/tools/modmesh"
 )
 
 type bodyShapeTestDisabler struct {
@@ -48,31 +50,6 @@ func TestBodyShapedFolderBaseName(t *testing.T) {
 		if actual := bodyShapedFolderBaseName(input); actual != expected {
 			t.Fatalf("bodyShapedFolderBaseName(%q) = %q, want %q", input, actual, expected)
 		}
-	}
-}
-
-func TestBodyShapeResourceCollectionMatchesVectorAndBlendLODRules(t *testing.T) {
-	t.Parallel()
-	resources := []modBufferResource{
-		{Name: "BodyVector_LOD", Filename: "vector.buf"},
-		{Name: "BodyBlend_LOD", Filename: "blend.buf"},
-	}
-	if got := collectNamedResources(resources, "vector", false); len(got) != 1 {
-		t.Fatalf("vector resources = %v, want LOD vector included", got)
-	}
-	if got := collectNamedResources(resources, "blend", true); len(got) != 0 {
-		t.Fatalf("blend resources = %v, want LOD blend excluded", got)
-	}
-}
-
-func TestScoreModINICapsOverrideAndResourceCounts(t *testing.T) {
-	t.Parallel()
-	var text strings.Builder
-	for range 80 {
-		text.WriteString("[TextureOverrideBody]\n[ResourceBody]\n")
-	}
-	if got := scoreModINI("mod.ini", text.String()); got != 100 {
-		t.Fatalf("scoreModINI = %d, want capped score 100", got)
 	}
 }
 
@@ -162,7 +139,7 @@ func TestBodyShapeSessionDescriptorUsesBinaryMeshTransport(t *testing.T) {
 		!strings.EqualFold(positionResponse.Header().Get("Content-Type"), "application/octet-stream") {
 		t.Fatalf("position response = %d %v", positionResponse.Code, positionResponse.Header())
 	}
-	if got, decodeErr := decodeFloat32Bytes(
+	if got, decodeErr := modmesh.DecodeFloat32Bytes(
 		positionResponse.Body.Bytes(),
 	); decodeErr != nil ||
 		len(got) != len(positions) {
@@ -262,7 +239,7 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	variant, err := extractBodyPositions(variantRaw, 12)
+	variant, err := modmesh.ExtractPositions(variantRaw, 12)
 	if err != nil || len(variant) != len(changed) {
 		t.Fatalf("variant = %#v, %v", variant, err)
 	}
@@ -281,7 +258,7 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	originalPositions, _ := extractBodyPositions(disabledOriginal, 12)
+	originalPositions, _ := modmesh.ExtractPositions(disabledOriginal, 12)
 	if math.Float32bits(originalPositions[3]) != math.Float32bits(1) {
 		t.Fatalf("source was modified: %#v", originalPositions)
 	}
@@ -316,7 +293,7 @@ func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPut,
 		upload.PositionsUploadURL,
-		strings.NewReader(string(float32Bytes(changed))),
+		strings.NewReader(string(modmesh.Float32Bytes(changed))),
 	)
 	request.Header.Set("Content-Type", "application/octet-stream")
 	recorder := httptest.NewRecorder()
@@ -335,7 +312,7 @@ func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	positions, err := extractBodyPositions(raw, 12)
+	positions, err := modmesh.ExtractPositions(raw, 12)
 	if err != nil || !reflect.DeepEqual(positions, changed) {
 		t.Fatalf("positions = %#v, %v", positions, err)
 	}
@@ -365,17 +342,5 @@ func TestRemapBodyShapePathUsesCanonicalPaths(t *testing.T) {
 	outside := filepath.Join(base, "outside", "Position.buf")
 	if _, err := remapBodyShapePathWithResolver(outside, logicalRoot, targetRoot, resolve); err == nil {
 		t.Fatal("canonical path outside the mod root was accepted")
-	}
-}
-
-func TestBodyShapeResourceRejectsTraversal(t *testing.T) {
-	root := t.TempDir()
-	outside := filepath.Join(filepath.Dir(root), "outside-body.buf")
-	if err := os.WriteFile(outside, make([]byte, 12), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Remove(outside) })
-	if _, err := resolveBodyShapeResource(root, "../outside-body.buf"); err == nil {
-		t.Fatal("resource traversal was accepted")
 	}
 }

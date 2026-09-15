@@ -7,8 +7,10 @@ describe("generated Wails binding contract", () => {
         const models = [
             "bindings/nahida.live/desktop/internal/tools/models.ts",
             "bindings/nahida.live/desktop/internal/tools/model_viewer/models.ts",
+            "bindings/nahida.live/desktop/internal/tools/modmesh/models.ts",
             "bindings/nahida.live/desktop/internal/tools/texture/models.ts",
             "bindings/nahida.live/desktop/internal/tools/toggle_persist/models.ts",
+            "bindings/nahida.live/desktop/internal/tools/touch_profile/models.ts",
         ].map((path) => readFileSync(path, "utf8"));
         for (const source of models) {
             expect(source).not.toMatch(/"(?:positions|indices|weights)": number\[\]/);

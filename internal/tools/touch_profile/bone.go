@@ -1,9 +1,11 @@
-package tools
+package touchprofile
 
 import (
 	"errors"
 	"fmt"
 	"math"
+
+	"nahida.live/desktop/internal/tools/modmesh"
 )
 
 const (
@@ -136,7 +138,7 @@ func analyzeTouchComponentBones(
 		seeds := make([]int, 0)
 		for vertex := 0; vertex < component.VertexCount && vertex*blendStride+blendStride <= len(blendBytes); vertex++ {
 			weight := float32(0)
-			visitBlendInfluences(blendBytes, vertex*blendStride, blendStride, func(id uint32, value float32) {
+			modmesh.VisitBlendInfluences(blendBytes, vertex*blendStride, blendStride, func(id uint32, value float32) {
 				if id == selection.BoneID && value > weight {
 					weight = value
 				}

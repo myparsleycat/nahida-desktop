@@ -14,6 +14,7 @@ import (
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 	"nahida.live/desktop/internal/tools/texture"
 	togglepersist "nahida.live/desktop/internal/tools/toggle_persist"
+	touchprofile "nahida.live/desktop/internal/tools/touch_profile"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -98,15 +99,13 @@ type Tools struct {
 
 	peDiversifier PEDiversifier
 
-	touchMu       sync.Mutex
-	touchSessions map[string]*touchSession
-
 	bodyShapeMu       sync.Mutex
 	bodyShapeSessions map[string]*bodyShapeSession
 
-	modelViewer *modelviewer.Service
-	texture     *texture.Service
-	persist     *togglepersist.Service
+	modelViewer  *modelviewer.Service
+	texture      *texture.Service
+	persist      *togglepersist.Service
+	touchProfile *touchprofile.Service
 
 	fixInspectors         *FixInspectorRegistry
 	fixInspectionRunMu    sync.Mutex
@@ -151,7 +150,6 @@ func NewWithOptions(opts Options) *Tools {
 		peDiversifier:     opts.PEDiversifier,
 		releaseCache:      make(map[string]releaseCacheEntry),
 		releaseCalls:      make(map[string]*releaseFetchCall),
-		touchSessions:     make(map[string]*touchSession),
 		bodyShapeSessions: make(map[string]*bodyShapeSession),
 		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{
 			Log:                    opts.Log,
@@ -168,6 +166,14 @@ func NewWithOptions(opts Options) *Tools {
 			Log:       opts.Log,
 			EventEmit: opts.EventEmit,
 			Settings:  opts.Settings,
+			XXMI:      opts.XXMI,
+		}),
+		touchProfile: touchprofile.NewWithOptions(touchprofile.Options{
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			FS:        opts.FS,
+			Protocol:  opts.Protocol,
+			Mod:       opts.Mod,
 			XXMI:      opts.XXMI,
 		}),
 		fixInspectors:       NewFixInspectorRegistry(),
@@ -195,6 +201,9 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 	t.appData = data
 	if t.texture != nil {
 		t.texture.UseAppData(data)
+	}
+	if t.touchProfile != nil {
+		t.touchProfile.UseAppData(data)
 	}
 }
 

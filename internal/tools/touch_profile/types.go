@@ -1,4 +1,6 @@
-package tools
+package touchprofile
+
+import "nahida.live/desktop/internal/tools/modmesh"
 
 const (
 	touchRuntimeVersion        = "1"
@@ -40,36 +42,36 @@ type TouchObjectMapEntry struct {
 }
 
 type TouchComponentAnalysis struct {
-	ID                   string                `json:"id"`
-	Name                 string                `json:"name"`
-	Kind                 string                `json:"kind"`
-	InteractiveCandidate bool                  `json:"interactiveCandidate"`
-	SupportGrade         string                `json:"supportGrade"`
-	SupportReasons       []string              `json:"supportReasons"`
-	PositionResourceName string                `json:"positionResourceName"`
-	PositionRelativePath string                `json:"positionRelativePath"`
-	PositionPath         string                `json:"positionPath"`
-	PositionStride       int                   `json:"positionStride"`
-	VertexCount          int                   `json:"vertexCount"`
-	IndexResourceName    *string               `json:"indexResourceName,omitempty"`
-	IndexRelativePath    *string               `json:"indexRelativePath,omitempty"`
-	IndexPath            *string               `json:"indexPath,omitempty"`
-	IndexRelativePaths   []string              `json:"indexRelativePaths,omitempty"`
-	IndexPaths           []string              `json:"indexPaths,omitempty"`
-	IndexFormats         []*string             `json:"indexFormats,omitempty"`
-	IndexFormat          *string               `json:"indexFormat,omitempty"`
-	IndexCount           int                   `json:"indexCount"`
-	BlendSectionName     *string               `json:"blendSectionName,omitempty"`
-	IBSectionName        *string               `json:"ibSectionName,omitempty"`
-	IBHash               *string               `json:"ibHash,omitempty"`
-	VariantKey           *string               `json:"variantKey,omitempty"`
-	VariantCondition     *string               `json:"variantCondition,omitempty"`
-	DrawRanges           []TouchDrawRange      `json:"drawRanges"`
-	ObjectMaps           []TouchObjectMapEntry `json:"objectMaps"`
-	BlendRelativePath    *string               `json:"blendRelativePath,omitempty"`
-	BlendPath            *string               `json:"blendPath,omitempty"`
-	BlendStride          *int                  `json:"blendStride,omitempty"`
-	Bones                []BlendBoneInfo       `json:"bones"`
+	ID                   string                  `json:"id"`
+	Name                 string                  `json:"name"`
+	Kind                 string                  `json:"kind"`
+	InteractiveCandidate bool                    `json:"interactiveCandidate"`
+	SupportGrade         string                  `json:"supportGrade"`
+	SupportReasons       []string                `json:"supportReasons"`
+	PositionResourceName string                  `json:"positionResourceName"`
+	PositionRelativePath string                  `json:"positionRelativePath"`
+	PositionPath         string                  `json:"positionPath"`
+	PositionStride       int                     `json:"positionStride"`
+	VertexCount          int                     `json:"vertexCount"`
+	IndexResourceName    *string                 `json:"indexResourceName,omitempty"`
+	IndexRelativePath    *string                 `json:"indexRelativePath,omitempty"`
+	IndexPath            *string                 `json:"indexPath,omitempty"`
+	IndexRelativePaths   []string                `json:"indexRelativePaths,omitempty"`
+	IndexPaths           []string                `json:"indexPaths,omitempty"`
+	IndexFormats         []*string               `json:"indexFormats,omitempty"`
+	IndexFormat          *string                 `json:"indexFormat,omitempty"`
+	IndexCount           int                     `json:"indexCount"`
+	BlendSectionName     *string                 `json:"blendSectionName,omitempty"`
+	IBSectionName        *string                 `json:"ibSectionName,omitempty"`
+	IBHash               *string                 `json:"ibHash,omitempty"`
+	VariantKey           *string                 `json:"variantKey,omitempty"`
+	VariantCondition     *string                 `json:"variantCondition,omitempty"`
+	DrawRanges           []TouchDrawRange        `json:"drawRanges"`
+	ObjectMaps           []TouchObjectMapEntry   `json:"objectMaps"`
+	BlendRelativePath    *string                 `json:"blendRelativePath,omitempty"`
+	BlendPath            *string                 `json:"blendPath,omitempty"`
+	BlendStride          *int                    `json:"blendStride,omitempty"`
+	Bones                []modmesh.BlendBoneInfo `json:"bones"`
 }
 
 type TouchModAnalysis struct {
@@ -87,18 +89,18 @@ type TouchModAnalysis struct {
 }
 
 type TouchComponentInspection struct {
-	ID                   string                `json:"id"`
-	Name                 string                `json:"name"`
-	Kind                 string                `json:"kind"`
-	SupportGrade         string                `json:"supportGrade"`
-	InteractiveCandidate bool                  `json:"interactiveCandidate"`
-	VertexCount          int                   `json:"vertexCount"`
-	IndexCount           int                   `json:"indexCount"`
-	VariantKey           *string               `json:"variantKey,omitempty"`
-	VariantCondition     *string               `json:"variantCondition,omitempty"`
-	ObjectMaps           []TouchObjectMapEntry `json:"objectMaps"`
-	HasBlend             bool                  `json:"hasBlend"`
-	Bones                []BlendBoneInfo       `json:"bones"`
+	ID                   string                  `json:"id"`
+	Name                 string                  `json:"name"`
+	Kind                 string                  `json:"kind"`
+	SupportGrade         string                  `json:"supportGrade"`
+	InteractiveCandidate bool                    `json:"interactiveCandidate"`
+	VertexCount          int                     `json:"vertexCount"`
+	IndexCount           int                     `json:"indexCount"`
+	VariantKey           *string                 `json:"variantKey,omitempty"`
+	VariantCondition     *string                 `json:"variantCondition,omitempty"`
+	ObjectMaps           []TouchObjectMapEntry   `json:"objectMaps"`
+	HasBlend             bool                    `json:"hasBlend"`
+	Bones                []modmesh.BlendBoneInfo `json:"bones"`
 }
 
 type TouchModInspection struct {
@@ -182,18 +184,18 @@ type TouchProgressEvent struct {
 }
 
 type TouchMeshDescriptor struct {
-	SessionID        string          `json:"sessionId"`
-	ComponentID      string          `json:"componentId"`
-	TopologyRevision string          `json:"topologyRevision"`
-	VertexCount      int             `json:"vertexCount"`
-	PositionsURL     string          `json:"positionsUrl"`
-	PositionsCount   int             `json:"positionsCount"`
-	IndicesURL       *string         `json:"indicesUrl,omitempty"`
-	IndexCount       int             `json:"indexCount"`
-	Bones            []BlendBoneInfo `json:"bones"`
-	BlendStride      *int            `json:"blendStride,omitempty"`
-	BlendURL         *string         `json:"blendUrl,omitempty"`
-	BlendBytes       int             `json:"blendBytes"`
+	SessionID        string                  `json:"sessionId"`
+	ComponentID      string                  `json:"componentId"`
+	TopologyRevision string                  `json:"topologyRevision"`
+	VertexCount      int                     `json:"vertexCount"`
+	PositionsURL     string                  `json:"positionsUrl"`
+	PositionsCount   int                     `json:"positionsCount"`
+	IndicesURL       *string                 `json:"indicesUrl,omitempty"`
+	IndexCount       int                     `json:"indexCount"`
+	Bones            []modmesh.BlendBoneInfo `json:"bones"`
+	BlendStride      *int                    `json:"blendStride,omitempty"`
+	BlendURL         *string                 `json:"blendUrl,omitempty"`
+	BlendBytes       int                     `json:"blendBytes"`
 }
 
 type TouchPreviewZoneDescriptor struct {

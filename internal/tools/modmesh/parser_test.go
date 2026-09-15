@@ -1,8 +1,9 @@
-package tools
+package modmesh
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -30,7 +31,7 @@ hash = abcdef01
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
+	_, sections, sources, err := LoadINIBundleWithSources(mergedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ hash = abcdef01
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
+	_, sections, sources, err := LoadINIBundleWithSources(mergedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ hash = 11111111
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
+	_, sections, sources, err := LoadINIBundleWithSources(mergedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +132,7 @@ func TestLoadModINIBundleRejectsDirectoryMergedReferences(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
+	_, sections, sources, err := LoadINIBundleWithSources(mergedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +170,7 @@ vb0 = ResourcePosition
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, sections, sources, err := loadModINIBundleWithSources(mergedPath)
+	_, sections, sources, err := LoadINIBundleWithSources(mergedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,10 +182,21 @@ vb0 = ResourcePosition
 	}
 }
 
-func sectionNames(sections []modINISection) []string {
+func sectionNames(sections []Section) []string {
 	names := make([]string, len(sections))
 	for index, section := range sections {
 		names[index] = section.Name
 	}
 	return names
+}
+
+func TestScoreModINICapsOverrideAndResourceCounts(t *testing.T) {
+	t.Parallel()
+	var text strings.Builder
+	for range 80 {
+		text.WriteString("[TextureOverrideBody]\n[ResourceBody]\n")
+	}
+	if got := scoreModINI("mod.ini", text.String()); got != 100 {
+		t.Fatalf("scoreModINI = %d, want capped score 100", got)
+	}
 }

@@ -1,4 +1,7 @@
-import type { TouchMeshDescriptor, TouchProfilePreviewDescriptor } from "@bindings/tools";
+import type {
+    TouchMeshDescriptor,
+    TouchProfilePreviewDescriptor,
+} from "@bindings/tools/touch_profile";
 import { fetchBinaryBytes, fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import type {
     TouchProfileMeshPreview,

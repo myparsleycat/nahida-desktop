@@ -1,4 +1,4 @@
-package tools
+package touchprofile
 
 import (
 	"context"
@@ -11,7 +11,19 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/tools/modmesh"
 )
+
+func useTouchTestAppData(t *testing.T, service *Service, home string) {
+	t.Helper()
+	data, err := appdata.Open(home)
+	if err != nil {
+		t.Fatalf("appdata.Open: %v", err)
+	}
+	service.UseAppData(data)
+}
 
 type touchTestMod struct{}
 
@@ -30,7 +42,7 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	source := filepath.Join(parent, "Hero")
 	writeTouchTestMod(t, source)
 	service := NewWithOptions(Options{Mod: touchTestMod{}})
-	useToolsTestAppData(t, service, filepath.Join(parent, "user-data"))
+	useTouchTestAppData(t, service, filepath.Join(parent, "user-data"))
 	inspection, err := service.TouchProfilePrepare(ctx, TouchProfileLoadInput{ModPath: source})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +90,7 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	}
 	weightsResponse := httptest.NewRecorder()
 	service.protocol.ServeHTTP(weightsResponse, httptest.NewRequest(http.MethodGet, preview.WeightsURL, nil))
-	weights, decodeErr := decodeFloat32Bytes(weightsResponse.Body.Bytes())
+	weights, decodeErr := modmesh.DecodeFloat32Bytes(weightsResponse.Body.Bytes())
 	if weightsResponse.Code != http.StatusOK || decodeErr != nil || len(weights) != 4 ||
 		preview.Zones[0].WeightOffset != 0 {
 		t.Fatalf("packed weights = %d %#v %v", weightsResponse.Code, weights, decodeErr)
@@ -160,7 +172,7 @@ func TestTouchProfileRegenerateRejectsChangedBlend(t *testing.T) {
 	source := filepath.Join(parent, "Hero")
 	writeTouchTestMod(t, source)
 	service := NewWithOptions(Options{Mod: touchTestMod{}})
-	useToolsTestAppData(t, service, filepath.Join(parent, "user-data"))
+	useTouchTestAppData(t, service, filepath.Join(parent, "user-data"))
 	inspection, err := service.TouchProfilePrepare(ctx, TouchProfileLoadInput{ModPath: source})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +339,7 @@ func TestTouchProfileAnalyzeProgressIsMonotonicForSelectedComponents(t *testing.
 			}
 		}
 	}})
-	useToolsTestAppData(t, service, filepath.Join(parent, "user-data"))
+	useTouchTestAppData(t, service, filepath.Join(parent, "user-data"))
 	inspection, err := service.TouchProfilePrepare(ctx, TouchProfileLoadInput{ModPath: source})
 	if err != nil {
 		t.Fatal(err)

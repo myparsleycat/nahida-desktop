@@ -1,4 +1,4 @@
-package tools
+package touchprofile
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"nahida.live/desktop/internal/tools/modmesh"
 )
 
 type touchInputDetection struct {
@@ -16,11 +18,11 @@ type touchInputDetection struct {
 }
 
 func assertTouchProfileInputAllowed(modPath string) error {
-	_, _, sourcePaths, err := loadModINIBundleWithSources(modPath)
+	_, _, sourcePaths, err := modmesh.LoadINIBundleWithSources(modPath)
 	if err != nil {
 		return err
 	}
-	iniPath, err := findPrimaryModINI(modPath)
+	iniPath, err := modmesh.FindPrimaryINI(modPath)
 	if err != nil {
 		return err
 	}

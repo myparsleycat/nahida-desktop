@@ -10,47 +10,41 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/tools/modmesh"
 )
 
 const (
-	bodyShapedSuffix   = " (Body Shaped)"
-	defaultBlendStride = 16
-	shaderFixMarker    = ".nahida-shader-fixes.json"
+	bodyShapedSuffix = " (Body Shaped)"
+	shaderFixMarker  = ".nahida-shader-fixes.json"
 )
 
 var bodyDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
 
-type BlendBoneInfo struct {
-	ID          uint32 `json:"id"`
-	VertexCount int    `json:"vertexCount"`
-}
-
 type BodyShapeMeshCandidate struct {
-	ID                   string          `json:"id"`
-	Name                 string          `json:"name"`
-	PositionPath         string          `json:"positionPath"`
-	PositionRelativePath string          `json:"positionRelativePath"`
-	PositionStride       int             `json:"positionStride"`
-	VertexCount          int             `json:"vertexCount"`
-	Positions            []float32       `json:"positions"`
-	Indices              []uint32        `json:"indices,omitempty"`
-	IndexPath            *string         `json:"indexPath,omitempty"`
-	IndexRelativePath    *string         `json:"indexRelativePath,omitempty"`
-	VectorPath           *string         `json:"vectorPath,omitempty"`
-	VectorRelativePath   *string         `json:"vectorRelativePath,omitempty"`
-	VectorStride         *int            `json:"vectorStride,omitempty"`
-	VectorLayout         *string         `json:"vectorLayout"`
-	GLBMeshNames         []string        `json:"glbMeshNames"`
-	BlendPath            *string         `json:"blendPath,omitempty"`
-	BlendRelativePath    *string         `json:"blendRelativePath,omitempty"`
-	BlendStride          *int            `json:"blendStride,omitempty"`
-	BlendBytes           []byte          `json:"blendBytes,omitempty"`
-	Bones                []BlendBoneInfo `json:"bones"`
+	ID                   string                  `json:"id"`
+	Name                 string                  `json:"name"`
+	PositionPath         string                  `json:"positionPath"`
+	PositionRelativePath string                  `json:"positionRelativePath"`
+	PositionStride       int                     `json:"positionStride"`
+	VertexCount          int                     `json:"vertexCount"`
+	Positions            []float32               `json:"positions"`
+	Indices              []uint32                `json:"indices,omitempty"`
+	IndexPath            *string                 `json:"indexPath,omitempty"`
+	IndexRelativePath    *string                 `json:"indexRelativePath,omitempty"`
+	VectorPath           *string                 `json:"vectorPath,omitempty"`
+	VectorRelativePath   *string                 `json:"vectorRelativePath,omitempty"`
+	VectorStride         *int                    `json:"vectorStride,omitempty"`
+	VectorLayout         *string                 `json:"vectorLayout"`
+	GLBMeshNames         []string                `json:"glbMeshNames"`
+	BlendPath            *string                 `json:"blendPath,omitempty"`
+	BlendRelativePath    *string                 `json:"blendRelativePath,omitempty"`
+	BlendStride          *int                    `json:"blendStride,omitempty"`
+	BlendBytes           []byte                  `json:"blendBytes,omitempty"`
+	Bones                []modmesh.BlendBoneInfo `json:"bones"`
 }
 
 type BodyShapeLoadResult struct {
@@ -80,18 +74,18 @@ type BodyShapeMeshInput struct {
 }
 
 type BodyShapeMeshDescriptor struct {
-	SessionID      string          `json:"sessionId"`
-	MeshID         string          `json:"meshId"`
-	PositionsURL   string          `json:"positionsUrl"`
-	PositionsCount int             `json:"positionsCount"`
-	IndicesURL     *string         `json:"indicesUrl,omitempty"`
-	IndexCount     int             `json:"indexCount"`
-	BlendURL       *string         `json:"blendUrl,omitempty"`
-	BlendBytes     int             `json:"blendBytes"`
-	PositionStride int             `json:"positionStride"`
-	VectorLayout   *string         `json:"vectorLayout"`
-	BlendStride    *int            `json:"blendStride,omitempty"`
-	Bones          []BlendBoneInfo `json:"bones"`
+	SessionID      string                  `json:"sessionId"`
+	MeshID         string                  `json:"meshId"`
+	PositionsURL   string                  `json:"positionsUrl"`
+	PositionsCount int                     `json:"positionsCount"`
+	IndicesURL     *string                 `json:"indicesUrl,omitempty"`
+	IndexCount     int                     `json:"indexCount"`
+	BlendURL       *string                 `json:"blendUrl,omitempty"`
+	BlendBytes     int                     `json:"blendBytes"`
+	PositionStride int                     `json:"positionStride"`
+	VectorLayout   *string                 `json:"vectorLayout"`
+	BlendStride    *int                    `json:"blendStride,omitempty"`
+	Bones          []modmesh.BlendBoneInfo `json:"bones"`
 }
 
 type BodyShapeBeginExportInput struct {
@@ -308,7 +302,7 @@ func (t *Tools) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput) 
 	positionsURL, err := t.protocol.StoreMemoryBuffer(
 		input.SessionID,
 		"mesh:"+mesh.ID+":positions",
-		float32Bytes(mesh.Positions),
+		modmesh.Float32Bytes(mesh.Positions),
 		"application/octet-stream",
 	)
 	if err != nil {
@@ -330,7 +324,7 @@ func (t *Tools) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput) 
 		value, storeErr := t.protocol.StoreMemoryBuffer(
 			input.SessionID,
 			"mesh:"+mesh.ID+":indices",
-			uint32Bytes(mesh.Indices),
+			modmesh.Uint32Bytes(mesh.Indices),
 			"application/octet-stream",
 		)
 		if storeErr != nil {
@@ -420,7 +414,7 @@ func (t *Tools) BodyShapeCommitExport(
 	if err != nil {
 		return BodyShapeExportResult{}, err
 	}
-	positions, err := decodeFloat32Bytes(positionsRaw)
+	positions, err := modmesh.DecodeFloat32Bytes(positionsRaw)
 	if err != nil {
 		return BodyShapeExportResult{}, err
 	}
@@ -430,7 +424,7 @@ func (t *Tools) BodyShapeCommitExport(
 		if takeErr != nil {
 			return BodyShapeExportResult{}, takeErr
 		}
-		weights, err = decodeFloat32Bytes(weightsRaw)
+		weights, err = modmesh.DecodeFloat32Bytes(weightsRaw)
 		if err != nil {
 			return BodyShapeExportResult{}, err
 		}
@@ -482,33 +476,6 @@ func findBodyShapeMesh(meshes []BodyShapeMeshCandidate, id string) *BodyShapeMes
 	return nil
 }
 
-func float32Bytes(values []float32) []byte {
-	data := make([]byte, len(values)*4)
-	for index, value := range values {
-		binary.LittleEndian.PutUint32(data[index*4:], math.Float32bits(value))
-	}
-	return data
-}
-
-func uint32Bytes(values []uint32) []byte {
-	data := make([]byte, len(values)*4)
-	for index, value := range values {
-		binary.LittleEndian.PutUint32(data[index*4:], value)
-	}
-	return data
-}
-
-func decodeFloat32Bytes(data []byte) ([]float32, error) {
-	if len(data)%4 != 0 {
-		return nil, errors.New("float32 buffer is not 4-byte aligned")
-	}
-	values := make([]float32, len(data)/4)
-	for index := range values {
-		values[index] = math.Float32frombits(binary.LittleEndian.Uint32(data[index*4:]))
-	}
-	return values, nil
-}
-
 func (t *Tools) shutdownBodyShape() error {
 	t.bodyShapeMu.Lock()
 	sessions := t.bodyShapeSessions
@@ -544,23 +511,23 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 			err,
 		)
 	}
-	iniPath, sections, err := loadModINIBundle(resolved)
+	iniPath, sections, err := modmesh.LoadINIBundle(resolved)
 	if err != nil {
 		return BodyShapeLoadResult{}, err
 	}
 	modRoot := filepath.Dir(iniPath)
-	resources := collectModResources(sections)
-	positions := collectPositionResources(resources)
-	indices := collectIndexResources(resources)
-	vectors := collectNamedResources(resources, "vector", false)
-	blends := collectNamedResources(resources, "blend", true)
-	indicesByPosition := matchIndexResources(positions, indices, sections)
+	resources := modmesh.CollectResources(sections)
+	positions := modmesh.CollectPositionResources(resources)
+	indices := modmesh.CollectIndexResources(resources)
+	vectors := modmesh.CollectNamedResources(resources, "vector", false)
+	blends := modmesh.CollectNamedResources(resources, "blend", true)
+	indicesByPosition := modmesh.MatchIndexResources(positions, indices, sections)
 	if len(positions) == 0 {
 		return BodyShapeLoadResult{}, contractError("No position buffer resources found in mod.ini")
 	}
 	result := BodyShapeLoadResult{ModRoot: modRoot, INIPath: iniPath, Meshes: []BodyShapeMeshCandidate{}}
 	for _, position := range positions {
-		positionPath, pathErr := resolveBodyShapeResource(modRoot, position.Filename)
+		positionPath, pathErr := modmesh.ResolveResource(modRoot, position.Filename)
 		if pathErr != nil {
 			warn(fmt.Sprintf("Missing position buffer: %s", position.Filename))
 			continue
@@ -570,24 +537,30 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 			warn(fmt.Sprintf("Missing position buffer: %s", positionPath))
 			continue
 		}
-		vertexCount, validationErr := validatePositionBuffer(len(data), position.Stride, nil)
+		vertexCount, validationErr := modmesh.ValidatePositionBuffer(len(data), position.Stride, nil)
 		if validationErr != nil {
 			warn(fmt.Sprintf("Skipping position buffer %s: %s", positionPath, validationErr))
 			continue
 		}
-		meshPositions, _ := extractBodyPositions(data, position.Stride)
+		meshPositions, _ := modmesh.ExtractPositions(data, position.Stride)
 		mesh := BodyShapeMeshCandidate{
-			ID: position.Name, Name: position.Name, PositionPath: positionPath,
-			PositionRelativePath: position.Filename, PositionStride: position.Stride,
-			VertexCount: vertexCount, Positions: meshPositions, GLBMeshNames: []string{}, Bones: []BlendBoneInfo{},
+			ID:                   position.Name,
+			Name:                 position.Name,
+			PositionPath:         positionPath,
+			PositionRelativePath: position.Filename,
+			PositionStride:       position.Stride,
+			VertexCount:          vertexCount,
+			Positions:            meshPositions,
+			GLBMeshNames:         []string{},
+			Bones:                []modmesh.BlendBoneInfo{},
 		}
 		for _, index := range indicesByPosition[strings.ToLower(position.Name)] {
-			indexPath, resolveErr := resolveBodyShapeResource(modRoot, index.Filename)
+			indexPath, resolveErr := modmesh.ResolveResource(modRoot, index.Filename)
 			if resolveErr != nil {
 				warn(fmt.Sprintf("Missing index buffer: %s", index.Filename))
 				continue
 			}
-			values, readErr := readIndexBuffer(indexPath, index.Format)
+			values, readErr := modmesh.ReadIndexBuffer(indexPath, index.Format)
 			if readErr != nil {
 				warn(fmt.Sprintf("Missing index buffer: %s", indexPath))
 				continue
@@ -612,8 +585,8 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 				strings.TrimSuffix(filepath.Base(filepath.FromSlash(index.Filename)), filepath.Ext(index.Filename)),
 			)
 		}
-		if vector, ok := matchCompanionResource(position, vectors); ok {
-			if vectorPath, resolveErr := resolveBodyShapeResource(modRoot, vector.Filename); resolveErr == nil {
+		if vector, ok := modmesh.MatchCompanionResource(position, vectors); ok {
+			if vectorPath, resolveErr := modmesh.ResolveResource(modRoot, vector.Filename); resolveErr == nil {
 				if stat, statErr := os.Stat(vectorPath); statErr == nil && stat.Mode().IsRegular() {
 					stride := vector.Stride
 					if stride == 0 {
@@ -628,21 +601,25 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 				}
 			}
 		}
-		if blend, ok := matchCompanionResource(position, blends); ok {
-			if blendPath, resolveErr := resolveBodyShapeResource(modRoot, blend.Filename); resolveErr == nil {
+		if blend, ok := modmesh.MatchCompanionResource(position, blends); ok {
+			if blendPath, resolveErr := modmesh.ResolveResource(modRoot, blend.Filename); resolveErr == nil {
 				if raw, readErr := os.ReadFile(blendPath); readErr == nil {
 					stride := blend.Stride
 					if stride == 0 {
-						stride = defaultBlendStride
+						stride = modmesh.DefaultBlendStride
 					}
-					if validationErr := validateBlendBuffer(len(raw), vertexCount, stride); validationErr != nil {
+					if validationErr := modmesh.ValidateBlendBuffer(
+						len(raw),
+						vertexCount,
+						stride,
+					); validationErr != nil {
 						warn(fmt.Sprintf("Skipping blend buffer %s: %s", blendPath, validationErr))
 					} else {
 						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, stringPtr(
 							blend.Filename,
 						), &stride
 						mesh.BlendBytes = raw
-						mesh.Bones = listBlendBones(raw, vertexCount, stride)
+						mesh.Bones = modmesh.ListBlendBones(raw, vertexCount, stride)
 					}
 				}
 			}
@@ -671,7 +648,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 	if len(input.Positions)%3 != 0 {
 		return BodyShapeExportResult{}, errors.New("position float count is not divisible by 3")
 	}
-	if _, err := validatePositionBuffer(len(original), input.PositionStride, &expected); err != nil {
+	if _, err := modmesh.ValidatePositionBuffer(len(original), input.PositionStride, &expected); err != nil {
 		return BodyShapeExportResult{}, err
 	}
 	written, err := writeBodyPositions(original, input.PositionStride, input.Positions)
@@ -761,37 +738,8 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 	return result, nil
 }
 
-func validatePositionBuffer(size, stride int, expected *int) (int, error) {
-	if stride < 12 {
-		return 0, contractError(fmt.Sprintf("Unsupported position stride: %d", stride))
-	}
-	if size <= 0 || size%stride != 0 {
-		return 0, contractError(fmt.Sprintf("Position file size %d is not divisible by stride %d", size, stride))
-	}
-	vertices := size / stride
-	if expected != nil && vertices != *expected {
-		return 0, contractError(fmt.Sprintf("Vertex count mismatch: file has %d, expected %d", vertices, *expected))
-	}
-	return vertices, nil
-}
-
-func extractBodyPositions(data []byte, stride int) ([]float32, error) {
-	count, err := validatePositionBuffer(len(data), stride, nil)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]float32, count*3)
-	for vertex := range count {
-		base, offset := vertex*stride, vertex*3
-		out[offset] = math.Float32frombits(binary.LittleEndian.Uint32(data[base:]))
-		out[offset+1] = math.Float32frombits(binary.LittleEndian.Uint32(data[base+4:]))
-		out[offset+2] = math.Float32frombits(binary.LittleEndian.Uint32(data[base+8:]))
-	}
-	return out, nil
-}
-
 func writeBodyPositions(original []byte, stride int, positions []float32) ([]byte, error) {
-	count, err := validatePositionBuffer(len(original), stride, nil)
+	count, err := modmesh.ValidatePositionBuffer(len(original), stride, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -813,73 +761,6 @@ func writeBodyPositions(original []byte, stride int, positions []float32) ([]byt
 		binary.LittleEndian.PutUint32(out[base+8:], math.Float32bits(positions[offset+2]))
 	}
 	return out, nil
-}
-
-func validateBlendBuffer(size, vertexCount, stride int) error {
-	if stride != 4 && stride != 8 && stride != 12 && stride != 32 && stride < 16 {
-		return contractError(fmt.Sprintf("Unsupported blend stride: %d", stride))
-	}
-	if vertexCount <= 0 {
-		return contractError("Blend vertex count must be positive")
-	}
-	if size < vertexCount*stride {
-		return contractError(fmt.Sprintf("Blend buffer too small: %d < %d", size, vertexCount*stride))
-	}
-	return nil
-}
-
-func listBlendBones(data []byte, vertexCount, stride int) []BlendBoneInfo {
-	counts := make(map[uint32]int)
-	limit := min(vertexCount, len(data)/stride)
-	for vertex := range limit {
-		seen := make(map[uint32]bool)
-		visitBlendInfluences(data, vertex*stride, stride, func(id uint32, weight float32) {
-			if weight > 0 && !seen[id] {
-				seen[id] = true
-				counts[id]++
-			}
-		})
-	}
-	bones := make([]BlendBoneInfo, 0, len(counts))
-	for id, count := range counts {
-		bones = append(bones, BlendBoneInfo{ID: id, VertexCount: count})
-	}
-	sort.Slice(bones, func(i, j int) bool { return bones[i].ID < bones[j].ID })
-	return bones
-}
-
-func visitBlendInfluences(data []byte, base, stride int, visit func(uint32, float32)) {
-	if base+stride > len(data) {
-		return
-	}
-	switch stride {
-	case 4:
-		visit(binary.LittleEndian.Uint32(data[base:]), 1)
-	case 12:
-		for index := range 4 {
-			weight := float32(binary.LittleEndian.Uint16(data[base+index*2:])) / 65535
-			if weight > 0 {
-				visit(uint32(data[base+8+index]), weight)
-			}
-		}
-	case 32:
-		for index := range 4 {
-			weight := math.Float32frombits(binary.LittleEndian.Uint32(data[base+index*4:]))
-			if weight > 0 && !math.IsNaN(float64(weight)) && !math.IsInf(float64(weight), 0) {
-				visit(binary.LittleEndian.Uint32(data[base+16+index*4:]), weight)
-			}
-		}
-	default:
-		weightsOffset := 8
-		if stride == 8 {
-			weightsOffset = 4
-		}
-		for index := range 4 {
-			if weight := float32(data[base+weightsOffset+index]) / 255; weight > 0 {
-				visit(uint32(data[base+index]), weight)
-			}
-		}
-	}
 }
 
 func correctBodyVectors(original []byte, weights []float32, amount float64, axis []float64) ([]byte, error) {
@@ -935,33 +816,6 @@ func correctBodyVertexVectors(data []byte, vertex int, sx, sy, sz float64) {
 func snorm8(value float64) int8 {
 	rounded := int(math.Floor(value*127 + 0.5))
 	return int8(max(-127, min(127, rounded)))
-}
-
-func resolveBodyShapeResource(root, relative string) (string, error) {
-	if strings.TrimSpace(relative) == "" {
-		return "", errors.New("resource filename is empty")
-	}
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-	path, err := filepath.Abs(filepath.Join(rootAbs, filepath.FromSlash(relative)))
-	if err != nil || !sameOrChildPath(rootAbs, path) || samePathFold(rootAbs, path) {
-		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
-	}
-	realRoot, err := filepath.EvalSymlinks(rootAbs)
-	if err != nil {
-		return "", err
-	}
-	realPath, err := filepath.EvalSymlinks(path)
-	if err != nil || !sameOrChildPath(realRoot, realPath) || samePathFold(realRoot, realPath) {
-		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
-	}
-	info, err := os.Stat(realPath)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", infra.WithCause(errors.New("resource is not a regular file"), err)
-	}
-	return realPath, nil
 }
 
 func remapBodyShapePath(path, sourceRoot, targetRoot string) (string, error) {
@@ -1074,6 +928,12 @@ func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) (returnEr
 }
 
 func stringPtr(value string) *string { return &value }
+
+func samePathFold(left, right string) bool {
+	leftAbs, _ := filepath.Abs(left)
+	rightAbs, _ := filepath.Abs(right)
+	return strings.EqualFold(filepath.Clean(leftAbs), filepath.Clean(rightAbs))
+}
 
 func bodyShapedFolderBaseName(name string) string {
 	return strings.TrimSpace(bodyDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "")) + bodyShapedSuffix
