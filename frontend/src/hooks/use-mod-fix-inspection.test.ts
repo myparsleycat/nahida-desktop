@@ -13,6 +13,7 @@ import {
 } from "./use-mod-fix-inspection";
 
 const mocks = vi.hoisted(() => ({
+    dismiss: vi.fn(),
     listeners: new Map<string, (event: { data: unknown }) => void>(),
     navigate: vi.fn(),
     refresh: vi.fn(),
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@bindings/tools", () => ({
     Tools: {
+        DismissFixInspection: mocks.dismiss,
         RefreshFixInspections: mocks.refresh,
     },
 }));
@@ -81,9 +83,10 @@ describe("syncFixInspectionActivities", () => {
 
     it("restores pending inspections and wires the fixer action", () => {
         const onOpenFixer = vi.fn();
+        const onDismissFix = vi.fn();
         const snapshot = pendingSnapshot();
 
-        syncFixInspectionActivities(snapshot, onOpenFixer, t);
+        syncFixInspectionActivities(snapshot, { onOpenFixer, onDismissFix }, t);
 
         const activity = titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"];
         expect(activity).toMatchObject({
@@ -93,12 +96,19 @@ describe("syncFixInspectionActivities", () => {
         });
         expect(activity?.popover?.description).toBe("Found 1 file with an outdated hash");
 
-        activity?.popover?.onAction?.();
+        activity?.popover?.action?.onClick();
         expect(onOpenFixer).toHaveBeenCalledWith(snapshot.inspections?.[0]);
+
+        activity?.popover?.dismiss?.onClick();
+        expect(onDismissFix).toHaveBeenCalledWith(snapshot.inspections?.[0]);
     });
 
     it("removes only stale fix activities", () => {
-        syncFixInspectionActivities(pendingSnapshot(), vi.fn(), t);
+        syncFixInspectionActivities(
+            pendingSnapshot(),
+            { onOpenFixer: vi.fn(), onDismissFix: vi.fn() },
+            t,
+        );
         titlebarActivityStore.getState().upsertActivity({
             id: "unrelated",
             label: "Unrelated",
@@ -106,7 +116,11 @@ describe("syncFixInspectionActivities", () => {
             icon: () => null,
         });
 
-        syncFixInspectionActivities({ revision: 2, inspections: [] }, vi.fn(), t);
+        syncFixInspectionActivities(
+            { revision: 2, inspections: [] },
+            { onOpenFixer: vi.fn(), onDismissFix: vi.fn() },
+            t,
+        );
 
         expect(
             titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"],
@@ -118,6 +132,8 @@ describe("syncFixInspectionActivities", () => {
 describe("useModFixInspectionTitlebarActivity", () => {
     beforeEach(() => {
         resetStores();
+        mocks.dismiss.mockReset();
+        mocks.dismiss.mockResolvedValue(undefined);
         mocks.listeners.clear();
         mocks.navigate.mockReset();
         mocks.refresh.mockReset();
@@ -177,7 +193,7 @@ describe("useModFixInspectionTitlebarActivity", () => {
         const activity = titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"];
         expect(activity?.detail).toBe("Newest");
 
-        act(() => activity?.popover?.onAction?.());
+        act(() => activity?.popover?.action?.onClick());
         expect(modStore.getState().pendingModFixerRequest).toEqual({
             modPath: "E:\\ZZZ\\ModA",
             importer: "ZZMI",
@@ -194,6 +210,57 @@ describe("useModFixInspectionTitlebarActivity", () => {
 
         await waitFor(() => {
             expect(Logger.error).toHaveBeenCalledWith(error, "ModFixInspection:restore");
+        });
+    });
+
+    it("dismisses the inspection and drops the activity when the snapshot changes", async () => {
+        mocks.refresh.mockResolvedValueOnce(pendingSnapshot(2));
+        renderHook(() => useModFixInspectionTitlebarActivity());
+
+        await waitFor(() => {
+            expect(
+                titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"],
+            ).toBeDefined();
+        });
+
+        const activity = titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"];
+        act(() => activity?.popover?.dismiss?.onClick());
+        expect(Tools.DismissFixInspection).toHaveBeenCalledWith("E:\\ZZZ\\ModA");
+
+        act(() =>
+            mocks.listeners.get("tools:fix-inspections")?.({
+                data: { revision: 3, inspections: [] },
+            }),
+        );
+
+        expect(
+            titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"],
+        ).toBeUndefined();
+    });
+
+    it("logs dismissal failures", async () => {
+        const error = new Error("dismiss failed");
+        mocks.dismiss.mockRejectedValueOnce(error);
+        mocks.refresh.mockResolvedValueOnce(pendingSnapshot(2));
+        renderHook(() => useModFixInspectionTitlebarActivity());
+
+        await waitFor(() => {
+            expect(
+                titlebarActivityStore.getState().activities["mod-fix:E:\\ZZZ\\ModA"],
+            ).toBeDefined();
+        });
+
+        act(() =>
+            titlebarActivityStore
+                .getState()
+                .activities["mod-fix:E:\\ZZZ\\ModA"].popover?.dismiss?.onClick(),
+        );
+
+        await waitFor(() => {
+            expect(Logger.error).toHaveBeenCalledWith(
+                { error, modPath: "E:\\ZZZ\\ModA" },
+                "ModFixInspection:dismiss",
+            );
         });
     });
 });

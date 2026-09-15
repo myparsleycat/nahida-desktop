@@ -36,10 +36,17 @@ type FixInspectionSnapshot struct {
 }
 
 type trackedFixInspection struct {
-	record         FixInspectionRecord
-	identity       fs.FileInfo
-	contentWatcher *watcher.Watcher
-	parentWatcher  *watcher.Watcher
+	// dismissedResult hides the warning for as long as the tracked result still equals it.
+	dismissedResult *FixInspectionResult
+	record          FixInspectionRecord
+	identity        fs.FileInfo
+	contentWatcher  *watcher.Watcher
+	parentWatcher   *watcher.Watcher
+}
+
+// warningHidden reports whether the user dismissed the warning currently tracked for this mod.
+func (t *trackedFixInspection) warningHidden() bool {
+	return t.dismissedResult != nil && equalFixInspectionResult(*t.dismissedResult, t.record.Result)
 }
 
 // Only actionable results are retained and watched for changes.
@@ -101,6 +108,27 @@ func (t *Tools) RefreshFixInspections(ctx context.Context) FixInspectionSnapshot
 		t.emitFixInspectionSnapshot()
 	}
 	return t.fixInspectionSnapshot()
+}
+
+// DismissFixInspection hides the warning for a mod until its inspection result changes.
+// The warning keeps being watched, so a mod that is repaired later stops being tracked.
+func (t *Tools) DismissFixInspection(modPath string) {
+	if t == nil {
+		return
+	}
+
+	t.fixInspectionMu.Lock()
+	tracked := t.fixInspections[fixInspectionKey(modPath)]
+	if t.fixInspectionClosed || tracked == nil || tracked.warningHidden() {
+		t.fixInspectionMu.Unlock()
+		return
+	}
+	dismissed := cloneFixInspectionResult(tracked.record.Result)
+	tracked.dismissedResult = &dismissed
+	t.fixInspectionRevision++
+	t.fixInspectionMu.Unlock()
+
+	t.emitFixInspectionSnapshot()
 }
 
 //wails:ignore
@@ -471,6 +499,7 @@ func (t *Tools) removeFixInspection(modPath string) (bool, []*trackedFixInspecti
 	return true, []*trackedFixInspection{tracked}
 }
 
+// Dismissed warnings are tracked and watched like any other record, but stay out of the snapshot.
 func (t *Tools) fixInspectionSnapshot() FixInspectionSnapshot {
 	if t == nil {
 		return FixInspectionSnapshot{Inspections: []FixInspectionRecord{}}
@@ -479,6 +508,9 @@ func (t *Tools) fixInspectionSnapshot() FixInspectionSnapshot {
 	defer t.fixInspectionMu.Unlock()
 	items := make([]FixInspectionRecord, 0, len(t.fixInspections))
 	for _, tracked := range t.fixInspections {
+		if tracked.warningHidden() {
+			continue
+		}
 		items = append(items, cloneFixInspectionRecord(tracked.record))
 	}
 	slices.SortFunc(items, func(left, right FixInspectionRecord) int {
@@ -551,11 +583,15 @@ func cloneFixInspectionResult(result FixInspectionResult) FixInspectionResult {
 func equalFixInspectionRecord(left, right FixInspectionRecord) bool {
 	return left.ModPath == right.ModPath &&
 		left.DisplayName == right.DisplayName &&
-		left.Result.NeedsFix == right.Result.NeedsFix &&
-		left.Result.Importer == right.Result.Importer &&
-		left.Result.ToolName == right.Result.ToolName &&
-		left.Result.Summary == right.Result.Summary &&
-		left.Result.ActionTool == right.Result.ActionTool &&
-		slices.Equal(left.Result.Details, right.Result.Details) &&
-		slices.Equal(left.Result.AffectedFiles, right.Result.AffectedFiles)
+		equalFixInspectionResult(left.Result, right.Result)
+}
+
+func equalFixInspectionResult(left, right FixInspectionResult) bool {
+	return left.NeedsFix == right.NeedsFix &&
+		left.Importer == right.Importer &&
+		left.ToolName == right.ToolName &&
+		left.Summary == right.Summary &&
+		left.ActionTool == right.ActionTool &&
+		slices.Equal(left.Details, right.Details) &&
+		slices.Equal(left.AffectedFiles, right.AffectedFiles)
 }

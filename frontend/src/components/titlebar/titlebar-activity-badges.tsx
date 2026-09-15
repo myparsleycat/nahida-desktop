@@ -101,32 +101,34 @@ export function TitlebarActivityBadges() {
                     <XIcon className="size-3.5" />
                   </PopoverClose>
                 </div>
-                <div className="flex items-center justify-end gap-1.5 pt-1">
-                  <PopoverClose
-                    render={
+                {(popover.dismiss || popover.action) && (
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    {popover.dismiss && (
+                      <PopoverClose
+                        render={
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={popover.dismiss.onClick}
+                          />
+                        }
+                      >
+                        {popover.dismiss.label}
+                      </PopoverClose>
+                    )}
+                    {popover.action && (
                       <Button
                         size="xs"
-                        variant="ghost"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => popover.onDismiss?.()}
-                      />
-                    }
-                  >
-                    {popover.dismissLabel ?? t("titlebar.activity.dismiss", t("g.close", "닫기"))}
-                  </PopoverClose>
-                  {popover.actionLabel && (
-                    <Button
-                      size="xs"
-                      className="h-6 px-2.5 text-xs font-medium"
-                      onClick={() => {
-                        popover.onAction?.();
-                      }}
-                    >
-                      <WrenchIcon className="size-3" />
-                      {popover.actionLabel}
-                    </Button>
-                  )}
-                </div>
+                        className="h-6 px-2.5 text-xs font-medium"
+                        onClick={popover.action.onClick}
+                      >
+                        <WrenchIcon className="size-3" />
+                        {popover.action.label}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
           );

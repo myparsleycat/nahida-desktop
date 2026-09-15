@@ -3,13 +3,16 @@ import { createStore, useStore } from "zustand";
 
 export type TitlebarActivityStatus = "running" | "paused" | "error" | "warning";
 
+export type TitlebarActivityPopoverAction = {
+    label: string;
+    onClick: () => void;
+};
+
 export type TitlebarActivityPopover = {
     title: string;
     description?: string;
-    actionLabel?: string;
-    dismissLabel?: string;
-    onAction?: () => void;
-    onDismiss?: () => void;
+    action?: TitlebarActivityPopoverAction;
+    dismiss?: TitlebarActivityPopoverAction;
     defaultOpen?: boolean;
 };
 
@@ -34,6 +37,13 @@ type TitlebarActivityStore = {
     removeActivity: (id: string) => void;
 };
 
+function isSamePopoverAction(
+    a: TitlebarActivityPopoverAction | undefined,
+    b: TitlebarActivityPopoverAction | undefined,
+) {
+    return a?.label === b?.label && a?.onClick === b?.onClick;
+}
+
 function isSameActivity(a: TitlebarActivity, b: TitlebarActivity) {
     return (
         a.id === b.id &&
@@ -48,11 +58,9 @@ function isSameActivity(a: TitlebarActivity, b: TitlebarActivity) {
         a.onClick === b.onClick &&
         a.popover?.title === b.popover?.title &&
         a.popover?.description === b.popover?.description &&
-        a.popover?.actionLabel === b.popover?.actionLabel &&
-        a.popover?.dismissLabel === b.popover?.dismissLabel &&
         a.popover?.defaultOpen === b.popover?.defaultOpen &&
-        a.popover?.onAction === b.popover?.onAction &&
-        a.popover?.onDismiss === b.popover?.onDismiss
+        isSamePopoverAction(a.popover?.action, b.popover?.action) &&
+        isSamePopoverAction(a.popover?.dismiss, b.popover?.dismiss)
     );
 }
 

@@ -237,6 +237,7 @@ describe("buildModCompressionTitlebarActivity", () => {
 describe("buildModFixTitlebarActivity", () => {
     it("builds warning activity with defaultOpen popover and wiring", () => {
         const onOpenFixer = vi.fn();
+        const onDismissFix = vi.fn();
         const activity = buildModFixTitlebarActivity({
             modPath: "E:/Mods/TestMod",
             displayName: "TestMod",
@@ -250,6 +251,7 @@ describe("buildModFixTitlebarActivity", () => {
                 actionTool: "hash",
             },
             onOpenFixer,
+            onDismissFix,
             t: (key) => key,
         });
 
@@ -262,11 +264,34 @@ describe("buildModFixTitlebarActivity", () => {
         expect(activity.popover?.defaultOpen).toBe(true);
         expect(activity.popover?.title).toBe("page.mod.fix_needed_toast.title");
         expect(activity.popover?.description).toBe("1 file outdated");
-        expect(activity.popover?.actionLabel).toBe("page.mod.fix_needed_toast.action");
-        expect(activity.popover?.dismissLabel).toBe("titlebar.activity.modFix.dismiss");
+        expect(activity.popover?.action?.label).toBe("page.mod.fix_needed_toast.action");
+        expect(activity.popover?.dismiss?.label).toBe("titlebar.activity.modFix.dismiss");
 
-        activity.popover?.onAction?.();
+        activity.popover?.action?.onClick();
         expect(onOpenFixer).toHaveBeenCalledWith("E:/Mods/TestMod", "hash");
+
+        activity.popover?.dismiss?.onClick();
+        expect(onDismissFix).toHaveBeenCalledWith("E:/Mods/TestMod");
+    });
+
+    it("omits popover actions without handlers", () => {
+        const activity = buildModFixTitlebarActivity({
+            modPath: "E:/Mods/TestMod",
+            displayName: "TestMod",
+            result: {
+                needsFix: true,
+                importer: "ZZMI",
+                toolName: "ZZMI Fixer",
+                summary: "1 file outdated",
+                details: ["mod.ini"],
+                affectedFiles: ["mod.ini"],
+                actionTool: "hash",
+            },
+            t: (key) => key,
+        });
+
+        expect(activity.popover?.action).toBeUndefined();
+        expect(activity.popover?.dismiss).toBeUndefined();
     });
 
     it("truncates long mod names in detail", () => {

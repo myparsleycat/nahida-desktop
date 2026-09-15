@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -257,6 +258,177 @@ func TestFixInspectionStateFollowsDisabledFolderRenames(t *testing.T) {
 	waitForFixInspectionCount(t, service, 0)
 }
 
+func TestDismissFixInspectionHidesWarning(t *testing.T) {
+	service := newMarkerInspectionService()
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	marker := filepath.Join(target, "needs-fix")
+	if err := os.WriteFile(marker, []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InspectModForFix(context.Background(), target, "TEST"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(target)
+	waitForFixInspectionCount(t, service, 0)
+
+	dismissedRevision := service.fixInspectionSnapshot().Revision
+	service.DismissFixInspection(target)
+	service.DismissFixInspection(filepath.Join(target, "absent"))
+	if revision := service.fixInspectionSnapshot().Revision; revision != dismissedRevision {
+		t.Fatalf("repeat dismissal changed revision to %d, want %d", revision, dismissedRevision)
+	}
+
+	// Dismissal hides the warning without stopping the watch, so a fixed mod stops being tracked.
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	waitForTrackedFixInspectionCount(t, service, 0)
+}
+
+func TestDismissedFixInspectionRearmsOnChangedResult(t *testing.T) {
+	service := newSummaryInspectionService()
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	summary := filepath.Join(target, "summary")
+	if err := os.WriteFile(summary, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InspectModForFix(context.Background(), target, "SUMMARY"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(target)
+	waitForFixInspectionCount(t, service, 0)
+
+	if err := os.WriteFile(summary, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+	record := service.fixInspectionSnapshot().Inspections[0]
+	if record.Result.Summary != "second" {
+		t.Fatalf("rearmed inspection = %+v", record)
+	}
+}
+
+func TestDismissedFixInspectionRearmsOnRestoredInspection(t *testing.T) {
+	inspector := &mutableFixInspector{summary: "first"}
+	service := New()
+	service.fixInspectors = NewFixInspectorRegistry()
+	service.fixInspectors.Register(inspector)
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	if _, err := service.InspectModForFix(context.Background(), target, "MUTABLE"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(target)
+	waitForFixInspectionCount(t, service, 0)
+
+	// The inspector reports a different problem without touching the watched folder.
+	inspector.setSummary("second")
+	if _, err := service.InspectModForFix(context.Background(), target, "MUTABLE"); err != nil {
+		t.Fatal(err)
+	}
+
+	waitForFixInspectionCount(t, service, 1)
+	record := service.fixInspectionSnapshot().Inspections[0]
+	if record.Result.Summary != "second" {
+		t.Fatalf("restored inspection = %+v", record)
+	}
+}
+
+func TestDismissalAppliesAgainWhenTheSameResultReturns(t *testing.T) {
+	inspector := &mutableFixInspector{summary: "first"}
+	service := New()
+	service.fixInspectors = NewFixInspectorRegistry()
+	service.fixInspectors.Register(inspector)
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	if _, err := service.InspectModForFix(context.Background(), target, "MUTABLE"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(target)
+	waitForFixInspectionCount(t, service, 0)
+
+	inspector.setSummary("second")
+	if _, err := service.InspectModForFix(context.Background(), target, "MUTABLE"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	// The restored result is the same problem the user already closed, so it stays hidden.
+	inspector.setSummary("first")
+	if _, err := service.InspectModForFix(context.Background(), target, "MUTABLE"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 0)
+	if tracked := trackedFixInspectionCount(service); tracked != 1 {
+		t.Fatalf("tracked inspections = %d, want 1", tracked)
+	}
+}
+
+func TestDismissalDoesNotCarryOverToANewWarning(t *testing.T) {
+	service := newMarkerInspectionService()
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	marker := filepath.Join(target, "needs-fix")
+	if err := os.WriteFile(marker, []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InspectModForFix(context.Background(), target, "TEST"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(target)
+	waitForFixInspectionCount(t, service, 0)
+
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	waitForTrackedFixInspectionCount(t, service, 0)
+
+	if err := os.WriteFile(marker, []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InspectModForFix(context.Background(), target, "TEST"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+}
+
 func TestFixInspectionStateIsNotSharedWithNewService(t *testing.T) {
 	first := newMarkerInspectionService()
 	root := t.TempDir()
@@ -305,6 +477,54 @@ func (*markerFixInspector) Inspect(_ context.Context, modPath string) (*FixInspe
 	}, nil
 }
 
+type summaryFixInspector struct{}
+
+func (*summaryFixInspector) CanInspect(importer string) bool { return importer == "SUMMARY" }
+
+func (*summaryFixInspector) Inspect(_ context.Context, modPath string) (*FixInspectionResult, error) {
+	content, err := os.ReadFile(filepath.Join(modPath, "summary"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &FixInspectionResult{Importer: "SUMMARY", ToolName: "Summary Fixer"}, nil
+		}
+		return nil, err
+	}
+	return &FixInspectionResult{
+		NeedsFix:   true,
+		Importer:   "SUMMARY",
+		ToolName:   "Summary Fixer",
+		Summary:    string(content),
+		ActionTool: "summary",
+	}, nil
+}
+
+// mutableFixInspector reports a summary the test can change without touching the watched folder.
+type mutableFixInspector struct {
+	mu      sync.Mutex
+	summary string
+}
+
+func (*mutableFixInspector) CanInspect(importer string) bool { return importer == "MUTABLE" }
+
+func (i *mutableFixInspector) setSummary(summary string) {
+	i.mu.Lock()
+	i.summary = summary
+	i.mu.Unlock()
+}
+
+func (i *mutableFixInspector) Inspect(_ context.Context, _ string) (*FixInspectionResult, error) {
+	i.mu.Lock()
+	summary := i.summary
+	i.mu.Unlock()
+	return &FixInspectionResult{
+		NeedsFix:   true,
+		Importer:   "MUTABLE",
+		ToolName:   "Mutable Fixer",
+		Summary:    summary,
+		ActionTool: "mutable",
+	}, nil
+}
+
 type countingFixInspector struct {
 	calls int
 }
@@ -341,6 +561,13 @@ func newMarkerInspectionService() *Tools {
 	return service
 }
 
+func newSummaryInspectionService() *Tools {
+	service := New()
+	service.fixInspectors = NewFixInspectorRegistry()
+	service.fixInspectors.Register(&summaryFixInspector{})
+	return service
+}
+
 func waitForFixInspectionCount(t *testing.T, service *Tools, expected int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -364,4 +591,22 @@ func waitForFixInspectionPath(t *testing.T, service *Tools, expected string) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for fix inspection path %q; snapshot=%+v", expected, service.fixInspectionSnapshot())
+}
+
+func trackedFixInspectionCount(service *Tools) int {
+	service.fixInspectionMu.Lock()
+	defer service.fixInspectionMu.Unlock()
+	return len(service.fixInspections)
+}
+
+func waitForTrackedFixInspectionCount(t *testing.T, service *Tools, expected int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if trackedFixInspectionCount(service) == expected {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for the watched fix inspection to be dropped")
 }
