@@ -324,28 +324,22 @@ func TestRenameMigrationCarriesDismissalRecordedDuringRefresh(t *testing.T) {
 	}
 	service.fixInspections[fixInspectionKey(previous)] = &trackedFixInspection{record: record}
 
-	// The refresh already snapshotted the record before this dismissal lands, so the migration has to
-	// move the latest dismissal state rather than the value it read earlier.
+	// The dismissal lands after the refresh snapshotted the record, so the migration has to move the
+	// latest dismissal state rather than the value the refresh read earlier.
 	service.DismissFixInspection(previous)
-	dismissed, stopped := service.removeFixInspectionWithDismissal(previous)
-	if len(stopped) != 1 || dismissed == nil {
-		t.Fatalf(
-			"removal returned %d watchers and dismissal %v, want one watcher and a dismissal",
-			len(stopped),
-			dismissed,
-		)
+	migrated, stopped := service.migrateFixInspectionRename(record, renamed)
+	if len(stopped) != 1 {
+		t.Fatalf("migration returned %d watchers, want one", len(stopped))
 	}
-
-	renamedRecord := cloneFixInspectionRecord(record)
-	renamedRecord.ModPath = renamed
-	renamedRecord.DisplayName = filepath.Base(renamed)
-	if _, err := service.storeFixInspection(renamedRecord); err != nil {
-		t.Fatal(err)
+	if !watcher.SamePath(migrated.ModPath, renamed) {
+		t.Fatalf("migration moved the record to %q, want %q", migrated.ModPath, renamed)
 	}
-	service.carryFixInspectionDismissal(fixInspectionKey(renamed), dismissed)
 
 	if snapshot := service.fixInspectionSnapshot(); len(snapshot.Inspections) != 0 {
 		t.Fatalf("dismissed warning reappeared after the rename: %+v", snapshot.Inspections)
+	}
+	if path := trackedFixInspectionPath(service); !watcher.SamePath(path, renamed) {
+		t.Fatalf("tracked rename target = %q, want %q", path, renamed)
 	}
 }
 

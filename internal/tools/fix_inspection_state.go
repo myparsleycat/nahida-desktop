@@ -403,15 +403,10 @@ func (t *Tools) refreshFixInspectionLocked(
 			if renamedPath == "" {
 				return t.removeFixInspection(record.ModPath)
 			}
-			var dismissed *FixInspectionResult
-			dismissed, stopped = t.removeFixInspectionWithDismissal(record.ModPath)
-
-			record.ModPath = renamedPath
-			record.DisplayName = filepath.Base(renamedPath)
-			_, watchErr := t.storeFixInspection(record)
-			t.logError(watchErr, "FixInspector.watch")
-			key = fixInspectionKey(renamedPath)
-			t.carryFixInspectionDismissal(key, dismissed)
+			var migrationStopped []*trackedFixInspection
+			record, migrationStopped = t.migrateFixInspectionRename(record, renamedPath)
+			key = fixInspectionKey(record.ModPath)
+			stopped = append(stopped, migrationStopped...)
 			changed = true
 		} else {
 			if err == nil {
@@ -456,6 +451,23 @@ func (t *Tools) refreshFixInspectionLocked(
 	}
 	t.fixInspectionMu.Unlock()
 	return changed || recordChanged, stopped
+}
+
+// migrateFixInspectionRename re-keys a tracked record after a disabled-folder rename. The dismissal
+// state comes from the same critical section that drops the old key, so a dismissal recorded while
+// the refresh was running is carried over instead of the value the refresh read earlier.
+func (t *Tools) migrateFixInspectionRename(
+	record FixInspectionRecord,
+	renamedPath string,
+) (FixInspectionRecord, []*trackedFixInspection) {
+	dismissed, stopped := t.removeFixInspectionWithDismissal(record.ModPath)
+
+	record.ModPath = renamedPath
+	record.DisplayName = filepath.Base(renamedPath)
+	_, watchErr := t.storeFixInspection(record)
+	t.logError(watchErr, "FixInspector.watch")
+	t.carryFixInspectionDismissal(fixInspectionKey(renamedPath), dismissed)
+	return record, stopped
 }
 
 func findDisabledFixInspectionRename(previousPath string, identity fs.FileInfo) string {
