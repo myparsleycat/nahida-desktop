@@ -258,6 +258,42 @@ func TestFixInspectionStateFollowsDisabledFolderRenames(t *testing.T) {
 	waitForFixInspectionCount(t, service, 0)
 }
 
+func TestDismissalSurvivesDisabledFolderRename(t *testing.T) {
+	service := newMarkerInspectionService()
+	t.Cleanup(func() {
+		if err := service.ServiceShutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	root := t.TempDir()
+	active := filepath.Join(root, "ModA")
+	if err := os.Mkdir(active, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(active, "needs-fix"), []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InspectModForFix(context.Background(), active, "TEST"); err != nil {
+		t.Fatal(err)
+	}
+	waitForFixInspectionCount(t, service, 1)
+
+	service.DismissFixInspection(active)
+	waitForFixInspectionCount(t, service, 0)
+
+	disabled := filepath.Join(root, "DISABLED ModA")
+	if err := os.Rename(active, disabled); err != nil {
+		t.Fatal(err)
+	}
+	waitForTrackedFixInspectionPath(t, service, disabled)
+
+	// A rename re-keys the record without changing the problem, so the warning stays hidden.
+	if visible := len(service.fixInspectionSnapshot().Inspections); visible != 0 {
+		t.Fatalf("dismissed inspection became visible again: %d", visible)
+	}
+}
+
 func TestDismissFixInspectionHidesWarning(t *testing.T) {
 	service := newMarkerInspectionService()
 	t.Cleanup(func() {
@@ -597,6 +633,27 @@ func trackedFixInspectionCount(service *Tools) int {
 	service.fixInspectionMu.Lock()
 	defer service.fixInspectionMu.Unlock()
 	return len(service.fixInspections)
+}
+
+func trackedFixInspectionPath(service *Tools) string {
+	service.fixInspectionMu.Lock()
+	defer service.fixInspectionMu.Unlock()
+	for _, tracked := range service.fixInspections {
+		return tracked.record.ModPath
+	}
+	return ""
+}
+
+func waitForTrackedFixInspectionPath(t *testing.T, service *Tools, expected string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if watcher.SamePath(trackedFixInspectionPath(service), expected) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for tracked fix inspection %q", expected)
 }
 
 func waitForTrackedFixInspectionCount(t *testing.T, service *Tools, expected int) {

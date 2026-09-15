@@ -131,6 +131,20 @@ func (t *Tools) DismissFixInspection(modPath string) {
 	t.emitFixInspectionSnapshot()
 }
 
+// carryFixInspectionDismissal hands a dismissal to the record stored under a new key, so a renamed
+// mod keeps its warning hidden while the inspection result does not change.
+func (t *Tools) carryFixInspectionDismissal(key string, dismissed *FixInspectionResult) {
+	if dismissed == nil {
+		return
+	}
+
+	t.fixInspectionMu.Lock()
+	defer t.fixInspectionMu.Unlock()
+	if tracked := t.fixInspections[key]; tracked != nil {
+		tracked.dismissedResult = dismissed
+	}
+}
+
 //wails:ignore
 func (t *Tools) QueueFixInspections(paths []string) {
 	if t == nil {
@@ -377,6 +391,7 @@ func (t *Tools) refreshFixInspectionLocked(
 	}
 	record := cloneFixInspectionRecord(tracked.record)
 	identity := tracked.identity
+	dismissed := tracked.dismissedResult
 	t.fixInspectionMu.Unlock()
 
 	var changed bool
@@ -394,6 +409,7 @@ func (t *Tools) refreshFixInspectionLocked(
 			_, watchErr := t.storeFixInspection(record)
 			t.logError(watchErr, "FixInspector.watch")
 			key = fixInspectionKey(renamedPath)
+			t.carryFixInspectionDismissal(key, dismissed)
 			changed = true
 		} else {
 			if err == nil {
