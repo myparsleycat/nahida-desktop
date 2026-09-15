@@ -1,9 +1,5 @@
-import {
-  Tools,
-  type ZZMIBackupSession,
-  type ZZMIFixerPrepareResult,
-  type ZZMIFixerRestoreConflict,
-} from "@bindings/tools";
+import { Tools, type ZZMIBackupSession, type ZZMIFixerPrepareResult } from "@bindings/tools";
+import type { ZZMIFixerRestoreConflict } from "@bindings/tools/zzmi_fixer";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import { getFixToolPresets, getFixToolScripts } from "@renderer/wails/fix-tools";

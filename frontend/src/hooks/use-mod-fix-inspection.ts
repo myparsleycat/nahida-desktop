@@ -1,4 +1,5 @@
-import { Tools, type FixInspectionRecord, type FixInspectionSnapshot } from "@bindings/tools";
+import { Tools, type FixInspectionSnapshot } from "@bindings/tools";
+import type { FixInspectionRecord } from "@bindings/tools/fix_inspection";
 import { buildModFixTitlebarActivity } from "@renderer/components/titlebar/titlebar-activity";
 import { Logger } from "@renderer/lib/logger";
 import { modStore } from "@renderer/store/mod";

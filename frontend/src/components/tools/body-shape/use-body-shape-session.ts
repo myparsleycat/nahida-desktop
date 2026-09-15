@@ -1,4 +1,5 @@
-import { Tools, type BodyShapeMeshDescriptor, type BodyShapeMeshSummary } from "@bindings/tools";
+import { Tools, type BodyShapeMeshDescriptor } from "@bindings/tools";
+import type { BodyShapeMeshSummary } from "@bindings/tools/body_shape";
 import { Logger } from "@renderer/lib/logger";
 import { isAbortError } from "@renderer/wails/binary-memory";
 import {

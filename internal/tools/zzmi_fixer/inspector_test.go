@@ -1,0 +1,240 @@
+package zzmifixer
+
+import (
+	"context"
+	"encoding/binary"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"nahida.live/desktop/internal/db"
+	fixinspection "nahida.live/desktop/internal/tools/fix_inspection"
+	zzmiengine "nahida.live/desktop/internal/tools/zzmi"
+)
+
+func TestZZMIFixInspector(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	appDataDir := t.TempDir()
+	client := openToolsTestDB(t)
+
+	service := NewWithOptions(Options{})
+	service.UseClient(client)
+	useToolsTestAppData(t, service, appDataDir)
+	inspections := fixinspection.NewWithOptions(fixinspection.Options{})
+	inspections.UseClient(client)
+	inspections.Register(NewInspector(service))
+	t.Cleanup(func() {
+		if err := inspections.Shutdown(); err != nil {
+			t.Errorf("shutdown fix inspections: %v", err)
+		}
+	})
+	importer := "ZZMI"
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{
+		Game:          "ZZZ",
+		ModFolderPath: root,
+		Importer:      &importer,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pack, err := zzmiengine.LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cleanTarget := filepath.Join(root, "CleanMod")
+	if err := os.Mkdir(cleanTarget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cleanTarget, "mod.ini"),
+		[]byte("[TextureOverrideClean]\nhash = aabbccdd\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := inspections.InspectModForFix(ctx, cleanTarget, "ZZMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NeedsFix {
+		t.Fatalf("expected NeedsFix: false for clean mod, got %+v", res)
+	}
+
+	janeTarget := filepath.Join(root, "JaneMod")
+	if err := os.Mkdir(janeTarget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ini := `[TextureOverrideJane]
+hash = 33a09cfe
+vb2 = ResourceHairBlend
+
+[ResourceHairBlend]
+type = Buffer
+stride = 32
+filename = hair.buf
+`
+	if err := os.WriteFile(filepath.Join(janeTarget, "mod.ini"), []byte(ini), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bufferPath := filepath.Join(janeTarget, "hair.buf")
+	buffer := make([]byte, 32)
+	binary.LittleEndian.PutUint32(buffer[16:], 26) // Index 26 maps to 4 in Jane rules
+	if err := os.WriteFile(bufferPath, buffer, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err = inspections.InspectModForFix(ctx, janeTarget, "ZZMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.NeedsFix || !slices.Contains(res.Details, "Jane Doe blend remapping required") {
+		t.Fatalf("expected NeedsFix: true with Jane Doe remap in details, got %+v", res)
+	}
+
+	originalContent, err := os.ReadFile(bufferPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary.LittleEndian.Uint32(originalContent[16:]) != 26 {
+		t.Fatal("inspection modified the file on disk! Dry-run invariant violated")
+	}
+
+	// Use a terminal, unconditional hash replacement. Arbitrary map entries can
+	// require additional sections/buffers or resolve back to the same hash.
+	var candidates []string
+	for hash, commands := range pack.HashCommands {
+		eligible, replaces := true, false
+		for _, command := range commands {
+			if command.Op == "log" {
+				continue
+			}
+			if command.Op != "update_hash" || len(command.Args) != 1 {
+				eligible = false
+				break
+			}
+			target, ok := command.Args[0].(string)
+			if !ok || target == hash || len(pack.HashCommands[target]) != 0 {
+				eligible = false
+				break
+			}
+			replaces = true
+		}
+		if eligible && replaces {
+			candidates = append(candidates, hash)
+		}
+	}
+	slices.Sort(candidates)
+	if len(candidates) == 0 {
+		t.Fatal("embedded rules have no terminal hash replacement fixture")
+	}
+	outdatedHash := candidates[0]
+	if outdatedHash != "" {
+		hashTarget := filepath.Join(root, "OutdatedHashMod")
+		if err := os.Mkdir(hashTarget, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		hashIni := "[TextureOverrideOld]\nhash = " + outdatedHash + "\n"
+		if err := os.WriteFile(filepath.Join(hashTarget, "mod.ini"), []byte(hashIni), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err = inspections.InspectModForFix(ctx, hashTarget, "ZZMI")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.NeedsFix || res.ActionTool != "hash" {
+			t.Fatalf("expected NeedsFix: true with ActionTool: 'hash', got %+v", res)
+		}
+	}
+
+	otherTarget := filepath.Join(root, "OtherMod")
+	if err := os.Mkdir(otherTarget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	otherIni := `[TextureOverrideHair]
+hash = 12345678
+vb2 = ResourceHairBlend
+
+[ResourceHairBlend]
+type = Buffer
+stride = 32
+filename = hair.buf
+`
+	if err := os.WriteFile(filepath.Join(otherTarget, "mod.ini"), []byte(otherIni), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	otherBuf := make([]byte, 32)
+	binary.LittleEndian.PutUint32(otherBuf[16:], 18) // Dialyn remapping candidate
+	if err := os.WriteFile(filepath.Join(otherTarget, "hair.buf"), otherBuf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = inspections.InspectModForFix(ctx, otherTarget, "ZZMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NeedsFix {
+		t.Fatalf("expected NeedsFix: false when ini lacks Jane/Dialyn hashes, got %+v", res)
+	}
+
+	dialynTarget := filepath.Join(root, "DialynMod")
+	if err := os.Mkdir(dialynTarget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dialynIni := `[TextureOverrideCustom]
+hash = ff36809b
+vb2 = ResourceBlend
+
+[ResourceBlend]
+type = Buffer
+stride = 32
+filename = body.buf
+`
+	if err := os.WriteFile(filepath.Join(dialynTarget, "mod.ini"), []byte(dialynIni), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dialynBuf := make([]byte, 32)
+	binary.LittleEndian.PutUint32(dialynBuf[16:], 18)
+	if err := os.WriteFile(filepath.Join(dialynTarget, "body.buf"), dialynBuf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = inspections.InspectModForFix(ctx, dialynTarget, "ZZMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.NeedsFix || !slices.Contains(res.Details, "Dialyn blend remapping required") {
+		t.Fatalf("expected NeedsFix: true with Dialyn remap in details, got %+v", res)
+	}
+
+	legacyJaneTarget := filepath.Join(root, "LegacyJaneMod")
+	if err := os.Mkdir(legacyJaneTarget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyJaneIni := `[TextureOverrideHair]
+hash = e7a3b7dc
+vb2 = ResourceHairBlend
+
+[ResourceHairBlend]
+type = Buffer
+stride = 32
+filename = hair.buf
+`
+	if err := os.WriteFile(filepath.Join(legacyJaneTarget, "mod.ini"), []byte(legacyJaneIni), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacyBuf := make([]byte, 32)
+	binary.LittleEndian.PutUint32(legacyBuf[16:], 26)
+	if err := os.WriteFile(filepath.Join(legacyJaneTarget, "hair.buf"), legacyBuf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = inspections.InspectModForFix(ctx, legacyJaneTarget, "ZZMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.NeedsFix || !slices.Contains(res.Details, "Jane Doe blend remapping required") {
+		t.Fatalf("expected NeedsFix: true with Jane remap for legacy hash, got %+v", res)
+	}
+}
