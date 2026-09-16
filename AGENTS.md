@@ -10,6 +10,12 @@
 - Do not restore Linux, Android, iOS, or macOS build targets.
 - Make small, reviewable changes and keep the build and types valid after each unit.
 
+## Go Skills
+
+- Use the `golang-*` skills from `https://github.com/samber/cc-skills-golang` for Go work: style, naming, error handling, testing, concurrency, performance, and library choice. Installed skills are recorded in `skills-lock.json`.
+- `golang-how-to` is the entry point; it routes to the relevant skills and loads several together when a task spans multiple concerns.
+- This file takes precedence on conflict: project commands, pinned tools, Wails wiring, and cross-layer contracts override general skill guidance.
+
 ## Layout
 
 - Application and Wails service wiring live in `internal/app/runtime.go`.
@@ -22,6 +28,7 @@
 ## Wails
 
 - Implement against the current Wails v3 API. Do not use Wails v2 APIs.
+- Keep the exported surface minimal: a bindable exported service method becomes a callable renderer API, and exported fields of bound models become part of the generated TypeScript. Renames and unexports are breaking changes for the frontend.
 - If documentation and the installed Wails v3 source/API disagree, follow the installed source/API.
 - Wails is a fork of `wailsapp/wails`, not vendored in this repository.
 - Fork repository: `https://github.com/myparsleycat/wails`, branch `master`.
@@ -113,22 +120,6 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
   ```text
   go get -tool -modfile="./govulncheck.mod" golang.org/x/vuln/cmd/govulncheck@latest
   ```
-
-## Go Libraries
-
-- Prefer the Go standard library when it provides an equally clear solution.
-- Use `github.com/samber/lo` for common collection transformations when it reduces boilerplate and makes intent clearer.
-- Prefer `lo` for operations such as `Map`, `Filter`, `FilterMap`, `GroupBy`, `KeyBy`, `UniqBy`, `Find`, `Chunk`, and similar collection helpers.
-- Before adding a generic project-local helper, check the standard library and `lo` first.
-- Do not force `lo` into complex control flow. Prefer a normal `for` loop for branching, early exits, multiple state updates, or performance-sensitive code.
-- Avoid deeply nested `lo` pipelines and unnecessary intermediate allocations. Combine operations with helpers such as `FilterMap` when appropriate.
-- Do not use `lo/mutable` or `lo/parallel` by default. Use them only when mutation or concurrency is intentional and justified.
-
-## Go Project Conventions
-
-- Use snake_case Go filenames and lowercase, one-word package directories. Avoid vague package names such as `base`, `util`, `common`, `lib`, and `misc`.
-- Use a consistent one- or two-letter receiver derived from the type.
-- Keep the exported surface minimal, especially for methods that become Wails bindings.
 
 ## Blank Lines
 
