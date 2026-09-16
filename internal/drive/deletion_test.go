@@ -6,23 +6,22 @@ import (
 	"testing"
 )
 
-func TestResolveDeletionResultAcceptedFromData(t *testing.T) {
+func TestResolveDeletionJobAcceptedFromData(t *testing.T) {
 	t.Parallel()
 
-	got, err := resolveDeletionResult(map[string]any{"deletionJobId": "job-1", "status": "pending"}, nil)
+	got, err := resolveDeletionJob(map[string]any{"deletionJobId": "job-1", "status": "pending"}, nil)
 	if err != nil {
-		t.Fatalf("resolveDeletionResult: %v", err)
+		t.Fatalf("resolveDeletionJob: %v", err)
 	}
-	if got.Accepted == nil || got.Accepted.DeletionJobID != "job-1" || got.Accepted.Status != "pending" ||
-		got.Accepted.DeletionJobToken != "" {
-		t.Fatalf("accepted = %+v", got.Accepted)
+	if got == nil || got.DeletionJobID != "job-1" || got.Status != "pending" || got.DeletionJobToken != "" {
+		t.Fatalf("accepted = %+v", got)
 	}
 }
 
-func TestResolveDeletionResultAcceptedFromEdenErrorChannel(t *testing.T) {
+func TestResolveDeletionJobAcceptedFromEdenErrorChannel(t *testing.T) {
 	t.Parallel()
 
-	got, err := resolveDeletionResult(nil, &edenError{
+	got, err := resolveDeletionJob(nil, &edenError{
 		Status: 202,
 		Value: map[string]any{
 			"deletionJobId":    "job-2",
@@ -31,29 +30,29 @@ func TestResolveDeletionResultAcceptedFromEdenErrorChannel(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("resolveDeletionResult: %v", err)
+		t.Fatalf("resolveDeletionJob: %v", err)
 	}
-	if got.Accepted == nil || got.Accepted.DeletionJobID != "job-2" || got.Accepted.DeletionJobToken != "token" {
-		t.Fatalf("accepted = %+v", got.Accepted)
+	if got == nil || got.DeletionJobID != "job-2" || got.DeletionJobToken != "token" {
+		t.Fatalf("accepted = %+v", got)
 	}
 }
 
-func TestResolveDeletionResultCompletedPayload(t *testing.T) {
+func TestResolveDeletionJobCompletedPageHasNoJob(t *testing.T) {
 	t.Parallel()
 
-	got, err := resolveDeletionResult(map[string]any{"status": "completed", "deletedCount": 0}, nil)
+	got, err := resolveDeletionJob(map[string]any{"status": "completed", "deletedCount": 0}, nil)
 	if err != nil {
-		t.Fatalf("resolveDeletionResult: %v", err)
+		t.Fatalf("resolveDeletionJob: %v", err)
 	}
-	if got.Completed == nil || got.Completed.DeletedCount != 0 {
-		t.Fatalf("completed = %+v", got.Completed)
+	if got != nil {
+		t.Fatalf("job = %+v", got)
 	}
 }
 
-func TestResolveDeletionResultThrowsNon202(t *testing.T) {
+func TestResolveDeletionJobThrowsNon202(t *testing.T) {
 	t.Parallel()
 
-	_, err := resolveDeletionResult(nil, &edenError{Status: 404, Value: "items_not_found"})
+	_, err := resolveDeletionJob(nil, &edenError{Status: 404, Value: "items_not_found"})
 	if err == nil || err.Error() != "items_not_found" {
 		t.Fatalf("err = %v", err)
 	}

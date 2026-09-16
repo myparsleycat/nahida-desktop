@@ -326,11 +326,7 @@ func (d *Drive) deleteManyPage(ctx context.Context, page []string) (*DeletionAcc
 	if err != nil {
 		return nil, err
 	}
-	result, err := resolveDeletionResult(data, edenErr)
-	if err != nil {
-		return nil, err
-	}
-	return requireAccepted(result)
+	return resolveDeletionJob(data, edenErr)
 }
 
 func (d *Drive) assertFilename(name string) error {

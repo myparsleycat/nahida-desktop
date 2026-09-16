@@ -16,16 +16,6 @@ type DeletionAccepted struct {
 	DeletionJobToken string `json:"deletionJobToken,omitempty"`
 }
 
-type DeletionCompleted struct {
-	Kind         string `json:"kind"`
-	DeletedCount int    `json:"deletedCount"`
-}
-
-type DeletionResult struct {
-	Accepted  *DeletionAccepted
-	Completed *DeletionCompleted
-}
-
 type BatchDeletionOutcome struct {
 	RequestedIDs []string           `json:"requestedIds"`
 	AcceptedIDs  []string           `json:"acceptedIds"`
@@ -80,33 +70,26 @@ type edenError struct {
 	Value  any
 }
 
-func resolveDeletionResult(data any, err *edenError) (DeletionResult, error) {
+// resolveDeletionJob returns the job the server accepted for one page of a batch
+// delete. A nil job with a nil error means the page was already deleted, so there
+// is nothing left to schedule.
+func resolveDeletionJob(data any, err *edenError) (*DeletionAccepted, error) {
 	if err != nil {
 		if err.Status == 202 {
 			if accepted := asDeletionAccepted(err.Value); accepted != nil {
-				return DeletionResult{Accepted: accepted}, nil
+				return accepted, nil
 			}
-			if completed := asDeletionCompleted(err.Value); completed != nil {
-				return DeletionResult{Completed: completed}, nil
+			if isDeletionCompleted(err.Value) {
+				return nil, nil
 			}
 		}
-		return DeletionResult{}, errors.New(toErrorMessage(err.Value))
+		return nil, errors.New(toErrorMessage(err.Value))
 	}
 
 	if accepted := asDeletionAccepted(data); accepted != nil {
-		return DeletionResult{Accepted: accepted}, nil
+		return accepted, nil
 	}
-	if completed := asDeletionCompleted(data); completed != nil {
-		return DeletionResult{Completed: completed}, nil
-	}
-	return DeletionResult{}, errors.New("unexpected_deletion_response")
-}
-
-func requireAccepted(result DeletionResult) (*DeletionAccepted, error) {
-	if result.Accepted != nil {
-		return result.Accepted, nil
-	}
-	if result.Completed != nil {
+	if isDeletionCompleted(data) {
 		return nil, nil
 	}
 	return nil, errors.New("unexpected_deletion_response")
@@ -136,20 +119,13 @@ func asDeletionAccepted(value any) *DeletionAccepted {
 	return out
 }
 
-func asDeletionCompleted(value any) *DeletionCompleted {
+func isDeletionCompleted(value any) bool {
 	record, ok := asRecord(value)
 	if !ok {
-		return nil
+		return false
 	}
 	status, _ := record["status"].(string)
-	if status != "completed" {
-		return nil
-	}
-	count := 0
-	if n, ok := asInt(record["deletedCount"]); ok {
-		count = n
-	}
-	return &DeletionCompleted{Kind: "completed", DeletedCount: count}
+	return status == "completed"
 }
 
 func uniqueStrings(ids []string) []string {
