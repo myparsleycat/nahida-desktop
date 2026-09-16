@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/samber/lo"
 )
 
 type ScriptsStore struct{ c *Client }
@@ -81,7 +83,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ID,
 		row.Name,
 		row.Source,
-		boolToInt(row.IsSrcZstd),
+		lo.Ternary(row.IsSrcZstd, 1, 0),
 		string(row.Type),
 		row.Size,
 		argInt64(row.ZstdSize),
@@ -147,16 +149,16 @@ func (s ScriptPresetsStore) ListWithScripts(ctx context.Context) ([]ScriptPreset
 		return nil, err
 	}
 
+	grouped := lo.GroupBy(items, func(item ScriptPresetItemRow) string { return item.PresetID })
 	out := make([]ScriptPresetWithScripts, 0, len(presets))
 	for _, preset := range presets {
-		scripts := make([]ScriptPresetItemRow, 0)
-		for _, item := range items {
-			if item.PresetID == preset.ID {
-				scripts = append(scripts, item)
-			}
+		scripts := grouped[preset.ID]
+		if scripts == nil {
+			scripts = make([]ScriptPresetItemRow, 0)
 		}
 		out = append(out, ScriptPresetWithScripts{ScriptPresetRow: preset, Scripts: scripts})
 	}
+
 	return out, nil
 }
 

@@ -3,6 +3,8 @@ package drive
 import (
 	"errors"
 	"fmt"
+
+	"github.com/samber/lo"
 )
 
 const DeletionBatchSize = 500
@@ -151,31 +153,14 @@ func asDeletionCompleted(value any) *DeletionCompleted {
 }
 
 func uniqueStrings(ids []string) []string {
-	seen := make(map[string]struct{}, len(ids))
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
+	return lo.Uniq(ids)
 }
 
 func chunkStrings(ids []string, size int) [][]string {
 	if size <= 0 {
 		return [][]string{ids}
 	}
-	var pages [][]string
-	for i := 0; i < len(ids); i += size {
-		end := i + size
-		if end > len(ids) {
-			end = len(ids)
-		}
-		pages = append(pages, ids[i:end])
-	}
-	return pages
+	return lo.Chunk(ids, size)
 }
 
 func formatPartialDeleteLog(outcome BatchDeletionOutcome, action string) map[string]any {

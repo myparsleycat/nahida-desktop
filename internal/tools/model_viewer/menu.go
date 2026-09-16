@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 type ModelViewerSlider struct {
@@ -115,7 +117,9 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 		}
 	}
 	bindings = append(bindings, collectModelViewerArrowBindings(sections)...)
-	return dedupeModelViewerSlotBindings(bindings)
+	return lo.UniqBy(bindings, func(binding modelViewerSlotBinding) string {
+		return strconv.Itoa(binding.Slot) + ":" + binding.Variable
+	})
 }
 
 func splitModelViewerMenuSlotBranches(lines []string) []modelViewerMenuSlotBranch {
@@ -435,19 +439,6 @@ func appendUniqueModelViewerValue(values []any, value any) []any {
 		}
 	}
 	return append(values, value)
-}
-
-func dedupeModelViewerSlotBindings(input []modelViewerSlotBinding) []modelViewerSlotBinding {
-	seen := make(map[string]bool)
-	out := make([]modelViewerSlotBinding, 0, len(input))
-	for _, binding := range input {
-		key := strconv.Itoa(binding.Slot) + ":" + binding.Variable
-		if !seen[key] {
-			seen[key] = true
-			out = append(out, binding)
-		}
-	}
-	return out
 }
 
 func allModelViewerNumbers(values []any) bool {

@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 type speedSample struct {
@@ -347,14 +349,12 @@ func AggregateProgress(transfers []Snapshot) *float64 {
 		}
 		value = float64(transferred) / float64(totalSize) * 100
 	} else {
-		for _, item := range scoped {
+		value = lo.MeanBy(scoped, func(item Snapshot) float64 {
 			if item.Status == StatusCompleted {
-				value += 100
-			} else {
-				value += clamp(item.Progress, 0, 100)
+				return 100
 			}
-		}
-		value /= float64(len(scoped))
+			return clamp(item.Progress, 0, 100)
+		})
 	}
 	value = clamp(value, 0, 100)
 	return &value

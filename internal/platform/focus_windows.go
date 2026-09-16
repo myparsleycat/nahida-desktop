@@ -4,9 +4,11 @@ package platform
 
 import (
 	"path/filepath"
+	"slices"
 	"time"
 	"unsafe"
 
+	"github.com/samber/lo"
 	"golang.org/x/sys/windows"
 )
 
@@ -66,28 +68,12 @@ func (n *Native) PreviousPIDs(currentPID uint32) []uint32 {
 	}
 	n.focus.mu.Lock()
 	defer n.focus.mu.Unlock()
-	var pids []uint32
-	for i := len(n.focus.history) - 1; i >= 0; i-- {
-		pid := n.focus.history[i]
-		if pid == currentPID {
-			continue
-		}
-		seen := false
-		for _, existing := range pids {
-			if existing == pid {
-				seen = true
-				break
-			}
-		}
-		if seen {
-			continue
-		}
-		pids = append(pids, pid)
-		if len(pids) >= 5 {
-			break
-		}
-	}
-	return pids
+	reversed := slices.Clone(n.focus.history)
+	slices.Reverse(reversed)
+
+	return lo.Take(lo.Uniq(lo.Filter(reversed, func(pid uint32, _ int) bool {
+		return pid != currentPID
+	})), 5)
 }
 
 func (n *Native) ProcessName(pid uint32) string {

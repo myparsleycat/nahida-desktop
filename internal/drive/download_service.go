@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -652,15 +653,9 @@ func parentDownloadKey(file transfer.DownloadFile, rootID string, singleFile boo
 
 func redistributeDownloadFiles(files []transfer.DownloadFile) []transfer.DownloadFile {
 	const largeThreshold = 50 * 1024 * 1024
-	large := make([]transfer.DownloadFile, 0)
-	small := make([]transfer.DownloadFile, 0)
-	for _, file := range files {
-		if file.Size >= largeThreshold {
-			large = append(large, file)
-		} else {
-			small = append(small, file)
-		}
-	}
+	large, small := lo.FilterReject(files, func(file transfer.DownloadFile, _ int) bool {
+		return file.Size >= largeThreshold
+	})
 	if len(large) == 0 || len(small) == 0 {
 		return slices.Clone(files)
 	}

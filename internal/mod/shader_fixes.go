@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -983,32 +985,11 @@ func mustAbs(path string) string {
 }
 
 func uniqueOwners(owners []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(owners))
-	for _, owner := range owners {
-		if owner == "" {
-			continue
-		}
-		if _, ok := seen[owner]; ok {
-			continue
-		}
-		seen[owner] = struct{}{}
-		out = append(out, owner)
-	}
-	return out
+	return lo.Uniq(lo.Compact(owners))
 }
 
 func uniqueStrings(values []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
+	return lo.Uniq(values)
 }
 
 func containsOwner(owners []string, owner string) bool {

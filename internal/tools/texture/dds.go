@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/myparsleycat/ddsutil"
+	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -214,7 +215,7 @@ func resizeDDSFile(path string, request *normalizedTextureResizeRequest) Texture
 			Status:         "failed",
 			OriginalFormat: unknownTextureFormatName,
 			OutputFormat:   unknownTextureFormatName,
-			Message:        platform.StringPtr(err.Error()),
+			Message:        lo.ToPtr(err.Error()),
 		}
 	}
 	return result
@@ -291,9 +292,9 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 	var message *string
 	switch {
 	case request.operation == textureOperationConvert:
-		message = platform.StringPtr("Format changed without resizing.")
+		message = lo.ToPtr("Format changed without resizing.")
 	case outputFormat != surface.ImageFormat && targetWidth == originalWidth && targetHeight == originalHeight:
-		message = platform.StringPtr("Texture format changed without resizing.")
+		message = lo.ToPtr("Texture format changed without resizing.")
 	}
 	return TextureResizeFileResult{
 		FilePath:       path,
@@ -323,7 +324,7 @@ func skippedResizeFileResult(
 		OutputHeight:   height,
 		OriginalFormat: originalFormat,
 		OutputFormat:   outputFormat,
-		Message:        platform.StringPtr(message),
+		Message:        lo.ToPtr(message),
 	}
 }
 

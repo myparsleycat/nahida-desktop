@@ -282,13 +282,6 @@ func encodeJSON(value any) string {
 	return strings.TrimSuffix(builder.String(), "\n")
 }
 
-func deref(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func containsString(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {

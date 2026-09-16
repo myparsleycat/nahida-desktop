@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
@@ -945,27 +946,25 @@ func collectWuwaBackupGroups(root string) ([]WuwaBackupGroup, error) {
 	if err != nil {
 		return nil, err
 	}
-	byGroup := make(map[string][]WuwaBackupFile)
-	for _, bakPath := range paths {
-		match := wuwaBackupRE.FindStringSubmatch(filepath.Base(bakPath))
-		if len(match) != 3 {
-			continue
-		}
-		groupKey := match[2][:16]
-		byGroup[groupKey] = append(
-			byGroup[groupKey],
-			WuwaBackupFile{
+	byGroup := lo.GroupBy(
+		lo.FilterMap(paths, func(bakPath string, _ int) (WuwaBackupFile, bool) {
+			match := wuwaBackupRE.FindStringSubmatch(filepath.Base(bakPath))
+			if len(match) != 3 {
+				return WuwaBackupFile{}, false
+			}
+			groupKey := match[2][:16]
+			return WuwaBackupFile{
 				CurrentPath:  bakPath,
 				OriginalPath: filepath.Join(filepath.Dir(bakPath), match[1]),
 				Timestamp:    match[2],
 				GroupKey:     groupKey,
-			},
-		)
-	}
-	groups := make([]WuwaBackupGroup, 0, len(byGroup))
-	for key, files := range byGroup {
-		groups = append(groups, WuwaBackupGroup{GroupKey: key, Files: files})
-	}
+			}, true
+		}),
+		func(file WuwaBackupFile) string { return file.GroupKey },
+	)
+	groups := lo.Map(lo.Entries(byGroup), func(entry lo.Entry[string, []WuwaBackupFile], _ int) WuwaBackupGroup {
+		return WuwaBackupGroup{GroupKey: entry.Key, Files: entry.Value}
+	})
 	sort.Slice(groups, func(i, j int) bool { return groups[i].GroupKey > groups[j].GroupKey })
 	return groups, nil
 }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
@@ -584,7 +586,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 			}
 			mesh.Indices = append(mesh.Indices, values...)
 			if mesh.IndexPath == nil {
-				mesh.IndexPath, mesh.IndexRelativePath = &indexPath, platform.StringPtr(index.Filename)
+				mesh.IndexPath, mesh.IndexRelativePath = &indexPath, lo.ToPtr(index.Filename)
 			}
 			mesh.GLBMeshNames = append(
 				mesh.GLBMeshNames,
@@ -598,11 +600,11 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					if stride == 0 {
 						stride = 8
 					}
-					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, platform.StringPtr(
+					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, lo.ToPtr(
 						vector.Filename,
 					), &stride
 					if stride == 8 && stat.Size() == int64(vertexCount*8) {
-						mesh.VectorLayout = platform.StringPtr("snorm8-tangent-normal")
+						mesh.VectorLayout = lo.ToPtr("snorm8-tangent-normal")
 					}
 				}
 			}
@@ -621,7 +623,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					); validationErr != nil {
 						warn(fmt.Sprintf("Skipping blend buffer %s: %s", blendPath, validationErr))
 					} else {
-						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, platform.StringPtr(
+						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, lo.ToPtr(
 							blend.Filename,
 						), &stride
 						mesh.BlendBytes = raw

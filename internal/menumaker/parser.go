@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -327,17 +329,7 @@ func safeIdentifier(value string) string {
 }
 
 func uniqueCaseInsensitive(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		key := strings.ToLower(value)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, value)
-	}
-	return out
+	return lo.UniqBy(values, strings.ToLower)
 }
 
 func readOriginalLines(lines []string) ([]string, bool) {

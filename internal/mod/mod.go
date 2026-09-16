@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/gamebanana"
@@ -714,7 +716,7 @@ func (m *Mod) SetLastGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
-	return client.Settings.Upsert(ctx, lastGameSettingKey, platform.StringPtr(game))
+	return client.Settings.Upsert(ctx, lastGameSettingKey, lo.ToPtr(game))
 }
 
 func (m *Mod) GetExpandedGroups(ctx context.Context) ([]string, error) {

@@ -1,5 +1,7 @@
 package pepad
 
+import "github.com/samber/lo"
+
 type CandidateStatus string
 
 const (
@@ -104,25 +106,27 @@ func (r *Report) addCandidate(candidate Candidate) {
 }
 
 func (r *Report) markPatches(patches []patch, dryRun bool) {
-	r.Patches = make([]PatchRecord, 0, len(patches))
-	for _, item := range patches {
-		r.Patches = append(r.Patches, PatchRecord{
+	r.Patches = lo.Map(patches, func(item patch, _ int) PatchRecord {
+		return PatchRecord{
 			CandidateID: item.CandidateID, RVA: item.RVA, FileOffset: item.FileOffset,
 			Length: len(item.Replacement), Template: item.Template,
 			ReplacementSHA256: sha256Hex(item.Replacement),
-		})
-		for i := range r.Candidates {
-			if r.Candidates[i].ID != item.CandidateID {
-				continue
-			}
-			if dryRun {
-				r.Candidates[i].Status = StatusApproved
-			} else {
-				r.Candidates[i].Status = StatusModified
-			}
-			template := item.Template
-			r.Candidates[i].Template = &template
 		}
+	})
+	for _, item := range patches {
+		// Candidate IDs come from one discovery pass, so each ID matches a single candidate.
+		_, index, ok := lo.FindIndexOf(r.Candidates, func(candidate Candidate) bool {
+			return candidate.ID == item.CandidateID
+		})
+		if !ok {
+			continue
+		}
+		if dryRun {
+			r.Candidates[index].Status = StatusApproved
+		} else {
+			r.Candidates[index].Status = StatusModified
+		}
+		r.Candidates[index].Template = lo.ToPtr(item.Template)
 	}
 	r.recount()
 }

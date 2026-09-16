@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/pepad"
 	"nahida.live/desktop/internal/platform"
@@ -188,7 +190,7 @@ func (f fakePEDiversifier) Diversify(_ context.Context, input, output string) (P
 	}
 	return PEDiversificationReport{
 		DiscoveredRegions: 1, ModifiedRegions: 1, InputSHA256: inputHash,
-		OutputSHA256: platform.StringPtr(outputHash), Patches: []PEDiversifierPatch{{CandidateID: 0}},
+		OutputSHA256: lo.ToPtr(outputHash), Patches: []PEDiversifierPatch{{CandidateID: 0}},
 	}, nil
 }
 

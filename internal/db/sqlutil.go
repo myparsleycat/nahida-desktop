@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 func quoteIdent(value string) string {
@@ -172,16 +174,14 @@ func ptrString(ns sql.NullString) *string {
 	if !ns.Valid {
 		return nil
 	}
-	v := ns.String
-	return &v
+	return lo.ToPtr(ns.String)
 }
 
 func ptrInt64(n sql.NullInt64) *int64 {
 	if !n.Valid {
 		return nil
 	}
-	v := n.Int64
-	return &v
+	return lo.ToPtr(n.Int64)
 }
 
 func argString(v *string) any {
@@ -222,13 +222,6 @@ func toBool(value any) bool {
 	default:
 		return false
 	}
-}
-
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
 }
 
 func toBytes(value any) []byte {

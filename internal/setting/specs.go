@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 type spec struct {
@@ -52,7 +54,7 @@ func enumSpec(def Definition, fallback string, allowed []string) spec {
 		def:        def,
 		getDefault: func(*Setting) any { return fallback },
 		fromStored: func(_ *Setting, value *string) any {
-			return normalizeEnum(deref(value), allowed, fallback)
+			return normalizeEnum(lo.FromPtr(value), allowed, fallback)
 		},
 		normalize: normalize,
 	}
@@ -71,7 +73,7 @@ func clampedIntSpec(def Definition, fallback, min, max int) spec {
 			return fallback
 		},
 		fromStored: func(_ *Setting, value *string) any {
-			n, ok := parseJSInt(deref(value))
+			n, ok := parseJSInt(lo.FromPtr(value))
 			return fromNumber(float64(n), ok)
 		},
 		normalize: func(_ *Setting, value any) any {
@@ -120,7 +122,7 @@ func buildSpecs() map[string]spec {
 				return defaultAutoUpdateMode
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				return normalizeAutoUpdateMode(deref(value))
+				return normalizeAutoUpdateMode(lo.FromPtr(value))
 			},
 			normalize: func(_ *Setting, value any) any {
 				return normalizeAutoUpdateMode(asString(value))
@@ -137,7 +139,7 @@ func buildSpecs() map[string]spec {
 				return defaultStartPage
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				return sanitizeDefaultStartPage(deref(value))
+				return sanitizeDefaultStartPage(lo.FromPtr(value))
 			},
 			normalize: func(_ *Setting, value any) any {
 				return sanitizeDefaultStartPage(asString(value))
@@ -253,8 +255,8 @@ func buildSpecs() map[string]spec {
 				return defaultTouchProfileLlmProtocol
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				if isTouchProfileLlmProtocol(deref(value)) {
-					return deref(value)
+				if isTouchProfileLlmProtocol(lo.FromPtr(value)) {
+					return lo.FromPtr(value)
 				}
 				return defaultTouchProfileLlmProtocol
 			},
@@ -271,7 +273,7 @@ func buildSpecs() map[string]spec {
 				return defaultLLMEndpoint(s.opts.LLMBaseURL)
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				return normalizeTouchProfileLlmEndpoint(deref(value))
+				return normalizeTouchProfileLlmEndpoint(lo.FromPtr(value))
 			},
 			normalize: func(_ *Setting, value any) any {
 				return normalizeTouchProfileLlmEndpoint(asString(value))
@@ -286,7 +288,7 @@ func buildSpecs() map[string]spec {
 				if value == nil {
 					return defaultTouchProfileLlmModel
 				}
-				if trimmed := strings.TrimSpace(deref(value)); trimmed != "" {
+				if trimmed := strings.TrimSpace(lo.FromPtr(value)); trimmed != "" {
 					return trimmed
 				}
 				return defaultTouchProfileLlmModel
@@ -304,8 +306,8 @@ func buildSpecs() map[string]spec {
 				return defaultTouchProfileLlmReasoning
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				if isTouchProfileLlmReasoning(deref(value)) {
-					return deref(value)
+				if isTouchProfileLlmReasoning(lo.FromPtr(value)) {
+					return lo.FromPtr(value)
 				}
 				return defaultTouchProfileLlmReasoning
 			},
@@ -330,7 +332,7 @@ func buildSpecs() map[string]spec {
 				return transferBandwidthDefault
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				n, ok := parseJSInt(deref(value))
+				n, ok := parseJSInt(lo.FromPtr(value))
 				if !ok {
 					return transferBandwidthDefault
 				}
@@ -376,7 +378,7 @@ func buildSpecs() map[string]spec {
 				return normalizeDriveNameSortPolicy("")
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				return normalizeDriveNameSortPolicy(deref(value))
+				return normalizeDriveNameSortPolicy(lo.FromPtr(value))
 			},
 			normalize: func(_ *Setting, value any) any {
 				return normalizeDriveNameSortPolicy(asString(value))
@@ -430,7 +432,7 @@ func buildSpecs() map[string]spec {
 				return defaultExposure
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				n, ok := parseJSFloat(deref(value))
+				n, ok := parseJSFloat(lo.FromPtr(value))
 				if !ok {
 					return clampModelViewerExposure(math.NaN())
 				}

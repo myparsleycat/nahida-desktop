@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
@@ -698,22 +700,15 @@ func extractTouchDrawRanges(lines []touchConditionalLine) []TouchDrawRange {
 }
 
 func uniqueTouchDrawRanges(input []TouchDrawRange) []TouchDrawRange {
-	seen := map[string]bool{}
-	out := []TouchDrawRange{}
-	for _, item := range input {
-		key := fmt.Sprintf(
+	return lo.UniqBy(input, func(item TouchDrawRange) string {
+		return fmt.Sprintf(
 			"%d:%d:%d:%s",
 			item.FirstIndex,
 			item.IndexCount,
 			item.BaseVertex,
 			derefString(item.ConditionText),
 		)
-		if !seen[key] {
-			seen[key] = true
-			out = append(out, item)
-		}
-	}
-	return out
+	})
 }
 
 func buildTouchObjectMaps(

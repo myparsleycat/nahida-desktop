@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/watcher"
 )
@@ -208,7 +210,7 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	}
 	m.compression.mu.Lock()
 	m.compression.state.Enabled = enabled
-	m.compression.state.TargetEnabled = boolPointer(enabled)
+	m.compression.state.TargetEnabled = lo.ToPtr(enabled)
 	m.compression.state.Status = "checking"
 	m.compression.state.Error = ""
 	m.compression.deriveCapabilitiesLocked()
@@ -416,7 +418,7 @@ func (c *compressionCoordinator) takePendingLocked() compressionWork {
 func (c *compressionCoordinator) resetCheckingLocked() {
 	c.state.Status = "checking"
 	if c.state.TargetEnabled == nil {
-		c.state.TargetEnabled = boolPointer(c.state.Enabled)
+		c.state.TargetEnabled = lo.ToPtr(c.state.Enabled)
 	}
 }
 
@@ -894,7 +896,7 @@ func (c *compressionCoordinator) addWorkTotals(status string, files int, bytes i
 func (c *compressionCoordinator) resetProgress(status string, target bool, method string, threshold int) {
 	c.mu.Lock()
 	c.state.Method, c.state.ThresholdMiB = method, threshold
-	c.state.Status, c.state.TargetEnabled = status, boolPointer(target)
+	c.state.Status, c.state.TargetEnabled = status, lo.ToPtr(target)
 	c.state.ProcessedFiles, c.state.TotalFiles = 0, 0
 	c.state.ProcessedBytes, c.state.TotalBytes = 0, 0
 	c.state.CurrentFileName, c.state.Error = "", ""
@@ -991,8 +993,6 @@ func isCompressionDirectoryWrite(event watcher.Event) bool {
 	info, err := os.Lstat(event.Path)
 	return err == nil && info.IsDir()
 }
-
-func boolPointer(value bool) *bool { return &value }
 
 type compressionFile struct {
 	path string

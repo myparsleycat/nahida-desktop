@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -193,7 +195,7 @@ func detectModelViewerComputeAnimation(
 			),
 		)
 	}
-	deformerID := modelViewerComputeDeformerID(scopeID, firstModelViewerString(posePass.outputName, base.Name))
+	deformerID := modelViewerComputeDeformerID(scopeID, lo.CoalesceOrEmpty(posePass.outputName, base.Name))
 	deformer := &ModelViewerComputeDeformerTransport{
 		Kind:        kernel.kind,
 		ID:          deformerID,
@@ -439,12 +441,9 @@ func modelViewerMeshUsesFile(positionFile, filename string) bool {
 }
 
 func modelViewerComputeMeshIDs(meshes []modelViewerDirectMesh, filename string) []string {
-	var output []string
-	for _, mesh := range meshes {
-		if mesh.geometry != nil && modelViewerMeshUsesFile(mesh.positionFile, filename) {
-			output = append(output, mesh.id)
-		}
-	}
+	output := lo.FilterMap(meshes, func(mesh modelViewerDirectMesh, _ int) (string, bool) {
+		return mesh.id, mesh.geometry != nil && modelViewerMeshUsesFile(mesh.positionFile, filename)
+	})
 	sort.Strings(output)
 	return output
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
@@ -152,19 +154,10 @@ func (t *Service) QueueFixInspections(paths []string) {
 	if t == nil {
 		return
 	}
-	targets := make([]string, 0, len(paths))
-	seen := make(map[string]struct{}, len(paths))
-	for _, path := range paths {
-		if strings.TrimSpace(path) == "" {
-			continue
-		}
-		key := fixInspectionKey(path)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		targets = append(targets, path)
-	}
+	targets := lo.UniqBy(
+		lo.Filter(paths, func(path string, _ int) bool { return strings.TrimSpace(path) != "" }),
+		fixInspectionKey,
+	)
 	if len(targets) == 0 {
 		return
 	}

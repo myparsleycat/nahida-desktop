@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 )
@@ -270,7 +272,7 @@ func (t *Service) downloadTextureRuntimeArchive(
 	go watchTextureRuntimeDownload(downloadCtx, cancelDownload, activity, done, stallTimeout)
 	defer close(done)
 
-	emitTextureRuntimeProgress(progress, "download", floatPointer(0))
+	emitTextureRuntimeProgress(progress, "download", lo.ToPtr[float64](0))
 	var received, contentLength int64
 	err := t.download.File(downloadCtx, infra.DownloadRequest{
 		URL: spec.downloadURL, Destination: archivePath,
@@ -297,7 +299,7 @@ func (t *Service) downloadTextureRuntimeArchive(
 		}
 		return err
 	}
-	emitTextureRuntimeProgress(progress, "download", floatPointer(100))
+	emitTextureRuntimeProgress(progress, "download", lo.ToPtr[float64](100))
 	return nil
 }
 
@@ -535,8 +537,6 @@ func emitTextureRuntimeProgress(callback func(string, *float64), phase string, p
 		callback(phase, percent)
 	}
 }
-
-func floatPointer(value float64) *float64 { return &value }
 
 func isTextureRuntimeInstalled(binaryPath, modelsPath string, models []string) bool {
 	if !pathExists(binaryPath) || !pathExists(modelsPath) {

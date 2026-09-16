@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/infra"
@@ -328,8 +328,7 @@ func firstUnresolvedModelViewerPositionResource(scans []modelViewerGeometryScan)
 	if len(unresolved) == 0 {
 		return ""
 	}
-	sort.Strings(unresolved)
-	return unresolved[0]
+	return lo.Min(unresolved)
 }
 
 type modelViewerGeometryScan struct {

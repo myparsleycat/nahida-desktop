@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -205,17 +207,15 @@ func decodeManualSubGroups(value string) manualSubGroups {
 	}
 	result := manualSubGroups{}
 	for game, paths := range stored {
-		seen := map[string]struct{}{}
-		for _, path := range paths {
-			normalized := manualRelativePath(path)
-			if normalized != "" {
-				seen[normalized] = struct{}{}
-			}
+		normalized := lo.Uniq(lo.FilterMap(paths, func(path string, _ int) (string, bool) {
+			relative := manualRelativePath(path)
+			return relative, relative != ""
+		}))
+		if len(normalized) == 0 {
+			continue
 		}
-		for path := range seen {
-			result[game] = append(result[game], path)
-		}
-		sortLocaleStrings(result[game])
+		sortLocaleStrings(normalized)
+		result[game] = normalized
 	}
 	return result
 }

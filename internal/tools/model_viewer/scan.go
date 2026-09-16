@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -901,13 +903,10 @@ func appendModelViewerDirectTextureHistory(
 }
 
 func resourceFilenames(resourceMap map[string]modelViewerResource, names []string) []string {
-	var files []string
-	for _, name := range names {
-		if resource, ok := resourceMap[modelViewerNormalizeKey(name)]; ok && resource.Filename != "" {
-			files = append(files, resource.Filename)
-		}
-	}
-	return files
+	return lo.FilterMap(names, func(name string, _ int) (string, bool) {
+		resource, ok := resourceMap[modelViewerNormalizeKey(name)]
+		return resource.Filename, ok && resource.Filename != ""
+	})
 }
 
 func collectHashVertexBuffers(sections []modINISection) (map[string]string, map[string]string) {

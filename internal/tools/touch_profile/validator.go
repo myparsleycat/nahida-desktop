@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 type touchSettingsFingerprint struct{ Radius, Strength, Falloff, MaxOffset, Damping, Spring float64 }
@@ -53,20 +55,16 @@ func validateTouchOutput(
 		}
 	}
 	headers := regexp.MustCompile(`(?m)^\s*\[([^\]]+)\]\s*$`).FindAllStringSubmatch(iniText, -1)
-	seen, duplicates := map[string]bool{}, map[string]bool{}
-	for _, match := range headers {
-		header := strings.ToLower(strings.TrimSpace(match[1]))
-		if seen[header] {
-			duplicates[header] = true
-		}
-		seen[header] = true
-	}
+	duplicates := lo.FindDuplicates(lo.Map(headers, func(match []string, _ int) string {
+		return strings.ToLower(strings.TrimSpace(match[1]))
+	}))
 	if len(duplicates) > 0 {
-		names := make([]string, 0, len(duplicates))
-		for name := range duplicates {
-			names = append(names, name)
-		}
-		add("warning", "duplicate_ini_section", "Duplicate INI sections preserved: "+strings.Join(names, ", "), nil)
+		add(
+			"warning",
+			"duplicate_ini_section",
+			"Duplicate INI sections preserved: "+strings.Join(duplicates, ", "),
+			nil,
+		)
 	}
 	channels := map[int]touchSettingsFingerprint{}
 	for _, draft := range drafts {

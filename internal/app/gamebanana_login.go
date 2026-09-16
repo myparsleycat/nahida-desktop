@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
@@ -402,21 +404,12 @@ func clearGameBananaCookies(ctx context.Context, window loginWindow) error {
 	// WebView2 rejects the documented empty-name wildcard with E_INVALIDARG,
 	// so always delete GameBanana's known auth cookies by name and include any
 	// additional cookies visible to the login page.
-	names := append([]string(nil), gameBananaAuthCookieNames...)
-	seen := make(map[string]struct{}, len(cookies)+len(names))
-	for _, name := range names {
-		seen[name] = struct{}{}
-	}
-	for _, cookie := range cookies {
-		if cookie.Name == "" {
-			continue
-		}
-		if _, ok := seen[cookie.Name]; ok {
-			continue
-		}
-		seen[cookie.Name] = struct{}{}
-		names = append(names, cookie.Name)
-	}
+	names := lo.Uniq(slices.Concat(
+		gameBananaAuthCookieNames,
+		lo.FilterMap(cookies, func(cookie application.WebviewCookie, _ int) (string, bool) {
+			return cookie.Name, cookie.Name != ""
+		}),
+	))
 	return window.DeleteCookies(ctx, gameBananaCookieURI, names...)
 }
 

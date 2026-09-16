@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 type ImageCacheStore struct{ c *Client }
@@ -101,12 +103,7 @@ func (s ModScanCacheStore) GetMany(ctx context.Context, paths []string) (map[str
 	if len(paths) == 0 {
 		return out, nil
 	}
-	for i := 0; i < len(paths); i += modScanCacheQueryChunk {
-		end := i + modScanCacheQueryChunk
-		if end > len(paths) {
-			end = len(paths)
-		}
-		chunk := paths[i:end]
+	for _, chunk := range lo.Chunk(paths, modScanCacheQueryChunk) {
 		placeholders := strings.TrimRight(strings.Repeat("?,", len(chunk)), ",")
 		query := `SELECT "path", "mtime", "payload", "updated_at" FROM "mod_scan_cache" WHERE "path" IN (` + placeholders + `)`
 		args := make([]any, len(chunk))

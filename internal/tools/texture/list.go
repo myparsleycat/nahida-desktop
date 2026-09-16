@@ -12,8 +12,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -492,13 +493,13 @@ func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResize
 
 func textureUpscaleSkipReason(m ddsMetadata, scale int) *string {
 	if m.layers > 1 {
-		return platform.StringPtr("Cubemap and layered DDS textures cannot be upscaled.")
+		return lo.ToPtr("Cubemap and layered DDS textures cannot be upscaled.")
 	}
 	if strings.Contains(m.format, "BC4") || strings.Contains(m.format, "BC5") || strings.Contains(m.format, "BC6H") {
-		return platform.StringPtr("This DDS format cannot be upscaled without destroying channel data.")
+		return lo.ToPtr("This DDS format cannot be upscaled without destroying channel data.")
 	}
 	if m.width*scale > 8192 || m.height*scale > 8192 {
-		return platform.StringPtr("Upscaled dimensions would exceed the 8192px limit.")
+		return lo.ToPtr("Upscaled dimensions would exceed the 8192px limit.")
 	}
 	return nil
 }

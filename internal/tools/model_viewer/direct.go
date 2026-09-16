@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -236,7 +238,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		if readErr != nil {
 			continue
 		}
-		indices, decodeErr := cache.decodeIndices(ibPath, firstModelViewerString(ib.Format, layout.IndexFormat), raw)
+		indices, decodeErr := cache.decodeIndices(ibPath, lo.CoalesceOrEmpty(ib.Format, layout.IndexFormat), raw)
 		if decodeErr != nil {
 			continue
 		}
@@ -305,7 +307,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			task.entry.group.Stride,
 			modelViewerLayoutKey(task.entry.layout),
 			filepath.Join(modDir, filepath.FromSlash(task.entry.ib.Filename)),
-			firstModelViewerString(task.entry.ib.Format, task.entry.layout.IndexFormat),
+			lo.CoalesceOrEmpty(task.entry.ib.Format, task.entry.layout.IndexFormat),
 			task.draw.draw.StartIndex,
 			task.draw.draw.IndexCount,
 			task.draw.draw.BaseVertex,
@@ -483,15 +485,6 @@ func collectModelViewerIBResources(
 	return output
 }
 
-func firstModelViewerString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func inferModelViewerFmtLayout(
 	group modelViewerBufferGroup,
 	resources []modelViewerResource,
@@ -532,7 +525,7 @@ func inferModelViewerFmtLayout(
 					layout.Elements,
 					modelViewerFmtElement{
 						SemanticName:      "NORMAL",
-						Format:            firstModelViewerString(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"),
+						Format:            lo.CoalesceOrEmpty(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"),
 						AlignedByteOffset: offset,
 						InputSlotClass:    "per-vertex",
 					},
@@ -696,13 +689,13 @@ func buildModelViewerDirectMeshPayload(
 		if modelViewerDNFIsTrue(assignment.conditions) {
 			switch assignment.role {
 			case "diffuse":
-				item.TexKey = platform.StringPtr(key)
+				item.TexKey = lo.ToPtr(key)
 			case "normal_map":
-				item.NormalMapKey = platform.StringPtr(key)
+				item.NormalMapKey = lo.ToPtr(key)
 			case "light_map":
-				item.LightMapKey = platform.StringPtr(key)
+				item.LightMapKey = lo.ToPtr(key)
 			case "material_map":
-				item.MaterialMapKey = platform.StringPtr(key)
+				item.MaterialMapKey = lo.ToPtr(key)
 			}
 			continue
 		}
@@ -721,7 +714,7 @@ func buildModelViewerDirectMeshPayload(
 	if item.TexKey == nil && firstDiffuseKey != "" && !skippedMissingDiffuse {
 		// Electron uses the mesh default file as texKey. If that file is missing,
 		// remaining conditional variants stay variants only (load.test.ts).
-		item.TexKey = platform.StringPtr(firstDiffuseKey)
+		item.TexKey = lo.ToPtr(firstDiffuseKey)
 	}
 	for _, binding := range textures {
 		if modelViewerNormalizeKey(binding.IBResourceName) != modelViewerNormalizeKey(mesh.ibName) {
@@ -756,13 +749,13 @@ func buildModelViewerDirectMeshPayload(
 			key = availableTexture.Key
 			switch role {
 			case "diffuse":
-				item.TexKey = platform.StringPtr(key)
+				item.TexKey = lo.ToPtr(key)
 			case "normal_map":
-				item.NormalMapKey = platform.StringPtr(key)
+				item.NormalMapKey = lo.ToPtr(key)
 			case "light_map":
-				item.LightMapKey = platform.StringPtr(key)
+				item.LightMapKey = lo.ToPtr(key)
 			case "material_map":
-				item.MaterialMapKey = platform.StringPtr(key)
+				item.MaterialMapKey = lo.ToPtr(key)
 			}
 		}
 		break

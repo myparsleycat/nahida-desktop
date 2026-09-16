@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -540,25 +542,14 @@ func currentHomeNeedles() []string {
 }
 
 func prepareHomeNeedles(homes []string) []string {
-	seen := make(map[string]struct{}, len(homes)*3)
-	out := make([]string, 0, len(homes)*3)
-	for _, home := range homes {
+	out := lo.Uniq(lo.Compact(lo.FlatMap(homes, func(home string, _ int) []string {
 		base := normalizeHomePrefix(home)
-		if base == "" {
-			continue
-		}
-		for _, needle := range []string{
+		return []string{
 			base,
 			strings.ReplaceAll(base, `\`, `/`),
 			strings.ReplaceAll(base, `\`, `\\`),
-		} {
-			if _, ok := seen[needle]; ok {
-				continue
-			}
-			seen[needle] = struct{}{}
-			out = append(out, needle)
 		}
-	}
+	})))
 	slices.SortFunc(out, func(a, b string) int {
 		return len(b) - len(a)
 	})

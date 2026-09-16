@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -172,7 +172,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		t.bisect = nil
 		var message *string
 		if len(paths) > 0 {
-			message = platform.StringPtr(bisectAllExcluded)
+			message = lo.ToPtr(bisectAllExcluded)
 		}
 		done := scanning
 		done.Status = BisectDone
@@ -263,7 +263,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 		} else {
 			session.currentBatch = []string{culprit}
 		}
-		session.finalBadPath = platform.StringPtr(culprit)
+		session.finalBadPath = lo.ToPtr(culprit)
 		snapshot := snapshotFor(session, nil, BisectDone)
 		t.broadcastBisect(snapshot)
 		return snapshot, nil
@@ -278,7 +278,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 			t.logError(err, "ModBisect:d3dxFinalRestore")
 		}
 		t.bisect = nil
-		snapshot := snapshotFor(session, platform.StringPtr(bisectInconclusive), BisectDone)
+		snapshot := snapshotFor(session, lo.ToPtr(bisectInconclusive), BisectDone)
 		t.broadcastBisect(snapshot)
 		return snapshot, nil
 	}
@@ -555,14 +555,13 @@ func scanEnabledINIs(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(matches))
-	for _, path := range matches {
+	paths := lo.FilterMap(matches, func(path string, _ int) (string, bool) {
 		relative, relativeErr := filepath.Rel(root, path)
 		if relativeErr != nil || bisectPathIsHidden(relative) || isDisabledBisectRelative(relative) {
-			continue
+			return "", false
 		}
-		paths = append(paths, filepath.Clean(path))
-	}
+		return filepath.Clean(path), true
+	})
 	sort.Strings(paths)
 	return paths, nil
 }

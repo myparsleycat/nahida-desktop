@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -1130,32 +1132,14 @@ func clickKey(modifier string, right bool) string {
 }
 
 func uniqueHandlers(slots []MenuMakerSlot) []MenuMakerHandler {
-	seen := map[int]bool{}
-	out := []MenuMakerHandler{}
-	for _, slot := range slots {
-		for _, handler := range slot.Handlers {
-			if seen[handler.SourceIndex] {
-				continue
-			}
-			seen[handler.SourceIndex] = true
-			out = append(out, handler)
-		}
-	}
-	return out
+	return lo.UniqBy(
+		lo.FlatMap(slots, func(slot MenuMakerSlot, _ int) []MenuMakerHandler { return slot.Handlers }),
+		func(handler MenuMakerHandler) int { return handler.SourceIndex },
+	)
 }
 
 func uniqueNormalizedKeys(values []string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, value := range values {
-		normalized := normalizeMenuMakerKey(value)
-		if seen[normalized] {
-			continue
-		}
-		seen[normalized] = true
-		out = append(out, value)
-	}
-	return out
+	return lo.UniqBy(values, normalizeMenuMakerKey)
 }
 
 func escapeComment(value string) string {
@@ -1164,16 +1148,7 @@ func escapeComment(value string) string {
 }
 
 func uniqueStrings(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out
+	return lo.Uniq(values)
 }
 
 func orInt(value, fallback int) int {

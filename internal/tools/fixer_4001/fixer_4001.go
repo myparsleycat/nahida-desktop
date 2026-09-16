@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -480,7 +482,7 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 			"4001Fixer:diversifyD3D11DllPadding",
 		)
 	}
-	return Fixer4001Result{Success: true, BackupPath: platform.StringPtr(backupPath)}
+	return Fixer4001Result{Success: true, BackupPath: lo.ToPtr(backupPath)}
 }
 
 func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
@@ -528,7 +530,7 @@ func (t *Service) begin4001Task(task string) bool {
 	if t.fixerTask != nil {
 		return false
 	}
-	t.fixerTask = platform.StringPtr(task)
+	t.fixerTask = lo.ToPtr(task)
 	t.fixerError = ""
 	return true
 }
@@ -555,7 +557,7 @@ func (t *Service) failed4001(code string, err error) Fixer4001Result {
 		t.logError(err, "4001Fixer")
 	}
 	t.update4001Progress(code, message)
-	return Fixer4001Result{ErrorMessage: platform.StringPtr(message)}
+	return Fixer4001Result{ErrorMessage: lo.ToPtr(message)}
 }
 
 func (t *Service) failed4001Install(err error, target, fallbackCode string) Fixer4001Result {
@@ -574,7 +576,7 @@ func (t *Service) failed4001Build(err error) Fixer4001Result {
 	t.logError(err, "4001Fixer")
 	message := extractBuildErrorMessage(err)
 	t.update4001Progress("XXMI_ERR_BUILD_FAILED", message)
-	return Fixer4001Result{ErrorMessage: platform.StringPtr(message)}
+	return Fixer4001Result{ErrorMessage: lo.ToPtr(message)}
 }
 
 func (t *Service) ensureXXMILauncherClosed(ctx context.Context) error {
@@ -814,7 +816,7 @@ func (t *Service) findDiversifierBackup(importerPath string) (*string, error) {
 			continue
 		}
 		if !hasCurrentHash || strings.HasPrefix(currentHash, match[1]) {
-			return platform.StringPtr(candidate), nil
+			return lo.ToPtr(candidate), nil
 		}
 		t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
 	}

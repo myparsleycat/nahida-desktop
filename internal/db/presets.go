@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/samber/lo"
 )
 
 type ModPresetsStore struct{ c *Client }
@@ -107,7 +109,7 @@ INSERT INTO "mod_preset_items"
 ("preset_id", "mod_key", "relative_path", "group_relative_path", "folder_name", "is_enabled", "item_order")
 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				item.PresetID, item.ModKey, item.RelativePath, item.GroupRelativePath,
-				item.FolderName, boolToInt(item.IsEnabled), item.ItemOrder); err != nil {
+				item.FolderName, lo.Ternary(item.IsEnabled, 1, 0), item.ItemOrder); err != nil {
 				return err
 			}
 		}
@@ -168,7 +170,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				row.RelativePath,
 				row.GroupRelativePath,
 				row.FolderName,
-				boolToInt(row.IsEnabled),
+				lo.Ternary(row.IsEnabled, 1, 0),
 				row.ItemOrder,
 			); err != nil {
 				return err

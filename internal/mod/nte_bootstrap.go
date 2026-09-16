@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -86,7 +88,7 @@ func (m *Mod) ensureNteBootstrapFiles(
 		return nil, err
 	}
 	if nteBootstrapFilesInstalled(targetDir) {
-		m.emitNteBootstrapProgress("completed", float64Pointer(100), "", "")
+		m.emitNteBootstrapProgress("completed", lo.ToPtr[float64](100), "", "")
 		return nil, nil
 	}
 	if m == nil || m.archive == nil || m.http == nil {
@@ -117,7 +119,7 @@ func (m *Mod) ensureNteBootstrapFiles(
 	if err := m.downloadAndExtractNteBootstrap(ctx, m.nteSigBypasserURL, nteSigBypasserArchive, tempDir); err != nil {
 		return nil, err
 	}
-	m.emitNteBootstrapProgress("fetching-release", float64Pointer(93), nteASILoaderArchive, "")
+	m.emitNteBootstrapProgress("fetching-release", lo.ToPtr[float64](93), nteASILoaderArchive, "")
 	if err := m.downloadAndExtractNteBootstrap(ctx, m.nteASILoaderURL, nteASILoaderArchive, tempDir); err != nil {
 		return nil, err
 	}
@@ -147,11 +149,11 @@ func (m *Mod) ensureNteBootstrapFiles(
 	if err != nil {
 		return nil, err
 	}
-	m.emitNteBootstrapProgress("installing", float64Pointer(96), "", "")
+	m.emitNteBootstrapProgress("installing", lo.ToPtr[float64](96), "", "")
 	if err := installNteBootstrapCopies(copies, !directoryWritableOrCreatable(targetDir)); err != nil {
 		return install, err
 	}
-	m.emitNteBootstrapProgress("completed", float64Pointer(100), "", "")
+	m.emitNteBootstrapProgress("completed", lo.ToPtr[float64](100), "", "")
 	return install, nil
 }
 
@@ -328,5 +330,3 @@ func (i *nteBootstrapInstall) Commit() error {
 	}
 	return os.RemoveAll(i.rollbackDir)
 }
-
-func float64Pointer(value float64) *float64 { return &value }

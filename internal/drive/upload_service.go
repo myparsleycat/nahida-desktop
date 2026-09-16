@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
@@ -373,7 +374,7 @@ func (d *Drive) runUpload(
 	if err := transfers.Update(pid, transfer.Updates{
 		Status:            &completed,
 		TransferredSize:   &total,
-		TransferredFiles:  ptrInt(len(preparation.Files)),
+		TransferredFiles:  lo.ToPtr(len(preparation.Files)),
 		Progress:          &hundred,
 		ClearPlanPhase:    true,
 		ClearPlanProgress: true,
@@ -489,8 +490,4 @@ func stringsMapKeys(values map[string]struct{}) func(func(string) bool) {
 			}
 		}
 	}
-}
-
-func ptrInt(value int) *int {
-	return &value
 }

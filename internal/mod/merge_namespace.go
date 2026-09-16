@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 type namespaceMergeSource struct {
@@ -159,11 +161,10 @@ func writeNamespaceMerge(options namespaceMergeOptions) (string, error) {
 }
 
 func pickNamespaceRepresentative(sources []namespaceWrapSource) *namespaceWrapSource {
+	// lo.Find would return a copy of the matched element, so keep the pointer into sources.
 	pick := func(pred func(namespaceWrapSource) bool) *namespaceWrapSource {
-		for i := range sources {
-			if pred(sources[i]) {
-				return &sources[i]
-			}
+		if _, index, ok := lo.FindIndexOf(sources, pred); ok {
+			return &sources[index]
 		}
 		return nil
 	}
@@ -360,19 +361,7 @@ func formatMergedModHeader(baseDir string, iniPaths []string) string {
 }
 
 func uniqueMergePaths(paths []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if path == "" {
-			continue
-		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		out = append(out, path)
-	}
-	return out
+	return lo.Uniq(lo.Compact(paths))
 }
 
 func resolveAgainst(base, entry string) string {

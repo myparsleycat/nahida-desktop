@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nahida.live/desktop/internal/platform"
+	"github.com/samber/lo"
 )
 
 func TestTextureUpscaleSkipsCubemapWithoutInstallingRuntime(t *testing.T) {
@@ -175,12 +175,12 @@ func TestResizeTextureFileProcessesDDS(t *testing.T) {
 func TestTextureJobOwnershipKeepsRunningStateWhenALaterFileFinishesFirst(t *testing.T) {
 	service := New()
 	folder := service.beginTextureJob(
-		TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("folder")},
+		TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("folder")},
 	)
-	file := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("file")})
+	file := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("file")})
 	service.settleTextureJob(
 		file,
-		TextureResizeProgressEvent{Status: "completed", FilePath: platform.StringPtr("file")},
+		TextureResizeProgressEvent{Status: "completed", FilePath: lo.ToPtr("file")},
 	)
 	state := service.GetTextureResizeState()
 	if state.Status != "running" || state.FilePath == nil || *state.FilePath != "folder" {
@@ -188,7 +188,7 @@ func TestTextureJobOwnershipKeepsRunningStateWhenALaterFileFinishesFirst(t *test
 	}
 	service.settleTextureJob(
 		folder,
-		TextureResizeProgressEvent{Status: "completed", FilePath: platform.StringPtr("folder")},
+		TextureResizeProgressEvent{Status: "completed", FilePath: lo.ToPtr("folder")},
 	)
 	if got := service.GetTextureResizeState(); got.Status != "idle" {
 		t.Fatalf("final = %#v", got)
@@ -197,14 +197,14 @@ func TestTextureJobOwnershipKeepsRunningStateWhenALaterFileFinishesFirst(t *test
 
 func TestTextureJobOwnershipDoesNotIdleAfterFailedResizeWhileAnotherJobRuns(t *testing.T) {
 	service := New()
-	first := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("a")})
-	second := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("b")})
-	service.settleTextureJob(first, TextureResizeProgressEvent{Status: "failed", Error: platform.StringPtr("boom")})
+	first := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("a")})
+	second := service.beginTextureJob(TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("b")})
+	service.settleTextureJob(first, TextureResizeProgressEvent{Status: "failed", Error: lo.ToPtr("boom")})
 	state := service.GetTextureResizeState()
 	if state.Status != "running" || state.FilePath == nil || *state.FilePath != "b" {
 		t.Fatalf("state after failure = %#v", state)
 	}
-	service.settleTextureJob(second, TextureResizeProgressEvent{Status: "completed", FilePath: platform.StringPtr("b")})
+	service.settleTextureJob(second, TextureResizeProgressEvent{Status: "completed", FilePath: lo.ToPtr("b")})
 	if got := service.GetTextureResizeState(); got.Status != "idle" {
 		t.Fatalf("final = %#v", got)
 	}
@@ -213,14 +213,14 @@ func TestTextureJobOwnershipDoesNotIdleAfterFailedResizeWhileAnotherJobRuns(t *t
 func TestTextureJobOwnershipKeepsFolderActivityWhenAFileResizeFinishesFirst(t *testing.T) {
 	service := New()
 	folder := service.beginTextureJob(
-		TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("mods")},
+		TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("mods")},
 	)
 	file := service.beginTextureJob(
-		TextureResizeProgressEvent{Status: "running", FilePath: platform.StringPtr("one.dds")},
+		TextureResizeProgressEvent{Status: "running", FilePath: lo.ToPtr("one.dds")},
 	)
 	service.settleTextureJob(
 		file,
-		TextureResizeProgressEvent{Status: "completed", FilePath: platform.StringPtr("one.dds")},
+		TextureResizeProgressEvent{Status: "completed", FilePath: lo.ToPtr("one.dds")},
 	)
 	state := service.GetTextureResizeState()
 	if state.Status != "running" || state.FilePath == nil || *state.FilePath != "mods" {
@@ -228,6 +228,6 @@ func TestTextureJobOwnershipKeepsFolderActivityWhenAFileResizeFinishesFirst(t *t
 	}
 	service.settleTextureJob(
 		folder,
-		TextureResizeProgressEvent{Status: "completed", FilePath: platform.StringPtr("mods")},
+		TextureResizeProgressEvent{Status: "completed", FilePath: lo.ToPtr("mods")},
 	)
 }

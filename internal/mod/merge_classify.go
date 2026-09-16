@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"nahida.live/desktop/internal/platform"
+	"github.com/samber/lo"
 )
 
 type MergePackClassification struct {
@@ -129,7 +129,7 @@ func classifyMergePack(modPath string) (MergePackClassification, error) {
 		return scored[i].path < scored[j].path
 	})
 	primary := scored[0]
-	result.PrimaryIniPath = platform.StringPtr(primary.path)
+	result.PrimaryIniPath = lo.ToPtr(primary.path)
 	result.Dialect = detectMergeDialect(primary.text)
 	result.Family = detectMergeFamily(primary.path, primary.text, allText.String())
 	result.Hashes = extractMergeHashes(primary.text)
@@ -255,16 +255,9 @@ func scoreMergeINI(path, text string) int {
 }
 
 func extractMergeHashes(text string) []string {
-	seen := map[string]struct{}{}
-	result := []string{}
-	for _, match := range hashLineRE.FindAllStringSubmatch(text, -1) {
-		value := strings.ToLower(match[1])
-		if _, ok := seen[value]; !ok {
-			seen[value] = struct{}{}
-			result = append(result, value)
-		}
-	}
-	return result
+	return lo.Uniq(lo.Map(hashLineRE.FindAllStringSubmatch(text, -1), func(match []string, _ int) string {
+		return strings.ToLower(match[1])
+	}))
 }
 
 func mergePacksOverlap(left, right MergePackClassification) bool {

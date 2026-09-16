@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/samber/lo"
 	wailsupdater "github.com/wailsapp/wails/v3/pkg/updater"
 	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 
@@ -380,18 +381,18 @@ func (u *Updater) GetStatus(ctx context.Context) (UpdaterStatus, error) {
 		IsDownloading:         u.downloading,
 	}
 	if u.releaseVersion != "" {
-		status.ReleaseVersion = platform.StringPtr(u.releaseVersion)
+		status.ReleaseVersion = lo.ToPtr(u.releaseVersion)
 	}
 	if u.originalNotes != "" || u.translatedNotes != "" {
 		status.ReleaseNotes = &UpdaterReleaseNotes{}
 		if u.originalNotes != "" {
-			status.ReleaseNotes.Original = platform.StringPtr(u.originalNotes)
+			status.ReleaseNotes.Original = lo.ToPtr(u.originalNotes)
 		}
 		if u.translatedNotes != "" {
-			status.ReleaseNotes.Translated = platform.StringPtr(u.translatedNotes)
+			status.ReleaseNotes.Translated = lo.ToPtr(u.translatedNotes)
 		}
 		if u.translatedLang != "" {
-			status.ReleaseNotes.TranslatedLanguage = platform.StringPtr(u.translatedLang)
+			status.ReleaseNotes.TranslatedLanguage = lo.ToPtr(u.translatedLang)
 		}
 	}
 	return status, nil

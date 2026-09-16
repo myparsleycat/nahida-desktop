@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -588,7 +590,7 @@ func loadModelViewerDrawVertexBuffers(
 			})
 			if buffersErr == nil {
 				uvOffset, uvFormat := detectModelViewerUVBest(combined, stride, posStride+vectorStride, tcStride)
-				vectorFormat := firstModelViewerString(vector.Format, "DXGI_FORMAT_R8G8B8A8_SNORM")
+				vectorFormat := lo.CoalesceOrEmpty(vector.Format, "DXGI_FORMAT_R8G8B8A8_SNORM")
 				return modelViewerDrawVertexBuffers{
 					combined:  combined,
 					stride:    stride,
