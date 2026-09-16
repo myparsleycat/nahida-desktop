@@ -114,21 +114,23 @@ func (s ModScanCacheStore) GetMany(ctx context.Context, paths []string) (map[str
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var row ModScanCacheRow
-			if err := rows.Scan(&row.Path, &row.Mtime, &row.Payload, &row.UpdatedAt); err != nil {
-				_ = rows.Close()
-				return nil, err
-			}
-			out[row.Path] = row
-		}
-		err = rows.Err()
-		_ = rows.Close()
-		if err != nil {
+		if err := scanModScanCacheRows(rows, out); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
+}
+
+func scanModScanCacheRows(rows *sql.Rows, out map[string]ModScanCacheRow) error {
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var row ModScanCacheRow
+		if err := rows.Scan(&row.Path, &row.Mtime, &row.Payload, &row.UpdatedAt); err != nil {
+			return err
+		}
+		out[row.Path] = row
+	}
+	return rows.Err()
 }
 
 func (s ModScanCacheStore) Upsert(ctx context.Context, row ModScanCacheRow) error {

@@ -26,6 +26,7 @@ func (rt *runtime) initProxy(ctx context.Context, configureBrowserArguments func
 	if configureBrowserArguments == nil {
 		return nil
 	}
-	args := append(windowsApplicationOptions().AdditionalBrowserArgs, relay.BrowserArguments()...)
+	args := windowsApplicationOptions().AdditionalBrowserArgs
+	args = append(args, relay.BrowserArguments()...)
 	return configureBrowserArguments(args)
 }

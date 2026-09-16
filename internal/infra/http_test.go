@@ -1155,6 +1155,7 @@ func TestRetryAfterWait(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := retryAfterWait(tt.raw)
 			if got < tt.min || got > tt.max {
 				t.Fatalf("retryAfterWait(%q) = %s, want [%s, %s]", tt.raw, got, tt.min, tt.max)
@@ -1184,6 +1185,7 @@ func TestIsUnreachableOpaqueTransportMessages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := IsUnreachable(tt.err); got != tt.want {
 				t.Fatalf("IsUnreachable(%v) = %v, want %v", tt.err, got, tt.want)
 			}

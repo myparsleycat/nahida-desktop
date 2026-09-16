@@ -865,7 +865,6 @@ func (t *Service) wuwaFetchBytes(
 	responseHeader := response.Header.Clone()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		//nolint:staticcheck // Electron contract text.
 		return nil, responseHeader, fmt.Errorf(
 			"HTTP %d",
 			response.StatusCode,

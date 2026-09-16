@@ -208,7 +208,7 @@ func httpProxyDial(direct proxyDial, endpoint *url.URL) proxyDial {
 		reader := bufio.NewReader(conn)
 		// A successful CONNECT transfers ownership to the tunnel; closing its
 		// HTTP body would consume or close the tunnel before TLS starts.
-		response, err := http.ReadResponse(reader, request) //nolint:bodyclose
+		response, err := http.ReadResponse(reader, request) //nolint:bodyclose // CONNECT success transfers the tunnel.
 		if err != nil {
 			_ = conn.Close()
 			return nil, err

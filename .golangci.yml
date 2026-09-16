@@ -2,6 +2,11 @@ version: "2"
 
 run:
   timeout: 5m
+  tests: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 100
 
 linters:
   default: standard
@@ -9,10 +14,32 @@ linters:
     - bodyclose
     - copyloopvar
     - errorlint
+    - exhaustive
+    - gocritic
+    - godot
     - intrange
     - misspell
     - nilerr
+    - nolintlint
+    - rowserrcheck
+    - sqlclosecheck
+    - thelper
+    - tparallel
     - unconvert
+    - whitespace
+  # Left off: revive/wsl_v5 (noisy style), gofumpt (conflicts with golines),
+  # goconst/funlen/gocyclo/nestif/paralleltest/modernize/perfsprint (hundreds of
+  # existing findings), prealloc (false positives), testifylint (no testify),
+  # forcetypeassert/predeclared (large existing-code cleanup).
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    nolintlint:
+      require-explanation: true
+      require-specific: true
   exclusions:
     generated: lax
     paths:

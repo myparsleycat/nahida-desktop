@@ -138,7 +138,11 @@ func TestDiagnosticQuotedURLPreservesJSON(t *testing.T) {
 					Error string `json:"error"`
 				} `json:"causes"`
 			}
-			if err := json.Unmarshal([]byte(line[strings.Index(line, "{"):]), &record); err != nil {
+			start := strings.Index(line, "{")
+			if start < 0 {
+				t.Fatalf("missing JSON object: %s", line)
+			}
+			if err := json.Unmarshal([]byte(line[start:]), &record); err != nil {
 				t.Fatalf("invalid log JSON: %v: %s", err, line)
 			}
 			if len(record.Causes) != 2 || record.Causes[0].Error != `Get "https://example.com/file": network failed` {

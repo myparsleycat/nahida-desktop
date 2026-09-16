@@ -112,6 +112,7 @@ func TestDialogCancellationSentinel(t *testing.T) {
 	t.Parallel()
 
 	t.Run("save file", func(t *testing.T) {
+		t.Parallel()
 		d := NewDialog()
 		d.saveFile = func(SaveFileOptions) (string, error) {
 			return "", fmt.Errorf("native dialog: %w", application.ErrDialogCancelled)
@@ -123,6 +124,7 @@ func TestDialogCancellationSentinel(t *testing.T) {
 	})
 
 	t.Run("directory", func(t *testing.T) {
+		t.Parallel()
 		d := NewDialog()
 		d.selectDirectory = func() (string, error) {
 			return "", application.ErrDialogCancelled

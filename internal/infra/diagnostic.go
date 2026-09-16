@@ -276,7 +276,7 @@ func visitDiagnosticErrors(err error, visit func(*diagnosticError)) {
 		if err == nil {
 			return
 		}
-		if annotated, ok := err.(*diagnosticError); ok { //nolint:errorlint
+		if annotated, ok := err.(*diagnosticError); ok { //nolint:errorlint // Inspect this node, not a descendant.
 			if annotated.reported {
 				return
 			}
@@ -308,7 +308,7 @@ func originalDiagnosticError(err error) error {
 	for range 32 {
 		// Only peel our outer marker. Peeling arbitrary wrapped causes would
 		// change the JSON shape Wails exposes to the renderer.
-		annotated, ok := err.(*diagnosticError) //nolint:errorlint
+		annotated, ok := err.(*diagnosticError) //nolint:errorlint // Peel this marker only.
 		if !ok || annotated == nil || annotated.err == nil {
 			return err
 		}

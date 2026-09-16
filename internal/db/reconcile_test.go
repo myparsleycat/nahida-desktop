@@ -762,17 +762,17 @@ func foreignKeys(t *testing.T, client *Client, table string) []ForeignKeySpec {
 	return groupForeignKeys(raw)
 }
 
-func userIndexes(t *testing.T, client *Client, table string) []IndexSpec {
+func listUserIndexes(t *testing.T, client *Client, table string) []indexListRow {
 	t.Helper()
 	rows, err := client.db.Query(`PRAGMA index_list(` + quoteIdent(table) + `)`)
 	if err != nil {
 		t.Fatalf("index_list %s: %v", table, err)
 	}
+	defer func() { _ = rows.Close() }()
 	var listed []indexListRow
 	for rows.Next() {
 		var row indexListRow
 		if err := rows.Scan(&row.Seq, &row.Name, &row.Unique, &row.Origin, &row.Partial); err != nil {
-			_ = rows.Close()
 			t.Fatalf("scan index: %v", err)
 		}
 		if row.Origin == "pk" {
@@ -780,14 +780,15 @@ func userIndexes(t *testing.T, client *Client, table string) []IndexSpec {
 		}
 		listed = append(listed, row)
 	}
-	iterationErr := rows.Err()
-	closeErr := rows.Close()
-	if iterationErr != nil {
-		t.Fatalf("indexes: %v", iterationErr)
+	if err := rows.Err(); err != nil {
+		t.Fatalf("indexes: %v", err)
 	}
-	if closeErr != nil {
-		t.Fatalf("close indexes: %v", closeErr)
-	}
+	return listed
+}
+
+func userIndexes(t *testing.T, client *Client, table string) []IndexSpec {
+	t.Helper()
+	listed := listUserIndexes(t, client, table)
 
 	// MaxOpenConns is 1; index_info must not run while index_list is still open.
 	out := make([]IndexSpec, 0, len(listed))

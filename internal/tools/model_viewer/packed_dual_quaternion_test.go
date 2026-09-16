@@ -650,7 +650,6 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 				geometry.Texcoord0[1] != 0.75 {
 				t.Fatalf("decoded UV: %+v error=%v", geometry, err)
 			}
-
 		})
 	}
 }

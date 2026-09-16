@@ -121,16 +121,19 @@ func TestFocusAndNavigateDoesNotConsumeRouteBeforeConfigure(t *testing.T) {
 }
 
 func TestNormalizeWindowRoute(t *testing.T) {
-	tests := map[string]string{
-		"":                            "",
-		"/":                           "",
-		" /setting/gen?tab=advanced ": "/setting/gen?tab=advanced",
-		"setting/gen":                 "",
-		"/setting#nested":             "",
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"", ""},
+		{"/", ""},
+		{" /setting/gen?tab=advanced ", "/setting/gen?tab=advanced"},
+		{"setting/gen", ""},
+		{"/setting#nested", ""},
 	}
-	for input, want := range tests {
-		if got := normalizeWindowRoute(input); got != want {
-			t.Errorf("normalizeWindowRoute(%q) = %q, want %q", input, got, want)
+	for _, tt := range tests {
+		if got := normalizeWindowRoute(tt.input); got != tt.want {
+			t.Errorf("normalizeWindowRoute(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

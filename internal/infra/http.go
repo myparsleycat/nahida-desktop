@@ -689,7 +689,11 @@ func (c *Client) recoverIfNeeded(ctx context.Context, nhd bool) error {
 		switch c.GetStatus() {
 		case BackendOffline, BackendMaintenance:
 			return cloneAPIError(ErrBackendUnavailable)
+		case BackendUnknown, BackendOnline:
+			return nil
 		}
+	case BackendUnknown, BackendOnline:
+		return nil
 	}
 	return nil
 }

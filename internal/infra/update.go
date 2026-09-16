@@ -554,7 +554,8 @@ func decodeTranslationBody(contentType string, raw []byte) (any, error) {
 		if strings.Contains(strings.ToLower(contentType), "json") {
 			return nil, fmt.Errorf("decode translation response: %w", err)
 		}
-		return strings.TrimSpace(string(raw)), nil //nolint:nilerr // text/plain is a supported response shape.
+		// Non-JSON bodies (text/plain) are valid translation payloads.
+		return strings.TrimSpace(string(raw)), nil
 	}
 	return value, nil
 }

@@ -240,15 +240,13 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 				kept = append(kept, assignment)
 			}
 		}
-		mesh.textureAssignments = append(
-			kept,
-			modelViewerDirectTextureAssignment{
-				role:       "diffuse",
-				resource:   resourceName,
-				file:       dumpPick,
-				conditions: modelViewerDNFTrue(),
-			},
-		)
+		kept = append(kept, modelViewerDirectTextureAssignment{
+			role:       "diffuse",
+			resource:   resourceName,
+			file:       dumpPick,
+			conditions: modelViewerDNFTrue(),
+		})
+		mesh.textureAssignments = kept
 		mesh.textureDefaultFile = dumpPick
 	}
 }

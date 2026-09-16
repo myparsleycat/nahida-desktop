@@ -460,6 +460,7 @@ func TestServiceErrorMarshalerPreservesPlainErrorMessages(t *testing.T) {
 		{name: "wrapped", err: fmt.Errorf("save failed: %w", errors.New("disk full")), want: "save failed: disk full"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var got string
 			if err := json.Unmarshal(marshaler(tc.err), &got); err != nil {
 				t.Fatalf("unmarshal: %v", err)

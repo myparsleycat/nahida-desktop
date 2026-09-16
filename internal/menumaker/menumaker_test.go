@@ -96,6 +96,7 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "source.ini")
 			mustWrite(t, path, test.data)
 			source, loadErr := New().LoadSource(context.Background(), path)
