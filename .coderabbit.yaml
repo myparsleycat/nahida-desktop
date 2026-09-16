@@ -188,7 +188,7 @@ reviews:
     - path: ".github/**/*.{yml,yaml}"
       instructions: |
         Check that CI uses the repository's Taskfile and pnpm scripts, pins or safely scopes third-party actions, grants least-privilege permissions, caches the correct Go and pnpm inputs, and verifies Go, frontend, generated-binding, release-script, and Windows build behavior appropriate to the changed files.
-        The reusable validate-desktop composite action is the canonical full validation gate. Release changes must preserve the main/v3 branch policy, dry-run behavior, complete git history, version propagation, draft release assets, and Windows-only packaging.
+        The reusable validate-desktop composite action is the canonical full validation gate. Release changes must preserve the main/v3 branch policy, complete git history, version propagation, draft release assets, and Windows-only packaging.
 
     - path: "scripts/**/*.{mjs,ps1}"
       instructions: |

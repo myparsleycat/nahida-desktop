@@ -2,12 +2,6 @@ name: Release desktop
 
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: Calculate the next release without creating a tag or draft
-        type: boolean
-        required: true
-        default: true
 
 concurrency:
   group: nahida-desktop-release
@@ -57,7 +51,6 @@ jobs:
         run: go install github.com/go-task/task/v3/cmd/task@v3.53.1
 
       - name: Install pinned NSIS
-        if: ${{ !inputs.dry_run }}
         shell: pwsh
         run: choco install nsis --version=3.11 --yes --no-progress
 
@@ -72,23 +65,18 @@ jobs:
       - name: Validate desktop
         uses: ./.github/actions/validate-desktop
 
-      - name: Calculate next release
-        if: inputs.dry_run
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec semantic-release --dry-run
-
       - name: Create release tag and draft
-        if: ${{ !inputs.dry_run }}
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm exec semantic-release
 
       - name: Verify packaged release binary
-        if: ${{ !inputs.dry_run }}
         shell: pwsh
         run: |
-          $version = (Get-Content -LiteralPath bin/release-version.nsh | Select-String 'NAHIDA_SEMVER').Line.Split('"')[1]
-          ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $version
+          if (-not (Test-Path -LiteralPath bin/release-version.nsh)) {
+            Write-Output 'No release was created from this commit range; skipping binary verification.'
+          } else {
+            $version = (Get-Content -LiteralPath bin/release-version.nsh | Select-String 'NAHIDA_SEMVER').Line.Split('"')[1]
+            ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $version
+          }
