@@ -26,6 +26,17 @@ reviews:
     docstrings:
       mode: "off"
 
+  tools:
+    golangci-lint:
+      enabled: true
+      config_file: ".golangci.yml"
+    oxc:
+      enabled: true
+    actionlint:
+      enabled: true
+    psscriptanalyzer:
+      enabled: true
+
   path_filters:
     - "!**/node_modules/**"
     - "!**/dist/**"
@@ -39,7 +50,6 @@ reviews:
     - "!bin/**"
     - "!frontend/bindings/**"
     - "!frontend/src/routeTree.gen.ts"
-    - "!frontend/src/shared/types.gen.ts"
     - "!**/*.gen.ts"
     - "!**/*.lock"
     - "!**/pnpm-lock.yaml"
@@ -55,7 +65,7 @@ reviews:
         This is a Windows-only Wails v3 desktop application with a Go backend and a React/TypeScript frontend. Do not suggest Electron APIs or restoring Linux, macOS, Android, or iOS support.
         Preserve the existing UI, UX, state management, and package ownership unless a change explicitly requires otherwise.
 
-    - path: "internal/**/*.go"
+    - path: "**/*.go"
       instructions: |
         Go backend review priorities:
         - Check context propagation and cancellation, goroutine ownership, synchronization, resource closure, partial-failure cleanup, rollback, and error propagation.
@@ -64,7 +74,7 @@ reviews:
         - Flag secrets, tokens, or sensitive user data written to logs.
         - Check SQL and filesystem consistency, HTTP response-body ownership, bounded concurrency, integer and buffer bounds, and Windows-specific path behavior.
         - Prefer the standard library when equally clear and github.com/samber/lo for straightforward collection transformations; do not force functional helpers into branching or performance-sensitive control flow.
-        - Keep exported APIs minimal because exported service methods and models may become frontend bindings.
+        - Keep exported APIs minimal. Exported Wails service methods and bound models become frontend contracts and require compatibility checks.
 
     - path: "internal/app/**/*.go"
       instructions: |
@@ -79,6 +89,35 @@ reviews:
       instructions: |
         Review Windows integration for correct build constraints, UTF-16/path handling, handle and COM/resource lifetimes, thread-affinity requirements, process quoting, registry/autostart behavior, and native error propagation.
         Do not request non-Windows implementations or generic cross-platform abstractions for Windows-only behavior.
+
+    - path: "internal/infra/**/*.go"
+      instructions: |
+        Treat this package as shared infrastructure and a security boundary:
+        - Check HTTP client and response-body ownership, redirects, proxy/PAC behavior, retry and Retry-After bounds, local HTTP/protocol authorization, archive extraction, update integrity, and rate-limit handling.
+        - Preserve diagnostic error causes and severity while redacting credentials, cookies, tokens, home-directory paths, and response bodies that may contain sensitive data.
+        - Check lifecycle ownership for background diagnostics, throttling, downloads, listeners, temporary files, and partially initialized services. Cancellation and shutdown must not leak goroutines or block application exit.
+        - ContractError values intentionally preserve legacy user-facing text; do not suggest normalizing their capitalization or punctuation without checking callers.
+
+    - path: "internal/db/**/*.go"
+      instructions: |
+        Review SQLite schema reconciliation and stores as persistent-data compatibility code. Check transactions, foreign keys, indexes, NULL/default handling, identifier quoting, row and statement closure, context propagation, and concurrent access.
+        Schema changes must preserve existing user data, aliases, and upgrade paths. Require migration/reconciliation tests for old or malformed schemas and do not assume a fresh database.
+
+    - path: "internal/{drive,transfer}/**/*.go"
+      instructions: |
+        Review uploads, downloads, remote imports, SSE streams, queues, bandwidth limiting, progress emission, and cancellation as one cross-package lifecycle.
+        Check bounded memory and concurrency, HTTP/body closure, short reads and writes, integer overflow, path and filename validation, partial-file cleanup, rollback, retry safety, terminal-status ordering, and exactly-once cancellation/cleanup.
+        Authentication tokens, signatures, link credentials, and remote response bodies must not leak into logs or user-visible diagnostics.
+
+    - path: "internal/{mod,watcher,xxmi}/**/*.go"
+      instructions: |
+        These packages mutate user mod trees and coordinate external game/importer processes. Check canonical and relative path validation, junction/reparse-point behavior, watcher races, process discovery and quoting, file identity, atomic replacement, cancellation, rollback, and recovery after interruption.
+        Compression, merge, disable/enable, and restore operations must never lose the only copy of user data. Verify cleanup and rollback errors remain observable and that concurrent operations cannot target the same files unsafely.
+
+    - path: "internal/{menumaker,pepad,tools}/**/*.go"
+      instructions: |
+        Treat INI, PE, DDS, mesh, archive, and rule inputs as untrusted binary or text formats. Check offsets, lengths, alignment, integer conversions, allocation limits, decompression limits, path traversal, deterministic output, and preservation of unknown-but-valid data.
+        Multi-file generators and fixers need source-change detection, atomic writes, explicit cleanup, and rollback that reports both the primary and rollback failures.
 
     - path: "frontend/src/**/*.{ts,tsx}"
       instructions: |
@@ -99,10 +138,27 @@ reviews:
       instructions: |
         Review bootstrap and port abstractions for correct Wails availability detection, initialization order, listener cleanup, and behavior when native capabilities are unavailable. Keep backend-specific details behind the existing boundary.
 
-    - path: "**/*.{ts,tsx,mjs,js}"
+    - path: "frontend/src/components/tools/{body-shape,model-viewer}/**/*.{ts,tsx}"
+      instructions: |
+        Review Three.js and worker-heavy rendering for transferred-buffer ownership, message generation/request ordering, stale responses, worker termination, object URL and GPU resource disposal, render-loop cleanup, and bounded CPU/GPU memory.
+        Validate binary lengths, strides, indices, frame ranges, numeric finiteness, and malformed model inputs before allocating or mutating geometry. Preserve the localized imperative update paths used for high-frequency visual feedback; do not request broad React state updates that rerender the scene.
+
+    - path: "frontend/src/shared/{body-shape,mod-viewer}/**/*.{ts,tsx}"
+      instructions: |
+        Treat parsers, geometry transforms, animation evaluation, and transport models as binary-data boundaries. Check bounds and overflow before typed-array access or allocation, preserve buffer ownership, and verify format-specific coordinate, stride, topology, and animation invariants with focused tests.
+
+    - path: "frontend/src/{components/tools/menu-maker,shared/menu-maker}/**/*.{ts,tsx}"
+      instructions: |
+        Review menu-maker parsing, draft state, media handling, and generation for untrusted input validation, object URL cleanup, deterministic output, source-hash conflict detection, and consistency with the backend apply/rollback contract.
+
+    - path: "**/*.{ts,tsx,mts,cts,mjs,cjs,js,jsx}"
       instructions: |
         Focus on bugs and material risks involving type safety, resource cleanup, concurrency, cancellation, error propagation, and boundary validation.
         Do not report style-only deviations such as destructuring choices, loop versus array-method preferences, variable inlining, helper extraction, or equivalent utility choices unless they cause a concrete defect or significant maintenance risk.
+
+    - path: "frontend/patches/**/*.patch"
+      instructions: |
+        These patches intentionally modify the pinned Wails runtime dependency. Check that each patch still applies to the exact frontend package version, remains narrowly scoped, preserves upstream behavior outside the documented fix, and stays synchronized with package.json and pnpm lockfile changes.
 
     - path: "**/*_test.go"
       instructions: |
@@ -116,9 +172,13 @@ reviews:
       instructions: |
         Preserve the Wails v3 fork mapping from github.com/wailsapp/wails/v3 to github.com/myparsleycat/wails/v3 and keep generators pinned with Go's tool directive. Check dependency changes for version compatibility, necessity, licensing/security risk, and corresponding go.sum updates.
 
+    - path: "**/package.json"
+      instructions: |
+        Check dependency and script changes against the matching pnpm workspace and lockfile. Preserve the root release/docs responsibilities and the frontend build/test/lint/format responsibilities; do not replace the project's pinned pnpm, OXC, TypeScript, Vite, Vitest, React, or Wails runtime workflow with unrelated tooling.
+
     - path: "Taskfile.yml"
       instructions: |
-        Keep task build, package, run, and dev on Wails v3 and Windows only. Verify task test, lint, and vuln continue to use the project-pinned commands and that cross-layer changes retain a production task build verification path.
+        Keep task build, package, run, and dev on Wails v3 and Windows only. Verify task test, lint, fmt, fmt:check, and vuln continue to use the project-pinned commands and that cross-layer changes retain binding generation and a production task build verification path.
 
     - path: "build/**/*"
       instructions: |
@@ -127,7 +187,13 @@ reviews:
 
     - path: ".github/**/*.{yml,yaml}"
       instructions: |
-        Check that CI uses the repository's Taskfile and pnpm scripts, pins or safely scopes third-party actions, caches the correct Go and pnpm inputs, and verifies Go, frontend, generated-binding, release-script, and Windows build behavior appropriate to the changed files.
+        Check that CI uses the repository's Taskfile and pnpm scripts, pins or safely scopes third-party actions, grants least-privilege permissions, caches the correct Go and pnpm inputs, and verifies Go, frontend, generated-binding, release-script, and Windows build behavior appropriate to the changed files.
+        The reusable validate-desktop composite action is the canonical full validation gate. Release changes must preserve the main/v3 branch policy, dry-run behavior, complete git history, version propagation, draft release assets, and Windows-only packaging.
+
+    - path: "scripts/**/*.{mjs,ps1}"
+      instructions: |
+        Review release and packaging scripts for strict argument validation, semantic-version and prerelease mapping, deterministic metadata updates, safe PowerShell quoting, explicit exit failures, and consistency with .releaserc.json, build metadata, NSIS inputs, and release workflow assets.
+        Tests must isolate filesystem and environment state and cover malformed input without modifying tracked files.
 
     - path: "**/*.{yml,yaml,json,jsonc,toml}"
       instructions: |
@@ -135,7 +201,14 @@ reviews:
 
     - path: "docs/**/*.md"
       instructions: |
-        Check technical accuracy, clarity, command correctness, broken internal references, and consistency with the current application behavior.
+        Check technical accuracy, command correctness, VitePress links/frontmatter, and consistency with the current application behavior.
+        When a source page changes, check whether the corresponding ko, ja, and zh-CN pages require the same structural or factual update. Do not demand literal translations when locale-specific wording or content is intentional.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
 
 chat:
   auto_reply: true
