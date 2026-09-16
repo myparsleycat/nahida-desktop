@@ -12,7 +12,7 @@
 
 ## Go Skills
 
-- Use the `golang-*` skills from `https://github.com/samber/cc-skills-golang` for Go work: style, naming, error handling, testing, concurrency, performance, and library choice. Installed skills are recorded in `skills-lock.json`.
+- Use the `golang-*` skills from `https://github.com/samber/cc-skills-golang` for Go work: style, naming, error handling, testing, concurrency, performance, and library choice.
 - `golang-how-to` is the entry point; it routes to the relevant skills and loads several together when a task spans multiple concerns.
 - This file takes precedence on conflict: project commands, pinned tools, Wails wiring, and cross-layer contracts override general skill guidance.
 
