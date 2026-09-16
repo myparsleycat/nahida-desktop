@@ -200,13 +200,13 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 	}
 	if p.dialog == nil {
 		err := errors.New("main window not found")
-		p.settle(selectionID, PathSelectorResult{}, err)
+		p.settleError(selectionID, err)
 		return false, newFolderPathSelectionError(selectionStage, "", err)
 	}
 	if pending.selectFile {
 		result, err := p.dialog.SaveFile(platform.SaveFileOptions{SuggestedName: pending.suggestedName})
 		if err != nil {
-			p.settle(selectionID, PathSelectorResult{}, err)
+			p.settleError(selectionID, err)
 			return false, newFolderPathSelectionError(selectionStage, "", err)
 		}
 		if result.Canceled {
@@ -223,10 +223,10 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 		name := filepath.Base(result.FilePath)
 		if p.fs != nil && !p.fs.IsPathWritable(dir) {
 			err = errors.New("path is not writable")
-			p.settle(selectionID, PathSelectorResult{}, err)
+			p.settleError(selectionID, err)
 			return false, newFolderPathSelectionError("validate_file_path", result.FilePath, err)
 		}
-		if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &dir, FileName: &name}, nil) {
+		if !p.settleResult(selectionID, PathSelectorResult{Mode: "folder", Path: &dir, FileName: &name}) {
 			return false, newFolderPathSelectionError(
 				"settle_file_path",
 				result.FilePath,
@@ -237,7 +237,7 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 	}
 	result, err := p.dialog.SelectDirectory()
 	if err != nil {
-		p.settle(selectionID, PathSelectorResult{}, err)
+		p.settleError(selectionID, err)
 		return false, newFolderPathSelectionError(selectionStage, "", err)
 	}
 	if result.Canceled {
@@ -252,10 +252,10 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 	}
 	if p.fs != nil && !p.fs.IsPathWritable(result.FilePath) {
 		err = errors.New("path is not writable")
-		p.settle(selectionID, PathSelectorResult{}, err)
+		p.settleError(selectionID, err)
 		return false, newFolderPathSelectionError("validate_directory_path", result.FilePath, err)
 	}
-	if !p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: &result.FilePath}, nil) {
+	if !p.settleResult(selectionID, PathSelectorResult{Mode: "folder", Path: &result.FilePath}) {
 		return false, newFolderPathSelectionError(
 			"settle_directory_path",
 			result.FilePath,
@@ -290,17 +290,29 @@ func (p *pathSelector) hasPending(selectionID string) bool {
 }
 
 func (p *pathSelector) selectModManagerPath(selectionID, path string, fileName *string) error {
-	if !p.settle(selectionID, PathSelectorResult{Mode: "modManager", Path: &path, FileName: fileName}, nil) {
+	if !p.settleResult(selectionID, PathSelectorResult{Mode: "modManager", Path: &path, FileName: fileName}) {
 		return errors.New("pending selection not found")
 	}
 	return nil
 }
 
 func (p *pathSelector) cancel(selectionID string) {
-	p.settle(selectionID, PathSelectorResult{Mode: "folder", Path: nil}, nil)
+	p.settleResult(selectionID, PathSelectorResult{Mode: "folder", Path: nil})
 }
 
-func (p *pathSelector) settle(selectionID string, result PathSelectorResult, err error) bool {
+// settleResult delivers a selection result to the caller waiting on the pending
+// selection, reporting whether that selection existed.
+func (p *pathSelector) settleResult(selectionID string, result PathSelectorResult) bool {
+	return p.deliver(selectionID, pathSelectionOutcome{result: result})
+}
+
+// settleError delivers a selection failure to the caller waiting on the pending
+// selection, reporting whether that selection existed.
+func (p *pathSelector) settleError(selectionID string, err error) bool {
+	return p.deliver(selectionID, pathSelectionOutcome{err: err})
+}
+
+func (p *pathSelector) deliver(selectionID string, outcome pathSelectionOutcome) bool {
 	p.mu.Lock()
 	pending := p.pending[selectionID]
 	delete(p.pending, selectionID)
@@ -308,6 +320,6 @@ func (p *pathSelector) settle(selectionID string, result PathSelectorResult, err
 	if pending == nil {
 		return false
 	}
-	pending.done <- pathSelectionOutcome{result: result, err: err}
+	pending.done <- outcome
 	return true
 }
