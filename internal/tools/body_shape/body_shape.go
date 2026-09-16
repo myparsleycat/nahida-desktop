@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
 
@@ -212,7 +213,7 @@ func (t *Service) BodyShapeExport(
 	}
 	info, err := os.Stat(sourceRoot)
 	if err != nil || !info.IsDir() {
-		return result, infra.WithCause(contractError(fmt.Sprintf("Mod path does not exist: %s", sourceRoot)), err)
+		return result, infra.WithCause(infra.ContractError(fmt.Sprintf("Mod path does not exist: %s", sourceRoot)), err)
 	}
 	if t.mod == nil {
 		return result, errors.New("tools service has no mod service")
@@ -231,8 +232,8 @@ func (t *Service) BodyShapeExport(
 	baseName := bodyShapedFolderBaseName(filepath.Base(sourceRoot))
 	targetName := t.fs.GetUniqueName(baseName, existing)
 	targetRoot := filepath.Join(parent, targetName)
-	if !sameOrChildPath(parent, targetRoot) || samePathFold(parent, targetRoot) ||
-		samePathFold(sourceRoot, targetRoot) {
+	if !platform.SameOrChildPath(parent, targetRoot) || platform.SamePathFold(parent, targetRoot) ||
+		platform.SamePathFold(sourceRoot, targetRoot) {
 		return result, errors.New("invalid body shape target path")
 	}
 	copied := false
@@ -297,7 +298,9 @@ func (t *Service) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput
 	}
 	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
 	if mesh == nil {
-		return BodyShapeMeshDescriptor{}, contractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+		return BodyShapeMeshDescriptor{}, infra.ContractError(
+			fmt.Sprintf("Body shape mesh not found: %s", input.MeshID),
+		)
 	}
 	positionsURL, err := t.protocol.StoreMemoryBuffer(
 		input.SessionID,
@@ -363,7 +366,7 @@ func (t *Service) BodyShapeBeginExport(
 	defer session.mu.Unlock()
 	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
 	if mesh == nil {
-		return BodyShapeExportUpload{}, contractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+		return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
 	}
 	exportID, err := newID()
 	if err != nil {
@@ -404,7 +407,7 @@ func (t *Service) BodyShapeCommitExport(
 	mesh := findBodyShapeMesh(session.loaded.Meshes, slot.meshID)
 	session.mu.Unlock()
 	if !exists || mesh == nil {
-		return BodyShapeExportResult{}, contractError("Body shape export slot not found")
+		return BodyShapeExportResult{}, infra.ContractError("Body shape export slot not found")
 	}
 	positionsID := "export:" + input.ExportID + ":positions"
 	weightsID := "export:" + input.ExportID + ":weights"
@@ -462,7 +465,7 @@ func (t *Service) requireBodyShapeSession(id string) (*bodyShapeSession, error) 
 	session := t.bodyShapeSessions[id]
 	t.bodyShapeMu.Unlock()
 	if session == nil {
-		return nil, contractError(fmt.Sprintf("Body shape session not found: %s", id))
+		return nil, infra.ContractError(fmt.Sprintf("Body shape session not found: %s", id))
 	}
 	return session, nil
 }
@@ -492,12 +495,6 @@ func (t *Service) Shutdown() error {
 	return nil
 }
 
-func sameOrChildPath(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
-}
-
 type unmanagedModDisabler interface {
 	DisableUnmanaged(context.Context, string) (string, error)
 }
@@ -516,7 +513,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 	}
 	if _, err := os.Stat(resolved); err != nil {
 		return BodyShapeLoadResult{}, infra.WithCause(
-			contractError(fmt.Sprintf("Path does not exist: %s", resolved)),
+			infra.ContractError(fmt.Sprintf("Path does not exist: %s", resolved)),
 			err,
 		)
 	}
@@ -532,7 +529,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 	blends := modmesh.CollectNamedResources(resources, "blend", true)
 	indicesByPosition := modmesh.MatchIndexResources(positions, indices, sections)
 	if len(positions) == 0 {
-		return BodyShapeLoadResult{}, contractError("No position buffer resources found in mod.ini")
+		return BodyShapeLoadResult{}, infra.ContractError("No position buffer resources found in mod.ini")
 	}
 	result := BodyShapeLoadResult{ModRoot: modRoot, INIPath: iniPath, Meshes: []BodyShapeMeshCandidate{}}
 	for _, position := range positions {
@@ -587,7 +584,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 			}
 			mesh.Indices = append(mesh.Indices, values...)
 			if mesh.IndexPath == nil {
-				mesh.IndexPath, mesh.IndexRelativePath = &indexPath, stringPtr(index.Filename)
+				mesh.IndexPath, mesh.IndexRelativePath = &indexPath, platform.StringPtr(index.Filename)
 			}
 			mesh.GLBMeshNames = append(
 				mesh.GLBMeshNames,
@@ -601,11 +598,11 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					if stride == 0 {
 						stride = 8
 					}
-					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, stringPtr(
+					mesh.VectorPath, mesh.VectorRelativePath, mesh.VectorStride = &vectorPath, platform.StringPtr(
 						vector.Filename,
 					), &stride
 					if stride == 8 && stat.Size() == int64(vertexCount*8) {
-						mesh.VectorLayout = stringPtr("snorm8-tangent-normal")
+						mesh.VectorLayout = platform.StringPtr("snorm8-tangent-normal")
 					}
 				}
 			}
@@ -624,7 +621,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 					); validationErr != nil {
 						warn(fmt.Sprintf("Skipping blend buffer %s: %s", blendPath, validationErr))
 					} else {
-						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, stringPtr(
+						mesh.BlendPath, mesh.BlendRelativePath, mesh.BlendStride = &blendPath, platform.StringPtr(
 							blend.Filename,
 						), &stride
 						mesh.BlendBytes = raw
@@ -636,7 +633,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 		result.Meshes = append(result.Meshes, mesh)
 	}
 	if len(result.Meshes) == 0 {
-		return BodyShapeLoadResult{}, contractError("No readable position buffers found in the selected mod")
+		return BodyShapeLoadResult{}, infra.ContractError("No readable position buffers found in the selected mod")
 	}
 	return result, nil
 }
@@ -649,7 +646,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 	original, err := os.ReadFile(positionPath)
 	if err != nil {
 		return BodyShapeExportResult{}, infra.WithCause(
-			contractError(fmt.Sprintf("Position buffer not found: %s", positionPath)),
+			infra.ContractError(fmt.Sprintf("Position buffer not found: %s", positionPath)),
 			err,
 		)
 	}
@@ -665,7 +662,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 		return BodyShapeExportResult{}, err
 	}
 	if len(written) != len(original) {
-		return BodyShapeExportResult{}, contractError(
+		return BodyShapeExportResult{}, infra.ContractError(
 			fmt.Sprintf(
 				"Refusing to write position buffer: size would change from %d to %d",
 				len(original),
@@ -709,7 +706,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 		if err != nil {
 			return result, err
 		}
-		if !sameOrChildPath(root, positionPath) {
+		if !platform.SameOrChildPath(root, positionPath) {
 			return result, errors.New("position path is outside mod root")
 		}
 		changeLogPath := filepath.Join(root, "변경사항.txt")
@@ -753,14 +750,14 @@ func writeBodyPositions(original []byte, stride int, positions []float32) ([]byt
 		return nil, err
 	}
 	if len(positions) != count*3 {
-		return nil, contractError(
+		return nil, infra.ContractError(
 			fmt.Sprintf("Position count %v does not match vertex count %d", float64(len(positions))/3, count),
 		)
 	}
 	out := append([]byte(nil), original...)
 	for index, value := range positions {
 		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-			return nil, contractError(fmt.Sprintf("Non-finite position at float index %d", index))
+			return nil, infra.ContractError(fmt.Sprintf("Non-finite position at float index %d", index))
 		}
 	}
 	for vertex := range count {
@@ -774,7 +771,7 @@ func writeBodyPositions(original []byte, stride int, positions []float32) ([]byt
 
 func correctBodyVectors(original []byte, weights []float32, amount float64, axis []float64) ([]byte, error) {
 	if len(original)%8 != 0 {
-		return nil, contractError("Vector buffer length is not divisible by 8")
+		return nil, infra.ContractError("Vector buffer length is not divisible by 8")
 	}
 	out := append([]byte(nil), original...)
 	limit := min(len(weights), len(original)/8)
@@ -853,7 +850,7 @@ func remapBodyShapePathWithResolver(
 	if err != nil || relative == "." || relative == ".." ||
 		strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
 		filepath.IsAbs(relative) {
-		return "", infra.WithCause(contractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
+		return "", infra.WithCause(infra.ContractError(fmt.Sprintf("Path is outside mod root: %s", path)), err)
 	}
 	return filepath.Join(targetRoot, relative), nil
 }
@@ -869,7 +866,7 @@ func copyBodyShapeTree(ctx context.Context, source, target string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if samePathFold(path, source) {
+		if platform.SamePathFold(path, source) {
 			return nil
 		}
 		relative, err := filepath.Rel(source, path)
@@ -877,7 +874,7 @@ func copyBodyShapeTree(ctx context.Context, source, target string) error {
 			return err
 		}
 		destination := filepath.Join(target, relative)
-		if !sameOrChildPath(target, destination) {
+		if !platform.SameOrChildPath(target, destination) {
 			return errors.New("copy target escaped body shape directory")
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
@@ -933,15 +930,7 @@ func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) (returnEr
 	if err := temp.Close(); err != nil {
 		return err
 	}
-	return replaceAtomic(tempPath, target)
-}
-
-func stringPtr(value string) *string { return &value }
-
-func samePathFold(left, right string) bool {
-	leftAbs, _ := filepath.Abs(left)
-	rightAbs, _ := filepath.Abs(right)
-	return strings.EqualFold(filepath.Clean(leftAbs), filepath.Clean(rightAbs))
+	return platform.ReplaceAtomic(tempPath, target)
 }
 
 func bodyShapedFolderBaseName(name string) string {

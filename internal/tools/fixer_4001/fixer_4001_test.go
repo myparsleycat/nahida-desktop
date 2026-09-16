@@ -188,7 +188,7 @@ func (f fakePEDiversifier) Diversify(_ context.Context, input, output string) (P
 	}
 	return PEDiversificationReport{
 		DiscoveredRegions: 1, ModifiedRegions: 1, InputSHA256: inputHash,
-		OutputSHA256: stringPointer(outputHash), Patches: []PEDiversifierPatch{{CandidateID: 0}},
+		OutputSHA256: platform.StringPtr(outputHash), Patches: []PEDiversifierPatch{{CandidateID: 0}},
 	}, nil
 }
 

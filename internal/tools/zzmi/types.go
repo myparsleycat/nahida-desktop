@@ -223,6 +223,7 @@ func validStringSequence(value any) bool {
 	}
 	return true
 }
+
 func validIntegerSequence(value any) bool {
 	items, ok := value.([]any)
 	if !ok || len(items) == 0 {

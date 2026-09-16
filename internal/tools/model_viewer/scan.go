@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const maxModelViewerDirectRunExpansions = 4096
@@ -437,7 +440,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		return nil, nil
 	}
 	if len(records) > maxModelViewerDraws {
-		return nil, contractError(
+		return nil, infra.ContractError(
 			fmt.Sprintf("Mod has too many draws (%d; limit %d).", len(records), maxModelViewerDraws),
 		)
 	}
@@ -592,7 +595,12 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			stageStartedAt = time.Now()
 			var geometryErr error
 			geometry, geometryErr = extractModelViewerGeometry(
-				buffers.combined, buffers.stride, buffers.layout, active, true, false, true, nil,
+				buffers.combined,
+				buffers.stride,
+				buffers.layout,
+				active,
+				modelViewerGeometryOptions{includeTangents: true, compact: true},
+				nil,
 			)
 			if timing != nil {
 				timing.GeometryMs += time.Since(stageStartedAt).Milliseconds()
@@ -830,7 +838,7 @@ func attachModelViewerDirectPositionOverrides(
 		}
 		if len(variants) == 1 {
 			basePath, err := resolveModelViewerResourcePath(modDir, modDir, mesh.positionFile)
-			if err == nil && samePathFold(basePath, variants[0].sourcePath) {
+			if err == nil && platform.SamePathFold(basePath, variants[0].sourcePath) {
 				continue
 			}
 		}

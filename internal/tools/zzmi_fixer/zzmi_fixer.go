@@ -21,6 +21,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	zzmiengine "nahida.live/desktop/internal/tools/zzmi"
 )
 
@@ -323,7 +324,7 @@ func (t *Service) ZZMIFixerRestore(ctx context.Context, input ZZMIFixerRestoreIn
 	if err != nil {
 		return ZZMIFixerRestoreResult{}, err
 	}
-	result := ZZMIFixerRestoreResult{}
+	result := ZZMIFixerRestoreResult{Conflicts: []ZZMIFixerRestoreConflict{}}
 	remaining := make([]ZZMIBackupEntry, 0, len(session.Entries))
 	for _, entry := range session.Entries {
 		if input.EntryID != nil && entry.ID != *input.EntryID {
@@ -378,7 +379,7 @@ func (t *Service) ZZMIFixerRestore(ctx context.Context, input ZZMIFixerRestoreIn
 		result.Restored++
 	}
 	if input.EntryID != nil && result.Restored == 0 && result.Skipped == 0 && len(result.Conflicts) == 0 {
-		return result, contractError("ZZMI backup entry not found")
+		return result, infra.ContractError("ZZMI backup entry not found")
 	}
 	session.Entries = remaining
 	session.Size = backupEntriesSize(remaining)
@@ -421,7 +422,7 @@ func (t *Service) ZZMIFixerDeleteBackup(ctx context.Context, input ZZMIFixerDele
 		remaining = append(remaining, entry)
 	}
 	if !found {
-		return contractError("ZZMI backup entry not found")
+		return infra.ContractError("ZZMI backup entry not found")
 	}
 	if len(remaining) == 0 {
 		return os.RemoveAll(dir)
@@ -444,7 +445,7 @@ func (t *Service) ZZMIFixerDeleteAllBackups(ctx context.Context, targetPath stri
 	if err != nil {
 		return err
 	}
-	if !sameOrChildPath(base, dir) || filepath.Clean(base) == filepath.Clean(dir) {
+	if !platform.SameOrChildPath(base, dir) || filepath.Clean(base) == filepath.Clean(dir) {
 		return errors.New("unsafe ZZMI backup cleanup path")
 	}
 	return os.RemoveAll(dir)
@@ -462,9 +463,9 @@ func (t *Service) zzmiRequireTarget(ctx context.Context, targetPath string) (str
 	target, err := filepath.EvalSymlinks(targetPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", "", infra.WithCause(contractError("Destination path does not exist"), err)
+			return "", "", infra.WithCause(infra.ContractError("Destination path does not exist"), err)
 		}
-		return "", "", contractError("Path is outside the managed ZZMI mod folder")
+		return "", "", infra.ContractError("Path is outside the managed ZZMI mod folder")
 	}
 	target, _ = filepath.Abs(target)
 	for _, game := range games {
@@ -476,15 +477,15 @@ func (t *Service) zzmiRequireTarget(ctx context.Context, targetPath string) (str
 			continue
 		}
 		root, _ = filepath.Abs(root)
-		if sameOrChildPath(root, target) {
+		if platform.SameOrChildPath(root, target) {
 			info, statErr := os.Stat(target)
 			if statErr != nil || !info.IsDir() {
-				return "", "", infra.WithCause(contractError("ZZMI fixer target must be a directory"), statErr)
+				return "", "", infra.WithCause(infra.ContractError("ZZMI fixer target must be a directory"), statErr)
 			}
 			return target, root, nil
 		}
 	}
-	return "", "", contractError("Path is outside the managed ZZMI mod folder")
+	return "", "", infra.ContractError("Path is outside the managed ZZMI mod folder")
 }
 
 func (t *Service) zzmiLoadActivePack() (*zzmiengine.RulePack, string, error) {
@@ -682,8 +683,7 @@ func (t *Service) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool
 	}
 	blobs := map[string]string{}
 	for _, entry := range tree.Tree {
-		if entry.Type == "blob" &&
-			(strings.HasPrefix(entry.Path, "Source Codes/Assets/PlayerCharacterPYData/") || entry.Path == "Source Codes/Jane.remapper.py" || entry.Path == "Source Codes/Dialyn.remapper.py") {
+		if entry.Type == "blob" && isZZMIRemapperEntry(entry.Path) {
 			blobs[entry.Path] = entry.SHA
 		}
 	}
@@ -706,6 +706,7 @@ func (t *Service) zzmiFetchJSON(ctx context.Context, rawURL string, target any) 
 	}
 	return nil
 }
+
 func (t *Service) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte, http.Header, error) {
 	if t.http == nil {
 		return nil, nil, errors.New("tools HTTP client is not configured")
@@ -741,6 +742,7 @@ func (t *Service) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]by
 	}
 	return data, header, nil
 }
+
 func validateZZMIZipballURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") ||
@@ -749,6 +751,7 @@ func validateZZMIZipballURL(raw string) error {
 	}
 	return nil
 }
+
 func isGitHubAPIURL(raw string) bool {
 	parsed, err := url.Parse(raw)
 	return err == nil && parsed.Scheme == "https" && strings.EqualFold(parsed.Host, "api.github.com") &&
@@ -758,6 +761,7 @@ func isGitHubAPIURL(raw string) bool {
 func (t *Service) zzmiBackupBase() (string, error) {
 	return t.appDataPath(filepath.Join(appdata.ToolsDir, zzmiFixerDirName, "backups"))
 }
+
 func (t *Service) zzmiBackupTargetDir(target string) (string, error) {
 	base, err := t.zzmiBackupBase()
 	if err != nil {
@@ -766,9 +770,10 @@ func (t *Service) zzmiBackupTargetDir(target string) (string, error) {
 	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(target))))
 	return filepath.Join(base, hex.EncodeToString(sum[:])), nil
 }
+
 func (t *Service) zzmiSessionDir(target, sessionID string) (string, error) {
 	if _, err := uuid.Parse(sessionID); err != nil {
-		return "", infra.WithCause(contractError("Invalid ZZMI backup session"), err)
+		return "", infra.WithCause(infra.ContractError("Invalid ZZMI backup session"), err)
 	}
 	base, err := t.zzmiBackupTargetDir(target)
 	if err != nil {
@@ -919,13 +924,14 @@ func rollbackZZMIEntries(dir string, entries []ZZMIBackupEntry) error {
 	}
 	return result
 }
+
 func secureSessionOriginal(target, candidate string) (string, error) {
 	targetAbs, _ := filepath.Abs(target)
 	candidateAbs, err := filepath.Abs(candidate)
 	if err != nil {
 		return "", err
 	}
-	if !sameOrChildPath(targetAbs, candidateAbs) {
+	if !platform.SameOrChildPath(targetAbs, candidateAbs) {
 		return "", errors.New("backup file escapes the selected ZZMI target")
 	}
 	if info, statErr := os.Lstat(candidateAbs); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -945,7 +951,7 @@ func secureSessionOriginal(target, candidate string) (string, error) {
 	} else if err != nil {
 		return "", err
 	}
-	if !sameOrChildPath(resolvedTarget, resolvedCandidate) {
+	if !platform.SameOrChildPath(resolvedTarget, resolvedCandidate) {
 		return "", errors.New("backup file resolves outside the selected ZZMI target")
 	}
 	return candidateAbs, nil
@@ -993,7 +999,7 @@ func (t *Service) CleanupZZMIAbandonedStaging(ctx context.Context) error {
 			if _, statErr := os.Stat(staging); errors.Is(statErr, os.ErrNotExist) {
 				continue
 			}
-			if !sameOrChildPath(base, staging) {
+			if !platform.SameOrChildPath(base, staging) {
 				return errors.New("unsafe abandoned ZZMI staging path")
 			}
 			if removeErr := os.RemoveAll(staging); removeErr != nil {
@@ -1031,6 +1037,7 @@ func writeSyncFile(path string, data []byte) error {
 	closeErr := file.Close()
 	return errors.Join(writeErr, closeErr)
 }
+
 func writeAtomicBytes(path string, data []byte) (returnErr error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -1054,8 +1061,9 @@ func writeAtomicBytes(path string, data []byte) (returnErr error) {
 	if err := errors.Join(writeErr, closeErr); err != nil {
 		return err
 	}
-	return replaceAtomic(name, path)
+	return platform.ReplaceAtomic(name, path)
 }
+
 func writeZZMISession(dir string, session ZZMIBackupSession) error {
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
@@ -1063,6 +1071,7 @@ func writeZZMISession(dir string, session ZZMIBackupSession) error {
 	}
 	return writeAtomicBytes(filepath.Join(dir, "manifest.json"), data)
 }
+
 func (t *Service) zzmiReadSession(target, sessionID string) (ZZMIBackupSession, error) {
 	dir, err := t.zzmiSessionDir(target, sessionID)
 	if err != nil {
@@ -1070,7 +1079,7 @@ func (t *Service) zzmiReadSession(target, sessionID string) (ZZMIBackupSession, 
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return ZZMIBackupSession{}, infra.WithCause(contractError("ZZMI backup session not found"), err)
+		return ZZMIBackupSession{}, infra.WithCause(infra.ContractError("ZZMI backup session not found"), err)
 	}
 	if err != nil {
 		return ZZMIBackupSession{}, err
@@ -1085,6 +1094,7 @@ func (t *Service) zzmiReadSession(target, sessionID string) (ZZMIBackupSession, 
 	}
 	return session, nil
 }
+
 func (t *Service) zzmiListBackups(target string) ([]ZZMIBackupSession, error) {
 	base, err := t.zzmiBackupTargetDir(target)
 	if err != nil {
@@ -1110,12 +1120,22 @@ func (t *Service) zzmiListBackups(target string) ([]ZZMIBackupSession, error) {
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].CreatedAt > sessions[j].CreatedAt })
 	return sessions, nil
 }
+
 func backupEntriesSize(entries []ZZMIBackupEntry) int64 {
 	var size int64
 	for _, entry := range entries {
 		size += entry.Size
 	}
 	return size
+}
+
+// isZZMIRemapperEntry reports whether a Git tree entry belongs to the remapper
+// payload the fixer needs; everything else in the repository tree is ignored.
+func isZZMIRemapperEntry(path string) bool {
+	if strings.HasPrefix(path, "Source Codes/Assets/PlayerCharacterPYData/") {
+		return true
+	}
+	return path == "Source Codes/Jane.remapper.py" || path == "Source Codes/Dialyn.remapper.py"
 }
 
 func (t *Service) zzmiLogRunError(

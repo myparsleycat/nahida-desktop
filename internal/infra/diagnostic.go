@@ -36,6 +36,7 @@ type diagnosticError struct {
 }
 
 func (e *diagnosticError) Error() string { return e.err.Error() }
+
 func (e *diagnosticError) Unwrap() error { return e.err }
 
 // DiagnosticReported is intentionally structural so packages that cannot

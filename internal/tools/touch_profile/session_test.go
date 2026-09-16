@@ -31,6 +31,7 @@ func (touchTestMod) Disable(_ context.Context, path string) (string, error) {
 	target := filepath.Join(filepath.Dir(path), "DISABLED "+filepath.Base(path))
 	return target, os.Rename(path, target)
 }
+
 func (touchTestMod) Enable(_ context.Context, path string) (string, error) {
 	target := filepath.Join(filepath.Dir(path), touchDisabledPrefixRE.ReplaceAllString(filepath.Base(path), ""))
 	return target, os.Rename(path, target)

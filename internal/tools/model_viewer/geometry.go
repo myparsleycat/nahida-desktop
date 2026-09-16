@@ -55,12 +55,20 @@ type modelViewerGeometry struct {
 	SourceIndices []uint32
 }
 
+// modelViewerGeometryOptions selects which optional attributes the extractor
+// decodes; Position and Texcoord0 are always read.
+type modelViewerGeometryOptions struct {
+	includeTangents bool
+	includeColors   bool
+	compact         bool
+}
+
 func extractModelViewerGeometry(
 	vb []byte,
 	stride int,
 	layout modelViewerFmtLayout,
 	indices []uint32,
-	includeTangents, includeColors, compact bool,
+	options modelViewerGeometryOptions,
 	warn func(string),
 ) (*modelViewerGeometry, error) {
 	if !strings.EqualFold(layout.Topology, "trianglelist") {
@@ -75,7 +83,7 @@ func extractModelViewerGeometry(
 	}
 	vertexCount := len(vb) / stride
 	sourceIndices := []uint32(nil)
-	if compact && len(indices) > 0 {
+	if options.compact && len(indices) > 0 {
 		var ok bool
 		indices, sourceIndices, ok = modelViewerCompactIndices(indices, vertexCount, warn)
 		if !ok {
@@ -117,7 +125,7 @@ func extractModelViewerGeometry(
 	if data, valid := read(findModelViewerElement(layout, "NORMAL", -1), 3, "NORMAL", false); valid && data != nil {
 		mesh.Normal = data
 	}
-	if tangent := findModelViewerElement(layout, "TANGENT", -1); includeTangents && tangent != nil {
+	if tangent := findModelViewerElement(layout, "TANGENT", -1); options.includeTangents && tangent != nil {
 		width := min(4, modelViewerFormatComponentCount(tangent.Format))
 		if data, valid := read(tangent, width, "TANGENT", false); valid && data != nil {
 			mesh.Tangent = ensureModelViewerVec4(data, vertexCount, width, 1)
@@ -132,7 +140,7 @@ func extractModelViewerGeometry(
 		data != nil {
 		mesh.Texcoord0 = data
 	}
-	if color := findModelViewerElement(layout, "COLOR", 0); includeColors && color != nil {
+	if color := findModelViewerElement(layout, "COLOR", 0); options.includeColors && color != nil {
 		width := min(4, modelViewerFormatComponentCount(color.Format))
 		if data, valid := read(color, width, "COLOR_0", false); valid && data != nil {
 			mesh.Color0 = ensureModelViewerVec4(data, vertexCount, width, 1)

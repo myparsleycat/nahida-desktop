@@ -714,7 +714,7 @@ func (m *Mod) SetLastGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
-	return client.Settings.Upsert(ctx, lastGameSettingKey, stringPointer(game))
+	return client.Settings.Upsert(ctx, lastGameSettingKey, platform.StringPtr(game))
 }
 
 func (m *Mod) GetExpandedGroups(ctx context.Context) ([]string, error) {
@@ -904,8 +904,6 @@ func cleanOptional(value *string) *string {
 func isNTEImporter(importer *string) bool {
 	return importer != nil && strings.Contains(strings.ToLower(*importer), "nte")
 }
-
-func stringPointer(value string) *string { return &value }
 
 func decodeStringSlice(value string) []string {
 	var paths []string

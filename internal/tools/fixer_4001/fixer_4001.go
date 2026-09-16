@@ -480,7 +480,7 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 			"4001Fixer:diversifyD3D11DllPadding",
 		)
 	}
-	return Fixer4001Result{Success: true, BackupPath: stringPointer(backupPath)}
+	return Fixer4001Result{Success: true, BackupPath: platform.StringPtr(backupPath)}
 }
 
 func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
@@ -528,7 +528,7 @@ func (t *Service) begin4001Task(task string) bool {
 	if t.fixerTask != nil {
 		return false
 	}
-	t.fixerTask = stringPointer(task)
+	t.fixerTask = platform.StringPtr(task)
 	t.fixerError = ""
 	return true
 }
@@ -555,7 +555,7 @@ func (t *Service) failed4001(code string, err error) Fixer4001Result {
 		t.logError(err, "4001Fixer")
 	}
 	t.update4001Progress(code, message)
-	return Fixer4001Result{ErrorMessage: stringPointer(message)}
+	return Fixer4001Result{ErrorMessage: platform.StringPtr(message)}
 }
 
 func (t *Service) failed4001Install(err error, target, fallbackCode string) Fixer4001Result {
@@ -574,7 +574,7 @@ func (t *Service) failed4001Build(err error) Fixer4001Result {
 	t.logError(err, "4001Fixer")
 	message := extractBuildErrorMessage(err)
 	t.update4001Progress("XXMI_ERR_BUILD_FAILED", message)
-	return Fixer4001Result{ErrorMessage: stringPointer(message)}
+	return Fixer4001Result{ErrorMessage: platform.StringPtr(message)}
 }
 
 func (t *Service) ensureXXMILauncherClosed(ctx context.Context) error {
@@ -814,7 +814,7 @@ func (t *Service) findDiversifierBackup(importerPath string) (*string, error) {
 			continue
 		}
 		if !hasCurrentHash || strings.HasPrefix(currentHash, match[1]) {
-			return stringPointer(candidate), nil
+			return platform.StringPtr(candidate), nil
 		}
 		t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
 	}

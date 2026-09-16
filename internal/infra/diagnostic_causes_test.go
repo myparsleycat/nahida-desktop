@@ -84,7 +84,8 @@ func TestDiagnosticSiblingStagesAndLimits(t *testing.T) {
 
 type diagnosticCycleError struct{ cause error }
 
-func (*diagnosticCycleError) Error() string   { return "cycle" }
+func (*diagnosticCycleError) Error() string { return "cycle" }
+
 func (e *diagnosticCycleError) Unwrap() error { return e.cause }
 
 func TestDiagnosticRedactsNestedCauses(t *testing.T) {

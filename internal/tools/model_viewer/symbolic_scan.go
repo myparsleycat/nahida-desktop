@@ -3,6 +3,8 @@ package modelviewer
 import (
 	"fmt"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type modelViewerSymbolicAssignment struct {
@@ -106,7 +108,7 @@ func collectModelViewerSymbolicDrawRecords(
 			if len(records) > 0 {
 				ctx.draws += len(records)
 				if ctx.draws > maxModelViewerDraws {
-					return nil, nil, contractError(
+					return nil, nil, infra.ContractError(
 						fmt.Sprintf("Mod has too many draws (%d; limit %d).", ctx.draws, maxModelViewerDraws),
 					)
 				}
@@ -237,7 +239,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 			state.explicitDraw = true
 			c.draws++
 			if c.draws > maxModelViewerDraws {
-				return contractError(
+				return infra.ContractError(
 					fmt.Sprintf("Mod has too many draws (%d; limit %d).", c.draws, maxModelViewerDraws),
 				)
 			}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,15 +80,13 @@ func (d *Drive) uploadPreparedDirect(
 		}
 		uploadedPayload := int64(0)
 		reportedLogical := int64(0)
-		result, sendErr := d.sendMultipart(
-			ctx,
-			upload.URL,
-			http.MethodPost,
-			fields,
-			bytes.NewReader(data),
-			int64(len(data)),
-			file.Name,
-			func(bytes int64) {
+		result, sendErr := d.sendMultipart(ctx, upload.URL, http.MethodPost, multipartUpload{
+			fields:    fields,
+			file:      bytes.NewReader(data),
+			fileSize:  int64(len(data)),
+			filename:  file.Name,
+			fieldName: "file",
+			onProgress: func(bytes int64) {
 				uploadedPayload += bytes
 				target := file.Size
 				if len(data) > 0 {
@@ -98,7 +97,7 @@ func (d *Drive) uploadPreparedDirect(
 				}
 				reportedLogical = target
 			},
-		)
+		})
 		if sendErr != nil {
 			if reportedLogical > 0 && onProgress != nil {
 				onProgress(-reportedLogical)
@@ -167,16 +166,21 @@ func (d *Drive) uploadParts(
 			for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 				attemptReported := int64(0)
 				section := io.NewSectionReader(handle, start, size)
-				result, sendErr := d.sendMultipart(
-					ctx,
-					fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index),
-					http.MethodPut,
-					[][2]string{{"token", upload.Form.Token}, {"totalParts", fmt.Sprintf("%d", totalParts)}},
-					section,
-					size,
-					file.Name,
-					func(bytes int64) { attemptReported += bytes; report(bytes) },
-				)
+				partURL := fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index)
+				result, sendErr := d.sendMultipart(ctx, partURL, http.MethodPut, multipartUpload{
+					fields: [][2]string{
+						{"token", upload.Form.Token},
+						{"totalParts", strconv.Itoa(totalParts)},
+					},
+					file:      section,
+					fileSize:  size,
+					filename:  file.Name,
+					fieldName: "file",
+					onProgress: func(bytes int64) {
+						attemptReported += bytes
+						report(bytes)
+					},
+				})
 				if sendErr != nil {
 					if attemptReported > 0 {
 						report(-attemptReported)
@@ -269,43 +273,39 @@ func (d *Drive) uploadParts(
 	return &UploadV2Error{Code: "complete_timeout"}
 }
 
+// multipartUpload is the body of one multipart/form-data upload request: the
+// non-file fields plus the part the payload is streamed into.
+type multipartUpload struct {
+	fields     [][2]string
+	file       io.Reader
+	fileSize   int64
+	filename   string
+	fieldName  string
+	onProgress func(int64)
+}
+
 func (d *Drive) sendMultipart(
 	ctx context.Context,
 	rawURL, method string,
-	fields [][2]string,
-	file io.Reader,
-	fileSize int64,
-	filename string,
-	onProgress func(int64),
-) (uploadHTTPResult, error) {
-	return d.sendMultipartField(ctx, rawURL, method, fields, file, fileSize, filename, "file", onProgress)
-}
-
-func (d *Drive) sendMultipartField(
-	ctx context.Context,
-	rawURL, method string,
-	fields [][2]string,
-	file io.Reader,
-	fileSize int64,
-	filename, fieldName string,
-	onProgress func(int64),
+	upload multipartUpload,
 ) (uploadHTTPResult, error) {
 	if d == nil || d.http == nil {
 		return uploadHTTPResult{}, errDriveHTTPUnconfigured
 	}
 	boundary := "----nahida-desktop-" + uuid.NewString()
-	prefix, suffix, err := multipartEnvelope(boundary, fields, filename, fieldName)
+	prefix, suffix, err := multipartEnvelope(boundary, upload.fields, upload.filename, upload.fieldName)
 	if err != nil {
 		return uploadHTTPResult{}, err
 	}
 	body := io.MultiReader(
 		bytes.NewReader(prefix),
-		&uploadProgressReader{reader: file, onProgress: onProgress},
+		&uploadProgressReader{reader: upload.file, onProgress: upload.onProgress},
 		bytes.NewReader(suffix),
 	)
 	header := make(http.Header)
 	header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
-	response, err := d.http.Stream(ctx, rawURL, method, header, body, int64(len(prefix))+fileSize+int64(len(suffix)))
+	contentLength := int64(len(prefix)) + upload.fileSize + int64(len(suffix))
+	response, err := d.http.Stream(ctx, rawURL, method, header, body, contentLength)
 	if err != nil {
 		return uploadHTTPResult{}, err
 	}

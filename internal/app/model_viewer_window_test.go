@@ -98,12 +98,14 @@ func (w *viewerTestWindow) OnWindowEvent(event events.WindowEventType, callback 
 	}
 	return func() {}
 }
+
 func (w *viewerTestWindow) RegisterHook(event events.WindowEventType, callback func(*application.WindowEvent)) func() {
 	if event == events.Common.WindowClosing {
 		w.close = callback
 	}
 	return func() {}
 }
+
 func (w *viewerTestWindow) Name() string { return w.options.Name }
 
 func TestModelViewerWindowsDeduplicateAndCloseIndependently(t *testing.T) {

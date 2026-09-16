@@ -9,16 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
-
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }
 
 func newTouchID() (string, error) {
 	data := make([]byte, 16)
@@ -26,18 +20,6 @@ func newTouchID() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(data), nil
-}
-
-func samePathFold(left, right string) bool {
-	leftAbs, _ := filepath.Abs(left)
-	rightAbs, _ := filepath.Abs(right)
-	return strings.EqualFold(filepath.Clean(leftAbs), filepath.Clean(rightAbs))
-}
-
-func sameOrChildPath(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
 }
 
 func writeTouchFileAtomic(target string, data []byte, mode os.FileMode) (returnErr error) {
@@ -64,7 +46,7 @@ func writeTouchFileAtomic(target string, data []byte, mode os.FileMode) (returnE
 	if err := temp.Close(); err != nil {
 		return err
 	}
-	return replaceAtomic(tempPath, target)
+	return platform.ReplaceAtomic(tempPath, target)
 }
 
 func copyTouchTree(ctx context.Context, source, target string) error {
@@ -78,7 +60,7 @@ func copyTouchTree(ctx context.Context, source, target string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if samePathFold(path, source) {
+		if platform.SamePathFold(path, source) {
 			return nil
 		}
 		relative, err := filepath.Rel(source, path)
@@ -86,7 +68,7 @@ func copyTouchTree(ctx context.Context, source, target string) error {
 			return err
 		}
 		destination := filepath.Join(target, relative)
-		if !sameOrChildPath(target, destination) {
+		if !platform.SameOrChildPath(target, destination) {
 			return errors.New("copy target escaped touch output directory")
 		}
 		if entry.Type()&os.ModeSymlink != 0 {

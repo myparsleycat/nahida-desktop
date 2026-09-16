@@ -8,8 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"nahida.live/desktop/internal/appdata"
@@ -107,19 +105,7 @@ func (t *Service) reportCleanup(err error, operation string) {
 	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }
 
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }
-
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-func sameOrChildPath(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
 }

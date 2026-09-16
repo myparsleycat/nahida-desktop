@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 var mediaExtensions = map[string]bool{
@@ -236,7 +237,7 @@ func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
 		IsEnabled: !isDisabled(name), Inis: []IniResult{},
 	}
 	if preview != nil {
-		info.Preview = stringPointer(preview.path)
+		info.Preview = platform.StringPtr(preview.path)
 	}
 	return info
 }
@@ -420,7 +421,7 @@ func sectionToggle(section, fileName string, data map[string]string) *ToggleKey 
 		return &ToggleKey{
 			SectionName: section, IniFileName: fileName, Key: optionalMapValue(data, "key"),
 			Back: optionalMapValue(data, "back"), Type: typeValue, Variable: variable,
-			Values: parts, CurrentValue: stringPointer(current),
+			Values: parts, CurrentValue: platform.StringPtr(current),
 		}
 	}
 	return nil
@@ -431,7 +432,7 @@ func optionalMapValue(data map[string]string, key string) *string {
 	if value == "" {
 		return nil
 	}
-	return stringPointer(value)
+	return platform.StringPtr(value)
 }
 
 func reportScanFailure(err error, reports []func(error)) {

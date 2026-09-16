@@ -35,6 +35,7 @@ type TouchGeneratedAssets struct {
 }
 
 type touchSeedCell struct{ X, Y, Z int }
+
 type touchSeedGrid struct {
 	Inverse float64
 	Buckets map[touchSeedCell][]int
@@ -170,14 +171,15 @@ func buildTouchSeedGrid(positions []float32, seeds []int, size float64) *touchSe
 	grid := &touchSeedGrid{Inverse: 1 / size, Buckets: map[touchSeedCell][]int{}}
 	for _, seed := range seeds {
 		cell := touchSeedCell{
-			int(math.Floor(float64(positions[seed*3]) * grid.Inverse)),
-			int(math.Floor(float64(positions[seed*3+1]) * grid.Inverse)),
-			int(math.Floor(float64(positions[seed*3+2]) * grid.Inverse)),
+			X: int(math.Floor(float64(positions[seed*3]) * grid.Inverse)),
+			Y: int(math.Floor(float64(positions[seed*3+1]) * grid.Inverse)),
+			Z: int(math.Floor(float64(positions[seed*3+2]) * grid.Inverse)),
 		}
 		grid.Buckets[cell] = append(grid.Buckets[cell], seed)
 	}
 	return grid
 }
+
 func nearestTouchSeed2(positions []float32, grid touchSeedGrid, px, py, pz, cutoff float64) float64 {
 	radius := int(math.Ceil(math.Sqrt(cutoff)))
 	cx, cy, cz := int(math.Floor(px*grid.Inverse)), int(math.Floor(py*grid.Inverse)), int(math.Floor(pz*grid.Inverse))
@@ -185,7 +187,8 @@ func nearestTouchSeed2(positions []float32, grid touchSeedGrid, px, py, pz, cuto
 	for dx := -radius; dx <= radius; dx++ {
 		for dy := -radius; dy <= radius; dy++ {
 			for dz := -radius; dz <= radius; dz++ {
-				for _, seed := range grid.Buckets[touchSeedCell{cx + dx, cy + dy, cz + dz}] {
+				cell := touchSeedCell{X: cx + dx, Y: cy + dy, Z: cz + dz}
+				for _, seed := range grid.Buckets[cell] {
 					sx := float64(positions[seed*3]) - px
 					sy := float64(positions[seed*3+1]) - py
 					sz := float64(positions[seed*3+2]) - pz
@@ -393,6 +396,7 @@ func encodeTouchObjectMap(entries []TouchObjectMapEntry) []float32 {
 	}
 	return values
 }
+
 func encodeTouchJiggleParams(p TouchJiggleParams) []float32 {
 	return []float32{
 		float32(p.ObjectID),
@@ -413,6 +417,7 @@ func encodeTouchJiggleParams(p TouchJiggleParams) []float32 {
 		0,
 	}
 }
+
 func writeTouchFloat32File(path string, values []float32) error {
 	file, err := os.Create(path)
 	if err != nil {
@@ -517,10 +522,12 @@ func clampFinite(value, low, high, fallback float64) float64 {
 	}
 	return math.Max(low, math.Min(high, value))
 }
+
 func touchSmoothstep(edge0, edge1, value float64) float64 {
 	normalized := math.Max(0, math.Min(1, (value-edge0)/(edge1-edge0)))
 	return normalized * normalized * (3 - 2*normalized)
 }
+
 func touchCoreAttenuation(scale float64, mode string) float64 {
 	if mode == "off" || scale >= 1 {
 		return 1

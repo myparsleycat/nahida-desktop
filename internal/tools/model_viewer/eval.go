@@ -221,26 +221,14 @@ func buildViewerBlockingVars(payload ModelViewerTransport, testedVar string, sta
 		for _, variant := range mesh.PositionVariants {
 			addDNF(variant.Conditions)
 		}
-		for _, variants := range [][]ModelViewerTextureVariant{mesh.TextureVariants, mesh.NormalMapVariants, mesh.LightMapVariants, mesh.MaterialMapVariants} {
+		for _, variants := range [][]ModelViewerTextureVariant{
+			mesh.TextureVariants,
+			mesh.NormalMapVariants,
+			mesh.LightMapVariants,
+			mesh.MaterialMapVariants,
+		} {
 			for _, variant := range variants {
-				hasTested := false
-				for _, group := range variant.Conditions {
-					for _, clause := range group {
-						if strings.ToLower(clause.Var) == testedLower {
-							hasTested = true
-						}
-					}
-				}
-				if !hasTested {
-					continue
-				}
-				for _, group := range variant.Conditions {
-					for _, clause := range group {
-						if strings.ToLower(clause.Var) != testedLower {
-							coOccurring[clause.Var] = true
-						}
-					}
-				}
+				addDNF(variant.Conditions)
 			}
 		}
 	}

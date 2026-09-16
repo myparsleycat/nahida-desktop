@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -95,14 +96,14 @@ func (t *Service) GetTextureResizeState() TextureResizeProgressEvent {
 func (t *Service) ResizeTextureFolder(ctx context.Context, input TextureResizeRunInput) (TextureResizeResult, error) {
 	target := strings.TrimSpace(input.TargetPath)
 	if target == "" {
-		return TextureResizeResult{}, contractError("Target path is required.")
+		return TextureResizeResult{}, infra.ContractError("Target path is required.")
 	}
 	settings, err := t.saveFullTextureResizeSettings(ctx, input.Settings)
 	if err != nil {
 		return TextureResizeResult{}, err
 	}
 	if isTextureUpscaleOperation(settings.Operation) {
-		return TextureResizeResult{}, contractError("Folder upscale is not supported.")
+		return TextureResizeResult{}, infra.ContractError("Folder upscale is not supported.")
 	}
 	resolved, err := filepath.Abs(target)
 	if err != nil {
@@ -130,7 +131,7 @@ func (t *Service) ResizeTextureMod(
 func (t *Service) ResizeTextureFile(ctx context.Context, input TextureResizeFileRunInput) (TextureResizeResult, error) {
 	filePath := strings.TrimSpace(input.FilePath)
 	if filePath == "" {
-		return TextureResizeResult{}, contractError("File path is required.")
+		return TextureResizeResult{}, infra.ContractError("File path is required.")
 	}
 	settings, err := t.saveFullTextureResizeSettings(ctx, input.Settings)
 	if err != nil {
@@ -174,8 +175,8 @@ func (t *Service) runTextureResizeJob(
 	work func(context.Context) (TextureResizeResult, error),
 ) (TextureResizeResult, error) {
 	running := TextureResizeProgressEvent{
-		Status: "running", Operation: stringPointer(settings.Operation), FilePath: stringPointer(path),
-		FileName: stringPointer(filepath.Base(path)),
+		Status: "running", Operation: platform.StringPtr(settings.Operation), FilePath: platform.StringPtr(path),
+		FileName: platform.StringPtr(filepath.Base(path)),
 	}
 	if singleFile {
 		running.TotalFiles, running.ProcessedFiles = intPointer(1), intPointer(0)
@@ -184,7 +185,7 @@ func (t *Service) runTextureResizeJob(
 	result, err := work(ctx)
 	if err != nil {
 		failed := running
-		failed.Status, failed.Error = "failed", stringPointer(err.Error())
+		failed.Status, failed.Error = "failed", platform.StringPtr(err.Error())
 		t.settleTextureJob(jobID, failed)
 		return TextureResizeResult{}, infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: "texture-resize", Stage: "execute",
@@ -270,16 +271,21 @@ func (t *Service) upscaleTextureFile(
 	}
 	engine := textureUpscaleEngine(settings.UpscaleModel)
 	displayName := map[string]string{"realesrgan": "Real-ESRGAN", "realcugan": "Real-CUGAN"}[engine]
-	t.emitTextureUpscaleProgress("download", floatPointer(0), stringPointer("Preparing "+displayName+" runtime"), path)
+	t.emitTextureUpscaleProgress(
+		"download",
+		floatPointer(0),
+		platform.StringPtr("Preparing "+displayName+" runtime"),
+		path,
+	)
 	runtimeStatus, err := t.installTextureUpscaleRuntime(ctx, engine, func(phase string, percent *float64) {
 		verb := "Downloading "
 		if phase == "extract" {
 			verb = "Extracting "
 		}
-		t.emitTextureUpscaleProgress(phase, percent, stringPointer(verb+displayName+" runtime"), path)
+		t.emitTextureUpscaleProgress(phase, percent, platform.StringPtr(verb+displayName+" runtime"), path)
 	})
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
+		t.emitTextureUpscaleProgress("error", nil, platform.StringPtr(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
 	if runtimeStatus.BinaryPath == nil || runtimeStatus.ModelsPath == nil {
@@ -291,24 +297,24 @@ func (t *Service) upscaleTextureFile(
 	}
 	defer func() { t.reportCleanup(os.RemoveAll(workDir), "upscaleTextureFile") }()
 	inputPNG, outputPNG := filepath.Join(workDir, "input.png"), filepath.Join(workDir, "output.png")
-	t.emitTextureUpscaleProgress("decode", nil, stringPointer("Decoding DDS texture"), path)
+	t.emitTextureUpscaleProgress("decode", nil, platform.StringPtr("Decoding DDS texture"), path)
 	decoded, err := decodeDDSToPng(path, inputPNG)
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
+		t.emitTextureUpscaleProgress("error", nil, platform.StringPtr(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
 	if decoded.Layers > 1 {
 		message := "Cubemap and layered DDS textures cannot be upscaled."
-		t.emitTextureUpscaleProgress("done", floatPointer(100), stringPointer(message), path)
+		t.emitTextureUpscaleProgress("done", floatPointer(100), platform.StringPtr(message), path)
 		return skippedTextureResizeResult(path, metadata, message), nil
 	}
 	outputFormat := resolveTextureUpscaleOutputFormat(settings, decoded.Format, metadata.colorSpace)
 	if outputFormat == "" {
 		message := "This DDS format cannot be re-encoded after upscaling."
-		t.emitTextureUpscaleProgress("done", floatPointer(100), stringPointer(message), path)
+		t.emitTextureUpscaleProgress("done", floatPointer(100), platform.StringPtr(message), path)
 		return skippedTextureResizeResult(path, metadata, message), nil
 	}
-	t.emitTextureUpscaleProgress("upscale", nil, stringPointer("Running "+displayName), path)
+	t.emitTextureUpscaleProgress("upscale", nil, platform.StringPtr("Running "+displayName), path)
 	if err := t.runNCNNUpscaler(
 		ctx,
 		engine,
@@ -318,17 +324,18 @@ func (t *Service) upscaleTextureFile(
 		outputPNG,
 		settings,
 	); err != nil {
-		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
+		t.emitTextureUpscaleProgress("error", nil, platform.StringPtr(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
-	t.emitTextureUpscaleProgress("encode", nil, stringPointer("Encoding DDS texture"), path)
+	t.emitTextureUpscaleProgress("encode", nil, platform.StringPtr("Encoding DDS texture"), path)
 	encoded, err := encodePNGToDDS(outputPNG, path, outputFormat, settings.Backup, decoded.Mipmaps > 1)
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, stringPointer(err.Error()), path)
+		t.emitTextureUpscaleProgress("error", nil, platform.StringPtr(err.Error()), path)
 		return TextureResizeResult{}, err
 	}
-	if expectedWidth, expectedHeight := decoded.Width*settings.UpscaleScale, decoded.Height*settings.UpscaleScale; encoded.Width != expectedWidth ||
-		encoded.Height != expectedHeight {
+	expectedWidth := decoded.Width * settings.UpscaleScale
+	expectedHeight := decoded.Height * settings.UpscaleScale
+	if encoded.Width != expectedWidth || encoded.Height != expectedHeight {
 		if t.log != nil {
 			t.log.Warn(
 				fmt.Sprintf(
@@ -343,7 +350,7 @@ func (t *Service) upscaleTextureFile(
 			)
 		}
 	}
-	t.emitTextureUpscaleProgress("done", floatPointer(100), stringPointer("Texture upscale completed"), path)
+	t.emitTextureUpscaleProgress("done", floatPointer(100), platform.StringPtr("Texture upscale completed"), path)
 	return TextureResizeResult{
 		TargetPath: path, Processed: 1, Updated: 1, Files: []TextureResizeFileResult{{
 			FilePath: path, Status: "updated", OriginalWidth: decoded.Width, OriginalHeight: decoded.Height,
@@ -461,7 +468,7 @@ func (t *Service) emitTextureUpscaleProgress(phase string, percent *float64, mes
 		Phase:    phase,
 		Percent:  percent,
 		Message:  message,
-		FilePath: stringPointer(path),
+		FilePath: platform.StringPtr(path),
 	}
 	t.emitEvent("tools:textureUpscaleProgress", event)
 }
@@ -494,7 +501,7 @@ func skippedTextureResizeResult(path string, metadata ddsMetadata, message strin
 		Files: []TextureResizeFileResult{{
 			FilePath: path, Status: "skipped", OriginalWidth: metadata.width, OriginalHeight: metadata.height,
 			OutputWidth: metadata.width, OutputHeight: metadata.height, OriginalFormat: metadata.format,
-			OutputFormat: metadata.format, Message: stringPointer(message),
+			OutputFormat: metadata.format, Message: platform.StringPtr(message),
 		}},
 	}
 }
@@ -515,7 +522,8 @@ func (b *limitedTextureBuffer) Write(data []byte) (int, error) {
 	return b.buffer.Write(data)
 }
 
-func (b *limitedTextureBuffer) Bytes() []byte  { return b.buffer.Bytes() }
+func (b *limitedTextureBuffer) Bytes() []byte { return b.buffer.Bytes() }
+
 func (b *limitedTextureBuffer) String() string { return b.buffer.String() }
 
 var _ io.Writer = (*limitedTextureBuffer)(nil)

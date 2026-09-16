@@ -322,10 +322,13 @@ func addIBChecks(content, hash string) string {
 		insert := -1
 		for lineIndex, line := range lines {
 			match := assignmentPattern.FindStringSubmatch(line)
-			if len(match) == 3 &&
-				(strings.EqualFold(match[1], "match_first_index") || insert < 0 && strings.EqualFold(match[1], "hash")) {
+			if len(match) != 3 {
+				continue
+			}
+			firstIndex := strings.EqualFold(match[1], "match_first_index")
+			if firstIndex || insert < 0 && strings.EqualFold(match[1], "hash") {
 				insert = lineIndex + 1
-				if strings.EqualFold(match[1], "match_first_index") {
+				if firstIndex {
 					break
 				}
 			}
@@ -619,9 +622,9 @@ func (e *engine) fixRemapperFile(filename, tool string) ([]Change, error) {
 				continue
 			}
 			switch {
-			case strings.Contains(lower, "hair") || strings.Contains(lower, "head"):
+			case containsAnyToken(lower, "hair", "head"):
 				resourceTargets[lower] = rules.ValidHashes[0]
-			case strings.Contains(lower, "hand") || strings.Contains(lower, "finger") || strings.Contains(lower, "accessor") || strings.Contains(lower, "knife"):
+			case containsAnyToken(lower, "hand", "finger", "accessor", "knife"):
 				resourceTargets[lower] = rules.ValidHashes[len(rules.ValidHashes)-1]
 			}
 		}
@@ -681,6 +684,16 @@ func (e *engine) remapBlend(path string, mapping map[uint32]uint32, kind string)
 	}
 	e.markApplied(path, kind)
 	return nil
+}
+
+// containsAnyToken reports whether value contains any of the given tokens.
+func containsAnyToken(value string, tokens ...string) bool {
+	for _, token := range tokens {
+		if strings.Contains(value, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *engine) resourceFile(iniPath, content, name string) (string, int, error) {
@@ -762,9 +775,11 @@ func (e *engine) setBuffer(path string, data []byte, kind string) {
 	e.bufferPaths[key] = path
 	e.bufferKind[key] = kind
 }
+
 func (e *engine) alreadyApplied(path, kind string) bool {
 	return e.applied[canonicalBufferKey(path)][kind]
 }
+
 func (e *engine) markApplied(path, kind string) {
 	key := canonicalBufferKey(path)
 	if e.applied[key] == nil {
@@ -772,9 +787,11 @@ func (e *engine) markApplied(path, kind string) {
 	}
 	e.applied[key][kind] = true
 }
+
 func canonicalBufferKey(path string) string {
 	return strings.ToLower(filepath.Clean(path))
 }
+
 func cloneApplied(source map[string]map[string]bool) map[string]map[string]bool {
 	result := make(map[string]map[string]bool, len(source))
 	for path, fixes := range source {
@@ -782,6 +799,7 @@ func cloneApplied(source map[string]map[string]bool) map[string]map[string]bool 
 	}
 	return result
 }
+
 func trimResourcePrefix(value string) string {
 	value = strings.TrimSpace(value)
 	const prefix = "Resource"
@@ -801,6 +819,7 @@ func unormByte(value float32) byte {
 	}
 	return byte(scaled)
 }
+
 func (e *engine) warn(message string) {
 	e.warnings = append(e.warnings, message)
 	if e.log != nil {
@@ -879,6 +898,7 @@ func collectHashes(content string) []string {
 	}
 	return result
 }
+
 func firstHashSection(content, hash string) *section {
 	for _, item := range parseSections(content) {
 		if sectionHasHash(item.body, hash) {
@@ -888,9 +908,11 @@ func firstHashSection(content, hash string) *section {
 	}
 	return nil
 }
+
 func sectionHasHash(body, hash string) bool {
 	return strings.EqualFold(assignmentValue(body, "hash"), hash)
 }
+
 func assignmentValue(body, key string) string {
 	for _, line := range strings.Split(body, "\n") {
 		if m := assignmentPattern.FindStringSubmatch(line); len(m) == 3 && strings.EqualFold(m[1], key) {
@@ -899,9 +921,11 @@ func assignmentValue(body, key string) string {
 	}
 	return ""
 }
+
 func containsAssignment(body, key, value string) bool {
 	return strings.EqualFold(assignmentValue(body, key), value)
 }
+
 func criticalContent(body string) string {
 	lines := strings.Split(body, "\n")
 	out := []string{}
@@ -991,6 +1015,7 @@ func stringArg(args []any, index int) (string, error) {
 	}
 	return value, nil
 }
+
 func stringSlice(value any) ([]string, error) {
 	items, ok := value.([]any)
 	if !ok {
@@ -1006,6 +1031,7 @@ func stringSlice(value any) ([]string, error) {
 	}
 	return result, nil
 }
+
 func uintSlice(value any) ([]uint32, error) {
 	items, ok := value.([]any)
 	if !ok {
@@ -1033,6 +1059,7 @@ func integerValue(value any) (int64, bool) {
 		return 0, false
 	}
 }
+
 func hashArgs(args []any, index int) ([]string, error) {
 	if index >= len(args) {
 		return nil, errors.New("missing hash argument")
@@ -1042,6 +1069,7 @@ func hashArgs(args []any, index int) ([]string, error) {
 	}
 	return stringSlice(args[index])
 }
+
 func relativeDisplay(root, path string) string {
 	relative, err := filepath.Rel(root, path)
 	if err != nil {
@@ -1061,6 +1089,7 @@ func formatStride(chunks []string) (int, error) {
 	}
 	return total, nil
 }
+
 func chunkSize(chunk string) (int, error) {
 	if len(chunk) < 2 {
 		return 0, errors.New("invalid struct format")
@@ -1075,6 +1104,7 @@ func chunkSize(chunk string) (int, error) {
 	}
 	return count * size, nil
 }
+
 func convertChunk(data []byte, oldChunk, newChunk string) ([]byte, error) {
 	if oldChunk == newChunk {
 		return bytes.Clone(data), nil
@@ -1119,6 +1149,7 @@ func convertChunk(data []byte, oldChunk, newChunk string) ([]byte, error) {
 	}
 	return out, nil
 }
+
 func halfToFloat(value uint16) float32 {
 	sign := uint32(value&0x8000) << 16
 	exp := (value >> 10) & 0x1f
@@ -1144,6 +1175,7 @@ func halfToFloat(value uint16) float32 {
 	}
 	return math.Float32frombits(bits)
 }
+
 func floatToHalf(value float32) uint16 {
 	bits := math.Float32bits(value)
 	sign := uint16(bits>>16) & 0x8000

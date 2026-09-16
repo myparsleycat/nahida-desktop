@@ -85,6 +85,7 @@ type shaderFixesError struct {
 }
 
 func (e *shaderFixesError) Error() string { return e.err.Error() }
+
 func (e *shaderFixesError) Unwrap() error { return e.err }
 
 type ShaderFixes struct {

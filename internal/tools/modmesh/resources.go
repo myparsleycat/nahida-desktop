@@ -32,8 +32,8 @@ func CollectPositionResources(resources []BufferResource) []BufferResource {
 			positionCSNameRE.MatchString(resource.Name) {
 			continue
 		}
-		if (strings.Contains(strings.ToLower(resource.Name), "position") || componentVB0RE.MatchString(resource.Name)) &&
-			resource.Stride >= 12 {
+		positionLike := strings.Contains(strings.ToLower(resource.Name), "position")
+		if (positionLike || componentVB0RE.MatchString(resource.Name)) && resource.Stride >= 12 {
 			out = append(out, resource)
 		}
 	}
@@ -47,8 +47,9 @@ func CollectIndexResources(resources []BufferResource) []BufferResource {
 		if resource.Filename == "" || modLOResourceRE.MatchString(resource.Name) {
 			continue
 		}
-		if strings.Contains(lowerName, "index") ||
-			((strings.Contains(upperFormat, "R16_UINT") || strings.Contains(upperFormat, "R32_UINT")) && !containsAny(lowerName, "position", "blend", "vector", "texcoord", "color")) {
+		uintFormat := strings.Contains(upperFormat, "R16_UINT") || strings.Contains(upperFormat, "R32_UINT")
+		named := containsAny(lowerName, "position", "blend", "vector", "texcoord", "color")
+		if strings.Contains(lowerName, "index") || uintFormat && !named {
 			out = append(out, resource)
 		}
 	}

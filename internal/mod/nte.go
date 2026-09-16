@@ -13,6 +13,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -275,7 +276,7 @@ func nteModInfoLight(entry nteModEntry, reports ...func(error)) ModInfo {
 		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
 	}
 	if preview := findPreviewWalk(entry.path, previewSearchDepth, reports...); preview != nil {
-		info.Preview = stringPointer(preview.path)
+		info.Preview = platform.StringPtr(preview.path)
 	}
 	if info.Preview == nil && entry.previewFallback != "" {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)

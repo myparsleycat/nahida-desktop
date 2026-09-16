@@ -751,7 +751,9 @@ func (w *nativeLoginWindow) Run() {
 		}
 	}
 }
+
 func (w *nativeLoginWindow) ID() uint { return w.window.ID() }
+
 func (w *nativeLoginWindow) WaitClosed(ctx context.Context) error {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
@@ -768,11 +770,15 @@ func (w *nativeLoginWindow) WaitClosed(ctx context.Context) error {
 }
 
 func (w *nativeLoginWindow) Show() application.Window { return w.window.Show() }
-func (w *nativeLoginWindow) Focus()                   { w.window.Focus() }
-func (w *nativeLoginWindow) Close()                   { w.window.Close() }
+
+func (w *nativeLoginWindow) Focus() { w.window.Focus() }
+
+func (w *nativeLoginWindow) Close() { w.window.Close() }
+
 func (w *nativeLoginWindow) GetCookies(ctx context.Context, uri string) ([]application.WebviewCookie, error) {
 	return w.window.GetCookies(ctx, uri)
 }
+
 func (w *nativeLoginWindow) DeleteCookies(ctx context.Context, uri string, names ...string) error {
 	return w.window.DeleteCookies(ctx, uri, names...)
 }

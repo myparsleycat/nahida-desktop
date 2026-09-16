@@ -55,7 +55,9 @@ func (w *fakeLoginWindow) Run() {
 		w.emit(events.Windows.WebViewNavigationCompleted)
 	}
 }
+
 func (w *fakeLoginWindow) ID() uint { return 1 }
+
 func (w *fakeLoginWindow) WaitClosed(ctx context.Context) error {
 	if w.waitCloseErr != nil {
 		return w.waitCloseErr
@@ -66,11 +68,14 @@ func (w *fakeLoginWindow) WaitClosed(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
+
 func (w *fakeLoginWindow) Show() application.Window {
 	w.shows.Add(1)
 	return nil
 }
+
 func (w *fakeLoginWindow) Focus() { w.focuses.Add(1) }
+
 func (w *fakeLoginWindow) Close() {
 	if w.closed.CompareAndSwap(false, true) {
 		if w.suppressCloseEvent {
@@ -79,6 +84,7 @@ func (w *fakeLoginWindow) Close() {
 		w.emit(events.Common.WindowClosing)
 	}
 }
+
 func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]application.WebviewCookie, error) {
 	current := w.inFlight.Add(1)
 	for {
@@ -113,6 +119,7 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]applica
 	}
 	return append([]application.WebviewCookie(nil), w.cookies...), nil
 }
+
 func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -154,6 +161,7 @@ func (w *fakeLoginWindow) OnWindowEvent(
 	w.mu.Unlock()
 	return func() {}
 }
+
 func (w *fakeLoginWindow) emit(eventType events.WindowEventType) {
 	w.mu.Lock()
 	listeners := append([]func(*application.WindowEvent){}, w.listeners[eventType]...)

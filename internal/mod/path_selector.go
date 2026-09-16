@@ -40,6 +40,7 @@ type folderPathSelectionError struct {
 }
 
 func (e *folderPathSelectionError) Error() string { return e.err.Error() }
+
 func (e *folderPathSelectionError) Unwrap() error { return e.err }
 
 type folderPathSelectionErrorLog struct {

@@ -19,6 +19,7 @@ import (
 	"github.com/myparsleycat/ddsutil"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const textureDefaultResizePercent = 50
@@ -36,7 +37,7 @@ var textureTempCounter atomic.Uint64
 // textureError wraps the former sidecar's user-facing message text so the
 // exact capitalisation and punctuation survive the port.
 func textureError(format string, args ...any) error {
-	var err error = contractError(fmt.Sprintf(format, args...))
+	var err error = infra.ContractError(fmt.Sprintf(format, args...))
 	for _, arg := range args {
 		if cause, ok := arg.(error); ok {
 			err = infra.WithCause(err, cause)
@@ -88,18 +89,21 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || (!info.IsDir() && !info.Mode().IsRegular()) {
 		return TextureResizeResult{}, infra.WithCause(
-			contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved)),
+			infra.ContractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", resolved)),
 			statErr,
 		)
 	}
 	var files []string
-	if info.IsDir() {
+	switch {
+	case info.IsDir():
 		if files, err = collectDDSFiles(resolved); err != nil {
 			return TextureResizeResult{}, textureError("Failed to scan target directory '%s': %s", resolved, err)
 		}
-	} else if !isDDSFilePath(resolved) {
-		return TextureResizeResult{}, contractError(fmt.Sprintf("Target file '%s' must be a DDS texture.", resolved))
-	} else {
+	case !isDDSFilePath(resolved):
+		return TextureResizeResult{}, infra.ContractError(
+			fmt.Sprintf("Target file '%s' must be a DDS texture.", resolved),
+		)
+	default:
 		files = []string{resolved}
 	}
 	sort.Strings(files)
@@ -126,7 +130,7 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 func normalizeTextureResizeRequest(request textureResizeRequest) (normalizedTextureResizeRequest, error) {
 	trimmed := strings.TrimSpace(request.TargetPath)
 	if trimmed == "" {
-		return normalizedTextureResizeRequest{}, contractError("Target path is required.")
+		return normalizedTextureResizeRequest{}, infra.ContractError("Target path is required.")
 	}
 	var mode textureResizeMode
 	switch request.Mode {
@@ -210,7 +214,7 @@ func resizeDDSFile(path string, request *normalizedTextureResizeRequest) Texture
 			Status:         "failed",
 			OriginalFormat: unknownTextureFormatName,
 			OutputFormat:   unknownTextureFormatName,
-			Message:        stringPointer(err.Error()),
+			Message:        platform.StringPtr(err.Error()),
 		}
 	}
 	return result
@@ -287,9 +291,9 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 	var message *string
 	switch {
 	case request.operation == textureOperationConvert:
-		message = stringPointer("Format changed without resizing.")
+		message = platform.StringPtr("Format changed without resizing.")
 	case outputFormat != surface.ImageFormat && targetWidth == originalWidth && targetHeight == originalHeight:
-		message = stringPointer("Texture format changed without resizing.")
+		message = platform.StringPtr("Texture format changed without resizing.")
 	}
 	return TextureResizeFileResult{
 		FilePath:       path,
@@ -319,7 +323,7 @@ func skippedResizeFileResult(
 		OutputHeight:   height,
 		OriginalFormat: originalFormat,
 		OutputFormat:   outputFormat,
-		Message:        stringPointer(message),
+		Message:        platform.StringPtr(message),
 	}
 }
 
@@ -350,7 +354,7 @@ func resizeTextureSurfaceRgba32F(
 		for level := range depth {
 			base := surface.Get(layer, level, 0)
 			if base == nil {
-				return nil, contractError(missingBaseMipTextureError)
+				return nil, infra.ContractError(missingBaseMipTextureError)
 			}
 			data = append(data, resizeTextureRgba32F(base, surface.Width, surface.Height, targetWidth, targetHeight)...)
 		}
@@ -369,7 +373,7 @@ func resizeTextureSurfaceRgba32F(
 func decodeDDSToPng(input, output string) (textureDecodedMetadata, error) {
 	path := strings.TrimSpace(input)
 	if path == "" {
-		return textureDecodedMetadata{}, contractError("Target path is required.")
+		return textureDecodedMetadata{}, infra.ContractError("Target path is required.")
 	}
 	dds, err := readDDSFile(path)
 	if err != nil {
@@ -385,7 +389,7 @@ func decodeDDSToPng(input, output string) (textureDecodedMetadata, error) {
 	}
 	base := decoded.Get(0, 0, 0)
 	if base == nil {
-		return textureDecodedMetadata{}, contractError(missingBaseMipTextureError)
+		return textureDecodedMetadata{}, infra.ContractError(missingBaseMipTextureError)
 	}
 	pixels := make([]uint8, len(base))
 	for index, channel := range base {
@@ -413,7 +417,7 @@ func encodePNGToDDS(
 		return textureEncodedMetadata{}, textureError("Failed to read upscaled PNG '%s': %s", input, err)
 	}
 	if width == 0 || height == 0 {
-		return textureEncodedMetadata{}, contractError("Encoded texture dimensions must be greater than zero.")
+		return textureEncodedMetadata{}, infra.ContractError("Encoded texture dimensions must be greater than zero.")
 	}
 	outputFormat, err := parseTextureOutputFormat(outputFormatName)
 	if err != nil {
@@ -506,7 +510,7 @@ func loadTexturePNG(path string) ([]uint8, int, int, error) {
 func saveTexturePNG(path string, pixels []uint8, width, height uint32) error {
 	out := image.NewNRGBA(image.Rect(0, 0, int(width), int(height)))
 	if len(out.Pix) != len(pixels) {
-		return contractError(missingBaseMipTextureError)
+		return infra.ContractError(missingBaseMipTextureError)
 	}
 	copy(out.Pix, pixels)
 	file, err := os.Create(path)
@@ -665,7 +669,7 @@ func writeDDSAtomically(path string, dds *ddsutil.Dds) error {
 		if err := tempFile.Close(); err != nil {
 			return textureError("Failed to finalize DDS file '%s': %s", path, err)
 		}
-		if err := replaceAtomic(tempPath, path); err != nil {
+		if err := platform.ReplaceAtomic(tempPath, path); err != nil {
 			return textureError("Failed to write DDS file '%s': %s", path, err)
 		}
 		return nil

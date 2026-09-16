@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
 
@@ -38,15 +39,17 @@ func assertTouchProfileBundleAllowed(root string, sourcePaths []string) error {
 		return nil
 	}
 	absolute, _ := filepath.Abs(root)
-	code, message := "TOUCH_PROFILE_INPUT_ALREADY_TOUCH", "Input is already a Nahida Touch Profile mod and cannot be converted again."
+	code := "TOUCH_PROFILE_INPUT_ALREADY_TOUCH"
+	message := "Input is already a Nahida Touch Profile mod and cannot be converted again."
 	if detection.Status == "suspected" {
-		code, message = "TOUCH_PROFILE_INPUT_SUSPECTED_TOUCH", "Input appears to be an existing Touch mod and cannot be safely converted."
+		code = "TOUCH_PROFILE_INPUT_SUSPECTED_TOUCH"
+		message = "Input appears to be an existing Touch mod and cannot be safely converted."
 	}
 	details := ""
 	if len(detection.Reasons) > 0 {
 		details = " " + strings.Join(detection.Reasons, "; ") + "."
 	}
-	return contractError(fmt.Sprintf("%s: %s%s Path: %s", code, message, details, absolute))
+	return infra.ContractError(fmt.Sprintf("%s: %s%s Path: %s", code, message, details, absolute))
 }
 
 func inspectTouchProfileBundle(root string, sourcePaths []string) (touchInputDetection, error) {
@@ -123,6 +126,7 @@ func touchDetectionWithFiles(root string, input touchInputDetection) touchInputD
 	}
 	return input
 }
+
 func missingTouchShaders(root string) []string {
 	missing := []string{}
 	for _, name := range touchShaderFiles {
@@ -132,6 +136,7 @@ func missingTouchShaders(root string) []string {
 	}
 	return missing
 }
+
 func touchMarkerNamespaces(text string, re *regexp.Regexp) []string {
 	matches := re.FindAllStringSubmatch(text, -1)
 	out := make([]string, 0, len(matches))

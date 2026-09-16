@@ -380,18 +380,18 @@ func (u *Updater) GetStatus(ctx context.Context) (UpdaterStatus, error) {
 		IsDownloading:         u.downloading,
 	}
 	if u.releaseVersion != "" {
-		status.ReleaseVersion = stringPointer(u.releaseVersion)
+		status.ReleaseVersion = platform.StringPtr(u.releaseVersion)
 	}
 	if u.originalNotes != "" || u.translatedNotes != "" {
 		status.ReleaseNotes = &UpdaterReleaseNotes{}
 		if u.originalNotes != "" {
-			status.ReleaseNotes.Original = stringPointer(u.originalNotes)
+			status.ReleaseNotes.Original = platform.StringPtr(u.originalNotes)
 		}
 		if u.translatedNotes != "" {
-			status.ReleaseNotes.Translated = stringPointer(u.translatedNotes)
+			status.ReleaseNotes.Translated = platform.StringPtr(u.translatedNotes)
 		}
 		if u.translatedLang != "" {
-			status.ReleaseNotes.TranslatedLanguage = stringPointer(u.translatedLang)
+			status.ReleaseNotes.TranslatedLanguage = platform.StringPtr(u.translatedLang)
 		}
 	}
 	return status, nil
@@ -699,5 +699,3 @@ func (u *Updater) ServiceShutdown() error {
 	}
 	return nil
 }
-
-func stringPointer(value string) *string { return &value }

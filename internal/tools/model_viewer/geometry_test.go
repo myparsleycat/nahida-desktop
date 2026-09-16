@@ -44,7 +44,14 @@ element[1]:
 		binary.LittleEndian.PutUint16(vb[vertex*24+14:], uint16(0))
 		binary.LittleEndian.PutUint16(vb[vertex*24+16:], uint16(32767))
 	}
-	mesh, err := extractModelViewerGeometry(vb, 24, layout, []uint32{0, 1, 2, 2, 2, 0}, true, true, false, nil)
+	mesh, err := extractModelViewerGeometry(
+		vb,
+		24,
+		layout,
+		[]uint32{0, 1, 2, 2, 2, 0},
+		modelViewerGeometryOptions{includeTangents: true, includeColors: true},
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +76,14 @@ func TestModelViewerGeometryMatchesElectronPayloadPostProcessing(t *testing.T) {
 		binary.LittleEndian.PutUint32(vb[offset+36:], math.Float32bits(-0.5))
 	}
 
-	mesh, err := extractModelViewerGeometry(vb, 40, layout, []uint32{3, 1, 3, 2, 2, 1}, true, false, true, nil)
+	mesh, err := extractModelViewerGeometry(
+		vb,
+		40,
+		layout,
+		[]uint32{3, 1, 3, 2, 2, 1},
+		modelViewerGeometryOptions{includeTangents: true, compact: true},
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

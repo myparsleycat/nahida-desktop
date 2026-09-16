@@ -211,7 +211,8 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 		return &DownloadHTTPError{Status: response.StatusCode, StatusText: http.StatusText(response.StatusCode)}
 	}
 	if appendFile &&
-		(response.StatusCode != http.StatusPartialContent || !expectedContentRange(response.Header.Get("Content-Range"), resumeFrom, request.Size)) {
+		(response.StatusCode != http.StatusPartialContent ||
+			!expectedContentRange(response.Header.Get("Content-Range"), resumeFrom, request.Size)) {
 		drainAndClose(response.Body)
 		if err := os.Remove(temporaryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("reset invalid partial download: %w", err)

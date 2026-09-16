@@ -19,6 +19,7 @@ import (
 type passCrypto struct{}
 
 func (passCrypto) EncryptString(s string) (string, error) { return s, nil }
+
 func (passCrypto) DecryptString(s string) (string, error) { return s, nil }
 
 type doneObservedContext struct {
@@ -272,6 +273,7 @@ func TestGetTokenClearsUndecryptableValue(t *testing.T) {
 type failCrypto struct{}
 
 func (failCrypto) EncryptString(string) (string, error) { return "", errors.New("no") }
+
 func (failCrypto) DecryptString(string) (string, error) { return "", errors.New("no") }
 
 func TestOldToken401DoesNotDropSavedToken(t *testing.T) {

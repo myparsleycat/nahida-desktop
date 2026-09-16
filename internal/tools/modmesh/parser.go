@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type Section struct {
@@ -63,7 +64,7 @@ func LoadINIBundleWithSources(input string) (string, []Section, []string, error)
 	refs := extractMergedINIRefs(string(text))
 	for _, ref := range refs {
 		refPath, resolveErr := resolveMergedINIRef(base, ref)
-		if resolveErr != nil || samePathFold(refPath, iniPath) {
+		if resolveErr != nil || platform.SamePathFold(refPath, iniPath) {
 			continue
 		}
 		refText, readErr := os.ReadFile(refPath)
@@ -121,7 +122,7 @@ func FindPrimaryINI(input string) (string, error) {
 		return "", err
 	}
 	if len(candidates) == 0 {
-		return "", contractError(fmt.Sprintf("No .ini found in %s", input))
+		return "", infra.ContractError(fmt.Sprintf("No .ini found in %s", input))
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].score != candidates[j].score {
@@ -263,7 +264,7 @@ func resolveMergedINIRef(baseDir, entry string) (string, error) {
 	} else {
 		resolved, err = filepath.Abs(filepath.Join(base, candidate))
 	}
-	if err != nil || !sameOrChildPath(base, resolved) || samePathFold(base, resolved) {
+	if err != nil || !platform.SameOrChildPath(base, resolved) || platform.SamePathFold(base, resolved) {
 		return "", infra.WithCause(errors.New("merged INI path is outside mod root"), err)
 	}
 	// EvalSymlinks can fail on Windows temp junctions even for in-tree files.
@@ -271,7 +272,7 @@ func resolveMergedINIRef(baseDir, entry string) (string, error) {
 	// rejects symlink escapes like Electron loadIniBundle.
 	if realBase, evalErr := filepath.EvalSymlinks(base); evalErr == nil {
 		if realPath, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {
-			if !sameOrChildPath(realBase, realPath) || samePathFold(realBase, realPath) {
+			if !platform.SameOrChildPath(realBase, realPath) || platform.SamePathFold(realBase, realPath) {
 				return "", errors.New("merged INI path is outside mod root")
 			}
 			resolved = realPath

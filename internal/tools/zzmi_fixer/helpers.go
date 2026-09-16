@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 // copyRegularFile replaces target with the contents of source through a temporary
@@ -45,5 +46,5 @@ func copyRegularFile(source, target string) (returnErr error) {
 	if closeErr != nil {
 		return closeErr
 	}
-	return replaceAtomic(tempPath, target)
+	return platform.ReplaceAtomic(tempPath, target)
 }

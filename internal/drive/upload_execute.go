@@ -21,6 +21,526 @@ type UploadExecutionProgress struct {
 	IsServerDeduplicated bool
 }
 
+type uploadRun struct {
+	drive            *Drive
+	ctx              context.Context
+	files            []FinalUploadFile
+	plan             UploadPlan
+	rules            UploadRules
+	concurrency      int
+	onProgress       func(UploadExecutionProgress)
+	filesByID        map[string]FinalUploadFile
+	bundleByClientID map[string]string
+
+	taskPool          *uploadTaskPool
+	multipartSlots    chan struct{}
+	packed            []preparedUpload
+	packedBytes       int64
+	pendingByIntent   map[string][]FinalUploadFile
+	intentOrder       []string
+	returned          map[string]struct{}
+	rejected          []UploadPlanItem
+	staged            map[string]struct{}
+	bundleCredits     map[string]int64
+	bundleContexts    map[string]context.Context
+	bundleCancels     map[string]context.CancelFunc
+	failedBundles     map[string]struct{}
+	rolledBackBundles map[string]struct{}
+	failures          []error
+	stateMu           sync.Mutex
+	progressMu        sync.Mutex
+}
+
+func (d *Drive) executeUploadPlanV2(
+	ctx context.Context,
+	files []FinalUploadFile,
+	plan UploadPlan,
+	concurrency int,
+	onProgress func(UploadExecutionProgress),
+) error {
+	if d == nil || d.http == nil {
+		return errDriveHTTPUnconfigured
+	}
+	run, err := d.newUploadRun(ctx, files, plan, concurrency, onProgress)
+	if err != nil {
+		return err
+	}
+	defer run.close()
+
+	run.indexPlan()
+	if err := run.dispatchIntents(); err != nil {
+		return err
+	}
+	run.finalizeBundles()
+	if err := ctx.Err(); err != nil {
+		d.abortAllNTEBundles(ctx, plan.Bundles)
+		return err
+	}
+	if len(run.failures) > 0 {
+		return errors.Join(run.failures...)
+	}
+	return nil
+}
+
+func (d *Drive) newUploadRun(
+	ctx context.Context,
+	files []FinalUploadFile,
+	plan UploadPlan,
+	concurrency int,
+	onProgress func(UploadExecutionProgress),
+) (*uploadRun, error) {
+	rules, err := d.UploadRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	filesByID := make(map[string]FinalUploadFile, len(files))
+	for _, file := range files {
+		filesByID[file.FID] = file
+	}
+
+	bundleByClientID := make(map[string]string)
+	for bundleID, bundle := range plan.Bundles {
+		for _, clientID := range bundle.MemberClientIDs {
+			bundleByClientID[clientID] = bundleID
+		}
+	}
+
+	// Plan items override bundle membership for their client id.
+	for _, item := range plan.Items {
+		if item.BundleID != "" {
+			bundleByClientID[item.ClientID] = item.BundleID
+		}
+	}
+
+	run := &uploadRun{
+		drive:             d,
+		ctx:               ctx,
+		files:             files,
+		plan:              plan,
+		rules:             rules,
+		concurrency:       concurrency,
+		onProgress:        onProgress,
+		filesByID:         filesByID,
+		bundleByClientID:  bundleByClientID,
+		pendingByIntent:   make(map[string][]FinalUploadFile),
+		intentOrder:       make([]string, 0),
+		returned:          make(map[string]struct{}, len(plan.Items)),
+		rejected:          make([]UploadPlanItem, 0),
+		staged:            make(map[string]struct{}),
+		bundleCredits:     make(map[string]int64),
+		bundleContexts:    make(map[string]context.Context, len(plan.Bundles)),
+		bundleCancels:     make(map[string]context.CancelFunc, len(plan.Bundles)),
+		failedBundles:     make(map[string]struct{}),
+		rolledBackBundles: make(map[string]struct{}, len(plan.Bundles)),
+		failures:          make([]error, 0),
+	}
+	for bundleID := range plan.Bundles {
+		run.bundleContexts[bundleID], run.bundleCancels[bundleID] = context.WithCancel(ctx)
+	}
+	return run, nil
+}
+
+func (r *uploadRun) close() {
+	if r.taskPool != nil {
+		_ = r.taskPool.Close()
+	}
+	for _, cancel := range r.bundleCancels {
+		cancel()
+	}
+}
+
+func (r *uploadRun) indexPlan() {
+	for _, item := range r.plan.Items {
+		r.returned[item.ClientID] = struct{}{}
+		file, ok := r.filesByID[item.ClientID]
+		if !ok {
+			continue
+		}
+		switch {
+		case item.Status == "created" || item.Status == "exists":
+			r.markReady(file, file.Size, true)
+		case item.Status == "pending" && item.IntentID != "":
+			if _, exists := r.pendingByIntent[item.IntentID]; !exists {
+				r.intentOrder = append(r.intentOrder, item.IntentID)
+			}
+			r.pendingByIntent[item.IntentID] = append(r.pendingByIntent[item.IntentID], file)
+		default:
+			r.rejected = append(r.rejected, item)
+		}
+	}
+
+	for _, file := range r.files {
+		if _, ok := r.returned[file.FID]; !ok {
+			r.rejected = append(
+				r.rejected,
+				UploadPlanItem{ClientID: file.FID, Status: "error", Reason: "upload_plan_item_missing"},
+			)
+		}
+	}
+
+	for _, item := range r.rejected {
+		file, ok := r.filesByID[item.ClientID]
+		if !ok {
+			continue
+		}
+		reason := item.Reason
+		if reason == "" {
+			reason = item.Status
+		}
+		r.failTargets(&UploadV2Error{Code: reason, Message: file.Name + ": " + reason}, []FinalUploadFile{file})
+	}
+}
+
+func (r *uploadRun) dispatchIntents() error {
+	r.packed = make([]preparedUpload, 0, max(1, r.rules.Pack.MaxFiles))
+	r.taskPool = newUploadTaskPool(r.ctx, r.concurrency)
+	r.multipartSlots = make(chan struct{}, maxMultipartUploadConcurrency)
+
+	for _, intentID := range r.intentOrder {
+		if err := r.dispatchIntent(intentID); err != nil {
+			return err
+		}
+	}
+	if err := r.flushPacked(); err != nil {
+		return err
+	}
+	if err := r.taskPool.Close(); err != nil {
+		r.drive.abortAllNTEBundles(r.ctx, r.plan.Bundles)
+		return err
+	}
+	return nil
+}
+
+func (r *uploadRun) dispatchIntent(intentID string) error {
+	if err := r.ctx.Err(); err != nil {
+		r.drive.abortAllNTEBundles(r.ctx, r.plan.Bundles)
+		return err
+	}
+
+	targets := r.pendingByIntent[intentID]
+	allFailedBundles := len(targets) > 0
+	allBundled := len(targets) > 0
+	for _, target := range targets {
+		bundleID := r.bundleByClientID[target.FID]
+		if bundleID == "" {
+			allBundled = false
+			allFailedBundles = false
+			continue
+		}
+		if !r.isBundleFailed(bundleID) {
+			allFailedBundles = false
+		}
+	}
+	if allFailedBundles {
+		return nil
+	}
+
+	upload, ok := r.plan.Uploads[intentID]
+	if !ok {
+		if allBundled {
+			for _, file := range targets {
+				r.markReady(file, file.Size, true)
+			}
+			return nil
+		}
+		r.failTargets(fmt.Errorf("upload intent missing for %s", targets[0].Name), targets)
+		return nil
+	}
+
+	source := targets[0]
+	data, compression, useParts, err := prepareUploadRoute(source, upload, r.rules.MaxUploadBodyBytes)
+	if err != nil {
+		r.failTargets(err, targets)
+		return nil
+	}
+	if useParts {
+		return r.queuePartsIntent(upload, source, targets)
+	}
+
+	member := preparedUpload{
+		upload:       upload,
+		source:       source,
+		copies:       slices.Clone(targets[1:]),
+		data:         data,
+		compression:  compression,
+		payloadBytes: int64(len(data)),
+		logicalSize:  source.Size,
+	}
+	if allBundled {
+		return r.queueBundledDirectIntent(member, targets)
+	}
+
+	r.packed = append(r.packed, member)
+	r.packedBytes += member.payloadBytes
+	if shouldFlushUploadPack(len(r.packed), r.packedBytes, r.rules.Pack) {
+		return r.flushPacked()
+	}
+	return nil
+}
+
+func (r *uploadRun) queuePartsIntent(upload UploadPlanEntry, source FinalUploadFile, targets []FinalUploadFile) error {
+	taskCtx := r.targetContext(targets)
+	return r.queueTask(func() {
+		select {
+		case r.multipartSlots <- struct{}{}:
+		case <-taskCtx.Done():
+			return
+		}
+		defer func() { <-r.multipartSlots }()
+
+		err := r.drive.uploadParts(
+			taskCtx,
+			upload,
+			source,
+			r.rules,
+			func(bytes int64) { r.report(source, bytes, false) },
+		)
+		if err != nil {
+			if taskCtx.Err() == nil || r.ctx.Err() != nil {
+				r.failTargets(err, targets)
+			}
+			return
+		}
+		r.markIntentReady(source, targets[1:])
+	})
+}
+
+func (r *uploadRun) queueBundledDirectIntent(member preparedUpload, targets []FinalUploadFile) error {
+	taskCtx := r.targetContext(targets)
+	return r.queueTask(func() {
+		err := r.drive.uploadPreparedDirect(
+			taskCtx,
+			member.upload,
+			member.source,
+			member.data,
+			member.compression,
+			func(bytes int64) { r.report(member.source, bytes, false) },
+		)
+		if err != nil {
+			if taskCtx.Err() == nil || r.ctx.Err() != nil {
+				r.failTargets(err, targets)
+			}
+			return
+		}
+		r.markIntentReady(member.source, targets[1:])
+	})
+}
+
+func (r *uploadRun) flushPacked() error {
+	groups := partitionPackedUploads(r.packed, r.rules.Pack)
+	r.packed = make([]preparedUpload, 0, max(1, r.rules.Pack.MaxFiles))
+	r.packedBytes = 0
+	for _, group := range groups {
+		if len(group.members) == 1 {
+			member := group.members[0]
+			if err := r.queueTask(func() {
+				err := r.drive.uploadPreparedDirect(
+					r.ctx,
+					member.upload,
+					member.source,
+					member.data,
+					member.compression,
+					func(bytes int64) {
+						r.report(member.source, bytes, false)
+					},
+				)
+				if err != nil {
+					r.addFailure(err)
+					return
+				}
+				r.markIntentReady(member.source, member.copies)
+			}); err != nil {
+				return err
+			}
+			continue
+		}
+		members := slices.Clone(group.members)
+		if err := r.queueTask(func() {
+			if err := r.drive.uploadPack(r.ctx, members, func(bytes int64) {
+				r.emitProgress(UploadExecutionProgress{Bytes: bytes})
+			}, r.markIntentReady); err != nil {
+				r.addFailure(err)
+			}
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *uploadRun) queueTask(task func()) error {
+	if err := r.taskPool.Submit(task); err != nil {
+		r.drive.abortAllNTEBundles(r.ctx, r.plan.Bundles)
+		return err
+	}
+	return nil
+}
+
+func (r *uploadRun) finalizeBundles() {
+	r.rollbackFailedBundles()
+	for bundleID, bundle := range r.plan.Bundles {
+		if _, failed := r.failedBundles[bundleID]; failed {
+			continue
+		}
+		members := make([]FinalUploadFile, 0, len(bundle.MemberClientIDs))
+		complete := true
+		for _, clientID := range bundle.MemberClientIDs {
+			file, exists := r.filesByID[clientID]
+			_, isStaged := r.staged[clientID]
+			if !exists || !isStaged {
+				complete = false
+			}
+			if exists {
+				members = append(members, file)
+			}
+		}
+		if !complete || len(members) != len(bundle.MemberClientIDs) {
+			name := bundleID
+			if len(members) > 0 {
+				name = members[0].Name
+			}
+			r.failTargets(
+				&UploadV2Error{Code: "nte_bundle_incomplete", Message: name + ": nte_bundle_incomplete"},
+				members,
+			)
+			continue
+		}
+		if err := r.drive.completeNTEBundle(r.ctx, bundle); err != nil {
+			r.failTargets(err, members)
+			continue
+		}
+		for _, file := range members {
+			r.emitProgress(UploadExecutionProgress{FileID: file.FID})
+		}
+	}
+	r.rollbackFailedBundles()
+}
+
+func (r *uploadRun) rollbackFailedBundles() {
+	for bundleID := range r.failedBundles {
+		if _, rolledBack := r.rolledBackBundles[bundleID]; rolledBack {
+			continue
+		}
+		r.rolledBackBundles[bundleID] = struct{}{}
+		if credited := r.bundleCredits[bundleID]; credited > 0 {
+			r.emitProgress(UploadExecutionProgress{Bytes: -credited})
+		}
+	}
+}
+
+func (r *uploadRun) emitProgress(progress UploadExecutionProgress) {
+	if r.onProgress == nil {
+		return
+	}
+	r.progressMu.Lock()
+	r.onProgress(progress)
+	r.progressMu.Unlock()
+}
+
+func (r *uploadRun) report(file FinalUploadFile, bytes int64, deduplicated bool) {
+	if bundleID := r.bundleByClientID[file.FID]; bundleID != "" {
+		r.stateMu.Lock()
+		r.bundleCredits[bundleID] += bytes
+		r.stateMu.Unlock()
+	}
+	r.emitProgress(UploadExecutionProgress{Bytes: bytes, IsServerDeduplicated: deduplicated})
+}
+
+func (r *uploadRun) markReady(file FinalUploadFile, bytes int64, deduplicated bool) {
+	if r.bundleByClientID[file.FID] != "" {
+		r.stateMu.Lock()
+		r.staged[file.FID] = struct{}{}
+		r.stateMu.Unlock()
+		r.report(file, bytes, deduplicated)
+		return
+	}
+	r.emitProgress(UploadExecutionProgress{Bytes: bytes, FileID: file.FID, IsServerDeduplicated: deduplicated})
+}
+
+func (r *uploadRun) markIntentReady(source FinalUploadFile, copies []FinalUploadFile) {
+	r.markReady(source, 0, false)
+	for _, file := range copies {
+		r.markReady(file, file.Size, true)
+	}
+}
+
+func (r *uploadRun) addFailure(failure error) {
+	r.stateMu.Lock()
+	r.failures = append(r.failures, failure)
+	r.stateMu.Unlock()
+}
+
+func (r *uploadRun) isBundleFailed(bundleID string) bool {
+	r.stateMu.Lock()
+	_, failed := r.failedBundles[bundleID]
+	r.stateMu.Unlock()
+	return failed
+}
+
+func (r *uploadRun) failTargets(failure error, targets []FinalUploadFile) {
+	bundleIDs := make(map[string]struct{})
+	hasNonBundle := false
+	for _, file := range targets {
+		bundleID := r.bundleByClientID[file.FID]
+		if bundleID == "" {
+			hasNonBundle = true
+			continue
+		}
+		bundleIDs[bundleID] = struct{}{}
+	}
+	newlyFailed := make([]string, 0, len(bundleIDs))
+	r.stateMu.Lock()
+	if hasNonBundle || len(bundleIDs) == 0 {
+		r.failures = append(r.failures, failure)
+	}
+	for bundleID := range bundleIDs {
+		if _, failed := r.failedBundles[bundleID]; failed {
+			continue
+		}
+		r.failedBundles[bundleID] = struct{}{}
+		r.failures = append(r.failures, failure)
+		newlyFailed = append(newlyFailed, bundleID)
+	}
+	r.stateMu.Unlock()
+	for _, bundleID := range newlyFailed {
+		if cancel := r.bundleCancels[bundleID]; cancel != nil {
+			cancel()
+		}
+		r.abortBundle(bundleID, failure)
+	}
+}
+
+func (r *uploadRun) abortBundle(bundleID string, cause error) {
+	bundle, ok := r.plan.Bundles[bundleID]
+	if !ok {
+		return
+	}
+	abortCtx, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), 30*time.Second)
+	defer cancel()
+	if err := r.drive.abortNTEBundle(abortCtx, bundle); err != nil {
+		_ = infra.ReportError(r.drive.log, err, "Drive", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "upload", Stage: "bundle-abort",
+			Fields: map[string]any{"bundleId": bundleID, "primaryError": cause.Error()},
+		})
+	}
+}
+
+func (r *uploadRun) targetContext(targets []FinalUploadFile) context.Context {
+	bundleID := ""
+	for _, target := range targets {
+		current := r.bundleByClientID[target.FID]
+		if current == "" || (bundleID != "" && current != bundleID) {
+			return r.ctx
+		}
+		bundleID = current
+	}
+	if bundleCtx := r.bundleContexts[bundleID]; bundleCtx != nil {
+		return bundleCtx
+	}
+	return r.ctx
+}
+
 func redistributeUploadFiles(files []FinalUploadFile) []FinalUploadFile {
 	const largeThreshold = 50 * 1024 * 1024
 	large := make([]FinalUploadFile, 0)
@@ -47,422 +567,6 @@ func redistributeUploadFiles(files []FinalUploadFile) []FinalUploadFile {
 		}
 	}
 	return out
-}
-
-func (d *Drive) executeUploadPlanV2(
-	ctx context.Context,
-	files []FinalUploadFile,
-	plan UploadPlan,
-	concurrency int,
-	onProgress func(UploadExecutionProgress),
-) error {
-	if d == nil || d.http == nil {
-		return errDriveHTTPUnconfigured
-	}
-	rules, err := d.UploadRules(ctx)
-	if err != nil {
-		return err
-	}
-	filesByID := make(map[string]FinalUploadFile, len(files))
-	for _, file := range files {
-		filesByID[file.FID] = file
-	}
-	bundleByClientID := make(map[string]string)
-	for bundleID, bundle := range plan.Bundles {
-		for _, clientID := range bundle.MemberClientIDs {
-			bundleByClientID[clientID] = bundleID
-		}
-	}
-	for _, item := range plan.Items {
-		if item.BundleID != "" {
-			bundleByClientID[item.ClientID] = item.BundleID
-		}
-	}
-
-	pendingByIntent := make(map[string][]FinalUploadFile)
-	intentOrder := make([]string, 0)
-	returned := make(map[string]struct{}, len(plan.Items))
-	rejected := make([]UploadPlanItem, 0)
-	staged := make(map[string]struct{})
-	bundleCredits := make(map[string]int64)
-	failedBundles := make(map[string]struct{})
-	failures := make([]error, 0)
-	var stateMu sync.Mutex
-	var progressMu sync.Mutex
-	bundleCancels := make(map[string]context.CancelFunc, len(plan.Bundles))
-	bundleContexts := make(map[string]context.Context, len(plan.Bundles))
-	for bundleID := range plan.Bundles {
-		bundleContexts[bundleID], bundleCancels[bundleID] = context.WithCancel(ctx)
-	}
-	defer func() {
-		for _, cancel := range bundleCancels {
-			cancel()
-		}
-	}()
-
-	emitProgress := func(progress UploadExecutionProgress) {
-		if onProgress == nil {
-			return
-		}
-		progressMu.Lock()
-		onProgress(progress)
-		progressMu.Unlock()
-	}
-	addFailure := func(failure error) {
-		stateMu.Lock()
-		failures = append(failures, failure)
-		stateMu.Unlock()
-	}
-	isBundleFailed := func(bundleID string) bool {
-		stateMu.Lock()
-		_, failed := failedBundles[bundleID]
-		stateMu.Unlock()
-		return failed
-	}
-
-	report := func(file FinalUploadFile, bytes int64, deduplicated bool) {
-		if bundleID := bundleByClientID[file.FID]; bundleID != "" {
-			stateMu.Lock()
-			bundleCredits[bundleID] += bytes
-			stateMu.Unlock()
-		}
-		emitProgress(UploadExecutionProgress{Bytes: bytes, IsServerDeduplicated: deduplicated})
-	}
-	markReady := func(file FinalUploadFile, bytes int64, deduplicated bool) {
-		if bundleByClientID[file.FID] != "" {
-			stateMu.Lock()
-			staged[file.FID] = struct{}{}
-			stateMu.Unlock()
-			report(file, bytes, deduplicated)
-			return
-		}
-		emitProgress(UploadExecutionProgress{Bytes: bytes, FileID: file.FID, IsServerDeduplicated: deduplicated})
-	}
-	markIntentReady := func(source FinalUploadFile, copies []FinalUploadFile) {
-		markReady(source, 0, false)
-		for _, file := range copies {
-			markReady(file, file.Size, true)
-		}
-	}
-	abortBundle := func(bundleID string, cause error) {
-		bundle, ok := plan.Bundles[bundleID]
-		if !ok {
-			return
-		}
-		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-		if err := d.abortNTEBundle(abortCtx, bundle); err != nil {
-			_ = infra.ReportError(d.log, err, "Drive", infra.Diagnostic{
-				Severity: infra.DiagnosticError, Operation: "upload", Stage: "bundle-abort",
-				Fields: map[string]any{"bundleId": bundleID, "primaryError": cause.Error()},
-			})
-		}
-	}
-	failTargets := func(failure error, targets []FinalUploadFile) {
-		bundleIDs := make(map[string]struct{})
-		hasNonBundle := false
-		for _, file := range targets {
-			bundleID := bundleByClientID[file.FID]
-			if bundleID == "" {
-				hasNonBundle = true
-				continue
-			}
-			bundleIDs[bundleID] = struct{}{}
-		}
-		newlyFailed := make([]string, 0, len(bundleIDs))
-		stateMu.Lock()
-		if hasNonBundle || len(bundleIDs) == 0 {
-			failures = append(failures, failure)
-		}
-		for bundleID := range bundleIDs {
-			if _, failed := failedBundles[bundleID]; failed {
-				continue
-			}
-			failedBundles[bundleID] = struct{}{}
-			failures = append(failures, failure)
-			newlyFailed = append(newlyFailed, bundleID)
-		}
-		stateMu.Unlock()
-		for _, bundleID := range newlyFailed {
-			if cancel := bundleCancels[bundleID]; cancel != nil {
-				cancel()
-			}
-			abortBundle(bundleID, failure)
-		}
-	}
-	targetContext := func(targets []FinalUploadFile) context.Context {
-		bundleID := ""
-		for _, target := range targets {
-			current := bundleByClientID[target.FID]
-			if current == "" || (bundleID != "" && current != bundleID) {
-				return ctx
-			}
-			bundleID = current
-		}
-		if bundleCtx := bundleContexts[bundleID]; bundleCtx != nil {
-			return bundleCtx
-		}
-		return ctx
-	}
-
-	for _, item := range plan.Items {
-		returned[item.ClientID] = struct{}{}
-		file, ok := filesByID[item.ClientID]
-		if !ok {
-			continue
-		}
-		switch {
-		case item.Status == "created" || item.Status == "exists":
-			markReady(file, file.Size, true)
-		case item.Status == "pending" && item.IntentID != "":
-			if _, exists := pendingByIntent[item.IntentID]; !exists {
-				intentOrder = append(intentOrder, item.IntentID)
-			}
-			pendingByIntent[item.IntentID] = append(pendingByIntent[item.IntentID], file)
-		default:
-			rejected = append(rejected, item)
-		}
-	}
-	for _, file := range files {
-		if _, ok := returned[file.FID]; !ok {
-			rejected = append(
-				rejected,
-				UploadPlanItem{ClientID: file.FID, Status: "error", Reason: "upload_plan_item_missing"},
-			)
-		}
-	}
-	for _, item := range rejected {
-		file, ok := filesByID[item.ClientID]
-		if !ok {
-			continue
-		}
-		reason := item.Reason
-		if reason == "" {
-			reason = item.Status
-		}
-		failTargets(&UploadV2Error{Code: reason, Message: file.Name + ": " + reason}, []FinalUploadFile{file})
-	}
-
-	packed := make([]preparedUpload, 0, max(1, rules.Pack.MaxFiles))
-	var packedBytes int64
-	taskPool := newUploadTaskPool(ctx, concurrency)
-	defer func() { _ = taskPool.Close() }()
-	multipartSlots := make(chan struct{}, maxMultipartUploadConcurrency)
-	queueTask := func(task func()) error {
-		if err := taskPool.Submit(task); err != nil {
-			d.abortAllNTEBundles(ctx, plan.Bundles)
-			return err
-		}
-		return nil
-	}
-	flushPacked := func() error {
-		groups := partitionPackedUploads(packed, rules.Pack)
-		packed = make([]preparedUpload, 0, max(1, rules.Pack.MaxFiles))
-		packedBytes = 0
-		for _, group := range groups {
-			if len(group.members) == 1 {
-				member := group.members[0]
-				if err := queueTask(func() {
-					err := d.uploadPreparedDirect(
-						ctx,
-						member.upload,
-						member.source,
-						member.data,
-						member.compression,
-						func(bytes int64) {
-							report(member.source, bytes, false)
-						},
-					)
-					if err != nil {
-						addFailure(err)
-						return
-					}
-					markIntentReady(member.source, member.copies)
-				}); err != nil {
-					return err
-				}
-				continue
-			}
-			members := slices.Clone(group.members)
-			if err := queueTask(func() {
-				if err := d.uploadPack(ctx, members, func(bytes int64) {
-					emitProgress(UploadExecutionProgress{Bytes: bytes})
-				}, markIntentReady); err != nil {
-					addFailure(err)
-				}
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	for _, intentID := range intentOrder {
-		if err := ctx.Err(); err != nil {
-			d.abortAllNTEBundles(ctx, plan.Bundles)
-			return err
-		}
-		targets := pendingByIntent[intentID]
-		allFailedBundles := len(targets) > 0
-		allBundled := len(targets) > 0
-		for _, target := range targets {
-			bundleID := bundleByClientID[target.FID]
-			if bundleID == "" {
-				allBundled = false
-				allFailedBundles = false
-				continue
-			}
-			if !isBundleFailed(bundleID) {
-				allFailedBundles = false
-			}
-		}
-		if allFailedBundles {
-			continue
-		}
-		upload, ok := plan.Uploads[intentID]
-		if !ok {
-			if allBundled {
-				for _, file := range targets {
-					markReady(file, file.Size, true)
-				}
-				continue
-			}
-			failTargets(fmt.Errorf("upload intent missing for %s", targets[0].Name), targets)
-			continue
-		}
-		source := targets[0]
-		data, compression, useParts, err := prepareUploadRoute(source, upload, rules.MaxUploadBodyBytes)
-		if err != nil {
-			failTargets(err, targets)
-			continue
-		}
-		if useParts {
-			taskCtx := targetContext(targets)
-			if err := queueTask(func() {
-				select {
-				case multipartSlots <- struct{}{}:
-				case <-taskCtx.Done():
-					return
-				}
-				defer func() { <-multipartSlots }()
-				err := d.uploadParts(taskCtx, upload, source, rules, func(bytes int64) { report(source, bytes, false) })
-				if err != nil {
-					if taskCtx.Err() == nil || ctx.Err() != nil {
-						failTargets(err, targets)
-					}
-					return
-				}
-				markIntentReady(source, targets[1:])
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-		member := preparedUpload{
-			upload:       upload,
-			source:       source,
-			copies:       slices.Clone(targets[1:]),
-			data:         data,
-			compression:  compression,
-			payloadBytes: int64(len(data)),
-			logicalSize:  source.Size,
-		}
-		if allBundled {
-			taskCtx := targetContext(targets)
-			if err := queueTask(func() {
-				err := d.uploadPreparedDirect(
-					taskCtx,
-					upload,
-					source,
-					data,
-					compression,
-					func(bytes int64) { report(source, bytes, false) },
-				)
-				if err != nil {
-					if taskCtx.Err() == nil || ctx.Err() != nil {
-						failTargets(err, targets)
-					}
-					return
-				}
-				markIntentReady(source, targets[1:])
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-		packed = append(packed, member)
-		packedBytes += member.payloadBytes
-		if shouldFlushUploadPack(len(packed), packedBytes, rules.Pack) {
-			if err := flushPacked(); err != nil {
-				return err
-			}
-		}
-	}
-
-	if err := flushPacked(); err != nil {
-		return err
-	}
-	if err := taskPool.Close(); err != nil {
-		d.abortAllNTEBundles(ctx, plan.Bundles)
-		return err
-	}
-	rolledBackBundles := make(map[string]struct{}, len(plan.Bundles))
-	rollbackFailedBundles := func() {
-		for bundleID := range failedBundles {
-			if _, rolledBack := rolledBackBundles[bundleID]; rolledBack {
-				continue
-			}
-			rolledBackBundles[bundleID] = struct{}{}
-			if credited := bundleCredits[bundleID]; credited > 0 {
-				emitProgress(UploadExecutionProgress{Bytes: -credited})
-			}
-		}
-	}
-	rollbackFailedBundles()
-
-	for bundleID, bundle := range plan.Bundles {
-		if _, failed := failedBundles[bundleID]; failed {
-			continue
-		}
-		members := make([]FinalUploadFile, 0, len(bundle.MemberClientIDs))
-		complete := true
-		for _, clientID := range bundle.MemberClientIDs {
-			file, exists := filesByID[clientID]
-			_, isStaged := staged[clientID]
-			if !exists || !isStaged {
-				complete = false
-			}
-			if exists {
-				members = append(members, file)
-			}
-		}
-		if !complete || len(members) != len(bundle.MemberClientIDs) {
-			name := bundleID
-			if len(members) > 0 {
-				name = members[0].Name
-			}
-			failTargets(
-				&UploadV2Error{Code: "nte_bundle_incomplete", Message: name + ": nte_bundle_incomplete"},
-				members,
-			)
-			continue
-		}
-		if err := d.completeNTEBundle(ctx, bundle); err != nil {
-			failTargets(err, members)
-			continue
-		}
-		for _, file := range members {
-			emitProgress(UploadExecutionProgress{FileID: file.FID})
-		}
-	}
-	rollbackFailedBundles()
-	if err := ctx.Err(); err != nil {
-		d.abortAllNTEBundles(ctx, plan.Bundles)
-		return err
-	}
-	if len(failures) > 0 {
-		return errors.Join(failures...)
-	}
-	return nil
 }
 
 func shouldFlushUploadPack(files int, payloadBytes int64, pack UploadPackRules) bool {

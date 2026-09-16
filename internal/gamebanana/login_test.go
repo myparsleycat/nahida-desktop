@@ -668,6 +668,7 @@ func TestClassifyLoginErrorTransportFailures(t *testing.T) {
 type prefixCrypto struct{}
 
 func (prefixCrypto) EncryptString(value string) (string, error) { return "enc:" + value, nil }
+
 func (prefixCrypto) DecryptString(value string) (string, error) {
 	if !strings.HasPrefix(value, "enc:") {
 		return "", errors.New("not encrypted")

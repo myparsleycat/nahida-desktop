@@ -14,60 +14,77 @@ var (
 	visibilityVariableRe = regexp.MustCompile(`(?i)\$[a-z0-9_]+`)
 )
 
+// visibilityScan is what one pass over the sections tells us about how the menu
+// is rendered: which flags exist, which resets restore them, and which
+// command lists a render override can reach.
+type visibilityScan struct {
+	declared         map[string]bool
+	reset            map[string][]string
+	used             map[string]bool
+	commands         map[string][]string
+	positionSections []int
+	inputs           []string
+	visited          map[string]bool
+}
+
 // prepareVisibility reuses a frame-scoped render flag, or instruments existing
 // Position overrides without introducing competing hash registrations.
 func prepareVisibility(sections []MenuMakerSection) ([]MenuMakerSection, []string, string) {
-	declared := map[string]bool{}
-	reset := map[string][]string{}
-	used := map[string]bool{}
-	commands := map[string][]string{}
-	positions := []int{}
+	scan := scanVisibilitySections(sections)
+	if len(scan.inputs) > 0 {
+		return sections, visibilityInputConditions(sections, scan.inputs), ""
+	}
+	// Position binding may be delegated to an animation command list, or an
+	// existing active assignment may be missing its per-frame reset.
+	hooks := collectVisibilityHooks(sections, scan)
+	if len(scan.positionSections) == 0 && len(hooks) == 0 {
+		return sections, nil, ""
+	}
+
+	variable := "$nhd_menu_active"
+	for suffix := 2; scan.used[variable]; suffix++ {
+		variable = "$nhd_menu_active_" + strconv.Itoa(suffix)
+	}
+	insertVisibilityHooks(sections, scan.positionSections, hooks, variable)
+	return sections, []string{variable + " == 1"}, variable
+}
+
+// scanVisibilitySections strips stale markers and collects the render-flag
+// state of every section.
+func scanVisibilitySections(sections []MenuMakerSection) visibilityScan {
+	scan := visibilityScan{
+		declared: map[string]bool{},
+		reset:    map[string][]string{},
+		used:     map[string]bool{},
+		commands: map[string][]string{},
+	}
 	renderLines := []string{}
 	for index := range sections {
 		section := &sections[index]
-		lines := []string{}
+		kept := []string{}
 		for _, line := range section.Lines {
 			if !strings.HasSuffix(line, visibilityMarker) {
-				lines = append(lines, line)
+				kept = append(kept, line)
 			}
 		}
-		section.Lines = lines
+		section.Lines = kept
 		if section.Name == nil {
 			continue
 		}
 		name := strings.ToLower(*section.Name)
 		if name == "present" {
-			section.Lines = stripGeneratedPresent(section.Lines)
-			filtered := []string{}
-			for _, line := range section.Lines {
-				if !strings.EqualFold(stripComment(line), "post run = CommandListGuiActivateReset") {
-					filtered = append(filtered, line)
-				}
-			}
-			section.Lines = filtered
-			for _, scoped := range visibilityScopedLines(filtered) {
-				line := scoped.line
-				if strings.HasPrefix(strings.ToLower(line), "post ") {
-					if match := assignRe.FindStringSubmatch(
-						strings.TrimSpace(line[5:]),
-					); match != nil &&
-						match[2] == "0" {
-						variable := strings.ToLower(match[1])
-						reset[variable] = append(reset[variable], scoped.condition)
-					}
-				}
-			}
+			recordVisibilityResets(section, scan.reset)
 		}
 		hasHash := false
 		position := strings.Contains(name, "position")
 		for _, line := range section.Lines {
 			line = stripComment(line)
 			for _, variable := range visibilityVariableRe.FindAllString(line, -1) {
-				used[strings.ToLower(variable)] = true
+				scan.used[strings.ToLower(variable)] = true
 			}
 			if name == "constants" {
 				if match := visibilityGlobalRe.FindStringSubmatch(line); match != nil {
-					declared[strings.ToLower(match[1])] = true
+					scan.declared[strings.ToLower(match[1])] = true
 				}
 			}
 			hasHash = hasHash || visibilityHashRe.MatchString(line)
@@ -78,24 +95,56 @@ func prepareVisibility(sections []MenuMakerSection) ([]MenuMakerSection, []strin
 			}
 		}
 		if strings.HasPrefix(name, "commandlist") {
-			commands[name] = append(commands[name], section.Lines...)
+			scan.commands[name] = append(scan.commands[name], section.Lines...)
 		}
 		if strings.HasPrefix(name, "textureoverride") && hasHash {
 			renderLines = append(renderLines, section.Lines...)
 			if position {
-				positions = append(positions, index)
+				scan.positionSections = append(scan.positionSections, index)
 			}
 		}
 	}
+	scan.inputs, scan.visited = visibilityInputs(renderLines, scan)
+	return scan
+}
 
+// recordVisibilityResets keeps the branch predicates around frame resets,
+// including manager slot gates.
+func recordVisibilityResets(section *MenuMakerSection, reset map[string][]string) {
+	section.Lines = stripGeneratedPresent(section.Lines)
+	filtered := []string{}
+	for _, line := range section.Lines {
+		if !strings.EqualFold(stripComment(line), "post run = CommandListGuiActivateReset") {
+			filtered = append(filtered, line)
+		}
+	}
+	section.Lines = filtered
+	for _, scoped := range visibilityScopedLines(filtered) {
+		if !strings.HasPrefix(strings.ToLower(scoped.line), "post ") {
+			continue
+		}
+		match := assignRe.FindStringSubmatch(strings.TrimSpace(scoped.line[5:]))
+		if match == nil || match[2] != "0" {
+			continue
+		}
+		variable := strings.ToLower(match[1])
+		reset[variable] = append(reset[variable], scoped.condition)
+	}
+}
+
+// visibilityInputs walks the render lines, following `run = CommandList…` hops,
+// and returns the visibility inputs plus the command lists it reached. Lines
+// pulled in through a hop are scanned as well, which is why both results come
+// out of one traversal.
+func visibilityInputs(renderLines []string, scan visibilityScan) ([]string, map[string]bool) {
 	inputs := []string{}
 	visited := map[string]bool{}
 	for index := 0; index < len(renderLines); index++ {
 		line := stripComment(renderLines[index])
 		if match := assignRe.FindStringSubmatch(line); match != nil && match[2] == "1" {
 			variable := strings.ToLower(match[1])
-			if declared[variable] && len(reset[variable]) > 0 {
-				for _, condition := range reset[variable] {
+			if scan.declared[variable] && len(scan.reset[variable]) > 0 {
+				for _, condition := range scan.reset[variable] {
 					input := variable + " == 1"
 					if condition != "" {
 						input += " && (" + condition + ")"
@@ -108,50 +157,57 @@ func prepareVisibility(sections []MenuMakerSection) ([]MenuMakerSection, []strin
 			command := strings.ToLower(strings.TrimSpace(afterEquals(line)))
 			if !visited[command] {
 				visited[command] = true
-				renderLines = append(renderLines, commands[command]...)
+				renderLines = append(renderLines, scan.commands[command]...)
 			}
 		}
 	}
-	if len(inputs) > 0 {
-		conditions := []string{}
-		for _, input := range uniqueStrings(inputs) {
-			variable := strings.Fields(input)[0]
-			found := false
-			for _, section := range sections {
-				if section.Name == nil || !keyPrefixRe.MatchString(*section.Name) {
+	return inputs, visited
+}
+
+// visibilityInputConditions expands each input with the condition of every
+// key-prefixed section that reads the same variable.
+func visibilityInputConditions(sections []MenuMakerSection, inputs []string) []string {
+	conditions := []string{}
+	for _, input := range uniqueStrings(inputs) {
+		variable := strings.Fields(input)[0]
+		found := false
+		for _, section := range sections {
+			if section.Name == nil || !keyPrefixRe.MatchString(*section.Name) {
+				continue
+			}
+			for _, line := range section.Lines {
+				if !conditionAssignRe.MatchString(stripComment(line)) {
 					continue
 				}
-				for _, line := range section.Lines {
-					if !conditionAssignRe.MatchString(stripComment(line)) {
-						continue
-					}
-					condition := stripComment(afterEquals(line))
-					for _, token := range visibilityVariableRe.FindAllString(condition, -1) {
-						if strings.EqualFold(token, variable) {
-							conditions = append(conditions, "("+input+") && ("+condition+")")
-							found = true
-							break
-						}
+				condition := stripComment(afterEquals(line))
+				for _, token := range visibilityVariableRe.FindAllString(condition, -1) {
+					if strings.EqualFold(token, variable) {
+						conditions = append(conditions, "("+input+") && ("+condition+")")
+						found = true
+						break
 					}
 				}
 			}
-			if !found {
-				conditions = append(conditions, input)
-			}
 		}
-		return sections, uniqueStrings(conditions), ""
+		if !found {
+			conditions = append(conditions, input)
+		}
 	}
-	// Position binding may be delegated to an animation command list, or an
-	// existing active assignment may be missing its per-frame reset.
+	return uniqueStrings(conditions)
+}
+
+// collectVisibilityHooks finds the lines that need a per-frame visibility flag:
+// Position bindings and active-state assignments in eligible sections.
+func collectVisibilityHooks(sections []MenuMakerSection, scan visibilityScan) map[int][]int {
 	hooks := map[int][]int{}
 	for index, section := range sections {
 		if section.Name == nil {
 			continue
 		}
 		name := strings.ToLower(*section.Name)
-		eligible := visited[name]
-		for _, position := range positions {
-			eligible = eligible || position == index
+		eligible := scan.visited[name]
+		for _, positionSection := range scan.positionSections {
+			eligible = eligible || positionSection == index
 		}
 		if strings.HasPrefix(name, "textureoverride") {
 			for _, line := range section.Lines {
@@ -167,24 +223,20 @@ func prepareVisibility(sections []MenuMakerSection) ([]MenuMakerSection, []strin
 			if strings.EqualFold(strings.TrimSpace(key), "vb0") &&
 				strings.Contains(strings.ToLower(value), "position") {
 				hooks[index] = append(hooks[index], lineIndex)
-			} else if match := assignRe.FindStringSubmatch(
-				line,
-			); match != nil && match[2] == "1" &&
-				declared[strings.ToLower(match[1])] &&
+			} else if match := assignRe.FindStringSubmatch(line); match != nil && match[2] == "1" &&
+				scan.declared[strings.ToLower(match[1])] &&
 				strings.Contains(strings.ToLower(match[1]), "active") {
 				hooks[index] = append(hooks[index], lineIndex)
 			}
 		}
 	}
-	if len(positions) == 0 && len(hooks) == 0 {
-		return sections, nil, ""
-	}
+	return hooks
+}
 
-	variable := "$nhd_menu_active"
-	for suffix := 2; used[variable]; suffix++ {
-		variable = "$nhd_menu_active_" + strconv.Itoa(suffix)
-	}
-	for _, index := range positions {
+// insertVisibilityHooks anchors the visibility flag on sections that bind a
+// position but carry no assignment to hook onto.
+func insertVisibilityHooks(sections []MenuMakerSection, positionSections []int, hooks map[int][]int, variable string) {
+	for _, index := range positionSections {
 		if len(hooks[index]) > 0 {
 			continue
 		}
@@ -214,7 +266,6 @@ func prepareVisibility(sections []MenuMakerSection) ([]MenuMakerSection, []strin
 			)
 		}
 	}
-	return sections, []string{variable + " == 1"}, variable
 }
 
 type visibilityScopedLine struct {

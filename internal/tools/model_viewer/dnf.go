@@ -14,7 +14,8 @@ var (
 	modelViewerAliasRE     = regexp.MustCompile(`^\$(\w+)\s*=\s*(.+)$`)
 )
 
-func modelViewerDNFTrue() ModelViewerDNF  { return ModelViewerDNF{[]ModelViewerDNFClause{}} }
+func modelViewerDNFTrue() ModelViewerDNF { return ModelViewerDNF{[]ModelViewerDNFClause{}} }
+
 func modelViewerDNFFalse() ModelViewerDNF { return ModelViewerDNF{} }
 
 func modelViewerDNFIsTrue(dnf ModelViewerDNF) bool {
@@ -64,6 +65,16 @@ func modelViewerDNFIntersects(left, right ModelViewerDNF) bool {
 	return false
 }
 
+// modelViewerDNFClausesConflict reports whether two clauses about the same
+// variable contradict each other: two assignments with different values, or an
+// assignment and its negation.
+func modelViewerDNFClausesConflict(left, right ModelViewerDNFClause) bool {
+	if left.Negate != right.Negate {
+		return left.Value == right.Value
+	}
+	return !left.Negate && left.Value != right.Value
+}
+
 // Intersection only needs a contradiction check, not a materialized group.
 func modelViewerDNFGroupsCompatible(left, right []ModelViewerDNFClause) bool {
 	groups := [2][]ModelViewerDNFClause{left, right}
@@ -76,8 +87,7 @@ func modelViewerDNFGroupsCompatible(left, right []ModelViewerDNFClause) bool {
 					start = i + 1
 				}
 				for _, other := range groups[gj][start:] {
-					if key == modelViewerNormalizeKey(other.Var) &&
-						(!clause.Negate && !other.Negate && clause.Value != other.Value || clause.Negate != other.Negate && clause.Value == other.Value) {
+					if key == modelViewerNormalizeKey(other.Var) && modelViewerDNFClausesConflict(clause, other) {
 						return false
 					}
 				}
@@ -358,8 +368,7 @@ func mergeModelViewerDNFGroup(left, right []ModelViewerDNFClause) ([]ModelViewer
 						duplicate = true
 						break
 					}
-					if !previous.Negate && !clause.Negate ||
-						previous.Negate != clause.Negate && previous.Value == clause.Value {
+					if modelViewerDNFClausesConflict(previous, clause) {
 						return nil, false
 					}
 				}

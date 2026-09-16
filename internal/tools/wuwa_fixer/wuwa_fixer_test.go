@@ -287,9 +287,11 @@ type wuwaNotificationSettings struct {
 }
 
 func (s wuwaNotificationSettings) Get(context.Context, string) (any, error) { return s.value, s.err }
+
 func (wuwaNotificationSettings) GetBisectPreserveD3dx(context.Context) (bool, error) {
 	return false, nil
 }
+
 func (wuwaNotificationSettings) GetDisabledPrefixStyle(context.Context) (string, error) {
 	return "underscore", nil
 }

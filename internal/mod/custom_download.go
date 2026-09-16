@@ -61,7 +61,15 @@ func (m *Mod) DownloadFromURL(ctx context.Context, rawURL, groupPath string) (st
 		head.finalURL,
 		size,
 		func(runCtx context.Context, transfers *transfer.Transfer) error {
-			return m.runGroupDownload(runCtx, transfers, pid, head, savePath, stagingPath, groupPath, suggested)
+			return m.runGroupDownload(runCtx, transfers, downloadTarget{
+				pid:            pid,
+				head:           head,
+				downloadPath:   savePath,
+				stagingPath:    stagingPath,
+				destinationDir: groupPath,
+				suggestedName:  suggested,
+				finalName:      suggested,
+			})
 		},
 	); err != nil {
 		return "", err
@@ -125,18 +133,15 @@ func (m *Mod) DownloadGameBananaFile(ctx context.Context, props GameBananaDownlo
 		head.finalURL,
 		size,
 		func(runCtx context.Context, transfers *transfer.Transfer) error {
-			return m.runGameBananaDownload(
-				runCtx,
-				transfers,
-				pid,
-				head,
-				payload,
-				stagingPath,
-				stagedDownloadPath,
-				destination,
-				suggested,
-				finalName,
-			)
+			return m.runGameBananaDownload(runCtx, transfers, payload, downloadTarget{
+				pid:            pid,
+				head:           head,
+				downloadPath:   stagedDownloadPath,
+				stagingPath:    stagingPath,
+				destinationDir: destination,
+				suggestedName:  suggested,
+				finalName:      finalName,
+			})
 		},
 	); err != nil {
 		return "", err
@@ -178,17 +183,15 @@ func (m *Mod) HuiDownload(ctx context.Context, title, fileURL string) (string, e
 		fileURL,
 		size,
 		func(runCtx context.Context, transfers *transfer.Transfer) error {
-			return m.runHuiCustomDownload(
-				runCtx,
-				transfers,
-				pid,
-				head,
-				stagingPath,
-				stagedDownloadPath,
-				destination,
-				sanitized,
-				finalName,
-			)
+			return m.runHuiCustomDownload(runCtx, transfers, downloadTarget{
+				pid:            pid,
+				head:           head,
+				downloadPath:   stagedDownloadPath,
+				stagingPath:    stagingPath,
+				destinationDir: destination,
+				suggestedName:  sanitized,
+				finalName:      finalName,
+			})
 		},
 	); err != nil {
 		return "", err
@@ -303,60 +306,73 @@ func (m *Mod) queueDownload(
 	})
 }
 
+// downloadTarget carries the state of one custom download run: the transfer
+// record, the response metadata, and the local paths and names the run writes
+// to and reports with.
+type downloadTarget struct {
+	pid            string
+	head           downloadHead
+	downloadPath   string
+	stagingPath    string
+	destinationDir string
+	suggestedName  string
+	finalName      string
+}
+
 func (m *Mod) runGroupDownload(
 	ctx context.Context,
 	transfers *transfer.Transfer,
-	pid string,
-	head downloadHead,
-	savePath, stagingPath, groupPath, suggested string,
+	target downloadTarget,
 ) error {
 	progress := transfer.StatusProgress
-	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
+	_ = transfers.Update(target.pid, transfer.Updates{Status: &progress})
 	defer func() {
-		m.reportDownloadStep(os.RemoveAll(savePath), pid, "cleanup-download", savePath)
-		m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath)
+		m.reportDownloadStep(os.RemoveAll(target.downloadPath), target.pid, "cleanup-download", target.downloadPath)
+		m.reportDownloadStep(os.RemoveAll(target.stagingPath), target.pid, "cleanup-staging", target.stagingPath)
 	}()
 	downloaded := int64(0)
-	if err := m.downloadFileTo(ctx, head, savePath, pid, "custom", func(bytes int64) {
+	if err := m.downloadFileTo(ctx, target.head, target.downloadPath, target.pid, "custom", func(bytes int64) {
 		downloaded += bytes
 		now := downloaded
-		_ = transfers.Update(pid, transfer.Updates{TransferredSize: &now})
+		_ = transfers.Update(target.pid, transfer.Updates{TransferredSize: &now})
 	}); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
-	html, err := isHTMLResponseOrContent(head.header, savePath)
+	html, err := isHTMLResponseOrContent(target.head.header, target.downloadPath)
 	if err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
 	if html {
 		return m.finishDownloadError(
 			ctx,
 			transfers,
-			pid,
+			target.pid,
 			errors.New("DOWNLOAD_URL_HTML_PAGE"),
 			"CustomDownloader:downloadToGroup",
 		)
 	}
-	if err := os.MkdirAll(stagingPath, 0o755); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+	if err := os.MkdirAll(target.stagingPath, 0o755); err != nil {
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
-	shouldExtract := isArchiveByResponseOrContent(ctx, head.header, suggested, savePath, m.archive)
-	extractedPath := filepath.Join(stagingPath, suggested)
+	shouldExtract := isArchiveByResponseOrContent(
+		ctx, target.head.header, target.suggestedName, target.downloadPath, m.archive,
+	)
+	extractedPath := filepath.Join(target.stagingPath, target.suggestedName)
 	if shouldExtract {
-		extracted, extractErr := m.extractDownloadedArchive(ctx, savePath, stagingPath)
+		extracted, extractErr := m.extractDownloadedArchive(ctx, target.downloadPath, target.stagingPath)
 		if extractErr != nil {
-			return m.finishDownloadError(ctx, transfers, pid, extractErr, "CustomDownloader:downloadToGroup")
+			return m.finishDownloadError(ctx, transfers, target.pid, extractErr, "CustomDownloader:downloadToGroup")
 		}
 		extractedPath = extracted
-	} else if err := movePathOverwrite(savePath, extractedPath); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+	} else if err := movePathOverwrite(target.downloadPath, extractedPath); err != nil {
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
-	entries, readErr := os.ReadDir(stagingPath)
+	entries, readErr := os.ReadDir(target.stagingPath)
 	if _, statErr := os.Stat(extractedPath); statErr != nil || len(entries) == 0 {
 		return m.finishDownloadError(
 			ctx,
 			transfers,
-			pid,
+			target.pid,
 			infra.WithCause(
 				errors.New("downloaded file did not produce staged content"),
 				errors.Join(readErr, statErr),
@@ -364,9 +380,9 @@ func (m *Mod) runGroupDownload(
 			"CustomDownloader:downloadToGroup",
 		)
 	}
-	finalized, err := finalizeStagedDownload(stagingPath, groupPath)
+	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
 	if err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "CustomDownloader:downloadToGroup")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
 	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, map[string]any{
 		"source": "mod", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
@@ -374,44 +390,56 @@ func (m *Mod) runGroupDownload(
 		return m.finishDownloadError(
 			ctx,
 			transfers,
-			pid,
+			target.pid,
 			infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})),
 			"CustomDownloader:downloadToGroup",
 		)
 	}
-	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", groupPath)
-	return m.finishDownloadOK(transfers, pid, head, downloaded, groupPath, suggested, finalized.DestinationPaths)
+	m.reportDownloadStep(finalized.Commit(), target.pid, "commit-cleanup", target.destinationDir)
+	return m.finishDownloadOK(
+		transfers,
+		target.pid,
+		target.head,
+		downloaded,
+		target.destinationDir,
+		target.finalName,
+		finalized.DestinationPaths,
+	)
 }
 
 func (m *Mod) runGameBananaDownload(
 	ctx context.Context,
 	transfers *transfer.Transfer,
-	pid string,
-	head downloadHead,
 	payload gamebanana.DownloadFilePayload,
-	stagingPath, stagedDownloadPath, destination, suggested, finalName string,
+	target downloadTarget,
 ) error {
 	progress := transfer.StatusProgress
-	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
-	m.reportDownloadStep(os.MkdirAll(stagingPath, 0o755), pid, "prepare-staging", stagingPath)
-	defer func() { m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath) }()
+	_ = transfers.Update(target.pid, transfer.Updates{Status: &progress})
+	m.reportDownloadStep(os.MkdirAll(target.stagingPath, 0o755), target.pid, "prepare-staging", target.stagingPath)
+	defer func() {
+		m.reportDownloadStep(os.RemoveAll(target.stagingPath), target.pid, "cleanup-staging", target.stagingPath)
+	}()
 	downloaded := int64(0)
-	if err := m.downloadFileTo(ctx, head, stagedDownloadPath, pid, "gamebanana", func(bytes int64) {
+	if err := m.downloadFileTo(ctx, target.head, target.downloadPath, target.pid, "gamebanana", func(bytes int64) {
 		downloaded += bytes
 		now := downloaded
-		_ = transfers.Update(pid, transfer.Updates{TransferredSize: &now})
+		_ = transfers.Update(target.pid, transfer.Updates{TransferredSize: &now})
 	}); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 	}
-	stagedPath := stagedDownloadPath
-	if isArchiveByResponseOrContent(ctx, head.header, suggested, stagedDownloadPath, m.archive) {
-		extracted, err := m.extractGBArchive(ctx, stagedDownloadPath)
+	stagedPath := target.downloadPath
+	if isArchiveByResponseOrContent(
+		ctx, target.head.header, target.suggestedName, target.downloadPath, m.archive,
+	) {
+		extracted, err := m.extractGBArchive(ctx, target.downloadPath)
 		if err != nil {
-			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 		}
-		renamed, err := applySelectedExtractedName(extracted, stagingPath, finalName, suggested, m.sanitizeName)
+		renamed, err := applySelectedExtractedName(
+			extracted, target.stagingPath, target.finalName, target.suggestedName, m.sanitizeName,
+		)
 		if err != nil {
-			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 		}
 		stagedPath = renamed
 	}
@@ -422,16 +450,16 @@ func (m *Mod) runGameBananaDownload(
 			ctx,
 			previewHead,
 			previewPath,
-			pid+":preview",
+			target.pid+":preview",
 			"gamebanana-preview",
 			nil,
 		); err != nil {
-			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 		}
 	}
-	finalized, err := finalizeStagedDownload(stagingPath, destination)
+	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
 	if err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB:context")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 	}
 	metadata := map[string]any{
 		"source": "gamebanana", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
@@ -443,57 +471,66 @@ func (m *Mod) runGameBananaDownload(
 		return m.finishDownloadError(
 			ctx,
 			transfers,
-			pid,
+			target.pid,
 			infra.WithCause(err, infra.AnnotateError(finalized.Restore(), infra.Diagnostic{Stage: "rollback"})),
 			"GameBanana:downloadFromGB:context",
 		)
 	}
-	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", destination)
-	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
+	m.reportDownloadStep(finalized.Commit(), target.pid, "commit-cleanup", target.destinationDir)
+	return m.finishDownloadOK(
+		transfers,
+		target.pid,
+		target.head,
+		downloaded,
+		target.destinationDir,
+		target.finalName,
+		finalized.DestinationPaths,
+	)
 }
 
 func (m *Mod) runHuiCustomDownload(
 	ctx context.Context,
 	transfers *transfer.Transfer,
-	pid string,
-	head downloadHead,
-	stagingPath, stagedDownloadPath, destination, originalTitle, finalName string,
+	target downloadTarget,
 ) error {
 	progress := transfer.StatusProgress
-	_ = transfers.Update(pid, transfer.Updates{Status: &progress})
-	m.reportDownloadStep(os.MkdirAll(stagingPath, 0o755), pid, "prepare-staging", stagingPath)
-	defer func() { m.reportDownloadStep(os.RemoveAll(stagingPath), pid, "cleanup-staging", stagingPath) }()
+	_ = transfers.Update(target.pid, transfer.Updates{Status: &progress})
+	m.reportDownloadStep(os.MkdirAll(target.stagingPath, 0o755), target.pid, "prepare-staging", target.stagingPath)
+	defer func() {
+		m.reportDownloadStep(os.RemoveAll(target.stagingPath), target.pid, "cleanup-staging", target.stagingPath)
+	}()
 	downloaded := int64(0)
-	if err := m.downloadFileTo(ctx, head, stagedDownloadPath, pid, "hui", func(bytes int64) {
+	if err := m.downloadFileTo(ctx, target.head, target.downloadPath, target.pid, "hui", func(bytes int64) {
 		downloaded += bytes
 		now := downloaded
-		_ = transfers.Update(pid, transfer.Updates{TransferredSize: &now})
+		_ = transfers.Update(target.pid, transfer.Updates{TransferredSize: &now})
 	}); err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
 	}
-	name := parseDownloadFileName(head.finalURL, m.sanitizeName, head.header.Get("Content-Disposition"))
-	if isArchiveByResponseOrContent(ctx, head.header, name, stagedDownloadPath, m.archive) {
-		extracted, err := m.archive.Extract(ctx, stagedDownloadPath, stagingPath, infra.ExtractOptions{}, nil)
+	name := parseDownloadFileName(target.head.finalURL, m.sanitizeName, target.head.header.Get("Content-Disposition"))
+	if isArchiveByResponseOrContent(ctx, target.head.header, name, target.downloadPath, m.archive) {
+		extracted, err := m.archive.Extract(
+			ctx, target.downloadPath, target.stagingPath, infra.ExtractOptions{}, nil,
+		)
 		if err != nil {
-			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
+			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
 		}
 		if _, err := applySelectedExtractedName(
-			extracted,
-			stagingPath,
-			finalName,
-			originalTitle,
-			m.sanitizeName,
+			extracted, target.stagingPath, target.finalName, target.suggestedName, m.sanitizeName,
 		); err != nil {
-			return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
+			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
 		}
-		m.reportDownloadStep(os.Remove(stagedDownloadPath), pid, "cleanup-archive", stagedDownloadPath)
+		m.reportDownloadStep(os.Remove(target.downloadPath), target.pid, "cleanup-archive", target.downloadPath)
 	}
-	finalized, err := finalizeStagedDownload(stagingPath, destination)
+	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
 	if err != nil {
-		return m.finishDownloadError(ctx, transfers, pid, err, "GameBanana:downloadFromGB")
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
 	}
-	m.reportDownloadStep(finalized.Commit(), pid, "commit-cleanup", destination)
-	return m.finishDownloadOK(transfers, pid, head, downloaded, destination, finalName, finalized.DestinationPaths)
+	m.reportDownloadStep(finalized.Commit(), target.pid, "commit-cleanup", target.destinationDir)
+	return m.finishDownloadOK(
+		transfers, target.pid, target.head, downloaded, target.destinationDir, target.finalName,
+		finalized.DestinationPaths,
+	)
 }
 
 func (m *Mod) downloadFileTo(

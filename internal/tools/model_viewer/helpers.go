@@ -2,16 +2,9 @@ package modelviewer
 
 import (
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
-
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }
 
 type modINISection struct {
 	Header string
@@ -56,12 +49,6 @@ func parseModINI(text string) []modINISection {
 	return sections
 }
 
-func samePathFold(left, right string) bool {
-	leftAbs, _ := filepath.Abs(left)
-	rightAbs, _ := filepath.Abs(right)
-	return strings.EqualFold(filepath.Clean(leftAbs), filepath.Clean(rightAbs))
-}
-
 func sectionValue(lines []string, key string) string {
 	for index := len(lines) - 1; index >= 0; index-- {
 		separator := strings.Index(lines[index], "=")
@@ -71,8 +58,6 @@ func sectionValue(lines []string, key string) string {
 	}
 	return ""
 }
-
-func stringPointer(value string) *string { return &value }
 
 func regularFile(path string) bool {
 	info, err := os.Stat(path)

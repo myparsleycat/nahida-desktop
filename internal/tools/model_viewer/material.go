@@ -303,7 +303,8 @@ func resolveModelViewerAssignments(
 		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
 		if strings.EqualFold(key, "run") {
 			if nested, exists := lookup[modelViewerNormalizeKey(value)]; exists {
-				for nestedKey, nestedValue := range resolveModelViewerAssignments(nested, targets, lookup, variables, visited) {
+				resolved := resolveModelViewerAssignments(nested, targets, lookup, variables, visited)
+				for nestedKey, nestedValue := range resolved {
 					assignments[nestedKey] = nestedValue
 				}
 			}

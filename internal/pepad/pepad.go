@@ -147,6 +147,8 @@ func patchesEqual(a, b []patch) bool {
 	return true
 }
 
-func IsInvalidPE(err error) bool    { return errors.Is(err, ErrInvalidPE) }
-func IsUnsupported(err error) bool  { return errors.Is(err, ErrUnsupported) }
+func IsInvalidPE(err error) bool { return errors.Is(err, ErrInvalidPE) }
+
+func IsUnsupported(err error) bool { return errors.Is(err, ErrUnsupported) }
+
 func IsAuthenticode(err error) bool { return errors.Is(err, ErrAuthenticode) }

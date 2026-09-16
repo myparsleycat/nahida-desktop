@@ -22,7 +22,9 @@ type solidImage struct {
 }
 
 func (s solidImage) ColorModel() color.Model { return color.NRGBAModel }
+
 func (s solidImage) Bounds() image.Rectangle { return image.Rect(0, 0, s.w, s.h) }
+
 func (s solidImage) At(int, int) color.Color { return s.c }
 
 func writeViewerGeometry(t *testing.T, dir string) {

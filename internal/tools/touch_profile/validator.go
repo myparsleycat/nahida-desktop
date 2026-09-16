@@ -87,12 +87,12 @@ func validateTouchOutput(
 			}
 			params := resolveTouchJiggleParams(settings, draft.ObjectID)
 			next := touchSettingsFingerprint{
-				params.Radius,
-				params.Strength,
-				params.Falloff,
-				params.MaxOffset,
-				params.GrabDamping / defaultTouchJiggleParams.GrabDamping,
-				params.GrabSpring / defaultTouchJiggleParams.GrabSpring,
+				Radius:    params.Radius,
+				Strength:  params.Strength,
+				Falloff:   params.Falloff,
+				MaxOffset: params.MaxOffset,
+				Damping:   params.GrabDamping / defaultTouchJiggleParams.GrabDamping,
+				Spring:    params.GrabSpring / defaultTouchJiggleParams.GrabSpring,
 			}
 			if previous, ok := channels[zone.Channel]; ok && !sameTouchFingerprint(previous, next) {
 				id := draft.ComponentID

@@ -120,8 +120,7 @@ func collectModelViewerPackedShapeCandidates(
 			continue
 		}
 		for index, pass := range passes {
-			if pass.t50 == "" || pass.t51 == "" || pass.t52 != "" || pass.x88 == "" || pass.outputName == "" ||
-				pass.shader == "" {
+			if !pass.usableForPackedShape() {
 				continue
 			}
 			shader, shaderOK := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)

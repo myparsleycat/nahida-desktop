@@ -22,6 +22,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -241,7 +242,7 @@ func (t *Service) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus
 	if err := os.WriteFile(tempPath, body, 0o700); err != nil {
 		return WuwaFixerStatus{}, fmt.Errorf("write Wuwa Mod Fixer: %w", err)
 	}
-	if err := replaceAtomic(tempPath, finalPath); err != nil {
+	if err := platform.ReplaceAtomic(tempPath, finalPath); err != nil {
 		return WuwaFixerStatus{}, fmt.Errorf("install Wuwa Mod Fixer: %w", err)
 	}
 	if err := t.wuwaCleanupOldBinaries(finalPath); err != nil {
@@ -263,10 +264,10 @@ func (t *Service) WuwaFixerRun(ctx context.Context, modPath string, options Wuwa
 		return err
 	}
 	if !installed.Exists || installed.BinaryPath == nil {
-		return contractError("Wuwa Mod Fixer is not installed")
+		return infra.ContractError("Wuwa Mod Fixer is not installed")
 	}
 	if _, err := os.Stat(modPath); err != nil {
-		return infra.WithCause(contractError("Destination path does not exist"), err)
+		return infra.WithCause(infra.ContractError("Destination path does not exist"), err)
 	}
 	configPath, err := t.wuwaEnsureLatestConfig(ctx)
 	if err != nil {
@@ -358,7 +359,7 @@ func (t *Service) WuwaFixerRollbackToGroup(ctx context.Context, modPath, groupKe
 		}
 	}
 	if !found {
-		return contractError(fmt.Sprintf("Backup group not found: %s", groupKey))
+		return infra.ContractError(fmt.Sprintf("Backup group not found: %s", groupKey))
 	}
 	for originalPath, backup := range earliest {
 		info, statErr := os.Stat(backup.CurrentPath)
@@ -575,7 +576,7 @@ func (t *Service) wuwaLatestReleaseForInstall(ctx context.Context) (*wuwaLatestR
 	if err != nil {
 		return nil, err
 	}
-	return nil, contractError("Unable to fetch the latest Wuwa Mod Fixer release")
+	return nil, infra.ContractError("Unable to fetch the latest Wuwa Mod Fixer release")
 }
 
 func (t *Service) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
@@ -599,7 +600,7 @@ func (t *Service) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 	if err := os.WriteFile(tempPath, body, 0o600); err != nil {
 		return "", err
 	}
-	if err := replaceAtomic(tempPath, configPath); err != nil {
+	if err := platform.ReplaceAtomic(tempPath, configPath); err != nil {
 		return "", err
 	}
 	return configPath, nil
@@ -716,26 +717,26 @@ func (t *Service) wuwaRequireModPath(ctx context.Context, modPath string) error 
 	}
 	resolvedTarget, err := filepath.Abs(modPath)
 	if err != nil {
-		return infra.WithCause(contractError("Path is outside the managed mod folder"), err)
+		return infra.WithCause(infra.ContractError("Path is outside the managed mod folder"), err)
 	}
 	_, statErr := os.Stat(modPath)
 	if statErr == nil {
 		resolvedTarget, err = filepath.EvalSymlinks(modPath)
 		if err != nil {
-			return infra.WithCause(contractError("Path is outside the managed mod folder"), err)
+			return infra.WithCause(infra.ContractError("Path is outside the managed mod folder"), err)
 		}
 	}
 	for _, game := range games {
 		logicalRoot, resolveErr := filepath.Abs(game.ModFolderPath)
-		if statErr != nil && resolveErr == nil && sameOrChildPath(logicalRoot, resolvedTarget) {
-			return infra.WithCause(contractError("Destination path does not exist"), statErr)
+		if statErr != nil && resolveErr == nil && platform.SameOrChildPath(logicalRoot, resolvedTarget) {
+			return infra.WithCause(infra.ContractError("Destination path does not exist"), statErr)
 		}
 		resolvedRoot, resolveErr := filepath.EvalSymlinks(game.ModFolderPath)
-		if resolveErr == nil && sameOrChildPath(resolvedRoot, resolvedTarget) {
+		if resolveErr == nil && platform.SameOrChildPath(resolvedRoot, resolvedTarget) {
 			return nil
 		}
 	}
-	return contractError("Path is outside the managed mod folder")
+	return infra.ContractError("Path is outside the managed mod folder")
 }
 
 func (t *Service) wuwaToolDir() (string, error) {
@@ -881,7 +882,7 @@ func (t *Service) wuwaFetchBytes(
 
 func parseWuwaLatestRelease(payload wuwaReleaseResponse) (wuwaLatestReleaseCache, error) {
 	if payload.TagName == "" {
-		return wuwaLatestReleaseCache{}, contractError("Latest Wuwa Mod Fixer release is missing tag_name")
+		return wuwaLatestReleaseCache{}, infra.ContractError("Latest Wuwa Mod Fixer release is missing tag_name")
 	}
 	for _, asset := range payload.Assets {
 		if wuwaBinaryRE.MatchString(asset.Name) && asset.BrowserDownloadURL != "" {
@@ -895,14 +896,14 @@ func parseWuwaLatestRelease(payload wuwaReleaseResponse) (wuwaLatestReleaseCache
 			}, nil
 		}
 	}
-	return wuwaLatestReleaseCache{}, contractError(
+	return wuwaLatestReleaseCache{}, infra.ContractError(
 		"Latest Wuwa Mod Fixer release is missing a Windows executable asset",
 	)
 }
 
 func buildWuwaCLIArgs(modPath, configPath string, options WuwaFixerOptions) ([]string, error) {
 	if options.DerivedHashes && options.StableTexture {
-		return nil, contractError("Derived hashes and stable texture cannot be enabled together")
+		return nil, infra.ContractError("Derived hashes and stable texture cannot be enabled together")
 	}
 	if options.AeroFix == "" {
 		options.AeroFix = "none"
@@ -1003,7 +1004,7 @@ func copyRegularFile(source, target string) (returnErr error) {
 	if closeErr != nil {
 		return closeErr
 	}
-	return replaceAtomic(tempPath, target)
+	return platform.ReplaceAtomic(tempPath, target)
 }
 
 func verifyWuwaDigest(data []byte, digest *string) error {
@@ -1012,11 +1013,11 @@ func verifyWuwaDigest(data []byte, digest *string) error {
 	}
 	algorithm, expected, ok := strings.Cut(*digest, ":")
 	if !ok || !strings.EqualFold(algorithm, "sha256") || expected == "" {
-		return contractError("Unsupported Wuwa Mod Fixer digest format")
+		return infra.ContractError("Unsupported Wuwa Mod Fixer digest format")
 	}
 	sum := sha256.Sum256(data)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), expected) {
-		return contractError("Wuwa Mod Fixer download digest mismatch")
+		return infra.ContractError("Wuwa Mod Fixer download digest mismatch")
 	}
 	return nil
 }
@@ -1068,12 +1069,6 @@ func compareToolVersions(left, right string) int {
 		}
 	}
 	return 0
-}
-
-func sameOrChildPath(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
 }
 
 func wuwaRateLimited(state *GitHubRateState) bool {

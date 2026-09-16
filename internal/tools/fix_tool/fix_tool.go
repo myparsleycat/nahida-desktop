@@ -53,17 +53,17 @@ func (t *Service) SaveScript(ctx context.Context, inputPath string) error {
 		return err
 	}
 	if strings.TrimSpace(inputPath) == "" {
-		return contractError("Path is required")
+		return infra.ContractError("Path is required")
 	}
 	info, err := os.Stat(inputPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return infra.WithCause(contractError("File does not exist"), err)
+		return infra.WithCause(infra.ContractError("File does not exist"), err)
 	}
 	if err != nil {
 		return fmt.Errorf("stat script: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return contractError("Path is not a regular file")
+		return infra.ContractError("Path is not a regular file")
 	}
 
 	ext := strings.ToLower(filepath.Ext(inputPath))
@@ -74,7 +74,7 @@ func (t *Service) SaveScript(ctx context.Context, inputPath string) error {
 	case ".exe":
 		scriptType = db.ScriptTypeExec
 	default:
-		return contractError("Invalid file type (only .py or .exe allowed)")
+		return infra.ContractError("Invalid file type (only .py or .exe allowed)")
 	}
 
 	data, err := os.ReadFile(inputPath)
@@ -89,10 +89,10 @@ func (t *Service) SaveScript(ctx context.Context, inputPath string) error {
 	}
 	if existing != nil {
 		if existing.SHA256 == fileHash {
-			return contractError("Already exists same file")
+			return infra.ContractError("Already exists same file")
 		}
 		if existing.Name == name {
-			return contractError("Already exists same name")
+			return infra.ContractError("Already exists same name")
 		}
 	}
 
@@ -122,14 +122,14 @@ func (t *Service) DeleteScript(ctx context.Context, scriptID string) error {
 		return err
 	}
 	if script == nil {
-		return contractError("Script not found")
+		return infra.ContractError("Script not found")
 	}
 	usage, err := client.ScriptPresetItems.FindUsageByScriptID(ctx, scriptID)
 	if err != nil {
 		return err
 	}
 	if usage != nil {
-		return contractError(fmt.Sprintf("Script is used in a preset: %s", usage.PresetName))
+		return infra.ContractError(fmt.Sprintf("Script is used in a preset: %s", usage.PresetName))
 	}
 	return client.Scripts.Delete(ctx, scriptID)
 }
@@ -154,15 +154,15 @@ func (t *Service) CreatePreset(ctx context.Context, input CreateScriptPresetInpu
 	}
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
-		return contractError("Invalid preset name: name cannot be empty or only whitespace")
+		return infra.ContractError("Invalid preset name: name cannot be empty or only whitespace")
 	}
 	if len(input.ScriptIDs) == 0 {
-		return contractError("No scripts selected")
+		return infra.ContractError("No scripts selected")
 	}
 	if conflict, err := client.ScriptPresets.FindByName(ctx, name); err != nil {
 		return err
 	} else if conflict != nil {
-		return contractError("Preset with same name already exists")
+		return infra.ContractError("Preset with same name already exists")
 	}
 
 	seen := make(map[string]struct{}, len(input.ScriptIDs))
@@ -204,7 +204,7 @@ func (t *Service) DeletePreset(ctx context.Context, presetID string) error {
 		return err
 	}
 	if preset == nil {
-		return contractError("Preset not found")
+		return infra.ContractError("Preset not found")
 	}
 	return client.ScriptPresets.Delete(ctx, presetID)
 }
@@ -262,14 +262,14 @@ func (t *Service) RunScript(ctx context.Context, scriptID, destPath string) erro
 		return t.ReportRunError(err)
 	}
 	if script == nil {
-		return t.ReportRunError(contractError("Script not found"))
+		return t.ReportRunError(infra.ContractError("Script not found"))
 	}
 	if err := t.validateRunDestination(destPath); err != nil {
 		return t.ReportRunError(err)
 	}
 	if script.Type == db.ScriptTypePython && !t.IsPythonAvailable(runCtx) {
 		return t.ReportRunError(
-			contractError(
+			infra.ContractError(
 				"Python is required to run Python fix tools. Install Python and make sure the python command is available.",
 			),
 		)
@@ -295,10 +295,10 @@ func (t *Service) RunPreset(ctx context.Context, presetID, destPath string) erro
 		return t.ReportRunError(err)
 	}
 	if preset == nil {
-		return t.ReportRunError(contractError("Preset not found"))
+		return t.ReportRunError(infra.ContractError("Preset not found"))
 	}
 	if len(preset.Scripts) == 0 {
-		return t.ReportRunError(contractError("Preset has no scripts"))
+		return t.ReportRunError(infra.ContractError("Preset has no scripts"))
 	}
 	if err := t.validateRunDestination(destPath); err != nil {
 		return t.ReportRunError(err)
@@ -316,7 +316,7 @@ func (t *Service) RunPreset(ctx context.Context, presetID, destPath string) erro
 	}
 	if needsPython && !t.IsPythonAvailable(runCtx) {
 		return t.ReportRunError(
-			contractError(
+			infra.ContractError(
 				"Python is required to run Python fix tools. Install Python and make sure the python command is available.",
 			),
 		)
@@ -351,13 +351,13 @@ func (t *Service) ReportRunError(err error) error {
 func (t *Service) validateRunDestination(destPath string) error {
 	info, err := os.Stat(destPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return infra.WithCause(contractError("Destination path does not exist"), err)
+		return infra.WithCause(infra.ContractError("Destination path does not exist"), err)
 	}
 	if err != nil {
 		return fmt.Errorf("stat destination path: %w", err)
 	}
 	if !info.IsDir() {
-		return contractError("Destination path is not a directory")
+		return infra.ContractError("Destination path is not a directory")
 	}
 	return nil
 }

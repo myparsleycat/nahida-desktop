@@ -355,7 +355,9 @@ func textureRuntimeSpecForEngine(engine string) (textureRuntimeSpec, error) {
 	case "realcugan":
 		return realcuganSpec, nil
 	default:
-		return textureRuntimeSpec{}, contractError(fmt.Sprintf("Unsupported texture upscale engine '%s'.", engine))
+		return textureRuntimeSpec{}, infra.ContractError(
+			fmt.Sprintf("Unsupported texture upscale engine '%s'.", engine),
+		)
 	}
 }
 
@@ -554,6 +556,7 @@ func isRealcuganRuntimeInstalled(binaryPath, runtimeRoot string) bool {
 }
 
 func pathExists(path string) bool { _, err := os.Stat(path); return err == nil }
+
 func regularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()

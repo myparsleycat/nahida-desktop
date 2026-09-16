@@ -20,6 +20,7 @@ import (
 type passCrypto struct{}
 
 func (passCrypto) EncryptString(value string) (string, error) { return value, nil }
+
 func (passCrypto) DecryptString(value string) (string, error) { return value, nil }
 
 func TestSetManualRMCTokenValidatesAndPersistsOnlyRMC(t *testing.T) {

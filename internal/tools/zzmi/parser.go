@@ -423,7 +423,9 @@ func (p *literalParser) skipSpace() {
 }
 
 func isDigit(char byte) bool { return char >= '0' && char <= '9' }
+
 func isIdentifierStart(char byte) bool {
 	return char == '_' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z'
 }
+
 func isIdentifierPart(char byte) bool { return isIdentifierStart(char) || isDigit(char) }

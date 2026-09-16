@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -39,6 +41,12 @@ type modelViewerComputePass struct {
 	t50, t51, t52      string
 	shader, outputName string
 	equalities         []modelViewerStateEquality
+}
+
+// usableForPackedShape reports whether the pass binds the two buffers and the
+// phase texture a packed shape animation needs, without a third target buffer.
+func (p modelViewerComputePass) usableForPackedShape() bool {
+	return p.t50 != "" && p.t51 != "" && p.t52 == "" && p.x88 != "" && p.outputName != "" && p.shader != ""
 }
 
 type modelViewerKnownBoneKernel struct {
@@ -150,7 +158,7 @@ func detectModelViewerComputeAnimation(
 		pose.Stride = kernel.poseStride
 	}
 	if !baseOK || !blendOK || !poseOK || !outputRawOK || !outputEffectiveOK || outputRaw.Filename != "" ||
-		!samePathFold(outputEffective.Filename, base.Filename) ||
+		!platform.SamePathFold(outputEffective.Filename, base.Filename) ||
 		base.Stride != kernel.baseStride ||
 		blend.Stride != kernel.blendStride ||
 		pose.Stride != kernel.poseStride {
@@ -423,11 +431,17 @@ func modelViewerComputeSource(folder string, resource modelViewerResource) (Mode
 	return ModelViewerComputeBinarySource{ByteLength: info.Size(), Stride: resource.Stride, sourcePath: path}, true
 }
 
+func modelViewerMeshUsesFile(positionFile, filename string) bool {
+	if platform.SamePathFold(positionFile, filename) {
+		return true
+	}
+	return strings.EqualFold(filepath.Base(positionFile), filepath.Base(filename))
+}
+
 func modelViewerComputeMeshIDs(meshes []modelViewerDirectMesh, filename string) []string {
 	var output []string
 	for _, mesh := range meshes {
-		if mesh.geometry != nil &&
-			(samePathFold(mesh.positionFile, filename) || strings.EqualFold(filepath.Base(mesh.positionFile), filepath.Base(filename))) {
+		if mesh.geometry != nil && modelViewerMeshUsesFile(mesh.positionFile, filename) {
 			output = append(output, mesh.id)
 		}
 	}
@@ -456,7 +470,7 @@ func detectModelViewerKnownBonePass(
 			// matching the resolved preview output before committing to a kernel.
 			base, baseOK := resources[modelViewerNormalizeKey(pass.t50)]
 			output, outputOK := resources[modelViewerNormalizeKey(pass.outputName)]
-			if !baseOK || !outputOK || base.Filename == "" || !samePathFold(output.Filename, base.Filename) {
+			if !baseOK || !outputOK || base.Filename == "" || !platform.SamePathFold(output.Filename, base.Filename) {
 				continue
 			}
 			shader, ok := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
@@ -507,7 +521,7 @@ func detectModelViewerKnownShapePasses(
 			target, targetOK := resources[modelViewerNormalizeKey(pass.t51)]
 			variable, offset, expressionOK := parseModelViewerPhaseExpression(pass.x88)
 			if !baseOK || !targetOK || !expressionOK || passBase.Stride != base.Stride ||
-				!samePathFold(passBase.Filename, base.Filename) {
+				!platform.SamePathFold(passBase.Filename, base.Filename) {
 				continue
 			}
 			source, sourceOK := modelViewerComputeSource(root, target)
@@ -563,11 +577,11 @@ func modelViewerComputeOutputMatchesBase(
 	}
 	if resource, exists := resources[modelViewerNormalizeKey(outputName)]; exists &&
 		resource.Filename != "" &&
-		samePathFold(resource.Filename, baseFilename) {
+		platform.SamePathFold(resource.Filename, baseFilename) {
 		return true
 	}
 	resolved, ok := aliases.resolve(outputName)
-	return ok && resolved.Filename != "" && samePathFold(resolved.Filename, baseFilename)
+	return ok && resolved.Filename != "" && platform.SamePathFold(resolved.Filename, baseFilename)
 }
 
 func collectModelViewerReachableComputeSections(sections []modINISection) map[string]bool {

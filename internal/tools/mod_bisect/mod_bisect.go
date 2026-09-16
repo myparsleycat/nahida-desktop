@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -171,7 +172,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		t.bisect = nil
 		var message *string
 		if len(paths) > 0 {
-			message = stringPointer(bisectAllExcluded)
+			message = platform.StringPtr(bisectAllExcluded)
 		}
 		done := scanning
 		done.Status = BisectDone
@@ -262,7 +263,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 		} else {
 			session.currentBatch = []string{culprit}
 		}
-		session.finalBadPath = stringPointer(culprit)
+		session.finalBadPath = platform.StringPtr(culprit)
 		snapshot := snapshotFor(session, nil, BisectDone)
 		t.broadcastBisect(snapshot)
 		return snapshot, nil
@@ -277,7 +278,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 			t.logError(err, "ModBisect:d3dxFinalRestore")
 		}
 		t.bisect = nil
-		snapshot := snapshotFor(session, stringPointer(bisectInconclusive), BisectDone)
+		snapshot := snapshotFor(session, platform.StringPtr(bisectInconclusive), BisectDone)
 		t.broadcastBisect(snapshot)
 		return snapshot, nil
 	}
@@ -567,7 +568,8 @@ func scanEnabledINIs(root string) ([]string, error) {
 }
 
 func bisectPathIsHidden(relative string) bool {
-	for _, part := range strings.FieldsFunc(filepath.ToSlash(relative), func(r rune) bool { return r == '/' || r == '\\' }) {
+	isSeparator := func(r rune) bool { return r == '/' || r == '\\' }
+	for _, part := range strings.FieldsFunc(filepath.ToSlash(relative), isSeparator) {
 		if strings.HasPrefix(part, ".") {
 			return true
 		}
@@ -593,7 +595,7 @@ func isDisabledBisectRelative(relative string) bool {
 func resolveBisectExclude(root, input string) (string, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
-		return "", contractError(bisectExcludeEmpty)
+		return "", infra.ContractError(bisectExcludeEmpty)
 	}
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
@@ -609,13 +611,13 @@ func resolveBisectExclude(root, input string) (string, error) {
 	}
 	relative, err := filepath.Rel(rootAbs, inputAbs)
 	if err != nil || pathEscapes(relative) {
-		return "", infra.WithCause(contractError(bisectExcludeOutside), err)
+		return "", infra.WithCause(infra.ContractError(bisectExcludeOutside), err)
 	}
 	if relative == "." {
-		return "", contractError(bisectExcludeRoot)
+		return "", infra.ContractError(bisectExcludeRoot)
 	}
 	if _, err := os.Stat(inputAbs); errors.Is(err, os.ErrNotExist) {
-		return "", infra.WithCause(contractError(bisectExcludeMissing), err)
+		return "", infra.WithCause(infra.ContractError(bisectExcludeMissing), err)
 	} else if err != nil {
 		return "", err
 	}
@@ -629,7 +631,7 @@ func resolveBisectExclude(root, input string) (string, error) {
 	}
 	canonicalRel, err := filepath.Rel(canonicalRoot, canonicalInput)
 	if err != nil || pathEscapes(canonicalRel) {
-		return "", infra.WithCause(contractError(bisectExcludeOutside), err)
+		return "", infra.WithCause(infra.ContractError(bisectExcludeOutside), err)
 	}
 	return filepath.ToSlash(relative), nil
 }
@@ -800,8 +802,6 @@ func lowerPathSet(paths []string) map[string]struct{} {
 	}
 	return result
 }
-
-func stringPointer(value string) *string { return &value }
 
 func cloneStringPointer(value *string) *string {
 	if value == nil {

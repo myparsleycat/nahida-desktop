@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 type MergePackClassification struct {
@@ -127,7 +129,7 @@ func classifyMergePack(modPath string) (MergePackClassification, error) {
 		return scored[i].path < scored[j].path
 	})
 	primary := scored[0]
-	result.PrimaryIniPath = stringPointer(primary.path)
+	result.PrimaryIniPath = platform.StringPtr(primary.path)
 	result.Dialect = detectMergeDialect(primary.text)
 	result.Family = detectMergeFamily(primary.path, primary.text, allText.String())
 	result.Hashes = extractMergeHashes(primary.text)

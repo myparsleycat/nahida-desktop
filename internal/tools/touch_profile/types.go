@@ -265,3 +265,60 @@ var defaultTouchJiggleParams = TouchJiggleParams{
 	ReleaseSpring: 0.055, ReleaseKick: 1.18, MaxOffset: 0.065,
 	TargetFollow: 0.12, MouseYDirection: 1, MouseXDirection: 1,
 }
+
+type TouchProfileLoadInput struct {
+	ModPath string `json:"modPath"`
+}
+
+type TouchProfilePreviewInput struct {
+	SessionID   string `json:"sessionId"`
+	ComponentID string `json:"componentId"`
+}
+
+type TouchProfileAnalyzeInput struct {
+	SessionID       string                        `json:"sessionId"`
+	ComponentIDs    []string                      `json:"componentIds"`
+	Mode            *string                       `json:"mode,omitempty"`
+	BoneSelections  []TouchBoneComponentSelection `json:"boneSelections,omitempty"`
+	WeightThreshold *[2]float64                   `json:"weightThreshold,omitempty"`
+}
+
+type TouchProfileUpdateZoneSettingsInput struct {
+	SessionID   string            `json:"sessionId"`
+	ComponentID string            `json:"componentId"`
+	ZoneID      string            `json:"zoneId"`
+	Settings    TouchZoneSettings `json:"settings"`
+}
+
+type TouchProfileZoneSettingsChange struct {
+	ComponentID string            `json:"componentId"`
+	ZoneID      string            `json:"zoneId"`
+	Settings    TouchZoneSettings `json:"settings"`
+}
+
+type TouchProfileUpdateZoneSettingsBatchInput struct {
+	SessionID string                           `json:"sessionId"`
+	Changes   []TouchProfileZoneSettingsChange `json:"changes"`
+}
+
+type TouchProfileUpdateResult struct {
+	OK             bool   `json:"ok"`
+	DraftRevision  uint64 `json:"draftRevision"`
+	PreviewChanged bool   `json:"previewChanged"`
+}
+
+type TouchProfileApplyInput struct {
+	SessionID string `json:"sessionId"`
+	Force     bool   `json:"force,omitempty"`
+}
+
+type TouchProfileRollbackInput struct {
+	SessionID                string `json:"sessionId"`
+	OutputModRoot            string `json:"outputModRoot"`
+	SourceModRoot            string `json:"sourceModRoot"`
+	ReenableSourceOnRollback bool   `json:"reenableSourceOnRollback"`
+}
+
+type TouchProfileOK struct {
+	OK bool `json:"ok"`
+}

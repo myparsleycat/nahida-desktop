@@ -101,7 +101,8 @@ func resolveTouchJiggleParams(settings TouchZoneSettings, objectID int) TouchJig
 	params.GrabDamping = settings.Advanced.Damping
 	params.GrabSpring = settings.Advanced.Spring
 	params.ReleaseDamping = math.Min(.99, settings.Advanced.Damping+.1)
-	params.ReleaseSpring = settings.Advanced.Spring * (defaultTouchJiggleParams.ReleaseSpring / defaultTouchJiggleParams.GrabSpring)
+	releaseSpringScale := defaultTouchJiggleParams.ReleaseSpring / defaultTouchJiggleParams.GrabSpring
+	params.ReleaseSpring = settings.Advanced.Spring * releaseSpringScale
 	params.MaxOffset = settings.Advanced.MaxOffset
 	return params
 }

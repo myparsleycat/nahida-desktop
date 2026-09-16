@@ -232,7 +232,8 @@ func systemProxyBypass(target *url.URL, list string) bool {
 			port = "443"
 		}
 	}
-	for _, rule := range strings.FieldsFunc(strings.ToLower(list), func(r rune) bool { return r == ';' || unicode.IsSpace(r) }) {
+	separator := func(r rune) bool { return r == ';' || unicode.IsSpace(r) }
+	for _, rule := range strings.FieldsFunc(strings.ToLower(list), separator) {
 		if rule == "<local>" {
 			if !strings.Contains(host, ".") && net.ParseIP(host) == nil {
 				return true

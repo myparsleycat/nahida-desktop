@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -71,13 +73,17 @@ func (b *modelViewerLoadBudget) validateReferencedResources(
 			return statErr
 		}
 		if !info.Mode().IsRegular() {
-			return contractError(fmt.Sprintf("Model Viewer resource is not a regular file: %s", resource.Filename))
+			return infra.ContractError(
+				fmt.Sprintf("Model Viewer resource is not a regular file: %s", resource.Filename),
+			)
 		}
 		if info.Size() > maxModelViewerBufferFileBytes {
-			return contractError(fmt.Sprintf("Buffer file is too large (%.1f MiB).", float64(info.Size())/1048576))
+			return infra.ContractError(
+				fmt.Sprintf("Buffer file is too large (%.1f MiB).", float64(info.Size())/1048576),
+			)
 		}
 		if b.totalBytes+info.Size() > maxModelViewerTotalBufferBytes {
-			return contractError("Mod buffer data exceeds the 2 GiB safety limit.")
+			return infra.ContractError("Mod buffer data exceeds the 2 GiB safety limit.")
 		}
 		b.seen[strings.ToLower(path)] = true
 		b.totalBytes += info.Size()
@@ -147,7 +153,7 @@ func sanitizeModelViewerLogValue(value string) string {
 func resolveModelViewerResourcePath(root, baseDir, relative string) (string, error) {
 	relative = filepath.FromSlash(strings.ReplaceAll(strings.TrimSpace(relative), `\`, string(filepath.Separator)))
 	if relative == "" || filepath.IsAbs(relative) {
-		return "", contractError(fmt.Sprintf("Model Viewer resource path must be relative: %s", relative))
+		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource path must be relative: %s", relative))
 	}
 	target, err := filepath.Abs(filepath.Join(baseDir, relative))
 	if err != nil {
@@ -155,7 +161,7 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 	}
 	ceiling := filepath.Dir(filepath.Clean(root))
 	if !modelViewerPathWithin(ceiling, target) {
-		return "", contractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
+		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
 	// A filename authored inside the mod folder must also resolve there: a
 	// symlink or junction inside it must not redirect a read to a sibling
@@ -164,7 +170,9 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 		realRoot, rootOK := resolveModelViewerLinkPath(root)
 		realTarget, targetOK := resolveModelViewerLinkPath(target)
 		if rootOK && targetOK && !modelViewerPathWithin(realRoot, realTarget) {
-			return "", contractError(fmt.Sprintf("Model Viewer resource link escapes the mod folder: %s", relative))
+			return "", infra.ContractError(
+				fmt.Sprintf("Model Viewer resource link escapes the mod folder: %s", relative),
+			)
 		}
 	}
 	if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil {
@@ -173,7 +181,9 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 			resolvedCeiling = realCeiling
 		}
 		if !modelViewerPathWithin(resolvedCeiling, resolved) {
-			return "", contractError(fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative))
+			return "", infra.ContractError(
+				fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative),
+			)
 		}
 	}
 	return filepath.Clean(target), nil

@@ -89,7 +89,7 @@ func (d *Drive) copyRemoteImportMany(ctx context.Context, in remoteImportMany) (
 	if len(in.SrcIDs) == 0 {
 		return 0, nil
 	}
-	transferCreated := d.createImportTransfer(in.OperationID, in.DestinationID, in.SourceNames, ctx)
+	transferCreated := d.createImportTransfer(ctx, in.OperationID, in.DestinationID, in.SourceNames)
 	if transferCreated {
 		defer d.transfer.ClearCancel(in.OperationID)
 	}
@@ -150,9 +150,9 @@ type importStream struct {
 }
 
 func (d *Drive) createImportTransfer(
+	ctx context.Context,
 	operationID, destinationID string,
 	sourceNames []string,
-	ctx context.Context,
 ) bool {
 	if d.transfer == nil || operationID == "" {
 		return false

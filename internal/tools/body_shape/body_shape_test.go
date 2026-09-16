@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
 
@@ -326,7 +327,7 @@ func TestRemapBodyShapePathUsesCanonicalPaths(t *testing.T) {
 	targetRoot := filepath.Join(base, "Character Mod (Body Shaped)")
 
 	resolve := func(path string) (string, error) {
-		if samePathFold(path, logicalRoot) {
+		if platform.SamePathFold(path, logicalRoot) {
 			return canonicalRoot, nil
 		}
 		return path, nil
@@ -336,7 +337,7 @@ func TestRemapBodyShapePathUsesCanonicalPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := filepath.Join(targetRoot, "Meshes", "Position.buf")
-	if !samePathFold(got, want) {
+	if !platform.SamePathFold(got, want) {
 		t.Fatalf("remapped path = %q, want %q", got, want)
 	}
 	outside := filepath.Join(base, "outside", "Position.buf")

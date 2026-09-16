@@ -128,8 +128,6 @@ func (t *Service) reportCleanup(err error, operation string) {
 	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }
 
-func stringPointer(value string) *string { return &value }
-
 func cloneStringPointer(value *string) *string {
 	if value == nil {
 		return nil

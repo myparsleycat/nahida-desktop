@@ -52,12 +52,6 @@ func NewWithOptions(opts Options) *Service {
 	}
 }
 
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }
-
 func (t *Service) logError(err error, where string) {
 	if err != nil && t != nil && t.log != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{

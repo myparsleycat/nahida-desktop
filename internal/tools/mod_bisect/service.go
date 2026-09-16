@@ -100,12 +100,6 @@ func (t *Service) reportCleanup(err error, operation string) {
 	_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{Operation: operation, Stage: "cleanup"})
 }
 
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }
-
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

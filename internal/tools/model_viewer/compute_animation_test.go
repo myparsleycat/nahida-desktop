@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 func TestDetectModelViewerGIMIShapePoseComputeAnimation(t *testing.T) {
@@ -659,11 +661,11 @@ filename = Kimono4.buf
 		deformer.ShapeStages[3].PhaseStart != -0.05236 {
 		t.Fatalf("incoming phase starts = %+v", deformer.ShapeStages)
 	}
-	if !samePathFold(deformer.ShapeStages[0].Base.sourcePath, deformer.Base.sourcePath) {
+	if !platform.SamePathFold(deformer.ShapeStages[0].Base.sourcePath, deformer.Base.sourcePath) {
 		t.Fatalf("stage0 base = %+v deformer base = %+v", deformer.ShapeStages[0].Base, deformer.Base)
 	}
 	if deformer.ShapeStages[2].PhaseRate != 5 || deformer.ShapeStages[2].WrapAt != 12 ||
-		samePathFold(deformer.ShapeStages[2].Base.sourcePath, deformer.Base.sourcePath) {
+		platform.SamePathFold(deformer.ShapeStages[2].Base.sourcePath, deformer.Base.sourcePath) {
 		t.Fatalf("stage2 = %+v", deformer.ShapeStages[2])
 	}
 	if deformer.ShapeStages[3].PhaseRate != 0.1 || deformer.ShapeStages[3].WrapAt != 0.05236 ||

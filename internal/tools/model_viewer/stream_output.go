@@ -141,8 +141,9 @@ func collectModelViewerStreamOutputs(
 			}
 			key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
 			resource := modelViewerNormalizeKey(modelViewerResourceToken(value))
-			if strings.HasPrefix(key, "resource") && resource != "" &&
-				(strings.HasPrefix(strings.ToLower(value), "copy ") || strings.HasPrefix(strings.ToLower(value), "ref ")) {
+			copied := strings.HasPrefix(strings.ToLower(value), "copy ")
+			referenced := strings.HasPrefix(strings.ToLower(value), "ref ")
+			if strings.HasPrefix(key, "resource") && resource != "" && (copied || referenced) {
 				name := modelViewerNormalizeKey(modelViewerResourceToken(key))
 				aliases[name] = appendUniqueModelViewer(aliases[name], resource)
 			}

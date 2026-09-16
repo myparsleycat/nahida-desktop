@@ -5,8 +5,6 @@ package fixinspection
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"nahida.live/desktop/internal/db"
@@ -86,10 +84,4 @@ func (t *Service) logError(err error, where string) {
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})
 	}
-}
-
-func sameOrChildPath(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
 }

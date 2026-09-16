@@ -72,7 +72,7 @@ func (t *Service) Begin(parent context.Context) (*Run, error) {
 	t.runMu.Lock()
 	defer t.runMu.Unlock()
 	if t.run != nil {
-		return nil, contractError("Another process is running.")
+		return nil, infra.ContractError("Another process is running.")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	executor := newScriptExecutor(t.Log)
@@ -124,9 +124,3 @@ func (t *Service) logError(err error, where string) {
 		})
 	}
 }
-
-// contractError preserves user-facing Electron error text, including its
-// original capitalisation and punctuation.
-type contractError string
-
-func (e contractError) Error() string { return string(e) }

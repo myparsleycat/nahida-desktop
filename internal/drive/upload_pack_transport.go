@@ -57,16 +57,13 @@ func (d *Drive) uploadPack(
 		}
 		var uploadedPayload int64
 		var reportedLogical int64
-		result, sendErr := d.sendMultipartField(
-			ctx,
-			packURL,
-			http.MethodPost,
-			[][2]string{{"manifest", string(manifest)}},
-			bytes.NewReader(payload.Bytes()),
-			int64(payload.Len()),
-			"pack.bin",
-			"pack",
-			func(uploaded int64) {
+		result, sendErr := d.sendMultipart(ctx, packURL, http.MethodPost, multipartUpload{
+			fields:    [][2]string{{"manifest", string(manifest)}},
+			file:      bytes.NewReader(payload.Bytes()),
+			fileSize:  int64(payload.Len()),
+			filename:  "pack.bin",
+			fieldName: "pack",
+			onProgress: func(uploaded int64) {
 				uploadedPayload += uploaded
 				target := logicalBytesForPackProgress(members, uploadedPayload)
 				if onProgress != nil && target != reportedLogical {
@@ -74,7 +71,7 @@ func (d *Drive) uploadPack(
 				}
 				reportedLogical = target
 			},
-		)
+		})
 		if sendErr != nil {
 			if reportedLogical > 0 && onProgress != nil {
 				onProgress(-reportedLogical)

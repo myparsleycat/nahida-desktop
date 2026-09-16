@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type touchInteractiveEntry struct {
@@ -14,6 +16,7 @@ type touchInteractiveEntry struct {
 	Component TouchComponentAnalysis
 	Asset     TouchGeneratedAssets
 }
+
 type touchZoneOverrides struct{ Radius, Strength, Falloff, MaxOffset, Damping, Spring [touchZoneChannels]float64 }
 
 var touchStateInitializers = []string{
@@ -62,6 +65,7 @@ func supportsTouchFrameNumberGuard(version string) bool {
 	}
 	return true
 }
+
 func touchVersionParts(value string) ([]int, bool) {
 	value = strings.TrimPrefix(strings.TrimPrefix(value, "v"), "V")
 	raw := strings.Split(value, ".")
@@ -123,11 +127,11 @@ func compileTouchINI(
 			}
 		}
 		if component != nil && asset != nil {
-			entries = append(entries, touchInteractiveEntry{draft, *component, *asset})
+			entries = append(entries, touchInteractiveEntry{Draft: draft, Component: *component, Asset: *asset})
 		}
 	}
 	if len(entries) == 0 {
-		return "", 0, contractError("No interactive components available for INI compile")
+		return "", 0, infra.ContractError("No interactive components available for INI compile")
 	}
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	components := make([]TouchComponentAnalysis, len(entries))
@@ -382,9 +386,11 @@ func matchTouchINISection(text, header string) (string, string, bool) {
 	}
 	return match[0], match[1], true
 }
+
 func touchToken(value string) string {
 	return regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(value, "")
 }
+
 func touchSectionToken(value string) string {
 	parts := regexp.MustCompile(`[^a-zA-Z0-9]+`).Split(value, -1)
 	out := ""
@@ -395,6 +401,7 @@ func touchSectionToken(value string) string {
 	}
 	return out
 }
+
 func touchTemplate(value, varPrefix, st, runtime, id string) string {
 	replacements := map[string]string{"{{V}}": varPrefix, "{{S}}": st, "{{R}}": runtime, "{{ID}}": id}
 	for from, to := range replacements {
@@ -911,23 +918,40 @@ func buildTouchComponentResources(st string, entry touchInteractiveEntry) []stri
 	return lines
 }
 
+// touchZoneSetting is one per-channel physics override written back from a zone
+// into the compiled settings.
+type touchZoneSetting struct {
+	name   string
+	target *[touchZoneChannels]float64
+	value  float64
+}
+
 func buildTouchZoneOverrides(entries []touchInteractiveEntry) (touchZoneOverrides, error) {
 	var out touchZoneOverrides
 	for _, entry := range entries {
 		for _, zone := range entry.Draft.Zones {
 			if zone.Channel < 0 || zone.Channel >= touchZoneChannels {
-				return out, contractError(fmt.Sprintf("Touch zone channel out of range: %d", zone.Channel))
+				return out, infra.ContractError(fmt.Sprintf("Touch zone channel out of range: %d", zone.Channel))
 			}
 			params := resolveTouchJiggleParams(zone.Settings, entry.Draft.ObjectID)
-			values := []struct {
-				name   string
-				target *[touchZoneChannels]float64
-				value  float64
-			}{{"radius", &out.Radius, params.Radius}, {"strength", &out.Strength, params.Strength}, {"falloff", &out.Falloff, params.Falloff}, {"maxOffset", &out.MaxOffset, params.MaxOffset}, {"damping", &out.Damping, params.GrabDamping / defaultTouchJiggleParams.GrabDamping}, {"spring", &out.Spring, params.GrabSpring / defaultTouchJiggleParams.GrabSpring}}
+			values := []touchZoneSetting{
+				{name: "radius", target: &out.Radius, value: params.Radius},
+				{name: "strength", target: &out.Strength, value: params.Strength},
+				{name: "falloff", target: &out.Falloff, value: params.Falloff},
+				{name: "maxOffset", target: &out.MaxOffset, value: params.MaxOffset},
+				{
+					name: "damping", target: &out.Damping,
+					value: params.GrabDamping / defaultTouchJiggleParams.GrabDamping,
+				},
+				{
+					name: "spring", target: &out.Spring,
+					value: params.GrabSpring / defaultTouchJiggleParams.GrabSpring,
+				},
+			}
 			for _, item := range values {
 				current := item.target[zone.Channel]
 				if current != 0 && mathAbs(current-item.value) > 1e-6 {
-					return out, contractError(
+					return out, infra.ContractError(
 						fmt.Sprintf("Touch zone channel %d has conflicting %s overrides", zone.Channel, item.name),
 					)
 				}
@@ -937,6 +961,7 @@ func buildTouchZoneOverrides(entries []touchInteractiveEntry) (touchZoneOverride
 	}
 	return out, nil
 }
+
 func touchBasePhysicsLines() []string {
 	p := defaultTouchJiggleParams
 	return []string{
@@ -954,13 +979,25 @@ func touchBasePhysicsLines() []string {
 		"w71 = " + formatTouchNumber(p.TargetFollow),
 	}
 }
+
+// touchZoneSlot maps one override group onto the three x/y/z RZ M slot numbers
+// the runtime shader reads.
+type touchZoneSlot struct {
+	x, y, z int
+	values  [touchZoneChannels]float64
+}
+
 func touchZoneOverrideLines(o touchZoneOverrides) []string {
 	lines := []string{}
-	for _, entry := range []struct {
-		a, b, c int
-		values  [touchZoneChannels]float64
-	}{{77, 78, 103, o.Radius}, {79, 80, 106, o.Strength}, {81, 82, 109, o.MaxOffset}, {101, 102, 116, o.Falloff}, {122, 123, 124, o.Damping}, {125, 126, 127, o.Spring}} {
-		slots := []int{entry.a, entry.b, entry.c}
+	for _, entry := range []touchZoneSlot{
+		{x: 77, y: 78, z: 103, values: o.Radius},
+		{x: 79, y: 80, z: 106, values: o.Strength},
+		{x: 81, y: 82, z: 109, values: o.MaxOffset},
+		{x: 101, y: 102, z: 116, values: o.Falloff},
+		{x: 122, y: 123, z: 124, values: o.Damping},
+		{x: 125, y: 126, z: 127, values: o.Spring},
+	} {
+		slots := []int{entry.x, entry.y, entry.z}
 		for group, slot := range slots {
 			names := []string{"x", "y", "z", "w"}
 			for i := range 4 {
@@ -970,7 +1007,9 @@ func touchZoneOverrideLines(o touchZoneOverrides) []string {
 	}
 	return lines
 }
+
 func formatTouchNumber(value float64) string { return strconv.FormatFloat(value, 'f', -1, 64) }
+
 func touchBakeOffsets(first, count, samples int) []int {
 	out := make([]int, samples)
 	if count <= 1 {
@@ -984,6 +1023,7 @@ func touchBakeOffsets(first, count, samples int) []int {
 	}
 	return out
 }
+
 func touchComponentKindToken(prefix string) string {
 	match := regexp.MustCompile(`(?i)(Body|Leg|Hair|Mesh)$`).FindStringSubmatch(prefix)
 	if len(match) == 2 {
@@ -991,10 +1031,13 @@ func touchComponentKindToken(prefix string) string {
 	}
 	return regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(prefix, "")
 }
+
 func touchMaskResourceToken(prefix string) string { return touchComponentKindToken(prefix) + "Masks" }
+
 func touchParamsResourceToken(prefix string) string {
 	return touchComponentKindToken(prefix) + "Params"
 }
+
 func touchObjectMapResourceToken(prefix, label string) string {
 	kind := touchComponentKindToken(prefix)
 	if label == "main" || label == "skin" {
@@ -1002,6 +1045,7 @@ func touchObjectMapResourceToken(prefix, label string) string {
 	}
 	return kind + strings.ToUpper(label[:1]) + label[1:] + "ObjectMap"
 }
+
 func mathAbs(value float64) float64 {
 	if value < 0 {
 		return -value

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
 
@@ -241,7 +242,7 @@ func (t *Service) resolveFixInspectionImporter(ctx context.Context, modPath stri
 			continue
 		}
 		root, resolveErr = filepath.Abs(root)
-		if resolveErr != nil || !sameOrChildPath(root, target) || len(root) <= bestRootLength {
+		if resolveErr != nil || !platform.SameOrChildPath(root, target) || len(root) <= bestRootLength {
 			continue
 		}
 		importer = *game.Importer

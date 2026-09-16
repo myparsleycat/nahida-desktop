@@ -242,6 +242,7 @@ func windowsAutoProxy(ctx context.Context, target string, config systemProxyConf
 	}
 	return strings.Join(entries, ";"), nil
 }
+
 func freeWindowsProxyStrings(values ...*uint16) {
 	for _, value := range values {
 		if value != nil {

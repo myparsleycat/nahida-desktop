@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type fileCopy struct {
@@ -18,6 +19,7 @@ type fileCopy struct {
 type elevatedFileCopyError struct{ err error }
 
 func (e elevatedFileCopyError) Error() string { return e.err.Error() }
+
 func (e elevatedFileCopyError) Unwrap() error { return e.err }
 
 func installFileCopies(copies []fileCopy, elevated bool) error {
@@ -75,7 +77,7 @@ func copyFileOverwrite(source, target string) (returnErr error) {
 	if closeErr != nil {
 		return closeErr
 	}
-	return replaceAtomic(tempPath, target)
+	return platform.ReplaceAtomic(tempPath, target)
 }
 
 func regularFile(path string) bool {

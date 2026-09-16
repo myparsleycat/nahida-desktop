@@ -1000,9 +1000,11 @@ func applyModIndexDefaults(input *ModIndexInput) {
 }
 
 func gameReferer(gameID int) string { return fmt.Sprintf("https://gamebanana.com/games/%d", gameID) }
+
 func categoryReferer(categoryID int) string {
 	return fmt.Sprintf("https://gamebanana.com/mods/cats/%d", categoryID)
 }
+
 func submissionReferer(model string, itemID int) string {
 	return fmt.Sprintf("https://gamebanana.com/%ss/%d", strings.ToLower(model), itemID)
 }

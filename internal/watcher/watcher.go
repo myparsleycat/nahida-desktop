@@ -304,14 +304,15 @@ func (w *Watcher) readCompletions() {
 			}
 			continue
 		}
-		if isOverflow(err) {
+		switch {
+		case isOverflow(err):
 			w.emitOverflow(item.path)
-		} else if err != nil {
+		case err != nil:
 			w.reportReadError(item.path, err)
 			continue
-		} else if length == 0 {
+		case length == 0:
 			w.emitOverflow(item.path)
-		} else {
+		default:
 			w.decode(item.path, item.buffer[:length])
 		}
 		if err := w.beginRead(item); err != nil {

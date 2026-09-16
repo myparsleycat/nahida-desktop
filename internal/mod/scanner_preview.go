@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -95,7 +97,7 @@ func (b *previewBuckets) best() *previewCandidate {
 
 func (b *previewBuckets) bestPath() *string {
 	if best := b.best(); best != nil {
-		return stringPointer(best.path)
+		return platform.StringPtr(best.path)
 	}
 	return nil
 }
@@ -212,17 +214,17 @@ func findGroupPreviewWithExtensions(
 	reports ...func(error),
 ) *string {
 	if preview := findPreviewWalkWithExtensions(root, previewRootDepth, extensions, reports...); preview != nil {
-		return stringPointer(preview.path)
+		return platform.StringPtr(preview.path)
 	}
 	if searchDepth <= previewRootDepth {
 		return nil
 	}
 	folders := listChildFolders(root, reports...)
 	if candidate := findChildFolderPreview(folders, searchDepth, false, extensions, reports...); candidate != nil {
-		return stringPointer(candidate.path)
+		return platform.StringPtr(candidate.path)
 	}
 	if candidate := findChildFolderPreview(folders, searchDepth, true, extensions, reports...); candidate != nil {
-		return stringPointer(candidate.path)
+		return platform.StringPtr(candidate.path)
 	}
 	return nil
 }
@@ -242,7 +244,7 @@ func findPreview(root string, searchSubfolders bool, reports ...func(error)) *st
 //wails:ignore
 func (m *Mod) FindModelViewerPreview(path string) *string {
 	if preview := findScannerPreviewWalk(path, previewSearchDepth); preview != nil {
-		return stringPointer(preview.path)
+		return platform.StringPtr(preview.path)
 	}
 	return nil
 }

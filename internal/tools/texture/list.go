@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -28,7 +29,17 @@ const (
 
 var textureSettingKeys = struct {
 	mode, operation, format, percent, width, height, backup, scale, model string
-}{"texture_resize_mode", "texture_resize_operation", "texture_resize_output_format", "texture_resize_percent", "texture_resize_custom_width", "texture_resize_custom_height", "texture_resize_backup", "texture_resize_upscale_scale", "texture_resize_upscale_model"}
+}{
+	"texture_resize_mode",
+	"texture_resize_operation",
+	"texture_resize_output_format",
+	"texture_resize_percent",
+	"texture_resize_custom_width",
+	"texture_resize_custom_height",
+	"texture_resize_backup",
+	"texture_resize_upscale_scale",
+	"texture_resize_upscale_model",
+}
 
 var srgbTextureFormats = []string{
 	"DXGI_FORMAT_R8G8B8A8_UNORM_SRGB", "DXGI_FORMAT_B8G8R8A8_UNORM_SRGB", "DXGI_FORMAT_BC1_UNORM_SRGB",
@@ -159,6 +170,7 @@ type ddsMetadata struct {
 	format, colorSpace string
 	layers, mipmaps    int
 }
+
 type ddsHeaderError struct{ message string }
 
 func (e ddsHeaderError) Error() string { return e.message }
@@ -300,7 +312,7 @@ func (t *Service) ListTextureFolder(
 	}
 	trimmed := strings.TrimSpace(targetPath)
 	if trimmed == "" {
-		return nil, contractError("Target path is required.")
+		return nil, infra.ContractError("Target path is required.")
 	}
 	root, err := filepath.Abs(trimmed)
 	if err != nil {
@@ -379,19 +391,19 @@ func mergeTexturePatch(s TextureResizeSettings, p TextureResizeSettingsPatch) Te
 func resolveDDSFiles(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, infra.WithCause(contractError(fmt.Sprintf("Target path '%s' does not exist.", path)), err)
+		return nil, infra.WithCause(infra.ContractError(fmt.Sprintf("Target path '%s' does not exist.", path)), err)
 	}
 	if err != nil {
 		return nil, err
 	}
 	if info.Mode().IsRegular() {
 		if !strings.EqualFold(filepath.Ext(path), ".dds") {
-			return nil, contractError(fmt.Sprintf("Target file '%s' is not a DDS texture.", path))
+			return nil, infra.ContractError(fmt.Sprintf("Target file '%s' is not a DDS texture.", path))
 		}
 		return []string{path}, nil
 	}
 	if !info.IsDir() {
-		return nil, contractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", path))
+		return nil, infra.ContractError(fmt.Sprintf("Target path '%s' must be a directory or DDS file.", path))
 	}
 	var files []string
 	err = filepath.WalkDir(path, func(p string, e fs.DirEntry, walkErr error) error {
@@ -443,9 +455,10 @@ func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResize
 		conversionMessage = &v
 	}
 	var message *string
-	if (s.Operation == "upscale" || s.Operation == "upscale_and_convert") && !canUpscale {
+	upscaling := s.Operation == "upscale" || s.Operation == "upscale_and_convert"
+	if upscaling && !canUpscale {
 		message = upscaleReason
-	} else if s.Operation != "convert" && s.Operation != "upscale" && s.Operation != "upscale_and_convert" && !canResize {
+	} else if !upscaling && s.Operation != "convert" && !canResize {
 		v := "No valid downscale candidate matched the requested bounds."
 		message = &v
 	}
@@ -479,13 +492,13 @@ func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResize
 
 func textureUpscaleSkipReason(m ddsMetadata, scale int) *string {
 	if m.layers > 1 {
-		return stringPointer("Cubemap and layered DDS textures cannot be upscaled.")
+		return platform.StringPtr("Cubemap and layered DDS textures cannot be upscaled.")
 	}
 	if strings.Contains(m.format, "BC4") || strings.Contains(m.format, "BC5") || strings.Contains(m.format, "BC6H") {
-		return stringPointer("This DDS format cannot be upscaled without destroying channel data.")
+		return platform.StringPtr("This DDS format cannot be upscaled without destroying channel data.")
 	}
 	if m.width*scale > 8192 || m.height*scale > 8192 {
-		return stringPointer("Upscaled dimensions would exceed the 8192px limit.")
+		return platform.StringPtr("Upscaled dimensions would exceed the 8192px limit.")
 	}
 	return nil
 }
@@ -524,7 +537,11 @@ func parseDDS(b []byte) (ddsMetadata, error) {
 			color = "linear"
 		}
 	}
-	return ddsMetadata{w, h, format, color, layers, mips}, nil
+	return ddsMetadata{
+		width: w, height: h,
+		format: format, colorSpace: color,
+		layers: layers, mipmaps: mips,
+	}, nil
 }
 
 func detectDDSFormat(u func(int) uint32) string {
@@ -582,12 +599,14 @@ func textureCandidates(w, h int) [][2]int {
 	}
 	return out
 }
+
 func textureBounds(w, h int, s TextureResizeSettings) [2]int {
 	if s.Mode == "percent" {
 		return [2]int{w * s.Percent / 100, h * s.Percent / 100}
 	}
 	return [2]int{s.CustomWidth, s.CustomHeight}
 }
+
 func pickTextureCandidate(c [][2]int, b [2]int) ([2]int, bool) {
 	var best [2]int
 	ok := false
@@ -599,12 +618,14 @@ func pickTextureCandidate(c [][2]int, b [2]int) ([2]int, bool) {
 	}
 	return best, ok
 }
+
 func gcdInt(a, b int) int {
 	for b != 0 {
 		a, b = b, a%b
 	}
 	return a
 }
+
 func availableFormats(color string) []string {
 	if color == "srgb" {
 		return append([]string{}, srgbTextureFormats...)
@@ -614,6 +635,7 @@ func availableFormats(color string) []string {
 	}
 	return append(append([]string{}, srgbTextureFormats...), linearTextureFormats...)
 }
+
 func contains(values []string, target string) bool {
 	for _, v := range values {
 		if v == target {
@@ -622,6 +644,7 @@ func contains(values []string, target string) bool {
 	}
 	return false
 }
+
 func containsUint(values []uint32, target uint32) bool {
 	for _, v := range values {
 		if v == target {
@@ -630,13 +653,16 @@ func containsUint(values []uint32, target uint32) bool {
 	}
 	return false
 }
+
 func parseInt(v string) int { n, _ := strconv.Atoi(v); return n }
+
 func normalizeTextureMode(v string) string {
 	if v == "percent" {
 		return v
 	}
 	return "custom"
 }
+
 func normalizeTextureOperation(v string) string {
 	switch v {
 	case "convert", "resize_and_convert", "upscale", "upscale_and_convert":
@@ -644,9 +670,11 @@ func normalizeTextureOperation(v string) string {
 	}
 	return "resize"
 }
+
 func normalizeTexturePercent(v int) int {
 	return max(1, min(99, v))
 }
+
 func normalizeTextureDimension(v int) int {
 	v = max(1024, v)
 	r := v % 1024
@@ -658,12 +686,14 @@ func normalizeTextureDimension(v int) int {
 	}
 	return v - r
 }
+
 func normalizeTextureFormat(v string) string {
 	if contains(srgbTextureFormats, v) || contains(linearTextureFormats, v) {
 		return v
 	}
 	return ""
 }
+
 func normalizeUpscaleModel(v string) string {
 	if contains(
 		[]string{
@@ -680,6 +710,7 @@ func normalizeUpscaleModel(v string) string {
 	}
 	return "realesr-animevideov3"
 }
+
 func normalizeUpscaleScale(model string, scale int) int {
 	available := []int{4}
 	switch model {

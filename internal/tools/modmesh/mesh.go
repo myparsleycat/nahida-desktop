@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 // DefaultBlendStride is the blend layout used when a mod does not declare one.
@@ -50,14 +51,16 @@ func DecodeFloat32Bytes(data []byte) ([]float32, error) {
 
 func ValidatePositionBuffer(size, stride int, expected *int) (int, error) {
 	if stride < 12 {
-		return 0, contractError(fmt.Sprintf("Unsupported position stride: %d", stride))
+		return 0, infra.ContractError(fmt.Sprintf("Unsupported position stride: %d", stride))
 	}
 	if size <= 0 || size%stride != 0 {
-		return 0, contractError(fmt.Sprintf("Position file size %d is not divisible by stride %d", size, stride))
+		return 0, infra.ContractError(fmt.Sprintf("Position file size %d is not divisible by stride %d", size, stride))
 	}
 	vertices := size / stride
 	if expected != nil && vertices != *expected {
-		return 0, contractError(fmt.Sprintf("Vertex count mismatch: file has %d, expected %d", vertices, *expected))
+		return 0, infra.ContractError(
+			fmt.Sprintf("Vertex count mismatch: file has %d, expected %d", vertices, *expected),
+		)
 	}
 	return vertices, nil
 }
@@ -79,13 +82,13 @@ func ExtractPositions(data []byte, stride int) ([]float32, error) {
 
 func ValidateBlendBuffer(size, vertexCount, stride int) error {
 	if stride != 4 && stride != 8 && stride != 12 && stride != 32 && stride < 16 {
-		return contractError(fmt.Sprintf("Unsupported blend stride: %d", stride))
+		return infra.ContractError(fmt.Sprintf("Unsupported blend stride: %d", stride))
 	}
 	if vertexCount <= 0 {
-		return contractError("Blend vertex count must be positive")
+		return infra.ContractError("Blend vertex count must be positive")
 	}
 	if size < vertexCount*stride {
-		return contractError(fmt.Sprintf("Blend buffer too small: %d < %d", size, vertexCount*stride))
+		return infra.ContractError(fmt.Sprintf("Blend buffer too small: %d < %d", size, vertexCount*stride))
 	}
 	return nil
 }
@@ -155,7 +158,7 @@ func ResolveResource(root, relative string) (string, error) {
 		return "", err
 	}
 	path, err := filepath.Abs(filepath.Join(rootAbs, filepath.FromSlash(relative)))
-	if err != nil || !sameOrChildPath(rootAbs, path) || samePathFold(rootAbs, path) {
+	if err != nil || !platform.SameOrChildPath(rootAbs, path) || platform.SamePathFold(rootAbs, path) {
 		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
 	realRoot, err := filepath.EvalSymlinks(rootAbs)
@@ -163,7 +166,7 @@ func ResolveResource(root, relative string) (string, error) {
 		return "", err
 	}
 	realPath, err := filepath.EvalSymlinks(path)
-	if err != nil || !sameOrChildPath(realRoot, realPath) || samePathFold(realRoot, realPath) {
+	if err != nil || !platform.SameOrChildPath(realRoot, realPath) || platform.SamePathFold(realRoot, realPath) {
 		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
 	info, err := os.Stat(realPath)

@@ -143,7 +143,7 @@ func collectModelViewerMihoyoGroups(
 			case "texcoord":
 				get(typed.Key).texcoord = resource
 			}
-		} else if !isModelViewerShapePositionVariant(resource.Name) && (strings.EqualFold(filepath.Ext(resource.Filename), ".buf") || strings.EqualFold(filepath.Ext(resource.Filename), ".vb")) {
+		} else if !isModelViewerShapePositionVariant(resource.Name) && isModelViewerBufferFile(resource.Filename) {
 			get(resource.Name).single = resource
 		}
 	}
@@ -210,6 +210,13 @@ func collectModelViewerMihoyoGroups(
 		)
 	}
 	return groups, nil
+}
+
+// isModelViewerBufferFile reports whether a resource filename is a raw vertex
+// buffer dump, which is what the legacy single-resource grouping picks up.
+func isModelViewerBufferFile(filename string) bool {
+	extension := filepath.Ext(filename)
+	return strings.EqualFold(extension, ".buf") || strings.EqualFold(extension, ".vb")
 }
 
 func isModelViewerShapePositionVariant(name string) bool {

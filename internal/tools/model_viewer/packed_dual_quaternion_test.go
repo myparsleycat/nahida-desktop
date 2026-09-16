@@ -643,9 +643,7 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 				buffers.stride,
 				buffers.layout,
 				[]uint32{0, 1, 2},
-				true,
-				false,
-				true,
+				modelViewerGeometryOptions{includeTangents: true, compact: true},
 				nil,
 			)
 			if err != nil || geometry == nil || len(geometry.Texcoord0) != 6 || geometry.Texcoord0[0] != 0.25 ||
@@ -749,9 +747,7 @@ func TestPackedDualQuaternionUVStreamEvidence(t *testing.T) {
 				buffers.stride,
 				buffers.layout,
 				[]uint32{2, 0, 1},
-				false,
-				false,
-				true,
+				modelViewerGeometryOptions{compact: true},
 				nil,
 			)
 			if err != nil {

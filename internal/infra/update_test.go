@@ -36,18 +36,22 @@ func (f *fakeUpdaterEngine) Init(cfg wailsupdater.Config) error {
 	f.cfg = cfg
 	return nil
 }
+
 func (f *fakeUpdaterEngine) Check(context.Context) (*wailsupdater.Release, error) {
 	f.checks++
 	return f.release, f.checkErr
 }
+
 func (f *fakeUpdaterEngine) DownloadAndInstall(context.Context) error {
 	f.downloads++
 	return f.downloadErr
 }
+
 func (f *fakeUpdaterEngine) Restart(context.Context) error {
 	f.restarts++
 	return f.restartErr
 }
+
 func (f *fakeUpdaterEngine) StopPeriodicCheck() { f.stopped = true }
 
 type fakeUpdaterSettings struct {
@@ -56,7 +60,8 @@ type fakeUpdaterSettings struct {
 }
 
 func (s fakeUpdaterSettings) GetAutoUpdateMode(context.Context) (string, error) { return s.mode, nil }
-func (s fakeUpdaterSettings) GetLanguage(context.Context) (string, error)       { return s.language, nil }
+
+func (s fakeUpdaterSettings) GetLanguage(context.Context) (string, error) { return s.language, nil }
 
 func TestGitHubProviderConfig(t *testing.T) {
 	t.Parallel()

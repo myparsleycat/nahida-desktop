@@ -21,7 +21,8 @@ type abortError struct {
 }
 
 func (e abortError) Error() string { return e.message }
-func (e abortError) Name() string  { return "AbortError" }
+
+func (e abortError) Name() string { return "AbortError" }
 
 func newAbortError() error {
 	return abortError{message: "The operation was aborted."}

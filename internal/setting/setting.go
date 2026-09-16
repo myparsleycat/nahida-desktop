@@ -327,6 +327,7 @@ func settingError(err error, operation, stage, key string, severity infra.Diagno
 func (s *Setting) GetRunOnStartup(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyGeneralRunOnStartup)
 }
+
 func (s *Setting) SetRunOnStartup(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralRunOnStartup, enabled)
 }
@@ -334,6 +335,7 @@ func (s *Setting) SetRunOnStartup(ctx context.Context, enabled bool) error {
 func (s *Setting) GetLanguage(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralLanguage)
 }
+
 func (s *Setting) SetLanguage(ctx context.Context, language string) error {
 	return s.Set(ctx, KeyGeneralLanguage, language)
 }
@@ -341,6 +343,7 @@ func (s *Setting) SetLanguage(ctx context.Context, language string) error {
 func (s *Setting) GetMoveTransferPageWhenStartTransfer(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyGeneralMoveTransferPageWhenStartTransfer)
 }
+
 func (s *Setting) SetMoveTransferPageWhenStartTransfer(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralMoveTransferPageWhenStartTransfer, enabled)
 }
@@ -348,6 +351,7 @@ func (s *Setting) SetMoveTransferPageWhenStartTransfer(ctx context.Context, enab
 func (s *Setting) GetPowerSaveBlockInTransfer(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyGeneralPowerSaveBlockInTransfer)
 }
+
 func (s *Setting) SetPowerSaveBlockInTransfer(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralPowerSaveBlockInTransfer, enabled)
 }
@@ -355,6 +359,7 @@ func (s *Setting) SetPowerSaveBlockInTransfer(ctx context.Context, enabled bool)
 func (s *Setting) GetDefaultStartPage(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralDefaultStartPage)
 }
+
 func (s *Setting) SetDefaultStartPage(ctx context.Context, page string) error {
 	return s.Set(ctx, KeyGeneralDefaultStartPage, page)
 }
@@ -362,6 +367,7 @@ func (s *Setting) SetDefaultStartPage(ctx context.Context, page string) error {
 func (s *Setting) GetAutoUpdateMode(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralAutoUpdateMode)
 }
+
 func (s *Setting) SetAutoUpdateMode(ctx context.Context, mode string) error {
 	return s.Set(ctx, KeyGeneralAutoUpdateMode, mode)
 }
@@ -369,6 +375,7 @@ func (s *Setting) SetAutoUpdateMode(ctx context.Context, mode string) error {
 func (s *Setting) GetRunInBackground(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyGeneralRunInBackground)
 }
+
 func (s *Setting) SetRunInBackground(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralRunInBackground, enabled)
 }
@@ -376,6 +383,7 @@ func (s *Setting) SetRunInBackground(ctx context.Context, enabled bool) error {
 func (s *Setting) GetLogLevel(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralLogLevel)
 }
+
 func (s *Setting) SetLogLevel(ctx context.Context, level string) error {
 	return s.Set(ctx, KeyGeneralLogLevel, level)
 }
@@ -383,6 +391,7 @@ func (s *Setting) SetLogLevel(ctx context.Context, level string) error {
 func (s *Setting) GetSidebarLayout(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModSidebarLayout)
 }
+
 func (s *Setting) SetSidebarLayout(ctx context.Context, mode string) error {
 	return s.Set(ctx, KeyModSidebarLayout, mode)
 }
@@ -390,6 +399,7 @@ func (s *Setting) SetSidebarLayout(ctx context.Context, mode string) error {
 func (s *Setting) GetCharacterSidebarWidth(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyModCharacterSidebarWidth)
 }
+
 func (s *Setting) SetCharacterSidebarWidth(ctx context.Context, width int) error {
 	return s.Set(ctx, KeyModCharacterSidebarWidth, width)
 }
@@ -397,6 +407,7 @@ func (s *Setting) SetCharacterSidebarWidth(ctx context.Context, width int) error
 func (s *Setting) GetArchiveExtractPathMode(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModArchiveExtractPathMode)
 }
+
 func (s *Setting) SetArchiveExtractPathMode(ctx context.Context, mode string) error {
 	return s.Set(ctx, KeyModArchiveExtractPathMode, mode)
 }
@@ -404,6 +415,7 @@ func (s *Setting) SetArchiveExtractPathMode(ctx context.Context, mode string) er
 func (s *Setting) GetDeleteArchiveAfterExtract(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyModDeleteArchiveAfterExtract)
 }
+
 func (s *Setting) SetDeleteArchiveAfterExtract(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModDeleteArchiveAfterExtract, enabled)
 }
@@ -411,6 +423,7 @@ func (s *Setting) SetDeleteArchiveAfterExtract(ctx context.Context, enabled bool
 func (s *Setting) GetMoveFolderInsteadOfCopy(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyModMoveFolderInsteadOfCopy)
 }
+
 func (s *Setting) SetMoveFolderInsteadOfCopy(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModMoveFolderInsteadOfCopy, enabled)
 }
@@ -418,6 +431,7 @@ func (s *Setting) SetMoveFolderInsteadOfCopy(ctx context.Context, enabled bool) 
 func (s *Setting) GetGridLayoutMode(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModGridLayoutMode)
 }
+
 func (s *Setting) SetGridLayoutMode(ctx context.Context, mode string) error {
 	return s.Set(ctx, KeyModGridLayoutMode, mode)
 }
@@ -425,6 +439,7 @@ func (s *Setting) SetGridLayoutMode(ctx context.Context, mode string) error {
 func (s *Setting) GetGridResponsiveBaseWidth(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyModGridResponsiveBaseWidth)
 }
+
 func (s *Setting) SetGridResponsiveBaseWidth(ctx context.Context, width int) error {
 	return s.Set(ctx, KeyModGridResponsiveBaseWidth, width)
 }
@@ -432,6 +447,7 @@ func (s *Setting) SetGridResponsiveBaseWidth(ctx context.Context, width int) err
 func (s *Setting) GetGridFixedCardWidth(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyModGridFixedCardWidth)
 }
+
 func (s *Setting) SetGridFixedCardWidth(ctx context.Context, width int) error {
 	return s.Set(ctx, KeyModGridFixedCardWidth, width)
 }
@@ -439,6 +455,7 @@ func (s *Setting) SetGridFixedCardWidth(ctx context.Context, width int) error {
 func (s *Setting) GetGridFixedColumnCount(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyModGridFixedColumnCount)
 }
+
 func (s *Setting) SetGridFixedColumnCount(ctx context.Context, count int) error {
 	return s.Set(ctx, KeyModGridFixedColumnCount, count)
 }
@@ -446,6 +463,7 @@ func (s *Setting) SetGridFixedColumnCount(ctx context.Context, count int) error 
 func (s *Setting) GetSearchModPreview(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyModSearchModPreview)
 }
+
 func (s *Setting) SetSearchModPreview(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModSearchModPreview, enabled)
 }
@@ -469,6 +487,7 @@ func (s *Setting) SetBisectPreserveD3dx(ctx context.Context, enabled bool) error
 func (s *Setting) GetCopyShaderFixesOnEnable(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyModCopyShaderFixesOnEnable)
 }
+
 func (s *Setting) SetCopyShaderFixesOnEnable(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModCopyShaderFixesOnEnable, enabled)
 }
@@ -476,6 +495,7 @@ func (s *Setting) SetCopyShaderFixesOnEnable(ctx context.Context, enabled bool) 
 func (s *Setting) GetDisabledPrefixStyle(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModDisabledPrefixStyle)
 }
+
 func (s *Setting) SetDisabledPrefixStyle(ctx context.Context, style string) error {
 	return s.Set(ctx, KeyModDisabledPrefixStyle, style)
 }
@@ -483,6 +503,7 @@ func (s *Setting) SetDisabledPrefixStyle(ctx context.Context, style string) erro
 func (s *Setting) GetCompressionMethod(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModCompressionMethod)
 }
+
 func (s *Setting) SetCompressionMethod(ctx context.Context, method string) error {
 	return s.Set(ctx, KeyModCompressionMethod, method)
 }
@@ -490,6 +511,7 @@ func (s *Setting) SetCompressionMethod(ctx context.Context, method string) error
 func (s *Setting) GetCompressionThresholdMib(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyModCompressionThresholdMib)
 }
+
 func (s *Setting) SetCompressionThresholdMib(ctx context.Context, threshold int) error {
 	return s.Set(ctx, KeyModCompressionThresholdMib, threshold)
 }
@@ -524,6 +546,7 @@ func (s *Setting) SetCompressionConfig(ctx context.Context, method string, thres
 func (s *Setting) GetCompressionEnabled(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyModCompressionEnabled)
 }
+
 func (s *Setting) SetCompressionEnabled(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyModCompressionEnabled, enabled)
 }
@@ -531,6 +554,7 @@ func (s *Setting) SetCompressionEnabled(ctx context.Context, enabled bool) error
 func (s *Setting) GetDownloadConcurrency(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyTransferDownloadConcurrency)
 }
+
 func (s *Setting) SetDownloadConcurrency(ctx context.Context, concurrency int) error {
 	return s.Set(ctx, KeyTransferDownloadConcurrency, concurrency)
 }
@@ -538,6 +562,7 @@ func (s *Setting) SetDownloadConcurrency(ctx context.Context, concurrency int) e
 func (s *Setting) GetDownloadBandwidthLimitMibps(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyTransferDownloadBandwidthLimitMibps)
 }
+
 func (s *Setting) SetDownloadBandwidthLimitMibps(ctx context.Context, mibps int) error {
 	return s.Set(ctx, KeyTransferDownloadBandwidthLimitMibps, mibps)
 }
@@ -545,6 +570,7 @@ func (s *Setting) SetDownloadBandwidthLimitMibps(ctx context.Context, mibps int)
 func (s *Setting) GetUploadConcurrency(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyTransferUploadConcurrency)
 }
+
 func (s *Setting) SetUploadConcurrency(ctx context.Context, concurrency int) error {
 	return s.Set(ctx, KeyTransferUploadConcurrency, concurrency)
 }
@@ -552,6 +578,7 @@ func (s *Setting) SetUploadConcurrency(ctx context.Context, concurrency int) err
 func (s *Setting) GetNameSortPolicy(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyDriveNameSortPolicy)
 }
+
 func (s *Setting) SetNameSortPolicy(ctx context.Context, policy string) error {
 	return s.Set(ctx, KeyDriveNameSortPolicy, policy)
 }
@@ -559,6 +586,7 @@ func (s *Setting) SetNameSortPolicy(ctx context.Context, policy string) error {
 func (s *Setting) GetOpenConsole(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyDebugOpenConsole)
 }
+
 func (s *Setting) SetOpenConsole(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyDebugOpenConsole, enabled)
 }
@@ -566,6 +594,7 @@ func (s *Setting) SetOpenConsole(ctx context.Context, enabled bool) error {
 func (s *Setting) GetToneMapping(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModelViewerToneMapping)
 }
+
 func (s *Setting) SetToneMapping(ctx context.Context, toneMapping string) error {
 	return s.Set(
 		ctx,
@@ -577,6 +606,7 @@ func (s *Setting) SetToneMapping(ctx context.Context, toneMapping string) error 
 func (s *Setting) GetEnvironment(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyModelViewerEnvironment)
 }
+
 func (s *Setting) SetEnvironment(ctx context.Context, environment string) error {
 	return s.Set(
 		ctx,
@@ -588,6 +618,7 @@ func (s *Setting) SetEnvironment(ctx context.Context, environment string) error 
 func (s *Setting) GetExposure(ctx context.Context) (float64, error) {
 	return s.getFloat(ctx, KeyModelViewerExposure)
 }
+
 func (s *Setting) SetExposure(ctx context.Context, exposure float64) error {
 	return s.Set(ctx, KeyModelViewerExposure, exposure)
 }
@@ -595,6 +626,7 @@ func (s *Setting) SetExposure(ctx context.Context, exposure float64) error {
 func (s *Setting) GetPersistToggles(ctx context.Context) (bool, error) {
 	return s.getBool(ctx, KeyXXMIPersistToggles)
 }
+
 func (s *Setting) SetPersistToggles(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyXXMIPersistToggles, enabled)
 }

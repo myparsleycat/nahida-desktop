@@ -34,6 +34,26 @@ type touchIndexInfo struct {
 	Path     string
 }
 
+// touchIndexBundle is every usable index buffer of one position buffer, already
+// concatenated in draw order. The parallel slices keep the per-buffer paths and
+// formats that the renderer reports back to the UI.
+type touchIndexBundle struct {
+	infos         []touchIndexInfo
+	combined      []uint32
+	paths         []string
+	relativePaths []string
+	formats       []*string
+}
+
+// touchBlendData is the optional blend buffer matched to a position buffer.
+// All fields stay nil/empty when the companion is missing or unusable.
+type touchBlendData struct {
+	relativePath *string
+	path         *string
+	stride       *int
+	bones        []modmesh.BlendBoneInfo
+}
+
 type touchConditionalLine struct {
 	Line      string
 	Condition *string
@@ -45,7 +65,10 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		return TouchModAnalysis{}, err
 	}
 	if _, err = os.Stat(resolved); err != nil {
-		return TouchModAnalysis{}, infra.WithCause(contractError(fmt.Sprintf("Path does not exist: %s", resolved)), err)
+		return TouchModAnalysis{}, infra.WithCause(
+			infra.ContractError(fmt.Sprintf("Path does not exist: %s", resolved)),
+			err,
+		)
 	}
 	// Windows CI and some installations expose temporary or mod directories
 	// through junctions. Keep the analysis root and the resource paths in the
@@ -67,7 +90,7 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 	blends := modmesh.CollectNamedResources(resources, "blend", true)
 	indexByPosition := modmesh.MatchIndexResources(positions, indices, sections)
 	if len(positions) == 0 {
-		return TouchModAnalysis{}, contractError("No position buffer resources found in mod.ini")
+		return TouchModAnalysis{}, infra.ContractError("No position buffer resources found in mod.ini")
 	}
 	components := []TouchComponentAnalysis{}
 	for _, position := range positions {
@@ -90,50 +113,14 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 			continue
 		}
 
-		matches := indexByPosition[strings.ToLower(position.Name)]
-		indexInfos := make([]touchIndexInfo, 0, len(matches))
-		combined := []uint32{}
-		indexPaths, indexRelativePaths := []string{}, []string{}
-		indexFormats := []*string{}
-		for _, index := range matches {
-			indexPath, pathErr := modmesh.ResolveResource(modRoot, index.Filename)
-			if pathErr != nil {
-				warn("Missing index buffer: " + filepath.Join(modRoot, filepath.FromSlash(index.Filename)))
-				continue
-			}
-			values, valueErr := modmesh.ReadIndexBuffer(indexPath, index.Format)
-			if valueErr != nil {
-				warn("Missing index buffer: " + indexPath)
-				continue
-			}
-			valid := true
-			for _, value := range values {
-				if value >= uint32(vertexCount) {
-					valid = false
-					break
-				}
-			}
-			if !valid {
-				warn(fmt.Sprintf("Skipping index buffer %s: index exceeds %d", indexPath, vertexCount-1))
-				continue
-			}
-			indexInfos = append(
-				indexInfos,
-				touchIndexInfo{Resource: index, Offset: len(combined), Count: len(values), Path: indexPath},
-			)
-			combined = append(combined, values...)
-			indexPaths, indexRelativePaths = append(indexPaths, indexPath), append(indexRelativePaths, index.Filename)
-			format := index.Format
-			if format == "" {
-				indexFormats = append(indexFormats, nil)
-			} else {
-				indexFormats = append(indexFormats, &format)
-			}
-		}
-		if len(indexInfos) == 0 {
+		indexes := collectTouchIndexes(modRoot, indexByPosition[strings.ToLower(position.Name)], vertexCount, warn)
+		if len(indexes.infos) == 0 {
 			warn("No usable index buffer for " + position.Name)
 			continue
 		}
+		indexInfos, combined := indexes.infos, indexes.combined
+		indexPaths, indexRelativePaths := indexes.paths, indexes.relativePaths
+		indexFormats := indexes.formats
 
 		drawRanges, blendSection, ibSection, ibHash, variantCondition := findTouchDrawContext(
 			sections,
@@ -150,33 +137,12 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		)
 		grade, reasons := gradeTouchComponent(position.Stride, positionBytes, vertexCount, combined, drawRanges, kind)
 		meshPositions, _ := modmesh.ExtractPositions(positionBytes, position.Stride)
-		blendRelative, blendPath, blendStride := (*string)(nil), (*string)(nil), (*int)(nil)
-		bones := []modmesh.BlendBoneInfo{}
-		if blend, ok := modmesh.MatchCompanionResource(position, blends); ok {
-			resolvedBlend, pathErr := modmesh.ResolveResource(modRoot, blend.Filename)
-			if pathErr == nil {
-				raw, readErr := os.ReadFile(resolvedBlend)
-				stride := blend.Stride
-				if stride == 0 {
-					stride = modmesh.DefaultBlendStride
-				}
-				if readErr == nil {
-					if validationErr := modmesh.ValidateBlendBuffer(
-						len(raw),
-						vertexCount,
-						stride,
-					); validationErr != nil {
-						warn(fmt.Sprintf("Skipping blend buffer %s: %s", resolvedBlend, validationErr))
-					} else {
-						rel := blend.Filename
-						blendRelative, blendPath, blendStride = &rel, &resolvedBlend, &stride
-						bones = modmesh.ListBlendBones(raw, vertexCount, stride)
-					}
-				}
-			}
-		}
+		blend := loadTouchBlend(modRoot, position, blends, vertexCount, warn)
 		primary := indexInfos[0]
-		primaryName, primaryRel, primaryPath, primaryFormat := primary.Resource.Name, indexRelativePaths[0], primary.Path, primary.Resource.Format
+		primaryName := primary.Resource.Name
+		primaryRel := indexRelativePaths[0]
+		primaryPath := primary.Path
+		primaryFormat := primary.Resource.Format
 		component := TouchComponentAnalysis{
 			ID:                   sanitizeTouchID(position.Name),
 			Name:                 position.Name,
@@ -202,10 +168,10 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 			VariantCondition:     variantCondition,
 			DrawRanges:           drawRanges,
 			ObjectMaps:           buildTouchObjectMaps(drawRanges, kind, len(components)+1, meshPositions, combined),
-			BlendRelativePath:    blendRelative,
-			BlendPath:            blendPath,
-			BlendStride:          blendStride,
-			Bones:                bones,
+			BlendRelativePath:    blend.relativePath,
+			BlendPath:            blend.path,
+			BlendStride:          blend.stride,
+			Bones:                blend.bones,
 		}
 		if primaryFormat != "" {
 			component.IndexFormat = &primaryFormat
@@ -216,30 +182,9 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		components = append(components, component)
 	}
 	if len(components) == 0 {
-		return TouchModAnalysis{}, contractError("No readable touch-compatible mesh components found")
+		return TouchModAnalysis{}, infra.ContractError("No readable touch-compatible mesh components found")
 	}
-	grade := "A"
-	reasonSet := map[string]bool{}
-	reasons := []string{}
-	meshPaths := []string{}
-	for _, component := range components {
-		if component.SupportGrade == "C" {
-			grade = "C"
-		} else if component.SupportGrade == "B" && grade == "A" {
-			grade = "B"
-		}
-		for _, reason := range component.SupportReasons {
-			if !reasonSet[reason] {
-				reasonSet[reason] = true
-				reasons = append(reasons, reason)
-			}
-		}
-		meshPaths = append(meshPaths, component.PositionPath)
-		meshPaths = append(meshPaths, component.IndexPaths...)
-		if component.BlendPath != nil {
-			meshPaths = append(meshPaths, *component.BlendPath)
-		}
-	}
+	grade, reasons, meshPaths := summarizeTouchComponents(components)
 	meshHash, err := hashTouchFiles(meshPaths, modRoot)
 	if err != nil {
 		return TouchModAnalysis{}, err
@@ -273,6 +218,129 @@ func analyzeTouchMod(modPath string, warn func(string)) (TouchModAnalysis, error
 		MeshHash:                 meshHash,
 		INIHash:                  iniHash,
 	}, nil
+}
+
+// collectTouchIndexes reads and concatenates the index buffers matched to one
+// position buffer, dropping any buffer that cannot be resolved, decoded, or
+// that addresses vertices past the end of the position buffer.
+func collectTouchIndexes(
+	modRoot string,
+	matches []modmesh.BufferResource,
+	vertexCount int,
+	warn func(string),
+) touchIndexBundle {
+	bundle := touchIndexBundle{
+		infos:         make([]touchIndexInfo, 0, len(matches)),
+		combined:      []uint32{},
+		paths:         []string{},
+		relativePaths: []string{},
+		formats:       []*string{},
+	}
+	for _, index := range matches {
+		indexPath, pathErr := modmesh.ResolveResource(modRoot, index.Filename)
+		if pathErr != nil {
+			warn("Missing index buffer: " + filepath.Join(modRoot, filepath.FromSlash(index.Filename)))
+			continue
+		}
+		values, valueErr := modmesh.ReadIndexBuffer(indexPath, index.Format)
+		if valueErr != nil {
+			warn("Missing index buffer: " + indexPath)
+			continue
+		}
+		valid := true
+		for _, value := range values {
+			if value >= uint32(vertexCount) {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			warn(fmt.Sprintf("Skipping index buffer %s: index exceeds %d", indexPath, vertexCount-1))
+			continue
+		}
+		bundle.infos = append(
+			bundle.infos,
+			touchIndexInfo{Resource: index, Offset: len(bundle.combined), Count: len(values), Path: indexPath},
+		)
+		bundle.combined = append(bundle.combined, values...)
+		bundle.paths = append(bundle.paths, indexPath)
+		bundle.relativePaths = append(bundle.relativePaths, index.Filename)
+		format := index.Format
+		if format == "" {
+			bundle.formats = append(bundle.formats, nil)
+		} else {
+			bundle.formats = append(bundle.formats, &format)
+		}
+	}
+	return bundle
+}
+
+// loadTouchBlend resolves the blend buffer that accompanies a position buffer.
+// A missing, unreadable, or size-mismatched blend leaves the result empty
+// instead of failing the whole component.
+func loadTouchBlend(
+	modRoot string,
+	position modmesh.BufferResource,
+	candidates []modmesh.BufferResource,
+	vertexCount int,
+	warn func(string),
+) touchBlendData {
+	blend, ok := modmesh.MatchCompanionResource(position, candidates)
+	if !ok {
+		return touchBlendData{bones: []modmesh.BlendBoneInfo{}}
+	}
+	resolved, pathErr := modmesh.ResolveResource(modRoot, blend.Filename)
+	if pathErr != nil {
+		return touchBlendData{bones: []modmesh.BlendBoneInfo{}}
+	}
+	raw, readErr := os.ReadFile(resolved)
+	if readErr != nil {
+		return touchBlendData{bones: []modmesh.BlendBoneInfo{}}
+	}
+	stride := blend.Stride
+	if stride == 0 {
+		stride = modmesh.DefaultBlendStride
+	}
+	if validationErr := modmesh.ValidateBlendBuffer(len(raw), vertexCount, stride); validationErr != nil {
+		warn(fmt.Sprintf("Skipping blend buffer %s: %s", resolved, validationErr))
+		return touchBlendData{bones: []modmesh.BlendBoneInfo{}}
+	}
+	relative := blend.Filename
+	return touchBlendData{
+		relativePath: &relative,
+		path:         &resolved,
+		stride:       &stride,
+		bones:        modmesh.ListBlendBones(raw, vertexCount, stride),
+	}
+}
+
+// summarizeTouchComponents folds the per-component grades and reasons into the
+// mod-wide grade, the deduplicated reason list, and the files the mesh hash
+// covers.
+func summarizeTouchComponents(components []TouchComponentAnalysis) (string, []string, []string) {
+	grade := "A"
+	reasonSet := map[string]bool{}
+	reasons := []string{}
+	meshPaths := []string{}
+	for _, component := range components {
+		if component.SupportGrade == "C" {
+			grade = "C"
+		} else if component.SupportGrade == "B" && grade == "A" {
+			grade = "B"
+		}
+		for _, reason := range component.SupportReasons {
+			if !reasonSet[reason] {
+				reasonSet[reason] = true
+				reasons = append(reasons, reason)
+			}
+		}
+		meshPaths = append(meshPaths, component.PositionPath)
+		meshPaths = append(meshPaths, component.IndexPaths...)
+		if component.BlendPath != nil {
+			meshPaths = append(meshPaths, *component.BlendPath)
+		}
+	}
+	return grade, reasons, meshPaths
 }
 
 func loadTouchMeshBuffers(component TouchComponentAnalysis) (touchMeshBuffers, error) {
@@ -597,6 +665,7 @@ func touchBranchCondition(branches []string, isElse bool) string {
 	}
 	return strings.Join(parts, " && ")
 }
+
 func sameTouchCondition(left, right *string) bool {
 	normalize := func(value *string) string {
 		if value == nil {
@@ -771,6 +840,7 @@ func hashTouchFiles(paths []string, root string) (string, error) {
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
+
 func sanitizeTouchID(value string) string {
 	value = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(value, "_")
 	value = strings.Trim(value, "_")
@@ -779,6 +849,7 @@ func sanitizeTouchID(value string) string {
 	}
 	return value
 }
+
 func derefString(value *string) string {
 	if value == nil {
 		return ""

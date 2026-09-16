@@ -78,7 +78,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 	if info, statErr := os.Stat(folder); statErr != nil {
 		return ModelViewerTransport{}, statErr
 	} else if !info.IsDir() {
-		return ModelViewerTransport{}, contractError("Model viewer path must be a folder.")
+		return ModelViewerTransport{}, infra.ContractError("Model viewer path must be a folder.")
 	}
 	discoveryStartedAt := time.Now()
 	diagnostics := &infra.DiagnosticBatch{}
@@ -98,7 +98,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 		)
 	}
 	if len(iniPaths) == 0 {
-		return ModelViewerTransport{}, contractError("No active .ini files found in this folder.")
+		return ModelViewerTransport{}, infra.ContractError("No active .ini files found in this folder.")
 	}
 	if err := ctx.Err(); err != nil {
 		return ModelViewerTransport{}, err
@@ -211,7 +211,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 	}
 	if len(transport.Meshes) == 0 {
 		if resource := firstUnresolvedModelViewerPositionResource(prepared.scans); resource != "" {
-			return ModelViewerTransport{}, contractError(
+			return ModelViewerTransport{}, infra.ContractError(
 				fmt.Sprintf("Position resource Resource%s has no resolvable file-backed source.", resource),
 			)
 		}
@@ -223,14 +223,14 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 			}
 		}
 		if !hasGeometryGroups {
-			return ModelViewerTransport{}, contractError(
+			return ModelViewerTransport{}, infra.ContractError(
 				fmt.Sprintf("No mesh geometry found across %d ini file(s).", len(iniPaths)),
 			)
 		}
 		if prepared.timing != nil && prepared.timing.SkippedMissingTexcoord {
-			return ModelViewerTransport{}, contractError("Draw sections are missing a texcoord buffer (vb1).")
+			return ModelViewerTransport{}, infra.ContractError("Draw sections are missing a texcoord buffer (vb1).")
 		}
-		return ModelViewerTransport{}, contractError("No mesh data could be extracted (buffer files missing?).")
+		return ModelViewerTransport{}, infra.ContractError("No mesh data could be extracted (buffer files missing?).")
 	}
 	if err := ctx.Err(); err != nil {
 		return ModelViewerTransport{}, err
@@ -336,6 +336,7 @@ type modelViewerGeometryScan struct {
 	sections  []modINISection
 	resources []modelViewerResource
 }
+
 type modelViewerPreparedGeometry struct {
 	sections                                   []modINISection
 	shapeKeys                                  []modelViewerShapeKey
@@ -356,9 +357,11 @@ func (t *Service) prepareModelViewerGeometry(
 	budget *modelViewerLoadBudget,
 ) (*modelViewerPreparedGeometry, error) {
 	prepared := &modelViewerPreparedGeometry{
-		cache:         newModelViewerBufferCache(),
-		variableNames: make(map[string]modelViewerVariableName),
-		timing:        &modelViewerMeshBuildTiming{},
+		cache:             newModelViewerBufferCache(),
+		variableNames:     make(map[string]modelViewerVariableName),
+		timing:            &modelViewerMeshBuildTiming{},
+		computeDeformers:  []ModelViewerComputeDeformerTransport{},
+		computeAnimations: []modelViewerPreparedAnimationClip{},
 	}
 	keep := false
 	defer func() {

@@ -326,8 +326,8 @@ func (m *SlowChunkMonitor) evaluateLocked(now time.Time) {
 		if entry.ChunkSize > 0 {
 			completion = float64(entry.TransferredBytes) / float64(entry.ChunkSize)
 		}
-		nearComplete := entry.ChunkSize > 0 &&
-			(completion >= slowChunkNearCompleteRatio || (completion >= 0.5 && remaining <= slowChunkNearCompleteRemaining))
+		almostDone := completion >= 0.5 && remaining <= slowChunkNearCompleteRemaining
+		nearComplete := entry.ChunkSize > 0 && (completion >= slowChunkNearCompleteRatio || almostDone)
 		stallTimeout := slowChunkStallTimeout
 		if nearComplete {
 			stallTimeout = slowChunkNearCompleteStallTimeout
