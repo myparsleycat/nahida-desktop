@@ -52,8 +52,15 @@ type ModelViewerMeshTransport struct {
 }
 
 type ModelViewerTextureTransport struct {
-	URL  string `json:"url"`
-	Role string `json:"role"`
+	URL         string `json:"url"`
+	FallbackURL string `json:"fallbackUrl,omitempty"`
+	Role        string `json:"role"`
+	Encoding    string `json:"encoding"`
+	Format      string `json:"format,omitempty"`
+	Width       uint32 `json:"width,omitempty"`
+	Height      uint32 `json:"height,omitempty"`
+	MipCount    uint32 `json:"mipCount,omitempty"`
+	InvertAlpha bool   `json:"invertAlpha,omitempty"`
 }
 
 type ModelViewerVariableValue struct {

@@ -261,7 +261,8 @@ filename = diffuse.png
 		_, _ = service.CleanupModelViewer(context.Background(), result.MemorySessionID)
 	})
 	ok := buf.String()
-	if !strings.Contains(ok, "Starting model viewer load") || !strings.Contains(ok, "Texture encoding completed in") ||
+	if !strings.Contains(ok, "Starting model viewer load") ||
+		!strings.Contains(ok, "Texture preparation completed in") ||
 		!strings.Contains(ok, "textures=1") ||
 		!strings.Contains(ok, "Completed model viewer load in") ||
 		!strings.Contains(ok, "meshes=1") {

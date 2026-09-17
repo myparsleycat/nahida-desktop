@@ -46,6 +46,22 @@ export type ViewerMesh = {
 };
 
 export type ViewerTextureRole = "diffuse" | "normal_map" | "light_map" | "material_map";
+
+export type ViewerDDSFormat =
+    | "bc1-unorm"
+    | "bc1-unorm-srgb"
+    | "bc2-unorm"
+    | "bc2-unorm-srgb"
+    | "bc3-unorm"
+    | "bc3-unorm-srgb"
+    | "bc4-unorm"
+    | "bc4-snorm"
+    | "bc5-unorm"
+    | "bc5-snorm"
+    | "bc6h-ufloat"
+    | "bc6h-sfloat"
+    | "bc7-unorm"
+    | "bc7-unorm-srgb";
 export type ViewerMaterialProfile = "zzmi" | "wuwa:rabbitfx";
 
 export type ViewerTexture = {
@@ -250,7 +266,20 @@ export type ModViewerTransport = {
     name: string;
     materialProfile?: ViewerMaterialProfile;
     meshes: ViewerMeshTransport[];
-    textures: Record<string, { url: string; role: ViewerTextureRole }>;
+    textures: Record<
+        string,
+        {
+            url: string;
+            fallbackUrl?: string;
+            role: ViewerTextureRole;
+            encoding: "image" | "dds";
+            format?: ViewerDDSFormat;
+            width?: number;
+            height?: number;
+            mipCount?: number;
+            invertAlpha?: boolean;
+        }
+    >;
     variables: ViewerVariable[];
     defaultState: Record<string, ViewerStateValue>;
     stateRules: ViewerStateRule[];

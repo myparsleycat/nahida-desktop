@@ -7,6 +7,7 @@ import type {
     ModViewerTransport,
     ViewerMaterialProfile,
     ViewerStateValue,
+    ViewerDDSFormat,
     ViewerTextureRole,
     ViewerComputeBinarySource,
 } from "@shared/mod-viewer/types";
@@ -21,6 +22,29 @@ function normalizeDNF(value: ModelViewerDNF): Dnf {
             negate: clause.negate,
         })),
     );
+}
+
+const viewerDDSFormats = new Set<ViewerDDSFormat>([
+    "bc1-unorm",
+    "bc1-unorm-srgb",
+    "bc2-unorm",
+    "bc2-unorm-srgb",
+    "bc3-unorm",
+    "bc3-unorm-srgb",
+    "bc4-unorm",
+    "bc4-snorm",
+    "bc5-unorm",
+    "bc5-snorm",
+    "bc6h-ufloat",
+    "bc6h-sfloat",
+    "bc7-unorm",
+    "bc7-unorm-srgb",
+]);
+
+function normalizeDDSFormat(value?: string): ViewerDDSFormat | undefined {
+    return value && viewerDDSFormats.has(value as ViewerDDSFormat)
+        ? (value as ViewerDDSFormat)
+        : undefined;
 }
 
 function normalizeStateValue(value: unknown): ViewerStateValue {
@@ -83,9 +107,19 @@ export function normalizeModelViewerTransport(
         if (!texture) {
             continue;
         }
+        const encoding = texture.encoding === "dds" ? "dds" : "image";
+        const unknownEncoding =
+            texture.encoding !== "" && texture.encoding !== "image" && texture.encoding !== "dds";
         textures[key] = {
-            url: texture.url,
+            url: unknownEncoding && texture.fallbackUrl ? texture.fallbackUrl : texture.url,
             role: normalizeTextureRole(texture.role),
+            encoding,
+            fallbackUrl: texture.fallbackUrl || undefined,
+            format: normalizeDDSFormat(texture.format),
+            width: texture.width || undefined,
+            height: texture.height || undefined,
+            mipCount: texture.mipCount || undefined,
+            invertAlpha: texture.invertAlpha || undefined,
         };
     }
 

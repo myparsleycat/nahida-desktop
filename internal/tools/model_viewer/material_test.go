@@ -615,6 +615,33 @@ func TestRunModelViewerTextureJobsKeepsInvertAlphaVariant(t *testing.T) {
 	}
 }
 
+func TestRunModelViewerTextureJobsPreservesDetectedAlphaInversion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mask.png")
+	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, G: 64, B: 32, A: 0})
+	output, _, err := runModelViewerTextureJobs(
+		context.Background(),
+		modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85},
+		1,
+		[]modelViewerTextureJob{{
+			path:         path,
+			resourceName: "BodyDiffuse",
+			keys:         []string{"body"},
+			role:         "diffuse",
+			canonicalKey: "body",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(output[0]["body"].Bytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alpha := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA).A; alpha != 255 {
+		t.Fatalf("prepared alpha = %d, want 255", alpha)
+	}
+}
+
 func TestRunModelViewerTextureJobsKeepsZZMINormalTransformVariant(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "packed-normal.png")
@@ -952,6 +979,34 @@ func encodeModelViewerBC1DDS(t *testing.T, width, height, mipmaps, whiteFromMip 
 				data[offset], data[offset+1] = 0xff, 0xff
 			}
 		}
+	}
+	dds.Data = data
+	var output bytes.Buffer
+	if err = dds.Write(&output); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
+}
+
+func encodeModelViewerTransparentWhiteBC3DDS(t *testing.T, width, height uint32) []byte {
+	t.Helper()
+	mipmaps := uint32(1)
+	dds, err := ddsutil.NewDXGI(ddsutil.NewDxgiParams{
+		Height:            height,
+		Width:             width,
+		Format:            ddsutil.DxgiFormatBC3_UNorm,
+		MipmapLevels:      &mipmaps,
+		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
+		AlphaMode:         ddsutil.AlphaModeStraight,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := make([]byte, int(((width+3)/4)*((height+3)/4)*16))
+	for offset := 0; offset < len(data); offset += 16 {
+		data[offset], data[offset+1] = 0, 0
+		data[offset+8], data[offset+9] = 0xff, 0xff
+		data[offset+10], data[offset+11] = 0xff, 0xff
 	}
 	dds.Data = data
 	var output bytes.Buffer
