@@ -7,9 +7,15 @@ import {
     parseModelViewerDDS,
 } from "./model-viewer-dds";
 
+const maxTextureSize = 8192;
+
 describe("parseModelViewerDDS", () => {
     it("parses a legacy BC1 texture without decoding its blocks", () => {
-        const result = parseModelViewerDDS(ddsFixture({ fourcc: "DXT1", width: 4, height: 4 }));
+        const result = parseModelViewerDDS(
+            ddsFixture({ fourcc: "DXT1", width: 4, height: 4 }),
+            undefined,
+            maxTextureSize,
+        );
 
         expect(result.format).toBe("bc1-unorm");
         expect(result.texture.format).toBe(RGBA_S3TC_DXT1_Format);
@@ -21,8 +27,16 @@ describe("parseModelViewerDDS", () => {
     });
 
     it("parses DX10 BC5 and signed BC4 formats", () => {
-        const bc5 = parseModelViewerDDS(ddsFixture({ dxgi: 83, width: 8, height: 8 }));
-        const bc4 = parseModelViewerDDS(ddsFixture({ dxgi: 81, width: 4, height: 4 }));
+        const bc5 = parseModelViewerDDS(
+            ddsFixture({ dxgi: 83, width: 8, height: 8 }),
+            undefined,
+            maxTextureSize,
+        );
+        const bc4 = parseModelViewerDDS(
+            ddsFixture({ dxgi: 81, width: 4, height: 4 }),
+            undefined,
+            maxTextureSize,
+        );
 
         expect(bc5.format).toBe("bc5-unorm");
         expect(bc5.texture.format).toBe(RED_GREEN_RGTC2_Format);
@@ -33,6 +47,8 @@ describe("parseModelViewerDDS", () => {
     it("keeps mips within the 64MP limit", () => {
         const result = parseModelViewerDDS(
             ddsFixture({ fourcc: "DXT1", width: 4096, height: 2048, mipCount: 3 }),
+            undefined,
+            maxTextureSize,
         );
 
         expect(result.texture.image).toMatchObject({ width: 4096, height: 2048 });
@@ -43,26 +59,52 @@ describe("parseModelViewerDDS", () => {
         ]);
     });
 
+    it("discards mips larger than the renderer texture-size limit", () => {
+        const result = parseModelViewerDDS(
+            ddsFixture({ fourcc: "DXT1", width: 16384, height: 4, mipCount: 2 }),
+            undefined,
+            maxTextureSize,
+        );
+
+        expect(result.texture.mipmaps.map(({ width, height }) => [width, height])).toEqual([
+            [8192, 2],
+        ]);
+    });
+
     it("rejects truncated data", () => {
         const truncated = ddsFixture({ fourcc: "DXT5", width: 8, height: 8 }).slice(0, -1);
-        expect(() => parseModelViewerDDS(truncated)).toThrow("truncated");
+        expect(() => parseModelViewerDDS(truncated, undefined, maxTextureSize)).toThrow(
+            "truncated",
+        );
     });
 
     it("rejects arrays, cubemaps, and metadata mismatches", () => {
         expect(() =>
-            parseModelViewerDDS(ddsFixture({ dxgi: 98, width: 4, height: 4, arraySize: 2 })),
+            parseModelViewerDDS(
+                ddsFixture({ dxgi: 98, width: 4, height: 4, arraySize: 2 }),
+                undefined,
+                maxTextureSize,
+            ),
         ).toThrow("arrays");
         expect(() =>
-            parseModelViewerDDS(ddsFixture({ fourcc: "DXT1", width: 4, height: 4, caps2: 0x200 })),
+            parseModelViewerDDS(
+                ddsFixture({ fourcc: "DXT1", width: 4, height: 4, caps2: 0x200 }),
+                undefined,
+                maxTextureSize,
+            ),
         ).toThrow("cubemap");
         expect(() =>
-            parseModelViewerDDS(ddsFixture({ fourcc: "DXT1", width: 4, height: 4 }), "bc3-unorm"),
+            parseModelViewerDDS(
+                ddsFixture({ fourcc: "DXT1", width: 4, height: 4 }),
+                "bc3-unorm",
+                maxTextureSize,
+            ),
         ).toThrow("format changed");
     });
 });
 
 describe("DDS capability selection", () => {
-    const all = { s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true };
+    const all = { maxTextureSize, s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true };
 
     it("requires the matching WebGL extension family", () => {
         expect(canUploadModelViewerDDS("bc1-unorm", "diffuse", all)).toBe(true);
@@ -85,9 +127,11 @@ describe("DDS capability selection", () => {
     });
 
     it("preflights the mip limit from transport metadata", () => {
-        expect(hasModelViewerDDSMipWithinLimit(8192, 8192, 1)).toBe(true);
-        expect(hasModelViewerDDSMipWithinLimit(16384, 8192, 1)).toBe(false);
-        expect(hasModelViewerDDSMipWithinLimit(16384, 8192, 2)).toBe(true);
+        expect(hasModelViewerDDSMipWithinLimit(8192, 8192, 1, maxTextureSize)).toBe(true);
+        expect(hasModelViewerDDSMipWithinLimit(16384, 8192, 1, maxTextureSize)).toBe(false);
+        expect(hasModelViewerDDSMipWithinLimit(16384, 8192, 2, maxTextureSize)).toBe(true);
+        expect(hasModelViewerDDSMipWithinLimit(16384, 4, 1, maxTextureSize)).toBe(false);
+        expect(hasModelViewerDDSMipWithinLimit(16384, 4, 2, maxTextureSize)).toBe(true);
     });
 });
 

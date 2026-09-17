@@ -91,6 +91,7 @@ type DDSTextureMetadata = {
 
 const textureLoader = new TextureLoader();
 const noCompressedTextureCapabilities: ModelViewerTextureCapabilities = {
+    maxTextureSize: 0,
     s3tc: false,
     s3tcSRGB: false,
     rgtc: false,
@@ -922,13 +923,22 @@ async function loadPayloadTexture(
         entry.height &&
         entry.mipCount &&
         canUploadModelViewerDDS(entry.format, entry.role, capabilities) &&
-        hasModelViewerDDSMipWithinLimit(entry.width, entry.height, entry.mipCount)
+        hasModelViewerDDSMipWithinLimit(
+            entry.width,
+            entry.height,
+            entry.mipCount,
+            capabilities.maxTextureSize,
+        )
     ) {
         let directTexture: Texture | undefined;
         try {
             const response = await fetch(entry.url, { signal, cache: "no-store" });
             if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
-            const parsed = parseModelViewerDDS(await response.arrayBuffer(), entry.format);
+            const parsed = parseModelViewerDDS(
+                await response.arrayBuffer(),
+                entry.format,
+                capabilities.maxTextureSize,
+            );
             directTexture = parsed.texture;
             signal.throwIfAborted();
             parsed.texture.userData.modelViewerDDS = { format: parsed.format, direct: true };

@@ -41,6 +41,7 @@ type DDSFormatInfo = {
 };
 
 export type ModelViewerTextureCapabilities = {
+    maxTextureSize: number;
     s3tc: boolean;
     s3tcSRGB: boolean;
     rgtc: boolean;
@@ -56,6 +57,7 @@ export function getModelViewerTextureCapabilities(
     renderer: WebGLRenderer,
 ): ModelViewerTextureCapabilities {
     return {
+        maxTextureSize: renderer.capabilities.maxTextureSize,
         s3tc: renderer.extensions.has("WEBGL_compressed_texture_s3tc"),
         s3tcSRGB: renderer.extensions.has("WEBGL_compressed_texture_s3tc_srgb"),
         rgtc: renderer.extensions.has("EXT_texture_compression_rgtc"),
@@ -84,9 +86,16 @@ export function hasModelViewerDDSMipWithinLimit(
     width: number,
     height: number,
     mipCount: number,
+    maxTextureSize: number,
 ): boolean {
     for (let mip = 0; mip < mipCount; mip++) {
-        if (width * height <= DDS_MAX_PIXELS) return true;
+        if (
+            width <= maxTextureSize &&
+            height <= maxTextureSize &&
+            width * height <= DDS_MAX_PIXELS
+        ) {
+            return true;
+        }
         width = Math.max(1, width >> 1);
         height = Math.max(1, height >> 1);
     }
@@ -95,7 +104,8 @@ export function hasModelViewerDDSMipWithinLimit(
 
 export function parseModelViewerDDS(
     buffer: ArrayBuffer,
-    expectedFormat?: ViewerDDSFormat,
+    expectedFormat: ViewerDDSFormat | undefined,
+    maxTextureSize: number,
 ): ParsedModelViewerDDS {
     if (buffer.byteLength < 128) throw new Error("DDS header is truncated");
     const view = new DataView(buffer);
@@ -143,7 +153,11 @@ export function parseModelViewerDDS(
         const dataLength = Math.ceil(mipWidth / 4) * Math.ceil(mipHeight / 4) * info.blockBytes;
         if (dataOffset + dataLength > buffer.byteLength)
             throw new Error("DDS mip data is truncated");
-        if (mipWidth * mipHeight <= DDS_MAX_PIXELS) {
+        if (
+            mipWidth <= maxTextureSize &&
+            mipHeight <= maxTextureSize &&
+            mipWidth * mipHeight <= DDS_MAX_PIXELS
+        ) {
             mipmaps.push({
                 data: new Uint8Array(buffer, dataOffset, dataLength),
                 width: mipWidth,
