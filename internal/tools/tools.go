@@ -175,6 +175,7 @@ func (t *Tools) UseClient(client *db.Client) {
 	t.fixTool.UseClient(client)
 	t.fixer4001.UseClient(client)
 	t.texture.UseClient(client)
+	t.wuwa.UseClient(client)
 	t.zzmi.UseClient(client)
 }
 
