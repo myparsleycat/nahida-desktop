@@ -35,6 +35,7 @@ import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
 import {
     canUploadModelViewerDDS,
+    fetchModelViewerDDSBuffer,
     hasModelViewerDDSMipWithinLimit,
     parseModelViewerDDS,
 } from "./model-viewer-dds";
@@ -932,10 +933,13 @@ async function loadPayloadTexture(
     ) {
         let directTexture: Texture | undefined;
         try {
-            const response = await fetch(entry.url, { signal, cache: "no-store" });
-            if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
             const parsed = parseModelViewerDDS(
-                await response.arrayBuffer(),
+                await fetchModelViewerDDSBuffer(
+                    entry.url,
+                    entry.format,
+                    capabilities.maxTextureSize,
+                    signal,
+                ),
                 entry.format,
                 capabilities.maxTextureSize,
             );

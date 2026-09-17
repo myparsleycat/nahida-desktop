@@ -211,6 +211,19 @@ func buildSpecs() map[string]spec {
 			defaultModGridLayout,
 			modGridLayoutModes,
 		),
+		KeyModGridModelPreview: {
+			def:        definitionsByKey[KeyModGridModelPreview],
+			getDefault: func(*Setting) any { return true },
+			fromStored: func(_ *Setting, value *string) any {
+				if value == nil || (*value != "true" && *value != "false") {
+					return true
+				}
+				return *value == "true"
+			},
+			toStored: func(_ *Setting, value any) string {
+				return formatBool(asBool(value))
+			},
+		},
 		KeyModGridResponsiveBaseWidth: clampedIntSpec(
 			definitionsByKey[KeyModGridResponsiveBaseWidth],
 			modGridResponsiveBaseWidthDefault,

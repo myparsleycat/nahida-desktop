@@ -70,7 +70,7 @@ import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
-import { hasPreviewFile, isPreviewMediaPath } from "./paste-preview";
+import { hasPreviewFile, isPreviewMediaPath } from "./preview-media";
 
 function getParentGroupPath(groupPath: string) {
   const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));

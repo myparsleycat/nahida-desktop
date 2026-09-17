@@ -49,6 +49,7 @@ func TestModelViewerPayloadStoresOneGeometryBufferPerMesh(t *testing.T) {
 		&transport,
 		[]modelViewerMeshPayload{payload},
 		nil,
+		modelViewerPayloadOptions{},
 	); err != nil {
 		t.Fatal(err)
 	}

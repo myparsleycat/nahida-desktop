@@ -710,6 +710,7 @@
       "empty_selection": "请从侧边栏选择群组或角色文件夹。",
       "no-preview": "无预览",
       "context-menu": {
+        "open-model-viewer": "在模型查看器中打开",
         "paste-preview": "粘贴",
         "open-preview-lightbox": "放大查看",
         "open-preview-viewer": "用预览查看器打开",
@@ -1759,6 +1760,8 @@
         },
         "layout": {
           "title": "布局",
+          "gridModelPreview": "为没有预览的模组显示模型预览",
+          "gridModelPreviewDescription": "在模组网格中，当没有图片或视频时，将当前切换状态显示为静态模型图像。",
           "sidebar": {
             "mode": "侧边栏布局",
             "modeDescription": "将角色侧边栏显示为行列表或正方形预览网格。",

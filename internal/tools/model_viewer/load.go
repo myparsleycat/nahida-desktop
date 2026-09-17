@@ -15,7 +15,22 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport ModelViewerTransport, err error) {
+func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
+	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{})
+}
+
+func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
+	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{
+		ddsPreviewMaxDimension:   modelViewerDDSPreviewMaxDimension,
+		includeAllStateVariables: true,
+	})
+}
+
+func (t *Service) loadModViewer(
+	ctx context.Context,
+	modPath string,
+	options modelViewerPayloadOptions,
+) (transport ModelViewerTransport, err error) {
 	startedAt := time.Now()
 	stage := "discover"
 	sessionID := ""
@@ -246,6 +261,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 		prepared.shapeKeys,
 		prepared.variableNames,
 		prepared.computeAnimations,
+		options.includeAllStateVariables,
 	)
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
@@ -257,6 +273,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 		&transport,
 		meshPayloads,
 		texturePayloads,
+		options,
 	); writeErr != nil {
 		return ModelViewerTransport{}, writeErr
 	}

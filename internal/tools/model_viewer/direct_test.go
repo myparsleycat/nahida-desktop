@@ -360,7 +360,15 @@ func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{0, 1, 2}},
 		{Positions: make([]float32, 9), Indices: []uint32{0, 1, 2}, SourceIndices: []uint32{7, 3, 11}},
 	}
-	if err := writeModelViewerPayload(context.Background(), service, sessionID, &transport, payloads, nil); err != nil {
+	if err := writeModelViewerPayload(
+		context.Background(),
+		service,
+		sessionID,
+		&transport,
+		payloads,
+		nil,
+		modelViewerPayloadOptions{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if transport.Meshes[0].SourceIndicesURL != "" {
@@ -483,6 +491,37 @@ func TestModelViewerVariableGatingDoesNotUseEffectVariables(t *testing.T) {
 	}
 	if !modelViewerVariableIsGating(variable, map[string]bool{"outfit": true}) {
 		t.Fatal("directly gated variable was hidden")
+	}
+}
+
+func TestConfigureModelViewerStateIncludesEffectOnlyVariablesForGridPreview(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persist $outfit = 0
+global persist $underwear = 0
+[KeyOutfit]
+type = cycle
+$outfit = 0,1
+$underwear = 0`)
+	newTransport := func() ModelViewerTransport {
+		return ModelViewerTransport{
+			Meshes: []ModelViewerMeshTransport{{
+				Conditions: ModelViewerDNF{{{Var: "underwear", Value: "1"}}},
+			}},
+			DefaultState: make(map[string]any),
+		}
+	}
+
+	regular := newTransport()
+	configureModelViewerState(&regular, sections, nil, nil, nil, false)
+	if len(regular.Variables) != 0 {
+		t.Fatalf("regular variables = %#v, want effect-only source hidden", regular.Variables)
+	}
+
+	grid := newTransport()
+	configureModelViewerState(&grid, sections, nil, nil, nil, true)
+	if len(grid.Variables) != 1 || grid.Variables[0].ID != "outfit" ||
+		len(grid.Variables[0].Effects) != 1 || grid.Variables[0].Effects[0].Var != "underwear" {
+		t.Fatalf("grid variables = %#v, want outfit with underwear effect", grid.Variables)
 	}
 }
 

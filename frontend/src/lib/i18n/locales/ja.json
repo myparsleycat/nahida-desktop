@@ -711,6 +711,7 @@
       "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
       "no-preview": "プレビューなし",
       "context-menu": {
+        "open-model-viewer": "モデルビューアーで開く",
         "paste-preview": "貼り付け",
         "open-preview-lightbox": "拡大表示",
         "open-preview-viewer": "プレビュービューアーで開く",
@@ -1760,6 +1761,8 @@
         },
         "layout": {
           "title": "レイアウト",
+          "gridModelPreview": "プレビューがないMODにモデルプレビューを表示",
+          "gridModelPreviewDescription": "MODグリッドで画像や動画がない場合、現在のトグル状態を静止モデル画像として表示します。",
           "sidebar": {
             "mode": "サイドバーレイアウト",
             "modeDescription": "キャラクターサイドバーを行リストまたは正方形プレビューグリッドで表示します。",

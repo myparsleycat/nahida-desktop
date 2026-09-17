@@ -67,6 +67,7 @@ export type ModelViewerCameraState = {
 
 export type ModelViewerHandle = {
     captureCameraState: () => ModelViewerCameraState | null;
+    captureSquarePngBlob: () => Promise<Blob | null>;
     captureSquarePngDataUrl: () => Promise<string | null>;
     restoreCameraState: (
         state: ModelViewerCameraState | null,
@@ -94,6 +95,7 @@ export type ModelViewerBodyShapeOverride = {
 
 export type ModelViewerSurfaceProps = {
     className?: string;
+    pixelRatio?: number;
     orientation: string;
     src?: string;
     payloadTransport?: ModViewerTransport;

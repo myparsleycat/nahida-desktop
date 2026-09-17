@@ -44,12 +44,14 @@ const settingsConfig = {
   disabledPrefixStyle: "mod.disabledPrefixStyle",
   sidebarLayout: "mod.sidebarLayout",
   gridLayoutMode: "mod.gridLayoutMode",
+  gridModelPreview: "mod.gridModelPreview",
   gridResponsiveBaseWidth: "mod.gridResponsiveBaseWidth",
   gridFixedCardWidth: "mod.gridFixedCardWidth",
   gridFixedColumnCount: "mod.gridFixedColumnCount",
 } as const;
 
 const AUTO_INSPECT_FIX_LABEL_ID = "setting-mod-auto-inspect-fix-title";
+const GRID_MODEL_PREVIEW_LABEL_ID = "setting-mod-grid-model-preview-title";
 
 function RouteComponent() {
   return <ModSettingsRouteContent />;
@@ -418,6 +420,24 @@ function ModSettingsRouteContent() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between space-x-4">
+              <div className="space-y-0.5">
+                <span id={GRID_MODEL_PREVIEW_LABEL_ID} className="text-sm font-medium">
+                  {t("page.setting.mod.layout.gridModelPreview")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.mod.layout.gridModelPreviewDescription")}
+                </p>
+              </div>
+              <Switch
+                checked={settings.gridModelPreview}
+                aria-labelledby={GRID_MODEL_PREVIEW_LABEL_ID}
+                onCheckedChange={(value) => update("gridModelPreview", value)}
+              />
             </div>
 
             <Separator />

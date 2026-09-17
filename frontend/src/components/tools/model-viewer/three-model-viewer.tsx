@@ -120,6 +120,7 @@ export const ThreeModelViewer = memo(
       onError,
       onLoad,
       orientation,
+      pixelRatio = window.devicePixelRatio,
       payloadEval,
       payloadTransport,
       shapeKeys,
@@ -138,6 +139,8 @@ export const ThreeModelViewer = memo(
       ref,
       () => ({
         captureCameraState: () => controllerRef.current?.captureCameraState() ?? null,
+        captureSquarePngBlob: async () =>
+          (await controllerRef.current?.captureSquarePngBlob()) ?? null,
         captureSquarePngDataUrl: async () =>
           (await controllerRef.current?.captureSquarePngDataUrl()) ?? null,
         restoreCameraState: (state, options) =>
@@ -187,7 +190,7 @@ export const ThreeModelViewer = memo(
             near: 0.01,
             position: DEFAULT_CAMERA_POSITION.toArray(),
           }}
-          dpr={window.devicePixelRatio}
+          dpr={pixelRatio}
           gl={modelViewerRenderer}
         >
           <ambientLight intensity={lighting.ambient} />
@@ -656,6 +659,10 @@ function ThreeModelScene({
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),
+      captureSquarePngBlob: async () => {
+        const blob = await captureSquareCanvasPngBlob(gl.domElement, invalidate);
+        return blob;
+      },
       captureSquarePngDataUrl: async () => {
         const dataUrl = await captureSquareCanvasPngDataUrl(gl.domElement, invalidate);
         return dataUrl;
@@ -1825,6 +1832,35 @@ async function captureSquareCanvasPngDataUrl(
   sourceCanvas: HTMLCanvasElement | null,
   invalidate?: () => void,
 ): Promise<string | null> {
+  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  if (!canvas) {
+    return null;
+  }
+
+  try {
+    return canvas.toDataURL("image/png");
+  } catch (error) {
+    Logger.capture("model-viewer:capture-preview", error);
+    return null;
+  }
+}
+
+async function captureSquareCanvasPngBlob(
+  sourceCanvas: HTMLCanvasElement | null,
+  invalidate?: () => void,
+): Promise<Blob | null> {
+  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  if (!canvas) {
+    return null;
+  }
+
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+async function copySquareCanvas(
+  sourceCanvas: HTMLCanvasElement | null,
+  invalidate?: () => void,
+): Promise<HTMLCanvasElement | null> {
   if (!sourceCanvas) {
     return null;
   }
@@ -1852,7 +1888,7 @@ async function captureSquareCanvasPngDataUrl(
 
   try {
     context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
-    return canvas.toDataURL("image/png");
+    return canvas;
   } catch (error) {
     Logger.capture("model-viewer:capture-preview", error);
     return null;

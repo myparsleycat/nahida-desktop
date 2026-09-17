@@ -137,6 +137,7 @@ func TestModelViewerCanceledPayloadDoesNotWrite(t *testing.T) {
 		&transport,
 		nil,
 		map[string]modelViewerTexturePayload{"texture": {Bytes: []byte("data")}},
+		modelViewerPayloadOptions{},
 	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
