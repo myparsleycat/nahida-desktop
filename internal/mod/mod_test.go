@@ -616,7 +616,7 @@ func TestUpdateToggleKeyOnlyTouchesRequestedSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(raw)
-	if got != "[KeyFirst]\r\n$swap = 0, 1\r\n\r\n[KeySecond]\r\nkey = F2\r\n$swap = 1, 0\n" {
+	if got != "[KeyFirst]\r\n$swap = 0, 1\r\n\r\n[KeySecond]\r\nkey = F2\r\n$swap = 1, 0\r\n" {
 		t.Fatalf("updated ini = %q", got)
 	}
 	if err := service.UpdateToggleKey(ctx, modPath, iniPath, "KeySecond", "$swap", ""); err != nil {
