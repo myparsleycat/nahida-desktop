@@ -44,6 +44,8 @@ type modelViewerTextureRunStats struct {
 	HashWallMs      int64
 	PrepareWallMs   int64
 	TotalWallMs     int64
+	DirectDDS       int
+	PreparedImages  int
 }
 
 func collectModelViewerTextureJobs(
@@ -154,6 +156,52 @@ func runModelViewerTextureJobs(
 		return outputs, stats, ctx.Err()
 	}
 	startedAt := time.Now()
+	imageJobs := make([]modelViewerTextureJob, 0, len(jobs))
+	directPaths := make(map[string]modelViewerDDSMetadata)
+	failedDirectPaths := make(map[string]bool)
+	for _, job := range jobs {
+		if !strings.EqualFold(filepath.Ext(job.path), ".dds") {
+			imageJobs = append(imageJobs, job)
+			continue
+		}
+		pathKey := strings.ToLower(filepath.Clean(job.path))
+		metadata, exists := directPaths[pathKey]
+		if !exists && !failedDirectPaths[pathKey] {
+			var err error
+			metadata, err = inspectModelViewerDDS(job.path)
+			if err != nil {
+				failedDirectPaths[pathKey] = true
+				continue
+			}
+			directPaths[pathKey] = metadata
+		}
+		if failedDirectPaths[pathKey] {
+			continue
+		}
+		item := modelViewerTexturePayload{
+			Key:          job.canonicalKey,
+			Role:         job.role,
+			Path:         job.path,
+			ResourceName: job.resourceName,
+			DDS:          &metadata,
+			InvertAlpha:  modelViewerTextureNameRequestsAlphaInvert(job.resourceName),
+		}
+		for _, key := range job.keys {
+			outputs[job.batchIndex][key] = item
+		}
+	}
+	for _, metadata := range directPaths {
+		if metadata.Format != "" {
+			stats.DirectDDS++
+		}
+	}
+	stats.UniquePaths = len(directPaths) + len(failedDirectPaths)
+	if len(imageJobs) == 0 {
+		stats.UniqueContents = len(directPaths)
+		stats.LogicalTextures = countModelViewerLogicalTextures(outputs)
+		stats.TotalWallMs = time.Since(startedAt).Milliseconds()
+		return outputs, stats, ctx.Err()
+	}
 	type pathGroup struct {
 		key         string
 		path        string
@@ -161,9 +209,9 @@ func runModelViewerTextureJobs(
 		contentKey  string
 		hashedBytes int64
 	}
-	pathIndexes := make(map[string]int, len(jobs))
-	pathGroups := make([]pathGroup, 0, len(jobs))
-	for _, job := range jobs {
+	pathIndexes := make(map[string]int, len(imageJobs))
+	pathGroups := make([]pathGroup, 0, len(imageJobs))
+	for _, job := range imageJobs {
 		pathKey := strings.ToLower(filepath.Clean(job.path))
 		index, ok := pathIndexes[pathKey]
 		if !ok {
@@ -173,7 +221,7 @@ func runModelViewerTextureJobs(
 		}
 		pathGroups[index].jobs = append(pathGroups[index].jobs, job)
 	}
-	stats.UniquePaths = len(pathGroups)
+	stats.UniquePaths += len(pathGroups)
 	hashStartedAt := time.Now()
 	hashWork := make(chan int)
 	hashWorkers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(pathGroups))
@@ -240,7 +288,7 @@ hashDispatch:
 		}
 		contentGroups[index].jobs = append(contentGroups[index].jobs, path.jobs...)
 	}
-	stats.UniqueContents = len(contentGroups)
+	stats.UniqueContents = len(directPaths) + len(contentGroups)
 	format := normalizeModelViewerFormat(settings.TextureFormat)
 	quality := normalizeJPEGQuality(settings.JPEGQuality)
 	type encodeVariant struct {
@@ -329,6 +377,7 @@ prepareDispatch:
 	for _, group := range contentGroups {
 		stats.Decodes += group.decodes
 		stats.Encodes += group.encodes
+		stats.PreparedImages += len(group.prepared)
 		for _, prepared := range group.prepared {
 			if prepared.job.batchIndex < 0 || prepared.job.batchIndex >= len(outputs) {
 				continue
@@ -344,19 +393,24 @@ prepareDispatch:
 			}
 		}
 	}
+	stats.LogicalTextures = countModelViewerLogicalTextures(outputs)
+	stats.TotalWallMs = time.Since(startedAt).Milliseconds()
+	return outputs, stats, ctx.Err()
+}
+
+func countModelViewerLogicalTextures(outputs []map[string]modelViewerTexturePayload) int {
+	count := 0
 	for _, output := range outputs {
 		seen := make(map[string]bool, len(output))
 		for _, item := range output {
-			key := item.Key
-			if key == "" || seen[key] {
+			if item.Key == "" || seen[item.Key] {
 				continue
 			}
-			seen[key] = true
-			stats.LogicalTextures++
+			seen[item.Key] = true
+			count++
 		}
 	}
-	stats.TotalWallMs = time.Since(startedAt).Milliseconds()
-	return outputs, stats, ctx.Err()
+	return count
 }
 
 func modelViewerAssignmentTextureKey(assignment modelViewerDirectTextureAssignment) string {

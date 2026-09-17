@@ -55,6 +55,7 @@ import type {
 
 import { ModelViewerComputeController } from "./model-viewer-compute-controller";
 import { parseOrientation } from "./model-viewer-contract";
+import { getModelViewerTextureCapabilities } from "./model-viewer-dds";
 import {
   buildPayloadModel,
   clearPayloadModelData,
@@ -457,6 +458,7 @@ function ThreeModelScene({
         positionLoader,
         toonShadowsRef.current,
         loadController.signal,
+        getModelViewerTextureCapabilities(gl),
       )
         .then((nextRoot) => {
           if (disposed || pendingLoadIdRef.current !== loadId) {

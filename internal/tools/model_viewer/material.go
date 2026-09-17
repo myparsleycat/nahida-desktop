@@ -569,12 +569,7 @@ func modelViewerTextureNameRequestsAlphaInvert(resourceName string) bool {
 }
 
 func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelViewerDecodedTexture) bool {
-	if decoded == nil {
-		return false
-	}
-	return modelViewerTextureNameRequestsAlphaInvert(resourceName) ||
-		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 &&
-			decoded.lowRGB/float64(decoded.low) >= 8
+	return decoded != nil && modelViewerTextureNameRequestsAlphaInvert(resourceName)
 }
 
 func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {

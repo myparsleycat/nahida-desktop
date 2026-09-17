@@ -1,5 +1,13 @@
 import type { EvaluatedViewerState } from "@shared/mod-viewer/types";
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial, Texture } from "three";
+import {
+    BufferAttribute,
+    BufferGeometry,
+    Group,
+    Mesh,
+    MeshStandardMaterial,
+    RED_GREEN_RGTC2_Format,
+    Texture,
+} from "three";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
@@ -228,6 +236,11 @@ describe("applyPayloadEval packed maps", () => {
         const normal = new Texture();
         const light = new Texture();
         const packedMaterial = new Texture();
+        diffuse.userData.modelViewerDDS = { format: "bc4-unorm", direct: true };
+        diffuse.userData.modelViewerInvertAlpha = true;
+        normal.userData.modelViewerDDS = { format: "bc5-snorm", direct: true };
+        light.userData.modelViewerDDS = { format: "bc4-unorm", direct: true };
+        packedMaterial.userData.modelViewerDDS = { format: "bc4-unorm", direct: true };
         const root = new Group();
         root.userData.payloadTextures = new Map([
             ["diffuse", diffuse],
@@ -263,14 +276,76 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.roughness).toBe(1);
 
         const shader = {
-            fragmentShader: "#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>",
+            fragmentShader:
+                "#include <common>\n#include <map_fragment>\n#include <normal_fragment_maps>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>",
             uniforms: {},
         };
         material.onBeforeCompile(shader as never, {} as never);
-        expect(shader.fragmentShader).toContain("1.0 - texelRoughness.g");
-        expect(shader.fragmentShader).toContain("metalnessFactor *= texelMetalness.g");
+        expect(shader.fragmentShader).toContain("float modelViewerRoughnessSample = mix(");
+        expect(shader.fragmentShader).toContain("float modelViewerMetalnessSample = mix(");
         expect(shader.fragmentShader).not.toContain("#include <roughnessmap_fragment>");
         expect(shader.fragmentShader).not.toContain("#include <metalnessmap_fragment>");
+        expect(shader.fragmentShader).toContain(
+            "sampledDiffuseColor = vec4( sampledDiffuseColor.rrr, 1.0 )",
+        );
+        expect(shader.fragmentShader).toContain("mapN = modelViewerNormalTexel");
+        const uniforms = shader.uniforms as Record<string, { value: number }>;
+        expect(uniforms.modelViewerInvertAlpha.value).toBe(1);
+        expect(uniforms.modelViewerMapBC4.value).toBe(1);
+        expect(uniforms.modelViewerNormalMode.value).toBe(2);
+        expect(uniforms.modelViewerMetalnessBC4.value).toBe(1);
+        expect(uniforms.modelViewerRoughnessBC4.value).toBe(1);
+    });
+
+    it("recompiles when a normal-map variant changes the packed-normal define", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
+        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        const material = new MeshStandardMaterial();
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            baseNormals: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            lastPositionVariantIndex: null,
+            materialProfile: "zzmi",
+        };
+        const packed = new Texture();
+        packed.format = RED_GREEN_RGTC2_Format;
+        packed.userData.modelViewerDDS = { format: "bc5-unorm", direct: true };
+        const rgba = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([
+            ["packed", packed],
+            ["rgba", rgba],
+        ]);
+        root.add(mesh);
+
+        const evaluated = (normalMapKey: string): EvaluatedViewerState => ({
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey,
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+        applyPayloadEval(root, evaluated("packed"));
+        const packedVersion = material.version;
+
+        applyPayloadEval(root, evaluated("rgba"));
+
+        expect(material.version).toBeGreaterThan(packedVersion);
     });
 
     it("does not bind tangent-space normal maps without authored tangents", () => {
@@ -399,7 +474,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.aoMap).toBeNull();
         expect(material.metalnessMap).toBeNull();
         expect(material.roughnessMap).toBeNull();
-        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v1");
+        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v1|model-viewer-dds-v1");
 
         const shader = {
             vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",

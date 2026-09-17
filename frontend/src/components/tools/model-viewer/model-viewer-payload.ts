@@ -18,6 +18,9 @@ import {
     MeshStandardMaterial,
     Object3D,
     NoColorSpace,
+    RG11_EAC_Format,
+    RGFormat,
+    RED_GREEN_RGTC2_Format,
     RGBAFormat,
     SRGBColorSpace,
     ShaderChunk,
@@ -26,9 +29,15 @@ import {
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
+import type { ModelViewerTextureCapabilities } from "./model-viewer-dds";
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
+import {
+    canUploadModelViewerDDS,
+    hasModelViewerDDSMipWithinLimit,
+    parseModelViewerDDS,
+} from "./model-viewer-dds";
 import { decodeModelViewerMesh } from "./model-viewer-mesh-codec";
 
 type PayloadMeshUserData = {
@@ -62,7 +71,31 @@ type RabbitFXShaderState = {
     toonEnabled: { value: number };
 };
 
+type DDSShaderState = {
+    invertAlpha: { value: number };
+    mapBC4: { value: number };
+    mapSigned: { value: number };
+    normalMode: { value: number };
+    metalnessBC4: { value: number };
+    metalnessSigned: { value: number };
+    roughnessBC4: { value: number };
+    roughnessSigned: { value: number };
+    rabbitFXLightBC4: { value: number };
+    rabbitFXLightSigned: { value: number };
+};
+
+type DDSTextureMetadata = {
+    format: string;
+    direct: boolean;
+};
+
 const textureLoader = new TextureLoader();
+const noCompressedTextureCapabilities: ModelViewerTextureCapabilities = {
+    s3tc: false,
+    s3tcSRGB: false,
+    rgtc: false,
+    bptc: false,
+};
 const rabbitFXFallbackLightMap = new DataTexture(
     new Uint8Array([255, 255, 255, 255]),
     1,
@@ -84,6 +117,7 @@ export async function buildPayloadModel(
     positionLoader: PositionVariantLoader,
     toonShadows = false,
     loadSignal?: AbortSignal,
+    textureCapabilities: ModelViewerTextureCapabilities = noCompressedTextureCapabilities,
 ): Promise<Group> {
     const controller = new AbortController();
     const signal = loadSignal
@@ -110,7 +144,7 @@ export async function buildPayloadModel(
             );
         }),
         loadItems(Object.entries(transport.textures), 4, async ([key, entry]) => {
-            const texture = await loadTexture(entry.url, textureCache, signal);
+            const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
             if (signal.aborted) {
                 texture?.dispose();
                 signal.throwIfAborted();
@@ -372,6 +406,7 @@ function applyEvaluatedMaps(
     } else if (userData.materialProfile === "wuwa:rabbitfx" && object.geometry.attributes.uv) {
         configureRabbitFXMaterialShader(material, userData.toonShadows);
     }
+    configureDDSMaterialShader(material);
     const last = userData.lastMaps;
     if (
         last &&
@@ -384,6 +419,7 @@ function applyEvaluatedMaps(
     }
     const hadMap = Boolean(material.map);
     const hadNormalMap = Boolean(material.normalMap);
+    const hadPackedNormalMap = usesPackedNormalMap(material.normalMap);
     const hadMetalnessMap = Boolean(material.metalnessMap);
     const hadRoughnessMap = Boolean(material.roughnessMap);
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
@@ -430,9 +466,11 @@ function applyEvaluatedMaps(
         rabbitFXState.lightMap.value = rabbitFXLightMap ?? rabbitFXFallbackLightMap;
         rabbitFXState.lightMapEnabled.value = rabbitFXLightMap ? 1 : 0;
     }
+    updateDDSShaderState(material, userData.materialProfile);
     if (
         hadMap !== Boolean(material.map) ||
         hadNormalMap !== Boolean(material.normalMap) ||
+        hadPackedNormalMap !== usesPackedNormalMap(material.normalMap) ||
         hadMetalnessMap !== Boolean(material.metalnessMap) ||
         hadRoughnessMap !== Boolean(material.roughnessMap)
     ) {
@@ -444,6 +482,143 @@ function applyEvaluatedMaps(
         lightMapKey: evaluated.lightMapKey,
         materialMapKey: evaluated.materialMapKey,
     };
+}
+
+function configureDDSMaterialShader(material: MeshStandardMaterial): void {
+    if (material.userData.modelViewerDDSMaterial) return;
+    const state: DDSShaderState = {
+        invertAlpha: { value: 0 },
+        mapBC4: { value: 0 },
+        mapSigned: { value: 0 },
+        normalMode: { value: 0 },
+        metalnessBC4: { value: 0 },
+        metalnessSigned: { value: 0 },
+        roughnessBC4: { value: 0 },
+        roughnessSigned: { value: 0 },
+        rabbitFXLightBC4: { value: 0 },
+        rabbitFXLightSigned: { value: 0 },
+    };
+    material.userData.modelViewerDDSMaterial = state;
+    const previousCompile = material.onBeforeCompile.bind(material);
+    const previousCacheKey = material.customProgramCacheKey.bind(material);
+    material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer) => {
+        previousCompile(shader, renderer);
+        shader.uniforms.modelViewerInvertAlpha = state.invertAlpha;
+        shader.uniforms.modelViewerMapBC4 = state.mapBC4;
+        shader.uniforms.modelViewerMapSigned = state.mapSigned;
+        shader.uniforms.modelViewerNormalMode = state.normalMode;
+        shader.uniforms.modelViewerMetalnessBC4 = state.metalnessBC4;
+        shader.uniforms.modelViewerMetalnessSigned = state.metalnessSigned;
+        shader.uniforms.modelViewerRoughnessBC4 = state.roughnessBC4;
+        shader.uniforms.modelViewerRoughnessSigned = state.roughnessSigned;
+        shader.uniforms.modelViewerRabbitFXLightBC4 = state.rabbitFXLightBC4;
+        shader.uniforms.modelViewerRabbitFXLightSigned = state.rabbitFXLightSigned;
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <common>",
+            `#include <common>
+uniform float modelViewerInvertAlpha;
+uniform float modelViewerMapBC4;
+uniform float modelViewerMapSigned;
+uniform float modelViewerNormalMode;
+uniform float modelViewerMetalnessBC4;
+uniform float modelViewerMetalnessSigned;
+uniform float modelViewerRoughnessBC4;
+uniform float modelViewerRoughnessSigned;
+uniform float modelViewerRabbitFXLightBC4;
+uniform float modelViewerRabbitFXLightSigned;`,
+        );
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <map_fragment>",
+            `#ifdef USE_MAP
+    vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+    if ( modelViewerMapSigned > 0.5 ) sampledDiffuseColor = sampledDiffuseColor * 0.5 + 0.5;
+    if ( modelViewerMapBC4 > 0.5 ) sampledDiffuseColor = vec4( sampledDiffuseColor.rrr, 1.0 );
+    if ( modelViewerInvertAlpha > 0.5 ) sampledDiffuseColor.a = 1.0 - sampledDiffuseColor.a;
+    diffuseColor *= sampledDiffuseColor;
+#endif`,
+        );
+        const normalChunk = ShaderChunk.normal_fragment_maps.replace(
+            "vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;",
+            `vec3 modelViewerNormalTexel = texture2D( normalMap, vNormalMapUv ).xyz;
+    vec3 mapN = modelViewerNormalTexel * 2.0 - 1.0;
+    if ( modelViewerNormalMode > 1.5 && modelViewerNormalMode < 2.5 ) mapN = modelViewerNormalTexel;
+    if ( modelViewerNormalMode > 2.5 && modelViewerNormalMode < 3.5 ) mapN.xy = vec2( mapN.x );
+    if ( modelViewerNormalMode > 3.5 ) mapN.xy = vec2( modelViewerNormalTexel.x );
+    if ( modelViewerNormalMode > 0.5 ) {
+        mapN.z = sqrt( max( 0.0, 1.0 - dot( mapN.xy, mapN.xy ) ) );
+    }`,
+        );
+        shader.fragmentShader = shader.fragmentShader
+            .replace("#include <normal_fragment_maps>", normalChunk)
+            .replace(
+                "roughnessFactor *= 1.0 - texelRoughness.g;",
+                `float modelViewerRoughnessSample = mix( texelRoughness.g, texelRoughness.r, modelViewerRoughnessBC4 );
+    if ( modelViewerRoughnessSigned > 0.5 ) modelViewerRoughnessSample = modelViewerRoughnessSample * 0.5 + 0.5;
+    roughnessFactor *= 1.0 - modelViewerRoughnessSample;`,
+            )
+            .replace(
+                "metalnessFactor *= texelMetalness.g;",
+                `float modelViewerMetalnessSample = mix( texelMetalness.g, texelMetalness.r, modelViewerMetalnessBC4 );
+    if ( modelViewerMetalnessSigned > 0.5 ) modelViewerMetalnessSample = modelViewerMetalnessSample * 0.5 + 0.5;
+    metalnessFactor *= modelViewerMetalnessSample;`,
+            )
+            .replace(
+                "float mask = texture2D( rabbitFXLightMap, vRabbitFXUv ).g;",
+                `vec4 modelViewerRabbitFXLightSample = texture2D( rabbitFXLightMap, vRabbitFXUv );
+    float mask = mix( modelViewerRabbitFXLightSample.g, modelViewerRabbitFXLightSample.r, modelViewerRabbitFXLightBC4 );
+    if ( modelViewerRabbitFXLightSigned > 0.5 ) mask = mask * 0.5 + 0.5;`,
+            );
+    };
+    material.customProgramCacheKey = () => `${previousCacheKey()}|model-viewer-dds-v1`;
+    material.needsUpdate = true;
+}
+
+function updateDDSShaderState(
+    material: MeshStandardMaterial,
+    materialProfile: ModViewerTransport["materialProfile"],
+): void {
+    const state = material.userData.modelViewerDDSMaterial as DDSShaderState;
+    const map = ddsTextureMetadata(material.map);
+    const normal = ddsTextureMetadata(material.normalMap);
+    const metalness = ddsTextureMetadata(material.metalnessMap);
+    const roughness = ddsTextureMetadata(material.roughnessMap);
+    const rabbitFX = material.userData.rabbitFXMaterial as RabbitFXShaderState | undefined;
+    const rabbitFXMap = ddsTextureMetadata(rabbitFX?.lightMap.value);
+    state.invertAlpha.value = material.map?.userData.modelViewerInvertAlpha ? 1 : 0;
+    state.mapBC4.value = map?.direct && map.format.startsWith("bc4-") ? 1 : 0;
+    state.mapSigned.value = map?.direct && map.format.endsWith("snorm") ? 1 : 0;
+    state.normalMode.value = normalMode(normal, materialProfile);
+    state.metalnessBC4.value = metalness?.direct && metalness.format.startsWith("bc4-") ? 1 : 0;
+    state.metalnessSigned.value = metalness?.direct && metalness.format.endsWith("snorm") ? 1 : 0;
+    state.roughnessBC4.value = roughness?.direct && roughness.format.startsWith("bc4-") ? 1 : 0;
+    state.roughnessSigned.value = roughness?.direct && roughness.format.endsWith("snorm") ? 1 : 0;
+    state.rabbitFXLightBC4.value =
+        rabbitFXMap?.direct && rabbitFXMap.format.startsWith("bc4-") ? 1 : 0;
+    state.rabbitFXLightSigned.value =
+        rabbitFXMap?.direct && rabbitFXMap.format.endsWith("snorm") ? 1 : 0;
+}
+
+function ddsTextureMetadata(texture: Texture | null | undefined): DDSTextureMetadata | undefined {
+    return texture?.userData.modelViewerDDS as DDSTextureMetadata | undefined;
+}
+
+function usesPackedNormalMap(texture: Texture | null | undefined): boolean {
+    return (
+        texture?.format === RGFormat ||
+        texture?.format === RG11_EAC_Format ||
+        texture?.format === RED_GREEN_RGTC2_Format
+    );
+}
+
+function normalMode(
+    metadata: DDSTextureMetadata | undefined,
+    materialProfile: ModViewerTransport["materialProfile"],
+): number {
+    if (!metadata || (materialProfile !== "zzmi" && materialProfile !== "wuwa:rabbitfx")) return 0;
+    const bc4 = metadata.format.startsWith("bc4-");
+    const signed = metadata.direct && metadata.format.endsWith("snorm");
+    if (bc4) return signed ? 4 : 3;
+    return signed ? 2 : 1;
 }
 
 function configurePackedMaterialShader(material: MeshStandardMaterial): void {
@@ -710,23 +885,72 @@ async function buildGeometry(
 }
 
 function loadTexture(
-    url: string,
+    entry: ModViewerTransport["textures"][string],
     textureCache: Map<string, Promise<Texture | null>>,
     signal: AbortSignal,
+    capabilities: ModelViewerTextureCapabilities,
 ): Promise<Texture | null> {
-    const cached = textureCache.get(url);
+    const cacheKey = [
+        entry.url,
+        entry.fallbackUrl ?? "",
+        entry.role,
+        entry.encoding,
+        entry.format ?? "",
+        entry.invertAlpha ? "invert" : "",
+    ].join("|");
+    const cached = textureCache.get(cacheKey);
     if (cached) {
         return cached;
     }
-    const request = loadPayloadTexture(url, signal).catch(() => {
+    const request = loadPayloadTexture(entry, signal, capabilities).catch(() => {
         signal.throwIfAborted();
         return null;
     });
-    textureCache.set(url, request);
+    textureCache.set(cacheKey, request);
     return request;
 }
 
-async function loadPayloadTexture(url: string, signal: AbortSignal): Promise<Texture | null> {
+async function loadPayloadTexture(
+    entry: ModViewerTransport["textures"][string],
+    signal: AbortSignal,
+    capabilities: ModelViewerTextureCapabilities,
+): Promise<Texture | null> {
+    if (
+        entry.encoding === "dds" &&
+        entry.format &&
+        entry.width &&
+        entry.height &&
+        entry.mipCount &&
+        canUploadModelViewerDDS(entry.format, entry.role, capabilities) &&
+        hasModelViewerDDSMipWithinLimit(entry.width, entry.height, entry.mipCount)
+    ) {
+        let directTexture: Texture | undefined;
+        try {
+            const response = await fetch(entry.url, { signal, cache: "no-store" });
+            if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
+            const parsed = parseModelViewerDDS(await response.arrayBuffer(), entry.format);
+            directTexture = parsed.texture;
+            signal.throwIfAborted();
+            parsed.texture.userData.modelViewerDDS = { format: parsed.format, direct: true };
+            parsed.texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
+            return parsed.texture;
+        } catch {
+            directTexture?.dispose();
+            signal.throwIfAborted();
+        }
+    }
+
+    const url = entry.encoding === "dds" ? entry.fallbackUrl : entry.url;
+    if (!url) return null;
+    const texture = await loadPayloadImageTexture(url, signal);
+    if (texture && entry.encoding === "dds") {
+        texture.userData.modelViewerDDS = { format: entry.format ?? "", direct: false };
+        texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
+    }
+    return texture;
+}
+
+async function loadPayloadImageTexture(url: string, signal: AbortSignal): Promise<Texture | null> {
     const response = await fetch(url, { signal, cache: "no-store" });
     if (!response.ok) return null;
     const blob = await response.blob();

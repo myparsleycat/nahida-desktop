@@ -143,7 +143,7 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 	var meshPayloadMs, postProcessMs, payloadWriteMs int64
 	var stageStartedAt time.Time
 	// Mesh payloads own the extracted attributes from this point onward. Drop
-	// interleaved vertex buffers and geometry caches before texture encoding so
+	// interleaved vertex buffers and geometry caches before texture preparation so
 	// the two peak-memory phases do not overlap.
 	prepared.cache.releaseGeometryScratch()
 	runtime.GC()
@@ -160,9 +160,11 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (transport 
 	if t.log != nil {
 		t.log.Info(
 			fmt.Sprintf(
-				"Texture encoding completed in %dms (textures=%d)",
+				"Texture preparation completed in %dms (textures=%d directDDS=%d preparedImages=%d)",
 				textureStats.TotalWallMs,
 				textureStats.LogicalTextures,
+				textureStats.DirectDDS,
+				textureStats.PreparedImages,
 			),
 			"StaticGlb.loadForViewer",
 		)

@@ -27,7 +27,7 @@ func (w viewerCancelWriter) Write(p []byte) (int, error) {
 }
 
 func TestModelViewerLoadCancellation(t *testing.T) {
-	for _, marker := range []string{"before-load", "INI discovery completed", "Texture encoding completed"} {
+	for _, marker := range []string{"before-load", "INI discovery completed", "Texture preparation completed"} {
 		t.Run(marker, func(t *testing.T) {
 			dir := t.TempDir()
 			writeViewerGeometry(t, dir)
