@@ -341,7 +341,7 @@ func readBounded(reader io.Reader, limit int64) ([]byte, error) {
 
 func previewExtension(contentType string, content []byte) string {
 	if contentType == "" {
-		contentType = http.DetectContentType(content)
+		contentType, _ = infra.DetectMediaType(content)
 	}
 	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	if extension, ok := map[string]string{

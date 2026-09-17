@@ -56,13 +56,15 @@ func (a *Archive) IsArchive(ctx context.Context, archivePath string) bool {
 }
 
 // IsArchiveOf identifies an archive by content and limits accepted formats to
-// the supplied extensions. It is used where Electron's file-type sniffing had
-// a narrower format contract than the general extractor.
+// the supplied extensions. It is used where Electron's file-type sniffing had a
+// narrower format contract than the general extractor: the classification
+// follows the container the bytes hold, so zip containers such as docx, jar, or
+// apk are not archives here.
 func (a *Archive) IsArchiveOf(ctx context.Context, archivePath string, extensions ...string) bool {
 	if ctx == nil || ctx.Err() != nil {
 		return false
 	}
-	input, err := os.Open(archivePath)
+	extension, err := DetectFormatExtension(archivePath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			_ = ReportError(
@@ -78,12 +80,6 @@ func (a *Archive) IsArchiveOf(ctx context.Context, archivePath string, extension
 		}
 		return false
 	}
-	defer func() { _ = input.Close() }()
-	format, _, err := archives.Identify(ctx, archivePath, input)
-	if err != nil {
-		return false
-	}
-	extension := strings.Trim(strings.ToLower(format.Extension()), ".")
 	for _, allowed := range extensions {
 		if extension == strings.Trim(strings.ToLower(allowed), ".") {
 			return true

@@ -77,6 +77,42 @@ func TestPastePreviewUsesSupportedAudioMIMEExtension(t *testing.T) {
 	}
 }
 
+func TestPreviewExtensionSniffsContentWithoutContentType(t *testing.T) {
+	// ftyp box with the avif brand, which the previous sniffer reported as octet-stream.
+	avif := []byte{
+		0,
+		0,
+		0,
+		24,
+		'f',
+		't',
+		'y',
+		'p',
+		'a',
+		'v',
+		'i',
+		'f',
+		0,
+		0,
+		0,
+		0,
+		'a',
+		'v',
+		'i',
+		'f',
+		'm',
+		'i',
+		'f',
+		'1',
+	}
+	if got := previewExtension("", avif); got != ".avif" {
+		t.Fatalf("previewExtension(avif) = %q, want .avif", got)
+	}
+	if got := previewExtension("", []byte("0123456789")); got != ".png" {
+		t.Fatalf("previewExtension(text) = %q, want .png", got)
+	}
+}
+
 func TestPreviewExtensionNormalizesVideoMIMEAliases(t *testing.T) {
 	tests := map[string]string{
 		"video/mp4":        ".mp4",

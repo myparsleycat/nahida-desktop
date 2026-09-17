@@ -48,6 +48,25 @@ func TestIsArchiveOfKeepsCustomDownloadSniffToElectronFormats(t *testing.T) {
 	}
 }
 
+func TestIsArchiveOfRejectsZipContainersThatAreNotArchives(t *testing.T) {
+	root := t.TempDir()
+	docxPath := filepath.Join(root, "document.bin")
+	writeZip(t, docxPath, map[string]string{
+		"[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types/>`,
+		"_rels/.rels":         `<Relationships/>`,
+		"word/document.xml":   `<w:document/>`,
+	})
+	jarPath := filepath.Join(root, "library.bin")
+	writeZip(t, jarPath, map[string]string{"META-INF/MANIFEST.MF": "Manifest-Version: 1.0"})
+
+	archive := NewArchive()
+	for _, path := range []string{docxPath, jarPath} {
+		if archive.IsArchiveOf(context.Background(), path, "zip", "7z", "rar") {
+			t.Fatalf("%s was classified as an archive", filepath.Base(path))
+		}
+	}
+}
+
 func writeZip(t *testing.T, path string, entries map[string]string) {
 	t.Helper()
 	file, err := os.Create(path)
