@@ -98,6 +98,38 @@ func TestPrepareModelViewerDDSPreviewCopiesCenteredCompressedBlocks(t *testing.T
 	}
 }
 
+func TestPrepareModelViewerDDSPreviewSamplesAcrossReadWindows(t *testing.T) {
+	const width, height = uint32(65_536), uint32(4)
+	blocksX := (width + 3) / 4
+	data := make([]byte, int(blocksX*16))
+	for x := range blocksX {
+		data[x*16] = byte(x / 4096)
+	}
+	path := writeModelViewerDDSurface(t, width, height, ddsutil.BC7RgbaUnorm, data)
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := prepareModelViewerDDSPreviewWithLimit(context.Background(), path, metadata, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := ddsutil.NewDdsReader(bytes.NewReader(preview), int64(len(preview)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface, err := reader.ReadMip(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{0, 1, 2, 3}
+	for block, expected := range want {
+		if actual := surface.Data[block*16]; actual != expected {
+			t.Fatalf("preview block %d = %d, want %d", block, actual, expected)
+		}
+	}
+}
+
 func TestPrepareModelViewerDDSPreviewReusesExistingMip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mipped.dds")
 	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 16, 16, 3, 1), 0o600); err != nil {

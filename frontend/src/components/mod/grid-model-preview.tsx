@@ -26,6 +26,7 @@ import {
 const MODEL_PREVIEW_SIZE = 512;
 const MODEL_PREVIEW_CACHE_ENTRIES = 64;
 const MODEL_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
+const MODEL_PREVIEW_RENDER_TIMEOUT_MS = 30_000;
 
 const modelPreviewSettingsConfig = {
   enabled: "mod.gridModelPreview",
@@ -63,6 +64,7 @@ export type PreviewRenderTask = {
   finalKey: string;
   finished: boolean;
   sessionId: string;
+  timeout: ReturnType<typeof setTimeout> | null;
   transport: ModViewerTransport;
 };
 
@@ -196,6 +198,10 @@ export class GridModelPreviewController {
     if (task.finished) {
       return;
     }
+    if (task.timeout !== null) {
+      clearTimeout(task.timeout);
+      task.timeout = null;
+    }
     task.finished = true;
 
     if (error) {
@@ -250,9 +256,15 @@ export class GridModelPreviewController {
     this.cache.clear();
     this.showRenderTask(null);
 
-    if (this.activeTask && !this.activeTask.finished) {
-      this.activeTask.finished = true;
-      void cleanupModelPreviewSession(this.activeTask.sessionId);
+    if (this.activeTask) {
+      if (this.activeTask.timeout !== null) {
+        clearTimeout(this.activeTask.timeout);
+        this.activeTask.timeout = null;
+      }
+      if (!this.activeTask.finished) {
+        this.activeTask.finished = true;
+        void cleanupModelPreviewSession(this.activeTask.sessionId);
+      }
     }
     this.activeTask = null;
   }
@@ -311,9 +323,13 @@ export class GridModelPreviewController {
         finalKey,
         finished: false,
         sessionId,
+        timeout: null,
         transport,
       };
       this.activeTask = task;
+      task.timeout = setTimeout(() => {
+        void this.complete(task, null, new Error("Model preview render timed out."));
+      }, MODEL_PREVIEW_RENDER_TIMEOUT_MS);
       this.showRenderTask(task);
     } catch (error) {
       if (sessionId) {

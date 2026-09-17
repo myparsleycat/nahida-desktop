@@ -130,6 +130,7 @@ describe("GridModelPreviewController", () => {
         const task = renderTask.mock.calls[0][0];
         expect(task).not.toBeNull();
         await controller.complete(task!, new Blob([new Uint8Array(1)]));
+        expect(task!.timeout).toBeNull();
         await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
         expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("first");
         controller.dispose();
@@ -184,6 +185,36 @@ describe("GridModelPreviewController", () => {
         expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
         expect(listener).toHaveBeenLastCalledWith({ status: "unavailable" });
         controller.dispose();
+    });
+
+    it("times out a stalled render and starts the next preview", async () => {
+        vi.useFakeTimers();
+        try {
+            vi.mocked(Tools.LoadModGridPreview)
+                .mockResolvedValueOnce(rawTransport("stalled"))
+                .mockResolvedValueOnce(rawTransport("next"));
+            const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
+            const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+            const firstMod = makeMod([]);
+            const secondMod = { ...firstMod, path: "C:/Mods/Second", id: "second" };
+
+            controller.subscribe(firstMod, vi.fn());
+            controller.subscribe(secondMod, vi.fn());
+            await vi.advanceTimersByTimeAsync(0);
+            expect(renderTask).toHaveBeenCalledTimes(1);
+
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("stalled");
+            expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2);
+            expect(renderTask).toHaveBeenLastCalledWith(
+                expect.objectContaining({ sessionId: "next" }),
+            );
+            const nextTask = renderTask.mock.calls.at(-1)?.[0];
+            controller.dispose();
+            expect(nextTask?.timeout).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

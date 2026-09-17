@@ -13,6 +13,7 @@ import (
 )
 
 const modelViewerDDSPreviewMaxDimension uint32 = 2048
+const modelViewerDDSPreviewReadBufferBytes = 64 * 1024
 
 type modelViewerDDSPreviewPlan struct {
 	baseWidth    uint32
@@ -207,7 +208,7 @@ func readModelViewerDDSDecimatedMip(
 		outputBytes > uint64(^uint(0)>>1) {
 		return nil, fmt.Errorf("DDS preview dimensions are too large")
 	}
-	sourceRow := make([]byte, int(sourceRowBytes))
+	sourceWindow := make([]byte, min(int(sourceRowBytes), modelViewerDDSPreviewReadBufferBytes))
 	output := make([]byte, int(outputBytes))
 	for targetY := range targetBlocksY {
 		if err = ctx.Err(); err != nil {
@@ -216,21 +217,30 @@ func readModelViewerDDSDecimatedMip(
 		// Sampling block centers avoids the top-left bias of a simple stride.
 		sourceY := ((2*targetY + 1) * sourceBlocksY) / (2 * targetBlocksY)
 		rowOffset := offset + int64(sourceY*sourceRowBytes)
-		read, readErr := file.ReadAt(sourceRow, rowOffset)
-		if readErr != nil && (readErr != io.EOF || read != len(sourceRow)) {
-			return nil, fmt.Errorf("read DDS preview source row: %w", readErr)
-		}
-		if read != len(sourceRow) {
-			return nil, io.ErrUnexpectedEOF
-		}
 		targetRow := output[targetY*targetRowBytes : (targetY+1)*targetRowBytes]
+		loadedWindowStart := sourceRowBytes
 		for targetX := range targetBlocksX {
 			sourceX := ((2*targetX + 1) * sourceBlocksX) / (2 * targetBlocksX)
 			sourceStart := sourceX * uint64(blockBytes)
+			windowBytes := uint64(len(sourceWindow))
+			windowStart := (sourceStart / windowBytes) * windowBytes
+			if windowStart != loadedWindowStart {
+				readWindow := sourceWindow[:min(windowBytes, sourceRowBytes-windowStart)]
+				read, readErr := file.ReadAt(readWindow, rowOffset+int64(windowStart))
+				if readErr != nil && (readErr != io.EOF || read != len(readWindow)) {
+					return nil, fmt.Errorf("read DDS preview source row: %w", readErr)
+				}
+				if read != len(readWindow) {
+					return nil, io.ErrUnexpectedEOF
+				}
+				loadedWindowStart = windowStart
+			}
+
 			targetStart := targetX * uint64(blockBytes)
+			windowBlockStart := sourceStart - loadedWindowStart
 			copy(
 				targetRow[targetStart:targetStart+uint64(blockBytes)],
-				sourceRow[sourceStart:sourceStart+uint64(blockBytes)],
+				sourceWindow[windowBlockStart:windowBlockStart+uint64(blockBytes)],
 			)
 		}
 	}
