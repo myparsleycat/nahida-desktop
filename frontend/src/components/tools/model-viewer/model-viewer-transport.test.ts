@@ -132,6 +132,73 @@ describe("normalizeModelViewerTransport", () => {
         ).toBeUndefined();
     });
 
+    it("normalizes DDS transport metadata and keeps unknown formats on the fallback path", () => {
+        const base = {
+            memorySessionId: "session",
+            iniPath: "mod.ini",
+            modPath: "mod",
+            name: "Example",
+            meshes: null,
+            variables: null,
+            defaultState: null,
+            stateRules: null,
+            uiAssets: {},
+            animations: null,
+            computeDeformers: null,
+        } satisfies Omit<WailsModelViewerTransport, "textures">;
+
+        const normalized = normalizeModelViewerTransport({
+            ...base,
+            textures: {
+                direct: {
+                    url: "body.dds",
+                    fallbackUrl: "body.png",
+                    role: "diffuse",
+                    encoding: "dds",
+                    format: "bc7-unorm-srgb",
+                    width: 4096,
+                    height: 4096,
+                    mipCount: 4,
+                    invertAlpha: true,
+                },
+                fallback: {
+                    url: "unknown.dds",
+                    fallbackUrl: "unknown.png",
+                    role: "normal_map",
+                    encoding: "dds",
+                    format: "unknown",
+                },
+                unknownEncoding: {
+                    url: "future.dds",
+                    fallbackUrl: "future.png",
+                    role: "diffuse",
+                    encoding: "future",
+                },
+            },
+        });
+
+        expect(normalized.textures.direct).toEqual({
+            url: "body.dds",
+            fallbackUrl: "body.png",
+            role: "diffuse",
+            encoding: "dds",
+            format: "bc7-unorm-srgb",
+            width: 4096,
+            height: 4096,
+            mipCount: 4,
+            invertAlpha: true,
+        });
+        expect(normalized.textures.fallback).toMatchObject({
+            encoding: "dds",
+            fallbackUrl: "unknown.png",
+            format: undefined,
+        });
+        expect(normalized.textures.unknownEncoding).toMatchObject({
+            url: "future.png",
+            encoding: "image",
+        });
+    });
+
     it("normalizes a known GIMI shape/pose compute descriptor", () => {
         const source = { url: "/source", byteLength: 40, stride: 40 };
         const input = {

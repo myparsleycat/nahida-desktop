@@ -278,6 +278,116 @@ function mockTextureURLs() {
     );
 }
 
+function bc1DDS(): ArrayBuffer {
+    const buffer = new ArrayBuffer(136);
+    const view = new DataView(buffer);
+    view.setUint32(0, 0x20534444, true);
+    view.setUint32(4, 124, true);
+    view.setUint32(12, 4, true);
+    view.setUint32(16, 4, true);
+    view.setUint32(28, 1, true);
+    view.setUint32(76, 32, true);
+    view.setUint32(84, 0x31545844, true);
+    return buffer;
+}
+
+it("loads a supported DDS as a GPU compressed texture", async () => {
+    const fetchTexture = vi.fn().mockResolvedValue(new Response(bc1DDS()));
+    vi.stubGlobal("fetch", fetchTexture);
+    const input = transport([mesh("mesh")]);
+    input.textures = {
+        body: {
+            url: "body.dds",
+            fallbackUrl: "body.png",
+            role: "diffuse",
+            encoding: "dds",
+            format: "bc1-unorm",
+            width: 4,
+            height: 4,
+            mipCount: 1,
+        },
+    };
+
+    const root = await buildPayloadModel(
+        input,
+        { state: {}, meshes: [] },
+        true,
+        { load: vi.fn() },
+        false,
+        undefined,
+        { s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true },
+    );
+    const texture = (root.userData.payloadTextures as Map<string, Texture>).get("body");
+    expect(texture?.isCompressedTexture).toBe(true);
+    expect(texture?.colorSpace).toBe(SRGBColorSpace);
+    expect(texture?.userData.modelViewerDDS).toEqual({ format: "bc1-unorm", direct: true });
+    expect(fetchTexture).toHaveBeenCalledWith("body.dds", expect.anything());
+    clearPayloadModelData(root);
+});
+
+it("skips the DDS request and loads its lazy fallback when the GPU format is unsupported", async () => {
+    mockTextureURLs();
+    const fetchTexture = vi.fn().mockResolvedValue(new Response(new Blob(["image"])));
+    vi.stubGlobal("fetch", fetchTexture);
+    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
+        const texture = new Texture();
+        queueMicrotask(() => onLoad?.(texture));
+        return texture;
+    });
+    const input = transport([mesh("mesh")]);
+    input.textures = {
+        body: {
+            url: "body.dds",
+            fallbackUrl: "body.png",
+            role: "diffuse",
+            encoding: "dds",
+            format: "bc7-unorm",
+            width: 4,
+            height: 4,
+            mipCount: 1,
+            invertAlpha: true,
+        },
+    };
+
+    const root = await buildPayloadModel(input, { state: {}, meshes: [] }, true, {
+        load: vi.fn(),
+    });
+    const texture = (root.userData.payloadTextures as Map<string, Texture>).get("body");
+    expect(fetchTexture).toHaveBeenCalledOnce();
+    expect(fetchTexture).toHaveBeenCalledWith("body.png", expect.anything());
+    expect(texture?.userData.modelViewerDDS).toEqual({ format: "bc7-unorm", direct: false });
+    expect(texture?.userData.modelViewerInvertAlpha).toBe(true);
+    clearPayloadModelData(root);
+});
+
+it("keeps DDS normal and alpha correction metadata when the fallback format is unknown", async () => {
+    mockTextureURLs();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new Blob(["image"]))));
+    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
+        const texture = new Texture();
+        queueMicrotask(() => onLoad?.(texture));
+        return texture;
+    });
+    const input = transport([mesh("mesh")]);
+    input.textures = {
+        normal: {
+            url: "normal.dds",
+            fallbackUrl: "normal.png",
+            role: "normal_map",
+            encoding: "dds",
+            invertAlpha: true,
+        },
+    };
+
+    const root = await buildPayloadModel(input, { state: {}, meshes: [] }, true, {
+        load: vi.fn(),
+    });
+    const texture = (root.userData.payloadTextures as Map<string, Texture>).get("normal");
+    expect(texture?.userData.modelViewerDDS).toEqual({ format: "", direct: false });
+    expect(texture?.userData.modelViewerInvertAlpha).toBe(true);
+    clearPayloadModelData(root);
+});
+
 it("deduplicates texture transfers and preserves texture decoding settings", async () => {
     mockTextureURLs();
     const fetchTexture = vi.fn().mockResolvedValue(new Response(new Blob(["image"])));

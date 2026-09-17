@@ -73,3 +73,23 @@ func TestProtocolMemoryLoaderReceivesRequestCancellation(t *testing.T) {
 		t.Fatalf("cancelled response=%d", response.Code)
 	}
 }
+
+func TestProtocolMemoryLoaderContentType(t *testing.T) {
+	p := NewProtocol()
+	session := p.CreateMemorySession()
+	url, err := p.StoreMemoryLoaderWithContentType(
+		session,
+		"image",
+		"image/png",
+		func(context.Context) ([]byte, error) { return []byte("png"), nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, url, nil)
+	response := httptest.NewRecorder()
+	p.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("status=%d content-type=%q", response.Code, response.Header().Get("Content-Type"))
+	}
+}

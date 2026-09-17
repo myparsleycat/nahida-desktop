@@ -127,8 +127,23 @@ func (p *Protocol) StoreMemoryLoader(
 	sessionID, bufferID string,
 	load func(context.Context) ([]byte, error),
 ) (string, error) {
+	return p.StoreMemoryLoaderWithContentType(sessionID, bufferID, "application/octet-stream", load)
+}
+
+// StoreMemoryLoaderWithContentType registers a lazy resource with the session's lifetime.
+// The loader owns any caching; responses keep their bytes alive even after eviction.
+//
+//wails:ignore
+func (p *Protocol) StoreMemoryLoaderWithContentType(
+	sessionID, bufferID, contentType string,
+	load func(context.Context) ([]byte, error),
+) (string, error) {
 	if p == nil || load == nil || bufferID == "" {
 		return "", errors.New("memory loader and buffer id are required")
+	}
+	contentType = normalizeContentType(contentType)
+	if contentType == "" {
+		return "", errors.New("memory loader content type is invalid")
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -136,7 +151,7 @@ func (p *Protocol) StoreMemoryLoader(
 	if session == nil {
 		return "", fmt.Errorf("missing memory session: %s", sessionID)
 	}
-	session.buffers[bufferID] = memoryProtocolEntry{load: load, contentType: "application/octet-stream"}
+	session.buffers[bufferID] = memoryProtocolEntry{load: load, contentType: contentType}
 	return memoryProtocolURL(sessionID, bufferID), nil
 }
 

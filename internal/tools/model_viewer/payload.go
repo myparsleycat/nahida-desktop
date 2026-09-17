@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"time"
 )
 
 func prepareModelViewerPayload(
@@ -56,10 +57,14 @@ func prepareModelViewerPayload(
 }
 
 type modelViewerTexturePayload struct {
-	Key      string
-	Role     string
-	Bytes    []byte
-	MIMEType string
+	Key          string
+	Role         string
+	Bytes        []byte
+	MIMEType     string
+	Path         string
+	ResourceName string
+	DDS          *modelViewerDDSMetadata
+	InvertAlpha  bool
 }
 
 type modelViewerMeshPayload struct {
@@ -98,11 +103,75 @@ func writeModelViewerPayload(
 			return err
 		}
 		texture := textures[key]
+		if texture.DDS != nil {
+			materialProfile := transport.MaterialProfile
+			fallbackURL, err := t.protocol.StoreMemoryLoaderWithContentType(
+				sessionID,
+				"tex-fallback:"+key,
+				"image/png",
+				func(loadCtx context.Context) ([]byte, error) {
+					startedAt := time.Now()
+					data, loadErr := prepareModelViewerDDSFallback(loadCtx, texture.Path)
+					if loadErr != nil {
+						if t.log != nil {
+							t.log.Warn(
+								fmt.Sprintf(
+									"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",
+									texture.Path,
+									texture.Role,
+									texture.DDS.Format,
+									materialProfile,
+									time.Since(startedAt).Milliseconds(),
+									loadErr,
+								),
+								"StaticGlb.loadForViewer",
+							)
+						}
+						return nil, fmt.Errorf(
+							"prepare DDS fallback path=%q role=%q format=%q: %w",
+							texture.Path,
+							texture.Role,
+							texture.DDS.Format,
+							loadErr,
+						)
+					}
+					if t.log != nil {
+						t.log.Info(
+							fmt.Sprintf(
+								"DDS fallback prepared path=%q role=%q format=%q materialProfile=%q elapsed=%dms",
+								texture.Path,
+								texture.Role,
+								texture.DDS.Format,
+								materialProfile,
+								time.Since(startedAt).Milliseconds(),
+							),
+							"StaticGlb.loadForViewer",
+						)
+					}
+					return data, nil
+				},
+			)
+			if err != nil {
+				return err
+			}
+			transport.Textures[key] = ModelViewerTextureTransport{
+				URL:         t.protocol.LocalFileURL(texture.Path, true),
+				FallbackURL: fallbackURL,
+				Role:        texture.Role,
+				Encoding:    "dds",
+				Format:      texture.DDS.Format,
+				Width:       texture.DDS.Width,
+				Height:      texture.DDS.Height,
+				MipCount:    texture.DDS.MipCount,
+				InvertAlpha: texture.InvertAlpha,
+			}
+			continue
+		}
 		url, err := t.protocol.StoreMemoryBuffer(sessionID, "tex:"+key, texture.Bytes, texture.MIMEType)
 		if err != nil {
 			return err
 		}
-		transport.Textures[key] = ModelViewerTextureTransport{URL: url, Role: texture.Role}
+		transport.Textures[key] = ModelViewerTextureTransport{URL: url, Role: texture.Role, Encoding: "image"}
 	}
 	positionCache := &modelViewerPositionCache{limit: modelViewerPositionCacheBytes}
 	if err := t.prepareModelViewerComputeSources(ctx, sessionID, transport, meshes, positionCache); err != nil {
