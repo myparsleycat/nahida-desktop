@@ -276,7 +276,7 @@ export class GridModelPreviewController {
     entry.state = "loading";
     let sessionId = "";
     try {
-      const loaded = await Tools.LoadModViewer(entry.mod.path);
+      const loaded = await Tools.LoadModGridPreview(entry.mod.path);
       sessionId = loaded.memorySessionId;
       if (this.disposed) {
         await cleanupModelPreviewSession(sessionId);

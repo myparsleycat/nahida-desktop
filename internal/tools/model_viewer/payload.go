@@ -79,6 +79,10 @@ type modelViewerMeshPayload struct {
 	PositionSources   []modelViewerDirectPositionAssignment
 }
 
+type modelViewerPayloadOptions struct {
+	ddsPreviewMaxDimension uint32
+}
+
 func writeModelViewerPayload(
 	ctx context.Context,
 	t *Service,
@@ -86,6 +90,7 @@ func writeModelViewerPayload(
 	transport *ModelViewerTransport,
 	meshes []modelViewerMeshPayload,
 	textures map[string]modelViewerTexturePayload,
+	options modelViewerPayloadOptions,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -105,6 +110,70 @@ func writeModelViewerPayload(
 		texture := textures[key]
 		if texture.DDS != nil {
 			materialProfile := transport.MaterialProfile
+			directURL := t.protocol.LocalFileURL(texture.Path, true)
+			directMetadata := *texture.DDS
+			if plan, needed := modelViewerDDSPreviewPlanFor(
+				*texture.DDS,
+				options.ddsPreviewMaxDimension,
+			); needed && texture.DDS.Format != "" {
+				previewURL, previewErr := t.protocol.StoreMemoryLoader(
+					sessionID,
+					"tex-dds-preview:"+key,
+					func(loadCtx context.Context) ([]byte, error) {
+						startedAt := time.Now()
+						data, loadErr := prepareModelViewerDDSPreviewWithLimit(
+							loadCtx,
+							texture.Path,
+							*texture.DDS,
+							options.ddsPreviewMaxDimension,
+						)
+						if loadErr != nil {
+							if t.log != nil {
+								t.log.Warn(
+									fmt.Sprintf(
+										"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
+										texture.Path,
+										texture.Role,
+										texture.DDS.Format,
+										time.Since(startedAt).Milliseconds(),
+										loadErr,
+									),
+									"StaticGlb.loadForViewer",
+								)
+							}
+							return nil, fmt.Errorf(
+								"prepare DDS preview path=%q role=%q format=%q: %w",
+								texture.Path,
+								texture.Role,
+								texture.DDS.Format,
+								loadErr,
+							)
+						}
+						if t.log != nil {
+							t.log.Info(
+								fmt.Sprintf(
+									"DDS preview prepared path=%q role=%q format=%q dimensions=%dx%d elapsed=%dms",
+									texture.Path,
+									texture.Role,
+									texture.DDS.Format,
+									plan.width,
+									plan.height,
+									time.Since(startedAt).Milliseconds(),
+								),
+								"StaticGlb.loadForViewer",
+							)
+						}
+						return data, nil
+					},
+				)
+				if previewErr != nil {
+					return previewErr
+				}
+				directURL = previewURL
+				directMetadata.Width = plan.width
+				directMetadata.Height = plan.height
+				directMetadata.MipCount = 1
+			}
 			fallbackURL, err := t.protocol.StoreMemoryLoaderWithContentType(
 				sessionID,
 				"tex-fallback:"+key,
@@ -155,14 +224,14 @@ func writeModelViewerPayload(
 				return err
 			}
 			transport.Textures[key] = ModelViewerTextureTransport{
-				URL:         t.protocol.LocalFileURL(texture.Path, true),
+				URL:         directURL,
 				FallbackURL: fallbackURL,
 				Role:        texture.Role,
 				Encoding:    "dds",
-				Format:      texture.DDS.Format,
-				Width:       texture.DDS.Width,
-				Height:      texture.DDS.Height,
-				MipCount:    texture.DDS.MipCount,
+				Format:      directMetadata.Format,
+				Width:       directMetadata.Width,
+				Height:      directMetadata.Height,
+				MipCount:    directMetadata.MipCount,
 				InvertAlpha: texture.InvertAlpha,
 			}
 			continue

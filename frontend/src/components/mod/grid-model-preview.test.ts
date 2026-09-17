@@ -13,7 +13,7 @@ import {
 
 vi.mock("@bindings/tools", () => ({
     Tools: {
-        LoadModViewer: vi.fn(),
+        LoadModGridPreview: vi.fn(),
         CleanupModelViewer: vi.fn(),
     },
 }));
@@ -108,8 +108,10 @@ describe("GridModelPreviewCache", () => {
 describe("GridModelPreviewController", () => {
     it("deduplicates requests and runs model loads serially", async () => {
         const first = deferred<ReturnType<typeof rawTransport>>();
-        vi.mocked(Tools.LoadModViewer)
-            .mockImplementationOnce(() => first.promise as ReturnType<typeof Tools.LoadModViewer>)
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockImplementationOnce(
+                () => first.promise as ReturnType<typeof Tools.LoadModGridPreview>,
+            )
             .mockResolvedValueOnce(rawTransport("second"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
         const controller = new GridModelPreviewController(1, renderSettings, renderTask);
@@ -119,22 +121,22 @@ describe("GridModelPreviewController", () => {
         controller.subscribe(firstMod, vi.fn());
         controller.subscribe(firstMod, vi.fn());
         controller.subscribe(secondMod, vi.fn());
-        expect(Tools.LoadModViewer).toHaveBeenCalledTimes(1);
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
 
         first.resolve(rawTransport("first"));
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
-        expect(Tools.LoadModViewer).toHaveBeenCalledTimes(1);
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
 
         const task = renderTask.mock.calls[0][0];
         expect(task).not.toBeNull();
         await controller.complete(task!, new Blob([new Uint8Array(1)]));
-        await vi.waitFor(() => expect(Tools.LoadModViewer).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
         expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("first");
         controller.dispose();
     });
 
     it("negative-caches a failed request", async () => {
-        vi.mocked(Tools.LoadModViewer).mockRejectedValueOnce(new Error("broken"));
+        vi.mocked(Tools.LoadModGridPreview).mockRejectedValueOnce(new Error("broken"));
         const controller = new GridModelPreviewController(1, renderSettings, vi.fn());
         const mod = makeMod([makeToggle("Character.ini", "$outfit", "0")]);
         const firstListener = vi.fn();
@@ -145,14 +147,14 @@ describe("GridModelPreviewController", () => {
         );
         controller.subscribe(mod, vi.fn());
 
-        expect(Tools.LoadModViewer).toHaveBeenCalledTimes(1);
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
         controller.dispose();
     });
 
     it("cleans up a session that arrives after disposal without rendering it", async () => {
         const loaded = deferred<ReturnType<typeof rawTransport>>();
-        vi.mocked(Tools.LoadModViewer).mockImplementationOnce(
-            () => loaded.promise as ReturnType<typeof Tools.LoadModViewer>,
+        vi.mocked(Tools.LoadModGridPreview).mockImplementationOnce(
+            () => loaded.promise as ReturnType<typeof Tools.LoadModGridPreview>,
         );
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
         const controller = new GridModelPreviewController(1, renderSettings, renderTask);
@@ -166,7 +168,7 @@ describe("GridModelPreviewController", () => {
     });
 
     it("cleans up and negative-caches a capture failure", async () => {
-        vi.mocked(Tools.LoadModViewer).mockResolvedValueOnce(rawTransport("capture-failure"));
+        vi.mocked(Tools.LoadModGridPreview).mockResolvedValueOnce(rawTransport("capture-failure"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
         const controller = new GridModelPreviewController(1, renderSettings, renderTask);
         const mod = makeMod([]);
@@ -179,7 +181,7 @@ describe("GridModelPreviewController", () => {
         controller.subscribe(mod, vi.fn());
 
         expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("capture-failure");
-        expect(Tools.LoadModViewer).toHaveBeenCalledTimes(1);
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
         expect(listener).toHaveBeenLastCalledWith({ status: "unavailable" });
         controller.dispose();
     });
@@ -249,7 +251,7 @@ function rawTransport(sessionId: string) {
         uiAssets: {},
         animations: [],
         computeDeformers: [],
-    } as Awaited<ReturnType<typeof Tools.LoadModViewer>>;
+    } as Awaited<ReturnType<typeof Tools.LoadModGridPreview>>;
 }
 
 function deferred<T>() {

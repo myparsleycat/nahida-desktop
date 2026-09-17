@@ -315,7 +315,7 @@ it("loads a supported DDS as a GPU compressed texture", async () => {
         { load: vi.fn() },
         false,
         undefined,
-        { s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true },
+        { maxTextureSize: 8192, s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true },
     );
     const texture = (root.userData.payloadTextures as Map<string, Texture>).get("body");
     expect(texture?.isCompressedTexture).toBe(true);
