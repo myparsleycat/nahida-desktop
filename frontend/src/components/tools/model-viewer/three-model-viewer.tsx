@@ -1123,7 +1123,7 @@ async function loadAnimationFrame(
     (clip.sharedBuffers ?? []).map((buffer) => [buffer.id, buffer.path]),
   );
   const meshes = await Promise.all(
-    frame.meshes.map(async (mesh) => ({
+    (frame.meshes ?? []).map(async (mesh) => ({
       meshName: mesh.meshName,
       indices: await loadOptionalUint32AnimationBuffer(
         mesh.indicesBufferId,

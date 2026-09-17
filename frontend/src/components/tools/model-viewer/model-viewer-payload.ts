@@ -145,7 +145,7 @@ export async function buildPayloadModel(
                 signal,
             );
         }),
-        loadItems(Object.entries(transport.textures), 4, async ([key, entry]) => {
+        loadItems(Object.entries(transport.textures), 8, async ([key, entry]) => {
             const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
             if (signal.aborted) {
                 texture?.dispose();

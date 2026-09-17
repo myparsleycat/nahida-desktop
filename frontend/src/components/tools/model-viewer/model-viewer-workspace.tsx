@@ -30,7 +30,7 @@ import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
-import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { CheckIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -40,11 +40,11 @@ import type { ModelViewerDialogSource, VariableStateValue } from "./model-viewer
 import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
 import {
   formatOrientation,
+  parseOrientation,
   type ModelViewerCameraState,
   type ModelViewerHandle,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
-  parseOrientation,
 } from "./model-viewer-contract";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
@@ -113,6 +113,7 @@ export function ModelViewerWorkspace({
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
   const [isViewerReady, setIsViewerReady] = useState(false);
+  const [isViewerLoading, setIsViewerLoading] = useState(Boolean(source));
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
   const viewerRef = useRef<ModelViewerHandle | null>(null);
@@ -125,6 +126,7 @@ export function ModelViewerWorkspace({
       setShowOverwritePreviewDialog(false);
       setIsSavingPreview(false);
       setIsViewerReady(false);
+      setIsViewerLoading(false);
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
     }
   }
@@ -133,6 +135,7 @@ export function ModelViewerWorkspace({
     setPrevSource(source);
     setPreviewState(null);
     setIsViewerReady(false);
+    setIsViewerLoading(Boolean(source));
 
     if (getSourceSessionKey(prevSource) !== getSourceSessionKey(source)) {
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
@@ -191,15 +194,7 @@ export function ModelViewerWorkspace({
   }, []);
 
   const payloadTransport = source?.transport ?? null;
-  const payloadAnimations = useMemo(
-    () =>
-      (payloadTransport?.animations ?? []).map((clip) => ({
-        ...clip,
-        frames: clip.frames.map((frame) => ({ ...frame, meshes: [] })),
-      })),
-    [payloadTransport],
-  );
-  const animationClips = payloadAnimations;
+  const animationClips = payloadTransport?.animations ?? [];
   const activeAnimation =
     animationClips.find((animation) => animation.id === activeAnimationId) ??
     animationClips[0] ??
@@ -408,6 +403,7 @@ export function ModelViewerWorkspace({
           initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
         }
         setIsViewerReady(true);
+        setIsViewerLoading(false);
         viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
       });
     })();
@@ -417,6 +413,7 @@ export function ModelViewerWorkspace({
     (error: unknown) => {
       setAnimationPlaying(false);
       setIsViewerReady(false);
+      setIsViewerLoading(false);
       Logger.capture(
         "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to load model viewer source",
@@ -511,20 +508,33 @@ export function ModelViewerWorkspace({
         >
           <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
             {payloadTransport ? (
-              <ThreeModelViewer
-                ref={viewerRef}
-                className="absolute inset-0 h-full w-full"
-                payloadTransport={payloadTransport}
-                payloadEval={payloadEval ?? undefined}
-                orientation={modelOrientation}
-                animationClip={effectiveAnimation ?? undefined}
-                threeToneMapping={threeToneMapping}
-                threeEnvironment={threeEnvironment}
-                threeExposure={threeExposure}
-                toonShadows={toonShadows}
-                onLoad={handleViewerLoad}
-                onError={handleViewerError}
-              />
+              <>
+                <ThreeModelViewer
+                  ref={viewerRef}
+                  className="absolute inset-0 h-full w-full"
+                  payloadTransport={payloadTransport}
+                  payloadEval={payloadEval ?? undefined}
+                  orientation={modelOrientation}
+                  animationClip={effectiveAnimation ?? undefined}
+                  threeToneMapping={threeToneMapping}
+                  threeEnvironment={threeEnvironment}
+                  threeExposure={threeExposure}
+                  toonShadows={toonShadows}
+                  onLoad={handleViewerLoad}
+                  onError={handleViewerError}
+                />
+                {isViewerLoading ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    aria-label={t("page.tools.model_viewer.loading")}
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-muted/70 text-sm text-muted-foreground backdrop-blur-sm"
+                  >
+                    <Loader2Icon className="size-8 animate-spin" aria-hidden="true" />
+                    <span>{t("page.tools.model_viewer.loading")}</span>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
                 {t("page.tools.model_viewer.model_data_unavailable")}

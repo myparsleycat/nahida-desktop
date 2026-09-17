@@ -93,6 +93,49 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+it("shows a loading indicator until the viewer is ready", async () => {
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: normalizeModelViewerTransport(payload),
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  expect(screen.getByRole("status", { name: "page.tools.model_viewer.loading" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Load viewer" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("status", { name: "page.tools.model_viewer.loading" })).toBeNull(),
+  );
+});
+
+it("passes payload animation frames to the viewer without recreating them", () => {
+  const transport = normalizeModelViewerTransport(payload);
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport,
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].animationClip?.frames[0]).toBe(
+    transport.animations[0].frames[0],
+  );
+});
+
 it("preserves double-sided rendering when the dialog body unmounts and reopens", async () => {
   const source = {
     mode: "payload" as const,

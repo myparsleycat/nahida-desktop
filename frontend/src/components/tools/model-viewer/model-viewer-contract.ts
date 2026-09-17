@@ -36,7 +36,7 @@ export type ModelViewerAnimationFrame = {
     index: number;
     time: number;
     values: Record<string, ModelViewerVariantStateValue>;
-    meshes: ModelViewerAnimationFrameMesh[];
+    meshes?: ModelViewerAnimationFrameMesh[];
 };
 
 export type ModelViewerAnimationSharedBuffer = {
