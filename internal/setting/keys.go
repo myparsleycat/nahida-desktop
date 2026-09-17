@@ -26,6 +26,7 @@ const (
 	KeyModSidebarLayout                    = "mod.sidebarLayout"
 	KeyModCharacterSidebarWidth            = "mod.characterSidebarWidth"
 	KeyModGridLayoutMode                   = "mod.gridLayoutMode"
+	KeyModGridModelPreview                 = "mod.gridModelPreview"
 	KeyModGridResponsiveBaseWidth          = "mod.gridResponsiveBaseWidth"
 	KeyModGridFixedCardWidth               = "mod.gridFixedCardWidth"
 	KeyModGridFixedColumnCount             = "mod.gridFixedColumnCount"
@@ -104,6 +105,7 @@ var allDefinitions = []Definition{
 	{KeyModSidebarLayout, ScopeMod, "mod_sidebar_layout"},
 	{KeyModCharacterSidebarWidth, ScopeMod, "mod_character_sidebar_width"},
 	{KeyModGridLayoutMode, ScopeMod, "mod_grid_layout_mode"},
+	{KeyModGridModelPreview, ScopeMod, "mod_grid_model_preview"},
 	{KeyModGridResponsiveBaseWidth, ScopeMod, "mod_grid_responsive_base_width"},
 	{KeyModGridFixedCardWidth, ScopeMod, "mod_grid_fixed_card_width"},
 	{KeyModGridFixedColumnCount, ScopeMod, "mod_grid_fixed_column_count"},

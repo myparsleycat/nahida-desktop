@@ -716,6 +716,7 @@
       "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
       "no-preview": "프리뷰 없음",
       "context-menu": {
+        "open-model-viewer": "모델 뷰어로 열기",
         "paste-preview": "붙여넣기",
         "open-preview-lightbox": "크게 보기",
         "open-preview-viewer": "뷰어로 열기",
@@ -1778,6 +1779,8 @@
         },
         "layout": {
           "title": "레이아웃",
+          "gridModelPreview": "프리뷰가 없는 모드에 모델 프리뷰 표시",
+          "gridModelPreviewDescription": "모드 그리드에서 이미지나 동영상이 없는 모드의 현재 토글 상태를 정적 모델 이미지로 표시합니다.",
           "sidebar": {
             "mode": "사이드바 레이아웃",
             "modeDescription": "캐릭터 사이드바를 행 목록 또는 정사각형 프리뷰 그리드로 표시합니다.",

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { normalizeModGridLayoutSettings, resolveModGridLayout } from "./grid-layout";
+import { GridModelPreviewProvider } from "./grid-model-preview";
 import { ModCard } from "./mod-card";
 
 interface ModGridProps {
@@ -137,66 +138,68 @@ export function ModGrid(_props: ModGridProps) {
   }
 
   return (
-    <div className="min-h-0 flex-1">
-      <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
-        <div className="relative w-full p-3">
-          {showSkeleton ? (
-            <div
-              className="grid gap-3"
-              style={{
-                gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
-                justifyContent: resolvedGridLayout.justifyContent,
-              }}
-            >
-              {Array.from({ length: 12 }).map((_, index) => (
-                <div
-                  key={index.toString()}
-                  className="flex flex-col space-y-3 rounded-lg border p-4"
-                >
-                  <Skeleton className="h-48 w-full rounded-md" />
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
+    <GridModelPreviewProvider key={selectedGroupPath} viewport={viewport}>
+      <div className="min-h-0 flex-1">
+        <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
+          <div className="relative w-full p-3">
+            {showSkeleton ? (
+              <div
+                className="grid gap-3"
+                style={{
+                  gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
+                  justifyContent: resolvedGridLayout.justifyContent,
+                }}
+              >
+                {Array.from({ length: 12 }).map((_, index) => (
+                  <div
+                    key={index.toString()}
+                    className="flex flex-col space-y-3 rounded-lg border p-4"
+                  >
+                    <Skeleton className="h-48 w-full rounded-md" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                    <div className="flex gap-2">
+                      <Skeleton className="h-9 flex-1" />
+                      <Skeleton className="h-9 w-9" />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Skeleton className="h-9 flex-1" />
-                    <Skeleton className="h-9 w-9" />
+                ))}
+              </div>
+            ) : (
+              <div
+                className="grid gap-3"
+                style={{
+                  gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
+                  justifyContent: resolvedGridLayout.justifyContent,
+                }}
+                // ref={parent}
+              >
+                {mods.map((mod) => (
+                  <div
+                    key={getModRenderKey(mod)}
+                    className="min-w-0"
+                    style={{
+                      contentVisibility: "auto",
+                      containIntrinsicBlockSize: "auto 400px",
+                    }}
+                  >
+                    <ModCard
+                      mod={mod}
+                      selectedGroupPath={selectedGroupPath}
+                      actions={actions}
+                      onToggle={handleToggle}
+                      onToggleKeyUpdate={handleToggleKeyUpdate}
+                    />
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              className="grid gap-3"
-              style={{
-                gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
-                justifyContent: resolvedGridLayout.justifyContent,
-              }}
-              // ref={parent}
-            >
-              {mods.map((mod) => (
-                <div
-                  key={getModRenderKey(mod)}
-                  className="min-w-0"
-                  style={{
-                    contentVisibility: "auto",
-                    containIntrinsicBlockSize: "auto 400px",
-                  }}
-                >
-                  <ModCard
-                    mod={mod}
-                    selectedGroupPath={selectedGroupPath}
-                    actions={actions}
-                    onToggle={handleToggle}
-                    onToggleKeyUpdate={handleToggleKeyUpdate}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-      {actions.overlays}
-    </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+        {actions.overlays}
+      </div>
+    </GridModelPreviewProvider>
   );
 }

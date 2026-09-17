@@ -732,6 +732,7 @@
       "empty_selection": "Please select a group or character folder from the sidebar.",
       "no-preview": "No Preview",
       "context-menu": {
+        "open-model-viewer": "Open in model viewer",
         "paste-preview": "Paste",
         "open-preview-lightbox": "View large",
         "open-preview-viewer": "Open in viewer",
@@ -1792,6 +1793,8 @@
         },
         "layout": {
           "title": "Layout",
+          "gridModelPreview": "Show model previews for mods without previews",
+          "gridModelPreviewDescription": "In the mod grid, show the current toggle state as a static model image when no image or video is available.",
           "sidebar": {
             "mode": "Sidebar layout",
             "modeDescription": "Display the character sidebar as either a row list or a square preview grid.",

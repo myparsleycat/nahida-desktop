@@ -15,6 +15,7 @@ import { ThreeModelViewer } from "./three-model-viewer";
 
 const handle = vi.hoisted(() => ({
   captureCameraState: vi.fn(() => null),
+  captureSquarePngBlob: vi.fn(async () => new Blob()),
   captureSquarePngDataUrl: vi.fn(async () => "data:image/png;base64,dGVzdA=="),
   restoreCameraState: vi.fn(),
   updateFraming: vi.fn(),

@@ -44,6 +44,7 @@ const settingsConfig = {
   disabledPrefixStyle: "mod.disabledPrefixStyle",
   sidebarLayout: "mod.sidebarLayout",
   gridLayoutMode: "mod.gridLayoutMode",
+  gridModelPreview: "mod.gridModelPreview",
   gridResponsiveBaseWidth: "mod.gridResponsiveBaseWidth",
   gridFixedCardWidth: "mod.gridFixedCardWidth",
   gridFixedColumnCount: "mod.gridFixedColumnCount",
@@ -418,6 +419,23 @@ function ModSettingsRouteContent() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between space-x-4">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.layout.gridModelPreview")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.mod.layout.gridModelPreviewDescription")}
+                </p>
+              </div>
+              <Switch
+                checked={settings.gridModelPreview}
+                onCheckedChange={(value) => update("gridModelPreview", value)}
+              />
             </div>
 
             <Separator />

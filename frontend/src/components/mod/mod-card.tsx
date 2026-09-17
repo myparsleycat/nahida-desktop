@@ -108,7 +108,14 @@ export const ModCard = memo(function ModCard({
             <div className="relative z-10 flex h-[calc(100%-2rem)] flex-row space-x-2">
               <ModPreviewContainer
                 mod={mod}
+                modelPreviewEligible={
+                  !actions.isNteGame &&
+                  !isDownloading &&
+                  !mod.isDownloadPlaceholder &&
+                  mod.inis.length > 0
+                }
                 onDeletePreview={() => actions.openDeletePreview(mod)}
+                onOpenModelViewer={() => void actions.openModelViewer(mod)}
                 onPaste={() => actions.openPastePreview(mod)}
               />
 

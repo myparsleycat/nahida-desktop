@@ -411,6 +411,37 @@ func TestGetRewritesDirtyStoredValue(t *testing.T) {
 	}
 }
 
+func TestGridModelPreviewSetting(t *testing.T) {
+	t.Parallel()
+
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+	got, err := s.Get(ctx, KeyModGridModelPreview)
+	if err != nil || got != true {
+		t.Fatalf("default grid model preview = %#v %v, want true", got, err)
+	}
+	if err := s.Set(ctx, KeyModGridModelPreview, false); err != nil {
+		t.Fatalf("disable grid model preview: %v", err)
+	}
+	got, err = s.Get(ctx, KeyModGridModelPreview)
+	if err != nil || got != false {
+		t.Fatalf("stored grid model preview = %#v %v, want false", got, err)
+	}
+
+	dirtySetting, _ := openTemp(t, Options{})
+	dirty := "not-a-bool"
+	if err := dirtySetting.Client().Settings.Upsert(ctx, "mod_grid_model_preview", &dirty); err != nil {
+		t.Fatalf("seed dirty grid model preview: %v", err)
+	}
+	got, err = dirtySetting.Get(ctx, KeyModGridModelPreview)
+	if err != nil || got != true {
+		t.Fatalf("dirty grid model preview = %#v %v, want true", got, err)
+	}
+	if raw := rawValue(t, dirtySetting, "mod_grid_model_preview"); raw != "true" {
+		t.Fatalf("dirty grid model preview rewritten to %q, want true", raw)
+	}
+}
+
 func TestDefaultLanguageFromLocale(t *testing.T) {
 	t.Parallel()
 

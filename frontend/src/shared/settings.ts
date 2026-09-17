@@ -31,6 +31,7 @@ export interface AppSettings {
     "mod.sidebarLayout": SidebarLayoutMode;
     "mod.characterSidebarWidth": number;
     "mod.gridLayoutMode": ModGridLayoutMode;
+    "mod.gridModelPreview": boolean;
     "mod.gridResponsiveBaseWidth": number;
     "mod.gridFixedCardWidth": number;
     "mod.gridFixedColumnCount": number;
@@ -185,6 +186,11 @@ export const APP_SETTINGS = {
         publicKey: "mod.gridLayoutMode",
         scope: "mod",
         storageKey: "mod_grid_layout_mode",
+    },
+    "mod.gridModelPreview": {
+        publicKey: "mod.gridModelPreview",
+        scope: "mod",
+        storageKey: "mod_grid_model_preview",
     },
     "mod.gridResponsiveBaseWidth": {
         publicKey: "mod.gridResponsiveBaseWidth",
