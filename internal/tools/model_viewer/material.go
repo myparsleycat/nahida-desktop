@@ -538,6 +538,10 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 		return nil, err
 	}
 	rgba = downscaleModelViewerTexture(rgba, maxModelViewerTextureOutputPixels)
+	return analyzeModelViewerTexture(rgba), nil
+}
+
+func analyzeModelViewerTexture(rgba *image.NRGBA) *modelViewerDecodedTexture {
 	low, high, partial := 0, 0, 0
 	lowRGB := float64(0)
 	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
@@ -560,7 +564,7 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 		lowRatio:     float64(low) / float64(pixels),
 		highRatio:    float64(high) / float64(pixels),
 		partialRatio: float64(partial) / float64(pixels),
-	}, nil
+	}
 }
 
 func modelViewerTextureNameRequestsAlphaInvert(resourceName string) bool {
@@ -569,7 +573,12 @@ func modelViewerTextureNameRequestsAlphaInvert(resourceName string) bool {
 }
 
 func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelViewerDecodedTexture) bool {
-	return decoded != nil && modelViewerTextureNameRequestsAlphaInvert(resourceName)
+	if decoded == nil {
+		return false
+	}
+	return modelViewerTextureNameRequestsAlphaInvert(resourceName) ||
+		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 &&
+			decoded.lowRGB/float64(decoded.low) >= 8
 }
 
 func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
@@ -607,6 +616,27 @@ func encodeModelViewerPreparedTexture(
 	format string,
 	quality int,
 ) (*modelViewerPreparedTexture, error) {
+	return encodeModelViewerPreparedTextureWithAlpha(
+		ctx,
+		decoded,
+		path,
+		resourceName,
+		transform,
+		format,
+		quality,
+		modelViewerTextureShouldInvertAlpha(resourceName, decoded),
+	)
+}
+
+func encodeModelViewerPreparedTextureWithAlpha(
+	ctx context.Context,
+	decoded *modelViewerDecodedTexture,
+	path, resourceName string,
+	transform modelViewerTextureTransform,
+	format string,
+	quality int,
+	invertAlpha bool,
+) (*modelViewerPreparedTexture, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -615,7 +645,6 @@ func encodeModelViewerPreparedTexture(
 	}
 	rgba := decoded.rgba
 	lowRatio, highRatio, partialRatio := decoded.lowRatio, decoded.highRatio, decoded.partialRatio
-	invertAlpha := modelViewerTextureShouldInvertAlpha(resourceName, decoded)
 	if transform != modelViewerTextureTransformPassthrough || invertAlpha {
 		rgba = cloneModelViewerNRGBA(rgba)
 		if err := ctx.Err(); err != nil {

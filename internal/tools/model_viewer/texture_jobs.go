@@ -168,7 +168,7 @@ func runModelViewerTextureJobs(
 		metadata, exists := directPaths[pathKey]
 		if !exists && !failedDirectPaths[pathKey] {
 			var err error
-			metadata, err = inspectModelViewerDDS(job.path)
+			metadata, err = inspectModelViewerDDS(ctx, job.path)
 			if err != nil {
 				failedDirectPaths[pathKey] = true
 				continue
@@ -184,7 +184,8 @@ func runModelViewerTextureJobs(
 			Path:         job.path,
 			ResourceName: job.resourceName,
 			DDS:          &metadata,
-			InvertAlpha:  modelViewerTextureNameRequestsAlphaInvert(job.resourceName),
+			InvertAlpha: modelViewerTextureNameRequestsAlphaInvert(job.resourceName) ||
+				metadata.AutoInvertAlpha,
 		}
 		for _, key := range job.keys {
 			outputs[job.batchIndex][key] = item

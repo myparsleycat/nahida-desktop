@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/myparsleycat/ddsutil"
 )
 
 type modelViewerDDSMetadata struct {
-	Format   string
-	Width    uint32
-	Height   uint32
-	MipCount uint32
+	Format          string
+	Width           uint32
+	Height          uint32
+	MipCount        uint32
+	AutoInvertAlpha bool
 }
 
 func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, error) {
@@ -20,7 +22,7 @@ func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	prepared, err := encodeModelViewerPreparedTexture(
+	prepared, err := encodeModelViewerPreparedTextureWithAlpha(
 		ctx,
 		decoded,
 		path,
@@ -28,6 +30,7 @@ func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, er
 		modelViewerTextureTransformPassthrough,
 		"png",
 		100,
+		false,
 	)
 	if err != nil {
 		return nil, err
@@ -35,7 +38,10 @@ func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, er
 	return prepared.bytes, nil
 }
 
-func inspectModelViewerDDS(path string) (modelViewerDDSMetadata, error) {
+func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMetadata, error) {
+	if err := ctx.Err(); err != nil {
+		return modelViewerDDSMetadata{}, err
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return modelViewerDDSMetadata{}, err
@@ -58,12 +64,29 @@ func inspectModelViewerDDS(path string) (modelViewerDDSMetadata, error) {
 	if metadata.Depth != 1 || metadata.Layers != 1 {
 		format = ""
 	}
+	autoInvertAlpha := false
+	if modelViewerDDSFormatHasAlpha(format) {
+		mipmap, width, height := wwmiHintMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
+		rgba, decodeErr := decodeModelViewerDDSMip(reader, mipmap, width, height)
+		if decodeErr == nil {
+			autoInvertAlpha = modelViewerTextureShouldInvertAlpha("", analyzeModelViewerTexture(rgba))
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return modelViewerDDSMetadata{}, err
+	}
 	return modelViewerDDSMetadata{
-		Format:   format,
-		Width:    metadata.Width,
-		Height:   metadata.Height,
-		MipCount: metadata.Mipmaps,
+		Format:          format,
+		Width:           metadata.Width,
+		Height:          metadata.Height,
+		MipCount:        metadata.Mipmaps,
+		AutoInvertAlpha: autoInvertAlpha,
 	}, nil
+}
+
+func modelViewerDDSFormatHasAlpha(format string) bool {
+	return strings.HasPrefix(format, "bc1-") || strings.HasPrefix(format, "bc2-") ||
+		strings.HasPrefix(format, "bc3-") || strings.HasPrefix(format, "bc7-")
 }
 
 func modelViewerDDSFormat(format ddsutil.ImageFormat) (string, bool) {

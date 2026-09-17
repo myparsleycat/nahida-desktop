@@ -1,8 +1,11 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"image/color"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,7 +24,7 @@ func TestInspectModelViewerDDS(t *testing.T) {
 	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 4096, 2048, 3, 0), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := inspectModelViewerDDS(path)
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +66,7 @@ func TestInspectModelViewerDDSMarksArrayForFallback(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := inspectModelViewerDDS(path)
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,12 +105,52 @@ func TestRunModelViewerTextureJobsKeepsDDSCompressed(t *testing.T) {
 	}
 }
 
+func TestRunModelViewerTextureJobsPreservesDetectedDDSAlphaInversion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "body.dds")
+	if err := os.WriteFile(path, encodeModelViewerTransparentWhiteBC3DDS(t, 4, 4), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output, stats, err := runModelViewerTextureJobs(
+		context.Background(),
+		modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85},
+		1,
+		[]modelViewerTextureJob{{
+			path:         path,
+			resourceName: "BodyDiffuse",
+			keys:         []string{"body"},
+			role:         "diffuse",
+			canonicalKey: "body",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := output[0]["body"]
+	if payload.DDS == nil || payload.DDS.Format != "bc3-unorm" || !payload.InvertAlpha {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if stats.DirectDDS != 1 || stats.Decodes != 0 || stats.Encodes != 0 {
+		t.Fatalf("stats = %#v", stats)
+	}
+	fallback, err := prepareModelViewerDDSFallback(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(fallback))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alpha := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA).A; alpha != 0 {
+		t.Fatalf("fallback alpha = %d, want 0 before renderer inversion", alpha)
+	}
+}
+
 func TestWriteModelViewerPayloadDefersDDSFallback(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "body.dds")
 	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 4, 4, 1, 0), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := inspectModelViewerDDS(path)
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
