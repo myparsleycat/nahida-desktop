@@ -21,7 +21,8 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewe
 
 func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{
-		ddsPreviewMaxDimension: modelViewerDDSPreviewMaxDimension,
+		ddsPreviewMaxDimension:   modelViewerDDSPreviewMaxDimension,
+		includeAllStateVariables: true,
 	})
 }
 
@@ -260,6 +261,7 @@ func (t *Service) loadModViewer(
 		prepared.shapeKeys,
 		prepared.variableNames,
 		prepared.computeAnimations,
+		options.includeAllStateVariables,
 	)
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()

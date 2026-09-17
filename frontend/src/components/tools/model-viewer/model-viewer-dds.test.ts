@@ -1,13 +1,52 @@
 import { RED_GREEN_RGTC2_Format, RGBA_S3TC_DXT1_Format, SIGNED_RED_RGTC1_Format } from "three";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     canUploadModelViewerDDS,
+    fetchModelViewerDDSBuffer,
     hasModelViewerDDSMipWithinLimit,
     parseModelViewerDDS,
 } from "./model-viewer-dds";
 
 const maxTextureSize = 8192;
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
+
+describe("fetchModelViewerDDSBuffer", () => {
+    it("requests only the mip chain that fits the renderer limit", async () => {
+        const source = ddsFixture({ fourcc: "DXT1", width: 16384, height: 4, mipCount: 2 });
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(new Response(source.slice(0, 148), { status: 206 }))
+            .mockResolvedValueOnce(new Response(source.slice(32896, 49280), { status: 206 }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const buffer = await fetchModelViewerDDSBuffer(
+            "wails://local-file/texture.dds",
+            "bc1-unorm",
+            maxTextureSize,
+            new AbortController().signal,
+        );
+        const result = parseModelViewerDDS(buffer, "bc1-unorm", maxTextureSize);
+
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            "wails://local-file/texture.dds",
+            expect.objectContaining({ headers: { Range: "bytes=0-147" } }),
+        );
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            "wails://local-file/texture.dds",
+            expect.objectContaining({ headers: { Range: "bytes=32896-49279" } }),
+        );
+        expect(buffer.byteLength).toBe(128 + 16384);
+        expect(result.texture.mipmaps.map(({ width, height }) => [width, height])).toEqual([
+            [8192, 2],
+        ]);
+    });
+});
 
 describe("parseModelViewerDDS", () => {
     it("parses a legacy BC1 texture without decoding its blocks", () => {

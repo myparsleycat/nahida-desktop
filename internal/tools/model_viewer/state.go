@@ -6,6 +6,7 @@ func configureModelViewerState(
 	allShapeKeys []modelViewerShapeKey,
 	variableNames map[string]modelViewerVariableName,
 	computeAnimations []modelViewerPreparedAnimationClip,
+	includeAllVariables bool,
 ) {
 	defaults := collectModelViewerDefaultVariables(allSections)
 	bindings := collectModelViewerSlotBindings(allSections, defaults)
@@ -40,7 +41,8 @@ func configureModelViewerState(
 		}
 	}
 	for _, variable := range variables {
-		if !animationVars[variable.ID] && (variable.alwaysVisible || modelViewerVariableIsGating(variable, gating)) {
+		if includeAllVariables ||
+			!animationVars[variable.ID] && (variable.alwaysVisible || modelViewerVariableIsGating(variable, gating)) {
 			transport.Variables = append(transport.Variables, variable)
 		}
 		transport.DefaultState[variable.ID] = variable.DefaultValue

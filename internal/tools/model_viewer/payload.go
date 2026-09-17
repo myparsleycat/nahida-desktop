@@ -80,7 +80,8 @@ type modelViewerMeshPayload struct {
 }
 
 type modelViewerPayloadOptions struct {
-	ddsPreviewMaxDimension uint32
+	ddsPreviewMaxDimension   uint32
+	includeAllStateVariables bool
 }
 
 func writeModelViewerPayload(

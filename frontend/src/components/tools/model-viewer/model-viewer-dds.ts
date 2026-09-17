@@ -40,6 +40,15 @@ type DDSFormatInfo = {
     threeFormat: CompressedPixelFormat;
 };
 
+type DDSHeader = {
+    dataOffset: 128 | 148;
+    format: ViewerDDSFormat;
+    height: number;
+    info: DDSFormatInfo;
+    mipCount: number;
+    width: number;
+};
+
 export type ModelViewerTextureCapabilities = {
     maxTextureSize: number;
     s3tc: boolean;
@@ -102,11 +111,119 @@ export function hasModelViewerDDSMipWithinLimit(
     return false;
 }
 
+export async function fetchModelViewerDDSBuffer(
+    url: string,
+    expectedFormat: ViewerDDSFormat,
+    maxTextureSize: number,
+    signal: AbortSignal,
+): Promise<ArrayBuffer> {
+    const headerResponse = await fetch(url, {
+        signal,
+        cache: "no-store",
+        headers: { Range: "bytes=0-147" },
+    });
+    if (!headerResponse.ok) throw new Error(`DDS request failed with ${headerResponse.status}`);
+    const headerBuffer = await headerResponse.arrayBuffer();
+
+    // A server that ignores Range has already returned the complete DDS.
+    if (headerResponse.status !== 206) return headerBuffer;
+
+    const header = parseDDSHeader(headerBuffer, expectedFormat);
+    let dataOffset: number = header.dataOffset;
+    let mipWidth = header.width;
+    let mipHeight = header.height;
+    let selectedMip = -1;
+    let selectedOffset = 0;
+    let selectedBytes = 0;
+    for (let mip = 0; mip < header.mipCount; mip++) {
+        const dataLength = ddsMipDataLength(mipWidth, mipHeight, header.info.blockBytes);
+        if (
+            selectedMip < 0 &&
+            mipWidth <= maxTextureSize &&
+            mipHeight <= maxTextureSize &&
+            mipWidth * mipHeight <= DDS_MAX_PIXELS
+        ) {
+            selectedMip = mip;
+            selectedOffset = dataOffset;
+        }
+        if (selectedMip >= 0) selectedBytes = checkedAdd(selectedBytes, dataLength);
+        dataOffset = checkedAdd(dataOffset, dataLength);
+        mipWidth = nextMipDimension(mipWidth);
+        mipHeight = nextMipDimension(mipHeight);
+    }
+    if (selectedMip < 0 || selectedBytes === 0) {
+        throw new Error("DDS has no mip within the model viewer limit");
+    }
+
+    const payloadResponse = await fetch(url, {
+        signal,
+        cache: "no-store",
+        headers: { Range: `bytes=${selectedOffset}-${selectedOffset + selectedBytes - 1}` },
+    });
+    if (!payloadResponse.ok) throw new Error(`DDS request failed with ${payloadResponse.status}`);
+    const payload = await payloadResponse.arrayBuffer();
+    if (payloadResponse.status !== 206) return payload;
+    if (payload.byteLength !== selectedBytes) throw new Error("DDS mip range is truncated");
+
+    const selectedWidth = mipDimension(header.width, selectedMip);
+    const selectedHeight = mipDimension(header.height, selectedMip);
+    const output = new ArrayBuffer(header.dataOffset + selectedBytes);
+    new Uint8Array(output).set(new Uint8Array(headerBuffer, 0, header.dataOffset));
+    new Uint8Array(output, header.dataOffset).set(new Uint8Array(payload));
+    const outputView = new DataView(output);
+    outputView.setUint32(12, selectedHeight, true);
+    outputView.setUint32(16, selectedWidth, true);
+    outputView.setUint32(28, header.mipCount - selectedMip, true);
+    return output;
+}
+
 export function parseModelViewerDDS(
     buffer: ArrayBuffer,
     expectedFormat: ViewerDDSFormat | undefined,
     maxTextureSize: number,
 ): ParsedModelViewerDDS {
+    const header = parseDDSHeader(buffer, expectedFormat);
+    let dataOffset: number = header.dataOffset;
+    const mipmaps: Array<{ data: Uint8Array; width: number; height: number }> = [];
+    let mipWidth = header.width;
+    let mipHeight = header.height;
+    for (let mip = 0; mip < header.mipCount; mip++) {
+        const dataLength = ddsMipDataLength(mipWidth, mipHeight, header.info.blockBytes);
+        if (dataOffset + dataLength > buffer.byteLength)
+            throw new Error("DDS mip data is truncated");
+        if (
+            mipWidth <= maxTextureSize &&
+            mipHeight <= maxTextureSize &&
+            mipWidth * mipHeight <= DDS_MAX_PIXELS
+        ) {
+            mipmaps.push({
+                data: new Uint8Array(buffer, dataOffset, dataLength),
+                width: mipWidth,
+                height: mipHeight,
+            });
+        }
+        dataOffset = checkedAdd(dataOffset, dataLength);
+        mipWidth = nextMipDimension(mipWidth);
+        mipHeight = nextMipDimension(mipHeight);
+    }
+    if (mipmaps.length === 0) throw new Error("DDS has no mip within the model viewer limit");
+
+    const texture = new CompressedTexture(
+        mipmaps,
+        mipmaps[0].width,
+        mipmaps[0].height,
+        header.info.threeFormat,
+    );
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.repeat.y = -1;
+    texture.offset.y = 1;
+    if (mipmaps.length === 1) texture.minFilter = LinearFilter;
+    texture.needsUpdate = true;
+    return { texture, format: header.format };
+}
+
+function parseDDSHeader(buffer: ArrayBuffer, expectedFormat?: ViewerDDSFormat): DDSHeader {
     if (buffer.byteLength < 128) throw new Error("DDS header is truncated");
     const view = new DataView(buffer);
     if (view.getUint32(0, true) !== DDS_MAGIC) throw new Error("Invalid DDS magic");
@@ -126,7 +243,7 @@ export function parseModelViewerDDS(
     }
 
     const fourcc = view.getUint32(84, true);
-    let dataOffset = 128;
+    let dataOffset: DDSHeader["dataOffset"] = 128;
     let format = legacyDDSFormat(fourcc);
     if (fourcc === FOURCC_DX10) {
         if (buffer.byteLength < 148) throw new Error("DDS DX10 header is truncated");
@@ -144,45 +261,7 @@ export function parseModelViewerDDS(
     if (expectedFormat && format !== expectedFormat) {
         throw new Error(`DDS format changed from ${expectedFormat} to ${format}`);
     }
-
-    const info = formatInfo(format);
-    const mipmaps: Array<{ data: Uint8Array; width: number; height: number }> = [];
-    let mipWidth = width;
-    let mipHeight = height;
-    for (let mip = 0; mip < mipCount; mip++) {
-        const dataLength = Math.ceil(mipWidth / 4) * Math.ceil(mipHeight / 4) * info.blockBytes;
-        if (dataOffset + dataLength > buffer.byteLength)
-            throw new Error("DDS mip data is truncated");
-        if (
-            mipWidth <= maxTextureSize &&
-            mipHeight <= maxTextureSize &&
-            mipWidth * mipHeight <= DDS_MAX_PIXELS
-        ) {
-            mipmaps.push({
-                data: new Uint8Array(buffer, dataOffset, dataLength),
-                width: mipWidth,
-                height: mipHeight,
-            });
-        }
-        dataOffset += dataLength;
-        mipWidth = Math.max(1, mipWidth >> 1);
-        mipHeight = Math.max(1, mipHeight >> 1);
-    }
-    if (mipmaps.length === 0) throw new Error("DDS has no mip within the model viewer limit");
-
-    const texture = new CompressedTexture(
-        mipmaps,
-        mipmaps[0].width,
-        mipmaps[0].height,
-        info.threeFormat,
-    );
-    texture.generateMipmaps = false;
-    texture.flipY = false;
-    texture.repeat.y = -1;
-    texture.offset.y = 1;
-    if (mipmaps.length === 1) texture.minFilter = LinearFilter;
-    texture.needsUpdate = true;
-    return { texture, format };
+    return { dataOffset, format, height, info: formatInfo(format), mipCount, width };
 }
 
 function legacyDDSFormat(value: number): ViewerDDSFormat | undefined {
@@ -244,6 +323,29 @@ function formatInfo(format: ViewerDDSFormat): DDSFormatInfo {
         return { blockBytes: 16, threeFormat: RGB_BPTC_SIGNED_Format };
     }
     return { blockBytes: 16, threeFormat: RGBA_BPTC_Format };
+}
+
+function ddsMipDataLength(width: number, height: number, blockBytes: 8 | 16): number {
+    const length = Math.ceil(width / 4) * Math.ceil(height / 4) * blockBytes;
+    if (!Number.isSafeInteger(length) || length <= 0) {
+        throw new Error("DDS mip dimensions are too large");
+    }
+    return length;
+}
+
+function checkedAdd(left: number, right: number): number {
+    const result = left + right;
+    if (!Number.isSafeInteger(result)) throw new Error("DDS byte range is too large");
+    return result;
+}
+
+function nextMipDimension(value: number): number {
+    return Math.max(1, Math.floor(value / 2));
+}
+
+function mipDimension(value: number, mip: number): number {
+    for (let index = 0; index < mip; index++) value = nextMipDimension(value);
+    return value;
 }
 
 function maxMipCount(width: number, height: number): number {

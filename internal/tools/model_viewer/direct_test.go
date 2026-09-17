@@ -494,6 +494,37 @@ func TestModelViewerVariableGatingDoesNotUseEffectVariables(t *testing.T) {
 	}
 }
 
+func TestConfigureModelViewerStateIncludesEffectOnlyVariablesForGridPreview(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persist $outfit = 0
+global persist $underwear = 0
+[KeyOutfit]
+type = cycle
+$outfit = 0,1
+$underwear = 0`)
+	newTransport := func() ModelViewerTransport {
+		return ModelViewerTransport{
+			Meshes: []ModelViewerMeshTransport{{
+				Conditions: ModelViewerDNF{{{Var: "underwear", Value: "1"}}},
+			}},
+			DefaultState: make(map[string]any),
+		}
+	}
+
+	regular := newTransport()
+	configureModelViewerState(&regular, sections, nil, nil, nil, false)
+	if len(regular.Variables) != 0 {
+		t.Fatalf("regular variables = %#v, want effect-only source hidden", regular.Variables)
+	}
+
+	grid := newTransport()
+	configureModelViewerState(&grid, sections, nil, nil, nil, true)
+	if len(grid.Variables) != 1 || grid.Variables[0].ID != "outfit" ||
+		len(grid.Variables[0].Effects) != 1 || grid.Variables[0].Effects[0].Var != "underwear" {
+		t.Fatalf("grid variables = %#v, want outfit with underwear effect", grid.Variables)
+	}
+}
+
 func TestModelViewerClickedSlotConditionalEffects(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $top = 1
