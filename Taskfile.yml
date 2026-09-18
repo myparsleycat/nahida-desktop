@@ -64,6 +64,12 @@ tasks:
     cmds:
       - go test ./...
 
+  catalog:generate:
+    summary: Regenerates the agent provider catalog from models.dev
+    desc: Rewrites internal/agent/providers/catalog.json.
+    cmds:
+      - go run ./internal/agent/cataloggen
+
   lint:
     summary: Runs golangci-lint
     desc: |

@@ -1,0 +1,73 @@
+/*
+ * Agent chat layout.
+ *
+ * The screen itself is styled with Tailwind utilities in `agent.tsx`. What stays here is what
+ * utilities cannot express: the shared size tokens, the two keyframe animations that the
+ * `animate-[...]` utilities reference, and the overrides for the shared Markdown stylesheet.
+ */
+
+.agent-page {
+    --agent-blue: #4176e6;
+    --agent-sidebar-width: 272px;
+    --agent-chat-width: clamp(680px, 64%, 920px);
+    --agent-composer-width: min(calc(var(--agent-chat-width) + 32px), calc(100% - 32px));
+}
+
+@keyframes agent-pulse {
+    from {
+        opacity: 0.45;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes agent-shimmer {
+    to {
+        background-position: 0 50%;
+    }
+}
+
+/* The shared Markdown renderer gives code blocks and tables their own horizontal scroll. The Agent
+ * transcript is a fixed-width column, so wrap those blocks instead of letting them open a second
+ * horizontal viewport. These rules stay unlayered on purpose: `markdown.css` is unlayered too, and
+ * layered utilities would lose to it. */
+.agent-assistant-message .markdown-body {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.agent-assistant-message .markdown-body :where(p, li, blockquote, a, code, th, td) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.agent-assistant-message .markdown-body pre {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.agent-assistant-message .markdown-body pre code {
+    white-space: inherit;
+    overflow-wrap: inherit;
+    word-break: inherit;
+}
+
+.agent-assistant-message .markdown-body table {
+    display: table;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: fixed;
+    overflow: visible;
+}
+
+.agent-assistant-message > .agent-reasoning + .markdown-body {
+    margin-top: 10px;
+}

@@ -184,6 +184,34 @@ func TestInspectModForFixRunsInspectorOnce(t *testing.T) {
 	}
 }
 
+func TestDiagnoseModForFixDoesNotTrack(t *testing.T) {
+	service := newMarkerInspectionService()
+	t.Cleanup(func() {
+		if err := service.Shutdown(); err != nil {
+			t.Errorf("shutdown tools service: %v", err)
+		}
+	})
+
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(target, "needs-fix"), []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := service.DiagnoseModForFix(context.Background(), target, "TEST")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.NeedsFix {
+		t.Fatal("diagnosis did not report a needed fix")
+	}
+	if tracked := trackedFixInspectionCount(service); tracked != 0 {
+		t.Fatalf("diagnosis tracked %d fix inspections", tracked)
+	}
+	if snapshot := service.fixInspectionSnapshot(); len(snapshot.Inspections) != 0 {
+		t.Fatalf("diagnosis published a snapshot: %+v", snapshot)
+	}
+}
+
 func TestShutdownFixInspectionsCancelsActiveRefresh(t *testing.T) {
 	inspector := &blockingFixInspector{started: make(chan struct{}), stopped: make(chan struct{})}
 	service := New()

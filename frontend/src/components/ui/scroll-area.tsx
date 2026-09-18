@@ -26,7 +26,9 @@ function ScrollArea({
           viewportClassName,
         )}
       >
-        <ScrollAreaPrimitive.Content>{children}</ScrollAreaPrimitive.Content>
+        <ScrollAreaPrimitive.Content data-slot="scroll-area-content">
+          {children}
+        </ScrollAreaPrimitive.Content>
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
       <ScrollAreaPrimitive.Corner />

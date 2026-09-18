@@ -16,6 +16,13 @@ func (t *Tools) InspectModForFix(ctx context.Context, modPath, importer string) 
 	return t.fixInspection.InspectModForFix(ctx, modPath, importer)
 }
 
+// DiagnoseModForFix inspects a mod for applicable local fixes without registering a fix warning.
+//
+//wails:ignore
+func (t *Tools) DiagnoseModForFix(ctx context.Context, modPath, importer string) (*FixInspectionResult, error) {
+	return t.fixInspection.DiagnoseModForFix(ctx, modPath, importer)
+}
+
 func (t *Tools) RefreshFixInspections(ctx context.Context) FixInspectionSnapshot {
 	return t.fixInspection.RefreshFixInspections(ctx)
 }

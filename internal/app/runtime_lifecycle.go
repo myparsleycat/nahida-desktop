@@ -59,6 +59,11 @@ func bootRuntime(
 	if rt.tools != nil {
 		rt.tools.UseAppData(data)
 	}
+	if rt.agent != nil {
+		if err := rt.agent.UseAppData(data); err != nil {
+			return runtimePaths{Root: data.Root()}, err
+		}
+	}
 	rt.configureLog(paths, in.Packaged)
 	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
 		return paths, err
@@ -156,6 +161,11 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.tools != nil {
 		rt.tools.UseClient(store.DB)
 	}
+	if rt.agent != nil {
+		if err := rt.agent.UseClient(ctx, store.DB); err != nil {
+			return rt.failInit(err, "agent")
+		}
+	}
 	return nil
 }
 
@@ -203,6 +213,9 @@ func (rt *runtime) Close() error {
 	}
 	if rt.mod != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
+	}
+	if rt.agent != nil {
+		err = errors.Join(err, infra.AnnotateError(rt.agent.ServiceShutdown(), infra.Diagnostic{Stage: "agent"}))
 	}
 	if rt.tools != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.tools.ServiceShutdown(), infra.Diagnostic{Stage: "tools"}))

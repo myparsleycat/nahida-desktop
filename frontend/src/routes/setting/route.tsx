@@ -4,6 +4,7 @@ import { useGlobalStore } from "@renderer/store/global";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDown,
+  BotIcon,
   ChevronRight,
   GamepadIcon,
   HardDrive,
@@ -46,6 +47,7 @@ function RouteComponent() {
       { icon: ArrowUpDown, label: t("page.setting.tabs.transfer"), path: "/setting/transfer" },
       { icon: Network, label: t("page.setting.tabs.network"), path: "/setting/network" },
       { icon: Wrench, label: t("page.setting.tabs.tools"), path: "/setting/tools" },
+      { icon: BotIcon, label: t("page.agent.title"), path: "/setting/agent" },
       { icon: ServerCrash, label: t("page.setting.tabs.advanced"), path: "/setting/adv" },
     ],
     [t],

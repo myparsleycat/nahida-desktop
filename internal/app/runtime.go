@@ -4,6 +4,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
+	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/drive"
@@ -32,6 +33,7 @@ type runtime struct {
 	protocol        *infra.Protocol
 	download        *infra.Download
 	archive         *infra.Archive
+	agent           *agent.Service
 	auth            *auth.Auth
 	setting         *setting.Setting
 	drive           *drive.Drive
@@ -181,6 +183,19 @@ func newRuntime() *runtime {
 		gameBananaLogin: login,
 		notifications:   notifier,
 	}
+	rt.agent = agent.New(agent.Options{
+		HTTP:      httpClient.HTTPClient(),
+		Crypto:    platform.NewCrypto(),
+		Tools:     rt.tools,
+		Mod:       rt.mod,
+		Setting:   rt.setting,
+		Transfer:  rt.transfer,
+		XXMI:      rt.xxmi,
+		MenuMaker: rt.menuMaker,
+		Log:       log,
+		EventEmit: eventEmit,
+		Shell:     shell,
+	})
 	rt.localHTTP.UseHandler(rt.handleLocalHTTPMessage)
 	if rt.mod != nil {
 		rt.mod.UseFocus(rt.window.Focus)
@@ -212,6 +227,7 @@ func emitAppEvent(name string, data ...any) {
 
 func (rt *runtime) services() []application.Service {
 	return []application.Service{
+		newLoggedService(rt, "Agent", rt.agent),
 		newLoggedService(rt, "Auth", rt.auth),
 		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
 		newLoggedService(rt, "Dialog", rt.dialog),
@@ -237,6 +253,7 @@ func (rt *runtime) services() []application.Service {
 // maintenance. Add a service here when it writes user files.
 func (rt *runtime) fileMutatingServices() []application.Service {
 	return []application.Service{
+		application.NewService(rt.agent),
 		application.NewService(rt.drive),
 		application.NewService(rt.fs),
 		application.NewService(rt.menuMaker),

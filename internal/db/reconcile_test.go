@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,8 +25,9 @@ func TestReconcileEmptyDatabaseCreatesElectronSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schema version: %v", err)
 	}
-	if state == nil || state.Value != "4" {
-		t.Fatalf("app_schema_version = %+v, want 4", state)
+	want := fmt.Sprintf("%d", AppSchemaVersion)
+	if state == nil || state.Value != want {
+		t.Fatalf("app_schema_version = %+v, want %s", state, want)
 	}
 }
 
@@ -352,6 +354,67 @@ VALUES
 	if again.GameExecutablePath == nil || *again.GameExecutablePath != "C:/games/new-launcher.exe" {
 		t.Fatalf("second pass should leave the new exe path: %+v", again.GameExecutablePath)
 	}
+}
+
+func TestReconcileSeedsBuiltInBlenderMCPServerOnce(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "blender.db")
+	client, err := New(path)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	seeded := blenderMCPRows(t, ctx, client)
+	if len(seeded) != 1 {
+		t.Fatalf("seeded %d built-in Blender servers, want 1: %+v", len(seeded), seeded)
+	}
+	row := seeded[0]
+	if row.Transport != BlenderMCPTransport {
+		t.Errorf("transport = %q, want %q", row.Transport, BlenderMCPTransport)
+	}
+	// Disabled on purpose: tools running inside Blender reach outside Nahida's file sandbox, so
+	// connecting is an explicit user action.
+	if row.Enabled {
+		t.Error("the built-in Blender server must be seeded disabled")
+	}
+	if !strings.Contains(row.PublicConfig, "9876") {
+		t.Errorf("public config = %q, want the add-on's default port", row.PublicConfig)
+	}
+
+	// Deleting it and reconciling again must not resurrect it: the migration is one-shot so a
+	// user's choice to remove the entry sticks.
+	if err := client.AgentMCPServers.Delete(ctx, row.ID); err != nil {
+		t.Fatalf("delete seeded row: %v", err)
+	}
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	if rows := blenderMCPRows(t, ctx, client); len(rows) != 0 {
+		t.Fatalf("one-shot seed ran twice: %+v", rows)
+	}
+}
+
+func blenderMCPRows(t *testing.T, ctx context.Context, client *Client) []AgentMCPServerRow {
+	t.Helper()
+
+	rows, err := client.AgentMCPServers.List(ctx)
+	if err != nil {
+		t.Fatalf("list mcp servers: %v", err)
+	}
+	filtered := make([]AgentMCPServerRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Transport == BlenderMCPTransport {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
 }
 
 func TestReconcileDropsToggleViewerArtifactTable(t *testing.T) {
