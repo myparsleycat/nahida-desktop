@@ -2,6 +2,7 @@ package menumaker
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -100,13 +101,38 @@ func TestSingleINIRejectsUnknownVisibility(t *testing.T) {
 	}
 }
 
+func TestSingleINIIgnoresUnrelatedDisabledCondition(t *testing.T) {
+	t.Parallel()
+	text := sidecarFixture + "\n[CommandListDisabled]\ncondition = 0\n"
+	generated, err := generateSingleINI(text, parseDocument(text).Slots, defaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(generated.INIText, "[CommandListDisabled]\ncondition = 0") {
+		t.Fatal("preserved disabled condition was removed")
+	}
+}
+
 func TestOwnedSidecarRequiresExactSourceMarker(t *testing.T) {
 	t.Parallel()
-	if !isOwnedSidecar(sidecarMarker+"Example.ini\r\n[Present]", `C:\\mods\\Example.ini`) {
+	if !isOwnedSidecar(sidecarMarker+"Example.ini\r\n[Present]", `C:\\mods\\Example.ini`, "") {
 		t.Fatal("matching sidecar marker was not recognized")
 	}
-	if isOwnedSidecar(sidecarMarker+"Other.ini\n", `C:\\mods\\Example.ini`) ||
-		isOwnedSidecar("[Present]\n", `C:\\mods\\Example.ini`) {
+	if !isOwnedSidecar(
+		sidecarMarker+"Creator\\Example\r\n[Present]",
+		`C:\\mods\\Example.ini`,
+		"namespace = Creator\\Example\n[KeySwap]\n",
+	) {
+		t.Fatal("legacy namespace marker was not recognized")
+	}
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "d3dx.ini"), []byte("[Include]\n"))
+	implicitPath := filepath.Join(root, "Mods", "Example.ini")
+	if !isOwnedSidecar(sidecarMarker+"Mods\\Example.ini\n", implicitPath, "[KeySwap]\n") {
+		t.Fatal("legacy implicit namespace marker was not recognized")
+	}
+	if isOwnedSidecar(sidecarMarker+"Other.ini\n", `C:\\mods\\Example.ini`, "") ||
+		isOwnedSidecar("[Present]\n", `C:\\mods\\Example.ini`, "") {
 		t.Fatal("unrelated menu was recognized as owned")
 	}
 }

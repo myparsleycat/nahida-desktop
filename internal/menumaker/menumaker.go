@@ -273,12 +273,34 @@ func (m *MenuMaker) applyGenerated(
 	}
 	dir := filepath.Dir(req.sourcePath)
 	outputPath := filepath.Join(dir, outputName)
+	sourceText, _, err := decodeText(req.original)
+	if err != nil {
+		return result, err
+	}
+	currentSource, err := readLimited(req.sourcePath, maxSourceBytes)
+	if err != nil {
+		return result, err
+	}
+	if !bytes.Equal(currentSource, req.original) {
+		return result, ErrSourceChanged
+	}
+	outputOriginal := []byte(nil)
+	outputExisted := false
+	if samePath(req.sourcePath, outputPath) {
+		outputOriginal = append(outputOriginal, req.original...)
+		outputExisted = true
+	} else if existing, readErr := readLimited(outputPath, maxSourceBytes); readErr == nil {
+		outputOriginal = existing
+		outputExisted = true
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return result, readErr
+	}
 	sidecarPath := ""
 	candidate := filepath.Join(dir, menuININame)
 	if !samePath(candidate, outputPath) {
-		if existing, readErr := os.ReadFile(candidate); readErr == nil {
+		if existing, readErr := readLimited(candidate, maxSourceBytes); readErr == nil {
 			decoded, _, decodeErr := decodeText(existing)
-			if decodeErr == nil && isOwnedSidecar(decoded, outputPath) {
+			if decodeErr == nil && isOwnedSidecar(decoded, outputPath, sourceText) {
 				sidecarPath = candidate
 			}
 		} else if !errors.Is(readErr, os.ErrNotExist) {
@@ -303,27 +325,6 @@ func (m *MenuMaker) applyGenerated(
 	}
 
 	backupPath := ""
-	if strings.EqualFold(filepath.Ext(req.sourcePath), ".ini") {
-		*stage = "backup-source"
-		backupPath, err = nextBackupPath(req.sourcePath)
-		if err != nil {
-			return result, err
-		}
-		if err = writeExclusive(backupPath, req.original); err != nil {
-			return result, fmt.Errorf("write menu maker source backup: %w", err)
-		}
-		if backup, readErr := os.ReadFile(backupPath); readErr != nil || sha256Hex(backup) != sha256Hex(req.original) {
-			return result, infra.WithCause(
-				errors.New("menu maker source backup verification failed"),
-				errors.Join(
-					readErr,
-					infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"}),
-				),
-			)
-		}
-		result.BackupPath = backupPath
-	}
-
 	promotions := make([]promotion, 0, len(allData))
 	rollback := func() error {
 		*cleanupState = "rolling-back"
@@ -363,6 +364,31 @@ func (m *MenuMaker) applyGenerated(
 		}
 		return nil
 	}
+	if outputExisted {
+		currentOutput, readErr := readLimited(outputPath, maxSourceBytes)
+		if readErr != nil || !bytes.Equal(currentOutput, outputOriginal) {
+			return result, errors.Join(ErrSourceChanged, readErr)
+		}
+		*stage = "backup-output"
+		backupPath, err = nextBackupPath(outputPath)
+		if err != nil {
+			return result, err
+		}
+		if err = writeExclusive(backupPath, outputOriginal); err != nil {
+			return result, fmt.Errorf("write menu maker output backup: %w", err)
+		}
+		if backup, readErr := readLimited(backupPath, maxSourceBytes); readErr != nil ||
+			!bytes.Equal(backup, outputOriginal) {
+			return result, infra.WithCause(
+				errors.New("menu maker output backup verification failed"),
+				errors.Join(
+					readErr,
+					infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"}),
+				),
+			)
+		}
+		result.BackupPath = backupPath
+	}
 
 	*stage = "promote-output"
 	for index, file := range allData {
@@ -370,6 +396,22 @@ func (m *MenuMaker) applyGenerated(
 			return result, errors.Join(err, rollback())
 		}
 		target := filepath.Join(dir, filepath.FromSlash(file.RelativePath))
+		if index == 0 || !samePath(req.sourcePath, outputPath) {
+			current, readErr := readLimited(req.sourcePath, maxSourceBytes)
+			if readErr != nil || !bytes.Equal(current, req.original) {
+				return result, errors.Join(ErrSourceChanged, readErr, rollback())
+			}
+		}
+		if index == 0 {
+			if outputExisted {
+				current, readErr := readLimited(target, maxSourceBytes)
+				if readErr != nil || !bytes.Equal(current, outputOriginal) {
+					return result, errors.Join(ErrSourceChanged, readErr, rollback())
+				}
+			} else if _, statErr := os.Stat(target); !errors.Is(statErr, os.ErrNotExist) {
+				return result, errors.Join(ErrSourceChanged, statErr, rollback())
+			}
+		}
 		if err = os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return result, errors.Join(err, rollback())
 		}
@@ -392,6 +434,12 @@ func (m *MenuMaker) applyGenerated(
 		*stage = "remove-sidecar"
 		if err = ctx.Err(); err != nil {
 			return result, errors.Join(err, rollback())
+		}
+		if !samePath(req.sourcePath, outputPath) {
+			current, readErr := readLimited(req.sourcePath, maxSourceBytes)
+			if readErr != nil || !bytes.Equal(current, req.original) {
+				return result, errors.Join(ErrSourceChanged, readErr, rollback())
+			}
 		}
 		entry := promotion{
 			target:   sidecarPath,

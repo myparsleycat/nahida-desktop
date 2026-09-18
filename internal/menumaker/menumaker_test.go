@@ -151,6 +151,24 @@ func TestApplyBundlePreservesTXTAndWritesMatchingINI(t *testing.T) {
 	}
 }
 
+func TestApplyBundleBacksUpExistingTXTTarget(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "Example.txt")
+	outputPath := filepath.Join(root, "Example.ini")
+	original := []byte(sidecarFixture)
+	existingOutput := []byte("existing generated INI")
+	mustWrite(t, sourcePath, original)
+	mustWrite(t, outputPath, existingOutput)
+
+	result := applyFixture(t, sourcePath, original)
+	if result.BackupPath == "" || result.BackupPath == sourcePath {
+		t.Fatalf("existing target has no recoverable backup: %+v", result)
+	}
+	assertFile(t, result.BackupPath, existingOutput)
+	assertFile(t, sourcePath, original)
+}
+
 func TestApplyBundleUsesTimestampedBackupWhenTXTExists(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -210,6 +228,46 @@ func TestApplyBundleRollsBackINIResourcesAndPreservesSidecarOnFailure(t *testing
 	assertFile(t, filepath.Join(root, menuININame), sidecar)
 	if _, statErr := os.Stat(filepath.Join(root, "Example.txt")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("rollback left a backup behind: %v", statErr)
+	}
+}
+
+func TestApplyBundleRollsBackExistingTXTTarget(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "Example.txt")
+	outputPath := filepath.Join(root, "Example.ini")
+	original := []byte(sidecarFixture)
+	existingOutput := []byte("existing generated INI")
+	mustWrite(t, sourcePath, original)
+	mustWrite(t, outputPath, existingOutput)
+	mustWrite(t, filepath.Join(root, "res_gui"), []byte("directory blocker"))
+
+	result, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), Slots: parseDocument(sidecarFixture).Slots,
+		Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+		Assets: []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
+	})
+	if err == nil || !result.RolledBack {
+		t.Fatalf("expected rolled back failure: result=%+v err=%v", result, err)
+	}
+	assertFile(t, sourcePath, original)
+	assertFile(t, outputPath, existingOutput)
+	if result.BackupPath != "" {
+		t.Fatalf("rollback left a redundant backup: %s", result.BackupPath)
+	}
+}
+
+func TestWriteGeneratedRejectsChangedTXTSource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "Example.txt")
+	mustWrite(t, sourcePath, []byte("changed"))
+
+	_, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
+		sourcePath: sourcePath, original: []byte("original"), iniText: "generated", encoding: "utf8", newline: "lf",
+	})
+	if !errors.Is(err, ErrSourceChanged) {
+		t.Fatalf("expected source changed error, got %v", err)
 	}
 }
 
