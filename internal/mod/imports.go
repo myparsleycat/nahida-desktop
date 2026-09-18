@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/menumaker"
 )
 
 const maxPreviewBytes = 50 << 20
@@ -183,11 +184,18 @@ func (m *Mod) CopyFolderToGroup(
 	}
 	if move {
 		if err := os.Rename(source, target); err == nil {
+			if err := menumaker.RepairRelocatedSidecars(target); err != nil {
+				return "", infra.WithCause(err, os.Rename(target, source))
+			}
 			m.queueFixInspection(target)
 			return target, nil
 		}
 	}
 	if err := copyDirectory(source, target); err != nil {
+		m.reportCleanup(os.RemoveAll(target), "CopyFolderToGroup")
+		return "", err
+	}
+	if err := menumaker.RepairRelocatedSidecars(target); err != nil {
 		m.reportCleanup(os.RemoveAll(target), "CopyFolderToGroup")
 		return "", err
 	}

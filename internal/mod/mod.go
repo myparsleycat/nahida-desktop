@@ -684,6 +684,7 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 		}
 		return nteScanGroup(nteRootsFor(*game), groupPath, search, diagnostics.Add), nil
 	}
+	m.repairEnabledMenuMakerSidecars(groupPath, diagnostics.Add)
 	group := scanGroup(groupPath, diagnostics.Add)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
 }
@@ -703,6 +704,7 @@ func (m *Mod) GetModsLight(ctx context.Context, groupPath string) (FolderGroup, 
 		}
 		return nteScanGroupLight(nteRootsFor(*game), groupPath, search, diagnostics.Add), nil
 	}
+	m.repairEnabledMenuMakerSidecars(groupPath, diagnostics.Add)
 	group := scanGroupLight(groupPath, diagnostics.Add)
 	return m.filterManualMods(ctx, *game, groupPath, group), nil
 }

@@ -288,6 +288,65 @@ func TestSidecarResolvesImplicitNamespaceWithoutChangingSourceNamespace(t *testi
 	}
 }
 
+func TestRepairRelocatedSidecarsRebindsImplicitNamespace(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "d3dx.ini"), []byte("[Include]"))
+	modPath := filepath.Join(root, "Mods", "Character", "Copied Mod")
+	mustWrite(t, filepath.Join(modPath, "Mod.ini"), []byte("[Constants]\nglobal $swap = 0\n"))
+	menuPath := filepath.Join(modPath, "menu.ini")
+	menu := "\ufeff" + sidecarMarker + "Mod.ini\r\nnamespace = Mods\\Character\\Original Mod\\Mod.ini\r\n\r\n[Present]\r\n"
+	mustWrite(t, menuPath, []byte(menu))
+
+	if err := RepairRelocatedSidecars(modPath); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(menuPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "\ufeff" + sidecarMarker + "Mod.ini\r\nnamespace = Mods\\Character\\Copied Mod\\Mod.ini\r\n\r\n[Present]\r\n"
+	if string(raw) != want {
+		t.Fatalf("repaired menu = %q, want %q", raw, want)
+	}
+
+	if err := RepairRelocatedSidecars(modPath); err != nil {
+		t.Fatal(err)
+	}
+	stable, err := os.ReadFile(menuPath)
+	if err != nil || string(stable) != want {
+		t.Fatalf("second repair changed menu = %q, %v", stable, err)
+	}
+}
+
+func TestRepairRelocatedSidecarsPreservesUserMenuAndExplicitNamespace(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "d3dx.ini"), []byte("[Include]"))
+	userMod := filepath.Join(root, "Mods", "User")
+	mustWrite(t, filepath.Join(userMod, "menu.ini"), []byte("namespace = User\n[Present]\n"))
+	if err := RepairRelocatedSidecars(userMod); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(userMod, "menu.ini"), []byte("namespace = User\n[Present]\n"))
+
+	explicitMod := filepath.Join(root, "Mods", "Explicit")
+	mustWrite(t, filepath.Join(explicitMod, "Mod.ini"), []byte("namespace = Creator\\Mod\n[Constants]\n"))
+	mustWrite(
+		t,
+		filepath.Join(explicitMod, "menu.ini"),
+		[]byte(sidecarMarker+"Mod.ini\nnamespace = Old\\Path\n\n[Present]\n"),
+	)
+	if err := RepairRelocatedSidecars(explicitMod); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(
+		t,
+		filepath.Join(explicitMod, "menu.ini"),
+		[]byte(sidecarMarker+"Mod.ini\nnamespace = Creator\\Mod\n\n[Present]\n"),
+	)
+}
+
 func TestSidecarApplyRejectsUnrelatedMenu(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

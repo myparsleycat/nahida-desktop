@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/menumaker"
 )
 
 func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
@@ -190,6 +191,11 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 	if err := os.Rename(modPath, next); err != nil {
 		return "", m.lockedFolderError(err, modPath)
 	}
+	if !isDisabled(filepath.Base(next)) {
+		if err := menumaker.RepairRelocatedSidecars(next); err != nil {
+			return "", infra.WithCause(err, os.Rename(next, modPath))
+		}
+	}
 	return next, nil
 }
 
@@ -341,6 +347,9 @@ func (m *Mod) enable(path string) (string, error) {
 	result, err := renameUnique(path, name)
 	if err != nil {
 		return "", m.lockedFolderError(err, path)
+	}
+	if err := menumaker.RepairRelocatedSidecars(result); err != nil {
+		return "", infra.WithCause(err, os.Rename(result, path))
 	}
 	return result, nil
 }

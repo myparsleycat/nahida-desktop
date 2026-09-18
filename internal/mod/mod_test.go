@@ -700,6 +700,82 @@ func TestCopyFolderAndReadGameBananaMetadata(t *testing.T) {
 	}
 }
 
+func TestCopyFolderRepairsRelocatedMenuMakerSidecar(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Group")
+	source := filepath.Join(root, "Copied Mod")
+	for _, path := range []string{group, source} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "d3dx.ini"), []byte("[Include]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Mod.ini"), []byte("[Constants]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	menu := "; NAHIDA MENU SIDECAR SOURCE=Mod.ini\nnamespace = Original\\Mod.ini\n\n[Present]\n"
+	if err := os.WriteFile(filepath.Join(source, "menu.ini"), []byte(menu), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := service.CopyFolderToGroup(ctx, source, group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(target, "menu.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "namespace = mods\\Group\\Copied Mod\\Mod.ini\n") {
+		t.Fatalf("copied menu namespace was not repaired: %q", raw)
+	}
+}
+
+func TestGetModsRepairsExplorerCopiedMenuMakerSidecar(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Group")
+	modPath := filepath.Join(group, "Explorer Copy")
+	if err := os.MkdirAll(modPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "d3dx.ini"), []byte("[Include]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modPath, "Mod.ini"), []byte("[Constants]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	menuPath := filepath.Join(modPath, "menu.ini")
+	menu := "; NAHIDA MENU SIDECAR SOURCE=Mod.ini\nnamespace = Old\\Mod.ini\n\n[Present]\n"
+	if err := os.WriteFile(menuPath, []byte(menu), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.GetMods(ctx, group); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(menuPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "namespace = mods\\Group\\Explorer Copy\\Mod.ini\n") {
+		t.Fatalf("scanned menu namespace was not repaired: %q", raw)
+	}
+}
+
 func TestCopyFolderToGroupMovesSourceWhenConfigured(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
