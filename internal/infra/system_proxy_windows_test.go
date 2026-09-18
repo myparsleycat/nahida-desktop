@@ -87,7 +87,9 @@ func TestWindowsAutoProxyUnavailable(t *testing.T) {
 	}{
 		{"WPAD not discovered", syscall.Errno(12180), "", true},
 		{"WPAD script unavailable", syscall.Errno(12167), "", true},
+		{"WPAD proxy unavailable", syscall.Errno(12178), "", true},
 		{"configured PAC unavailable", syscall.Errno(12167), "http://pac/config", false},
+		{"configured PAC proxy unavailable", syscall.Errno(12178), "http://pac/config", false},
 		{"unrelated failure", syscall.Errno(12002), "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

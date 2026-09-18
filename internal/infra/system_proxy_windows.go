@@ -182,7 +182,11 @@ func windowsAutoProxy(ctx context.Context, target string, config systemProxyConf
 			id,
 		)
 		if code != 997 {
-			return "", fmt.Errorf("WinHttpGetProxyForUrlEx: %w", syscall.Errno(code))
+			err = syscall.Errno(code)
+			if isWindowsAutoProxyUnavailable(err, config.autoConfigURL) {
+				return "", errNoAutoProxy
+			}
+			return "", fmt.Errorf("WinHttpGetProxyForUrlEx: %w", err)
 		}
 		select {
 		case err = <-done:
@@ -247,7 +251,11 @@ func isWindowsAutoProxyUnavailable(err error, autoConfigURL string) bool {
 	if errors.Is(err, syscall.Errno(12180)) { // ERROR_WINHTTP_AUTODETECTION_FAILED
 		return true
 	}
-	return autoConfigURL == "" && errors.Is(err, syscall.Errno(12167)) // ERROR_WINHTTP_UNABLE_TO_DOWNLOAD_SCRIPT
+	if autoConfigURL != "" {
+		return false
+	}
+	return errors.Is(err, syscall.Errno(12167)) || // ERROR_WINHTTP_UNABLE_TO_DOWNLOAD_SCRIPT
+		errors.Is(err, syscall.Errno(12178)) // ERROR_WINHTTP_AUTO_PROXY_SERVICE_ERROR
 }
 
 func freeWindowsProxyStrings(values ...*uint16) {
