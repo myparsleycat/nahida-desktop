@@ -25,7 +25,13 @@ export type EditorAction =
           sourceAvailable?: boolean;
       }
     | { type: "sourceAvailable"; value: boolean }
-    | { type: "sourceContent"; text: string; sha256: string }
+    | {
+          type: "sourceContent";
+          path?: string;
+          text: string;
+          sha256: string;
+          document?: MenuMakerDocument;
+      }
     | { type: "slots"; value: MenuMakerSlot[] }
     | { type: "settings"; value: Partial<MenuMakerSettings> }
     | { type: "palette"; key: keyof MenuMakerSettings["palette"]; value: string | number };
@@ -37,7 +43,15 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         if (!state.source) return state;
         return {
             ...state,
-            source: { ...state.source, text: action.text, sha256: action.sha256 },
+            source: {
+                ...state.source,
+                path: action.path ?? state.source.path,
+                fileName: action.path?.split(/[\\/]/).pop() ?? state.source.fileName,
+                text: action.text,
+                sha256: action.sha256,
+                document: action.document ?? state.source.document,
+            },
+            document: action.document ?? state.document,
         };
     }
     if (action.type === "scan") return { ...state, scan: action.value };

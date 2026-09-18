@@ -142,7 +142,7 @@ export function useMenuMakerEditor({
         const result = await Dialog.SelectDirectory();
         if (!result.canceled && result.filePath) await scanFolder(result.filePath);
     };
-    const outputName = "menu.ini";
+    const outputName = state.source?.fileName.replace(/\.(?:ini|txt)$/i, ".ini") ?? "mod.ini";
     const generateCurrent = async () => {
         if (!state.source) return null;
         try {
@@ -185,7 +185,6 @@ export function useMenuMakerEditor({
             const result = await MenuMaker.ApplyBundle({
                 sourcePath: state.source.path,
                 sourceSHA256: state.source.sha256,
-                outputININame: outputName,
                 slots: state.slots,
                 settings: state.settings,
                 encoding: state.source.encoding,
@@ -194,14 +193,15 @@ export function useMenuMakerEditor({
                 assets,
             });
             toast.success(t("page.tools.menu_maker.applied", { path: result.outputINIPath }));
-            if (result.sourceSHA256) {
+            if (result.outputINIPath && result.sourceSHA256) {
+                const document = await MenuMaker.Parse(generated.iniText);
                 dispatch({
                     type: "sourceContent",
-                    text: generated.sourceINIText,
+                    path: result.outputINIPath,
+                    text: generated.iniText,
                     sha256: result.sourceSHA256,
+                    document,
                 });
-            } else if (result.sourceINIPath) {
-                await loadSource(result.sourceINIPath);
             }
         } catch (error) {
             Logger.error(
@@ -262,7 +262,6 @@ export function useMenuMakerEditor({
             if (!assets) return;
             await MenuMaker.SaveZIP({
                 destinationPath: selection.filePath,
-                outputININame: outputName,
                 sourcePath: state.source.path,
                 sourceText: state.source.text,
                 slots: state.slots,

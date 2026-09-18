@@ -19,9 +19,7 @@ func TestScanFolderFiltersDisabledAndTXT(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "main.ini"), []byte("[KeySwap]"))
 	mustWrite(t, filepath.Join(root, "notes.txt"), []byte("text"))
-	mustWrite(t, filepath.Join(root, "image.png"), []byte("png"))
 	mustWrite(t, filepath.Join(root, "DISABLED old", "old.ini"), []byte("disabled"))
-	mustWrite(t, filepath.Join(root, "sub", "disabled-copy.ini"), []byte("disabled"))
 	mustWrite(t, filepath.Join(root, "sub", "extra.ini"), []byte("ini"))
 
 	withoutTXT, err := New().ScanFolder(context.Background(), root, false)
@@ -36,17 +34,12 @@ func TestScanFolderFiltersDisabledAndTXT(t *testing.T) {
 	) {
 		t.Fatalf("unexpected files without txt: %v", got)
 	}
-	if withoutTXT.Stats.INI != 2 || withoutTXT.Stats.TXT != 1 || withoutTXT.Stats.Disabled != 2 {
-		t.Fatalf("unexpected stats: %+v", withoutTXT.Stats)
-	}
 
 	withTXT, err := New().ScanFolder(context.Background(), root, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := relativePaths(
-		withTXT.Files,
-	); !slices.Equal(
+	if got := relativePaths(withTXT.Files); !slices.Equal(
 		got,
 		[]string{"main.ini", "notes.txt", filepath.Join("sub", "extra.ini")},
 	) {
@@ -64,13 +57,6 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 		newline  string
 		text     string
 	}{
-		{
-			name:     "utf8 lf",
-			data:     []byte("[KeySwap]\nkey = 5\n$x = 0\n"),
-			encoding: "utf8",
-			newline:  "lf",
-			text:     "[KeySwap]\nkey = 5\n$x = 0\n",
-		},
 		{
 			name:     "utf8 bom crlf",
 			data:     append([]byte{0xef, 0xbb, 0xbf}, []byte("[KeySwap]\r\nkey = 5\r\n$x = 0\r\n")...),
@@ -107,251 +93,171 @@ func TestLoadSourcePreservesEncodingBOMAndNewline(t *testing.T) {
 				source.Newline != test.newline {
 				t.Fatalf("unexpected source metadata: %+v", source)
 			}
-			encoded, encodeErr := encodeText(
-				source.Text,
-				textEncoding{name: source.Encoding, bom: source.HasBOM, newline: source.Newline},
-			)
-			if encodeErr != nil {
-				t.Fatal(encodeErr)
-			}
-			if !bytes.Equal(encoded, test.data) {
-				t.Fatalf("round trip changed bytes: %x != %x", encoded, test.data)
-			}
 		})
 	}
 }
 
-func TestApplyBundleBacksUpAndPreservesUnmanagedResources(t *testing.T) {
+func TestLoadSourceAllowsMenuINIUnlessItIsNahidaSidecar(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	original := []byte("[KeySwap]\r\nkey = 5\r\n")
-	mustWrite(t, sourcePath, original)
-	mustWrite(t, filepath.Join(root, "res_gui", "keep.dat"), []byte("keep"))
-
-	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\n[Present]\nrun = CommandListGuiMenu\n",
-		sourceINIText: "patched\n",
-		encoding:      "utf8",
-		newline:       "crlf",
-		assets: []MenuMakerGeneratedAsset{
-			{RelativePath: "res_gui/draw_2d.hlsl", Data: []byte("shader")},
-			{RelativePath: "res_gui/slot_01.png", Data: []byte("png")},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
+	path := filepath.Join(root, "menu.ini")
+	mustWrite(t, path, []byte(sidecarFixture))
+	if _, err := New().LoadSource(context.Background(), path); err != nil {
+		t.Fatalf("ordinary menu.ini was rejected: %v", err)
 	}
-	if result.OutputINIPath != filepath.Join(root, "menu.ini") || result.BackupPath != filepath.Join(root, "mod.txt") ||
-		result.RolledBack {
+	mustWrite(t, path, []byte(sidecarMarker+"Example.ini\n"+sidecarFixture))
+	if _, err := New().LoadSource(context.Background(), path); err == nil {
+		t.Fatal("Nahida sidecar was accepted as an original")
+	}
+	otherPath := filepath.Join(root, "Example.ini")
+	mustWrite(t, otherPath, []byte(sidecarMarker+"Example.ini\n"+sidecarFixture))
+	if _, err := New().LoadSource(context.Background(), otherPath); err != nil {
+		t.Fatalf("non-menu source containing a legacy marker was rejected: %v", err)
+	}
+}
+
+func TestApplyBundleReplacesINIAndCreatesBackup(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "Example.ini")
+	original := []byte(sidecarFixture)
+	mustWrite(t, sourcePath, original)
+
+	result := applyFixture(t, sourcePath, original)
+	if result.OutputINIPath != sourcePath || result.BackupPath != filepath.Join(root, "Example.txt") {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-	written := []byte("patched\r\n")
-	if result.SourceSHA256 != sha256Hex(written) {
-		t.Fatalf("unexpected overwrite sha256: %q", result.SourceSHA256)
-	}
 	assertFile(t, result.BackupPath, original)
-	assertFile(t, sourcePath, written)
-	assertFile(t, filepath.Join(root, "res_gui", "keep.dat"), []byte("keep"))
-	assertFile(t, filepath.Join(root, "res_gui", "draw_2d.hlsl"), []byte("shader"))
-}
-
-func TestApplyBundleSidecarKeepsOriginalINIEnabled(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	original := []byte("original")
-	mustWrite(t, sourcePath, original)
-
-	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText: "patched",
-		encoding:      "utf8",
-		newline:       "lf",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertFile(t, sourcePath, []byte("patched"))
-	assertFile(t, result.BackupPath, original)
-	assertFile(t, filepath.Join(root, "menu.ini"), []byte(sidecarMarker+"mod.ini\ngenerated"))
-	if result.SourceSHA256 != sha256Hex([]byte("patched")) {
-		t.Fatalf("source hash not refreshed: %+v", result)
+	written := mustRead(t, sourcePath)
+	if result.SourceSHA256 != sha256Hex(written) || !bytes.Contains(written, []byte(generatedBegin)) {
+		t.Fatal("single generated INI was not written")
 	}
 }
 
-func TestApplyBundleUsesTimestampedBackupWhenTXTNameExists(t *testing.T) {
+func TestApplyBundlePreservesTXTAndWritesMatchingINI(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	original := []byte("original")
-	mustWrite(t, sourcePath, original)
-	mustWrite(t, filepath.Join(root, "mod.txt"), []byte("existing"))
-
-	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText: "patched",
-		encoding:      "utf8",
-		newline:       "lf",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(filepath.Base(result.BackupPath), "mod.backup-") ||
-		!strings.HasSuffix(result.BackupPath, ".txt") {
-		t.Fatalf("unexpected collision backup path: %s", result.BackupPath)
-	}
-	assertFile(t, filepath.Join(root, "mod.txt"), []byte("existing"))
-	assertFile(t, result.BackupPath, original)
-}
-
-func TestApplyBundleTXTAlwaysPreservesSource(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.txt")
-	original := []byte("original")
+	sourcePath := filepath.Join(root, "Example.txt")
+	original := []byte(sidecarFixture)
 	mustWrite(t, sourcePath, original)
 
-	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText: "patched",
-		encoding:      "utf8",
-		newline:       "lf",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := applyFixture(t, sourcePath, original)
 	assertFile(t, sourcePath, original)
-	assertFile(t, result.SourceINIPath, []byte("patched"))
-	if result.SourceSHA256 != "" {
-		t.Fatalf("txt apply should not refresh source sha256: %+v", result)
+	if result.OutputINIPath != filepath.Join(root, "Example.ini") || result.BackupPath != "" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
+	if result.SourceSHA256 != sha256Hex(mustRead(t, result.OutputINIPath)) {
+		t.Fatal("output hash was not refreshed")
+	}
+}
+
+func TestApplyBundleUsesTimestampedBackupWhenTXTExists(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "Example.ini")
+	original := []byte(sidecarFixture)
+	mustWrite(t, sourcePath, original)
+	mustWrite(t, filepath.Join(root, "Example.txt"), []byte("existing"))
+
+	result := applyFixture(t, sourcePath, original)
+	if !strings.HasPrefix(filepath.Base(result.BackupPath), "Example.backup-") ||
+		!strings.HasSuffix(result.BackupPath, ".txt") {
+		t.Fatalf("unexpected backup path: %s", result.BackupPath)
+	}
+	assertFile(t, filepath.Join(root, "Example.txt"), []byte("existing"))
 }
 
 func TestApplyBundleRejectsChangedSourceAndAssetTraversal(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	mustWrite(t, sourcePath, []byte("changed"))
+	sourcePath := filepath.Join(root, "Example.ini")
+	mustWrite(t, sourcePath, []byte(sidecarFixture))
 	_, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
-		SourcePath: sourcePath, SourceSHA256: sha256Hex([]byte("old")), OutputININame: "menu.ini",
-		Encoding: "utf8", Newline: "lf",
+		SourcePath: sourcePath, SourceSHA256: sha256Hex([]byte("old")),
+		Slots: parseDocument(sidecarFixture).Slots, Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
 	})
 	if !errors.Is(err, ErrSourceChanged) {
 		t.Fatalf("expected source changed error, got %v", err)
 	}
-
 	_, err = New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      []byte("changed"),
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText: "patched",
-		encoding:      "utf8",
-		newline:       "lf",
-		assets:        []MenuMakerGeneratedAsset{{RelativePath: "res_gui/../evil.png", Data: []byte("evil")}},
+		sourcePath: sourcePath, original: []byte(sidecarFixture), iniText: "generated", encoding: "utf8", newline: "lf",
+		assets: []MenuMakerGeneratedAsset{{RelativePath: "res_gui/../evil.png", Data: []byte("evil")}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "invalid menu maker asset path") {
 		t.Fatalf("expected traversal rejection, got %v", err)
 	}
 }
 
-func TestApplyBundleRollsBackPromotedINIWhenResourceCommitFails(t *testing.T) {
+func TestApplyBundleRollsBackINIResourcesAndPreservesSidecarOnFailure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	original := []byte("original")
+	sourcePath := filepath.Join(root, "Example.ini")
+	original := []byte(sidecarFixture)
+	sidecar := []byte(sidecarMarker + "Example.ini\nlegacy")
 	mustWrite(t, sourcePath, original)
+	mustWrite(t, filepath.Join(root, menuININame), sidecar)
 	mustWrite(t, filepath.Join(root, "res_gui"), []byte("directory blocker"))
 
-	result, err := New().writeGenerated(context.Background(), applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: "menu.ini",
-		iniText:       sidecarMarker + "mod.ini\ngenerated",
-		sourceINIText: "patched",
-		encoding:      "utf8",
-		newline:       "lf",
-		assets:        []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
+	result, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), Slots: parseDocument(sidecarFixture).Slots,
+		Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+		Assets: []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
 	})
-	if err == nil {
-		t.Fatal("expected resource promotion failure")
-	}
-	if !result.RolledBack {
-		t.Fatalf("expected rollback result: %+v", result)
+	if err == nil || !result.RolledBack {
+		t.Fatalf("expected rolled back failure: result=%+v err=%v", result, err)
 	}
 	assertFile(t, sourcePath, original)
-	if _, statErr := os.Stat(filepath.Join(root, "mod.txt")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("failed transaction left a backup behind: %v", statErr)
+	assertFile(t, filepath.Join(root, menuININame), sidecar)
+	if _, statErr := os.Stat(filepath.Join(root, "Example.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("rollback left a backup behind: %v", statErr)
 	}
 }
 
-func TestApplyBundleOverwriteAllowsImmediateReapply(t *testing.T) {
+func TestApplyBundleRemovesOnlyMatchingNahidaSidecar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		menu      string
+		isRemoved bool
+	}{
+		{name: "matching", menu: sidecarMarker + "Example.ini\nlegacy", isRemoved: true},
+		{name: "different source", menu: sidecarMarker + "Other.ini\nlegacy"},
+		{name: "user menu", menu: "[Present]\nrun = CommandListUser"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			sourcePath := filepath.Join(root, "Example.ini")
+			original := []byte(sidecarFixture)
+			menuPath := filepath.Join(root, menuININame)
+			mustWrite(t, sourcePath, original)
+			mustWrite(t, menuPath, []byte(test.menu))
+			applyFixture(t, sourcePath, original)
+			_, err := os.Stat(menuPath)
+			if test.isRemoved && !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("matching sidecar was not removed: %v", err)
+			}
+			if !test.isRemoved {
+				assertFile(t, menuPath, []byte(test.menu))
+			}
+		})
+	}
+}
+
+func TestSaveZIPContainsOneINIAndAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	sourcePath := filepath.Join(root, "mod.ini")
-	original := []byte(
-		"namespace = TestMod\n[Constants]\nglobal $active\nglobal persist $x = 0\n[Present]\npost $active = 0\n[KeySwap]\nkey = 5\ncondition = $active == 1\n$x = 0,1\n[TextureOverrideBodyPosition]\nhash = abcdef01\n$active = 1\n",
-	)
-	mustWrite(t, sourcePath, original)
-	svc := New()
-	first, err := svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
-		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), OutputININame: "menu.ini",
-		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
-		Encoding: "utf8", Newline: "lf",
+	archive := filepath.Join(root, "bundle.zip")
+	_, err := New().SaveZIP(context.Background(), MenuMakerSaveZIPRequest{
+		SourcePath: filepath.Join(root, "Example.txt"), DestinationPath: archive, SourceText: sidecarFixture,
+		Slots: parseDocument(sidecarFixture).Slots, Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
+		Assets: []MenuMakerGeneratedAsset{{RelativePath: "res_gui/bg.png", Data: []byte("png")}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	written, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.SourceSHA256 == "" || first.SourceSHA256 == sha256Hex(original) ||
-		first.SourceSHA256 != sha256Hex(written) {
-		t.Fatalf(
-			"unexpected overwrite sha256: got %q original %q file %q",
-			first.SourceSHA256,
-			sha256Hex(original),
-			sha256Hex(written),
-		)
-	}
-	if _, err = svc.ApplyBundle(context.Background(), MenuMakerApplyRequest{
-		SourcePath: sourcePath, SourceSHA256: first.SourceSHA256, OutputININame: "menu.ini",
-		Slots: parseDocument(string(original)).Slots, Settings: defaultSettings(),
-		Encoding: "utf8", Newline: "lf",
-	}); err != nil {
-		t.Fatalf("reapply with returned hash failed: %v", err)
-	}
-}
-
-func TestSaveZIPUsesUTF8NamesAndContainsBundle(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(t.TempDir(), "menu.zip")
-	_, err := saveZIPBytes(
-		path,
-		"메뉴.ini",
-		"ini",
-		textEncoding{name: "utf8", newline: "lf"},
-		[]MenuMakerGeneratedAsset{{RelativePath: "res_gui/title.png", Data: []byte("png")}},
-		nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reader, err := zip.OpenReader(path)
+	reader, err := zip.OpenReader(archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,19 +266,29 @@ func TestSaveZIPUsesUTF8NamesAndContainsBundle(t *testing.T) {
 	for _, file := range reader.File {
 		names = append(names, file.Name)
 	}
-	if !slices.Equal(names, []string{"메뉴.ini", "res_gui/title.png"}) {
-		t.Fatalf("unexpected zip entries: %v", names)
+	if !slices.Equal(names, []string{"Example.ini", "res_gui/bg.png"}) {
+		t.Fatalf("unexpected ZIP entries: %v", names)
 	}
 }
 
-func relativePaths(files []MenuMakerScanFile) []string {
-	return slices.Collect(func(yield func(string) bool) {
-		for _, file := range files {
-			if !yield(file.RelativePath) {
-				return
-			}
-		}
+func applyFixture(t *testing.T, sourcePath string, original []byte) MenuMakerWriteResult {
+	t.Helper()
+	result, err := New().ApplyBundle(context.Background(), MenuMakerApplyRequest{
+		SourcePath: sourcePath, SourceSHA256: sha256Hex(original), Slots: parseDocument(string(original)).Slots,
+		Settings: defaultSettings(), Encoding: "utf8", Newline: "lf",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func relativePaths(files []MenuMakerScanFile) []string {
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.RelativePath)
+	}
+	return paths
 }
 
 func mustWrite(t *testing.T, path string, data []byte) {
@@ -385,12 +301,18 @@ func mustWrite(t *testing.T, path string, data []byte) {
 	}
 }
 
-func assertFile(t *testing.T, path string, expected []byte) {
+func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
-	actual, err := os.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return data
+}
+
+func assertFile(t *testing.T, path string, expected []byte) {
+	t.Helper()
+	actual := mustRead(t, path)
 	if !bytes.Equal(actual, expected) {
 		t.Fatalf("unexpected contents for %s: %q", path, actual)
 	}

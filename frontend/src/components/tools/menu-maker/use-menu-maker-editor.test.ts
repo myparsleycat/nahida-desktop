@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     generate: vi.fn(),
     parse: vi.fn(),
     saveINI: vi.fn(),
+    saveZIP: vi.fn(),
     apply: vi.fn(),
     assets: vi.fn(),
     saveFile: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@bindings/menumaker", () => ({
         Generate: mocks.generate,
         Parse: mocks.parse,
         SaveINI: mocks.saveINI,
+        SaveZIP: mocks.saveZIP,
         ApplyBundle: mocks.apply,
     },
 }));
@@ -56,7 +58,6 @@ const source: MenuMakerSource = {
 };
 const generated = {
     iniText: "generated",
-    sourceINIText: "patched original",
     geometry: emptyMenuMakerGeometry(),
     slotStates: [],
     assetPaths: [],
@@ -90,10 +91,11 @@ beforeEach(() => {
     mocks.saveBlobs.mockResolvedValue(undefined);
     mocks.deleteBlobs.mockResolvedValue(undefined);
     mocks.saveINI.mockResolvedValue({});
+    mocks.saveZIP.mockResolvedValue({});
     mocks.assets.mockResolvedValue([]);
     mocks.apply.mockResolvedValue({
         sourceSHA256: "patched-hash",
-        outputINIPath: "C:\\mods\\menu.ini",
+        outputINIPath: "C:\\mods\\test.ini",
     });
     mocks.saveFile.mockResolvedValue({ canceled: false, filePath: "C:\\output.ini" });
 });
@@ -108,14 +110,15 @@ function useEditor() {
 }
 
 describe("Menu Maker editor boundaries", () => {
-    it("keeps the patched source editable after applying a separate menu", async () => {
+    it("uses the single output path and hash after applying", async () => {
         const hook = renderHook(useEditor);
         await act(async () => hook.result.current.loadSource(source.path));
         await act(async () => hook.result.current.applyBundle());
         expect(mocks.apply).toHaveBeenCalledWith(
-            expect.objectContaining({ outputININame: "menu.ini" }),
+            expect.not.objectContaining({ outputININame: expect.anything() }),
         );
-        expect(hook.result.current.state.source?.text).toBe("patched original");
+        expect(hook.result.current.state.source?.path).toBe("C:\\mods\\test.ini");
+        expect(hook.result.current.state.source?.text).toBe("generated");
         expect(hook.result.current.state.source?.sha256).toBe("patched-hash");
         expect(hook.result.current.state.sourceAvailable).toBe(true);
     });
@@ -245,5 +248,25 @@ describe("Menu Maker editor boundaries", () => {
             newline: "crlf",
         });
         expect(hook.result.current.state.busy).toBe(false);
+    });
+    it("suggests the source basename when saving the generated INI", async () => {
+        const hook = renderHook(useEditor);
+        await act(async () => hook.result.current.loadSource(source.path));
+        await act(async () => hook.result.current.saveINI());
+        expect(mocks.saveFile).toHaveBeenCalledWith(
+            expect.objectContaining({ suggestedName: "test.ini" }),
+        );
+    });
+    it("saves a single-INI ZIP without an output name override", async () => {
+        mocks.saveFile.mockResolvedValue({ canceled: false, filePath: "C:\\output.zip" });
+        const hook = renderHook(useEditor);
+        await act(async () => hook.result.current.loadSource(source.path));
+        await act(async () => hook.result.current.saveZIP());
+        expect(mocks.saveFile).toHaveBeenCalledWith(
+            expect.objectContaining({ suggestedName: "test.zip" }),
+        );
+        expect(mocks.saveZIP).toHaveBeenCalledWith(
+            expect.not.objectContaining({ outputININame: expect.anything() }),
+        );
     });
 });
