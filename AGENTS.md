@@ -85,12 +85,14 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 ## Verification
 
 - Do not use `task dev` or a standalone Vite dev server as a substitute for verification.
+- Verification should be proportional to the change: run the commands for the layers that changed, but keep a successful production build as the final compile, type, and binding check for cross-layer changes.
 - For Go-only changes, run focused package tests first (`go test <pkgs>`), then `task test` and `task lint` when the change is ready.
 - For frontend-only changes, run `pnpm fmt -- <paths...>`, `pnpm lint -- <paths...>`, the relevant Vitest tests, and `pnpm build` from `frontend/`.
+- `task test` and `task lint` cover Go code only, and `task build` adds Go compilation and binding generation on top of the frontend build. A frontend-only change therefore does not need `task test`, `task lint`, or `task build`.
+- Treat a change as cross-layer rather than frontend-only when it changes Go-exported service methods, parameters, return types, or bound models; frontend build or packaging inputs such as `vite.config.ts`, `package.json`, `pnpm-lock.yaml`, or asset paths; or the runtime contract between the renderer and the backend.
 - For changes to Wails services, bindings, application wiring, build configuration, or cross-layer behavior, run `task build` after the relevant tests and linters.
 - For `.ts`, `.tsx`, `.js`, and `.jsx` files, use the existing `pnpm lint` and `pnpm fmt` scripts from `frontend/`; do not invoke `tsc`, Oxlint, or Oxfmt directly.
 - Run `task vuln` when dependencies, networking, archive handling, process execution, or other security-sensitive code changes.
-- Verification should be proportional to the change, but a successful production build is the final compile/type/binding check for cross-layer changes.
 
 ## Error Logging
 
