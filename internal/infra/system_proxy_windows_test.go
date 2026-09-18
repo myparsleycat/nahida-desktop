@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -74,5 +75,27 @@ func TestWindowsAutoProxyCancellation(t *testing.T) {
 	_, err := resolveWindowsAutoProxy(ctx, target, systemProxyConfig{autoConfigURL: "http://127.0.0.1:1/proxy.pac"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
+	}
+}
+
+func TestWindowsAutoProxyUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		err           error
+		autoConfigURL string
+		want          bool
+	}{
+		{"WPAD not discovered", syscall.Errno(12180), "", true},
+		{"WPAD script unavailable", syscall.Errno(12167), "", true},
+		{"WPAD proxy unavailable", syscall.Errno(12178), "", true},
+		{"configured PAC unavailable", syscall.Errno(12167), "http://pac/config", false},
+		{"configured PAC proxy unavailable", syscall.Errno(12178), "http://pac/config", false},
+		{"unrelated failure", syscall.Errno(12002), "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isWindowsAutoProxyUnavailable(tc.err, tc.autoConfigURL); got != tc.want {
+				t.Fatalf("isWindowsAutoProxyUnavailable() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
