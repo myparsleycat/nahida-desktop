@@ -29,7 +29,6 @@ var (
 	keyLineRe         = regexp.MustCompile(`(?i)^\s*key\s*=`)
 	conditionLineRe   = regexp.MustCompile(`(?i)^\s*condition\s*=`)
 	commentTailRe     = regexp.MustCompile(`\s+;.*`)
-	variablePrefixRe  = regexp.MustCompile(`^\$[A-Za-z0-9_]+`)
 	keyAssignRe       = regexp.MustCompile(`(?i)^key\s*=`)
 	conditionAssignRe = regexp.MustCompile(`(?i)^condition\s*=`)
 	typeAssignRe      = regexp.MustCompile(`(?i)^type\s*=`)

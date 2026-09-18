@@ -78,9 +78,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
     onSourceLoaded: () => setSelected([]),
     onDraftRestored: () => setDialog(null),
   });
-  const generatedINI = preview
-    ? `; menu.ini\n${preview.iniText}\n; ${state.source?.fileName ?? "Source INI"}\n${preview.sourceINIText}`
-    : "";
+  const generatedINI = preview?.iniText ?? "";
   const geometry = preview?.geometry ?? emptyMenuMakerGeometry();
   const previewResolutionScale = calculateMenuMakerPreviewScale(state.settings);
   const previewTitle = menuMakerTitleText(state.settings);

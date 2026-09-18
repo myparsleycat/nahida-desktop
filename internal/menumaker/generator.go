@@ -46,7 +46,7 @@ func generatePreview(sourceText string, slots []MenuMakerSlot, settings MenuMake
 	document := parseDocument(sourceText)
 	geometry := calculateGeometry(slots, settings)
 	constants := parseInitialConstants(document.Sections)
-	sourceINIText, iniText := generateINI(document, slots, settings, geometry, constants)
+	iniText := generateINI(document, slots, settings, geometry, constants)
 	groups := make([]MenuMakerSlotStateGroup, 0, len(slots))
 	for _, slot := range slots {
 		groups = append(groups, MenuMakerSlotStateGroup{
@@ -55,11 +55,10 @@ func generatePreview(sourceText string, slots []MenuMakerSlot, settings MenuMake
 		})
 	}
 	return MenuMakerGenerateResult{
-		INIText:       iniText,
-		SourceINIText: sourceINIText,
-		Geometry:      geometry,
-		SlotStates:    groups,
-		AssetPaths:    assetPaths(slots, settings, constants),
+		INIText:    iniText,
+		Geometry:   geometry,
+		SlotStates: groups,
+		AssetPaths: assetPaths(slots, settings, constants),
 	}
 }
 
@@ -69,7 +68,7 @@ func generateINI(
 	settings MenuMakerSettings,
 	geometry MenuMakerGeometry,
 	constants map[string]string,
-) (string, string) {
+) string {
 	handlers := uniqueHandlers(slots)
 	sections := document.Sections
 	legacy := strings.Contains(document.Text, generatedBegin)
@@ -100,8 +99,8 @@ func generateINI(
 	for _, section := range sections {
 		originalParts = append(originalParts, strings.Join(section.Lines, "\n"))
 	}
-	original := strings.TrimSpace(strings.Join(originalParts, "\n")) + "\n"
-	return original, buildGeneratedBlock(
+	original := strings.TrimSpace(strings.Join(originalParts, "\n"))
+	generated := buildGeneratedBlock(
 		slots,
 		handlers,
 		geometry,
@@ -109,7 +108,8 @@ func generateINI(
 		activeCondition,
 		constants,
 		generatedVariable,
-	) + "\n"
+	)
+	return original + "\n\n" + generated + "\n"
 }
 
 func calculateGeometry(slots []MenuMakerSlot, settings MenuMakerSettings) MenuMakerGeometry {

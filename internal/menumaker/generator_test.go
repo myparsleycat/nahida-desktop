@@ -439,8 +439,7 @@ func TestGenerateAssetPathsSkipAndTitle(t *testing.T) {
 
 func generateFrom(document MenuMakerDocument, slots []MenuMakerSlot, settings MenuMakerSettings) string {
 	geometry := calculateGeometry(slots, settings)
-	source, menu := generateINI(document, slots, settings, geometry, parseInitialConstants(document.Sections))
-	return source + "\n" + menu
+	return generateINI(document, slots, settings, geometry, parseInitialConstants(document.Sections))
 }
 
 func mergeSlots(slots []MenuMakerSlot, selectedIDs []string, mode string) []MenuMakerSlot {
