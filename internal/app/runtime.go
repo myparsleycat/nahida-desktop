@@ -43,6 +43,7 @@ type runtime struct {
 	tools           *tools.Tools
 	dialog          *platform.Dialog
 	shell           *platform.Shell
+	input           *platform.Input
 	window          *Window
 	localHTTP       *infra.LocalHTTP
 	gameBananaLogin *gameBananaLogin
@@ -65,6 +66,20 @@ func newRuntime() *runtime {
 	fs := platform.NewFS()
 	fs.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(log, err, "FS", infra.Diagnostic{Operation: "write-access", Stage: stage, Fields: fields})
+	})
+	input := platform.NewInput()
+	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
+		_ = infra.ReportError(
+			log,
+			err,
+			"Input",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "send-keys",
+				Stage:     stage,
+				Fields:    fields,
+			},
+		)
 	})
 	native := platform.NewNative()
 	window := NewWindow()
@@ -173,6 +188,7 @@ func newRuntime() *runtime {
 		}),
 		dialog: dialog,
 		shell:  shell,
+		input:  input,
 		window: window,
 		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
 			Version: platform.AppVersion,
@@ -218,6 +234,7 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "Drive", rt.drive),
 		newLoggedService(rt, "FS", rt.fs),
 		newLoggedService(rt, "GameBanana", rt.gamebanana),
+		newLoggedService(rt, "Input", rt.input),
 		application.NewService(rt.log),
 		newLoggedService(rt, "MenuMaker", rt.menuMaker),
 		newLoggedService(rt, "Mod", rt.mod),
