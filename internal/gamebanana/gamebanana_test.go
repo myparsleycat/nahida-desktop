@@ -476,6 +476,103 @@ func TestRequestReportsAuthRequiredWhenAnonymousRetryFails(t *testing.T) {
 	}
 }
 
+func TestConcurrentRequestRetriesAnonymousAfterSiblingDropsSession(t *testing.T) {
+	var siblingCalls atomic.Int32
+	siblingStarted := make(chan struct{})
+	sessionDropped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/apiv13/sibling" && siblingCalls.Add(1) == 1 {
+			// Hold the rejection until the sibling request has dropped the session,
+			// so this request reaches its anonymous retry with the cookie already gone.
+			close(siblingStarted)
+			<-sessionDropped
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+			return
+		}
+		if request.Header.Get("Cookie") == "" {
+			if request.URL.Path == "/apiv13/owner" {
+				close(sessionDropped)
+			}
+			_, _ = io.WriteString(w, `{}`)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := service.saveCookie(ctx, "rmc=expired"); err != nil {
+		t.Fatal(err)
+	}
+	policy := requestPolicy{
+		PersistResponseCookies:  true,
+		ClearStoredCookieOnAuth: true,
+		AuthFallback:            authFallbackAnonymous,
+	}
+
+	sibling := make(chan error, 1)
+	go func() {
+		response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/sibling", nil, policy)
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		sibling <- err
+	}()
+	<-siblingStarted
+
+	response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/owner", nil, policy)
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if err != nil {
+		t.Fatalf("session-dropping request = %v", err)
+	}
+	if err := <-sibling; err != nil {
+		t.Fatalf("sibling request = %v, want the anonymous retry to succeed", err)
+	}
+	if calls := siblingCalls.Load(); calls != 2 {
+		t.Fatalf("sibling calls = %d, want 2", calls)
+	}
+	cookie, err := service.getCookie(ctx)
+	if err != nil || cookie != "" {
+		t.Fatalf("stored session = %q, error = %v", cookie, err)
+	}
+}
+
+func TestAnonymousAuthRequiredResponseKeepsStoredSessionWritable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	ctx := context.Background()
+	_, revision, err := service.cookieSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/anonymous", nil, requestPolicy{
+		PersistResponseCookies:  true,
+		ClearStoredCookieOnAuth: true,
+		AuthFallback:            authFallbackAnonymous,
+	})
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if !errors.Is(err, ErrAuthRequired) {
+		t.Fatalf("error = %v, want %s", err, ErrAuthRequired)
+	}
+
+	applied, err := service.updateCookie(ctx, revision, "rmc=accepted")
+	if err != nil || !applied {
+		t.Fatalf("session accepted during the anonymous request = %v, %v", applied, err)
+	}
+}
+
 func TestNormalizeRMCCookieKeepsElectronFallbackWithoutRMCSegment(t *testing.T) {
 	if cookie, err := normalizeRMCCookie("secret; other=value"); err != nil || cookie != "rmc=secret; other=value" {
 		t.Fatalf("cookie = %q, err = %v", cookie, err)

@@ -51,6 +51,27 @@ func TestGetSessionStatusReportsSavedMember(t *testing.T) {
 	}
 }
 
+func TestGetSessionStatusPersistsRotatedCookie(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("Set-Cookie", "rmc=rotated; Path=/")
+		_, _ = io.WriteString(w, validMemberJSON)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	if err := service.saveCookie(context.Background(), "rmc=original"); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := service.GetSessionStatus(context.Background())
+	if err != nil || !status.Authenticated || status.Username != "member" {
+		t.Fatalf("status = %+v, error = %v", status, err)
+	}
+	cookie, err := service.getCookie(context.Background())
+	if err != nil || cookie != "rmc=rotated" {
+		t.Fatalf("stored session = %q, error = %v", cookie, err)
+	}
+}
+
 func TestGetSessionStatusClearsRejectedSession(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

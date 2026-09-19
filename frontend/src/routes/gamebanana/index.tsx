@@ -20,10 +20,7 @@ import {
   useGameBananaSessionStatus,
 } from "@renderer/hooks/use-gamebanana-data";
 import { useGames } from "@renderer/hooks/use-mod-data";
-import {
-  getGameBananaAuthErrorCode,
-  runGameBananaEnsureSession,
-} from "@renderer/lib/gamebanana-auth";
+import { getGameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { gameBananaStore, useGameBananaStore } from "@renderer/store/gamebanana";
@@ -43,7 +40,7 @@ import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
 import { CategoryPanel } from "./-panels/category-panel";
 import { GameHomePanel } from "./-panels/game-home-panel";
 import { ModDetailPanel } from "./-panels/mod-detail-panel";
-import { showGameBananaAuthFailureToast } from "./-shared/auth-error";
+import { showGameBananaAuthFailureToast, signInGameBanana } from "./-shared/auth-error";
 import { CategorySidebar } from "./-sidebars/category-sidebar";
 import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
 
@@ -283,20 +280,9 @@ function RouteComponent() {
   const handleSignIn = () => {
     if (isSigningIn) return;
     setIsSigningIn(true);
-    void runGameBananaEnsureSession(() => GameBanana.EnsureSession())
-      .then(async (result) => {
-        if (!result.ok) {
-          if ("stale" in result) {
-            return;
-          }
-          showGameBananaAuthFailureToast(t, result.code);
-          return;
-        }
-        await queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
-      })
-      .finally(() => {
-        setIsSigningIn(false);
-      });
+    void signInGameBanana(t, queryClient).finally(() => {
+      setIsSigningIn(false);
+    });
   };
 
   const handleLogout = () => {

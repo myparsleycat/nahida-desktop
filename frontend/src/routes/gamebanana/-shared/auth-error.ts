@@ -1,4 +1,7 @@
+import { GameBanana } from "@bindings/gamebanana";
+import { runGameBananaEnsureSession } from "@renderer/lib/gamebanana-auth";
 import type { GameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
+import type { QueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
@@ -11,6 +14,20 @@ export {
 export function showGameBananaAuthFailureToast(t: TFunction, code: GameBananaAuthErrorCode) {
     const copy = gameBananaAuthCopyKey(code);
     toast.error(t(copy.title), { description: t(copy.description) });
+}
+
+// Every renderer action that needs an account signs in through this helper, so
+// the failure toast and the data refresh after a new session stay identical.
+export async function signInGameBanana(t: TFunction, queryClient: QueryClient): Promise<boolean> {
+    const result = await runGameBananaEnsureSession(() => GameBanana.EnsureSession());
+    if (!result.ok) {
+        if (!("stale" in result)) {
+            showGameBananaAuthFailureToast(t, result.code);
+        }
+        return false;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
+    return true;
 }
 
 export function gameBananaAuthCopyKey(code: string | null): {

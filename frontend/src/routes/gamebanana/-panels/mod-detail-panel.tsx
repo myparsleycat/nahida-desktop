@@ -18,10 +18,10 @@ import {
   type GameBananaModPostsSort,
   type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
-import { runGameBananaEnsureSession } from "@renderer/lib/gamebanana-auth";
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
@@ -39,7 +39,7 @@ import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
-import { showGameBananaAuthFailureToast } from "../-shared/auth-error";
+import { signInGameBanana } from "../-shared/auth-error";
 import { ErrorState } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
@@ -238,6 +238,7 @@ export function ModDetailPanel({
 }) {
   const modId = selection?.id;
   const modelName = selection?.modelName ?? "Mod";
+  const queryClient = useQueryClient();
   const previews = modOverviewQuery.data
     ? getSubmissionPreviewImages(modOverviewQuery.data.profile)
     : [];
@@ -274,13 +275,7 @@ export function ModDetailPanel({
     setPendingLikeKey(likeOperationKey);
     try {
       if (!canToggleLike) {
-        const auth = await runGameBananaEnsureSession(() => GameBanana.EnsureSession());
-        if (!auth.ok) {
-          if (!("stale" in auth)) {
-            showGameBananaAuthFailureToast(t, auth.code);
-          }
-          return;
-        }
+        if (!(await signInGameBanana(t, queryClient))) return;
         await modOverviewQuery.refetch();
       }
       const toggleResult = await GameBanana.ToggleModLike({

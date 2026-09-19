@@ -1,15 +1,12 @@
-import { GameBanana } from "@bindings/gamebanana";
 import { Mod } from "@bindings/mod";
 import { Badge } from "@renderer/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
-import {
-  getGameBananaAuthErrorCode,
-  runGameBananaEnsureSession,
-} from "@renderer/lib/gamebanana-auth";
+import { getGameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
 import { Logger } from "@renderer/lib/logger";
 import { toErrorMessage } from "@shared/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import {
   FileArchiveIcon,
@@ -23,7 +20,7 @@ import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
-import { showGameBananaAuthFailureToast } from "../-shared/auth-error";
+import { signInGameBanana } from "../-shared/auth-error";
 import { ErrorState, StatCard } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { formatEpoch, formatNumber } from "../-utils";
@@ -40,6 +37,7 @@ export function ModFilesSidebar({
   const errorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const files = modOverviewQuery.data?.profile._aFiles ?? [];
   const profile = modOverviewQuery.data?.profile;
+  const queryClient = useQueryClient();
   const [pendingFileId, setPendingFileId] = useState<number | null>(null);
 
   const startDownload = async (itemId: number, fileId: number) => {
@@ -53,13 +51,7 @@ export function ModFilesSidebar({
       }
     }
 
-    const auth = await runGameBananaEnsureSession(() => GameBanana.EnsureSession());
-    if (!auth.ok) {
-      if (!("stale" in auth)) {
-        showGameBananaAuthFailureToast(t, auth.code);
-      }
-      return;
-    }
+    if (!(await signInGameBanana(t, queryClient))) return;
     await Mod.DownloadGameBananaFile(request);
   };
 

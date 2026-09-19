@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const gameBanana = vi.hoisted(() => ({
@@ -44,9 +46,22 @@ function buildQuery() {
 }
 
 function renderSidebar(query: ReturnType<typeof buildQuery>) {
-  return render(
-    <ModFilesSidebar t={t} language="en" modOverviewQuery={query as unknown as ModOverviewQuery} />,
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+  return {
+    invalidateQueries,
+    ...render(
+      <ModFilesSidebar
+        t={t}
+        language="en"
+        modOverviewQuery={query as unknown as ModOverviewQuery}
+      />,
+      { wrapper },
+    ),
+  };
 }
 
 beforeEach(() => {
@@ -59,7 +74,7 @@ afterEach(cleanup);
 describe("ModFilesSidebar download authentication", () => {
   it("signs in and retries the download once when the session is required", async () => {
     mod.DownloadGameBananaFile.mockRejectedValueOnce(new Error("GAMEBANANA_AUTH_REQUIRED"));
-    renderSidebar(buildQuery());
+    const { invalidateQueries } = renderSidebar(buildQuery());
 
     fireEvent.click(await screen.findByText("mod.zip"));
 
@@ -70,6 +85,9 @@ describe("ModFilesSidebar download authentication", () => {
       fileId: 20,
       modelName: "Mod",
     });
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gamebanana"] }),
+    );
     expect(toast.error).not.toHaveBeenCalled();
   });
 

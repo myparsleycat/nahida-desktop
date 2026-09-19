@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
@@ -43,15 +45,24 @@ function buildQuery(likeAccess: { Like_Add?: boolean; Like_Trash?: boolean }) {
 }
 
 function renderPanel(query: ReturnType<typeof buildQuery>, isSignedIn: boolean) {
-  return render(
-    <ModDetailPanel
-      t={t}
-      language="en"
-      selection={{ id: 10, modelName: "Mod" }}
-      modOverviewQuery={query as unknown as ModOverviewQuery}
-      isSignedIn={isSignedIn}
-    />,
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+  return {
+    invalidateQueries,
+    ...render(
+      <ModDetailPanel
+        t={t}
+        language="en"
+        selection={{ id: 10, modelName: "Mod" }}
+        modOverviewQuery={query as unknown as ModOverviewQuery}
+        isSignedIn={isSignedIn}
+      />,
+      { wrapper },
+    ),
+  };
 }
 
 beforeEach(() => {
@@ -64,7 +75,7 @@ afterEach(cleanup);
 describe("ModDetailPanel like without a session", () => {
   it("signs in and toggles the like once when the anonymous button is clicked", async () => {
     const query = buildQuery({});
-    renderPanel(query, false);
+    const { invalidateQueries } = renderPanel(query, false);
 
     const likeButton = await screen.findByTitle("page.gamebanana.like_sign_in_required");
     expect(likeButton.hasAttribute("disabled")).toBe(false);
@@ -74,6 +85,9 @@ describe("ModDetailPanel like without a session", () => {
     await waitFor(() => expect(backend.ToggleModLike).toHaveBeenCalledTimes(1));
     expect(backend.EnsureSession).toHaveBeenCalledTimes(1);
     expect(query.refetch).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gamebanana"] }),
+    );
     expect(toast.error).not.toHaveBeenCalled();
   });
 

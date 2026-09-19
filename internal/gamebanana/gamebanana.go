@@ -719,7 +719,9 @@ func (g *GameBanana) request(
 		if policy.AuthFallback == authFallbackAnonymous && cookie != "" {
 			return g.retryAnonymousRequest(ctx, method, rawURL, header, policy, revision)
 		}
-		if policy.ClearStoredCookieOnAuth {
+		// Only the session attached to this request may be dropped; an anonymous
+		// caller has none, and clearing would discard a concurrent login.
+		if policy.ClearStoredCookieOnAuth && cookie != "" {
 			_, clearErr := g.updateCookie(ctx, revision, "")
 			g.reportRecovery(clearErr, "remove-cookie")
 		}
@@ -765,17 +767,17 @@ func (g *GameBanana) retryAnonymousRequest(
 	policy.PersistResponseCookies = false
 	header = header.Clone()
 	header.Del("Cookie")
-	current, latest, err := g.cookieSnapshot(ctx)
+	_, latest, err := g.cookieSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
+	// Another request, a status check, or a logout may have dropped the rejected
+	// session first. The retry carries no credentials, so it can neither reopen
+	// nor replace a session and stays valid for every caller.
 	if latest == revision {
 		if _, err := g.updateCookie(ctx, revision, ""); err != nil {
 			return nil, err
 		}
-	} else if current == "" {
-		// Logout won the race; an old request must not reopen a session.
-		return nil, ErrAuthRequired
 	}
 	return g.request(ctx, method, rawURL, header, policy)
 }
@@ -873,7 +875,8 @@ type SessionStatus struct {
 
 // GetSessionStatus reports the stored session without opening the login window.
 // A missing cookie is answered locally, and a rejected cookie is dropped so the
-// renderer shows the signed-out state.
+// renderer shows the signed-out state. A rotated cookie is persisted, exactly as
+// the login flow does, so later requests keep using the accepted session.
 func (g *GameBanana) GetSessionStatus(ctx context.Context) (SessionStatus, error) {
 	cookie, revision, err := g.cookieSnapshot(ctx)
 	if err != nil {
@@ -894,6 +897,11 @@ func (g *GameBanana) GetSessionStatus(ctx context.Context) (SessionStatus, error
 			return SessionStatus{}, err
 		}
 		return SessionStatus{}, nil
+	}
+	if session.cookie != "" && session.cookie != cookie {
+		if _, err := g.updateCookie(ctx, revision, session.cookie); err != nil {
+			return SessionStatus{}, err
+		}
 	}
 	return SessionStatus{Authenticated: true, Username: session.username}, nil
 }
