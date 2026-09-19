@@ -116,8 +116,11 @@ func TestRuntimeRegistersMenuMakerService(t *testing.T) {
 	if rt.agent == nil {
 		t.Fatal("Nahida Agent service is not initialized")
 	}
-	if len(rt.services()) != 19 {
-		t.Fatalf("services = %d, want 19 including Nahida Agent and CDN trace", len(rt.services()))
+	if rt.input == nil {
+		t.Fatal("Input service is not initialized")
+	}
+	if len(rt.services()) != 20 {
+		t.Fatalf("services = %d, want 20 including Nahida Agent, CDN trace, and Input", len(rt.services()))
 	}
 }
 
