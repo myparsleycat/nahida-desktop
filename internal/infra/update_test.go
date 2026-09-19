@@ -211,6 +211,88 @@ func TestUpdaterAutoModeDownloadsAvailableRelease(t *testing.T) {
 	}
 }
 
+func TestUpdaterAutomaticCheckNotifiesOncePerRelease(t *testing.T) {
+	t.Parallel()
+
+	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3", Notes: "Changes"}}
+	notified := 0
+	u := &Updater{
+		engine:   engine,
+		settings: fakeUpdaterSettings{mode: "auto"},
+		ready:    func() { notified++ },
+		ctx:      context.Background(),
+	}
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("CheckForUpdates: %v", err)
+	}
+	if engine.downloads != 1 || notified != 1 {
+		t.Fatalf("downloads=%d notified=%d, want 1/1", engine.downloads, notified)
+	}
+
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("automatic recheck: %v", err)
+	}
+	if engine.downloads != 1 || notified != 1 {
+		t.Fatalf("automatic recheck downloads=%d notified=%d, want 1/1", engine.downloads, notified)
+	}
+
+	u.DismissUpdateDialog()
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("automatic recheck after dismissal: %v", err)
+	}
+	if notified != 1 || !u.dialogDismissed {
+		t.Fatalf("after dismissal notified=%d dismissed=%v, want 1/true", notified, u.dialogDismissed)
+	}
+
+	if err := u.CheckForUpdates(context.Background(), true); err != nil {
+		t.Fatalf("user-initiated CheckForUpdates: %v", err)
+	}
+	if notified != 2 || u.dialogDismissed {
+		t.Fatalf("user-initiated notified=%d dismissed=%v, want 2/false", notified, u.dialogDismissed)
+	}
+}
+
+func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
+	t.Parallel()
+
+	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3"}}
+	notified := 0
+	u := &Updater{
+		engine:   engine,
+		settings: fakeUpdaterSettings{mode: "auto"},
+		ready:    func() { notified++ },
+		ctx:      context.Background(),
+	}
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("CheckForUpdates: %v", err)
+	}
+	if notified != 1 {
+		t.Fatalf("notified=%d, want 1", notified)
+	}
+
+	// Dropping the announced release mirrors the reset a failed check performs,
+	// so the next check discovers the newer release through the normal path.
+	u.mu.Lock()
+	u.available, u.downloaded = false, false
+	u.releaseVersion, u.originalNotes = "", ""
+	u.mu.Unlock()
+	engine.release = &wailsupdater.Release{Version: "1.2.4"}
+
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("check for the newer release: %v", err)
+	}
+	if notified != 2 || engine.downloads != 2 {
+		t.Fatalf("newer release notified=%d downloads=%d, want 2/2", notified, engine.downloads)
+	}
+
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("automatic recheck: %v", err)
+	}
+	if notified != 2 {
+		t.Fatalf("automatic recheck notified=%d, want 2", notified)
+	}
+}
+
 func TestDismissUpdateDialogBeforeDownloadIsNoOp(t *testing.T) {
 	t.Parallel()
 

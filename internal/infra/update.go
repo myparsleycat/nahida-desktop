@@ -87,6 +87,7 @@ type Updater struct {
 	available         bool
 	downloaded        bool
 	releaseVersion    string
+	notifiedVersion   string
 	originalNotes     string
 	translatedNotes   string
 	translatedLang    string
@@ -239,8 +240,13 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 		if userInitiated {
 			u.dialogDismissed = false
 		}
+		// Automatic checks repeat every hour, so the ready prompt is announced
+		// once per release unless the user asked for the check.
+		notify := userInitiated || u.releaseVersion != u.notifiedVersion
 		u.mu.Unlock()
-		u.notifyReady()
+		if notify {
+			u.notifyReady()
+		}
 		u.broadcastStatus(ctx)
 		return nil
 	}
@@ -643,6 +649,7 @@ func (u *Updater) broadcastStatus(ctx context.Context) {
 
 func (u *Updater) notifyReady() {
 	u.mu.Lock()
+	u.notifiedVersion = u.releaseVersion
 	ready, focus := u.ready, u.focus
 	u.mu.Unlock()
 	if ready != nil {
