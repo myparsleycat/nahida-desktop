@@ -39,6 +39,62 @@ func TestApplyPatchHunksReplacesMultipleLinesInOrder(t *testing.T) {
 	}
 }
 
+func TestApplyPatchHunksReusesPreviousBoundaryAsContext(t *testing.T) {
+	t.Parallel()
+	text := "[A]\r\nfirst=1\r\n[B]\r\nsecond=2\r\n[C]\r\n"
+	updated, _, err := applyPatchHunks(text, []PatchHunk{
+		{
+			Context:  "[A]",
+			OldLines: []string{"first=1", "[B]"},
+			NewLines: []string{"first=11", "[B]"},
+		},
+		{
+			Context:  "[B]",
+			OldLines: []string{"second=2", "[C]"},
+			NewLines: []string{"second=22", "[C]"},
+		},
+	}, "mod.ini", "\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[A]\r\nfirst=11\r\n[B]\r\nsecond=22\r\n[C]\r\n"
+	if updated != want {
+		t.Fatalf("updated = %q, want %q", updated, want)
+	}
+}
+
+func TestApplyPatchHunksRejectsChangedPreviousBoundaryContext(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name     string
+		newLines []string
+	}{
+		{name: "renamed", newLines: []string{"first=11", "[Renamed]"}},
+		{name: "deleted", newLines: []string{"first=11"}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := applyPatchHunks("[A]\r\nfirst=1\r\n[B]\r\nsecond=2\r\n", []PatchHunk{
+				{
+					Context:  "[A]",
+					OldLines: []string{"first=1", "[B]"},
+					NewLines: testCase.newLines,
+				},
+				{
+					Context:  "[B]",
+					OldLines: []string{"second=2"},
+					NewLines: []string{"second=22"},
+				},
+			}, "mod.ini", "\r\n")
+			if err == nil || !strings.Contains(err.Error(), `context "[B]" not found`) {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
+
 func TestApplyPatchHunksDeletesBlock(t *testing.T) {
 	t.Parallel()
 	updated, _, err := applyPatchHunks("a\r\nremove=1\r\nkeep=2\r\n", []PatchHunk{{

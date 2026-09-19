@@ -76,7 +76,11 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 	warnings := make([]string, 0)
 	cursor := 0
 	for index, hunk := range hunks {
-		resolution, next, err := resolveHunk(content, hunk, cursor, path, index+1)
+		reusePreviousBoundary := false
+		if len(resolutions) > 0 {
+			reusePreviousBoundary = keepsBoundary(content, resolutions[len(resolutions)-1])
+		}
+		resolution, next, err := resolveHunk(content, hunk, cursor, reusePreviousBoundary, path, index+1)
 		if err != nil {
 			return "", nil, err
 		}
@@ -112,7 +116,14 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 	return joinTextLines(edited), warnings, nil
 }
 
-func resolveHunk(lines []string, hunk PatchHunk, start int, path string, number int) (hunkResolution, int, error) {
+func resolveHunk(
+	lines []string,
+	hunk PatchHunk,
+	start int,
+	reusePreviousBoundary bool,
+	path string,
+	number int,
+) (hunkResolution, int, error) {
 	if hunk.EOF && len(hunk.OldLines) > 0 {
 		return hunkResolution{}, 0, fmt.Errorf("hunk %d: eof: true requires empty oldLines", number)
 	}
@@ -123,6 +134,15 @@ func resolveHunk(lines []string, hunk PatchHunk, start int, path string, number 
 	cursor := start
 	if hunk.Context != "" {
 		match := findLineBlock(lines, []string{hunk.Context}, cursor)
+		if !match.found && len(match.candidates) == 0 && reusePreviousBoundary && cursor > 0 {
+			// Adjacent hunks commonly keep the next section header as the final old line, then reuse
+			// that unchanged boundary as the following hunk's context. Include only that boundary in
+			// the fallback so a context farther behind the cursor cannot make hunks overlap.
+			boundary := findLineBlock(lines[cursor-1:cursor], []string{hunk.Context}, 0)
+			if boundary.found {
+				match = lineMatch{found: true, index: cursor - 1, pass: boundary.pass}
+			}
+		}
 		switch {
 		case match.found:
 			cursor = match.index + 1
@@ -169,6 +189,13 @@ func resolveHunk(lines []string, hunk PatchHunk, start int, path string, number 
 	}
 	end := match.index + len(hunk.OldLines)
 	return hunkResolution{start: match.index, end: end, lines: hunk.NewLines, warning: warning}, end, nil
+}
+
+func keepsBoundary(lines []string, resolution hunkResolution) bool {
+	if resolution.end <= resolution.start || len(resolution.lines) == 0 {
+		return false
+	}
+	return lines[resolution.end-1] == resolution.lines[len(resolution.lines)-1]
 }
 
 // findLineBlock locates the single line range equal to pattern at or after start.

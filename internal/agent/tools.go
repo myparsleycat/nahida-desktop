@@ -62,7 +62,7 @@ func builtInToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        "apply_patch",
-			Description: "Atomically create, update, rewrite, or delete text files after preflight validation. For write, content is the complete replacement and expectedContent is the complete decoded text previously read; for update, hunks replace only the lines they name, in file order. Existing encoding, BOM, and newline style are preserved.",
+			Description: "Atomically create, update, rewrite, or delete text files after preflight validation. For write, content is the complete replacement and expectedContent is the complete decoded text previously read; for update, hunks replace only the lines they name, in file order. A hunk may reuse the immediately preceding hunk's final old line as its context when the replacement keeps that line unchanged, but hunks must not otherwise overlap. Existing encoding, BOM, and newline style are preserved.",
 			InputSchema: objectSchema(map[string]any{
 				"rootId": map[string]any{
 					"type": "string",
