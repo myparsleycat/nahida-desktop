@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/menumaker"
 	modservice "nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
 	"nahida.live/desktop/internal/transfer"
@@ -51,6 +52,7 @@ type desktopActionDependencies struct {
 	transfer  *transfer.Transfer
 	xxmi      *xxmi.XXMI
 	menuMaker *menumaker.MenuMaker
+	input     *platform.Input
 }
 
 type desktopActionContext struct {
@@ -1212,6 +1214,82 @@ func newDesktopActionRegistry(deps desktopActionDependencies) *desktopActionRegi
 			}))
 	}
 
+	if deps.input != nil {
+		register(
+			simpleAction(
+				"input.list_windows",
+				"List visible top-level windows with their title, class, pid, and process name.",
+				"input",
+				ActionRiskRead,
+				object(map[string]any{
+					"title": stringSchema(), "process": stringSchema(), "pid": integerSchema(1, math.MaxInt32),
+					"limit": integerSchema(1, 200),
+				}),
+				func(ctx context.Context, _ desktopActionContext, raw json.RawMessage) (any, error) {
+					var input struct {
+						Title   string `json:"title"`
+						Process string `json:"process"`
+						PID     uint32 `json:"pid"`
+						Limit   int    `json:"limit"`
+					}
+					if err := decodeActionArguments(raw, &input); err != nil {
+						return nil, err
+					}
+					return deps.input.ListWindows(ctx, platform.WindowFilter{
+						Title: input.Title, Process: input.Process, PID: input.PID, Limit: input.Limit,
+					})
+				},
+			),
+		)
+		register(desktopAction{
+			definition: DesktopActionDefinition{
+				ID: "input.send_keys", Description: "Send keyboard keys to another window.", Domain: "input",
+				Risk: ActionRiskConfirm, Scopes: []string{"global", "mod"}, InputSchema: object(map[string]any{
+					"title": stringSchema(), "process": stringSchema(), "pid": integerSchema(1, math.MaxInt32),
+					"keys": map[string]any{
+						"type": "array", "minItems": 1, "maxItems": 16, "items": stringSchema(),
+					},
+					"delivery":     enumSchema("foreground", "message"),
+					"holdMs":       integerSchema(0, 2000),
+					"intervalMs":   integerSchema(0, 5000),
+					"restoreFocus": booleanSchema(),
+				}, "keys")},
+			execute: func(ctx context.Context, _ desktopActionContext, raw json.RawMessage) (any, error) {
+				var input struct {
+					Title        string               `json:"title"`
+					Process      string               `json:"process"`
+					PID          uint32               `json:"pid"`
+					Keys         []string             `json:"keys"`
+					Delivery     platform.KeyDelivery `json:"delivery"`
+					HoldMs       int                  `json:"holdMs"`
+					IntervalMs   int                  `json:"intervalMs"`
+					RestoreFocus *bool                `json:"restoreFocus"`
+				}
+				if err := decodeActionArguments(raw, &input); err != nil {
+					return nil, err
+				}
+				return deps.input.SendKeys(ctx, platform.KeyRequest{
+					Target: platform.WindowTarget{Title: input.Title, Process: input.Process, PID: input.PID},
+					Keys:   input.Keys, Delivery: input.Delivery, HoldMs: input.HoldMs, IntervalMs: input.IntervalMs,
+					RestoreFocus: input.RestoreFocus,
+				})
+			},
+			describe: func(_ desktopActionContext, raw json.RawMessage) (string, string, error) {
+				var input struct {
+					Title   string   `json:"title"`
+					Process string   `json:"process"`
+					PID     uint32   `json:"pid"`
+					Keys    []string `json:"keys"`
+				}
+				if err := json.Unmarshal(raw, &input); err != nil {
+					return "", "", err
+				}
+				summary := fmt.Sprintf("Send %s to a window.", strings.Join(input.Keys, ", "))
+				return summary, windowTargetLabel(input.Title, input.Process, input.PID), nil
+			},
+		})
+	}
+
 	return registry
 }
 
@@ -1686,6 +1764,24 @@ func resolveAgentMergeNode(sandbox *Sandbox, input agentMergePlanNode) (modservi
 	return node, nil
 }
 
+// windowTargetLabel describes a window selector for the approval prompt.
+func windowTargetLabel(title, process string, pid uint32) string {
+	parts := make([]string, 0, 3)
+	if title = strings.TrimSpace(title); title != "" {
+		parts = append(parts, fmt.Sprintf("title %q", title))
+	}
+	if process = strings.TrimSpace(process); process != "" {
+		parts = append(parts, fmt.Sprintf("process %q", process))
+	}
+	if pid != 0 {
+		parts = append(parts, fmt.Sprintf("pid %d", pid))
+	}
+	if len(parts) == 0 {
+		return "no window selector"
+	}
+	return strings.Join(parts, ", ")
+}
+
 func pathDescription(summary string) func(desktopActionContext, json.RawMessage) (string, string, error) {
 	return func(actionCtx desktopActionContext, raw json.RawMessage) (string, string, error) {
 		var input struct {
@@ -1824,6 +1920,9 @@ func validateActionSchema(schema map[string]any, value any, path string) error {
 		}
 		if minimum, ok := schema["minItems"].(int); ok && len(items) < minimum {
 			return fmt.Errorf("%s must contain at least %d item(s)", path, minimum)
+		}
+		if maximum, ok := schema["maxItems"].(int); ok && len(items) > maximum {
+			return fmt.Errorf("%s must contain at most %d item(s)", path, maximum)
 		}
 		itemSchema, _ := schema["items"].(map[string]any)
 		for index, item := range items {

@@ -211,6 +211,7 @@ func newRuntime() *runtime {
 		Log:       log,
 		EventEmit: eventEmit,
 		Shell:     shell,
+		Input:     rt.input,
 	})
 	rt.localHTTP.UseHandler(rt.handleLocalHTTPMessage)
 	if rt.mod != nil {

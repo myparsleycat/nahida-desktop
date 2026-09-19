@@ -53,6 +53,7 @@ type Options struct {
 	Log       *infra.Log
 	EventEmit func(string, ...any)
 	Shell     *platform.Shell
+	Input     *platform.Input
 }
 
 type Service struct {
@@ -122,7 +123,7 @@ func New(options Options) *Service {
 		settings:  options.Setting,
 		actions: newDesktopActionRegistry(desktopActionDependencies{
 			mod: options.Mod, tools: options.Tools, settings: options.Setting, transfer: options.Transfer,
-			xxmi: options.XXMI, menuMaker: options.MenuMaker,
+			xxmi: options.XXMI, menuMaker: options.MenuMaker, input: options.Input,
 		}),
 		workers:   make(map[string]*sessionWorker),
 		oauth:     defaultOpenAIOAuth,
