@@ -32,7 +32,10 @@ describe("getGameBananaAuthErrorCode", () => {
             }
         },
     );
-    it("classifies cancelled, unsupported, unreachable, and generic failures", () => {
+    it("classifies cancelled, required, unsupported, unreachable, and generic failures", () => {
+        expect(getGameBananaAuthErrorCode(new Error("GAMEBANANA_AUTH_REQUIRED"))).toBe(
+            "GAMEBANANA_AUTH_REQUIRED",
+        );
         expect(getGameBananaAuthErrorCode(new Error("GAMEBANANA_LOGIN_CANCELLED"))).toBe(
             "GAMEBANANA_LOGIN_CANCELLED",
         );
@@ -99,6 +102,7 @@ describe("runGameBananaEnsureSession", () => {
 
 describe("gameBananaAuthCopyKey", () => {
     it("maps each auth error to distinct copy", () => {
+        expect(gameBananaAuthCopyKey("GAMEBANANA_AUTH_REQUIRED").title).toContain("required");
         expect(gameBananaAuthCopyKey("GAMEBANANA_LOGIN_CANCELLED").title).toContain("cancelled");
         expect(gameBananaAuthCopyKey("GAMEBANANA_AUTO_LOGIN_UNSUPPORTED").title).toContain(
             "unsupported",

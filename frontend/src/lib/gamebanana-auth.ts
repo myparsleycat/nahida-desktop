@@ -1,4 +1,5 @@
 export type GameBananaAuthErrorCode =
+    | "GAMEBANANA_AUTH_REQUIRED"
     | "GAMEBANANA_LOGIN_INIT_FAILED"
     | "GAMEBANANA_AUTH_CHECK_FAILED"
     | "GAMEBANANA_AUTH_FAILED"
@@ -12,6 +13,7 @@ export function getGameBananaAuthErrorCode(error: unknown): GameBananaAuthErrorC
     }
 
     switch (error.message) {
+        case "GAMEBANANA_AUTH_REQUIRED":
         case "GAMEBANANA_LOGIN_INIT_FAILED":
         case "GAMEBANANA_AUTH_CHECK_FAILED":
         case "GAMEBANANA_LOGIN_CANCELLED":
@@ -27,6 +29,9 @@ export function isManualRmcPrimaryAction(code: string | null): boolean {
     return code === "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED";
 }
 
+// EnsureSession is the explicit sign-in entry point. Data requests never open
+// the login window, so a renderer action that needs an account calls this and
+// reports the outcome from its own UI.
 export async function runGameBananaEnsureSession(
     ensureSession: () => Promise<unknown>,
     isCurrent: () => boolean = () => true,

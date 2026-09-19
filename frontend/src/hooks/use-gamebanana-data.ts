@@ -7,6 +7,7 @@ type GameBananaGameSubfeed = Awaited<ReturnType<typeof GameBanana.GetGameSubfeed
 type GameBananaModCategoryOverview = Awaited<ReturnType<typeof GameBanana.GetModCategoryOverview>>;
 type GameBananaModOverview = Awaited<ReturnType<typeof GameBanana.GetModOverview>>;
 type GameBananaModPosts = Awaited<ReturnType<typeof GameBanana.GetModPosts>>;
+type GameBananaSessionStatus = Awaited<ReturnType<typeof GameBanana.GetSessionStatus>>;
 
 export type GameBananaGameKey = keyof GameBananaGames;
 export type GameBananaModPostsSort = "popular" | "newest";
@@ -25,6 +26,13 @@ export function useGameBananaGames(enabled = true) {
         queryKey: ["gamebanana", "games"],
         queryFn: async () => ((await GameBanana.GetGames()) ?? {}) as GameBananaGames,
         enabled,
+    });
+}
+
+export function useGameBananaSessionStatus() {
+    return useQuery<GameBananaSessionStatus>({
+        queryKey: ["gamebanana", "sessionStatus"],
+        queryFn: () => GameBanana.GetSessionStatus(),
     });
 }
 
