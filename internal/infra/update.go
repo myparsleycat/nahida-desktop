@@ -241,8 +241,12 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 			u.dialogDismissed = false
 		}
 		// Automatic checks repeat every hour, so the ready prompt is announced
-		// once per release unless the user asked for the check.
+		// once per release unless the user asked for the check. Claiming the
+		// version here keeps overlapping checks from announcing it twice.
 		notify := userInitiated || u.releaseVersion != u.notifiedVersion
+		if notify {
+			u.notifiedVersion = u.releaseVersion
+		}
 		u.mu.Unlock()
 		if notify {
 			u.notifyReady()
@@ -336,6 +340,10 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	u.downloading = false
 	u.downloaded = true
 	u.dialogDismissed = false
+	// The completed release is claimed as announced in the same critical
+	// section, so an automatic recheck finishing concurrently cannot announce
+	// it a second time.
+	u.notifiedVersion = u.releaseVersion
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
 	u.notifyReady()
@@ -647,9 +655,10 @@ func (u *Updater) broadcastStatus(ctx context.Context) {
 	u.broadcast("updater:status-changed", status)
 }
 
+// notifyReady announces the downloaded release. Callers claim
+// notifiedVersion under u.mu before calling it.
 func (u *Updater) notifyReady() {
 	u.mu.Lock()
-	u.notifiedVersion = u.releaseVersion
 	ready, focus := u.ready, u.focus
 	u.mu.Unlock()
 	if ready != nil {

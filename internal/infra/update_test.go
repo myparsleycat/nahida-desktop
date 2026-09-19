@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,15 +22,16 @@ import (
 )
 
 type fakeUpdaterEngine struct {
-	cfg         wailsupdater.Config
-	release     *wailsupdater.Release
-	checkErr    error
-	downloadErr error
-	restartErr  error
-	checks      int
-	downloads   int
-	restarts    int
-	stopped     bool
+	cfg          wailsupdater.Config
+	release      *wailsupdater.Release
+	checkErr     error
+	downloadErr  error
+	restartErr   error
+	downloadDone func()
+	checks       int
+	downloads    int
+	restarts     int
+	stopped      bool
 }
 
 func (f *fakeUpdaterEngine) Init(cfg wailsupdater.Config) error {
@@ -44,6 +46,9 @@ func (f *fakeUpdaterEngine) Check(context.Context) (*wailsupdater.Release, error
 
 func (f *fakeUpdaterEngine) DownloadAndInstall(context.Context) error {
 	f.downloads++
+	if f.downloadDone != nil {
+		f.downloadDone()
+	}
 	return f.downloadErr
 }
 
@@ -290,6 +295,114 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 	}
 	if notified != 2 {
 		t.Fatalf("automatic recheck notified=%d, want 2", notified)
+	}
+}
+
+func TestUpdaterRecheckRacingWithDownloadCompletionNotifiesOnce(t *testing.T) {
+	t.Parallel()
+
+	var downloadReturned atomic.Bool
+	engine := &fakeUpdaterEngine{
+		release:      &wailsupdater.Release{Version: "4.0.0"},
+		downloadDone: func() { downloadReturned.Store(true) },
+	}
+	var (
+		notified    atomic.Int32
+		gateClaimed atomic.Bool
+	)
+	gateEntered := make(chan struct{})
+	releaseGate := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseChecks := func() { releaseOnce.Do(func() { close(releaseGate) }) }
+	// Release the gated check even when the test fails before doing so itself.
+	defer releaseChecks()
+	u := &Updater{
+		engine:   engine,
+		settings: fakeUpdaterSettings{mode: "auto"},
+		ready:    func() { notified.Add(1) },
+		emit: func(name string, _ ...any) {
+			// Hold the completed download between its state update and its ready
+			// prompt, where an automatic recheck used to decide to notify again.
+			if name != "updater:status-changed" || !downloadReturned.Load() ||
+				!gateClaimed.CompareAndSwap(false, true) {
+				return
+			}
+			close(gateEntered)
+			<-releaseGate
+		},
+		ctx: context.Background(),
+	}
+
+	checkDone := make(chan error, 1)
+	go func() { checkDone <- u.CheckForUpdates(context.Background(), false) }()
+
+	select {
+	case <-gateEntered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("download completion never reached its status broadcast")
+	}
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("recheck while the download completed: %v", err)
+	}
+	releaseChecks()
+
+	if err := <-checkDone; err != nil {
+		t.Fatalf("CheckForUpdates: %v", err)
+	}
+	if got := notified.Load(); got != 1 {
+		t.Fatalf("notifications = %d, want 1", got)
+	}
+}
+
+func TestUpdaterOverlappingChecksNotifyOncePerRelease(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workers    = 32
+		iterations = 100
+	)
+	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "5.0.0"}}
+	var notified atomic.Int32
+	u := &Updater{
+		engine:   engine,
+		settings: fakeUpdaterSettings{mode: "notify"},
+		ready:    func() { notified.Add(1) },
+		ctx:      context.Background(),
+	}
+	for index := range iterations {
+		// A downloaded release that no automatic check has announced yet. Until
+		// the decision and the claim shared one critical section, overlapping
+		// checks could all read the stale version and notify for it.
+		u.mu.Lock()
+		u.available, u.downloaded = true, true
+		u.releaseVersion, u.notifiedVersion = "5.0.0", ""
+		u.mu.Unlock()
+		before := notified.Load()
+
+		start := make(chan struct{})
+		var waitGroup sync.WaitGroup
+		for range workers {
+			waitGroup.Add(1)
+			go func() {
+				defer waitGroup.Done()
+				<-start
+				if err := u.CheckForUpdates(context.Background(), false); err != nil {
+					t.Errorf("CheckForUpdates: %v", err)
+				}
+			}()
+		}
+		close(start)
+		waitGroup.Wait()
+
+		if got := notified.Load() - before; got != 1 {
+			t.Fatalf("iteration %d: notifications = %d, want 1", index, got)
+		}
+		u.mu.Lock()
+		announced := u.notifiedVersion
+		u.mu.Unlock()
+		if announced != "5.0.0" {
+			t.Fatalf("iteration %d: notifiedVersion = %q, want %q", index, announced, "5.0.0")
+		}
 	}
 }
 
