@@ -40,15 +40,14 @@ type MenuMakerGeneratedAsset struct {
 }
 
 type MenuMakerApplyRequest struct {
-	SourcePath    string                    `json:"sourcePath"`
-	SourceSHA256  string                    `json:"sourceSHA256"`
-	OutputININame string                    `json:"outputININame"`
-	Slots         []MenuMakerSlot           `json:"slots"`
-	Settings      MenuMakerSettings         `json:"settings"`
-	Encoding      string                    `json:"encoding"`
-	HasBOM        bool                      `json:"hasBOM"`
-	Newline       string                    `json:"newline"`
-	Assets        []MenuMakerGeneratedAsset `json:"assets"`
+	SourcePath   string                    `json:"sourcePath"`
+	SourceSHA256 string                    `json:"sourceSHA256"`
+	Slots        []MenuMakerSlot           `json:"slots"`
+	Settings     MenuMakerSettings         `json:"settings"`
+	Encoding     string                    `json:"encoding"`
+	HasBOM       bool                      `json:"hasBOM"`
+	Newline      string                    `json:"newline"`
+	Assets       []MenuMakerGeneratedAsset `json:"assets"`
 }
 
 type MenuMakerSaveINIRequest struct {
@@ -65,7 +64,6 @@ type MenuMakerSaveINIRequest struct {
 type MenuMakerSaveZIPRequest struct {
 	SourcePath      string                    `json:"sourcePath"`
 	DestinationPath string                    `json:"destinationPath"`
-	OutputININame   string                    `json:"outputININame"`
 	SourceText      string                    `json:"sourceText"`
 	Slots           []MenuMakerSlot           `json:"slots"`
 	Settings        MenuMakerSettings         `json:"settings"`
@@ -76,7 +74,6 @@ type MenuMakerSaveZIPRequest struct {
 }
 
 type MenuMakerWriteResult struct {
-	SourceINIPath string   `json:"sourceINIPath,omitempty"`
 	OutputINIPath string   `json:"outputINIPath,omitempty"`
 	ArchivePath   string   `json:"archivePath,omitempty"`
 	BackupPath    string   `json:"backupPath,omitempty"`
@@ -211,9 +208,8 @@ type MenuMakerGenerateRequest struct {
 }
 
 type MenuMakerGenerateResult struct {
-	SourceINIText string                    `json:"sourceINIText"`
-	INIText       string                    `json:"iniText"`
-	Geometry      MenuMakerGeometry         `json:"geometry"`
-	SlotStates    []MenuMakerSlotStateGroup `json:"slotStates"`
-	AssetPaths    []string                  `json:"assetPaths"`
+	INIText    string                    `json:"iniText"`
+	Geometry   MenuMakerGeometry         `json:"geometry"`
+	SlotStates []MenuMakerSlotStateGroup `json:"slotStates"`
+	AssetPaths []string                  `json:"assetPaths"`
 }

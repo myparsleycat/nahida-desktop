@@ -150,7 +150,7 @@ func (m *MenuMaker) LoadSource(ctx context.Context, filePath string) (MenuMakerS
 		return MenuMakerSource{}, err
 	}
 	document := parseDocument(text)
-	if strings.Contains(text, sidecarMarker) {
+	if strings.EqualFold(filepath.Base(path), menuININame) && strings.Contains(text, sidecarMarker) {
 		return MenuMakerSource{}, errors.New("select the original mod INI, not menu.ini")
 	}
 	if len(document.Slots) == 0 {
@@ -172,10 +172,10 @@ func (m *MenuMaker) Parse(_ context.Context, text string) (MenuMakerDocument, er
 }
 
 func (m *MenuMaker) Generate(_ context.Context, req MenuMakerGenerateRequest) (MenuMakerGenerateResult, error) {
-	result, err := generateSidecar(req.SourcePath, req.SourceText, req.Slots, req.Settings)
+	result, err := generateSingleINI(req.SourceText, req.Slots, req.Settings)
 	if err != nil {
 		return result, infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{
-			Operation: "generate", Stage: "resolve-sidecar", Fields: map[string]any{"sourcePath": req.SourcePath},
+			Operation: "generate", Stage: "generate-ini", Fields: map[string]any{"sourcePath": req.SourcePath},
 		})
 	}
 	return result, nil
@@ -192,7 +192,7 @@ func (m *MenuMaker) ApplyBundle(
 	defer func() {
 		if err != nil {
 			fields := map[string]any{
-				"sourcePath": req.SourcePath, "outputName": req.OutputININame,
+				"sourcePath":   req.SourcePath,
 				"writtenPaths": writtenPaths, "rolledBack": result.RolledBack,
 				"rollbackError": rollbackError, "cleanupState": cleanupState,
 			}
@@ -220,20 +220,18 @@ func (m *MenuMaker) ApplyBundle(
 	if err != nil {
 		return result, err
 	}
-	generated, err := generateSidecar(sourcePath, text, req.Slots, req.Settings)
+	generated, err := generateSingleINI(text, req.Slots, req.Settings)
 	if err != nil {
 		return result, err
 	}
 	return m.applyGenerated(ctx, applyGeneratedRequest{
-		sourcePath:    sourcePath,
-		original:      original,
-		outputININame: req.OutputININame,
-		iniText:       generated.INIText,
-		sourceINIText: generated.SourceINIText,
-		encoding:      req.Encoding,
-		hasBOM:        req.HasBOM,
-		newline:       req.Newline,
-		assets:        req.Assets,
+		sourcePath: sourcePath,
+		original:   original,
+		iniText:    generated.INIText,
+		encoding:   req.Encoding,
+		hasBOM:     req.HasBOM,
+		newline:    req.Newline,
+		assets:     req.Assets,
 	}, &stage, &cleanupState, &writtenPaths, &rollbackError)
 }
 
@@ -246,15 +244,13 @@ func (m *MenuMaker) writeGenerated(ctx context.Context, req applyGeneratedReques
 }
 
 type applyGeneratedRequest struct {
-	sourcePath    string
-	original      []byte
-	outputININame string
-	iniText       string
-	sourceINIText string
-	encoding      string
-	hasBOM        bool
-	newline       string
-	assets        []MenuMakerGeneratedAsset
+	sourcePath string
+	original   []byte
+	iniText    string
+	encoding   string
+	hasBOM     bool
+	newline    string
+	assets     []MenuMakerGeneratedAsset
 }
 
 func (m *MenuMaker) applyGenerated(
@@ -265,13 +261,7 @@ func (m *MenuMaker) applyGenerated(
 	writtenPaths *[]string,
 	rollbackError *string,
 ) (result MenuMakerWriteResult, err error) {
-	outputName, err := expectedOutputName(req.sourcePath)
-	if err != nil {
-		return result, err
-	}
-	if !strings.EqualFold(outputName, req.outputININame) {
-		return result, fmt.Errorf("invalid menu maker output name %q, expected %q", req.outputININame, outputName)
-	}
+	outputName := expectedOutputName(req.sourcePath)
 	assets, err := validateAssets(req.assets)
 	if err != nil {
 		return result, err
@@ -283,19 +273,39 @@ func (m *MenuMaker) applyGenerated(
 	}
 	dir := filepath.Dir(req.sourcePath)
 	outputPath := filepath.Join(dir, outputName)
-	sourceOutputPath := strings.TrimSuffix(req.sourcePath, filepath.Ext(req.sourcePath)) + ".ini"
-	if existing, readErr := os.ReadFile(outputPath); readErr == nil {
-		decoded, _, decodeErr := decodeText(existing)
-		if decodeErr != nil || !strings.HasPrefix(decoded, sidecarMarker+filepath.Base(sourceOutputPath)+"\n") &&
-			!strings.HasPrefix(decoded, sidecarMarker+filepath.Base(sourceOutputPath)+"\r\n") {
-			return result, errors.New("menu.ini already exists and belongs to another source")
-		}
+	sourceText, _, err := decodeText(req.original)
+	if err != nil {
+		return result, err
+	}
+	currentSource, err := readLimited(req.sourcePath, maxSourceBytes)
+	if err != nil {
+		return result, err
+	}
+	if !bytes.Equal(currentSource, req.original) {
+		return result, ErrSourceChanged
+	}
+	outputOriginal := []byte(nil)
+	outputExisted := false
+	if samePath(req.sourcePath, outputPath) {
+		outputOriginal = append(outputOriginal, req.original...)
+		outputExisted = true
+	} else if existing, readErr := readLimited(outputPath, maxSourceBytes); readErr == nil {
+		outputOriginal = existing
+		outputExisted = true
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return result, readErr
 	}
-	sourceData, err := encodeText(req.sourceINIText, encoding)
-	if err != nil {
-		return result, err
+	sidecarPath := ""
+	candidate := filepath.Join(dir, menuININame)
+	if !samePath(candidate, outputPath) {
+		if existing, readErr := readLimited(candidate, maxSourceBytes); readErr == nil {
+			decoded, _, decodeErr := decodeText(existing)
+			if decodeErr == nil && isOwnedSidecar(decoded, outputPath, sourceText) {
+				sidecarPath = candidate
+			}
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return result, readErr
+		}
 	}
 	stageDir, err := os.MkdirTemp(dir, ".menu-maker-stage-*")
 	if err != nil {
@@ -306,7 +316,6 @@ func (m *MenuMaker) applyGenerated(
 	*stage = "stage-output"
 	staged := make(map[string]string, len(assets)+1)
 	allData := append([]MenuMakerGeneratedAsset{{RelativePath: outputName, Data: iniBytes}}, assets...)
-	allData = append(allData, MenuMakerGeneratedAsset{RelativePath: filepath.Base(sourceOutputPath), Data: sourceData})
 	for index, file := range allData {
 		stagedPath := filepath.Join(stageDir, fmt.Sprintf("new-%04d", index))
 		if writeErr := os.WriteFile(stagedPath, file.Data, 0o600); writeErr != nil {
@@ -316,32 +325,6 @@ func (m *MenuMaker) applyGenerated(
 	}
 
 	backupPath := ""
-	if existing, statErr := os.ReadFile(sourceOutputPath); statErr == nil {
-		if !bytes.Equal(existing, req.original) {
-			return result, ErrSourceChanged
-		}
-		*stage = "backup-source"
-		backupPath, err = nextBackupPath(req.sourcePath)
-		if err != nil {
-			return result, err
-		}
-		if err = writeExclusive(backupPath, req.original); err != nil {
-			return result, fmt.Errorf("write menu maker source backup: %w", err)
-		}
-		if backup, readErr := os.ReadFile(backupPath); readErr != nil || sha256Hex(backup) != sha256Hex(req.original) {
-			return result, infra.WithCause(
-				errors.New("menu maker source backup verification failed"),
-				errors.Join(
-					readErr,
-					infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"}),
-				),
-			)
-		}
-		result.BackupPath = backupPath
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return result, statErr
-	}
-
 	promotions := make([]promotion, 0, len(allData))
 	rollback := func() error {
 		*cleanupState = "rolling-back"
@@ -381,6 +364,31 @@ func (m *MenuMaker) applyGenerated(
 		}
 		return nil
 	}
+	if outputExisted {
+		currentOutput, readErr := readLimited(outputPath, maxSourceBytes)
+		if readErr != nil || !bytes.Equal(currentOutput, outputOriginal) {
+			return result, errors.Join(ErrSourceChanged, readErr)
+		}
+		*stage = "backup-output"
+		backupPath, err = nextBackupPath(outputPath)
+		if err != nil {
+			return result, err
+		}
+		if err = writeExclusive(backupPath, outputOriginal); err != nil {
+			return result, fmt.Errorf("write menu maker output backup: %w", err)
+		}
+		if backup, readErr := readLimited(backupPath, maxSourceBytes); readErr != nil ||
+			!bytes.Equal(backup, outputOriginal) {
+			return result, infra.WithCause(
+				errors.New("menu maker output backup verification failed"),
+				errors.Join(
+					readErr,
+					infra.AnnotateError(os.Remove(backupPath), infra.Diagnostic{Stage: "cleanup-backup"}),
+				),
+			)
+		}
+		result.BackupPath = backupPath
+	}
 
 	*stage = "promote-output"
 	for index, file := range allData {
@@ -388,6 +396,22 @@ func (m *MenuMaker) applyGenerated(
 			return result, errors.Join(err, rollback())
 		}
 		target := filepath.Join(dir, filepath.FromSlash(file.RelativePath))
+		if index == 0 || !samePath(req.sourcePath, outputPath) {
+			current, readErr := readLimited(req.sourcePath, maxSourceBytes)
+			if readErr != nil || !bytes.Equal(current, req.original) {
+				return result, errors.Join(ErrSourceChanged, readErr, rollback())
+			}
+		}
+		if index == 0 {
+			if outputExisted {
+				current, readErr := readLimited(target, maxSourceBytes)
+				if readErr != nil || !bytes.Equal(current, outputOriginal) {
+					return result, errors.Join(ErrSourceChanged, readErr, rollback())
+				}
+			} else if _, statErr := os.Stat(target); !errors.Is(statErr, os.ErrNotExist) {
+				return result, errors.Join(ErrSourceChanged, statErr, rollback())
+			}
+		}
 		if err = os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return result, errors.Join(err, rollback())
 		}
@@ -406,13 +430,34 @@ func (m *MenuMaker) applyGenerated(
 		}
 		*writtenPaths = append(*writtenPaths, target)
 	}
+	if sidecarPath != "" {
+		*stage = "remove-sidecar"
+		if err = ctx.Err(); err != nil {
+			return result, errors.Join(err, rollback())
+		}
+		if !samePath(req.sourcePath, outputPath) {
+			current, readErr := readLimited(req.sourcePath, maxSourceBytes)
+			if readErr != nil || !bytes.Equal(current, req.original) {
+				return result, errors.Join(ErrSourceChanged, readErr, rollback())
+			}
+		}
+		entry := promotion{
+			target:   sidecarPath,
+			rollback: filepath.Join(stageDir, fmt.Sprintf("old-%04d", len(promotions))),
+			existed:  true,
+		}
+		if err = os.Rename(sidecarPath, entry.rollback); err != nil {
+			return result, errors.Join(
+				fmt.Errorf("remove owned menu maker sidecar %s: %w", sidecarPath, err),
+				rollback(),
+			)
+		}
+		promotions = append(promotions, entry)
+	}
 
 	*cleanupState = "complete"
 	result.OutputINIPath = outputPath
-	result.SourceINIPath = sourceOutputPath
-	if samePath(req.sourcePath, sourceOutputPath) {
-		result.SourceSHA256 = sha256Hex(sourceData)
-	}
+	result.SourceSHA256 = sha256Hex(iniBytes)
 
 	result.ResourcePaths = make([]string, 0, len(assets))
 	for _, asset := range assets {
@@ -426,7 +471,7 @@ func (m *MenuMaker) SaveINI(ctx context.Context, req MenuMakerSaveINIRequest) (r
 		if err != nil {
 			err = infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{
 				Operation: "SaveINI",
-				Stage:     "export-sidecar",
+				Stage:     "export-ini",
 				Fields: map[string]any{
 					"sourcePath":      req.SourcePath,
 					"destinationPath": req.DestinationPath,
@@ -439,23 +484,26 @@ func (m *MenuMaker) SaveINI(ctx context.Context, req MenuMakerSaveINIRequest) (r
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
-	if err = requireMenuININame(filepath.Base(destination)); err != nil {
-		return MenuMakerWriteResult{}, err
-	}
-	generated, err := generateExportSidecar(req.SourcePath, req.SourceText, req.Slots, req.Settings)
+	generated, err := generateSingleINI(req.SourceText, req.Slots, req.Settings)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
 	encoding := textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}
-	original, err := encodeText(req.SourceText, encoding)
+	data, err := encodeText(generated.INIText, encoding)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
-	return m.writeGenerated(ctx, applyGeneratedRequest{
-		sourcePath: filepath.Join(filepath.Dir(destination), filepath.Base(req.SourcePath)),
-		original:   original, outputININame: menuININame, iniText: generated.INIText,
-		sourceINIText: generated.SourceINIText, encoding: req.Encoding, hasBOM: req.HasBOM, newline: req.Newline,
-	})
+	if err = ctx.Err(); err != nil {
+		return MenuMakerWriteResult{}, err
+	}
+	if err = writeAtomic(destination, data, m.reportCleanup); err != nil {
+		return MenuMakerWriteResult{}, err
+	}
+	return MenuMakerWriteResult{
+		OutputINIPath: destination,
+		SourceSHA256:  sha256Hex(data),
+		ResourcePaths: []string{},
+	}, nil
 }
 
 func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (result MenuMakerWriteResult, err error) {
@@ -463,7 +511,7 @@ func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (res
 		if err != nil {
 			err = infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{
 				Operation: "SaveZIP",
-				Stage:     "export-sidecar",
+				Stage:     "export-zip",
 				Fields: map[string]any{
 					"sourcePath":      req.SourcePath,
 					"destinationPath": req.DestinationPath,
@@ -472,28 +520,19 @@ func (m *MenuMaker) SaveZIP(_ context.Context, req MenuMakerSaveZIPRequest) (res
 			})
 		}
 	}()
-	if err = requireMenuININame(req.OutputININame); err != nil {
-		return MenuMakerWriteResult{}, err
-	}
-	generated, err := generateExportSidecar(req.SourcePath, req.SourceText, req.Slots, req.Settings)
+	generated, err := generateSingleINI(req.SourceText, req.Slots, req.Settings)
 	if err != nil {
 		return MenuMakerWriteResult{}, err
 	}
 	encoding := textEncoding{name: req.Encoding, bom: req.HasBOM, newline: req.Newline}
-	sourceData, err := encodeText(generated.SourceINIText, encoding)
-	if err != nil {
-		return MenuMakerWriteResult{}, err
-	}
 	sourceName := strings.TrimSuffix(filepath.Base(req.SourcePath), filepath.Ext(req.SourcePath)) + ".ini"
-	return saveZIPBytes(req.DestinationPath, menuININame, generated.INIText, encoding, req.Assets,
-		&MenuMakerGeneratedAsset{RelativePath: sourceName, Data: sourceData}, m.reportCleanup)
+	return saveZIPBytes(req.DestinationPath, sourceName, generated.INIText, encoding, req.Assets, m.reportCleanup)
 }
 
 func saveZIPBytes(
 	destination, outputININame, iniText string,
 	encoding textEncoding,
 	assets []MenuMakerGeneratedAsset,
-	sourceINI *MenuMakerGeneratedAsset,
 	reports ...func(error),
 ) (MenuMakerWriteResult, error) {
 	resolved, err := requireSavePath(destination, ".zip")
@@ -514,9 +553,6 @@ func saveZIPBytes(
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
 	files := append([]MenuMakerGeneratedAsset{{RelativePath: outputININame, Data: iniData}}, validated...)
-	if sourceINI != nil {
-		files = append(files, *sourceINI)
-	}
 	for _, file := range files {
 		header := &zip.FileHeader{Name: filepath.ToSlash(file.RelativePath), Method: zip.Deflate}
 		header.Modified = time.Now()
@@ -614,20 +650,8 @@ func validateAssets(input []MenuMakerGeneratedAsset) ([]MenuMakerGeneratedAsset,
 	return out, nil
 }
 
-func expectedOutputName(source string) (string, error) {
-	if strings.EqualFold(filepath.Base(source), menuININame) {
-		return "", errors.New("menu.ini cannot be the original mod INI")
-	}
-	return menuININame, nil
-}
-
-// requireMenuININame keeps the generated menu name fixed: the mod loader only
-// picks up menu.ini, so the UI no longer offers a custom name.
-func requireMenuININame(name string) error {
-	if !strings.EqualFold(strings.TrimSpace(name), menuININame) {
-		return errors.New("save the menu as menu.ini")
-	}
-	return nil
+func expectedOutputName(source string) string {
+	return strings.TrimSuffix(filepath.Base(source), filepath.Ext(source)) + ".ini"
 }
 
 func nextBackupPath(source string) (string, error) {

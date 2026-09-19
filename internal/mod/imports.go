@@ -35,7 +35,13 @@ func (m *Mod) UpdateToggleKey(
 	if err != nil {
 		return err
 	}
-	lines := strings.Split(string(content), "\n")
+	text := string(content)
+	newline := "\n"
+	if strings.Contains(text, "\r\n") {
+		newline = "\r\n"
+	}
+	normalized := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	lines := strings.Split(normalized, "\n")
 	newLines := make([]string, 0, len(lines)+1)
 	currentSection := ""
 	foundVariable := false
@@ -84,7 +90,7 @@ func (m *Mod) UpdateToggleKey(
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return writeToggleKeyFile(iniPath, []byte(strings.Join(newLines, "\n")))
+	return writeToggleKeyFile(iniPath, []byte(strings.Join(newLines, newline)))
 }
 
 func writeToggleKeyFile(path string, content []byte) error {
@@ -341,7 +347,7 @@ func readBounded(reader io.Reader, limit int64) ([]byte, error) {
 
 func previewExtension(contentType string, content []byte) string {
 	if contentType == "" {
-		contentType = http.DetectContentType(content)
+		contentType, _ = infra.DetectMediaType(content)
 	}
 	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	if extension, ok := map[string]string{
