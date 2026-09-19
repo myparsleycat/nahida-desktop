@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
+    MODEL_PAYLOAD_LOAD_CONCURRENCY,
     buildPayloadModel,
     clearPayloadModelData,
     commitPayloadEval,
@@ -436,9 +437,11 @@ it("cancels pending texture transfers and leaves queued textures unrequested", a
         controller.signal,
     );
     const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() =>
+        expect(fetchTexture).toHaveBeenCalledTimes(MODEL_PAYLOAD_LOAD_CONCURRENCY),
+    );
     const startedTransfers = fetchTexture.mock.calls.length;
-    expect(startedTransfers).toBeGreaterThan(0);
-    expect(startedTransfers).toBeLessThan(20);
+    expect(startedTransfers).toBe(MODEL_PAYLOAD_LOAD_CONCURRENCY);
     controller.abort();
     await rejected;
     expect(signals.every((signal) => signal.aborted)).toBe(true);

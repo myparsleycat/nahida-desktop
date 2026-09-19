@@ -120,6 +120,7 @@ export function ModelViewerWorkspace({
   const viewerRef = useRef<ModelViewerHandle | null>(null);
   const doubleSidedEnabledRef = useRef(doubleSidedEnabled);
   const initialCameraStateRef = useRef<ModelViewerCameraState | null>(null);
+  const viewerSourceGenerationRef = useRef(0);
 
   if (prevOpen !== open) {
     setPrevOpen(open);
@@ -157,6 +158,10 @@ export function ModelViewerWorkspace({
   useEffect(() => {
     doubleSidedEnabledRef.current = doubleSidedEnabled;
   }, [doubleSidedEnabled]);
+
+  useEffect(() => {
+    viewerSourceGenerationRef.current += 1;
+  }, [source]);
 
   useEffect(() => {
     void viewerRef.current?.setDoubleSided(doubleSidedEnabled);
@@ -390,26 +395,6 @@ export function ModelViewerWorkspace({
   const isViewerReady = viewerStatus === "ready";
   const canSaveCapturedPreview = Boolean(source?.modPath) && isViewerReady && !isSavingPreview;
 
-  const handleViewerLoad = useCallback(() => {
-    void (async () => {
-      const viewer = viewerRef.current;
-      if (!viewer) {
-        return;
-      }
-
-      await viewer.setDoubleSided(doubleSidedEnabledRef.current);
-      await viewer.updateFraming();
-
-      requestAnimationFrame(() => {
-        if (!initialCameraStateRef.current) {
-          initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
-        }
-        setViewerStatus("ready");
-        viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
-      });
-    })();
-  }, []);
-
   const handleViewerError = useCallback(
     (error: unknown) => {
       setAnimationPlaying(false);
@@ -425,6 +410,42 @@ export function ModelViewerWorkspace({
     },
     [t],
   );
+
+  const handleViewerLoad = useCallback(() => {
+    void (async () => {
+      const generation = viewerSourceGenerationRef.current;
+      const viewer = viewerRef.current;
+      if (!viewer) {
+        return;
+      }
+
+      try {
+        await viewer.setDoubleSided(doubleSidedEnabledRef.current);
+        await viewer.updateFraming();
+      } catch (error) {
+        if (generation !== viewerSourceGenerationRef.current) {
+          return;
+        }
+        handleViewerError(error);
+        return;
+      }
+
+      if (generation !== viewerSourceGenerationRef.current) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        if (generation !== viewerSourceGenerationRef.current) {
+          return;
+        }
+        if (!initialCameraStateRef.current) {
+          initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
+        }
+        setViewerStatus("ready");
+        viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
+      });
+    })();
+  }, [handleViewerError]);
 
   const captureAndSavePreview = async () => {
     if (!source?.modPath) {

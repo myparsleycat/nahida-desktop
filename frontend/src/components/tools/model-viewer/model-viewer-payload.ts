@@ -108,7 +108,7 @@ rabbitFXFallbackLightMap.colorSpace = NoColorSpace;
 rabbitFXFallbackLightMap.needsUpdate = true;
 
 // Eight workers overlap transfers and decoding without dispatching every payload request at once.
-const MODEL_PAYLOAD_LOAD_CONCURRENCY = 8;
+export const MODEL_PAYLOAD_LOAD_CONCURRENCY = 8;
 
 export type PreparedPayloadEval = {
     evalResult: EvaluatedViewerState;
