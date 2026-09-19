@@ -249,7 +249,12 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 	}
 
 	source := targets[0]
-	data, compression, useParts, err := prepareUploadRoute(source, upload, r.rules.MaxUploadBodyBytes)
+	data, compression, useParts, err := prepareUploadRoute(
+		source,
+		upload,
+		r.rules.Compression,
+		r.rules.MaxUploadBodyBytes,
+	)
 	if err != nil {
 		r.failTargets(err, targets)
 		return nil

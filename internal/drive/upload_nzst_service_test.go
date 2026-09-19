@@ -29,7 +29,9 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 			t.Setenv("TEMP", tempRoot)
 			root := t.TempDir()
 			archive := filepath.Join(root, "file.ini.nzst")
-			content := []byte("payload")
+			// Larger than the skip size and not a media type, so the restored
+			// payload still travels compressed.
+			content := bytes.Repeat([]byte("payload "), 32)
 			writeUploadNZST(t, archive, content)
 			paths := []string{archive}
 			if mode == "pack" {
@@ -216,7 +218,7 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 				}
 				// Same length, different bytes: a new decoded file must not reuse
 				// the previous execution's cached hash.
-				content = []byte("changed")
+				content = bytes.Repeat([]byte("changed "), 32)
 				writeUploadNZST(t, archive, content)
 				restart.Store(true)
 				if mode == "pause" {
