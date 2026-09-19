@@ -1,8 +1,14 @@
-import type { EvaluatedViewerState, ModViewerTransport } from "@shared/mod-viewer/types";
+import type {
+    EvaluatedViewerState,
+    ModViewerTransport,
+    ViewerAnimationClip,
+    ViewerAnimationFrame,
+    ViewerStateValue,
+} from "@shared/mod-viewer/types";
 
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
-export type ModelViewerVariantStateValue = number | string;
+export type ModelViewerVariantStateValue = ViewerStateValue;
 
 export type ModelViewerRealtimeShapeKey = {
     targetMeshPrefixes: string[];
@@ -32,10 +38,7 @@ export type ModelViewerAnimationFrameMesh = {
     texcoord0Path?: string;
 };
 
-export type ModelViewerAnimationFrame = {
-    index: number;
-    time: number;
-    values: Record<string, ModelViewerVariantStateValue>;
+export type ModelViewerAnimationFrame = ViewerAnimationFrame & {
     meshes?: ModelViewerAnimationFrameMesh[];
 };
 
@@ -44,15 +47,7 @@ export type ModelViewerAnimationSharedBuffer = {
     path: string;
 };
 
-export type ModelViewerAnimationClip = {
-    id: string;
-    label: string;
-    deformerId?: string;
-    variableIds: string[];
-    fps: number;
-    frameStart: number;
-    frameEnd: number;
-    loop: boolean;
+export type ModelViewerAnimationClip = Omit<ViewerAnimationClip, "frames"> & {
     sharedBuffers?: ModelViewerAnimationSharedBuffer[];
     frames: ModelViewerAnimationFrame[];
 };

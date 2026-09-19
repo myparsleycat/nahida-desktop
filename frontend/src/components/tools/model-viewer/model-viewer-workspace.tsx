@@ -66,6 +66,8 @@ import { ThreeModelViewer } from "./three-model-viewer";
 
 export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
 
+type ViewerStatus = "idle" | "loading" | "ready" | "error";
+
 function getInitialActiveState(
   source: ModelViewerDialogSource | null,
 ): Record<string, VariableStateValue> {
@@ -112,8 +114,7 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
-  const [isViewerReady, setIsViewerReady] = useState(false);
-  const [isViewerLoading, setIsViewerLoading] = useState(Boolean(source));
+  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>(source ? "loading" : "idle");
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
   const viewerRef = useRef<ModelViewerHandle | null>(null);
@@ -125,17 +126,17 @@ export function ModelViewerWorkspace({
     if (!open) {
       setShowOverwritePreviewDialog(false);
       setIsSavingPreview(false);
-      setIsViewerReady(false);
-      setIsViewerLoading(false);
+      setViewerStatus("idle");
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    } else if (source) {
+      setViewerStatus("loading");
     }
   }
 
   if (prevSource !== source) {
     setPrevSource(source);
     setPreviewState(null);
-    setIsViewerReady(false);
-    setIsViewerLoading(Boolean(source));
+    setViewerStatus(source ? "loading" : "idle");
 
     if (getSourceSessionKey(prevSource) !== getSourceSessionKey(source)) {
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
@@ -386,6 +387,7 @@ export function ModelViewerWorkspace({
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(payloadTransport && hasVariantToggleUi);
+  const isViewerReady = viewerStatus === "ready";
   const canSaveCapturedPreview = Boolean(source?.modPath) && isViewerReady && !isSavingPreview;
 
   const handleViewerLoad = useCallback(() => {
@@ -402,8 +404,7 @@ export function ModelViewerWorkspace({
         if (!initialCameraStateRef.current) {
           initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
         }
-        setIsViewerReady(true);
-        setIsViewerLoading(false);
+        setViewerStatus("ready");
         viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
       });
     })();
@@ -412,8 +413,7 @@ export function ModelViewerWorkspace({
   const handleViewerError = useCallback(
     (error: unknown) => {
       setAnimationPlaying(false);
-      setIsViewerReady(false);
-      setIsViewerLoading(false);
+      setViewerStatus("error");
       Logger.capture(
         "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to load model viewer source",
@@ -523,7 +523,7 @@ export function ModelViewerWorkspace({
                   onLoad={handleViewerLoad}
                   onError={handleViewerError}
                 />
-                {isViewerLoading ? (
+                {viewerStatus === "loading" ? (
                   <div
                     role="status"
                     aria-live="polite"
@@ -532,6 +532,13 @@ export function ModelViewerWorkspace({
                   >
                     <Loader2Icon className="size-8 animate-spin" aria-hidden="true" />
                     <span>{t("page.tools.model_viewer.loading")}</span>
+                  </div>
+                ) : viewerStatus === "error" ? (
+                  <div
+                    role="alert"
+                    className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-muted/70 p-6 text-center text-sm text-muted-foreground backdrop-blur-sm"
+                  >
+                    {t("page.tools.model_viewer.toast.load_error")}
                   </div>
                 ) : null}
               </>
