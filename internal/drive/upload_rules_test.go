@@ -31,6 +31,13 @@ func testUploadRules() UploadRules {
 			MaxFiles:      100,
 		},
 		Parts: UploadPartRules{MaxBytes: 32 * 1024 * 1024, MaxParts: 64},
+		Compression: UploadCompressionRules{
+			Algorithm:        "zstd",
+			Level:            6,
+			SkipMaxBytes:     100,
+			SkipMimePrefixes: []string{"image/", "video/", "audio/"},
+			SkipMimeTypes:    []string{"application/zip", "application/gzip"},
+		},
 	}
 }
 
@@ -66,11 +73,71 @@ func TestUploadRulesFetchesAndCaches(t *testing.T) {
 	if first.MaxPlanFiles != 500 || second.MaxFileSize != first.MaxFileSize || len(first.Extensions) == 0 {
 		t.Fatalf("rules = %#v", first)
 	}
+	if first.Compression.Algorithm != "zstd" || first.Compression.Level != 6 ||
+		first.Compression.SkipMaxBytes != 100 || len(first.Compression.SkipMimeTypes) == 0 {
+		t.Fatalf("compression rules = %#v", first.Compression)
+	}
 }
 
 func TestParseUploadRulesRejectsIncompletePayload(t *testing.T) {
 	if _, err := parseUploadRules(map[string]any{"maxFileSize": 1}); err == nil {
 		t.Fatal("expected unavailable rules")
+	}
+}
+
+func TestParseUploadRulesRequiresTheCompressionBlock(t *testing.T) {
+	payload := func(mutate func(rules map[string]any)) map[string]any {
+		raw, err := json.Marshal(testUploadRules())
+		if err != nil {
+			t.Fatal(err)
+		}
+		rules := map[string]any{}
+		if err := json.Unmarshal(raw, &rules); err != nil {
+			t.Fatal(err)
+		}
+		mutate(rules)
+		return rules
+	}
+	tests := []struct {
+		name   string
+		mutate func(rules map[string]any)
+	}{
+		{name: "missing block", mutate: func(rules map[string]any) { delete(rules, "compression") }},
+		{name: "no algorithm", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["algorithm"] = ""
+		}},
+		{name: "algorithm this client cannot encode", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["algorithm"] = "gzip"
+		}},
+		{name: "level below the encoder range", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["level"] = 0
+		}},
+		{name: "level above the encoder range", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["level"] = 23
+		}},
+		{name: "negative skip size", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["skipMaxBytes"] = -1
+		}},
+		{name: "empty prefix list", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["skipMimePrefixes"] = []string{}
+		}},
+		{name: "empty type list", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["skipMimeTypes"] = []string{}
+		}},
+		{name: "blank prefix entry", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["skipMimePrefixes"] = []string{" "}
+		}},
+		{name: "blank type entry", mutate: func(rules map[string]any) {
+			rules["compression"].(map[string]any)["skipMimeTypes"] = []string{""}
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseUploadRules(payload(tc.mutate)); err == nil {
+				t.Fatal("expected unavailable rules")
+			}
+		})
 	}
 }
 

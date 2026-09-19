@@ -6,11 +6,19 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 const (
 	preferredUploadPartSize = 25 * 1024 * 1024
+	// uploadCompressionAlgorithm is the only algorithm this client encodes;
+	// rules naming another one describe payloads this client cannot produce.
+	uploadCompressionAlgorithm = "zstd"
+	// The zstd levels the encoder accepts; a rules answer outside them is not
+	// one this client can read.
+	minUploadCompressionLevel = 1
+	maxUploadCompressionLevel = 22
 )
 
 type UploadExtensionRule struct {
@@ -29,13 +37,25 @@ type UploadPartRules struct {
 	MaxParts int   `json:"maxParts"`
 }
 
+// UploadCompressionRules is the algorithm, level and skip rules the server
+// publishes; the client compresses every upload with them instead of its own
+// hardcoded rules.
+type UploadCompressionRules struct {
+	Algorithm        string   `json:"algorithm"`
+	Level            int      `json:"level"`
+	SkipMaxBytes     int64    `json:"skipMaxBytes"`
+	SkipMimePrefixes []string `json:"skipMimePrefixes"`
+	SkipMimeTypes    []string `json:"skipMimeTypes"`
+}
+
 type UploadRules struct {
-	MaxFileSize        int64                 `json:"maxFileSize"`
-	MaxPlanFiles       int                   `json:"maxPlanFiles"`
-	MaxUploadBodyBytes int64                 `json:"maxUploadBodyBytes"`
-	Extensions         []UploadExtensionRule `json:"extensions"`
-	Pack               UploadPackRules       `json:"pack"`
-	Parts              UploadPartRules       `json:"parts"`
+	MaxFileSize        int64                  `json:"maxFileSize"`
+	MaxPlanFiles       int                    `json:"maxPlanFiles"`
+	MaxUploadBodyBytes int64                  `json:"maxUploadBodyBytes"`
+	Extensions         []UploadExtensionRule  `json:"extensions"`
+	Pack               UploadPackRules        `json:"pack"`
+	Parts              UploadPartRules        `json:"parts"`
+	Compression        UploadCompressionRules `json:"compression"`
 }
 
 func (r UploadRules) PartSize() int64 {
@@ -141,7 +161,24 @@ func parseUploadRules(decoded any) (UploadRules, error) {
 	if rules.Parts.MaxBytes <= 0 || rules.Parts.MaxParts <= 0 {
 		return UploadRules{}, errors.New("upload_rules_unavailable")
 	}
+	if rules.Compression.Algorithm != uploadCompressionAlgorithm ||
+		rules.Compression.Level < minUploadCompressionLevel ||
+		rules.Compression.Level > maxUploadCompressionLevel ||
+		rules.Compression.SkipMaxBytes < 0 ||
+		!usableUploadMimePatterns(rules.Compression.SkipMimePrefixes) ||
+		!usableUploadMimePatterns(rules.Compression.SkipMimeTypes) {
+		return UploadRules{}, errors.New("upload_rules_unavailable")
+	}
 	return rules, nil
+}
+
+// usableUploadMimePatterns reports whether the list holds at least one pattern
+// that names a type, so a blank entry cannot match every detection and turn
+// the skip checks into "skip everything".
+func usableUploadMimePatterns(patterns []string) bool {
+	return len(patterns) > 0 && !slices.ContainsFunc(patterns, func(pattern string) bool {
+		return strings.TrimSpace(pattern) == ""
+	})
 }
 
 func normalizeUploadExt(extension string) string {

@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 
@@ -55,7 +57,7 @@ func (d *Drive) uploadIntent(
 	if err != nil {
 		return err
 	}
-	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.MaxUploadBodyBytes)
+	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.Compression, rules.MaxUploadBodyBytes)
 	if err != nil {
 		return err
 	}
@@ -343,15 +345,20 @@ func infraFetchJSON(method string, body []byte) infra.FetchOptions {
 	}
 }
 
-func prepareUploadRoute(file FinalUploadFile, upload UploadPlanEntry, maxBody int64) ([]byte, string, bool, error) {
-	data, compression, err := prepareDirectUpload(file)
+func prepareUploadRoute(
+	file FinalUploadFile,
+	upload UploadPlanEntry,
+	compression UploadCompressionRules,
+	maxBody int64,
+) ([]byte, string, bool, error) {
+	data, algorithm, err := prepareDirectUpload(file, compression)
 	if err != nil {
 		return nil, "", false, err
 	}
-	if directUploadExceedsMaxBody(file, data, compression, upload, maxBody) {
+	if directUploadExceedsMaxBody(file, data, algorithm, upload, maxBody) {
 		return nil, "", true, nil
 	}
-	return data, compression, false, nil
+	return data, algorithm, false, nil
 }
 
 func directUploadFields(upload UploadPlanEntry, compression string) [][2]string {
@@ -426,15 +433,15 @@ func sanitizeMultipartValue(value string) string {
 	return value
 }
 
-func prepareDirectUpload(file FinalUploadFile) ([]byte, string, error) {
+func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRules) ([]byte, string, error) {
 	data, err := os.ReadFile(filepath.FromSlash(file.FullPath))
 	if err != nil {
 		return nil, "", fmt.Errorf("read upload file %q: %w", file.Name, err)
 	}
-	if file.Size <= 100 || isPreviewUploadFile(data, file.Name) {
+	if skipUploadCompression(data, file.Size, compression) {
 		return data, "", nil
 	}
-	encoder, err := zstd.NewWriter(nil)
+	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(compression.Level)))
 	if err != nil {
 		return nil, "", err
 	}
@@ -442,50 +449,43 @@ func prepareDirectUpload(file FinalUploadFile) ([]byte, string, error) {
 	if err := encoder.Close(); err != nil {
 		return nil, "", err
 	}
-	return compressed, "zstd", nil
+	return compressed, uploadCompressionAlgorithm, nil
 }
 
-func isPreviewUploadFile(data []byte, name string) bool {
-	signatures := [][]byte{
-		{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a},
-		{0x47, 0x49, 0x46, 0x38},
-		{0xff, 0xd8, 0xff},
-		{0x42, 0x4d},
-		{0x49, 0x49, 0x2a, 0x00},
-		{0x4d, 0x4d, 0x00, 0x2a},
-		{0x00, 0x00, 0x01, 0x00},
-		{0x1a, 0x45, 0xdf, 0xa3},
+// skipUploadCompression applies the published rules in their own order: tiny
+// files, then the media prefixes, then the already-compressed containers.
+func skipUploadCompression(data []byte, size int64, compression UploadCompressionRules) bool {
+	if size <= compression.SkipMaxBytes {
+		return true
 	}
-	for _, signature := range signatures {
-		if bytes.HasPrefix(data, signature) {
+	mimeType := uploadMimeType(data)
+	if mimeType == "" {
+		return false
+	}
+	for _, prefix := range compression.SkipMimePrefixes {
+		if strings.HasPrefix(mimeType, prefix) {
 			return true
 		}
 	}
-	if len(data) >= 8 && string(data[4:8]) == "ftyp" {
-		return true
+	return slices.Contains(compression.SkipMimeTypes, mimeType)
+}
+
+// uploadMimeType reports the bare type the leading bytes identify. Content that
+// identifies nothing, or only the generic binary type, answers nothing so the
+// caller compresses it — the server stores an untyped file compressed the same
+// way.
+func uploadMimeType(data []byte) string {
+	if len(data) == 0 {
+		return ""
 	}
-	extension := strings.ToLower(filepath.Ext(name))
-	switch extension {
-	case ".gif",
-		".jpg",
-		".jpeg",
-		".tif",
-		".tiff",
-		".png",
-		".webp",
-		".bmp",
-		".ico",
-		".mp4",
-		".webm",
-		".ogg",
-		".mov",
-		".avi",
-		".flv",
-		".mkv":
-		return true
-	default:
-		return false
+	detected := mimetype.Detect(data)
+	if detected == nil || detected.Is("application/octet-stream") {
+		return ""
 	}
+	// Detections such as text/plain carry a charset parameter; the published
+	// patterns name bare types.
+	baseType, _, _ := strings.Cut(detected.String(), ";")
+	return strings.TrimSpace(baseType)
 }
 
 func parseUploadHTTPResult(status int, raw []byte) uploadHTTPResult {

@@ -1,6 +1,7 @@
 package drive
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -240,6 +241,108 @@ func TestDirectUploadExceedsMaxBodyIncludesMultipartOverhead(t *testing.T) {
 	if directUploadExceedsMaxBody(file, data, "", upload, 1024) {
 		t.Fatal("small direct request should fit a 1KiB body limit")
 	}
+}
+
+func TestPrepareDirectUploadFollowsTheCompressionRules(t *testing.T) {
+	compression := testUploadRules().Compression
+	content := bytes.Repeat([]byte("compressible payload"), 512)
+	path := writeUploadContent(t, "data.ini", content)
+	file := FinalUploadFile{
+		UploadFile: UploadFile{Name: "data.ini", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}
+
+	data, algorithm, err := prepareDirectUpload(file, compression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if algorithm != compression.Algorithm {
+		t.Fatalf("algorithm = %q, want %q", algorithm, compression.Algorithm)
+	}
+	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(compression.Level)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = encoder.Close() }()
+	if want := encoder.EncodeAll(content, nil); !bytes.Equal(data, want) {
+		t.Fatalf("payload = %d bytes, want an encode at level %d", len(data), compression.Level)
+	}
+}
+
+func TestPrepareDirectUploadSkipsWhatTheRulesSkip(t *testing.T) {
+	compression := testUploadRules().Compression
+	tests := []struct {
+		name    string
+		content []byte
+	}{
+		{
+			name:    "file at the skip size",
+			content: bytes.Repeat([]byte("x"), int(compression.SkipMaxBytes)),
+		},
+		{
+			name: "image content under an unknown name",
+			content: append(
+				[]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a},
+				bytes.Repeat([]byte{0x00}, 4096)...,
+			),
+		},
+		{
+			name: "already-compressed container",
+			content: append(
+				[]byte{'P', 'K', 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00},
+				bytes.Repeat([]byte{0x00}, 4096)...,
+			),
+		},
+		{
+			name:    "gzip stream",
+			content: append([]byte{0x1f, 0x8b, 0x08, 0x00}, bytes.Repeat([]byte{0x00}, 4096)...),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeUploadContent(t, "payload.bin", tc.content)
+			file := FinalUploadFile{
+				UploadFile: UploadFile{
+					Name: "payload.bin", FullPath: filepath.ToSlash(path), Size: int64(len(tc.content)),
+				},
+			}
+
+			data, algorithm, err := prepareDirectUpload(file, compression)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if algorithm != "" || !bytes.Equal(data, tc.content) {
+				t.Fatalf("algorithm = %q, payload = %d bytes", algorithm, len(data))
+			}
+		})
+	}
+}
+
+func TestPrepareDirectUploadMatchesBareMimeTypes(t *testing.T) {
+	compression := testUploadRules().Compression
+	compression.SkipMimeTypes = []string{"text/plain"}
+	content := bytes.Repeat([]byte("plain text payload "), 16)
+	path := writeUploadContent(t, "notes.bin", content)
+	file := FinalUploadFile{
+		UploadFile: UploadFile{Name: "notes.bin", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}
+
+	data, algorithm, err := prepareDirectUpload(file, compression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if algorithm != "" || !bytes.Equal(data, content) {
+		t.Fatalf("algorithm = %q, payload = %d bytes", algorithm, len(data))
+	}
+}
+
+func writeUploadContent(t *testing.T, name string, content []byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
