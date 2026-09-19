@@ -115,8 +115,7 @@ type menuMakerSaveINIInput struct {
 
 type menuMakerSaveZIPInput struct {
 	menuMakerSaveINIInput
-	OutputININame string                              `json:"outputININame"`
-	Assets        []menumaker.MenuMakerGeneratedAsset `json:"assets"`
+	Assets []menumaker.MenuMakerGeneratedAsset `json:"assets"`
 }
 
 type approvalProposal struct {
@@ -1206,7 +1205,7 @@ func newDesktopActionRegistry(deps desktopActionDependencies) *desktopActionRegi
 					return nil, err
 				}
 				return deps.menuMaker.SaveZIP(ctx, menumaker.MenuMakerSaveZIPRequest{
-					SourcePath: source, DestinationPath: destination, OutputININame: input.OutputININame,
+					SourcePath: source, DestinationPath: destination,
 					SourceText: input.SourceText, Slots: input.Slots, Settings: input.Settings,
 					Encoding: input.Encoding, HasBOM: input.HasBOM, Newline: input.Newline, Assets: input.Assets,
 				})
@@ -1520,9 +1519,8 @@ func menuMakerSaveAction(
 		"sourceText", "slots", "settings", "encoding", "hasBOM", "newline",
 	}
 	if id == "menumaker.save_zip" {
-		properties["outputININame"] = stringSchema()
 		properties["assets"] = map[string]any{"type": "array"}
-		required = append(required, "outputININame", "assets")
+		required = append(required, "assets")
 	}
 	return desktopAction{
 		definition: DesktopActionDefinition{ID: id, Description: description, Domain: "menumaker",
