@@ -469,7 +469,10 @@ func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {
 	}
 	contentType := normalizeContentType(response.Header.Get("Content-Type"))
 	if contentType == "" || !strings.HasPrefix(contentType, "image/") {
-		contentType = http.DetectContentType(raw)
+		contentType = "application/octet-stream"
+		if detected, ok := DetectMediaType(raw); ok {
+			contentType = detected
+		}
 	}
 	if !strings.HasPrefix(contentType, "image/") {
 		p.reportProtocolFailure(
@@ -503,7 +506,21 @@ func (p *Protocol) reportProtocolFailure(err error, request *http.Request, stage
 	_ = ReportError(log, err, "Protocol", Diagnostic{Operation: "serve-resource", Stage: stage, Fields: fields})
 }
 
+// contentTypeForFile resolves the type to serve for a local file. Content-based
+// detection wins over the file name, which is the order the Electron protocol
+// used and keeps a misleading name from reaching the media stack.
+//
+// Text-based content has no signature to detect and keeps the extension mapping
+// instead of the standard library text sniff, which only ever reported
+// text/plain.
 func contentTypeForFile(path string, file *os.File) string {
+	if detected, ok := DetectFileMediaType(file); ok {
+		return detected
+	}
+
+	// The mapping covers the formats whose served type the model viewer and the
+	// WebView2 media stack pin explicitly, plus names that content detection
+	// could not identify.
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".glb":
@@ -522,9 +539,7 @@ func contentTypeForFile(path string, file *os.File) string {
 	if resolved := mime.TypeByExtension(ext); resolved != "" {
 		return resolved
 	}
-	buffer := make([]byte, 512)
-	read, _ := file.ReadAt(buffer, 0)
-	return http.DetectContentType(buffer[:read])
+	return "application/octet-stream"
 }
 
 func normalizeContentType(value string) string {

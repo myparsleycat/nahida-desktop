@@ -291,3 +291,128 @@ func TestProtocolUnconfiguredWebImagePreservesUnavailableResponse(t *testing.T) 
 		}
 	}
 }
+
+func TestProtocolSniffsWebImageContentWhenTheHeaderIsGeneric(t *testing.T) {
+	t.Parallel()
+	content := isoBMFFContent("avif", "avif", "mif1")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(content)
+	}))
+	defer upstream.Close()
+	service := NewProtocol()
+	service.Configure(NewClientWithOptions(ClientOptions{HTTPClient: upstream.Client()}), nil)
+
+	recorder := httptest.NewRecorder()
+	service.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/nahida/image-web?url="+upstream.URL, nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "image/avif" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+}
+
+func TestProtocolRejectsScriptableWebImageContent(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = io.WriteString(w, `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`)
+	}))
+	defer upstream.Close()
+	service := NewProtocol()
+	service.Configure(NewClientWithOptions(ClientOptions{HTTPClient: upstream.Client()}), nil)
+
+	recorder := httptest.NewRecorder()
+	service.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/nahida/image-web?url="+upstream.URL, nil))
+	if recorder.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+}
+
+func TestContentTypeForFilePrefersContentOverExtension(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		fileName string
+		content  []byte
+		want     string
+	}{
+		{
+			name:     "avif download without a descriptive name",
+			fileName: "preview.bin",
+			content:  isoBMFFContent("avif", "avif", "mif1"),
+			want:     "image/avif",
+		},
+		{
+			name:     "mp4 whose brands omit the mp4 marker",
+			fileName: "clip.bin",
+			content:  isoBMFFContent("isom", "isom"),
+			want:     "video/mp4",
+		},
+		{
+			name:     "text keeps the extension mapping",
+			fileName: "notes.txt",
+			content:  []byte("0123456789"),
+			want:     "text/plain; charset=utf-8",
+		},
+		{
+			name:     "matroska keeps the WebView2 type when content is unrecognized",
+			fileName: "movie.mkv",
+			content:  []byte("not a container"),
+			want:     "video/x-matroska",
+		},
+		{
+			name:     "detected matroska is normalized to the WebView2 type",
+			fileName: "movie.mkv",
+			content:  ebmlContent("matroska"),
+			want:     "video/x-matroska",
+		},
+		{
+			name:     "detected webm keeps the pinned type",
+			fileName: "clip.webm",
+			content:  ebmlContent("webm"),
+			want:     "video/webm",
+		},
+		{
+			name:     "detected avi keeps the pinned type",
+			fileName: "clip.avi",
+			content:  aviContent(),
+			want:     "video/x-msvideo",
+		},
+		{
+			name:     "glb keeps the model viewer type",
+			fileName: "mesh.glb",
+			content:  glbContent(),
+			want:     "model/gltf-binary",
+		},
+		{
+			name:     "gltf keeps the model viewer type",
+			fileName: "model.gltf",
+			content:  []byte(`{"asset":{"version":"2.0"}}`),
+			want:     "model/gltf+json",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := contentTypeOfFile(t, test.fileName, test.content); got != test.want {
+				t.Fatalf("contentTypeForFile = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func contentTypeOfFile(t *testing.T, fileName string, content []byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), fileName)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+	return contentTypeForFile(path, file)
+}
