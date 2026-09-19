@@ -107,6 +107,9 @@ const rabbitFXFallbackLightMap = new DataTexture(
 rabbitFXFallbackLightMap.colorSpace = NoColorSpace;
 rabbitFXFallbackLightMap.needsUpdate = true;
 
+// Eight workers overlap transfers and decoding without dispatching every payload request at once.
+export const MODEL_PAYLOAD_LOAD_CONCURRENCY = 8;
+
 export type PreparedPayloadEval = {
     evalResult: EvaluatedViewerState;
     positions: Map<string, { variantIndex: number } & ModelViewerPositionGeometry>;
@@ -135,7 +138,7 @@ export async function buildPayloadModel(
 
     // Bound active work while overlapping image decoding with geometry transfers.
     const jobs = [
-        loadItems(transport.meshes, 8, async (mesh, index) => {
+        loadItems(transport.meshes, MODEL_PAYLOAD_LOAD_CONCURRENCY, async (mesh, index) => {
             objects[index] = await buildPayloadMesh(
                 mesh,
                 transport.materialProfile,
@@ -145,17 +148,21 @@ export async function buildPayloadModel(
                 signal,
             );
         }),
-        loadItems(Object.entries(transport.textures), 4, async ([key, entry]) => {
-            const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
-            if (signal.aborted) {
-                texture?.dispose();
-                signal.throwIfAborted();
-            }
-            if (texture) {
-                texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
-                textures.set(key, texture);
-            }
-        }),
+        loadItems(
+            Object.entries(transport.textures),
+            MODEL_PAYLOAD_LOAD_CONCURRENCY,
+            async ([key, entry]) => {
+                const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
+                if (signal.aborted) {
+                    texture?.dispose();
+                    signal.throwIfAborted();
+                }
+                if (texture) {
+                    texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
+                    textures.set(key, texture);
+                }
+            },
+        ),
     ];
     try {
         await Promise.all(jobs);

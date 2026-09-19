@@ -47,7 +47,12 @@ vi.mock("./model-viewer-menu-bar", () => ({
 vi.mock("./three-model-viewer", () => ({
   ThreeModelViewer: vi.fn((props: ComponentProps<typeof ThreeModelViewer>) => {
     useImperativeHandle(props.ref, () => handle, []);
-    return <button onClick={() => props.onLoad?.()}>Load viewer</button>;
+    return (
+      <>
+        <button onClick={() => props.onLoad?.()}>Load viewer</button>
+        <button onClick={() => props.onError?.(new Error("load failed"))}>Fail viewer</button>
+      </>
+    );
   }),
 }));
 
@@ -91,6 +96,93 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+it("shows a loading indicator until the viewer is ready", async () => {
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: normalizeModelViewerTransport(payload),
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  expect(screen.getByRole("status", { name: "page.tools.model_viewer.loading" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Load viewer" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("status", { name: "page.tools.model_viewer.loading" })).toBeNull(),
+  );
+});
+
+it("replaces the loading indicator with an error when the viewer fails", () => {
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: normalizeModelViewerTransport(payload),
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Fail viewer" }));
+  expect(screen.queryByRole("status", { name: "page.tools.model_viewer.loading" })).toBeNull();
+  expect(screen.getByRole("alert").textContent).toBe("page.tools.model_viewer.toast.load_error");
+});
+
+it("shows the loading indicator again when the source changes", async () => {
+  const dialog = (memorySessionId: string) => (
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: normalizeModelViewerTransport({ ...payload, memorySessionId }),
+        memorySessionId,
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />
+  );
+  const view = render(dialog("first"));
+  fireEvent.click(screen.getByRole("button", { name: "Load viewer" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("status", { name: "page.tools.model_viewer.loading" })).toBeNull(),
+  );
+
+  view.rerender(dialog("second"));
+  expect(screen.getByRole("status", { name: "page.tools.model_viewer.loading" })).toBeTruthy();
+});
+
+it("passes payload animation frames to the viewer without recreating them", () => {
+  const transport = normalizeModelViewerTransport(payload);
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport,
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].animationClip?.frames[0]).toBe(
+    transport.animations[0].frames[0],
+  );
 });
 
 it("preserves double-sided rendering when the dialog body unmounts and reopens", async () => {

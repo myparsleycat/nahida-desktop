@@ -30,7 +30,7 @@ import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
-import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { CheckIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -40,11 +40,11 @@ import type { ModelViewerDialogSource, VariableStateValue } from "./model-viewer
 import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
 import {
   formatOrientation,
+  parseOrientation,
   type ModelViewerCameraState,
   type ModelViewerHandle,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
-  parseOrientation,
 } from "./model-viewer-contract";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
@@ -65,6 +65,8 @@ import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
 export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
+
+type ViewerStatus = "idle" | "loading" | "ready" | "error";
 
 function getInitialActiveState(
   source: ModelViewerDialogSource | null,
@@ -112,27 +114,30 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
-  const [isViewerReady, setIsViewerReady] = useState(false);
+  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>(source ? "loading" : "idle");
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
   const viewerRef = useRef<ModelViewerHandle | null>(null);
   const doubleSidedEnabledRef = useRef(doubleSidedEnabled);
   const initialCameraStateRef = useRef<ModelViewerCameraState | null>(null);
+  const viewerSourceGenerationRef = useRef(0);
 
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (!open) {
       setShowOverwritePreviewDialog(false);
       setIsSavingPreview(false);
-      setIsViewerReady(false);
+      setViewerStatus("idle");
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    } else if (source) {
+      setViewerStatus("loading");
     }
   }
 
   if (prevSource !== source) {
     setPrevSource(source);
     setPreviewState(null);
-    setIsViewerReady(false);
+    setViewerStatus(source ? "loading" : "idle");
 
     if (getSourceSessionKey(prevSource) !== getSourceSessionKey(source)) {
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
@@ -153,6 +158,10 @@ export function ModelViewerWorkspace({
   useEffect(() => {
     doubleSidedEnabledRef.current = doubleSidedEnabled;
   }, [doubleSidedEnabled]);
+
+  useEffect(() => {
+    viewerSourceGenerationRef.current += 1;
+  }, [source]);
 
   useEffect(() => {
     void viewerRef.current?.setDoubleSided(doubleSidedEnabled);
@@ -191,15 +200,7 @@ export function ModelViewerWorkspace({
   }, []);
 
   const payloadTransport = source?.transport ?? null;
-  const payloadAnimations = useMemo(
-    () =>
-      (payloadTransport?.animations ?? []).map((clip) => ({
-        ...clip,
-        frames: clip.frames.map((frame) => ({ ...frame, meshes: [] })),
-      })),
-    [payloadTransport],
-  );
-  const animationClips = payloadAnimations;
+  const animationClips = payloadTransport?.animations ?? [];
   const activeAnimation =
     animationClips.find((animation) => animation.id === activeAnimationId) ??
     animationClips[0] ??
@@ -391,32 +392,13 @@ export function ModelViewerWorkspace({
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(payloadTransport && hasVariantToggleUi);
+  const isViewerReady = viewerStatus === "ready";
   const canSaveCapturedPreview = Boolean(source?.modPath) && isViewerReady && !isSavingPreview;
-
-  const handleViewerLoad = useCallback(() => {
-    void (async () => {
-      const viewer = viewerRef.current;
-      if (!viewer) {
-        return;
-      }
-
-      await viewer.setDoubleSided(doubleSidedEnabledRef.current);
-      await viewer.updateFraming();
-
-      requestAnimationFrame(() => {
-        if (!initialCameraStateRef.current) {
-          initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
-        }
-        setIsViewerReady(true);
-        viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
-      });
-    })();
-  }, []);
 
   const handleViewerError = useCallback(
     (error: unknown) => {
       setAnimationPlaying(false);
-      setIsViewerReady(false);
+      setViewerStatus("error");
       Logger.capture(
         "components/tools/model-viewer/model-viewer-workspace.tsx",
         "Failed to load model viewer source",
@@ -428,6 +410,42 @@ export function ModelViewerWorkspace({
     },
     [t],
   );
+
+  const handleViewerLoad = useCallback(() => {
+    void (async () => {
+      const generation = viewerSourceGenerationRef.current;
+      const viewer = viewerRef.current;
+      if (!viewer) {
+        return;
+      }
+
+      try {
+        await viewer.setDoubleSided(doubleSidedEnabledRef.current);
+        await viewer.updateFraming();
+      } catch (error) {
+        if (generation !== viewerSourceGenerationRef.current) {
+          return;
+        }
+        handleViewerError(error);
+        return;
+      }
+
+      if (generation !== viewerSourceGenerationRef.current) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        if (generation !== viewerSourceGenerationRef.current) {
+          return;
+        }
+        if (!initialCameraStateRef.current) {
+          initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
+        }
+        setViewerStatus("ready");
+        viewerRef.current?.setAnimationFrame(animationFrameIndexRef.current);
+      });
+    })();
+  }, [handleViewerError]);
 
   const captureAndSavePreview = async () => {
     if (!source?.modPath) {
@@ -511,20 +529,40 @@ export function ModelViewerWorkspace({
         >
           <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
             {payloadTransport ? (
-              <ThreeModelViewer
-                ref={viewerRef}
-                className="absolute inset-0 h-full w-full"
-                payloadTransport={payloadTransport}
-                payloadEval={payloadEval ?? undefined}
-                orientation={modelOrientation}
-                animationClip={effectiveAnimation ?? undefined}
-                threeToneMapping={threeToneMapping}
-                threeEnvironment={threeEnvironment}
-                threeExposure={threeExposure}
-                toonShadows={toonShadows}
-                onLoad={handleViewerLoad}
-                onError={handleViewerError}
-              />
+              <>
+                <ThreeModelViewer
+                  ref={viewerRef}
+                  className="absolute inset-0 h-full w-full"
+                  payloadTransport={payloadTransport}
+                  payloadEval={payloadEval ?? undefined}
+                  orientation={modelOrientation}
+                  animationClip={effectiveAnimation ?? undefined}
+                  threeToneMapping={threeToneMapping}
+                  threeEnvironment={threeEnvironment}
+                  threeExposure={threeExposure}
+                  toonShadows={toonShadows}
+                  onLoad={handleViewerLoad}
+                  onError={handleViewerError}
+                />
+                {viewerStatus === "loading" ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    aria-label={t("page.tools.model_viewer.loading")}
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-muted/70 text-sm text-muted-foreground backdrop-blur-sm"
+                  >
+                    <Loader2Icon className="size-8 animate-spin" aria-hidden="true" />
+                    <span>{t("page.tools.model_viewer.loading")}</span>
+                  </div>
+                ) : viewerStatus === "error" ? (
+                  <div
+                    role="alert"
+                    className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-muted/70 p-6 text-center text-sm text-muted-foreground backdrop-blur-sm"
+                  >
+                    {t("page.tools.model_viewer.toast.load_error")}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
                 {t("page.tools.model_viewer.model_data_unavailable")}
