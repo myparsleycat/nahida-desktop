@@ -1,3 +1,4 @@
+.tmp
 local.db*
 .task
 bin
