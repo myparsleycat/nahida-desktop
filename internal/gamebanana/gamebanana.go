@@ -158,6 +158,9 @@ func (g *GameBanana) GetGames() map[string]int {
 	return out
 }
 
+// EnsureSession is the explicit sign-in entry point. It validates the stored
+// session and opens the GameBanana login window when it is missing or rejected.
+// Data requests never call it: browsing and downloads work without a session.
 func (g *GameBanana) EnsureSession(ctx context.Context) error {
 	_, err := g.openAuthenticatedSession(ctx)
 	return err
@@ -255,7 +258,7 @@ func (g *GameBanana) logoutWebSession(ctx context.Context, cookie string) error 
 		Cookie:                  cookie,
 		PersistResponseCookies:  false,
 		ClearStoredCookieOnAuth: false,
-		SkipAuthRetry:           true,
+		AuthFallback:            authFallbackNone,
 	})
 	if response != nil {
 		_ = response.Body.Close()
@@ -532,6 +535,7 @@ func (g *GameBanana) ToggleModLike(ctx context.Context, input ModOverviewInput) 
 		requestPolicy{
 			PersistResponseCookies:  true,
 			ClearStoredCookieOnAuth: true,
+			AuthFallback:            authFallbackNone,
 		},
 	)
 	if err != nil {
@@ -601,6 +605,7 @@ func (g *GameBanana) getJSON(
 	response, err := g.request(ctx, method, rawURL, header, requestPolicy{
 		PersistResponseCookies:  true,
 		ClearStoredCookieOnAuth: true,
+		AuthFallback:            authFallbackAnonymous,
 	})
 	if err != nil {
 		return nil, err
@@ -642,11 +647,21 @@ func (e *gameBananaHTTPError) Error() string {
 	return fmt.Sprintf("GAMEBANANA_HTTP_ERROR:%d:%s", e.Status, http.StatusText(e.Status))
 }
 
+// authFallback decides how a request reacts when GameBanana rejects it for
+// authentication: retry once without the saved session, or report the
+// requirement without opening the login window.
+type authFallback int
+
+const (
+	authFallbackNone authFallback = iota
+	authFallbackAnonymous
+)
+
 type requestPolicy struct {
 	Cookie                  string
 	PersistResponseCookies  bool
 	ClearStoredCookieOnAuth bool
-	SkipAuthRetry           bool
+	AuthFallback            authFallback
 }
 
 func (g *GameBanana) request(
@@ -701,14 +716,14 @@ func (g *GameBanana) request(
 	}
 	if response.StatusCode == http.StatusUnauthorized || isLoginRequiredBody(body) {
 		diagnostic.Fields["reason"] = "authentication-required"
-		if !policy.SkipAuthRetry {
-			return g.retryAuthenticatedRequest(ctx, method, rawURL, header, policy, revision)
+		if policy.AuthFallback == authFallbackAnonymous && cookie != "" {
+			return g.retryAnonymousRequest(ctx, method, rawURL, header, policy, revision)
 		}
 		if policy.ClearStoredCookieOnAuth {
 			_, clearErr := g.updateCookie(ctx, revision, "")
 			g.reportRecovery(clearErr, "remove-cookie")
 		}
-		return nil, ErrAuthFailed
+		return nil, ErrAuthRequired
 	}
 	if response.StatusCode == http.StatusForbidden {
 		diagnostic.Fields["reason"] = "access-denied"
@@ -733,15 +748,21 @@ func (g *GameBanana) request(
 	return response, nil
 }
 
-func (g *GameBanana) retryAuthenticatedRequest(
+// retryAnonymousRequest drops the rejected session and retries once without
+// credentials. Authentication failures never open the login window implicitly;
+// only an explicit renderer-driven login does that.
+func (g *GameBanana) retryAnonymousRequest(
 	ctx context.Context,
 	method, rawURL string,
 	header http.Header,
 	policy requestPolicy,
 	revision uint64,
 ) (*http.Response, error) {
-	policy.SkipAuthRetry = true
+	policy.AuthFallback = authFallbackNone
 	policy.Cookie = ""
+	// There is no session left to update, and an anonymous response must not
+	// overwrite the stored cookie.
+	policy.PersistResponseCookies = false
 	header = header.Clone()
 	header.Del("Cookie")
 	current, latest, err := g.cookieSnapshot(ctx)
@@ -749,11 +770,11 @@ func (g *GameBanana) retryAuthenticatedRequest(
 		return nil, err
 	}
 	if latest == revision {
-		if err := g.EnsureSession(ctx); err != nil {
+		if _, err := g.updateCookie(ctx, revision, ""); err != nil {
 			return nil, err
 		}
 	} else if current == "" {
-		// Logout won the race; an old request must not reopen login.
+		// Logout won the race; an old request must not reopen a session.
 		return nil, ErrAuthRequired
 	}
 	return g.request(ctx, method, rawURL, header, policy)
@@ -764,7 +785,7 @@ func (g *GameBanana) validateStoredRMCCookie(ctx context.Context, cookie string)
 		Cookie:                  cookie,
 		PersistResponseCookies:  false,
 		ClearStoredCookieOnAuth: false,
-		SkipAuthRetry:           true,
+		AuthFallback:            authFallbackNone,
 	})
 }
 
@@ -773,11 +794,32 @@ func (g *GameBanana) validateCandidateRMCCookie(ctx context.Context, cookie stri
 		Cookie:                  cookie,
 		PersistResponseCookies:  false,
 		ClearStoredCookieOnAuth: false,
-		SkipAuthRetry:           true,
+		AuthFallback:            authFallbackNone,
 	})
 }
 
-func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, policy requestPolicy) (bool, string, error) {
+func (g *GameBanana) validateRMCCookie(
+	ctx context.Context,
+	cookie string,
+	policy requestPolicy,
+) (bool, string, error) {
+	valid, session, err := g.resolveMemberSession(ctx, cookie, policy)
+	return valid, session.cookie, err
+}
+
+// memberSession is the validated identity of a stored or candidate session.
+type memberSession struct {
+	username string
+	cookie   string
+}
+
+// resolveMemberSession checks a cookie against the member profile endpoint and
+// reports the member identity plus any rotated cookie to persist.
+func (g *GameBanana) resolveMemberSession(
+	ctx context.Context,
+	cookie string,
+	policy requestPolicy,
+) (bool, memberSession, error) {
 	if policy.Cookie == "" {
 		policy.Cookie = cookie
 	}
@@ -789,10 +831,10 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 		policy,
 	)
 	if err != nil {
-		if errors.Is(err, ErrAuthFailed) {
-			return false, "", nil
+		if errors.Is(err, ErrAuthFailed) || errors.Is(err, ErrAuthRequired) {
+			return false, memberSession{}, nil
 		}
-		return false, "", err
+		return false, memberSession{}, err
 	}
 	defer func() { _ = response.Body.Close() }()
 	diagnostic := infra.HTTPDiagnostic(
@@ -805,19 +847,55 @@ func (g *GameBanana) validateRMCCookie(ctx context.Context, cookie string, polic
 	var value map[string]any
 	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
 		diagnostic.Fields["reason"] = "invalid-profile-json"
-		return false, "", infra.AnnotateError(infra.WithCause(ErrAuthCheckFailed, err), diagnostic)
+		return false, memberSession{}, infra.AnnotateError(infra.WithCause(ErrAuthCheckFailed, err), diagnostic)
 	}
 	if value["_sErrorCode"] == "LOGIN_REQUIRED" {
-		return false, "", nil
+		return false, memberSession{}, nil
 	}
-	_, usernameOK := value["_sUsername"].(string)
+	username, usernameOK := value["_sUsername"].(string)
 	_, profileOK := value["_sProfileUrl"].(string)
 	if !usernameOK || !profileOK {
 		diagnostic.Stage = "validate-cookie-schema"
 		diagnostic.Fields["reason"] = "missing-profile-fields"
-		return false, "", infra.AnnotateError(ErrAuthCheckFailed, diagnostic)
+		return false, memberSession{}, infra.AnnotateError(ErrAuthCheckFailed, diagnostic)
 	}
-	return true, mergeSetCookies(cookie, response.Header.Values("Set-Cookie")), nil
+	return true, memberSession{
+		username: username,
+		cookie:   mergeSetCookies(cookie, response.Header.Values("Set-Cookie")),
+	}, nil
+}
+
+// SessionStatus reports the GameBanana member session stored on this device.
+type SessionStatus struct {
+	Authenticated bool   `json:"authenticated"`
+	Username      string `json:"username,omitempty"`
+}
+
+// GetSessionStatus reports the stored session without opening the login window.
+// A missing cookie is answered locally, and a rejected cookie is dropped so the
+// renderer shows the signed-out state.
+func (g *GameBanana) GetSessionStatus(ctx context.Context) (SessionStatus, error) {
+	cookie, revision, err := g.cookieSnapshot(ctx)
+	if err != nil {
+		return SessionStatus{}, err
+	}
+	if cookie == "" {
+		return SessionStatus{}, nil
+	}
+	valid, session, err := g.resolveMemberSession(ctx, cookie, requestPolicy{
+		Cookie:       cookie,
+		AuthFallback: authFallbackNone,
+	})
+	if err != nil {
+		return SessionStatus{}, err
+	}
+	if !valid {
+		if _, err := g.updateCookie(ctx, revision, ""); err != nil {
+			return SessionStatus{}, err
+		}
+		return SessionStatus{}, nil
+	}
+	return SessionStatus{Authenticated: true, Username: session.username}, nil
 }
 
 func (g *GameBanana) getCookie(ctx context.Context) (string, error) {

@@ -352,7 +352,11 @@ func TestRequestCannotMutateReplacedSession(t *testing.T) {
 					http.MethodGet,
 					server.URL+"/apiv13/test",
 					nil,
-					requestPolicy{PersistResponseCookies: true, ClearStoredCookieOnAuth: true, SkipAuthRetry: true},
+					requestPolicy{
+						PersistResponseCookies:  true,
+						ClearStoredCookieOnAuth: true,
+						AuthFallback:            authFallbackNone,
+					},
 				)
 				if r != nil {
 					_ = r.Body.Close()
