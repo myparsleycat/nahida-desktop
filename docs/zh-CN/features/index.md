@@ -11,7 +11,7 @@
 
 ![GameBanana](/features/index/gamebanana-ko.png)
 Nahida Desktop 使用 GameBanana API，让你无需打开网页浏览器也能浏览并下载 GameBanana 模组。
-使用此功能前，必须先登录 GameBanana。
+登录是可选的，仅在点赞等需要账号的操作时才会要求登录。
 
 ## 模组管理器
 

@@ -11,7 +11,7 @@ This page lets you monitor and manage the status of downloads and uploads. It su
 
 ![GameBanana](/features/index/gamebanana-ko.png)
 Nahida Desktop can browse and download GameBanana mods without opening a web browser by using the GameBanana API.
-To use this feature, you must sign in to GameBanana.
+Signing in is optional: it is only requested for actions that need an account, such as liking a mod.
 
 ## Mod Manager
 

@@ -8,17 +8,17 @@ Nahida Desktop では、Web ブラウザを開かずにアプリ内から GameBa
 
 ![画像](/features/gamebanana/login1.png)
 
-この機能を使うには、まず GameBanana にログインする必要があります。
+ログインは任意です。GameBanana アカウントがなくても MOD の閲覧とファイルのダウンロードができます。
 
 ![画像](/features/gamebanana/login2.png)
 
-左側のサイドバーから GameBanana ページへ移動すると、認証が必要な場合は GameBanana のログイン画面が表示されます。
+GameBanana のログイン画面は、GameBanana ツールバーのログインボタンを押したときや MOD にいいねするときなど、必要な場合にのみ表示されます。
 
 Username や Email など、好きなログイン方法を選んでログインできます。
 
 ![画像](/features/index/gamebanana-ko.png)
 
-ログインが正常に完了すると、ログイン画面は自動的に閉じ、GameBanana ページのメイン画面が表示されます。
+ログインが正常に完了すると、ログイン画面は自動的に閉じ、GameBanana ツールバーにアカウントが表示されます。
 
 ## 閲覧
 

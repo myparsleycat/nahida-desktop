@@ -11,7 +11,7 @@
 
 ![GameBanana](/features/index/gamebanana-ko.png)
 Nahida Desktop は GameBanana API を利用し、Web ブラウザを使わずに GameBanana の MOD を閲覧してダウンロードできます。
-この機能を使うには GameBanana へのログインが必要です。
+ログインは任意で、いいねなどアカウントが必要な操作でのみ求められます。
 
 ## MOD マネージャー
 
