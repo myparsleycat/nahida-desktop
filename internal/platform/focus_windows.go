@@ -77,6 +77,13 @@ func (n *Native) PreviousPIDs(currentPID uint32) []uint32 {
 }
 
 func (n *Native) ProcessName(pid uint32) string {
+	return processName(pid)
+}
+
+// processName returns the executable base name of a process, or an empty
+// string when the process cannot be queried, for example because it runs with
+// higher privileges or has already exited.
+func processName(pid uint32) string {
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 	if err != nil {
 		return ""
