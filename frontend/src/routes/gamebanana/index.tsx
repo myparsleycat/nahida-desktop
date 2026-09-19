@@ -21,7 +21,6 @@ import {
 } from "@renderer/hooks/use-gamebanana-data";
 import { useGames } from "@renderer/hooks/use-mod-data";
 import {
-  type GameBananaAuthErrorCode,
   getGameBananaAuthErrorCode,
   runGameBananaEnsureSession,
 } from "@renderer/lib/gamebanana-auth";
@@ -32,7 +31,6 @@ import { modStore } from "@renderer/store/mod";
 import { getGameBananaKeyForImporter } from "@shared/mod";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import type { TFunction } from "i18next";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,16 +43,11 @@ import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
 import { CategoryPanel } from "./-panels/category-panel";
 import { GameHomePanel } from "./-panels/game-home-panel";
 import { ModDetailPanel } from "./-panels/mod-detail-panel";
-import { gameBananaAuthCopyKey } from "./-shared/auth-error";
+import { showGameBananaAuthFailureToast } from "./-shared/auth-error";
 import { CategorySidebar } from "./-sidebars/category-sidebar";
 import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
 
 const EMPTY_GAMES_MAP: Record<string, number> = {};
-
-function showAuthFailureToast(t: TFunction, code: GameBananaAuthErrorCode) {
-  const copy = gameBananaAuthCopyKey(code);
-  toast.error(t(copy.title), { description: t(copy.description) });
-}
 
 export const Route = createFileRoute("/gamebanana/")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -296,7 +289,7 @@ function RouteComponent() {
           if ("stale" in result) {
             return;
           }
-          showAuthFailureToast(t, result.code);
+          showGameBananaAuthFailureToast(t, result.code);
           return;
         }
         await queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
@@ -315,7 +308,7 @@ function RouteComponent() {
       })
       .catch((error: unknown) => {
         Logger.error(error, "GameBananaRoute:handleLogout");
-        showAuthFailureToast(t, getGameBananaAuthErrorCode(error));
+        showGameBananaAuthFailureToast(t, getGameBananaAuthErrorCode(error));
       })
       .finally(() => {
         setIsLoggingOut(false);
@@ -480,6 +473,7 @@ function RouteComponent() {
                 language={i18n.language}
                 selection={selectedMod}
                 modOverviewQuery={modOverviewQuery}
+                isSignedIn={isSignedIn}
               />
             )}
           </div>

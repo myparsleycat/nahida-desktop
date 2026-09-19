@@ -1,8 +1,13 @@
+import { GameBanana } from "@bindings/gamebanana";
 import { Mod } from "@bindings/mod";
 import { Badge } from "@renderer/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import {
+  getGameBananaAuthErrorCode,
+  runGameBananaEnsureSession,
+} from "@renderer/lib/gamebanana-auth";
 import { Logger } from "@renderer/lib/logger";
 import { toErrorMessage } from "@shared/utils";
 import type { TFunction } from "i18next";
@@ -18,6 +23,7 @@ import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
+import { showGameBananaAuthFailureToast } from "../-shared/auth-error";
 import { ErrorState, StatCard } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { formatEpoch, formatNumber } from "../-utils";
@@ -36,6 +42,27 @@ export function ModFilesSidebar({
   const profile = modOverviewQuery.data?.profile;
   const [pendingFileId, setPendingFileId] = useState<number | null>(null);
 
+  const startDownload = async (itemId: number, fileId: number) => {
+    const request = { itemId, fileId, modelName: "Mod" };
+    try {
+      await Mod.DownloadGameBananaFile(request);
+      return;
+    } catch (error) {
+      if (getGameBananaAuthErrorCode(error) !== "GAMEBANANA_AUTH_REQUIRED") {
+        throw error;
+      }
+    }
+
+    const auth = await runGameBananaEnsureSession(() => GameBanana.EnsureSession());
+    if (!auth.ok) {
+      if (!("stale" in auth)) {
+        showGameBananaAuthFailureToast(t, auth.code);
+      }
+      return;
+    }
+    await Mod.DownloadGameBananaFile(request);
+  };
+
   const handleDownload = async (fileId: number) => {
     if (pendingFileId !== null) return;
 
@@ -44,11 +71,7 @@ export function ModFilesSidebar({
 
     setPendingFileId(fileId);
     try {
-      await Mod.DownloadGameBananaFile({
-        itemId: profile._idRow,
-        fileId: selectedFile._idRow,
-        modelName: "Mod",
-      });
+      await startDownload(profile._idRow, selectedFile._idRow);
     } catch (error) {
       toast.error(t("page.gamebanana.download_failed"), {
         description: toErrorMessage(error),

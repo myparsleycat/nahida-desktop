@@ -1,8 +1,17 @@
+import type { GameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
+import type { TFunction } from "i18next";
+import { toast } from "sonner";
+
 export {
     getGameBananaAuthErrorCode,
     isManualRmcPrimaryAction,
     type GameBananaAuthErrorCode,
 } from "@renderer/lib/gamebanana-auth";
+
+export function showGameBananaAuthFailureToast(t: TFunction, code: GameBananaAuthErrorCode) {
+    const copy = gameBananaAuthCopyKey(code);
+    toast.error(t(copy.title), { description: t(copy.description) });
+}
 
 export function gameBananaAuthCopyKey(code: string | null): {
     title: string;
