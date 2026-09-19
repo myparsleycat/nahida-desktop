@@ -12,3 +12,7 @@ frontend/src/shared/types.gen.ts
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Cargo build artifacts (per-machine)
 native/*/target/
+
+# Local AI experiment models, environments, and results
+.tmp/body-shape-ai/
+tools/body-shape-ai/__pycache__/
