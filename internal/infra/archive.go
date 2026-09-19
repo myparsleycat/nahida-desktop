@@ -80,6 +80,9 @@ func (a *Archive) IsArchiveOf(ctx context.Context, archivePath string, extension
 		}
 		return false
 	}
+	if ctx.Err() != nil {
+		return false
+	}
 	for _, allowed := range extensions {
 		if extension == strings.Trim(strings.ToLower(allowed), ".") {
 			return true
