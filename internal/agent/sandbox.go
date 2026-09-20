@@ -503,6 +503,73 @@ func (s *Sandbox) resolve(rootID, relativePath string) (*openedRoot, string, err
 	return root, clean, nil
 }
 
+// ResolveExisting resolves a sandbox path that must already exist. It is one half of the resolver the
+// desktop action registry binds to, so a nil sandbox reports itself as unavailable instead of
+// panicking.
+func (s *Sandbox) ResolveExisting(rootID, relativePath string) (string, error) {
+	if s == nil {
+		return "", errors.New("agent sandbox is unavailable")
+	}
+	root, clean, err := s.resolve(rootID, relativePath)
+	if err != nil {
+		return "", err
+	}
+	if _, err := root.root.Stat(clean); err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(root.view.Path, filepath.FromSlash(clean)))
+	if err != nil {
+		return "", err
+	}
+	if !pathWithin(root.view.Path, resolved) {
+		return "", errSandboxPath
+	}
+	return resolved, nil
+}
+
+// ResolveTarget resolves a sandbox path that may be missing, such as an action's output file. The
+// existing parent chain decides containment, so a symlink pointing outside the root is rejected.
+func (s *Sandbox) ResolveTarget(rootID, relativePath string) (string, error) {
+	if s == nil {
+		return "", errors.New("agent sandbox is unavailable")
+	}
+	root, clean, err := s.resolve(rootID, relativePath)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(root.view.Path, filepath.FromSlash(clean))
+	if resolved, resolveErr := filepath.EvalSymlinks(target); resolveErr == nil {
+		if !pathWithin(root.view.Path, resolved) {
+			return "", errSandboxPath
+		}
+		return resolved, nil
+	} else if !errors.Is(resolveErr, os.ErrNotExist) {
+		return "", resolveErr
+	}
+	parent := filepath.Dir(target)
+	for {
+		resolved, resolveErr := filepath.EvalSymlinks(parent)
+		if resolveErr == nil {
+			if !pathWithin(root.view.Path, resolved) {
+				return "", errSandboxPath
+			}
+			break
+		}
+		if !errors.Is(resolveErr, os.ErrNotExist) {
+			return "", resolveErr
+		}
+		next := filepath.Dir(parent)
+		if next == parent {
+			return "", resolveErr
+		}
+		parent = next
+	}
+	if !pathWithin(root.view.Path, target) {
+		return "", errSandboxPath
+	}
+	return target, nil
+}
+
 func validateRelativePath(path string) (string, error) {
 	if path == "" {
 		path = "."

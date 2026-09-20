@@ -1,20 +1,24 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	agentactions "nahida.live/desktop/internal/agent/actions"
 )
 
 type toolExecutor struct {
 	sandbox *Sandbox
 	skills  *skillCatalog
-	desktop *desktopActionRegistry
+	desktop *agentactions.Registry
 	scope   AgentScope
 	mcp     *mcpRuntime
 }
@@ -23,7 +27,7 @@ type toolExecution struct {
 	Output       any
 	Images       []pendingImage
 	ChangedFiles []string
-	Approval     *approvalProposal
+	Approval     *agentactions.Proposal
 }
 
 func builtInToolDefinitions() []ToolDefinition {
@@ -115,6 +119,19 @@ func builtInToolDefinitions() []ToolDefinition {
 	}
 }
 
+// decodeToolArguments decodes strict tool arguments: unknown fields and trailing values are rejected.
+func decodeToolArguments(raw json.RawMessage, destination any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return fmt.Errorf("decode tool arguments: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("decode tool arguments: multiple values")
+	}
+	return nil
+}
+
 // objectSchema builds a strict object schema. Required stays an empty array rather than nil, because
 // encoding/json renders a nil string slice as "required": null, which providers reject as invalid.
 func objectSchema(properties map[string]any, required ...string) map[string]any {
@@ -190,7 +207,7 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			RootID     string           `json:"rootId"`
 			Operations []PatchOperation `json:"operations"`
 		}
-		if err := decodeActionArguments(call.Arguments, &input); err != nil {
+		if err := decodeToolArguments(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
 		}
 		prepared, targets, err := e.sandbox.PreparePatch(input.RootID, input.Operations)
@@ -201,7 +218,7 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			if patchNeedsApproval(operation.Type) {
 				input.Operations = prepared
 				canonical, _ := json.Marshal(input)
-				return toolExecution{Approval: &approvalProposal{
+				return toolExecution{Approval: &agentactions.Proposal{
 					ActionID:  "sandbox.apply_patch",
 					Arguments: canonical,
 					Summary:   "Modify or delete sandbox files.",
@@ -219,10 +236,10 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			From   string `json:"from"`
 			To     string `json:"to"`
 		}
-		if err := decodeActionArguments(call.Arguments, &input); err != nil {
+		if err := decodeToolArguments(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
 		}
-		source, err := resolveActionPath(e.sandbox, input.RootID, input.From)
+		source, err := e.sandbox.ResolveExisting(input.RootID, input.From)
 		if err != nil {
 			return toolExecution{}, err
 		}
@@ -241,7 +258,7 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			return toolExecution{}, statErr
 		}
 		canonical, _ := json.Marshal(input)
-		return toolExecution{Approval: &approvalProposal{
+		return toolExecution{Approval: &agentactions.Proposal{
 			ActionID: "sandbox.move_path", Arguments: canonical, Summary: "Move or rename a sandbox path.",
 			Target: source + " → " + target, Impact: "This changes local file paths and may affect mod loading.",
 			Kind: "sandbox",
@@ -266,21 +283,18 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		if e.desktop == nil {
 			return toolExecution{}, errors.New("desktop actions are unavailable")
 		}
-		var input desktopActionCall
+		var input agentactions.Call
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
 		}
-		action, _, canonical, approval, err := e.desktop.Prepare(
-			desktopActionContext{sandbox: e.sandbox, scope: e.scope},
-			input,
-		)
+		plan, err := e.desktop.Prepare(e.scope.Type, e.sandbox, input)
 		if err != nil {
 			return toolExecution{}, err
 		}
-		if approval != nil {
-			return toolExecution{Approval: approval}, nil
+		if plan.Proposal != nil {
+			return toolExecution{Approval: plan.Proposal}, nil
 		}
-		output, err := action.execute(ctx, desktopActionContext{sandbox: e.sandbox, scope: e.scope}, canonical)
+		output, err := plan.Run(ctx)
 		return toolExecution{Output: output}, err
 	case "list_mcp_resources":
 		var input struct{ Server string }
@@ -332,12 +346,7 @@ func (e *toolExecutor) ExecuteApproved(
 		if e.desktop == nil {
 			return toolExecution{}, errors.New("desktop actions are unavailable")
 		}
-		output, err := e.desktop.Execute(
-			ctx,
-			desktopActionContext{sandbox: e.sandbox, scope: e.scope},
-			actionID,
-			arguments,
-		)
+		output, err := e.desktop.Execute(ctx, e.scope.Type, e.sandbox, actionID, arguments)
 		return toolExecution{Output: output}, err
 	case "sandbox":
 		switch actionID {

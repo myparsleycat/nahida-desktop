@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -66,7 +67,7 @@ type Service struct {
 	shell            *platform.Shell
 	settings         *setting.Setting
 	skills           *skillCatalog
-	actions          *desktopActionRegistry
+	actions          *agentactions.Registry
 	log              *infra.Log
 	oauth            providerOAuthConfig
 	loginMu          sync.Mutex
@@ -121,9 +122,9 @@ func New(options Options) *Service {
 		emitEvent: options.EventEmit,
 		shell:     options.Shell,
 		settings:  options.Setting,
-		actions: newDesktopActionRegistry(desktopActionDependencies{
-			mod: options.Mod, tools: options.Tools, settings: options.Setting, transfer: options.Transfer,
-			xxmi: options.XXMI, menuMaker: options.MenuMaker, input: options.Input,
+		actions: agentactions.NewRegistry(agentactions.Dependencies{
+			Mod: options.Mod, Tools: options.Tools, Settings: options.Setting, Transfer: options.Transfer,
+			XXMI: options.XXMI, MenuMaker: options.MenuMaker, Input: options.Input,
 		}),
 		workers:   make(map[string]*sessionWorker),
 		oauth:     defaultOpenAIOAuth,
@@ -1009,7 +1010,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			s.emit(sessionID, run.id, 0, "tool-start", call)
 			result, toolErr := executor.Execute(ctx, call)
 			if toolErr != nil && call.Name == "run_desktop_action" {
-				var actionCall desktopActionCall
+				var actionCall agentactions.Call
 				if json.Unmarshal(call.Arguments, &actionCall) == nil {
 					toolErr = s.reportActionError(toolErr, db.AgentApprovalRow{
 						SessionID: sessionID, ActionID: actionCall.ActionID,
@@ -1354,7 +1355,7 @@ func (s *Service) reportActionError(err error, row db.AgentApprovalRow, scope Ag
 func (s *Service) requestApproval(
 	ctx context.Context,
 	sessionID, turnID, toolCallID string,
-	proposal approvalProposal,
+	proposal agentactions.Proposal,
 ) (AgentApproval, error) {
 	client, err := s.dbClient()
 	if err != nil {

@@ -337,3 +337,65 @@ func TestSandboxSearchIsCancellable(t *testing.T) {
 		t.Fatal("ListFiles unexpectedly ignored cancellation")
 	}
 }
+
+func TestSandboxResolveExistingStaysInsideRoot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	directory := filepath.Join(root, "mod")
+	if err := os.Mkdir(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+	resolved, err := sandbox.ResolveExisting("root", "mod")
+	if err != nil || resolved != directory {
+		t.Fatalf("resolved = %q, %v", resolved, err)
+	}
+	if _, err := sandbox.ResolveExisting("root", "../outside"); err == nil {
+		t.Fatal("path escape unexpectedly accepted")
+	}
+	outside := t.TempDir()
+	link := filepath.Join(root, "outside-link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Logf("symlink test skipped: %v", err)
+		return
+	}
+	if _, err := sandbox.ResolveExisting("root", "outside-link"); err == nil {
+		t.Fatal("symlink escape unexpectedly accepted")
+	}
+}
+
+func TestSandboxResolveTargetAllowsMissingFileInsideRoot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "output"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	resolved, err := sandbox.ResolveTarget("root", "output/generated.ini")
+	if err != nil || resolved != filepath.Join(root, "output", "generated.ini") {
+		t.Fatalf("resolved = %q, %v", resolved, err)
+	}
+	if _, err := sandbox.ResolveTarget("root", "../outside.ini"); err == nil {
+		t.Fatal("output path escape unexpectedly accepted")
+	}
+}
+
+func TestSandboxResolversReportUnavailableSandbox(t *testing.T) {
+	t.Parallel()
+	var sandbox *Sandbox
+	if _, err := sandbox.ResolveExisting("root", "mod"); err == nil {
+		t.Fatal("nil sandbox unexpectedly resolved an existing path")
+	}
+	if _, err := sandbox.ResolveTarget("root", "output.ini"); err == nil {
+		t.Fatal("nil sandbox unexpectedly resolved a target path")
+	}
+}
