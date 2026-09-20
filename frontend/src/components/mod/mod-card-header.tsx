@@ -11,6 +11,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
+import { openModAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { stripDisabledPrefix } from "@shared/mod";
@@ -47,6 +48,25 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
     <div className="relative z-10 flex items-center justify-between pb-1">
       <span className="truncate text-sm font-semibold">{stripDisabledPrefix(mod.name)}</span>
       <div className="flex items-center gap-1">
+        <Tooltip disableHoverablePopup>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 hover:bg-accent/20"
+                aria-label={t("page.agent.title")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void openModAgent(navigate, mod);
+                }}
+              />
+            }
+          >
+            <SparklesIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipContent>{t("page.agent.title")}</TooltipContent>
+        </Tooltip>
         {!actions.isNteGame && (
           <>
             <DropdownMenu>

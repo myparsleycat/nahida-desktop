@@ -13,6 +13,7 @@ import {
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
+import { openModAgent } from "@renderer/lib/agent-navigation";
 import { Logger } from "@renderer/lib/logger";
 import type { ModInfo } from "@renderer/types/mod";
 import { useNavigate } from "@tanstack/react-router";
@@ -224,6 +225,14 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
           <ContextMenuItem onClick={() => actions.openRenameDialog(mod)}>
             <PencilIcon className="mr-2 size-4" />
             {t("page.mod.context-menu.rename")}
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuLabel>{t("page.mod.context-menu.group-tools")}</ContextMenuLabel>
+          <ContextMenuItem onClick={() => void openModAgent(navigate, mod)}>
+            <SparklesIcon className="mr-2 size-4" />
+            {t("page.agent.title")}
           </ContextMenuItem>
         </ContextMenuGroup>
         {!actions.isNteGame && (

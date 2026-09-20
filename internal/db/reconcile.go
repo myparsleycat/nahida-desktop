@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type tableInfoRow struct {
@@ -112,7 +114,39 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateGamePathsNteLauncherPath(ctx); err != nil {
 		return err
 	}
+	if err := c.seedBlenderMCPDefault(ctx); err != nil {
+		return err
+	}
 	return c.dropToggleViewerArtifactTable(ctx)
+}
+
+// seedBlenderMCPDefault publishes the built-in Blender transport as a ready-made MCP server entry.
+// It stays disabled: enabling it is the user's signal that they want Nahida to talk to a running
+// Blender instance, and tools that run inside Blender reach outside Nahida's file sandbox.
+func (c *Client) seedBlenderMCPDefault(ctx context.Context) error {
+	seeded, err := c.SchemaState.Get(ctx, SchemaKeyBlenderMCPDefaultSeeded)
+	if err != nil {
+		return err
+	}
+	if seeded != nil && seeded.Value == "1" {
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	row := AgentMCPServerRow{
+		ID:           uuid.NewString(),
+		Name:         "Blender (built-in)",
+		Transport:    BlenderMCPTransport,
+		PublicConfig: `{"endpoint":"localhost:9876"}`,
+		Enabled:      false,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := c.AgentMCPServers.Upsert(ctx, row); err != nil {
+		return fmt.Errorf("seed built-in Blender MCP server: %w", err)
+	}
+
+	return c.SchemaState.Upsert(ctx, SchemaKeyBlenderMCPDefaultSeeded, "1", now)
 }
 
 func (c *Client) listUserTables(ctx context.Context) (map[string]struct{}, error) {

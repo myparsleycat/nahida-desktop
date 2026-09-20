@@ -1,13 +1,17 @@
 package db
 
-const AppSchemaVersion = 4
+const AppSchemaVersion = 6
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
 	SchemaKeyGamePathsNTELauncher        = "game_paths_nte_launcher_path"
 	SchemaKeyToggleViewerArtifactDropped = "toggle_viewer_artifact_dropped"
+	SchemaKeyBlenderMCPDefaultSeeded     = "blender_mcp_default_seeded"
 	NTEImporter                          = "NTE"
 	NTEGameExeKeepSuffix                 = "%htgame.exe"
+	// BlenderMCPTransport names the built-in Blender compatibility layer. It is the transport value
+	// the agent package recognizes for servers that Nahida hosts itself instead of launching.
+	BlenderMCPTransport = "blender"
 )
 
 type ColumnType string
@@ -155,6 +159,80 @@ var TableSpecs = []TableSpec{
 		},
 	},
 	{
+		Name: "agent_session",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "scope_type", Type: TypeText, NotNull: true},
+			{Name: "mod_path", Type: TypeText},
+			{Name: "mod_name", Type: TypeText},
+			{Name: "title", Type: TypeText, NotNull: true},
+			{Name: "durable_summary", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "created_at", Type: TypeText, NotNull: true},
+			{Name: "updated_at", Type: TypeText, NotNull: true},
+		},
+		Indexes: []IndexSpec{
+			{Name: "agent_session_scope_updated_idx", Columns: []string{"scope_type", "updated_at"}},
+		},
+	},
+	{
+		Name: "agent_event",
+		Columns: []ColumnSpec{
+			{Name: "session_id", Type: TypeText, NotNull: true},
+			{Name: "sequence", Type: TypeInteger, NotNull: true},
+			{Name: "turn_id", Type: TypeText, NotNull: true},
+			{Name: "event_type", Type: TypeText, NotNull: true},
+			{Name: "payload", Type: TypeText, NotNull: true},
+			{Name: "created_at", Type: TypeText, NotNull: true},
+		},
+		CompositePrimaryKey: []string{"session_id", "sequence"},
+		ForeignKeys: []ForeignKeySpec{{
+			Columns: []string{"session_id"}, RefTable: "agent_session", RefColumns: []string{"id"},
+			OnDelete: FKCascade, OnUpdate: FKNoAction,
+		}},
+	},
+	{
+		Name: "agent_approval",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "session_id", Type: TypeText, NotNull: true},
+			{Name: "turn_id", Type: TypeText, NotNull: true},
+			{Name: "tool_call_id", Type: TypeText, NotNull: true},
+			{Name: "action_id", Type: TypeText, NotNull: true},
+			{Name: "arguments", Type: TypeText, NotNull: true},
+			{Name: "summary", Type: TypeText, NotNull: true},
+			{Name: "target", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "impact", Type: TypeText, NotNull: true},
+			{Name: "status", Type: TypeText, NotNull: true},
+			{Name: "result", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "error", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "created_at", Type: TypeText, NotNull: true},
+			{Name: "decided_at", Type: TypeText},
+			{Name: "completed_at", Type: TypeText},
+		},
+		Indexes: []IndexSpec{
+			{Name: "agent_approval_session_status_idx", Columns: []string{"session_id", "status"}},
+			{Name: "agent_approval_tool_call_idx", Columns: []string{"session_id", "tool_call_id"}, Unique: true},
+		},
+		ForeignKeys: []ForeignKeySpec{{
+			Columns: []string{"session_id"}, RefTable: "agent_session", RefColumns: []string{"id"},
+			OnDelete: FKCascade, OnUpdate: FKNoAction,
+		}},
+	},
+	{
+		Name: "agent_mcp_server",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "name", Type: TypeText, NotNull: true},
+			{Name: "transport", Type: TypeText, NotNull: true},
+			{Name: "public_config", Type: TypeText, NotNull: true},
+			{Name: "secret_blob", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "enabled", Type: TypeInteger, NotNull: true, Boolean: true, DefaultSQL: sqlDefault("0")},
+			{Name: "created_at", Type: TypeText, NotNull: true},
+			{Name: "updated_at", Type: TypeText, NotNull: true},
+		},
+		Indexes: []IndexSpec{{Name: "agent_mcp_server_name_idx", Columns: []string{"name"}, Unique: true}},
+	},
+	{
 		Name: "mod_scan_cache",
 		Columns: []ColumnSpec{
 			{Name: "path", Type: TypeText, PrimaryKey: true, NotNull: true},
@@ -288,6 +366,55 @@ type ModScanCacheRow struct {
 	Mtime     int64
 	Payload   string
 	UpdatedAt string
+}
+
+type AgentSessionRow struct {
+	ID             string
+	ScopeType      string
+	ModPath        *string
+	ModName        *string
+	Title          string
+	DurableSummary string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type AgentEventRow struct {
+	SessionID string
+	Sequence  int64
+	TurnID    string
+	EventType string
+	Payload   string
+	CreatedAt string
+}
+
+type AgentApprovalRow struct {
+	ID          string
+	SessionID   string
+	TurnID      string
+	ToolCallID  string
+	ActionID    string
+	Arguments   string
+	Summary     string
+	Target      string
+	Impact      string
+	Status      string
+	Result      string
+	Error       string
+	CreatedAt   string
+	DecidedAt   *string
+	CompletedAt *string
+}
+
+type AgentMCPServerRow struct {
+	ID           string
+	Name         string
+	Transport    string
+	PublicConfig string
+	SecretBlob   string
+	Enabled      bool
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 type ScriptType string

@@ -52,17 +52,30 @@ func (t *trackedFixInspection) warningHidden() bool {
 	return t.dismissedResult != nil && equalFixInspectionResult(*t.dismissedResult, t.record.Result)
 }
 
+// DiagnoseModForFix runs a one-off inspection. Unlike InspectModForFix it keeps no state, so
+// read-only callers such as the agent neither register a fix warning nor start watchers.
+func (t *Service) DiagnoseModForFix(ctx context.Context, modPath, importer string) (*FixInspectionResult, error) {
+	if t == nil || t.inspectors == nil {
+		return &FixInspectionResult{Importer: strings.ToUpper(importer)}, nil
+	}
+
+	resolved, err := resolveFixInspectionTarget(modPath)
+	if err != nil {
+		return nil, err
+	}
+	return t.inspectors.Inspect(ctx, resolved, importer)
+}
+
 // Only actionable results are retained and watched for changes.
 func (t *Service) InspectModForFix(ctx context.Context, modPath, importer string) (*FixInspectionResult, error) {
 	if t == nil || t.inspectors == nil {
 		return &FixInspectionResult{Importer: strings.ToUpper(importer)}, nil
 	}
 
-	resolved, err := filepath.Abs(modPath)
+	resolved, err := resolveFixInspectionTarget(modPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve fix inspection target %q: %w", modPath, err)
+		return nil, err
 	}
-	resolved = filepath.Clean(resolved)
 
 	t.fixInspectionRunMu.Lock()
 	defer t.fixInspectionRunMu.Unlock()
@@ -589,6 +602,14 @@ func closeFixInspectionWatchers(tracked []*trackedFixInspection) error {
 		}
 	}
 	return result
+}
+
+func resolveFixInspectionTarget(modPath string) (string, error) {
+	resolved, err := filepath.Abs(modPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve fix inspection target %q: %w", modPath, err)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func fixInspectionKey(path string) string {

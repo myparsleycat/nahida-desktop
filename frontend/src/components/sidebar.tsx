@@ -1,6 +1,7 @@
 import { Shell } from "@bindings/platform";
 import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { openGlobalAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { gameBananaStore } from "@renderer/store/gamebanana";
@@ -18,6 +19,7 @@ import {
   HardDriveIcon,
   SettingsIcon,
   Share2Icon,
+  SparklesIcon,
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -73,6 +75,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isSharePage = pathname.startsWith("/drive/share");
   const isModPage = pathname.startsWith("/mod");
   const isToolsPage = pathname.startsWith("/tools");
+  const isAgentPage = pathname.startsWith("/agent");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
   const isDevelopmentPage = pathname.startsWith("/development");
@@ -216,6 +219,24 @@ export function Sidebar({ className }: { className?: string }) {
               <WrenchIcon className={cn(iconSize)} />
             </TooltipTrigger>
             <TooltipContent side="right">Tools</TooltipContent>
+          </Tooltip>
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isAgentPage)}
+                  aria-current={isAgentPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => void openGlobalAgent(navi)}
+                />
+              }
+            >
+              <SparklesIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("page.agent.title")}</TooltipContent>
           </Tooltip>
 
           <Separator orientation="horizontal" />

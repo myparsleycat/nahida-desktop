@@ -19,6 +19,10 @@ type Client struct {
 	ImageCache              ImageCacheStore
 	TouchProfileVisionCache TouchProfileVisionCacheStore
 	ModScanCache            ModScanCacheStore
+	AgentSessions           AgentSessionsStore
+	AgentEvents             AgentEventsStore
+	AgentApprovals          AgentApprovalsStore
+	AgentMCPServers         AgentMCPServersStore
 	Scripts                 ScriptsStore
 	ScriptPresets           ScriptPresetsStore
 	ScriptPresetItems       ScriptPresetItemsStore
@@ -44,6 +48,10 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.ImageCache = ImageCacheStore{c: c}
 	c.TouchProfileVisionCache = TouchProfileVisionCacheStore{c: c}
 	c.ModScanCache = ModScanCacheStore{c: c}
+	c.AgentSessions = AgentSessionsStore{c: c}
+	c.AgentEvents = AgentEventsStore{c: c}
+	c.AgentApprovals = AgentApprovalsStore{c: c}
+	c.AgentMCPServers = AgentMCPServersStore{c: c}
 	c.Scripts = ScriptsStore{c: c}
 	c.ScriptPresets = ScriptPresetsStore{c: c}
 	c.ScriptPresetItems = ScriptPresetItemsStore{c: c}

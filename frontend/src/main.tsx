@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
+import "./markdown.css";
 import { routeTree } from "./routeTree.gen";
 
 document.documentElement.style.setProperty("--app-titlebar-height", `${TITLE_BAR_HEIGHT}px`);
