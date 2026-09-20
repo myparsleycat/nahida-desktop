@@ -5,6 +5,37 @@ import (
 	"testing"
 )
 
+func TestTextureRenderSkillAndReferencesAreEmbedded(t *testing.T) {
+	t.Parallel()
+	catalog := newSkillCatalog(t.TempDir())
+	views := catalog.Reload()
+	found := map[string]bool{"texture-render-diagnosis": false, "gimi-texfx-transparency": false}
+	for _, view := range views {
+		if _, ok := found[view.Name]; ok {
+			found[view.Name] = view.Error == "" && view.Source == "built-in" && view.Description != ""
+		}
+	}
+	for name, available := range found {
+		if !available {
+			t.Fatalf("skill %s is not discoverable", name)
+		}
+	}
+	for _, reference := range []struct{ skill, path string }{
+		{"texture-render-diagnosis", ""},
+		{"texture-render-diagnosis", "references/uv_selection.py"},
+		{"gimi-texfx-transparency", ""},
+		{"gimi-texfx-transparency", "references/texfx-transparency.md"},
+	} {
+		content, err := catalog.Load(reference.skill, reference.path)
+		if err != nil || len(content) == 0 {
+			t.Fatalf("load %s %q: %v", reference.skill, reference.path, err)
+		}
+	}
+	if _, err := catalog.Load("texture-render-diagnosis", "references/texfx-transparency.md"); err == nil {
+		t.Fatal("TexFx-specific reference is still exposed as a common texture reference")
+	}
+}
+
 func TestBuiltInModDiagnosisSkill(t *testing.T) {
 	t.Parallel()
 	catalog := newSkillCatalog(t.TempDir())

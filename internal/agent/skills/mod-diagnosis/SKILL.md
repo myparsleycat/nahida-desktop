@@ -40,6 +40,8 @@ For example, if both `TextureOverrideChongyunHead` and `TextureOverrideChongyunB
 
 ## 1. Establish the symptom and scope
 
+For toggle-dependent transparency gaps, DDS effect masks, abrupt transparency gradients, or opaque/transparent color seams, load `texture-render-diagnosis`. It provides importer-independent channel inspection and reversible DDS trials; do not route these symptoms automatically to a hash fixer or ORFix. Load `gimi-texfx-transparency` only after confirming both GIMI and an active TexFx transparency call on the affected draw. Other importers, GIMI without TexFx on that path, and uncertain cases remain on the common workflow.
+
 - Identify the game/importer, affected object or character part, expected result, visible symptom, when it started, and whether it affects one mod or the whole setup.
 - Read the active scope and query available XXMI or desktop state before asking the user for a path, importer, version, or running process that Nahida can already determine locally. Ask only when the available values conflict or remain ambiguous.
 - Inspect the authorized sandbox for INIs, resources, bundled instructions, dependencies, disabled files, and logs. Do not claim to inspect the game, launcher, sibling mods, or directories outside the exposed roots.
