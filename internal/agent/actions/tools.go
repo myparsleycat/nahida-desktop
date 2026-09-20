@@ -12,6 +12,7 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 	if deps.Tools == nil {
 		return
 	}
+	registerTextureDiagnosticActions(registry)
 	registry.add(
 		simpleAction("tools.get_scripts", "List installed local fix scripts.", "tools", RiskRead, objectSchema(nil),
 			func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
