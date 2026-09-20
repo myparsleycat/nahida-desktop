@@ -8,6 +8,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/drive"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/menumaker"
@@ -20,36 +21,38 @@ import (
 )
 
 type runtime struct {
-	startup         *startupWork
-	proxyRelay      *infra.ProxyRelay
-	appData         *appdata.Store
-	log             *infra.Log
-	store           *infra.Store
-	http            *infra.Client
-	cdnTrace        *infra.CDNTrace
-	fs              *platform.FS
-	native          *platform.Native
-	updater         *infra.Updater
-	protocol        *infra.Protocol
-	download        *infra.Download
-	archive         *infra.Archive
-	agent           *agent.Service
-	auth            *auth.Auth
-	setting         *setting.Setting
-	drive           *drive.Drive
-	transfer        *transfer.Transfer
-	gamebanana      *gamebanana.GameBanana
-	menuMaker       *menumaker.MenuMaker
-	mod             *mod.Mod
-	xxmi            *xxmi.XXMI
-	tools           *tools.Tools
-	dialog          *platform.Dialog
-	shell           *platform.Shell
-	input           *platform.Input
-	window          *Window
-	localHTTP       *infra.LocalHTTP
-	gameBananaLogin *gameBananaLogin
-	notifications   *notifications.NotificationService
+	startup           *startupWork
+	proxyRelay        *infra.ProxyRelay
+	appData           *appdata.Store
+	log               *infra.Log
+	store             *infra.Store
+	http              *infra.Client
+	cdnTrace          *infra.CDNTrace
+	fs                *platform.FS
+	native            *platform.Native
+	updater           *infra.Updater
+	protocol          *infra.Protocol
+	download          *infra.Download
+	archive           *infra.Archive
+	agent             *agent.Service
+	auth              *auth.Auth
+	setting           *setting.Setting
+	drive             *drive.Drive
+	transfer          *transfer.Transfer
+	gamebanana        *gamebanana.GameBanana
+	menuMaker         *menumaker.MenuMaker
+	mod               *mod.Mod
+	xxmi              *xxmi.XXMI
+	tools             *tools.Tools
+	dialog            *platform.Dialog
+	shell             *platform.Shell
+	input             *platform.Input
+	elevated          *elevated.Client
+	elevatedLifecycle *elevatedLifecycle
+	window            *Window
+	localHTTP         *infra.LocalHTTP
+	gameBananaLogin   *gameBananaLogin
+	notifications     *notifications.NotificationService
 }
 
 func newRuntime() *runtime {
@@ -70,6 +73,11 @@ func newRuntime() *runtime {
 		_ = infra.ReportError(log, err, "FS", infra.Diagnostic{Operation: "write-access", Stage: stage, Fields: fields})
 	})
 	input := platform.NewInput()
+	elevatedClient := elevated.NewClient()
+	elevatedHelper := newElevatedLifecycle(elevatedClient, func(err error, stage string) {
+		reportElevatedHelperError(log, err, stage)
+	})
+	input.UseElevatedInput(elevatedClient)
 	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
 			log,
@@ -133,7 +141,7 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil, nil))
 	rt := &runtime{
 		startup:  newStartupWork(),
 		log:      log,
@@ -188,10 +196,12 @@ func newRuntime() *runtime {
 				})
 			},
 		}),
-		dialog: dialog,
-		shell:  shell,
-		input:  input,
-		window: window,
+		dialog:            dialog,
+		shell:             shell,
+		input:             input,
+		elevated:          elevatedClient,
+		elevatedLifecycle: elevatedHelper,
+		window:            window,
 		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
 			Version: platform.AppVersion,
 			Log:     log,
@@ -231,7 +241,7 @@ func newRuntime() *runtime {
 		}
 	}
 	settings.UseHooks(
-		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil),
+		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil, nil),
 	)
 	return rt
 }

@@ -258,6 +258,55 @@ func TestSendKeysPostsKeysToBackgroundWindow(t *testing.T) {
 	}
 }
 
+func TestSendKeysRoutesHigherIntegrityTargetThroughHelper(t *testing.T) {
+	title := "Nahida Elevated Input Test " + t.Name()
+	window := newTestWindow(t, title)
+	input := NewInput()
+	window.restrictTo(input)
+	var integrityCalls atomic.Int32
+	input.integrityLevel = func(uint32) (uint32, error) {
+		if integrityCalls.Add(1) == 1 {
+			return 0x2000, nil
+		}
+		return 0x3000, nil
+	}
+
+	want := KeyResult{
+		Window:   WindowInfo{PID: uint32(os.Getpid())},
+		Delivery: KeyDeliveryForeground,
+		Keys:     []string{"vk_f10"},
+	}
+	sender := &testElevatedInputSender{result: want}
+	input.UseElevatedInput(sender)
+	request := KeyRequest{Target: WindowTarget{Title: title}, Keys: []string{"vk_f10"}}
+	got, err := input.SendKeys(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sender.calls != 1 || !slices.Equal(got.Keys, want.Keys) {
+		t.Fatalf("helper calls = %d, result = %+v", sender.calls, got)
+	}
+	if sender.readyCalls != 1 {
+		t.Fatalf("helper readiness calls = %d, want 1", sender.readyCalls)
+	}
+}
+
+type testElevatedInputSender struct {
+	result     KeyResult
+	calls      int
+	readyCalls int
+}
+
+func (s *testElevatedInputSender) EnsureReady(context.Context) error {
+	s.readyCalls++
+	return nil
+}
+
+func (s *testElevatedInputSender) SendKeys(context.Context, KeyRequest) (KeyResult, error) {
+	s.calls++
+	return s.result, nil
+}
+
 func TestSendKeysDoesNotInjectWithoutForeground(t *testing.T) {
 	title := "Nahida Input Test " + t.Name()
 	window := newTestWindow(t, title)

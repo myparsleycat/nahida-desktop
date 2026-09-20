@@ -98,6 +98,11 @@ func buildSpecs() map[string]spec {
 		s.opts.Hooks.logLevelChanged(asString(value))
 		return nil
 	}
+	elevatedHelper := boolSpec(definitionsByKey[KeyGeneralElevatedHelperEnabled], false)
+	elevatedHelper.afterSet = func(s *Setting, _ context.Context, value any) error {
+		s.opts.Hooks.elevatedHelperChanged(asBool(value))
+		return nil
+	}
 	specs := map[string]spec{
 		KeyGeneralRunOnStartup: runOnStartup,
 		KeyGeneralLanguage: {
@@ -169,6 +174,7 @@ func buildSpecs() map[string]spec {
 			definitionsByKey[KeyGeneralTitlebarActivityBadgeClickNavigate],
 			true,
 		),
+		KeyGeneralElevatedHelperEnabled: elevatedHelper,
 
 		KeyModArchiveExtractPathMode: enumSpec(
 			definitionsByKey[KeyModArchiveExtractPathMode],

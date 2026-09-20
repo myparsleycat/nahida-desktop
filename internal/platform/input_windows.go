@@ -4,6 +4,7 @@ package platform
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
@@ -99,14 +101,16 @@ type Input struct {
 	mu         sync.Mutex
 	diagnostic func(error, string, map[string]any)
 
-	enumerate     func() []win.HWND
-	isVisible     func(win.HWND) bool
-	foreground    func() win.HWND
-	focus         func(win.HWND)
-	processOf     func(uint32) string
-	postMessage   func(win.HWND, co.WM, win.WPARAM, win.LPARAM) error
-	sendInput     func([]win.INPUT) (int, error)
-	mapVirtualKey func(co.VK) uint32
+	enumerate      func() []win.HWND
+	isVisible      func(win.HWND) bool
+	foreground     func() win.HWND
+	focus          func(win.HWND)
+	processOf      func(uint32) string
+	postMessage    func(win.HWND, co.WM, win.WPARAM, win.LPARAM) error
+	sendInput      func([]win.INPUT) (int, error)
+	mapVirtualKey  func(co.VK) uint32
+	integrityLevel func(uint32) (uint32, error)
+	elevated       ElevatedInputSender
 
 	focusTimeout time.Duration
 	focusPoll    time.Duration
@@ -122,11 +126,22 @@ func NewInput() *Input {
 		postMessage: func(handle win.HWND, message co.WM, wParam win.WPARAM, lParam win.LPARAM) error {
 			return handle.PostMessage(message, wParam, lParam)
 		},
-		sendInput:     win.SendInput,
-		mapVirtualKey: defaultMapVirtualKey,
-		focusTimeout:  focusWaitTimeout,
-		focusPoll:     focusPollInterval,
+		sendInput:      win.SendInput,
+		mapVirtualKey:  defaultMapVirtualKey,
+		integrityLevel: processIntegrityLevel,
+		focusTimeout:   focusWaitTimeout,
+		focusPoll:      focusPollInterval,
 	}
+}
+
+// UseElevatedInput routes requests blocked by UIPI through the optional
+// elevated helper. Passing nil disables elevated delivery.
+//
+//wails:ignore
+func (i *Input) UseElevatedInput(sender ElevatedInputSender) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.elevated = sender
 }
 
 //wails:ignore
@@ -205,24 +220,40 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		chords = append(chords, chord)
 	}
 
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
 	if err := ctx.Err(); err != nil {
 		return KeyResult{}, err
 	}
+	// Resolve the target and integrity before taking the send lock so a helper
+	// launch that waits on UAC never blocks other Input operations.
 	record, err := selectWindow(i.enumerateRecords(), request.Target)
 	if err != nil {
 		i.report(err, "resolve", map[string]any{"target": request.Target.describe(), "keys": keys})
 		return KeyResult{}, err
 	}
-
 	fields := map[string]any{
 		"target":   request.Target.describe(),
 		"delivery": string(options.delivery),
 		"keys":     keys,
 		"window":   record.describe(),
 	}
+	currentLevel, levelErr := i.integrityLevel(windows.GetCurrentProcessId())
+	if levelErr != nil {
+		err = fmt.Errorf("read current process integrity: %w", levelErr)
+		i.report(err, "integrity", fields)
+		return KeyResult{}, err
+	}
+	targetLevel, levelErr := i.integrityLevel(record.pid)
+	if levelErr != nil {
+		err = fmt.Errorf("read target process integrity: %w", levelErr)
+		i.report(err, "integrity", fields)
+		return KeyResult{}, err
+	}
+	if targetLevel > currentLevel {
+		return i.sendElevatedKeys(ctx, request, record, fields)
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	if options.delivery == KeyDeliveryMessage {
 		err = i.sendMessageKeys(ctx, record, chords, options)
 	} else {
@@ -233,6 +264,90 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		return KeyResult{}, err
 	}
 	return KeyResult{Window: record.info(), Delivery: options.delivery, Keys: keys}, nil
+}
+
+// sendElevatedKeys readies the helper before taking the send lock, then holds
+// the lock for the send itself. A connection that drops in between is reported
+// instead of restarting the helper while the lock is held.
+func (i *Input) sendElevatedKeys(
+	ctx context.Context,
+	request KeyRequest,
+	record *windowRecord,
+	fields map[string]any,
+) (KeyResult, error) {
+	i.mu.Lock()
+	sender := i.elevated
+	i.mu.Unlock()
+	if sender == nil {
+		err := fmt.Errorf(
+			"%w: target pid %d has a higher integrity level; enable the elevated helper in settings",
+			ErrElevatedHelperRequired,
+			record.pid,
+		)
+		i.report(err, "elevated", fields)
+		return KeyResult{}, err
+	}
+	if err := sender.EnsureReady(ctx); err != nil {
+		i.report(err, "elevated", fields)
+		return KeyResult{}, err
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	result, err := sender.SendKeys(ctx, request)
+	if err != nil {
+		i.report(err, "elevated", fields)
+	}
+	return result, err
+}
+
+func processIntegrityLevel(pid uint32) (uint32, error) {
+	process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = windows.CloseHandle(process) }()
+
+	var token windows.Token
+	if err := windows.OpenProcessToken(process, windows.TOKEN_QUERY, &token); err != nil {
+		return 0, err
+	}
+	defer func() { _ = token.Close() }()
+
+	var size uint32
+	err = windows.GetTokenInformation(token, windows.TokenIntegrityLevel, nil, 0, &size)
+	if !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
+		return 0, err
+	}
+	if size == 0 {
+		return 0, errors.New("integrity token information is empty")
+	}
+	buffer := make([]byte, size)
+	if err := windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &buffer[0], size, &size); err != nil {
+		return 0, err
+	}
+
+	// Parse TOKEN_MANDATORY_LABEL and its trailing SID from raw bytes. The
+	// x/sys SID helpers call GetSidSubAuthorityCount/SubAuthority, which hand
+	// an interior SID pointer back to Go; under -race checkptr rejects that
+	// uintptr -> pointer conversion as pointing outside any Go allocation.
+	// A SID is Revision(1) + SubAuthorityCount(1) + IdentifierAuthority(6) +
+	// SubAuthorityCount * DWORD(little-endian), so the last DWORD is read
+	// directly without leaving Go memory.
+	labelSize := int(unsafe.Sizeof(windows.Tokenmandatorylabel{}))
+	const sidHeaderLen = 8
+	if len(buffer) < labelSize+sidHeaderLen {
+		return 0, fmt.Errorf("integrity token information too short: %d bytes", len(buffer))
+	}
+	sid := buffer[labelSize:]
+	count := int(sid[1])
+	if count == 0 {
+		return 0, errors.New("integrity SID has no sub-authority")
+	}
+	if len(sid) < sidHeaderLen+4*count {
+		return 0, fmt.Errorf("integrity SID truncated: need %d bytes, have %d", sidHeaderLen+4*count, len(sid))
+	}
+	return binary.LittleEndian.Uint32(sid[sidHeaderLen+4*(count-1):]), nil
 }
 
 func (i *Input) report(err error, stage string, fields map[string]any) {
