@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"nahida.live/desktop/internal/elevated"
@@ -15,9 +16,17 @@ type elevatedLifecycle struct {
 	client *elevated.Client
 	report func(err error, stage string)
 
-	gate     sync.Mutex
-	stopping bool
-	startup  *elevatedStartup
+	// ctx is cancelled by shutdown so an in-flight client start releases its
+	// pipe wait instead of holding the worker until a UAC prompt resolves.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	gate sync.Mutex
+	// generation advances whenever disable or shutdown invalidates a startup
+	// read, so a resolve that finished after its gate section can be rejected.
+	generation uint64
+	stopping   bool
+	startup    *elevatedStartup
 
 	mu         sync.Mutex
 	cond       *sync.Cond
@@ -38,6 +47,7 @@ type elevatedStartup struct {
 func newElevatedLifecycle(client *elevated.Client, report func(err error, stage string)) *elevatedLifecycle {
 	lifecycle := &elevatedLifecycle{client: client, report: report, done: make(chan struct{})}
 	lifecycle.cond = sync.NewCond(&lifecycle.mu)
+	lifecycle.ctx, lifecycle.cancel = context.WithCancel(context.Background())
 	return lifecycle
 }
 
@@ -72,20 +82,25 @@ func (l *elevatedLifecycle) startAsync(body func(ctx context.Context)) {
 	}()
 }
 
-// request rechecks the desired state under the gate and enqueues it. Holding
-// the gate excludes a concurrent disable or shutdown, so a startup read that
-// lost the race applies nothing.
+// request resolves the desired state outside the gate, then enqueues it only
+// when no disable or shutdown invalidated the read while it ran.
 func (l *elevatedLifecycle) request(resolve func() (enabled bool, ok bool)) {
 	if l == nil {
 		return
 	}
 	l.gate.Lock()
-	defer l.gate.Unlock()
 	if l.stopping {
+		l.gate.Unlock()
 		return
 	}
+	generation := l.generation
+	l.gate.Unlock()
+
 	enabled, ok := resolve()
-	if !ok {
+
+	l.gate.Lock()
+	defer l.gate.Unlock()
+	if !ok || l.stopping || l.generation != generation {
 		return
 	}
 	l.enqueue(enabled)
@@ -113,8 +128,10 @@ func (l *elevatedLifecycle) shutdown() {
 	if l == nil {
 		return
 	}
+	l.cancel()
 	l.gate.Lock()
 	l.stopping = true
+	l.generation++
 	startup := l.startup
 	if startup != nil {
 		startup.cancel()
@@ -136,6 +153,7 @@ func (l *elevatedLifecycle) shutdown() {
 
 func (l *elevatedLifecycle) cancelStartup() {
 	l.gate.Lock()
+	l.generation++
 	startup := l.startup
 	if startup != nil {
 		startup.cancel()
@@ -182,11 +200,15 @@ func (l *elevatedLifecycle) run() {
 		var err error
 		if enabled {
 			stage = "start"
-			err = l.client.Start(context.Background())
+			err = l.client.Start(l.ctx)
 		} else {
 			err = l.client.Close()
 		}
-		l.report(err, stage)
+		// A cancellation means shutdown or a racing disable superseded this
+		// start; it is an expected stop, not a failure worth reporting.
+		if err != nil && !errors.Is(err, context.Canceled) {
+			l.report(err, stage)
+		}
 	}
 }
 
@@ -196,8 +218,8 @@ func (rt *runtime) startElevatedHelperIfEnabled() {
 	}
 	lifecycle := rt.elevatedLifecycle
 	lifecycle.startAsync(func(ctx context.Context) {
-		// Recheck under the gate immediately before enqueueing, so a disable or
-		// shutdown that started first cannot be overtaken by this startup.
+		// Resolve the setting off the gate, then let request reject it if a
+		// disable or shutdown invalidated the read while it was in flight.
 		lifecycle.request(func() (bool, bool) {
 			if ctx.Err() != nil {
 				return false, false

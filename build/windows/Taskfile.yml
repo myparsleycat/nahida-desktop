@@ -38,6 +38,8 @@ tasks:
         vars:
           APP_VERSION: '{{.APP_VERSION}}'
           ARCH: '{{.ARCH | default "amd64"}}'
+          OBFUSCATED: '{{.OBFUSCATED}}'
+          GARBLE_ARGS: '{{.GARBLE_ARGS}}'
       - task: generate:syso
         vars:
           APP_VERSION: '{{.APP_VERSION}}'
@@ -57,7 +59,7 @@ tasks:
     internal: true
     cmds:
       - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon build/windows/icon.ico -manifest build/windows/elevated-helper.exe.manifest -info {{if .APP_VERSION}}bin/windows-info.json{{else}}build/windows/info.json{{end}} -out cmd/nahida-elevated-helper/elevated_helper_windows_{{.ARCH | default "amd64"}}.syso
-      - go build -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "internal/elevated/bundle/nahida-elevated-helper.exe" ./cmd/nahida-elevated-helper
+      - '{{if eq .OBFUSCATED "true"}}garble {{.GARBLE_ARGS}} build{{else}}go build{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "internal/elevated/bundle/nahida-elevated-helper.exe" ./cmd/nahida-elevated-helper'
       - cmd: powershell -NoProfile -Command "Remove-Item -LiteralPath './cmd/nahida-elevated-helper/elevated_helper_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
         platforms: [windows]
     env:

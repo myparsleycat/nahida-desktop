@@ -62,30 +62,54 @@ type shellExecuteInfoW struct {
 
 // Client owns one authenticated connection to the elevated helper.
 type Client struct {
-	mu      sync.Mutex
-	conn    net.Conn
-	process windows.Handle
-	pid     uint32
-	secret  string
-	wanted  bool
-	nextID  atomic.Uint64
+	mu         sync.Mutex
+	conn       net.Conn
+	process    windows.Handle
+	pid        uint32
+	secret     string
+	wanted     bool
+	generation uint64
+	nextID     atomic.Uint64
+
+	// startMu serializes launch attempts so a lifecycle start and an input
+	// EnsureReady cannot race two helpers. It is separate from mu because it is
+	// held across launch, and Close must stay reachable while ShellExecuteExW
+	// waits on a UAC prompt.
+	startMu sync.Mutex
 }
 
 func NewClient() *Client {
 	return &Client{}
 }
 
+// Start enables the helper and connects to it. Launching may wait on a UAC
+// prompt, so it runs without holding the state lock; Close can invalidate the
+// attempt and the launched helper is discarded when it returns.
 func (c *Client) Start(ctx context.Context) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.wanted = true
-	return c.startLocked(ctx)
+	c.mu.Unlock()
+	return c.start(ctx)
 }
 
-func (c *Client) startLocked(ctx context.Context) error {
+// start launches the helper and connects to it. It holds startMu, not mu, while
+// the launch and pipe dial are in flight, and captures generation so a Close
+// that lands mid-launch wins.
+func (c *Client) start(ctx context.Context) error {
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+
+	c.mu.Lock()
 	if c.conn != nil {
+		c.mu.Unlock()
 		return nil
 	}
+	if !c.wanted || ctx.Err() != nil {
+		c.mu.Unlock()
+		return context.Canceled
+	}
+	generation := c.generation
+	c.mu.Unlock()
 
 	executable, err := os.Executable()
 	if err != nil {
@@ -150,6 +174,10 @@ func (c *Client) startLocked(ctx context.Context) error {
 		discardStartedHelper(process)
 		return fmt.Errorf("verify elevated helper image %q, expected %q", processPath, helper)
 	}
+	if c.invalidated(generation) || ctx.Err() != nil {
+		discardStartedHelper(process)
+		return context.Canceled
+	}
 
 	connectCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -170,11 +198,34 @@ func (c *Client) startLocked(ctx context.Context) error {
 		return fmt.Errorf("verify elevated helper process: pid %d, expected %d", serverPID, pid)
 	}
 
+	// Publish and handshake together so SendKeys never observes a half-open
+	// connection. The handshake is a local pipe round trip.
+	c.mu.Lock()
+	if c.generation != generation || !c.wanted || ctx.Err() != nil {
+		c.mu.Unlock()
+		_ = conn.Close()
+		discardStartedHelper(process)
+		return context.Canceled
+	}
 	c.conn, c.process, c.pid, c.secret = conn, process, pid, secret
 	if _, err := c.callLocked(connectCtx, operationHello, nil); err != nil {
-		return errors.Join(err, c.closeLocked())
+		closeErr := c.closeLocked()
+		c.mu.Unlock()
+		if ctx.Err() != nil {
+			return context.Canceled
+		}
+		return errors.Join(err, closeErr)
 	}
+	c.mu.Unlock()
 	return nil
+}
+
+// invalidated reports whether a Close superseded the launch identified by
+// generation while it was in flight.
+func (c *Client) invalidated(generation uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.generation != generation || !c.wanted
 }
 
 func dialPipeUntilReady(ctx context.Context, pipe string) (net.Conn, error) {
@@ -248,14 +299,17 @@ func verifyHelperHandle(handle windows.Handle, want []byte) error {
 // run it before taking the lock that serializes key delivery.
 func (c *Client) EnsureReady(ctx context.Context) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.conn != nil {
+		c.mu.Unlock()
 		return nil
 	}
 	if !c.wanted {
+		c.mu.Unlock()
 		return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
 	}
-	if err := c.startLocked(ctx); err != nil {
+	c.mu.Unlock()
+
+	if err := c.start(ctx); err != nil {
 		return fmt.Errorf("%w: restart elevated helper: %w", platform.ErrElevatedHelperRequired, err)
 	}
 	return nil
@@ -289,6 +343,7 @@ func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.wanted = false
+	c.generation++
 	if c.conn == nil {
 		return nil
 	}
