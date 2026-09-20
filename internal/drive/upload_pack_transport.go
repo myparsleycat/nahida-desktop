@@ -84,7 +84,7 @@ func (d *Drive) uploadPack(
 			}
 			continue
 		}
-		if result.status >= 200 && result.status < 300 && result.status != http.StatusAccepted {
+		if result.status >= 200 && result.status < 300 {
 			packResults, parseErr := decodeIntentPackResults(result.payload)
 			if parseErr != nil {
 				if reportedLogical > 0 && onProgress != nil {
@@ -99,6 +99,44 @@ func (d *Drive) uploadPack(
 				if found && packResult.Status == "completed" {
 					if credited < member.logicalSize && onProgress != nil {
 						onProgress(member.logicalSize - credited)
+					}
+					if onReady != nil {
+						onReady(member.source, slices.Clone(member.copies))
+					}
+					continue
+				}
+				if found && (packResult.Status == "pending" || packResult.Status == "processing") {
+					uploadRequired, waitErr := d.waitUploadIntent(ctx, member.upload)
+					if waitErr == nil && !uploadRequired {
+						if credited < member.logicalSize && onProgress != nil {
+							onProgress(member.logicalSize - credited)
+						}
+						if onReady != nil {
+							onReady(member.source, slices.Clone(member.copies))
+						}
+						continue
+					}
+					if credited > 0 && onProgress != nil {
+						onProgress(-credited)
+					}
+					if waitErr != nil {
+						failures = append(failures, fmt.Errorf("%s: %w", member.source.Name, waitErr))
+						continue
+					}
+					if err := d.uploadPreparedDirect(
+						ctx,
+						member.upload,
+						member.source,
+						member.data,
+						member.compression,
+						func(bytes int64) {
+							if onProgress != nil {
+								onProgress(bytes)
+							}
+						},
+					); err != nil {
+						failures = append(failures, fmt.Errorf("%s: %w", member.source.Name, err))
+						continue
 					}
 					if onReady != nil {
 						onReady(member.source, slices.Clone(member.copies))

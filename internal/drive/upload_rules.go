@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	preferredUploadPartSize = 25 * 1024 * 1024
+	preferredDirectUploadThreshold = 80 * 1024 * 1024
+	preferredUploadPartSize        = 25 * 1024 * 1024
 	// uploadCompressionAlgorithm is the only algorithm this client encodes;
 	// rules naming another one describe payloads this client cannot produce.
 	uploadCompressionAlgorithm = "zstd"
@@ -49,13 +50,14 @@ type UploadCompressionRules struct {
 }
 
 type UploadRules struct {
-	MaxFileSize        int64                  `json:"maxFileSize"`
-	MaxPlanFiles       int                    `json:"maxPlanFiles"`
-	MaxUploadBodyBytes int64                  `json:"maxUploadBodyBytes"`
-	Extensions         []UploadExtensionRule  `json:"extensions"`
-	Pack               UploadPackRules        `json:"pack"`
-	Parts              UploadPartRules        `json:"parts"`
-	Compression        UploadCompressionRules `json:"compression"`
+	MaxFileSize                 int64                  `json:"maxFileSize"`
+	MaxPlanFiles                int                    `json:"maxPlanFiles"`
+	MaxUploadBodyBytes          int64                  `json:"maxUploadBodyBytes"`
+	DirectUploadMaxLogicalBytes int64                  `json:"directUploadMaxLogicalBytes"`
+	Extensions                  []UploadExtensionRule  `json:"extensions"`
+	Pack                        UploadPackRules        `json:"pack"`
+	Parts                       UploadPartRules        `json:"parts"`
+	Compression                 UploadCompressionRules `json:"compression"`
 }
 
 func (r UploadRules) PartSize() int64 {
@@ -151,7 +153,11 @@ func parseUploadRules(decoded any) (UploadRules, error) {
 	if err := json.Unmarshal(raw, &rules); err != nil {
 		return UploadRules{}, err
 	}
+	if rules.DirectUploadMaxLogicalBytes <= 0 {
+		rules.DirectUploadMaxLogicalBytes = preferredDirectUploadThreshold
+	}
 	if rules.MaxFileSize <= 0 || rules.MaxPlanFiles <= 0 || rules.MaxUploadBodyBytes <= 0 ||
+		rules.DirectUploadMaxLogicalBytes <= 0 ||
 		len(rules.Extensions) == 0 {
 		return UploadRules{}, errors.New("upload_rules_unavailable")
 	}

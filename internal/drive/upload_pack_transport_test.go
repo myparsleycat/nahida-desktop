@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -142,6 +144,56 @@ func TestUploadPackAcceptsCBORResultsFromNHDAPI(t *testing.T) {
 	}
 	if len(ready) != 2 || ready[0] != "file-1" || ready[1] != "file-2" {
 		t.Fatalf("ready = %v", ready)
+	}
+}
+
+func TestUploadPackPollsPendingMembersWithoutResendingPack(t *testing.T) {
+	var packRequests atomic.Int32
+	var statusRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(request.URL.Path, "/status") {
+			statusRequests.Add(1)
+			_, _ = io.WriteString(w, `{"status":"completed"}`)
+			return
+		}
+		packRequests.Add(1)
+		_, _ = io.Copy(io.Discard, request.Body)
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(
+			w,
+			`{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"processing","nextAction":"poll"}]}`,
+		)
+	}))
+	defer server.Close()
+
+	members := []preparedUpload{
+		{
+			upload: uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
+			source: FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 2}},
+			data:   []byte("ab"), payloadBytes: 2, logicalSize: 2,
+		},
+		{
+			upload: uploadPlanEntry("two", server.URL+"/v2/uploads/two", "token-2", "hash-2"),
+			source: FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 3}},
+			data:   []byte("XYZ"), payloadBytes: 3, logicalSize: 3,
+		},
+	}
+	ready := make([]string, 0, 2)
+	if err := uploadTestDrive(
+		server,
+	).uploadPack(context.Background(), members, nil, func(file FinalUploadFile, _ []FinalUploadFile) {
+		ready = append(ready, file.FID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if packRequests.Load() != 1 || statusRequests.Load() != 1 || len(ready) != 2 {
+		t.Fatalf(
+			"pack requests = %d, status requests = %d, ready = %v",
+			packRequests.Load(),
+			statusRequests.Load(),
+			ready,
+		)
 	}
 }
 

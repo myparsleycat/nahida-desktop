@@ -249,6 +249,9 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 	}
 
 	source := targets[0]
+	if source.Size >= r.rules.DirectUploadMaxLogicalBytes {
+		return r.queuePartsIntent(upload, source, targets)
+	}
 	data, compression, useParts, err := prepareUploadRoute(
 		source,
 		upload,

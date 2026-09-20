@@ -155,6 +155,118 @@ func TestUploadIntentRollsBackFailedAttemptProgress(t *testing.T) {
 	}
 }
 
+func TestUploadIntentPollsAcceptedUploadWithoutResendingPayload(t *testing.T) {
+	content := []byte("accepted payload")
+	var uploadRequests atomic.Int32
+	var statusRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(request.URL.Path, "/status") {
+			if statusRequests.Add(1) == 1 {
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = io.WriteString(w, `{"status":"processing","nextAction":"poll","retryAfterMs":1}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"status":"completed"}`)
+			return
+		}
+
+		uploadRequests.Add(1)
+		_, _ = io.Copy(io.Discard, request.Body)
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(w, `{"status":"processing","nextAction":"poll","retryAfterMs":1}`)
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "file.ini")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	upload := UploadPlanEntry{URL: server.URL + "/v2/uploads/intent"}
+	upload.Form.Token = "token"
+	if err := uploadTestDrive(server).uploadIntent(context.Background(), upload, FinalUploadFile{
+		UploadFile: UploadFile{Name: "file.ini", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if uploadRequests.Load() != 1 || statusRequests.Load() != 2 {
+		t.Fatalf("upload requests = %d, status requests = %d", uploadRequests.Load(), statusRequests.Load())
+	}
+}
+
+func TestUploadIntentDoesNotResendForMissingIntentStatus(t *testing.T) {
+	content := []byte("accepted payload")
+	var uploadRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.HasSuffix(request.URL.Path, "/status") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "intent_not_found")
+			return
+		}
+
+		uploadRequests.Add(1)
+		_, _ = io.Copy(io.Discard, request.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(w, `{"status":"processing","nextAction":"poll"}`)
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "file.ini")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	upload := UploadPlanEntry{URL: server.URL + "/v2/uploads/missing"}
+	upload.Form.Token = "token"
+	err := uploadTestDrive(server).uploadIntent(context.Background(), upload, FinalUploadFile{
+		UploadFile: UploadFile{Name: "file.ini", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}, nil)
+	var uploadErr *UploadV2Error
+	if !errors.As(err, &uploadErr) || uploadErr.Code != "intent_not_found" {
+		t.Fatalf("error = %v, want intent_not_found", err)
+	}
+	if uploadRequests.Load() != 1 {
+		t.Fatalf("upload requests = %d, want 1", uploadRequests.Load())
+	}
+}
+
+func TestUploadIntentFallsBackWhenStatusEndpointIsUnavailable(t *testing.T) {
+	content := []byte("accepted payload")
+	var uploadRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.HasSuffix(request.URL.Path, "/status") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "Not Found")
+			return
+		}
+
+		_, _ = io.Copy(io.Discard, request.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if uploadRequests.Add(1) == 1 {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"status":"pending"}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"status":"completed"}`)
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "file.ini")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	upload := UploadPlanEntry{URL: server.URL + "/v2/uploads/intent"}
+	upload.Form.Token = "token"
+	if err := uploadTestDrive(server).uploadIntent(context.Background(), upload, FinalUploadFile{
+		UploadFile: UploadFile{Name: "file.ini", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if uploadRequests.Load() != 2 {
+		t.Fatalf("upload requests = %d, want the legacy retry", uploadRequests.Load())
+	}
+}
+
 func TestUploadIntentRetriesTransportError(t *testing.T) {
 	content := []byte("retry me")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -227,6 +339,56 @@ func TestUploadIntentUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
 	}
 	if partRequests.Load() != 1 {
 		t.Fatalf("part requests = %d, want 1", partRequests.Load())
+	}
+}
+
+func TestUploadPartsPollsAcceptedCompletionWithoutResendingParts(t *testing.T) {
+	content := []byte("small")
+	var partRequests atomic.Int32
+	var completeRequests atomic.Int32
+	var statusRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(request.URL.Path, "/parts/0"):
+			partRequests.Add(1)
+			_, _ = io.Copy(io.Discard, request.Body)
+			_, _ = io.WriteString(w, `{}`)
+		case strings.HasSuffix(request.URL.Path, "/complete"):
+			completeRequests.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"status":"processing","nextAction":"poll","retryAfterMs":1}`)
+		case strings.HasSuffix(request.URL.Path, "/status"):
+			statusRequests.Add(1)
+			_, _ = io.WriteString(w, `{"status":"completed"}`)
+		default:
+			t.Fatalf("unexpected path %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "file.ini")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	drive := uploadTestDrive(server)
+	rules := testUploadRules()
+	rules.MaxUploadBodyBytes = 32
+	drive.setUploadRules(rules)
+	upload := UploadPlanEntry{URL: server.URL + "/v2/uploads/intent"}
+	upload.Form.Token = "token"
+	if err := drive.uploadIntent(context.Background(), upload, FinalUploadFile{
+		UploadFile: UploadFile{Name: "file.ini", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if partRequests.Load() != 1 || completeRequests.Load() != 1 || statusRequests.Load() != 1 {
+		t.Fatalf(
+			"part requests = %d, complete requests = %d, status requests = %d",
+			partRequests.Load(),
+			completeRequests.Load(),
+			statusRequests.Load(),
+		)
 	}
 }
 

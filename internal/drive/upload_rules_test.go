@@ -13,9 +13,10 @@ import (
 
 func testUploadRules() UploadRules {
 	return UploadRules{
-		MaxFileSize:        1024 * 1024 * 1024,
-		MaxPlanFiles:       500,
-		MaxUploadBodyBytes: 100 * 1024 * 1024,
+		MaxFileSize:                 1024 * 1024 * 1024,
+		MaxPlanFiles:                500,
+		MaxUploadBodyBytes:          100 * 1024 * 1024,
+		DirectUploadMaxLogicalBytes: 80 * 1024 * 1024,
 		Extensions: []UploadExtensionRule{
 			{Ext: ".ini", MaxSize: 10*1024*1024 - 1},
 			{Ext: ".dds", MaxSize: 1024 * 1024 * 1024},

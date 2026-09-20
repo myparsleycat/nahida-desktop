@@ -57,6 +57,9 @@ func (d *Drive) uploadIntent(
 	if err != nil {
 		return err
 	}
+	if file.Size >= rules.DirectUploadMaxLogicalBytes {
+		return d.uploadParts(ctx, upload, file, rules, onProgress)
+	}
 	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.Compression, rules.MaxUploadBodyBytes)
 	if err != nil {
 		return err
@@ -118,6 +121,21 @@ func (d *Drive) uploadPreparedDirect(
 			}
 			return nil
 		}
+		if result.status == http.StatusAccepted {
+			uploadRequired, waitErr := d.waitUploadIntent(ctx, upload)
+			if waitErr != nil {
+				if reportedLogical > 0 && onProgress != nil {
+					onProgress(-reportedLogical)
+				}
+				return waitErr
+			}
+			if !uploadRequired {
+				if reportedLogical < file.Size && onProgress != nil {
+					onProgress(file.Size - reportedLogical)
+				}
+				return nil
+			}
+		}
 		if reportedLogical > 0 && onProgress != nil {
 			onProgress(-reportedLogical)
 		}
@@ -129,6 +147,43 @@ func (d *Drive) uploadPreparedDirect(
 		}
 	}
 	return errors.New("direct upload exhausted retries")
+}
+
+func (d *Drive) waitUploadIntent(ctx context.Context, upload UploadPlanEntry) (bool, error) {
+	started := d.now()
+	for attempt := 0; d.now().Sub(started) < uploadCompleteLimit; attempt++ {
+		result, err := d.sendJSON(
+			ctx,
+			strings.TrimRight(upload.URL, "/")+"/status",
+			map[string]any{"token": upload.Form.Token},
+		)
+		if err != nil {
+			if ctx.Err() != nil {
+				return false, err
+			}
+			result = uploadHTTPResult{reason: err.Error()}
+		}
+
+		status, _ := result.payload["status"].(string)
+		nextAction, _ := result.payload["nextAction"].(string)
+		switch {
+		case result.status >= 200 && result.status < 300 && status == "completed":
+			return false, nil
+		case nextAction == "upload", uploadStatusEndpointUnavailable(result):
+			return true, nil
+		case !retryableUploadResult(result):
+			return false, uploadResultError(result)
+		}
+
+		delay := retryDelay(min(attempt, 4), 30*time.Second)
+		if retryAfter, ok := result.payload["retryAfterMs"].(float64); ok && retryAfter > 0 {
+			delay = min(time.Duration(retryAfter)*time.Millisecond, 30*time.Second)
+		}
+		if err := d.sleep(ctx, delay); err != nil {
+			return false, err
+		}
+	}
+	return false, &UploadV2Error{Code: "upload_processing_timeout"}
 }
 
 func (d *Drive) uploadParts(
@@ -249,6 +304,22 @@ func (d *Drive) uploadParts(
 				report(file.Size - reported)
 			}
 			return nil
+		}
+		if result.status == http.StatusAccepted {
+			nextAction, _ := result.payload["nextAction"].(string)
+			if nextAction == "poll" {
+				uploadRequired, waitErr := d.waitUploadIntent(ctx, upload)
+				if waitErr != nil {
+					return waitErr
+				}
+				if !uploadRequired {
+					if reported < file.Size {
+						report(file.Size - reported)
+					}
+					return nil
+				}
+				continue
+			}
 		}
 		if !resetAfterMissingManifest &&
 			(result.reason == "chunk_manifest_not_found" || result.reason == "chunks_incomplete") {
@@ -513,6 +584,10 @@ func retryableUploadResult(result uploadHTTPResult) bool {
 		result.status == http.StatusTooManyRequests ||
 		result.status == 524 ||
 		result.status >= 500
+}
+
+func uploadStatusEndpointUnavailable(result uploadHTTPResult) bool {
+	return result.status == http.StatusNotFound && result.reason != "intent_not_found"
 }
 
 func uploadResultError(result uploadHTTPResult) error {
