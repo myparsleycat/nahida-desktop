@@ -4,6 +4,7 @@ package platform
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"slices"
@@ -318,16 +319,35 @@ func processIntegrityLevel(pid uint32) (uint32, error) {
 	if !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
 		return 0, err
 	}
+	if size == 0 {
+		return 0, errors.New("integrity token information is empty")
+	}
 	buffer := make([]byte, size)
 	if err := windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &buffer[0], size, &size); err != nil {
 		return 0, err
 	}
-	label := (*windows.Tokenmandatorylabel)(unsafe.Pointer(&buffer[0]))
-	count := label.Label.Sid.SubAuthorityCount()
+
+	// Parse TOKEN_MANDATORY_LABEL and its trailing SID from raw bytes. The
+	// x/sys SID helpers call GetSidSubAuthorityCount/SubAuthority, which hand
+	// an interior SID pointer back to Go; under -race checkptr rejects that
+	// uintptr -> pointer conversion as pointing outside any Go allocation.
+	// A SID is Revision(1) + SubAuthorityCount(1) + IdentifierAuthority(6) +
+	// SubAuthorityCount * DWORD(little-endian), so the last DWORD is read
+	// directly without leaving Go memory.
+	labelSize := int(unsafe.Sizeof(windows.Tokenmandatorylabel{}))
+	const sidHeaderLen = 8
+	if len(buffer) < labelSize+sidHeaderLen {
+		return 0, fmt.Errorf("integrity token information too short: %d bytes", len(buffer))
+	}
+	sid := buffer[labelSize:]
+	count := int(sid[1])
 	if count == 0 {
 		return 0, errors.New("integrity SID has no sub-authority")
 	}
-	return label.Label.Sid.SubAuthority(uint32(count - 1)), nil
+	if len(sid) < sidHeaderLen+4*count {
+		return 0, fmt.Errorf("integrity SID truncated: need %d bytes, have %d", sidHeaderLen+4*count, len(sid))
+	}
+	return binary.LittleEndian.Uint32(sid[sidHeaderLen+4*(count-1):]), nil
 }
 
 func (i *Input) report(err error, stage string, fields map[string]any) {
