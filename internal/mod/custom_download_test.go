@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -59,6 +61,9 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/apiv13/Mod/10/ProfilePage":
+			if request.Header.Get("Cookie") != "" {
+				t.Errorf("profile request sent cookie %q", request.Header.Get("Cookie"))
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(
 				w,
@@ -130,6 +135,53 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 		processCustomDownloadQueue(t, transfers, int64(len(huiArchive)))
 		assertCustomDownloadFile(t, filepath.Join(destination, "Selected Hui", "mod.ini"), "hui")
 	})
+}
+
+func TestGameBananaDownloadRejectsHTMLResponse(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/apiv13/Mod/10/ProfilePage":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(
+				w,
+				`{"_idRow":10,"_sName":"GB Mod","_sProfileUrl":"%s/mods/10","_aSubmitter":{"_sName":"author","_sProfileUrl":"%s/member/1"},"_aGame":{"_idRow":8552,"_sName":"Game"},"_aCategory":{"_sName":"Characters"},"_aFiles":[{"_idRow":20,"_sFile":"gb.zip","_tsDateAdded":1,"_nDownloadCount":1,"_sDownloadUrl":"%s/login.html"}]}`,
+				server.URL,
+				server.URL,
+				server.URL,
+			)
+		case "/login.html":
+			w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+			_, _ = io.WriteString(w, "<html><body>Sign in to GameBanana to download this file.</body></html>")
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+
+	destination := t.TempDir()
+	service, transfers := customDownloadTestService(t, server, destination, "Selected GB", true)
+	status, err := service.DownloadGameBananaFile(
+		context.Background(),
+		GameBananaDownloadProps{ItemID: 10, FileID: 20},
+	)
+	if err != nil || status != "started" {
+		t.Fatalf("DownloadGameBananaFile = %q, %v", status, err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	records := transfers.List()
+	if len(records) != 1 {
+		t.Fatalf("transfers = %#v", records)
+	}
+	record, ok := transfers.Get(records[0].PID)
+	if !ok || record.Status != transfer.StatusError || !strings.Contains(record.Error, "DOWNLOAD_URL_HTML_PAGE") {
+		t.Fatalf("transfer = %#v", record.Snapshot)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "Selected GB", "mod.ini")); err == nil {
+		t.Fatal("HTML login page was saved as a mod")
+	}
 }
 
 func TestCanceledCustomDownloadCannotBeResumedOrRetried(t *testing.T) {

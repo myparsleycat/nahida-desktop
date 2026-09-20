@@ -3,6 +3,7 @@ package gamebanana
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -360,7 +361,7 @@ func TestToggleModLikeUsesCachedProfileState(t *testing.T) {
 	}
 }
 
-func TestToggleModLikeReauthenticatesLoginRequiredBody(t *testing.T) {
+func TestToggleModLikeRequiresLoginWithoutOpeningWindow(t *testing.T) {
 	var likeCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -376,16 +377,6 @@ func TestToggleModLikeReauthenticatesLoginRequiredBody(t *testing.T) {
 			if request.Method != http.MethodPost {
 				t.Fatalf("method = %s", request.Method)
 			}
-			if request.Header.Get("Cookie") == "rmc=fresh" {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
-		case "/apiv13/Member/Navigator/Personal":
-			if request.Header.Get("Cookie") == "rmc=fresh" {
-				_, _ = io.WriteString(w, validMemberJSON)
-				return
-			}
 			_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
 		default:
 			http.NotFound(w, request)
@@ -393,66 +384,192 @@ func TestToggleModLikeReauthenticatesLoginRequiredBody(t *testing.T) {
 	}))
 	defer server.Close()
 	service, _ := gameBananaTestService(t, server)
-	if err := service.saveCookie(context.Background(), "rmc=expired"); err != nil {
-		t.Fatal(err)
+	var opens atomic.Int32
+	service.openLogin = func(context.Context, CookieValidator) (string, error) {
+		opens.Add(1)
+		return "", ErrLoginCancelled
 	}
-	service.openLogin = func(ctx context.Context, validate CookieValidator) (string, error) {
-		valid, err := validate(ctx, "rmc=fresh")
-		if err != nil || !valid {
-			t.Fatalf("fresh cookie validation = %v, %v", valid, err)
-		}
-		return "rmc=fresh", nil
+	_, err := service.ToggleModLike(context.Background(), ModOverviewInput{ItemID: 10})
+	if !errors.Is(err, ErrAuthRequired) {
+		t.Fatalf("error = %v, want %s", err, ErrAuthRequired)
 	}
-	result, err := service.ToggleModLike(context.Background(), ModOverviewInput{ItemID: 10})
-	if err != nil || !result.Liked {
-		t.Fatalf("result = %+v, error = %v", result, err)
+	if likeCalls != 1 {
+		t.Fatalf("like calls = %d, want 1", likeCalls)
 	}
-	if likeCalls != 2 {
-		t.Fatalf("like calls = %d, want 2", likeCalls)
+	if opens.Load() != 0 {
+		t.Fatalf("login window opened %d times, want 0", opens.Load())
 	}
 }
 
-func TestRequestReauthenticatesAndRetriesUnauthorized(t *testing.T) {
+func TestRequestDropsRejectedSessionAndRetriesAnonymous(t *testing.T) {
 	var subfeedCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/apiv13/Game/8552/Subfeed":
-			subfeedCalls++
-			if request.Header.Get("Cookie") != "rmc=fresh" {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			_, _ = io.WriteString(
-				w,
-				`{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`,
-			)
-		case "/apiv13/Member/Navigator/Personal":
-			if request.Header.Get("Cookie") == "rmc=fresh" {
-				_, _ = io.WriteString(w, validMemberJSON)
-				return
-			}
-			w.WriteHeader(http.StatusUnauthorized)
-		default:
+		if request.URL.Path != "/apiv13/Game/8552/Subfeed" {
 			http.NotFound(w, request)
+			return
 		}
+		subfeedCalls++
+		if request.Header.Get("Cookie") != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(
+			w,
+			`{"_aMetadata":{"_nRecordCount":0,"_nPerpage":15,"_bIsComplete":true},"_aRecords":[]}`,
+		)
 	}))
 	defer server.Close()
 	service, _ := gameBananaTestService(t, server)
 	if err := service.saveCookie(context.Background(), "rmc=expired"); err != nil {
 		t.Fatal(err)
 	}
-	service.openLogin = func(ctx context.Context, validate CookieValidator) (string, error) {
-		valid, err := validate(ctx, "rmc=fresh")
-		if err != nil || !valid {
-			t.Fatalf("fresh cookie validation = %v, %v", valid, err)
-		}
-		return "rmc=fresh", nil
+	var opens atomic.Int32
+	service.openLogin = func(context.Context, CookieValidator) (string, error) {
+		opens.Add(1)
+		return "", ErrLoginCancelled
 	}
 	if _, err := service.GetGameSubfeed(context.Background(), GameSubfeedInput{GameID: 8552}); err != nil {
 		t.Fatal(err)
 	}
 	if subfeedCalls != 2 {
 		t.Fatalf("subfeed calls = %d, want 2", subfeedCalls)
+	}
+	if opens.Load() != 0 {
+		t.Fatalf("login window opened %d times, want 0", opens.Load())
+	}
+	cookie, err := service.getCookie(context.Background())
+	if err != nil || cookie != "" {
+		t.Fatalf("rejected session = %q, error = %v", cookie, err)
+	}
+}
+
+func TestRequestReportsAuthRequiredWhenAnonymousRetryFails(t *testing.T) {
+	var subfeedCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/apiv13/Game/8552/Subfeed" {
+			http.NotFound(w, request)
+			return
+		}
+		subfeedCalls++
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	if err := service.saveCookie(context.Background(), "rmc=expired"); err != nil {
+		t.Fatal(err)
+	}
+	var opens atomic.Int32
+	service.openLogin = func(context.Context, CookieValidator) (string, error) {
+		opens.Add(1)
+		return "", ErrLoginCancelled
+	}
+	_, err := service.GetGameSubfeed(context.Background(), GameSubfeedInput{GameID: 8552})
+	if !errors.Is(err, ErrAuthRequired) {
+		t.Fatalf("error = %v, want %s", err, ErrAuthRequired)
+	}
+	if subfeedCalls != 2 {
+		t.Fatalf("subfeed calls = %d, want 2", subfeedCalls)
+	}
+	if opens.Load() != 0 {
+		t.Fatalf("login window opened %d times, want 0", opens.Load())
+	}
+}
+
+func TestConcurrentRequestRetriesAnonymousAfterSiblingDropsSession(t *testing.T) {
+	var siblingCalls atomic.Int32
+	siblingStarted := make(chan struct{})
+	sessionDropped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/apiv13/sibling" && siblingCalls.Add(1) == 1 {
+			// Hold the rejection until the sibling request has dropped the session,
+			// so this request reaches its anonymous retry with the cookie already gone.
+			close(siblingStarted)
+			<-sessionDropped
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+			return
+		}
+		if request.Header.Get("Cookie") == "" {
+			if request.URL.Path == "/apiv13/owner" {
+				close(sessionDropped)
+			}
+			_, _ = io.WriteString(w, `{}`)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := service.saveCookie(ctx, "rmc=expired"); err != nil {
+		t.Fatal(err)
+	}
+	policy := requestPolicy{
+		PersistResponseCookies:  true,
+		ClearStoredCookieOnAuth: true,
+		AuthFallback:            authFallbackAnonymous,
+	}
+
+	sibling := make(chan error, 1)
+	go func() {
+		response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/sibling", nil, policy)
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		sibling <- err
+	}()
+	<-siblingStarted
+
+	response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/owner", nil, policy)
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if err != nil {
+		t.Fatalf("session-dropping request = %v", err)
+	}
+	if err := <-sibling; err != nil {
+		t.Fatalf("sibling request = %v, want the anonymous retry to succeed", err)
+	}
+	if calls := siblingCalls.Load(); calls != 2 {
+		t.Fatalf("sibling calls = %d, want 2", calls)
+	}
+	cookie, err := service.getCookie(ctx)
+	if err != nil || cookie != "" {
+		t.Fatalf("stored session = %q, error = %v", cookie, err)
+	}
+}
+
+func TestAnonymousAuthRequiredResponseKeepsStoredSessionWritable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"_sErrorCode":"LOGIN_REQUIRED"}`)
+	}))
+	defer server.Close()
+	service, _ := gameBananaTestService(t, server)
+	ctx := context.Background()
+	_, revision, err := service.cookieSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := service.request(ctx, http.MethodGet, server.URL+"/apiv13/anonymous", nil, requestPolicy{
+		PersistResponseCookies:  true,
+		ClearStoredCookieOnAuth: true,
+		AuthFallback:            authFallbackAnonymous,
+	})
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if !errors.Is(err, ErrAuthRequired) {
+		t.Fatalf("error = %v, want %s", err, ErrAuthRequired)
+	}
+
+	applied, err := service.updateCookie(ctx, revision, "rmc=accepted")
+	if err != nil || !applied {
+		t.Fatalf("session accepted during the anonymous request = %v, %v", applied, err)
 	}
 }
 

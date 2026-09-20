@@ -8,17 +8,17 @@ Nahida Desktop 支持直接在应用内浏览和下载 GameBanana 模组，无�
 
 ![图片](/features/gamebanana/login1.png)
 
-使用此功能前，需要先登录 GameBanana。
+登录是可选的。即使没有 GameBanana 账号，也可以浏览模组并下载不需要登录的模组。
 
 ![图片](/features/gamebanana/login2.png)
 
-从左侧边栏进入 GameBanana 页面后，如果需要认证，就会显示 GameBanana 登录窗口。
+只有在需要时才会显示 GameBanana 登录窗口，例如点击 GameBanana 工具栏中的登录按钮或给模组点赞时。
 
 你可以选择自己偏好的登录方式，例如 Username 或 Email。
 
 ![图片](/features/index/gamebanana-ko.png)
 
-登录成功后，登录窗口会自动关闭，并显示 GameBanana 页面的主界面。
+登录成功后，登录窗口会自动关闭，工具栏中会显示你的账号。
 
 ## 浏览
 

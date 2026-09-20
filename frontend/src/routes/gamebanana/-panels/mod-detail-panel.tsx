@@ -21,6 +21,7 @@ import {
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
@@ -38,6 +39,7 @@ import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
+import { signInGameBanana } from "../-shared/auth-error";
 import { ErrorState } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
@@ -226,14 +228,17 @@ export function ModDetailPanel({
   language,
   selection,
   modOverviewQuery,
+  isSignedIn,
 }: {
   t: TFunction;
   language: string;
   selection?: GameBananaSubmissionSelection;
   modOverviewQuery: ModOverviewQuery;
+  isSignedIn: boolean;
 }) {
   const modId = selection?.id;
   const modelName = selection?.modelName ?? "Mod";
+  const queryClient = useQueryClient();
   const previews = modOverviewQuery.data
     ? getSubmissionPreviewImages(modOverviewQuery.data.profile)
     : [];
@@ -264,10 +269,15 @@ export function ModDetailPanel({
   const canToggleLike = likeAccess?.Like_Add === true || likeAccess?.Like_Trash === true;
 
   const handleLike = async () => {
-    if (!modId || !likeOperationKey || !canToggleLike || isLikePending) return;
+    if (!modId || !likeOperationKey || isLikePending) return;
+    if (!canToggleLike && isSignedIn) return;
 
     setPendingLikeKey(likeOperationKey);
     try {
+      if (!canToggleLike) {
+        if (!(await signInGameBanana(t, queryClient))) return;
+        await modOverviewQuery.refetch();
+      }
       const toggleResult = await GameBanana.ToggleModLike({
         itemId: modId,
         modelName,
@@ -361,14 +371,16 @@ export function ModDetailPanel({
                       type="button"
                       variant={isLiked ? "default" : "outline"}
                       size="sm"
-                      disabled={!canToggleLike || isLikePending}
+                      disabled={(!canToggleLike && isSignedIn) || isLikePending}
                       aria-pressed={isLiked}
                       title={
                         canToggleLike
                           ? isLiked
                             ? t("page.gamebanana.unlike")
                             : t("page.gamebanana.like")
-                          : t("page.gamebanana.like_unavailable")
+                          : isSignedIn
+                            ? t("page.gamebanana.like_unavailable")
+                            : t("page.gamebanana.like_sign_in_required")
                       }
                       onClick={() => void handleLike()}
                     >

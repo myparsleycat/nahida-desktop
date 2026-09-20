@@ -15,7 +15,7 @@ export function getGameBananaErrorPresentation(error: unknown, t: TFunction): Er
         };
     }
 
-    if (message === "GAMEBANANA_AUTH_FAILED") {
+    if (message === "GAMEBANANA_AUTH_REQUIRED" || message === "GAMEBANANA_AUTH_FAILED") {
         return {
             description: t("page.gamebanana.error_description_auth"),
         };

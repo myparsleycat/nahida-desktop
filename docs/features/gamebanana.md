@@ -8,17 +8,17 @@ This page explains how to browse and download mods from the GameBanana page.
 
 ![Image](/features/gamebanana/login1.png)
 
-You need to sign in to GameBanana before using this feature.
+Signing in is optional. You can browse mods and download mods that do not require sign-in without a GameBanana account.
 
 ![Image](/features/gamebanana/login2.png)
 
-When you open the GameBanana page from the left sidebar, a GameBanana sign-in window appears if authentication is required.
+A GameBanana sign-in window appears only when it is needed, such as when you press the sign-in button in the GameBanana toolbar or like a mod.
 
 You can sign in with whichever method you prefer, such as Username or Email.
 
 ![Image](/features/index/gamebanana-ko.png)
 
-After sign-in completes successfully, the sign-in window closes automatically and the main GameBanana page is shown.
+After sign-in completes successfully, the sign-in window closes automatically and your account appears in the GameBanana toolbar.
 
 ## Browsing
 

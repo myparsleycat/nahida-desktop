@@ -427,6 +427,19 @@ func (m *Mod) runGameBananaDownload(
 	}); err != nil {
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 	}
+	html, err := isHTMLResponseOrContent(target.head.header, target.downloadPath)
+	if err != nil {
+		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
+	}
+	if html {
+		return m.finishDownloadError(
+			ctx,
+			transfers,
+			target.pid,
+			errors.New("DOWNLOAD_URL_HTML_PAGE"),
+			"GameBanana:downloadFromGB:context",
+		)
+	}
 	stagedPath := target.downloadPath
 	if isArchiveByResponseOrContent(
 		ctx, target.head.header, target.suggestedName, target.downloadPath, m.archive,
