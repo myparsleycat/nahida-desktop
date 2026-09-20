@@ -99,6 +99,7 @@ def write_uv_selection(spec, component_ids, evidence, width, height, output, pad
     if not selected or not selected.issubset(groups):
         raise ValueError("Choose inspected component IDs")
     masks = [bytearray(width * height), bytearray(width * height)]
+    bounds = [[width, height, -1, -1], [width, height, -1, -1]]
     work = 0
     for triangle in triangles:
         points = [(values["uv"][i][0] * width, values["uv"][i][1] * height) for i in triangle]
@@ -113,20 +114,48 @@ def write_uv_selection(spec, component_ids, evidence, width, height, output, pad
         work += (right - left + 1) * (bottom - top + 1)
         if work > 50000000:
             raise ValueError("UV raster workload exceeds limit")
-        mask = masks[0 if roots[triangle[0]] in selected else 1]
+        mask_index = 0 if roots[triangle[0]] in selected else 1
+        mask = masks[mask_index]
+        bound = bounds[mask_index]
         for y in range(top, bottom + 1):
             for x in range(left, right + 1):
                 u = ((bx - x - .5) * (cy - y - .5) - (by - y - .5) * (cx - x - .5)) / area
                 v = ((cx - x - .5) * (ay - y - .5) - (cy - y - .5) * (ax - x - .5)) / area
                 if min(u, v, 1 - u - v) >= -1e-7:
                     mask[y * width + x] = 255
+                    if x < bound[0]:
+                        bound[0] = x
+                    if y < bound[1]:
+                        bound[1] = y
+                    if x > bound[2]:
+                        bound[2] = x
+                    if y > bound[3]:
+                        bound[3] = y
     # Pad both selections for bilinear sampling; fail rather than paint shared texels.
+    regions = []
+    for bound in bounds:
+        if bound[2] < 0:
+            regions.append(None)
+            continue
+        x0 = max(0, bound[0] - padding)
+        y0 = max(0, bound[1] - padding)
+        x1 = min(width - 1, bound[2] + padding)
+        y1 = min(height - 1, bound[3] + padding)
+        regions.append((x0, y0, x1, y1))
+        work += (x1 - x0 + 1) * (y1 - y0 + 1) * padding * 4
+        if work > 50000000:
+            raise ValueError("UV raster workload exceeds limit")
     for _ in range(padding):
         for i, mask in enumerate(masks):
+            region = regions[i]
+            if region is None:
+                continue
+            x0, y0, x1, y1 = region
             expanded = bytearray(mask)
-            for y in range(height):
-                for x in range(width):
-                    if mask[y * width + x]:
+            for y in range(y0, y1 + 1):
+                base = y * width
+                for x in range(x0, x1 + 1):
+                    if mask[base + x]:
                         for yy in range(max(0, y - 1), min(height, y + 2)):
                             expanded[yy * width + max(0, x - 1):yy * width + min(width, x + 2)] = b'\xff' * (min(width, x + 2) - max(0, x - 1))
             masks[i] = expanded
