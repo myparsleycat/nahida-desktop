@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/platform"
@@ -27,8 +26,8 @@ func TestRegistryRegistersWindowInputActions(t *testing.T) {
 				t.Fatalf("list windows risk = %q, want %q", definition.Risk, RiskRead)
 			}
 		case "input.send_keys":
-			if definition.Risk != RiskConfirm {
-				t.Fatalf("send keys risk = %q, want %q", definition.Risk, RiskConfirm)
+			if definition.Risk != RiskWrite {
+				t.Fatalf("send keys risk = %q, want %q", definition.Risk, RiskWrite)
 			}
 		default:
 			t.Fatalf("unexpected input action %q", definition.ID)
@@ -46,7 +45,7 @@ func TestRegistryRegistersWindowInputActions(t *testing.T) {
 	}
 }
 
-func TestRegistryPrepareWindowKeysRequestsApproval(t *testing.T) {
+func TestRegistryPrepareWindowKeysSkipsApproval(t *testing.T) {
 	t.Parallel()
 	registry := NewRegistry(Dependencies{Input: platform.NewInput()})
 
@@ -54,14 +53,8 @@ func TestRegistryPrepareWindowKeysRequestsApproval(t *testing.T) {
 		ActionID:  "input.send_keys",
 		Arguments: json.RawMessage(`{"process":"StarRail.exe","keys":["vk_f10"]}`),
 	})
-	if err != nil || plan.Risk != RiskConfirm || plan.Proposal == nil {
+	if err != nil || plan.Risk != RiskWrite || plan.Proposal != nil {
 		t.Fatalf("prepare = risk %q proposal %#v, %v", plan.Risk, plan.Proposal, err)
-	}
-	if plan.Proposal.Kind != "desktop" || plan.Proposal.Target != `process "StarRail.exe"` {
-		t.Fatalf("proposal = %#v", plan.Proposal)
-	}
-	if !strings.Contains(plan.Proposal.Summary, "vk_f10") {
-		t.Fatalf("proposal summary = %q, want the requested key", plan.Proposal.Summary)
 	}
 }
 

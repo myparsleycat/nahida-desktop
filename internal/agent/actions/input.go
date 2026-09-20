@@ -44,7 +44,7 @@ func registerInputActions(registry *Registry, deps Dependencies) {
 	registry.add(action{
 		definition: Definition{
 			ID: "input.send_keys", Description: "Send keyboard keys to another window.", Domain: "input",
-			Risk: RiskConfirm, Scopes: []string{"global", "mod"}, InputSchema: objectSchema(map[string]any{
+			Risk: RiskWrite, Scopes: []string{"global", "mod"}, InputSchema: objectSchema(map[string]any{
 				"title": stringSchema(), "process": stringSchema(), "pid": integerSchema(1, math.MaxInt32),
 				"keys": map[string]any{
 					"type": "array", "minItems": 1, "maxItems": 16, "items": stringSchema(),
