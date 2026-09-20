@@ -21,8 +21,10 @@ import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
+  KeyRoundIcon,
   LinkIcon,
   LoaderIcon,
+  LogInIcon,
   LogOutIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -40,11 +42,16 @@ export function GameBananaToolbar({
   gamesError,
   canOpenProfile,
   canGoBack,
+  isModUrlOpen,
+  isSignedIn,
+  username,
+  isSigningIn,
   isLoggingOut,
   onSelectGame,
-  isModUrlOpen,
   onToggleModUrl,
   onOpenGameProfile,
+  onSignIn,
+  onOpenManualRmc,
   onLogout,
   onGoBack,
   onBackToCategory,
@@ -63,9 +70,14 @@ export function GameBananaToolbar({
   canGoBack: boolean;
   isLoggingOut: boolean;
   isModUrlOpen: boolean;
+  isSignedIn: boolean;
+  username?: string;
+  isSigningIn: boolean;
   onSelectGame: (game: GameOption["key"]) => void;
   onToggleModUrl: () => void;
   onOpenGameProfile: () => void;
+  onSignIn: () => void;
+  onOpenManualRmc: () => void;
   onLogout: () => void;
   onGoBack: () => void;
   onBackToCategory: () => void;
@@ -199,15 +211,48 @@ export function GameBananaToolbar({
             <TooltipContent side="bottom">{t("page.gamebanana.open_profile")}</TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="outline" onClick={onLogout} disabled={isLoggingOut} />}
-          >
-            {isLoggingOut ? <LoaderIcon className="animate-spin" /> : <LogOutIcon />}
-            <span className="sr-only">{t("page.gamebanana.logout")}</span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("page.gamebanana.logout")}</TooltipContent>
-        </Tooltip>
+        {isSignedIn ? (
+          <>
+            <ButtonGroupText
+              className="h-8 max-w-40 truncate text-xs"
+              title={t("page.gamebanana.auth.signed_in_as", { name: username })}
+            >
+              {username}
+            </ButtonGroupText>
+            <Tooltip>
+              <TooltipTrigger
+                render={<Button variant="outline" onClick={onLogout} disabled={isLoggingOut} />}
+              >
+                {isLoggingOut ? <LoaderIcon className="animate-spin" /> : <LogOutIcon />}
+                <span className="sr-only">{t("page.gamebanana.logout")}</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("page.gamebanana.logout")}</TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={<Button variant="outline" onClick={onSignIn} disabled={isSigningIn} />}
+              >
+                {isSigningIn ? <LoaderIcon className="animate-spin" /> : <LogInIcon />}
+                <span>{t("page.gamebanana.auth.sign_in")}</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("page.gamebanana.auth.guest_notice")}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="outline" onClick={onOpenManualRmc} />}>
+                <KeyRoundIcon />
+                <span className="sr-only">{t("page.gamebanana.auth.manual_rmc.button")}</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("page.gamebanana.auth.manual_rmc.button")}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        )}
       </ButtonGroup>
     </div>
   );

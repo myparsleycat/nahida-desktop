@@ -17,20 +17,21 @@ import {
   useGameBananaGameSubfeed,
   useGameBananaModCategoryOverview,
   useGameBananaModOverview,
+  useGameBananaSessionStatus,
 } from "@renderer/hooks/use-gamebanana-data";
 import { useGames } from "@renderer/hooks/use-mod-data";
-import {
-  isManualRmcPrimaryAction,
-  runGameBananaEnsureSession,
-} from "@renderer/lib/gamebanana-auth";
+import { getGameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
+import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { gameBananaStore, useGameBananaStore } from "@renderer/store/gamebanana";
 import { modStore } from "@renderer/store/mod";
 import { getGameBananaKeyForImporter } from "@shared/mod";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import isURL from "validator/lib/isURL";
 
 import type { GameOption } from "./-types";
@@ -39,8 +40,7 @@ import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
 import { CategoryPanel } from "./-panels/category-panel";
 import { GameHomePanel } from "./-panels/game-home-panel";
 import { ModDetailPanel } from "./-panels/mod-detail-panel";
-import { gameBananaAuthCopyKey } from "./-shared/auth-error";
-import { GameBananaAuthState } from "./-shared/common";
+import { showGameBananaAuthFailureToast, signInGameBanana } from "./-shared/auth-error";
 import { CategorySidebar } from "./-sidebars/category-sidebar";
 import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
 
@@ -89,8 +89,8 @@ function RouteComponent() {
   const { t, i18n } = useTranslation();
   const { mod: deepLinkedModId } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const [authStatus, setAuthStatus] = useState<"checking" | "ready" | "error">("checking");
-  const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isManualRmcDialogOpen, setIsManualRmcDialogOpen] = useState(false);
   const [manualRmcValue, setManualRmcValue] = useState("");
@@ -98,13 +98,10 @@ function RouteComponent() {
   const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
   const [modUrlValue, setModUrlValue] = useState("");
   const [modUrlError, setModUrlError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-  const isAuthReady = authStatus === "ready";
-  const {
-    data: gamesMap,
-    isLoading: isGamesLoading,
-    error: gamesError,
-  } = useGameBananaGames(isAuthReady);
+  const sessionStatusQuery = useGameBananaSessionStatus();
+  const sessionStatus = sessionStatusQuery.data;
+  const isSignedIn = sessionStatus?.authenticated === true;
+  const { data: gamesMap, isLoading: isGamesLoading, error: gamesError } = useGameBananaGames();
   const { data: modGames = [], isLoading: isModGamesLoading } = useGames();
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
@@ -142,43 +139,14 @@ function RouteComponent() {
   const selectedGame = games.find((game) => game.key === selectedGameKey) ?? games[0];
   const selectedGameId = selectedGame?.id;
 
-  const gameOverviewQuery = useGameBananaGameOverview(selectedGameId, isAuthReady);
-  const subfeedQuery = useGameBananaGameSubfeed(selectedGameId, subfeedPage, isAuthReady);
+  const gameOverviewQuery = useGameBananaGameOverview(selectedGameId);
+  const subfeedQuery = useGameBananaGameSubfeed(selectedGameId, subfeedPage);
   const categoryOverviewQuery = useGameBananaModCategoryOverview(
     selectedCategoryId,
     modsPage,
     modsSort,
-    isAuthReady,
   );
-  const modOverviewQuery = useGameBananaModOverview(selectedMod, isAuthReady);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const ensureAuthenticated = async () => {
-      setAuthStatus("checking");
-      setAuthErrorCode(null);
-
-      const result = await runGameBananaEnsureSession(
-        () => GameBanana.EnsureSession(),
-        () => mountedRef.current,
-      );
-      if (!result.ok) {
-        if ("stale" in result) {
-          return;
-        }
-        setAuthErrorCode(result.code);
-        setAuthStatus("error");
-        return;
-      }
-      setAuthStatus("ready");
-    };
-
-    void ensureAuthenticated();
-
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const modOverviewQuery = useGameBananaModOverview(selectedMod);
 
   useEffect(() => {
     if (!games.length) return;
@@ -207,14 +175,14 @@ function RouteComponent() {
   }, [games, modGames, isModGamesLoading, setSelectedGame]);
 
   useEffect(() => {
-    if (!isAuthReady || !deepLinkedModId) return;
+    if (!deepLinkedModId) return;
 
     selectMod({ id: deepLinkedModId, modelName: "Mod" });
     void navigate({
       replace: true,
       search: (previous) => ({ ...previous, mod: undefined }),
     });
-  }, [deepLinkedModId, isAuthReady, navigate, selectMod]);
+  }, [deepLinkedModId, navigate, selectMod]);
 
   const rootCategories = gameOverviewQuery.data?.profile._aModRootCategories ?? [];
   const categoryChildren = categoryOverviewQuery.data?.categories ?? [];
@@ -309,31 +277,24 @@ function RouteComponent() {
     resetToGameHome();
   };
 
-  const handleRetryAuth = () => {
-    setAuthStatus("checking");
-    setAuthErrorCode(null);
-    void runGameBananaEnsureSession(
-      () => GameBanana.EnsureSession(),
-      () => mountedRef.current,
-    ).then((result) => {
-      if (!result.ok) {
-        if ("stale" in result) {
-          return;
-        }
-        setAuthErrorCode(result.code);
-        setAuthStatus("error");
-        return;
-      }
-      setAuthStatus("ready");
+  const handleSignIn = () => {
+    if (isSigningIn) return;
+    setIsSigningIn(true);
+    void signInGameBanana(t, queryClient).finally(() => {
+      setIsSigningIn(false);
     });
   };
 
   const handleLogout = () => {
     setIsLoggingOut(true);
     void GameBanana.Logout()
-      .then(() => {
-        setAuthErrorCode("GAMEBANANA_AUTH_FAILED");
-        setAuthStatus("error");
+      .then(async () => {
+        await queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
+        toast.success(t("page.gamebanana.auth.signed_out"));
+      })
+      .catch((error: unknown) => {
+        Logger.error(error, "GameBananaRoute:handleLogout");
+        showGameBananaAuthFailureToast(t, getGameBananaAuthErrorCode(error));
       })
       .finally(() => {
         setIsLoggingOut(false);
@@ -363,10 +324,10 @@ function RouteComponent() {
 
         setIsManualRmcDialogOpen(false);
         setManualRmcValue("");
-        setAuthErrorCode(null);
-        setAuthStatus("ready");
+        void queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
       })
       .catch((error) => {
+        Logger.error(error, "GameBananaRoute:handleSaveManualRmc");
         setManualRmcError(
           t(
             error instanceof Error &&
@@ -386,89 +347,6 @@ function RouteComponent() {
         setIsSavingManualRmc(false);
       });
   };
-
-  if (authStatus === "checking") {
-    return (
-      <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
-        <GameBananaAuthState
-          title={t("page.gamebanana.auth.checking_title")}
-          description={t("page.gamebanana.auth.checking_description")}
-          pending={true}
-        />
-      </main>
-    );
-  }
-
-  if (authStatus === "error") {
-    const copy = gameBananaAuthCopyKey(authErrorCode);
-    const manualPrimary = isManualRmcPrimaryAction(authErrorCode);
-    return (
-      <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
-        <GameBananaAuthState
-          title={t(copy.title)}
-          description={t(copy.description)}
-          actionLabel={manualPrimary ? undefined : t("page.gamebanana.auth.retry")}
-          onAction={manualPrimary ? undefined : handleRetryAuth}
-          extraAction={
-            <Button
-              variant={manualPrimary ? "default" : "outline"}
-              onClick={handleOpenManualRmcDialog}
-              disabled={isSavingManualRmc}
-            >
-              {t("page.gamebanana.auth.manual_rmc.button")}
-            </Button>
-          }
-        />
-        <Dialog
-          open={isManualRmcDialogOpen}
-          onOpenChange={(open) => {
-            setIsManualRmcDialogOpen(open);
-            if (!open) {
-              setManualRmcError(null);
-            }
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
-              <DialogDescription>
-                {t("page.gamebanana.auth.manual_rmc.description")}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Input
-                type="password"
-                autoComplete="off"
-                value={manualRmcValue}
-                onChange={(event) => setManualRmcValue(event.target.value)}
-                disabled={isSavingManualRmc}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSaveManualRmc();
-                  }
-                }}
-              />
-              {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsManualRmcDialogOpen(false)}
-                disabled={isSavingManualRmc}
-              >
-                {t("g.cancel")}
-              </Button>
-              <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
-                {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
-                {t("g.save")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </main>
-    );
-  }
 
   return (
     <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
@@ -502,7 +380,12 @@ function RouteComponent() {
             isModUrlOpen={isModUrlOpen}
             onToggleModUrl={handleToggleModUrl}
             onOpenGameProfile={handleOpenGameProfile}
+            isSignedIn={isSignedIn}
+            username={sessionStatus?.username ?? undefined}
+            isSigningIn={isSigningIn}
             isLoggingOut={isLoggingOut}
+            onSignIn={handleSignIn}
+            onOpenManualRmc={handleOpenManualRmcDialog}
             onLogout={handleLogout}
             canGoBack={canGoBack}
             onGoBack={handleGoBack}
@@ -576,6 +459,7 @@ function RouteComponent() {
                 language={i18n.language}
                 selection={selectedMod}
                 modOverviewQuery={modOverviewQuery}
+                isSignedIn={isSignedIn}
               />
             )}
           </div>
@@ -612,6 +496,54 @@ function RouteComponent() {
           )}
         </div>
       </div>
+
+      <Dialog
+        open={isManualRmcDialogOpen}
+        onOpenChange={(open) => {
+          setIsManualRmcDialogOpen(open);
+          if (!open) {
+            setManualRmcError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
+            <DialogDescription>
+              {t("page.gamebanana.auth.manual_rmc.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              type="password"
+              autoComplete="off"
+              value={manualRmcValue}
+              onChange={(event) => setManualRmcValue(event.target.value)}
+              disabled={isSavingManualRmc}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleSaveManualRmc();
+                }
+              }}
+            />
+            {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsManualRmcDialogOpen(false)}
+              disabled={isSavingManualRmc}
+            >
+              {t("g.cancel")}
+            </Button>
+            <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
+              {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {t("g.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
