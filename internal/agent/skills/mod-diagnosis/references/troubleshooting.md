@@ -40,6 +40,8 @@ If it occurs only on the first load, have the user reload the object by leaving 
 
 Slight deformation more often suggests weights; chaotic geometry more often suggests group ordering, stride/layout, wrong buffers, or stale importer hashes.
 
+Do not classify every missing fragment as broken geometry. A stable hole whose boundary resembles a texture or UV mask may be produced by alpha test, discard, depth, shadow, outline, or another pass-specific state. When a verified static patch does not change the symptom, use the runtime-render workflow to compare the same draw range across passes before modifying bones or buffer layouts.
+
 ## Wrong orientation or scale
 
 The replacement and importer source may use different coordinate spaces. Check applied rotation/scale and the importer's expected export orientation. When a capable Blender MCP is enabled, inspect and correct the relevant objects through it while preserving unrelated scene state; otherwise provide the Blender steps as manual instructions.
@@ -56,6 +58,12 @@ Trace the override slot to the Resource and file, then compare it with the origi
 - conditional branches that bind different textures.
 
 A very bright/glowing result can be an alpha/emission problem, but packed channels vary by game. An opaque mesh can require shader/blend support such as an already installed TexFX setup; describe that dependency without obtaining it.
+
+### Pass-specific alpha or depth rejection
+
+If geometry is present but part of its surface is cut away, inspect whether an original clothing or mask texture remains bound during a depth, shadow, outline, or other non-color pass while the color pass uses the replacement skin or surface texture. A matching transparent region is evidence that the surface is being rejected before color output, not proof that its vertices or weights are corrupt.
+
+When runtime evidence confirms one affected draw, prefer a scoped save-bind-draw-restore change over replacing the texture state for the whole command list. Preserve the previous binding by reference, restore it immediately after the draw under the same condition, and clear temporary references. Never reuse an example shader condition, slot meaning, draw count, or resource name without current evidence.
 
 ### GIMI green parts and ORFix/NNFix
 

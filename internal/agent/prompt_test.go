@@ -32,6 +32,8 @@ func TestRenderSystemPromptReplacesRuntimeContext(t *testing.T) {
 		"An `update` operation carries ordered `hunks`",
 		"prefer it for targeted changes to an existing file instead of resending the whole file",
 		"Every approval request must directly advance the user's requested outcome",
+		"Use locally available application state before asking the user to retype a configured path",
+		"A delivered key or launched process is not proof of the expected game state",
 		`Desktop action index (ID, description, and risk only): [{"id":"mod.update_toggle_key"`,
 	} {
 		if !strings.Contains(prompt, expected) {
