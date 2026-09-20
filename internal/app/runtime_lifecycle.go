@@ -185,6 +185,9 @@ func (rt *runtime) Close() error {
 	}
 	var err error
 	rt.startup.stop()
+	if rt.elevatedLifecycle != nil {
+		rt.elevatedLifecycle.shutdown()
+	}
 	if rt.elevated != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
 	}

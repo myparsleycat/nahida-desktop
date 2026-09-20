@@ -57,7 +57,7 @@ tasks:
     internal: true
     cmds:
       - go tool wails3 generate syso -arch {{.ARCH | default "amd64"}} -icon build/windows/icon.ico -manifest build/windows/elevated-helper.exe.manifest -info {{if .APP_VERSION}}bin/windows-info.json{{else}}build/windows/info.json{{end}} -out cmd/nahida-elevated-helper/elevated_helper_windows_{{.ARCH | default "amd64"}}.syso
-      - go build -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "{{.BIN_DIR}}/nahida-elevated-helper.exe" ./cmd/nahida-elevated-helper
+      - go build -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "internal/elevated/bundle/nahida-elevated-helper.exe" ./cmd/nahida-elevated-helper
       - cmd: powershell -NoProfile -Command "Remove-Item -LiteralPath './cmd/nahida-elevated-helper/elevated_helper_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
         platforms: [windows]
     env:
@@ -133,9 +133,9 @@ tasks:
       - go tool wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}
-        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" -DARG_NAHIDA_ELEVATED_HELPER="{{.ROOT_DIR}}\{{.BIN_DIR}}\nahida-elevated-helper.exe" project.nsi
+        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
         {{else}}
-        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" -DARG_NAHIDA_ELEVATED_HELPER="{{.ROOT_DIR}}/{{.BIN_DIR}}/nahida-elevated-helper.exe" project.nsi
+        '{{.MAKENSIS}}' -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
         {{end}}
     vars:
       MAKENSIS: '{{.MAKENSIS | default (ternary "C:/Program Files (x86)/NSIS/makensis.exe" "makensis" (eq OS "windows"))}}'

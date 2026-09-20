@@ -3,8 +3,10 @@
 package elevated
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
@@ -25,11 +27,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/platform"
-)
-
-const (
-	helperExecutableName = "nahida-elevated-helper.exe"
-	mainExecutableName   = "nahida-desktop.exe"
 )
 
 var (
@@ -70,7 +67,7 @@ type Client struct {
 	process windows.Handle
 	pid     uint32
 	secret  string
-	enabled bool
+	wanted  bool
 	nextID  atomic.Uint64
 }
 
@@ -81,12 +78,12 @@ func NewClient() *Client {
 func (c *Client) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.wanted = true
 	return c.startLocked(ctx)
 }
 
 func (c *Client) startLocked(ctx context.Context) error {
 	if c.conn != nil {
-		c.enabled = true
 		return nil
 	}
 
@@ -94,7 +91,18 @@ func (c *Client) startLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("resolve application executable: %w", err)
 	}
-	helper := filepath.Join(filepath.Dir(executable), helperExecutableName)
+	helperDir, err := defaultHelperDir()
+	if err != nil {
+		return err
+	}
+	helperData, err := bundledHelper()
+	if err != nil {
+		return fmt.Errorf("prepare elevated helper: %w", err)
+	}
+	helper, err := writeHelper(helperDir, helperData)
+	if err != nil {
+		return fmt.Errorf("prepare elevated helper: %w", err)
+	}
 	info, err := os.Lstat(helper)
 	if err != nil {
 		return fmt.Errorf("locate elevated helper %q: %w", helper, err)
@@ -119,6 +127,9 @@ func (c *Client) startLocked(ctx context.Context) error {
 		return fmt.Errorf("lock elevated helper executable: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(helperFile) }()
+	if err := verifyHelperHandle(helperFile, helperData); err != nil {
+		return err
+	}
 
 	secretBytes := make([]byte, 32)
 	if _, err := rand.Read(secretBytes); err != nil {
@@ -126,7 +137,7 @@ func (c *Client) startLocked(ctx context.Context) error {
 	}
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	pipe := `\\.\pipe\nahida-elevated-` + strconv.FormatUint(uint64(os.Getpid()), 10) + "-" + secret[:16]
-	process, pid, err := launch(helper, pipe, secret, uint32(os.Getpid()))
+	process, pid, err := launch(helper, pipe, secret, uint32(os.Getpid()), executable)
 	if err != nil {
 		return err
 	}
@@ -163,7 +174,6 @@ func (c *Client) startLocked(ctx context.Context) error {
 	if _, err := c.callLocked(connectCtx, operationHello, nil); err != nil {
 		return errors.Join(err, c.closeLocked())
 	}
-	c.enabled = true
 	return nil
 }
 
@@ -207,23 +217,58 @@ func equalPath(left, right string) bool {
 	return leftErr == nil && rightErr == nil && strings.EqualFold(filepath.Clean(leftPath), filepath.Clean(rightPath))
 }
 
+// verifyHelperHandle hashes the bytes read from the already-locked handle and
+// compares them with want. Verification is bound to the file object the caller
+// holds open without write or delete sharing, so a successful check cannot be
+// invalidated by re-resolving the path before the helper is launched.
+func verifyHelperHandle(handle windows.Handle, want []byte) error {
+	digest := sha256.New()
+	buffer := make([]byte, 64*1024)
+	for {
+		var read uint32
+		if err := windows.ReadFile(handle, buffer, &read, nil); err != nil {
+			return fmt.Errorf("read elevated helper: %w", err)
+		}
+		if read == 0 {
+			break
+		}
+		if _, err := digest.Write(buffer[:read]); err != nil {
+			return fmt.Errorf("hash elevated helper: %w", err)
+		}
+	}
+	expected := helperDigest(want)
+	if !bytes.Equal(digest.Sum(nil), expected[:]) {
+		return errors.New("elevated helper contents changed before launch")
+	}
+	return nil
+}
+
+// EnsureReady connects the helper when it is enabled, reconnecting after a
+// dropped connection. Launching the helper can wait on a UAC prompt, so callers
+// run it before taking the lock that serializes key delivery.
+func (c *Client) EnsureReady(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		return nil
+	}
+	if !c.wanted {
+		return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
+	}
+	if err := c.startLocked(ctx); err != nil {
+		return fmt.Errorf("%w: restart elevated helper: %w", platform.ErrElevatedHelperRequired, err)
+	}
+	return nil
+}
+
 func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (platform.KeyResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil {
-		if !c.enabled {
-			return platform.KeyResult{}, fmt.Errorf(
-				"%w: elevated helper is not running",
-				platform.ErrElevatedHelperRequired,
-			)
-		}
-		if err := c.startLocked(ctx); err != nil {
-			return platform.KeyResult{}, fmt.Errorf(
-				"%w: restart elevated helper: %w",
-				platform.ErrElevatedHelperRequired,
-				err,
-			)
-		}
+		return platform.KeyResult{}, fmt.Errorf(
+			"%w: elevated helper is not running",
+			platform.ErrElevatedHelperRequired,
+		)
 	}
 	payload, err := json.Marshal(request)
 	if err != nil {
@@ -243,7 +288,7 @@ func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (pla
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.enabled = false
+	c.wanted = false
 	if c.conn == nil {
 		return nil
 	}
@@ -305,11 +350,13 @@ func (c *Client) closeLocked() error {
 	return err
 }
 
-func launch(helper, pipe, secret string, parentPID uint32) (windows.Handle, uint32, error) {
+func launch(helper, pipe, secret string, parentPID uint32, parentExe string) (windows.Handle, uint32, error) {
 	verb, _ := syscall.UTF16PtrFromString("runas")
 	file, _ := syscall.UTF16PtrFromString(helper)
 	parameters, _ := syscall.UTF16PtrFromString(
-		"--pipe " + pipe + " --secret " + secret + " --parent-pid " + strconv.FormatUint(uint64(parentPID), 10),
+		"--pipe " + pipe + " --secret " + secret +
+			" --parent-pid " + strconv.FormatUint(uint64(parentPID), 10) +
+			" --parent-exe " + syscall.EscapeArg(parentExe),
 	)
 	directory, _ := syscall.UTF16PtrFromString(filepath.Dir(helper))
 	info := shellExecuteInfoW{

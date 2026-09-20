@@ -186,7 +186,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		go rt.startElevatedHelperIfEnabled()
+		rt.startElevatedHelperIfEnabled()
 		rt.startup.start(rt.runStartupWork)
 		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
 			newLaunchHandler(viewers.Open, func() { newWindow(app, rt.window) }, rt.window.HandleArguments))

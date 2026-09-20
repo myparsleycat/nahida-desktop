@@ -68,6 +68,10 @@ func InputErrorFromCode(code string) (error, bool) {
 // ElevatedInputSender handles requests that Windows UIPI prevents this
 // process from delivering to a higher-integrity target.
 type ElevatedInputSender interface {
+	// EnsureReady connects or reconnects the helper. Launching the helper can
+	// wait on a UAC prompt, so callers invoke it before taking the lock that
+	// serializes key delivery.
+	EnsureReady(context.Context) error
 	SendKeys(context.Context, KeyRequest) (KeyResult, error)
 }
 

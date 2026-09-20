@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/Microsoft/go-winio"
@@ -22,10 +21,11 @@ type ServerOptions struct {
 	Pipe      string
 	Secret    string
 	ParentPID uint32
+	ParentExe string
 }
 
 func RunServer(ctx context.Context, options ServerOptions) error {
-	if options.Pipe == "" || options.Secret == "" || options.ParentPID == 0 {
+	if options.Pipe == "" || options.Secret == "" || options.ParentPID == 0 || options.ParentExe == "" {
 		return errors.New("missing elevated helper session parameters")
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
@@ -44,13 +44,13 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	if err != nil {
 		return fmt.Errorf("read parent process image: %w", err)
 	}
-	helperPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("read elevated helper image: %w", err)
-	}
-	expectedParent := filepath.Join(filepath.Dir(helperPath), mainExecutableName)
-	if !equalPath(parentPath, expectedParent) {
-		return fmt.Errorf("reject parent process image %q, expected %q", parentPath, expectedParent)
+	// The client passes its own executable path and the kernel reports the image
+	// the parent actually runs. Requiring the two to match keeps the helper from
+	// serving a parent that misrepresents itself, without pinning the hardcoded
+	// "nahida-desktop.exe" name that rejected renamed portable builds. The pipe
+	// secret remains the authentication; this is a consistency check.
+	if !equalPath(parentPath, options.ParentExe) {
+		return fmt.Errorf("reject parent process image %q, expected %q", parentPath, options.ParentExe)
 	}
 
 	// Grant the pipe to the verified parent process user, not the helper token.

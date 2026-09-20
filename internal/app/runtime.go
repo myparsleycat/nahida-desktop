@@ -21,37 +21,38 @@ import (
 )
 
 type runtime struct {
-	startup         *startupWork
-	proxyRelay      *infra.ProxyRelay
-	appData         *appdata.Store
-	log             *infra.Log
-	store           *infra.Store
-	http            *infra.Client
-	cdnTrace        *infra.CDNTrace
-	fs              *platform.FS
-	native          *platform.Native
-	updater         *infra.Updater
-	protocol        *infra.Protocol
-	download        *infra.Download
-	archive         *infra.Archive
-	agent           *agent.Service
-	auth            *auth.Auth
-	setting         *setting.Setting
-	drive           *drive.Drive
-	transfer        *transfer.Transfer
-	gamebanana      *gamebanana.GameBanana
-	menuMaker       *menumaker.MenuMaker
-	mod             *mod.Mod
-	xxmi            *xxmi.XXMI
-	tools           *tools.Tools
-	dialog          *platform.Dialog
-	shell           *platform.Shell
-	input           *platform.Input
-	elevated        *elevated.Client
-	window          *Window
-	localHTTP       *infra.LocalHTTP
-	gameBananaLogin *gameBananaLogin
-	notifications   *notifications.NotificationService
+	startup           *startupWork
+	proxyRelay        *infra.ProxyRelay
+	appData           *appdata.Store
+	log               *infra.Log
+	store             *infra.Store
+	http              *infra.Client
+	cdnTrace          *infra.CDNTrace
+	fs                *platform.FS
+	native            *platform.Native
+	updater           *infra.Updater
+	protocol          *infra.Protocol
+	download          *infra.Download
+	archive           *infra.Archive
+	agent             *agent.Service
+	auth              *auth.Auth
+	setting           *setting.Setting
+	drive             *drive.Drive
+	transfer          *transfer.Transfer
+	gamebanana        *gamebanana.GameBanana
+	menuMaker         *menumaker.MenuMaker
+	mod               *mod.Mod
+	xxmi              *xxmi.XXMI
+	tools             *tools.Tools
+	dialog            *platform.Dialog
+	shell             *platform.Shell
+	input             *platform.Input
+	elevated          *elevated.Client
+	elevatedLifecycle *elevatedLifecycle
+	window            *Window
+	localHTTP         *infra.LocalHTTP
+	gameBananaLogin   *gameBananaLogin
+	notifications     *notifications.NotificationService
 }
 
 func newRuntime() *runtime {
@@ -73,6 +74,9 @@ func newRuntime() *runtime {
 	})
 	input := platform.NewInput()
 	elevatedClient := elevated.NewClient()
+	elevatedHelper := newElevatedLifecycle(elevatedClient, func(err error, stage string) {
+		reportElevatedHelperError(log, err, stage)
+	})
 	input.UseElevatedInput(elevatedClient)
 	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
@@ -192,11 +196,12 @@ func newRuntime() *runtime {
 				})
 			},
 		}),
-		dialog:   dialog,
-		shell:    shell,
-		input:    input,
-		elevated: elevatedClient,
-		window:   window,
+		dialog:            dialog,
+		shell:             shell,
+		input:             input,
+		elevated:          elevatedClient,
+		elevatedLifecycle: elevatedHelper,
+		window:            window,
 		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
 			Version: platform.AppVersion,
 			Log:     log,

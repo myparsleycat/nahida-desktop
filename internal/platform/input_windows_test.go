@@ -286,11 +286,20 @@ func TestSendKeysRoutesHigherIntegrityTargetThroughHelper(t *testing.T) {
 	if sender.calls != 1 || !slices.Equal(got.Keys, want.Keys) {
 		t.Fatalf("helper calls = %d, result = %+v", sender.calls, got)
 	}
+	if sender.readyCalls != 1 {
+		t.Fatalf("helper readiness calls = %d, want 1", sender.readyCalls)
+	}
 }
 
 type testElevatedInputSender struct {
-	result KeyResult
-	calls  int
+	result     KeyResult
+	calls      int
+	readyCalls int
+}
+
+func (s *testElevatedInputSender) EnsureReady(context.Context) error {
+	s.readyCalls++
+	return nil
 }
 
 func (s *testElevatedInputSender) SendKeys(context.Context, KeyRequest) (KeyResult, error) {

@@ -219,12 +219,11 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		chords = append(chords, chord)
 	}
 
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
 	if err := ctx.Err(); err != nil {
 		return KeyResult{}, err
 	}
+	// Resolve the target and integrity before taking the send lock so a helper
+	// launch that waits on UAC never blocks other Input operations.
 	record, err := selectWindow(i.enumerateRecords(), request.Target)
 	if err != nil {
 		i.report(err, "resolve", map[string]any{"target": request.Target.describe(), "keys": keys})
@@ -249,22 +248,11 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		return KeyResult{}, err
 	}
 	if targetLevel > currentLevel {
-		if i.elevated == nil {
-			err = fmt.Errorf(
-				"%w: target pid %d has a higher integrity level; enable the elevated helper in settings",
-				ErrElevatedHelperRequired,
-				record.pid,
-			)
-			i.report(err, "elevated", fields)
-			return KeyResult{}, err
-		}
-		result, elevatedErr := i.elevated.SendKeys(ctx, request)
-		if elevatedErr != nil {
-			i.report(elevatedErr, "elevated", fields)
-		}
-		return result, elevatedErr
+		return i.sendElevatedKeys(ctx, request, record, fields)
 	}
 
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	if options.delivery == KeyDeliveryMessage {
 		err = i.sendMessageKeys(ctx, record, chords, options)
 	} else {
@@ -275,6 +263,41 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		return KeyResult{}, err
 	}
 	return KeyResult{Window: record.info(), Delivery: options.delivery, Keys: keys}, nil
+}
+
+// sendElevatedKeys readies the helper before taking the send lock, then holds
+// the lock for the send itself. A connection that drops in between is reported
+// instead of restarting the helper while the lock is held.
+func (i *Input) sendElevatedKeys(
+	ctx context.Context,
+	request KeyRequest,
+	record *windowRecord,
+	fields map[string]any,
+) (KeyResult, error) {
+	i.mu.Lock()
+	sender := i.elevated
+	i.mu.Unlock()
+	if sender == nil {
+		err := fmt.Errorf(
+			"%w: target pid %d has a higher integrity level; enable the elevated helper in settings",
+			ErrElevatedHelperRequired,
+			record.pid,
+		)
+		i.report(err, "elevated", fields)
+		return KeyResult{}, err
+	}
+	if err := sender.EnsureReady(ctx); err != nil {
+		i.report(err, "elevated", fields)
+		return KeyResult{}, err
+	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	result, err := sender.SendKeys(ctx, request)
+	if err != nil {
+		i.report(err, "elevated", fields)
+	}
+	return result, err
 }
 
 func processIntegrityLevel(pid uint32) (uint32, error) {
