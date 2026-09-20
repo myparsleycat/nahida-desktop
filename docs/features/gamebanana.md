@@ -8,7 +8,7 @@ This page explains how to browse and download mods from the GameBanana page.
 
 ![Image](/features/gamebanana/login1.png)
 
-Signing in is optional. You can browse mods and download files without a GameBanana account.
+Signing in is optional. You can browse mods and download mods that do not require sign-in without a GameBanana account.
 
 ![Image](/features/gamebanana/login2.png)
 

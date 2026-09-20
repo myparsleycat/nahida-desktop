@@ -792,7 +792,7 @@
         "sign_in": "Sign in",
         "signed_out": "Signed out.",
         "signed_in_as": "Signed in as {{name}}",
-        "guest_notice": "Browsing and downloads work without an account. Sign in to like mods.",
+        "guest_notice": "Browsing and downloads for mods that do not require sign-in work without signing in. Sign in to like mods.",
         "unsupported_title": "Automatic GameBanana login is unavailable",
         "unsupported_description": "This platform cannot open the GameBanana login window. Enter an rmc cookie to continue.",
         "init_failed_title": "Could not prepare GameBanana login",

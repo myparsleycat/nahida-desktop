@@ -8,7 +8,7 @@ Nahida Desktop 支持直接在应用内浏览和下载 GameBanana 模组，无�
 
 ![图片](/features/gamebanana/login1.png)
 
-登录是可选的。即使没有 GameBanana 账号，也可以浏览模组并下载文件。
+登录是可选的。即使没有 GameBanana 账号，也可以浏览模组并下载不需要登录的模组。
 
 ![图片](/features/gamebanana/login2.png)
 

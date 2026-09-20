@@ -776,7 +776,7 @@
         "sign_in": "로그인",
         "signed_out": "로그아웃되었습니다.",
         "signed_in_as": "{{name}} 님으로 로그인됨",
-        "guest_notice": "로그인 없이도 탐색과 다운로드를 이용할 수 있습니다. 좋아요를 누르려면 로그인하세요.",
+        "guest_notice": "로그인 없이도 탐색과 로그인이 필요하지 않은 모드 다운로드를 이용할 수 있습니다. 좋아요를 누르려면 로그인하세요.",
         "unsupported_title": "GameBanana 자동 로그인을 사용할 수 없습니다",
         "unsupported_description": "이 환경에서는 GameBanana 로그인 창을 열 수 없습니다. rmc 쿠키를 직접 입력해 주세요.",
         "init_failed_title": "GameBanana 로그인 준비에 실패했습니다",

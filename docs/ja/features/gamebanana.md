@@ -8,7 +8,7 @@ Nahida Desktop では、Web ブラウザを開かずにアプリ内から GameBa
 
 ![画像](/features/gamebanana/login1.png)
 
-ログインは任意です。GameBanana アカウントがなくても MOD の閲覧とファイルのダウンロードができます。
+ログインは任意です。GameBanana アカウントがなくても MOD の閲覧と、ログインが不要な MOD のダウンロードができます。
 
 ![画像](/features/gamebanana/login2.png)
 

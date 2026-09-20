@@ -771,7 +771,7 @@
         "sign_in": "ログイン",
         "signed_out": "ログアウトしました。",
         "signed_in_as": "{{name}} としてログイン中",
-        "guest_notice": "ログインしなくても閲覧とダウンロードができます。いいねするにはログインしてください。",
+        "guest_notice": "ログインしなくても閲覧と、ログインが不要な MOD のダウンロードができます。いいねするにはログインしてください。",
         "unsupported_title": "GameBanana の自動ログインは利用できません",
         "unsupported_description": "この環境では GameBanana のログインウィンドウを開けません。rmc Cookie を入力してください。",
         "init_failed_title": "GameBanana ログインの準備に失敗しました",
