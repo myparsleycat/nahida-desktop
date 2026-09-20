@@ -19,6 +19,7 @@ func TestBuiltInModDiagnosisSkill(t *testing.T) {
 		"Establish the symptom and scope",
 		"Check compatible fixers when the symptom suggests an update",
 		"Inspect INIs and resource integrity",
+		"Escalate from static files to runtime evidence",
 		"Isolate conflicts when the scope permits",
 		"one or two ancestor directory levels",
 		"Report or patch",
@@ -33,6 +34,30 @@ func TestBuiltInModDiagnosisSkill(t *testing.T) {
 			t.Fatalf("mod-diagnosis skill step %q is out of order", step)
 		}
 		previous = index
+	}
+}
+
+func TestBuiltInModDiagnosisSkillUsesRuntimeEvidenceAfterFailedTrial(t *testing.T) {
+	t.Parallel()
+	catalog := newSkillCatalog(t.TempDir())
+	catalog.Reload()
+
+	content, err := catalog.Load("mod-diagnosis", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, instruction := range []string{
+		"A syntactically correct patch is not proof that the edited path executed",
+		"do not stack more speculative edits on top of it",
+		"record the unchanged result",
+		"capture the target game window before and after a trial",
+		"Key delivery proves only that the input was sent",
+		"Use `F10` first for ordinary INI/resource changes",
+		"Clean up only artifacts that the current diagnostic session recorded as its own",
+	} {
+		if !strings.Contains(content, instruction) {
+			t.Fatalf("mod-diagnosis skill is missing runtime-evidence guidance %q", instruction)
+		}
 	}
 }
 
@@ -232,6 +257,11 @@ func TestBuiltInModdingReferencesLoad(t *testing.T) {
 			want:      "Imported shader-override reference",
 		},
 		{skill: "mod-diagnosis", reference: "references/troubleshooting.md", want: "Symptom-driven troubleshooting"},
+		{
+			skill:     "mod-diagnosis",
+			reference: "references/runtime-render-diagnosis.md",
+			want:      "Keep a hypothesis ledger",
+		},
 		{
 			skill:     "mod-diagnosis",
 			reference: "references/source-troubleshooting-guide.md",

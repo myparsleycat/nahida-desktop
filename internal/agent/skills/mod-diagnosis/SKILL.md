@@ -41,8 +41,10 @@ For example, if both `TextureOverrideChongyunHead` and `TextureOverrideChongyunB
 ## 1. Establish the symptom and scope
 
 - Identify the game/importer, affected object or character part, expected result, visible symptom, when it started, and whether it affects one mod or the whole setup.
+- Read the active scope and query available XXMI or desktop state before asking the user for a path, importer, version, or running process that Nahida can already determine locally. Ask only when the available values conflict or remain ambiguous.
 - Inspect the authorized sandbox for INIs, resources, bundled instructions, dependencies, disabled files, and logs. Do not claim to inspect the game, launcher, sibling mods, or directories outside the exposed roots.
 - Preserve originals and prefer a focused, reversible patch.
+- Separate direct observations from hypotheses. Before a trial patch, state the evidence, the predicted visible result, the required reload method, and the rollback. Do not describe a plausible cause as confirmed until the file or runtime evidence verifies it.
 
 Read [references/troubleshooting.md](references/troubleshooting.md) and use the symptom matrix to prioritize checks.
 
@@ -69,22 +71,41 @@ Load `ini-editing`, then inspect every active path relevant to the symptom:
 
 Do not delete cache, ShaderFixes, or configuration files. If an external cleanup or in-game reload is a useful test, describe it as a reversible manual experiment and state what each outcome would mean.
 
-## 4. Isolate conflicts when the scope permits
+## 4. Escalate from static files to runtime evidence
+
+A syntactically correct patch is not proof that the edited path executed. If a focused trial patch produces no visible change after the appropriate reload, do not stack more speculative edits on top of it. Confirm that the patch is present on disk, record the unchanged result, revert the rejected trial when it is no longer useful, and determine whether the edited override, branch, command list, shader, and draw actually ran.
+
+Read [references/runtime-render-diagnosis.md](references/runtime-render-diagnosis.md) when a visual defect remains after a verified static edit, when the disk state differs from a frame-analysis record, or when the symptom may differ between depth, shadow, color, outline, or reflection passes. Load `modding-basics` and its summarized hunting reference when frame analysis or resource hunting is required.
+
+Use registered desktop actions when they are available and directly advance the diagnosis:
+
+- inspect the configured XXMI state before asking the user to retype it;
+- capture the target game window before and after a trial so the same visible symptom can be compared;
+- after one-time approval, send a focused reload or analysis shortcut to the resolved game window; and
+- after one-time approval, start a configured game through XXMI when a full game restart is required.
+
+Key delivery proves only that the input was sent, not that the expected scene, overlay, dump, or reload occurred. Verify the resulting screen or generated files. Ask the user to perform only the in-game navigation, pose, camera setup, or other semantic interaction that no registered action can safely perform. Never assume an exact hunting shortcut is universal; inspect the active configuration or use the overlay instructions supplied by that importer.
+
+## 5. Isolate conflicts when the scope permits
 
 When many mods may be responsible, recommend a binary or "halves" isolation test: disable half, reproduce, and repeat with the failing half. After Mods are ruled out, ShaderFixes can be isolated separately. Nahida should perform this only through registered reversible actions and only when the user's request authorizes those changes; otherwise give manual steps.
 
 Change one variable per test and keep a record of the enabled set. A successful reload without reproducing the original scene is not conclusive.
 
-## 5. Compare a compatible mod
+## 6. Compare a compatible mod
 
 - Look for other mods of the same character/object in the authorized sandbox. They are often one or two ancestor directory levels above the target mod.
 - Compare like-for-like INI sections, resource types, slots, draw parameters, buffer layouts, and hashes.
 - If the sandbox does not expose the needed ancestor or sibling folders, state that limitation.
 - A difference is evidence, not proof. Never replace a hash, stride, format, or draw count solely because another mod differs.
 
-## 6. Report or patch
+## 7. Report or patch
 
-State the observed evidence, most likely cause, remaining uncertainty, and smallest next test. For an authorized edit, explain the exact render path or reference being changed and preserve a straightforward rollback. Re-read every changed region. Once a sufficient fix has been applied and verified in the files, stop tool use and ask only for the necessary user-observed check. Remind the user that `F10`, relaunching, reproducing the scene, and visual confirmation are user-performed checks.
+State the observed evidence, rejected hypotheses, most likely cause, remaining uncertainty, and smallest next test. For an authorized edit, explain the exact render path or reference being changed and preserve a straightforward rollback. Re-read every changed region. Once a sufficient fix has been applied and verified in the files, stop unrelated tool use and perform or request only the necessary runtime check.
+
+Use `F10` first for ordinary INI/resource changes when the importer supports reloading them. Require a full game-process restart when the diagnostic feature or shader source is initialized only on first load, when an importer or DLL changed, or when runtime evidence shows that reload did not refresh the relevant state. Do not require restarting the XXMI application when restarting only the game process is sufficient.
+
+After the user or a captured screen confirms the fix, restore every temporary diagnostic setting. Clean up only artifacts that the current diagnostic session recorded as its own. Preserve the working mod, the final patch, a straightforward original backup, pre-existing ShaderFixes and caches, and any generated file that changed after creation. Report what was restored, removed, and retained.
 
 ## GIMI outline and reflection diagnosis
 
