@@ -34,7 +34,17 @@ type AgentChatEntry struct {
 	ChangedFiles []string        `json:"changedFiles,omitempty"`
 	Error        string          `json:"error,omitempty"`
 	Approval     *AgentApproval  `json:"approval,omitempty"`
+	Reverted     bool            `json:"reverted,omitempty"`
 	CreatedAt    string          `json:"createdAt"`
+}
+
+// AgentSessionRevert is a staged revert: every event at or after BoundarySequence is hidden until the
+// next send commits the deletion.
+type AgentSessionRevert struct {
+	BoundarySequence int64  `json:"boundarySequence"`
+	BoundaryTurnID   string `json:"boundaryTurnId"`
+	RevertedCount    int    `json:"revertedCount"`
+	CreatedAt        string `json:"createdAt"`
 }
 
 type AgentSessionSnapshot struct {
@@ -42,6 +52,7 @@ type AgentSessionSnapshot struct {
 	Entries           []AgentChatEntry    `json:"entries"`
 	Roots             []SandboxRoot       `json:"roots"`
 	Approvals         []AgentApproval     `json:"approvals"`
+	Revert            *AgentSessionRevert `json:"revert,omitempty"`
 	SupportsImages    bool                `json:"supportsImages"`
 	UnavailableReason string              `json:"unavailableReason,omitempty"`
 }

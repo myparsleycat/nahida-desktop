@@ -16,7 +16,9 @@ const backend = vi.hoisted(() => ({
   OpenSession: vi.fn(),
   RejectAction: vi.fn(),
   RenameSession: vi.fn(),
+  RevertSession: vi.fn(),
   Send: vi.fn(),
+  UnrevertSession: vi.fn(),
 }));
 const navigate = vi.hoisted(() => vi.fn());
 const subscriptions = vi.hoisted(() => ({
@@ -616,5 +618,131 @@ describe("Agent image input", () => {
       name: "mcp__blender__get_screenshot_of_window_as_image",
     });
     expect(toolImage.getAttribute("src")).toMatch(/^\/protocol\/local\?path=.*b\.png$/);
+  });
+});
+
+describe("Agent conversation revert", () => {
+  const conversation = [
+    {
+      sequence: 1,
+      turnId: RUN_ID,
+      type: "turn/start",
+      role: "user",
+      text: "first request",
+      createdAt: new Date().toISOString(),
+    },
+    {
+      sequence: 2,
+      turnId: RUN_ID,
+      type: "message/assistant",
+      role: "assistant",
+      text: "first answer",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  it("stages a revert from a user message and refills the composer", async () => {
+    backend.RevertSession.mockResolvedValue(
+      makeSnapshot(conversation, {
+        revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
+      }),
+    );
+    await renderAgent(conversation);
+
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.revert_message" }));
+
+    await waitFor(() => expect(backend.RevertSession).toHaveBeenCalledWith(SESSION_ID, 1));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "page.agent.placeholder" }) as HTMLTextAreaElement)
+          .value,
+      ).toBe("first request"),
+    );
+    expect(screen.getByText("page.agent.revert_pending")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "page.agent.revert_undo" })).toBeTruthy();
+  });
+
+  it("clears a staged revert from the banner", async () => {
+    const staged = makeSnapshot(conversation, {
+      revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
+    });
+    backend.UnrevertSession.mockResolvedValue(makeSnapshot(conversation));
+    await renderAgent(conversation, () => Promise.resolve(staged));
+
+    fireEvent.click(await screen.findByRole("button", { name: "page.agent.revert_undo" }));
+
+    await waitFor(() => expect(backend.UnrevertSession).toHaveBeenCalledWith(SESSION_ID));
+    await waitFor(() => expect(screen.queryByText("page.agent.revert_pending")).toBeNull());
+  });
+
+  it("copies a user message", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await renderAgent(conversation);
+
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.copy_message" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("first request"));
+  });
+
+  it("keeps an in-progress composer draft when reverting", async () => {
+    backend.RevertSession.mockResolvedValue(
+      makeSnapshot(conversation, {
+        revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
+      }),
+    );
+    await renderAgent(conversation);
+
+    const composer = screen.getByRole("textbox", {
+      name: "page.agent.placeholder",
+    }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: "still typing" } });
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.revert_message" }));
+
+    await waitFor(() => expect(backend.RevertSession).toHaveBeenCalledWith(SESSION_ID, 1));
+    expect(composer.value).toBe("still typing");
+  });
+
+  it("drops reverted entries from the optimistic view after sending", async () => {
+    const reverted = conversation.map((entry) => ({ ...entry, reverted: true }));
+    const staged = makeSnapshot(reverted, {
+      revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
+    });
+    backend.Send.mockResolvedValue({ runId: RUN_ID });
+    await renderAgent(reverted, () => Promise.resolve(staged));
+
+    const composer = screen.getByRole("textbox", { name: "page.agent.placeholder" });
+    fireEvent.change(composer, { target: { value: "next request" } });
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.send" }));
+
+    await waitFor(() => expect(backend.Send).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText("first request")).toBeNull());
+    expect(screen.getByText("next request")).toBeTruthy();
+  });
+
+  it("disables copy for a message with no text", async () => {
+    await renderAgent([
+      {
+        sequence: 1,
+        turnId: RUN_ID,
+        type: "turn/start",
+        role: "user",
+        images: [
+          {
+            name: "only.png",
+            mimeType: "image/png",
+            bytes: 4,
+            path: "agent/images/session-1/only.png",
+            src: "C:\\data\\agent\\images\\session-1\\only.png",
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    const copy = screen.getByRole("button", {
+      name: "page.agent.copy_message",
+    }) as HTMLButtonElement;
+    expect(copy.disabled).toBe(true);
   });
 });

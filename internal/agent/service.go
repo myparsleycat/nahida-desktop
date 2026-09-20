@@ -82,12 +82,15 @@ type Service struct {
 	refreshMu sync.Mutex
 	workers   map[string]*sessionWorker
 	sequences sync.Map
-	global    chan struct{}
-	stop      chan struct{}
-	runCtx    context.Context
-	cancelRun context.CancelFunc
-	closing   atomic.Bool
-	wg        sync.WaitGroup
+	// sessionLocks serializes revert staging with the destructive revert commit in Send, so a
+	// concurrent send cannot read a stale revert marker or delete a turn it just appended.
+	sessionLocks sync.Map
+	global       chan struct{}
+	stop         chan struct{}
+	runCtx       context.Context
+	cancelRun    context.CancelFunc
+	closing      atomic.Bool
+	wg           sync.WaitGroup
 }
 
 type queuedRun struct {
@@ -333,11 +336,24 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	}
 	scope := rowScope(*row)
 	_, roots, scopeErr := s.resolveScope(ctx, scope)
+	var staged *AgentSessionRevert
+	if parsed := parseSessionRevert(row.Revert); parsed != nil {
+		reverted := 0
+		for index := range entries {
+			if entries[index].Sequence >= parsed.BoundarySequence {
+				entries[index].Reverted = true
+				reverted++
+			}
+		}
+		parsed.RevertedCount = reverted
+		staged = parsed
+	}
 	snapshot := AgentSessionSnapshot{
 		Summary:   s.sessionSummary(*row),
 		Entries:   entries,
 		Roots:     roots,
 		Approvals: approvals,
+		Revert:    staged,
 	}
 	if settings, settingsErr := readSettings(ctx, client, s.crypto); settingsErr == nil {
 		snapshot.SupportsImages = settings.SupportsImages
@@ -393,6 +409,83 @@ func (s *Service) DeleteSession(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *Service) RevertSession(ctx context.Context, id string, sequence int64) (AgentSessionSnapshot, error) {
+	lock := s.sessionLock(id)
+	lock.Lock()
+	defer lock.Unlock()
+	client, err := s.dbClient()
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	row, err := client.AgentSessions.Get(ctx, id)
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	if row == nil {
+		return AgentSessionSnapshot{}, errors.New("agent session not found")
+	}
+	if s.sessionSummary(*row).Running {
+		return AgentSessionSnapshot{}, errors.New("the agent is still responding to this chat")
+	}
+	approvals, err := client.AgentApprovals.ListSession(ctx, id)
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	for _, approval := range approvals {
+		if approval.Status == "pending" || approval.Status == "executing" {
+			return AgentSessionSnapshot{}, errors.New("agent session is awaiting an action decision")
+		}
+	}
+	events, err := client.AgentEvents.List(ctx, id)
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	var boundary *db.AgentEventRow
+	for index := range events {
+		if events[index].Sequence == sequence && events[index].EventType == "turn/start" {
+			boundary = &events[index]
+			break
+		}
+	}
+	if boundary == nil {
+		return AgentSessionSnapshot{}, errors.New("revert target is not a user message")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	encoded, err := json.Marshal(AgentSessionRevert{
+		BoundarySequence: boundary.Sequence, BoundaryTurnID: boundary.TurnID, CreatedAt: now,
+	})
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	if err := client.AgentSessions.SetRevert(ctx, id, string(encoded), now); err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	return s.GetSession(ctx, id)
+}
+
+func (s *Service) UnrevertSession(ctx context.Context, id string) (AgentSessionSnapshot, error) {
+	lock := s.sessionLock(id)
+	lock.Lock()
+	defer lock.Unlock()
+	client, err := s.dbClient()
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	row, err := client.AgentSessions.Get(ctx, id)
+	if err != nil {
+		return AgentSessionSnapshot{}, err
+	}
+	if row == nil {
+		return AgentSessionSnapshot{}, errors.New("agent session not found")
+	}
+	if row.Revert != "" {
+		if err := client.AgentSessions.ClearRevert(ctx, id, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return AgentSessionSnapshot{}, err
+		}
+	}
+	return s.GetSession(ctx, id)
+}
+
 func (s *Service) Send(ctx context.Context, id, text string, images []AgentImageInput) (SendResult, error) {
 	if s.closing.Load() {
 		return SendResult{}, errors.New("agent is shutting down")
@@ -401,6 +494,9 @@ func (s *Service) Send(ctx context.Context, id, text string, images []AgentImage
 	if text == "" && len(images) == 0 {
 		return SendResult{}, errors.New("message is required")
 	}
+	lock := s.sessionLock(id)
+	lock.Lock()
+	defer lock.Unlock()
 	client, err := s.dbClient()
 	if err != nil {
 		return SendResult{}, err
@@ -408,6 +504,12 @@ func (s *Service) Send(ctx context.Context, id, text string, images []AgentImage
 	row, err := client.AgentSessions.Get(ctx, id)
 	if err != nil || row == nil {
 		return SendResult{}, errors.New("agent session not found")
+	}
+	if row.Revert != "" {
+		row, err = s.commitRevert(ctx, client, *row)
+		if err != nil {
+			return SendResult{}, err
+		}
 	}
 	if _, _, err := s.resolveScope(ctx, rowScope(*row)); err != nil {
 		return SendResult{}, err
@@ -1785,6 +1887,13 @@ func (s *Service) dbClient() (*db.Client, error) {
 	return s.client, nil
 }
 
+// sessionLock returns the per-session mutex that serializes revert staging with the revert commit in
+// Send. The lock is never removed: sessions are few and a stale entry costs one mutex.
+func (s *Service) sessionLock(id string) *sync.Mutex {
+	value, _ := s.sessionLocks.LoadOrStore(id, &sync.Mutex{})
+	return value.(*sync.Mutex)
+}
+
 func (s *Service) toolOutput(sessionID, runID, callID string, output any) (any, string) {
 	data, _ := json.Marshal(output)
 	if len(data) <= maxToolOutput || s.appData == nil {
@@ -1799,6 +1908,62 @@ func (s *Service) toolOutput(sessionID, runID, callID string, output any) (any, 
 	return map[string]any{
 		"preview": string(data[:maxToolOutput]), "truncated": true, "originalBytes": len(data), "artifact": relative,
 	}, relative
+}
+
+// parseSessionRevert decodes a staged revert marker. An empty or unusable value reads as no revert,
+// which matches how GetSession projects entries, so a corrupt marker never hides the conversation.
+func parseSessionRevert(raw string) *AgentSessionRevert {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var staged AgentSessionRevert
+	if err := json.Unmarshal([]byte(raw), &staged); err != nil {
+		return nil
+	}
+	if staged.BoundarySequence <= 0 {
+		return nil
+	}
+	return &staged
+}
+
+// commitRevert applies a staged revert before a new turn is queued: it deletes the hidden events
+// with their approvals and keeps the session summary consistent with the surviving events.
+func (s *Service) commitRevert(
+	ctx context.Context,
+	client *db.Client,
+	row db.AgentSessionRow,
+) (*db.AgentSessionRow, error) {
+	staged := parseSessionRevert(row.Revert)
+	if staged == nil {
+		return &row, nil
+	}
+	payload, err := client.AgentEvents.LatestSummaryBefore(ctx, row.ID, staged.BoundarySequence)
+	if err != nil {
+		return nil, fmt.Errorf("commit agent revert: %w", err)
+	}
+	summary := ""
+	if payload != "" {
+		var decoded struct {
+			Summary string `json:"summary"`
+		}
+		if json.Unmarshal([]byte(payload), &decoded) == nil {
+			summary = decoded.Summary
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := client.AgentSessions.CommitRevert(
+		ctx, row.ID, staged.BoundarySequence, row.Revert, summary, now,
+	); err != nil {
+		return nil, err
+	}
+	updated, err := client.AgentSessions.Get(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	if updated == nil {
+		return nil, errors.New("agent session not found")
+	}
+	return updated, nil
 }
 
 func rowScope(row db.AgentSessionRow) AgentScope {

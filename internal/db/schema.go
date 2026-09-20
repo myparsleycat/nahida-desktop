@@ -167,6 +167,7 @@ var TableSpecs = []TableSpec{
 			{Name: "mod_name", Type: TypeText},
 			{Name: "title", Type: TypeText, NotNull: true},
 			{Name: "durable_summary", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "revert", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
 			{Name: "created_at", Type: TypeText, NotNull: true},
 			{Name: "updated_at", Type: TypeText, NotNull: true},
 		},
@@ -375,6 +376,7 @@ type AgentSessionRow struct {
 	ModName        *string
 	Title          string
 	DurableSummary string
+	Revert         string
 	CreatedAt      string
 	UpdatedAt      string
 }

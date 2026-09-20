@@ -52,6 +52,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CircleStopIcon,
+  CopyIcon,
   FolderIcon,
   Loader2Icon,
   MessageSquarePlusIcon,
@@ -61,6 +62,7 @@ import {
   ShieldAlertIcon,
   SparklesIcon,
   Trash2Icon,
+  Undo2Icon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
@@ -151,6 +153,7 @@ function AgentRoute() {
   const [liveEntries, setLiveEntries] = useState<LiveAgentChatEntry[]>([]);
   const [runId, setRunId] = useState<string>();
   const [decidingApproval, setDecidingApproval] = useState<string>();
+  const [reverting, setReverting] = useState(false);
   const [menuSessionId, setMenuSessionId] = useState<string>();
   const [renameTarget, setRenameTarget] = useState<AgentSessionSummary>();
   const [renameValue, setRenameValue] = useState("");
@@ -324,7 +327,9 @@ function AgentRoute() {
         ? {
             ...value,
             entries: [
-              ...(value.entries ?? []),
+              // Sending commits the staged revert, which deletes these events; drop them here so the
+              // conversation does not show messages that no longer exist for the whole turn.
+              ...(value.entries ?? []).filter((entry) => !entry.reverted),
               {
                 sequence: Number.MAX_SAFE_INTEGER,
                 turnId: "pending",
@@ -335,6 +340,9 @@ function AgentRoute() {
                 createdAt: new Date().toISOString(),
               },
             ],
+            // Sending commits a staged revert on the backend, so drop the banner now instead of
+            // leaving it up for the whole turn.
+            revert: undefined,
           }
         : value,
     );
@@ -435,6 +443,33 @@ function AgentRoute() {
       await openSnapshot(approval.sessionId);
     } finally {
       setDecidingApproval(undefined);
+    }
+  };
+
+  const revertToMessage = async (entry: LiveAgentChatEntry) => {
+    if (!snapshot || runId || hasPendingApproval || reverting) return;
+    setReverting(true);
+    try {
+      setSnapshot(await Agent.RevertSession(snapshot.summary.id, entry.sequence));
+      setLiveEntries([]);
+      // Only refill an empty composer: overwriting an in-progress draft would discard it silently.
+      if (entry.text && !draft.trim()) setDraft(entry.text);
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setReverting(false);
+    }
+  };
+
+  const unrevertSession = async () => {
+    if (!snapshot || reverting) return;
+    setReverting(true);
+    try {
+      setSnapshot(await Agent.UnrevertSession(snapshot.summary.id));
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setReverting(false);
     }
   };
 
@@ -651,18 +686,26 @@ function AgentRoute() {
                 </div>
               )}
               {!empty &&
-                entries.map((entry, index) =>
-                  entry.approval ? (
-                    <ApprovalCard
-                      key={entry.approval.id}
-                      approval={entry.approval}
-                      busy={decidingApproval === entry.approval.id}
-                      onDecision={decideApproval}
-                    />
-                  ) : (
-                    <ChatEntry key={`${entry.sequence}-${entry.type}-${index}`} entry={entry} />
-                  ),
-                )}
+                entries.map((entry, index) => (
+                  <div
+                    key={`${entry.sequence}-${entry.type}-${index}`}
+                    className={cn("max-w-full min-w-0", entry.reverted && "opacity-45")}
+                  >
+                    {entry.approval ? (
+                      <ApprovalCard
+                        approval={entry.approval}
+                        busy={decidingApproval === entry.approval.id}
+                        onDecision={decideApproval}
+                      />
+                    ) : (
+                      <ChatEntry
+                        entry={entry}
+                        onRevert={revertToMessage}
+                        revertDisabled={!!runId || hasPendingApproval || reverting}
+                      />
+                    )}
+                  </div>
+                ))}
               {runId && liveEntries.length === 0 && (
                 <div className="inline-flex h-[26px] animate-[agent-shimmer_1.8s_linear_infinite] items-center self-start bg-[linear-gradient(90deg,#4176e6_0%,#4176e6_38%,#b7c8fe_50%,#4176e6_62%,#4176e6_100%)] [background-size:250%_100%] bg-clip-text [background-position:100%_50%] text-sm font-medium text-transparent motion-reduce:animate-none">
                   <span>{t("page.agent.thinking")}</span>
@@ -683,8 +726,10 @@ function AgentRoute() {
             snapshot={snapshot}
             runId={runId}
             hasPendingApproval={hasPendingApproval}
+            reverting={reverting}
             empty={empty}
             onSend={send}
+            onUnrevert={unrevertSession}
           />
         </div>
       </main>
@@ -765,8 +810,10 @@ function Composer({
   snapshot,
   runId,
   hasPendingApproval,
+  reverting,
   empty,
   onSend,
+  onUnrevert,
 }: {
   draft: string;
   setDraft: (value: string) => void;
@@ -776,8 +823,10 @@ function Composer({
   snapshot?: AgentSessionSnapshot;
   runId?: string;
   hasPendingApproval: boolean;
+  reverting: boolean;
   empty: boolean;
   onSend: () => Promise<void>;
+  onUnrevert: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -820,6 +869,26 @@ function Composer({
           void onAddImages([...event.dataTransfer.files]);
         }}
       >
+        {snapshot?.revert && (
+          <div className="flex items-center justify-between gap-3 rounded-[14px] bg-muted px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-foreground">
+                {t("page.agent.revert_pending", { count: snapshot.revert.revertedCount })}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {t("page.agent.revert_files_notice")}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={reverting}
+              className="flex-none rounded-[8px] border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors duration-100 hover:bg-background/60 disabled:cursor-default disabled:opacity-35"
+              onClick={() => void onUnrevert()}
+            >
+              {t("page.agent.revert_undo")}
+            </button>
+          </div>
+        )}
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 px-[7px] pt-[5px]">
             {images.map((image, index) => (
@@ -1018,13 +1087,59 @@ function AgentImages({ images, alt }: { images?: AgentImage[] | null; alt: strin
   );
 }
 
-function ChatEntry({ entry }: { entry: LiveAgentChatEntry }) {
+function ChatEntry({
+  entry,
+  onRevert,
+  revertDisabled = false,
+}: {
+  entry: LiveAgentChatEntry;
+  onRevert?: (entry: LiveAgentChatEntry) => void;
+  revertDisabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
   if (entry.role === "user") {
+    const copy = async () => {
+      if (!entry.text) return;
+      try {
+        await navigator.clipboard.writeText(entry.text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      } catch {
+        toast.error(t("page.agent.copy_failed"));
+      }
+    };
+
     return (
       <div className="flex justify-end">
-        <div className="flex max-w-[min(70%,640px)] min-w-0 flex-col items-end gap-1.5 rounded-[22px] bg-[color-mix(in_oklab,var(--muted)_88%,var(--background))] px-4 py-2.5 text-sm leading-[22px] wrap-anywhere whitespace-pre-wrap">
-          <AgentImages images={entry.images} alt="" />
-          {entry.text}
+        <div className="flex w-fit max-w-[min(70%,640px)] min-w-[176px] flex-col items-end gap-1">
+          <div className="max-w-full min-w-0 rounded-[22px] bg-[color-mix(in_oklab,var(--muted)_88%,var(--background))] px-4 py-2.5 text-sm leading-[22px] wrap-anywhere whitespace-pre-wrap">
+            <AgentImages images={entry.images} alt="" />
+            {entry.text}
+          </div>
+          <div className="flex w-full items-center justify-between gap-2 px-1">
+            <button
+              type="button"
+              aria-label={t("page.agent.revert_message")}
+              title={t("page.agent.revert_message")}
+              disabled={revertDisabled || !onRevert}
+              className="grid size-6 flex-none place-items-center rounded-[7px] text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-35"
+              onClick={() => onRevert?.(entry)}
+            >
+              <Undo2Icon className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={copied ? t("page.agent.copied") : t("page.agent.copy_message")}
+              title={copied ? t("page.agent.copied") : t("page.agent.copy_message")}
+              disabled={!entry.text}
+              className="grid size-6 flex-none place-items-center rounded-[7px] text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-35"
+              onClick={() => void copy()}
+            >
+              {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+            </button>
+          </div>
         </div>
       </div>
     );
