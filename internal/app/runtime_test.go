@@ -67,7 +67,7 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 		got = append(got, event{name: name, data: payload})
 	}, func(language string) {
 		synced = append(synced, language)
-	})
+	}, nil)
 	hooks.AfterLanguageChanged("ko")
 	hooks.AfterSet(setting.KeyGeneralLanguage, "ko")
 	hooks.AfterRendererReload()
@@ -94,7 +94,7 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 
 func TestRuntimeSettingHooksApplyOpenConsoleToWindow(t *testing.T) {
 	window := NewWindow()
-	hooks := runtimeSettingHooks(nil, nil, nil, nil, window, nil, nil, nil)
+	hooks := runtimeSettingHooks(nil, nil, nil, nil, window, nil, nil, nil, nil)
 
 	hooks.AfterOpenConsoleChanged(true)
 	window.mu.Lock()

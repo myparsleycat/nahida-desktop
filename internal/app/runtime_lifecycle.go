@@ -110,13 +110,23 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.setting == nil {
 		rt.setting = setting.NewWithOptions(store.DB, setting.Options{
 			Locale: platform.SystemLocale(),
-			Hooks:  runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil),
+			Hooks: runtimeSettingHooks(
+				rt.log,
+				rt.transfer,
+				rt.updater,
+				rt.tools,
+				rt.window,
+				nil,
+				emitAppEvent,
+				nil,
+				nil,
+			),
 		})
 	} else {
 		rt.setting.UseClient(store.DB)
 		rt.setting.UseLocale(platform.SystemLocale())
 		rt.setting.UseHooks(
-			runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil),
+			runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil, nil),
 		)
 	}
 	if rt.transfer != nil {
@@ -173,7 +183,11 @@ func (rt *runtime) Close() error {
 	if rt == nil {
 		return nil
 	}
+	var err error
 	rt.startup.stop()
+	if rt.elevated != nil {
+		err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
+	}
 	if rt.gameBananaLogin != nil {
 		rt.gameBananaLogin.Close()
 	}
@@ -185,7 +199,6 @@ func (rt *runtime) Close() error {
 			infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"},
 		)
 	}
-	var err error
 	if rt.proxyRelay != nil {
 		err = errors.Join(err, rt.proxyRelay.Close())
 		rt.proxyRelay = nil

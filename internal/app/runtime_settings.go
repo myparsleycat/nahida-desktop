@@ -19,9 +19,11 @@ func runtimeSettingHooks(
 	autostart func(bool) error,
 	emit func(string, ...any),
 	syncModelViewerMenu func(language string),
+	elevatedHelperChanged func(enabled bool),
 ) setting.Hooks {
 	return setting.Hooks{
-		AfterRunOnStartupChanged: autostart,
+		AfterRunOnStartupChanged:   autostart,
+		AfterElevatedHelperChanged: elevatedHelperChanged,
 		AfterSet: func(key string, value any) {
 			if emit != nil {
 				emit("setting:update", map[string]any{"key": key, "value": value})

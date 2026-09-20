@@ -8,6 +8,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/drive"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/menumaker"
@@ -46,6 +47,7 @@ type runtime struct {
 	dialog          *platform.Dialog
 	shell           *platform.Shell
 	input           *platform.Input
+	elevated        *elevated.Client
 	window          *Window
 	localHTTP       *infra.LocalHTTP
 	gameBananaLogin *gameBananaLogin
@@ -70,6 +72,8 @@ func newRuntime() *runtime {
 		_ = infra.ReportError(log, err, "FS", infra.Diagnostic{Operation: "write-access", Stage: stage, Fields: fields})
 	})
 	input := platform.NewInput()
+	elevatedClient := elevated.NewClient()
+	input.UseElevatedInput(elevatedClient)
 	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
 			log,
@@ -133,7 +137,7 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil))
+	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil, nil))
 	rt := &runtime{
 		startup:  newStartupWork(),
 		log:      log,
@@ -188,10 +192,11 @@ func newRuntime() *runtime {
 				})
 			},
 		}),
-		dialog: dialog,
-		shell:  shell,
-		input:  input,
-		window: window,
+		dialog:   dialog,
+		shell:    shell,
+		input:    input,
+		elevated: elevatedClient,
+		window:   window,
 		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
 			Version: platform.AppVersion,
 			Log:     log,
@@ -231,7 +236,7 @@ func newRuntime() *runtime {
 		}
 	}
 	settings.UseHooks(
-		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil),
+		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil, nil),
 	)
 	return rt
 }

@@ -147,6 +147,11 @@ Section
     SetOutPath $INSTDIR
     
     !insertmacro wails.files
+    # The helper is installed next to the per-user app, so an ordinary user can
+    # replace it before it is launched elevated. This is an accepted limitation
+    # of the unsigned per-user install, not a closed defense; see
+    # internal/elevated/doc.go.
+    File "/oname=nahida-elevated-helper.exe" "${ARG_NAHIDA_ELEVATED_HELPER}"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -166,6 +171,7 @@ Section "uninstall"
     SetOutPath "$TEMP"
     ClearErrors
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    Delete "$INSTDIR\nahida-elevated-helper.exe"
     IfErrors uninstallFailed
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath

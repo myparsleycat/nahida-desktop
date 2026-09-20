@@ -380,6 +380,14 @@ func (s *Setting) SetRunInBackground(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralRunInBackground, enabled)
 }
 
+func (s *Setting) GetElevatedHelperEnabled(ctx context.Context) (bool, error) {
+	return s.getBool(ctx, KeyGeneralElevatedHelperEnabled)
+}
+
+func (s *Setting) SetElevatedHelperEnabled(ctx context.Context, enabled bool) error {
+	return s.Set(ctx, KeyGeneralElevatedHelperEnabled, enabled)
+}
+
 func (s *Setting) GetLogLevel(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralLogLevel)
 }

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
@@ -99,14 +100,16 @@ type Input struct {
 	mu         sync.Mutex
 	diagnostic func(error, string, map[string]any)
 
-	enumerate     func() []win.HWND
-	isVisible     func(win.HWND) bool
-	foreground    func() win.HWND
-	focus         func(win.HWND)
-	processOf     func(uint32) string
-	postMessage   func(win.HWND, co.WM, win.WPARAM, win.LPARAM) error
-	sendInput     func([]win.INPUT) (int, error)
-	mapVirtualKey func(co.VK) uint32
+	enumerate      func() []win.HWND
+	isVisible      func(win.HWND) bool
+	foreground     func() win.HWND
+	focus          func(win.HWND)
+	processOf      func(uint32) string
+	postMessage    func(win.HWND, co.WM, win.WPARAM, win.LPARAM) error
+	sendInput      func([]win.INPUT) (int, error)
+	mapVirtualKey  func(co.VK) uint32
+	integrityLevel func(uint32) (uint32, error)
+	elevated       ElevatedInputSender
 
 	focusTimeout time.Duration
 	focusPoll    time.Duration
@@ -122,11 +125,22 @@ func NewInput() *Input {
 		postMessage: func(handle win.HWND, message co.WM, wParam win.WPARAM, lParam win.LPARAM) error {
 			return handle.PostMessage(message, wParam, lParam)
 		},
-		sendInput:     win.SendInput,
-		mapVirtualKey: defaultMapVirtualKey,
-		focusTimeout:  focusWaitTimeout,
-		focusPoll:     focusPollInterval,
+		sendInput:      win.SendInput,
+		mapVirtualKey:  defaultMapVirtualKey,
+		integrityLevel: processIntegrityLevel,
+		focusTimeout:   focusWaitTimeout,
+		focusPoll:      focusPollInterval,
 	}
+}
+
+// UseElevatedInput routes requests blocked by UIPI through the optional
+// elevated helper. Passing nil disables elevated delivery.
+//
+//wails:ignore
+func (i *Input) UseElevatedInput(sender ElevatedInputSender) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.elevated = sender
 }
 
 //wails:ignore
@@ -216,13 +230,41 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		i.report(err, "resolve", map[string]any{"target": request.Target.describe(), "keys": keys})
 		return KeyResult{}, err
 	}
-
 	fields := map[string]any{
 		"target":   request.Target.describe(),
 		"delivery": string(options.delivery),
 		"keys":     keys,
 		"window":   record.describe(),
 	}
+	currentLevel, levelErr := i.integrityLevel(windows.GetCurrentProcessId())
+	if levelErr != nil {
+		err = fmt.Errorf("read current process integrity: %w", levelErr)
+		i.report(err, "integrity", fields)
+		return KeyResult{}, err
+	}
+	targetLevel, levelErr := i.integrityLevel(record.pid)
+	if levelErr != nil {
+		err = fmt.Errorf("read target process integrity: %w", levelErr)
+		i.report(err, "integrity", fields)
+		return KeyResult{}, err
+	}
+	if targetLevel > currentLevel {
+		if i.elevated == nil {
+			err = fmt.Errorf(
+				"%w: target pid %d has a higher integrity level; enable the elevated helper in settings",
+				ErrElevatedHelperRequired,
+				record.pid,
+			)
+			i.report(err, "elevated", fields)
+			return KeyResult{}, err
+		}
+		result, elevatedErr := i.elevated.SendKeys(ctx, request)
+		if elevatedErr != nil {
+			i.report(elevatedErr, "elevated", fields)
+		}
+		return result, elevatedErr
+	}
+
 	if options.delivery == KeyDeliveryMessage {
 		err = i.sendMessageKeys(ctx, record, chords, options)
 	} else {
@@ -233,6 +275,36 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 		return KeyResult{}, err
 	}
 	return KeyResult{Window: record.info(), Delivery: options.delivery, Keys: keys}, nil
+}
+
+func processIntegrityLevel(pid uint32) (uint32, error) {
+	process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = windows.CloseHandle(process) }()
+
+	var token windows.Token
+	if err := windows.OpenProcessToken(process, windows.TOKEN_QUERY, &token); err != nil {
+		return 0, err
+	}
+	defer func() { _ = token.Close() }()
+
+	var size uint32
+	err = windows.GetTokenInformation(token, windows.TokenIntegrityLevel, nil, 0, &size)
+	if !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
+		return 0, err
+	}
+	buffer := make([]byte, size)
+	if err := windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &buffer[0], size, &size); err != nil {
+		return 0, err
+	}
+	label := (*windows.Tokenmandatorylabel)(unsafe.Pointer(&buffer[0]))
+	count := label.Label.Sid.SubAuthorityCount()
+	if count == 0 {
+		return 0, errors.New("integrity SID has no sub-authority")
+	}
+	return label.Label.Sid.SubAuthority(uint32(count - 1)), nil
 }
 
 func (i *Input) report(err error, stage string, fields map[string]any) {

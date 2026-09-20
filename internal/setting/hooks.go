@@ -12,7 +12,14 @@ type Hooks struct {
 	AfterBandwidthLimitChanged func(mibps int)
 	AfterOpenConsoleChanged    func(enabled bool)
 	AfterPersistTogglesChanged func(enabled bool)
+	AfterElevatedHelperChanged func(enabled bool)
 	AfterRendererReload        func()
+}
+
+func (h Hooks) elevatedHelperChanged(enabled bool) {
+	if h.AfterElevatedHelperChanged != nil {
+		h.AfterElevatedHelperChanged(enabled)
+	}
 }
 
 func (h Hooks) runOnStartupChanged(enabled bool) error {
