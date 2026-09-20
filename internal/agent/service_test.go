@@ -584,8 +584,12 @@ func TestSessionScopesResolveCurrentGameRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	modSnapshot, err := service.GetSession(ctx, mod.ID)
-	if err != nil || len(modSnapshot.Roots) != 1 || modSnapshot.Roots[0].Path != selectedMod {
-		t.Fatalf("mod roots = %#v, %v", modSnapshot.Roots, err)
+	canonicalSelected, canonicalErr := canonicalExistingDir(selectedMod)
+	if canonicalErr != nil {
+		t.Fatalf("canonicalExistingDir(%q): %v", selectedMod, canonicalErr)
+	}
+	if err != nil || len(modSnapshot.Roots) != 1 || modSnapshot.Roots[0].Path != canonicalSelected {
+		t.Fatalf("mod roots = %#v, expected = %q, %v", modSnapshot.Roots, canonicalSelected, err)
 	}
 	if _, err := service.CreateSession(ctx, AgentScope{Type: "mod", ModPath: t.TempDir()}); err == nil {
 		t.Fatal("outside mod scope unexpectedly succeeded")

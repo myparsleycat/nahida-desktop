@@ -351,8 +351,12 @@ func TestSandboxResolveExistingStaysInsideRoot(t *testing.T) {
 	}
 	defer func() { _ = sandbox.Close() }()
 	resolved, err := sandbox.ResolveExisting("root", "mod")
-	if err != nil || resolved != directory {
-		t.Fatalf("resolved = %q, %v", resolved, err)
+	expected, evalErr := filepath.EvalSymlinks(directory)
+	if evalErr != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", directory, evalErr)
+	}
+	if err != nil || resolved != expected {
+		t.Fatalf("resolved = %q, expected = %q, %v", resolved, expected, err)
 	}
 	if _, err := sandbox.ResolveExisting("root", "../outside"); err == nil {
 		t.Fatal("path escape unexpectedly accepted")
@@ -381,8 +385,9 @@ func TestSandboxResolveTargetAllowsMissingFileInsideRoot(t *testing.T) {
 	defer func() { _ = sandbox.Close() }()
 
 	resolved, err := sandbox.ResolveTarget("root", "output/generated.ini")
-	if err != nil || resolved != filepath.Join(root, "output", "generated.ini") {
-		t.Fatalf("resolved = %q, %v", resolved, err)
+	expected := filepath.Join(sandbox.Roots()[0].Path, "output", "generated.ini")
+	if err != nil || resolved != expected {
+		t.Fatalf("resolved = %q, expected = %q, %v", resolved, expected, err)
 	}
 	if _, err := sandbox.ResolveTarget("root", "../outside.ini"); err == nil {
 		t.Fatal("output path escape unexpectedly accepted")
