@@ -12,7 +12,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/platform"
 )
 
 var testPNG = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00}
@@ -242,5 +244,52 @@ func TestSummarizeMessagesDropsImagePayloads(t *testing.T) {
 	}
 	if !strings.Contains(messages[1].Content, "[image/png image, 300 bytes]") {
 		t.Fatalf("content = %q", messages[1].Content)
+	}
+}
+
+func TestSplitActionImageExtractsWindowCapture(t *testing.T) {
+	t.Parallel()
+	captured := agentactions.CapturedImage{
+		Window: platform.WindowInfo{
+			Title: "Star Rail", ProcessName: "StarRail.exe", PID: 42,
+		},
+		Width: 1280, Height: 720, Scale: 0.5, MIMEType: "image/png", PNG: testPNG,
+	}
+
+	output, images := splitActionImage(captured)
+	persisted, ok := output.(map[string]any)
+	if !ok {
+		t.Fatalf("output = %#v, want the capture metadata", output)
+	}
+	if persisted["window"] != captured.Window || persisted["width"] != 1280 ||
+		persisted["height"] != 720 || persisted["scale"] != 0.5 {
+		t.Fatalf("persisted = %#v", persisted)
+	}
+	placeholder, _ := persisted["image"].(string)
+	if !strings.Contains(placeholder, fmt.Sprintf("[image: image/png, %d bytes]", len(testPNG))) {
+		t.Fatalf("placeholder = %q", placeholder)
+	}
+	if len(images) != 1 || images[0].MIMEType != "image/png" ||
+		string(images[0].Data) != string(testPNG) || images[0].Name != "Star Rail" {
+		t.Fatalf("images = %#v", images)
+	}
+
+	encoded, err := json.Marshal(persisted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), base64.StdEncoding.EncodeToString(testPNG)) {
+		t.Fatalf("persisted result kept the image payload: %s", encoded)
+	}
+}
+
+func TestSplitActionImageKeepsOtherResults(t *testing.T) {
+	t.Parallel()
+	output, images := splitActionImage(map[string]any{"completed": true})
+	if len(images) != 0 {
+		t.Fatalf("images = %#v, want none", images)
+	}
+	if completed, ok := output.(map[string]any)["completed"]; !ok || completed != true {
+		t.Fatalf("output = %#v, want the original result", output)
 	}
 }

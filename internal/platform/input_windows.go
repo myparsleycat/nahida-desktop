@@ -61,6 +61,61 @@ func enumerateTopLevel() []win.HWND {
 	return handles
 }
 
+// windowScanner reads the top-level windows the platform services address.
+// Input and Screen share it, so a target resolves the same way for keys and for
+// captures.
+type windowScanner struct {
+	enumerate  func() []win.HWND
+	isVisible  func(win.HWND) bool
+	foreground func() win.HWND
+	processOf  func(uint32) string
+}
+
+func defaultWindowScanner() windowScanner {
+	return windowScanner{
+		enumerate:  enumerateTopLevel,
+		isVisible:  isWindowVisible,
+		foreground: win.GetForegroundWindow,
+		processOf:  processName,
+	}
+}
+
+// records returns every visible, non-tool top-level window in Z-order.
+func (s windowScanner) records() []windowRecord {
+	foreground := s.foreground()
+	names := make(map[uint32]string, 16)
+	records := make([]windowRecord, 0, 64)
+	for _, handle := range s.enumerate() {
+		if !handle.IsWindow() || !s.isVisible(handle) {
+			continue
+		}
+		if exStyle, err := handle.ExStyle(); err == nil && exStyle&co.WS_EX_TOOLWINDOW != 0 {
+			continue
+		}
+		_, pid, err := handle.GetWindowThreadProcessId()
+		if err != nil {
+			continue
+		}
+
+		name, known := names[pid]
+		if !known {
+			name = s.processOf(pid)
+			names[pid] = name
+		}
+		title, _ := handle.GetWindowText()
+		className, _ := handle.GetClassName()
+		record := windowRecord{
+			handle: handle, title: title, className: className, pid: pid, processName: name,
+			isForeground: handle == foreground, isMinimized: handle.IsIconic(),
+		}
+		if rect, err := handle.GetWindowRect(); err == nil {
+			record.area = int64(rect.Right-rect.Left) * int64(rect.Bottom-rect.Top)
+		}
+		records = append(records, record)
+	}
+	return records
+}
+
 // windowRecord is one enumerated top-level window. selectWindow ranks records
 // without touching the Win32 API, which keeps the choice testable.
 type windowRecord struct {
@@ -117,12 +172,13 @@ type Input struct {
 }
 
 func NewInput() *Input {
+	scanner := defaultWindowScanner()
 	return &Input{
-		enumerate:  enumerateTopLevel,
-		isVisible:  isWindowVisible,
-		foreground: win.GetForegroundWindow,
+		enumerate:  scanner.enumerate,
+		isVisible:  scanner.isVisible,
+		foreground: scanner.foreground,
 		focus:      func(handle win.HWND) { ForceForegroundWindow(uintptr(handle)) },
-		processOf:  processName,
+		processOf:  scanner.processOf,
 		postMessage: func(handle win.HWND, message co.WM, wParam win.WPARAM, lParam win.LPARAM) error {
 			return handle.PostMessage(message, wParam, lParam)
 		},
@@ -157,7 +213,8 @@ func (i *Input) ListWindows(ctx context.Context, filter WindowFilter) ([]WindowI
 		return nil, err
 	}
 
-	title := strings.TrimSpace(filter.Title)
+	title := foldWindowText(filter.Title)
+	process := foldWindowText(filter.Process)
 	matched := make([]WindowInfo, 0, defaultWindowLimit)
 	for _, record := range i.enumerateRecords() {
 		if err := ctx.Err(); err != nil {
@@ -166,10 +223,10 @@ func (i *Input) ListWindows(ctx context.Context, filter WindowFilter) ([]WindowI
 		if filter.PID != 0 && record.pid != filter.PID {
 			continue
 		}
-		if !matchesProcess(record.processName, filter.Process) {
+		if !matchesProcessKey(foldWindowText(record.processName), process) {
 			continue
 		}
-		if title != "" && !containsFold(record.title, title) {
+		if title != "" && !foldWindowText(record.title).contains(title) {
 			continue
 		}
 		matched = append(matched, record.info())
@@ -227,7 +284,9 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 	// launch that waits on UAC never blocks other Input operations.
 	record, err := selectWindow(i.enumerateRecords(), request.Target)
 	if err != nil {
-		i.report(err, "resolve", map[string]any{"target": request.Target.describe(), "keys": keys})
+		fields := request.Target.resolveDiagnosticFields()
+		fields["keys"] = keys
+		i.report(err, "resolve", fields)
 		return KeyResult{}, err
 	}
 	fields := map[string]any{
@@ -358,38 +417,20 @@ func (i *Input) report(err error, stage string, fields map[string]any) {
 }
 
 func (i *Input) enumerateRecords() []windowRecord {
-	foreground := i.foreground()
-	names := make(map[uint32]string, 16)
-	records := make([]windowRecord, 0, 64)
-	for _, handle := range i.enumerate() {
-		if !handle.IsWindow() || !i.isVisible(handle) {
-			continue
-		}
-		if exStyle, err := handle.ExStyle(); err == nil && exStyle&co.WS_EX_TOOLWINDOW != 0 {
-			continue
-		}
-		_, pid, err := handle.GetWindowThreadProcessId()
-		if err != nil {
-			continue
-		}
+	return windowScanner{
+		enumerate:  i.enumerate,
+		isVisible:  i.isVisible,
+		foreground: i.foreground,
+		processOf:  i.processOf,
+	}.records()
+}
 
-		name, known := names[pid]
-		if !known {
-			name = i.processOf(pid)
-			names[pid] = name
-		}
-		title, _ := handle.GetWindowText()
-		className, _ := handle.GetClassName()
-		record := windowRecord{
-			handle: handle, title: title, className: className, pid: pid, processName: name,
-			isForeground: handle == foreground, isMinimized: handle.IsIconic(),
-		}
-		if rect, err := handle.GetWindowRect(); err == nil {
-			record.area = int64(rect.Right-rect.Left) * int64(rect.Bottom-rect.Top)
-		}
-		records = append(records, record)
-	}
-	return records
+// windowCandidate is one record with its folded title, so the exact, prefix,
+// and substring narrowing passes compare keys instead of refolding the same
+// title for every matcher.
+type windowCandidate struct {
+	record windowRecord
+	title  windowKey
 }
 
 // selectWindow picks the single best record for target: every set field must
@@ -401,22 +442,29 @@ func selectWindow(records []windowRecord, target WindowTarget) (*windowRecord, e
 		return nil, ErrInputTargetRequired
 	}
 
-	candidates := make([]windowRecord, 0, len(records))
+	process := foldWindowText(target.Process)
+	candidates := make([]windowCandidate, 0, len(records))
 	for _, record := range records {
-		if matchesWindowTarget(record, target) {
-			candidates = append(candidates, record)
+		if target.PID != 0 && record.pid != target.PID {
+			continue
 		}
+		if !matchesProcessKey(foldWindowText(record.processName), process) {
+			continue
+		}
+		candidates = append(candidates, windowCandidate{record: record, title: foldWindowText(record.title)})
 	}
 	if len(candidates) == 0 {
 		return nil, windowNotFound(target)
 	}
-	if title := strings.TrimSpace(target.Title); title != "" {
+	if title := foldWindowText(target.Title); title != "" {
 		matched := false
-		for _, match := range []func(string, string) bool{equalFold, hasPrefixFold, containsFold} {
-			narrowed := make([]windowRecord, 0, len(candidates))
-			for _, record := range candidates {
-				if match(record.title, title) {
-					narrowed = append(narrowed, record)
+		for _, match := range []func(windowKey, windowKey) bool{
+			windowKey.equal, windowKey.hasPrefix, windowKey.contains,
+		} {
+			narrowed := make([]windowCandidate, 0, len(candidates))
+			for _, candidate := range candidates {
+				if match(candidate.title, title) {
+					narrowed = append(narrowed, candidate)
 				}
 			}
 			if len(narrowed) > 0 {
@@ -429,28 +477,22 @@ func selectWindow(records []windowRecord, target WindowTarget) (*windowRecord, e
 		}
 	}
 
-	slices.SortStableFunc(candidates, compareWindowRecords)
-	return &candidates[0], nil
+	slices.SortStableFunc(candidates, func(left, right windowCandidate) int {
+		return compareWindowRecords(left.record, right.record)
+	})
+	return &candidates[0].record, nil
 }
 
-func matchesWindowTarget(record windowRecord, target WindowTarget) bool {
-	if target.PID != 0 && record.pid != target.PID {
-		return false
-	}
-	return matchesProcess(record.processName, target.Process)
-}
-
-// matchesProcess compares an executable name. It matches exactly or as a
+// matchesProcessKey compares an executable name. It matches exactly or as a
 // substring so "StarRail.exe" and "starrail" both select the game window.
-func matchesProcess(processName, wanted string) bool {
-	wanted = strings.TrimSpace(wanted)
+func matchesProcessKey(process, wanted windowKey) bool {
 	if wanted == "" {
 		return true
 	}
-	if processName == "" {
+	if process == "" {
 		return false
 	}
-	return equalFold(processName, wanted) || containsFold(processName, wanted)
+	return process.equal(wanted) || process.contains(wanted)
 }
 
 func compareWindowRecords(left, right windowRecord) int {
@@ -480,16 +522,27 @@ func windowNotFound(target WindowTarget) error {
 	return fmt.Errorf("%w: no visible window matches %s", ErrWindowNotFound, target.describe())
 }
 
-func equalFold(value, wanted string) bool {
-	return strings.EqualFold(value, wanted)
+// windowKey is window text folded for matching: every Unicode whitespace
+// sequence collapses to one ASCII space and the result is lowercased, so a
+// title that carries NBSP or another invisible space still matches a regular
+// space typed by the caller. Each record and target is folded once, then the
+// matchers compare keys, so no value is refolded per comparison.
+type windowKey string
+
+func foldWindowText(value string) windowKey {
+	return windowKey(strings.ToLower(normalizeWindowText(value)))
 }
 
-func hasPrefixFold(value, wanted string) bool {
-	return len(value) >= len(wanted) && strings.EqualFold(value[:len(wanted)], wanted)
+func (k windowKey) equal(wanted windowKey) bool {
+	return k == wanted
 }
 
-func containsFold(value, wanted string) bool {
-	return strings.Contains(strings.ToLower(value), strings.ToLower(wanted))
+func (k windowKey) hasPrefix(wanted windowKey) bool {
+	return strings.HasPrefix(string(k), string(wanted))
+}
+
+func (k windowKey) contains(wanted windowKey) bool {
+	return strings.Contains(string(k), string(wanted))
 }
 
 func (i *Input) sendMessageKeys(

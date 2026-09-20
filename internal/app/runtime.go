@@ -49,6 +49,7 @@ type runtime struct {
 	input             *platform.Input
 	elevated          *elevated.Client
 	elevatedLifecycle *elevatedLifecycle
+	screen            *platform.Screen
 	window            *Window
 	localHTTP         *infra.LocalHTTP
 	gameBananaLogin   *gameBananaLogin
@@ -86,6 +87,20 @@ func newRuntime() *runtime {
 			infra.Diagnostic{
 				Severity:  infra.DiagnosticWarn,
 				Operation: "send-keys",
+				Stage:     stage,
+				Fields:    fields,
+			},
+		)
+	})
+	screen := platform.NewScreen()
+	screen.UseDiagnostic(func(err error, stage string, fields map[string]any) {
+		_ = infra.ReportError(
+			log,
+			err,
+			"Screen",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "capture-window",
 				Stage:     stage,
 				Fields:    fields,
 			},
@@ -201,6 +216,7 @@ func newRuntime() *runtime {
 		input:             input,
 		elevated:          elevatedClient,
 		elevatedLifecycle: elevatedHelper,
+		screen:            screen,
 		window:            window,
 		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
 			Version: platform.AppVersion,
@@ -222,6 +238,7 @@ func newRuntime() *runtime {
 		EventEmit: eventEmit,
 		Shell:     shell,
 		Input:     rt.input,
+		Screen:    rt.screen,
 	})
 	rt.localHTTP.UseHandler(rt.handleLocalHTTPMessage)
 	if rt.mod != nil {
@@ -267,6 +284,7 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "Mod", rt.mod),
 		application.NewService(rt.notifications),
 		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
+		newLoggedService(rt, "Screen", rt.screen),
 		newLoggedService(rt, "Setting", rt.setting),
 		newLoggedService(rt, "Shell", rt.shell),
 		newLoggedService(rt, "Tools", rt.tools),

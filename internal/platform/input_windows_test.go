@@ -91,6 +91,114 @@ func TestSelectWindowNarrowsTitlesExactThenPrefix(t *testing.T) {
 	}
 }
 
+func TestSelectWindowNormalizesWhitespace(t *testing.T) {
+	t.Parallel()
+
+	records := []windowRecord{
+		{handle: 0x1, title: "붕괴:\u00A0스타레일", processName: "StarRail.exe", pid: 20264, area: 900},
+		{handle: 0x2, title: "Other\u2003Window", processName: "other.exe", pid: 30, area: 100},
+	}
+	cases := []struct {
+		name   string
+		target WindowTarget
+		want   win.HWND
+	}{
+		{
+			name:   "nbsp matches a regular space",
+			target: WindowTarget{Title: "붕괴: 스타레일", Process: "StarRail.exe", PID: 20264},
+			want:   0x1,
+		},
+		{
+			name:   "nbsp matches a tab in the target",
+			target: WindowTarget{Title: "붕괴:\t스타레일", Process: "starrail", PID: 20264},
+			want:   0x1,
+		},
+		{
+			name:   "em space collapses to a space",
+			target: WindowTarget{Title: "Other Window"},
+			want:   0x2,
+		},
+		{
+			name:   "repeated whitespace collapses",
+			target: WindowTarget{Title: "붕괴:   스타레일"},
+			want:   0x1,
+		},
+		{
+			name:   "prefix match ignores whitespace kind",
+			target: WindowTarget{Title: "붕괴: 스"},
+			want:   0x1,
+		},
+		{
+			name:   "substring match ignores whitespace kind",
+			target: WindowTarget{Title: "괴: 스타"},
+			want:   0x1,
+		},
+		{
+			name:   "multibyte prefix stays on rune boundaries",
+			target: WindowTarget{Title: "붕괴"},
+			want:   0x1,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			record, err := selectWindow(records, testCase.target)
+			if err != nil {
+				t.Fatalf("selectWindow(%s) = %v", testCase.target.describe(), err)
+			}
+			if record.handle != testCase.want {
+				t.Fatalf("selectWindow picked 0x%X, want 0x%X", record.handle, testCase.want)
+			}
+		})
+	}
+}
+
+func TestMatchesProcessIgnoresSurroundingWhitespace(t *testing.T) {
+	t.Parallel()
+
+	if !matchesProcessKey(foldWindowText("StarRail.exe"), foldWindowText("\u00A0starrail\u00A0")) {
+		t.Fatal("matchesProcessKey with surrounding NBSP = false, want true")
+	}
+	if matchesProcessKey(foldWindowText("\u00A0"), foldWindowText("starrail")) {
+		t.Fatal("matchesProcessKey(blank process name) = true, want false")
+	}
+}
+
+func TestWindowTargetResolveDiagnosticFields(t *testing.T) {
+	t.Parallel()
+
+	fields := WindowTarget{Title: "붕괴:\u00A0스타레일", PID: 20264}.resolveDiagnosticFields()
+	if fields["normalizedTitle"] != "붕괴: 스타레일" {
+		t.Fatalf("normalizedTitle = %v, want %q", fields["normalizedTitle"], "붕괴: 스타레일")
+	}
+	if !strings.Contains(fmt.Sprint(fields["target"]), "pid 20264") {
+		t.Fatalf("target = %v, want the original description", fields["target"])
+	}
+
+	fields = WindowTarget{PID: 7}.resolveDiagnosticFields()
+	if _, ok := fields["normalizedTitle"]; ok {
+		t.Fatalf("normalizedTitle = %v, want no entry without a title", fields["normalizedTitle"])
+	}
+}
+
+func TestListWindowsNormalizesTitleFilter(t *testing.T) {
+	title := "Nahida Input Test " + t.Name() + "\u00A0Suffix"
+	window := newTestWindow(t, title)
+	input := NewInput()
+	window.restrictTo(input)
+
+	found, err := input.ListWindows(context.Background(), WindowFilter{
+		Title: "Nahida Input Test " + t.Name() + " Suffix",
+	})
+	if err != nil {
+		t.Fatalf("ListWindows = %v", err)
+	}
+	if len(found) != 1 || found[0].Title != title {
+		t.Fatalf("ListWindows = %+v, want the window with its original NBSP title", found)
+	}
+}
+
 func TestSelectWindowReportsMissingWindow(t *testing.T) {
 	t.Parallel()
 
@@ -127,8 +235,9 @@ func TestMatchesProcessAcceptsExactAndSubstring(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		if got := matchesProcess(testCase.processName, testCase.wanted); got != testCase.want {
-			t.Fatalf("matchesProcess(%q, %q) = %t, want %t",
+		got := matchesProcessKey(foldWindowText(testCase.processName), foldWindowText(testCase.wanted))
+		if got != testCase.want {
+			t.Fatalf("matchesProcessKey(%q, %q) = %t, want %t",
 				testCase.processName, testCase.wanted, got, testCase.want)
 		}
 	}

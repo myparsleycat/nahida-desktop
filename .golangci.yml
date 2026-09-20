@@ -47,6 +47,13 @@ linters:
       - ^frontend/
       - builtin$
       - examples$
+    rules:
+      # COM vtable calls in internal/platform convert uintptr to unsafe.Pointer
+      # by design, so keep the govet check everywhere else.
+      - path: ^internal/platform/
+        linters:
+          - govet
+        text: possible misuse of unsafe\.Pointer
 
 formatters:
   # Keep existing lint checks while adopting wrapping incrementally.
