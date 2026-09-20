@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,7 +128,7 @@ func (s *Service) openMCPRuntime(ctx context.Context, roots []SandboxRoot) (*mcp
 				break
 			}
 			for _, tool := range result.Tools {
-				publicName := "mcp__" + mcpName(row.Name) + "__" + mcpName(tool.Name)
+				publicName := publicMCPToolName(row.Name, tool.Name)
 				if _, collision := runtime.tools[publicName]; collision {
 					s.reportMCPError(
 						fmt.Errorf("public tool name %q is already registered", publicName),
@@ -298,6 +300,24 @@ func mcpName(value string) string {
 		}
 	}
 	return strings.Trim(builder.String(), "_")
+}
+
+// mcpToolNameLimit is the function-name limit OpenAI-compatible providers enforce on a model
+// request. One built-in Blender tool needs a longer name than that, so an over-long public name is
+// shortened instead of being dropped from the tool list.
+const mcpToolNameLimit = 64
+
+// publicMCPToolName namespaces one MCP tool for the model. A name over the provider limit keeps a
+// readable prefix and ends in a hash of the full name, so a shortened name stays unique and stable
+// across turns, restarts, and provider switches.
+func publicMCPToolName(server, tool string) string {
+	name := "mcp__" + mcpName(server) + "__" + mcpName(tool)
+	if len(name) <= mcpToolNameLimit {
+		return name
+	}
+	hash := sha256.Sum256([]byte(name))
+	suffix := hex.EncodeToString(hash[:4])
+	return name[:mcpToolNameLimit-len(suffix)-1] + "_" + suffix
 }
 
 func (s *Service) ListMCPServers(ctx context.Context) ([]MCPServerView, error) {

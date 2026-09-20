@@ -91,6 +91,17 @@ func TestExecuteApprovesUpdateHunks(t *testing.T) {
 	}
 }
 
+// Providers reject a function name longer than 64 characters for the whole request, so every
+// built-in definition has to fit that limit too.
+func TestToolDefinitionsFitProviderNameLimit(t *testing.T) {
+	t.Parallel()
+	for _, definition := range slices.Concat(builtInToolDefinitions(), mcpBuiltInToolDefinitions()) {
+		if len(definition.Name) > mcpToolNameLimit {
+			t.Errorf("tool %q is %d characters", definition.Name, len(definition.Name))
+		}
+	}
+}
+
 // Providers reject a tool schema whose "required" is null, so every definition sent with a model
 // request must carry an array.
 func TestToolDefinitionsSendArrayRequired(t *testing.T) {
