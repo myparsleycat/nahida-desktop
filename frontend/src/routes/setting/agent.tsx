@@ -15,6 +15,14 @@ import type {
 } from "@bindings/agent/models";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { toErrorMessage } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
@@ -65,6 +73,12 @@ const headerDrafts = (headers: AgentHeaderView[] | null | undefined): HeaderDraf
   }));
 
 const reasoningOrder = ["auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+const protocolOptions = [
+  { value: "openai-responses", label: "OpenAI Responses" },
+  { value: "openai-compatible", label: "OpenAI-compatible" },
+  { value: "anthropic", label: "Anthropic Messages" },
+];
 
 const providerOf = (
   catalog: AgentProviderCatalogView | undefined,
@@ -388,26 +402,46 @@ function AgentSettingsRoute() {
   const showReasoning = !isBuiltin || reasoningOptions.length > 1;
   const credential = activeProvider?.credential ?? settings.credential;
   const connected = credential.kind !== "none";
+  const providerOptions = (catalog?.providers ?? []).map((provider) => {
+    const name = provider.custom ? t("page.agent.provider_custom") : provider.name;
+    const linked = (provider.credential?.kind ?? "none") !== "none";
+    return {
+      value: provider.id,
+      label: linked ? `${name} · ${t("page.agent.provider_connected")}` : name,
+    };
+  });
+  const keyActionOptions = [
+    { value: "keep", label: connected ? t("page.agent.secret_configured") : t("page.agent.keep") },
+    { value: "replace", label: t("page.agent.replace") },
+    ...(credential.kind === "oauth" ? [] : [{ value: "clear", label: t("page.agent.clear") }]),
+  ];
 
   return (
     <div className="space-y-6 p-4 pb-12">
       <SettingsSection title={t("page.agent.provider")} description={t("page.agent.provider_hint")}>
         <Field label={t("page.agent.provider_select")}>
-          <select
-            className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
-            aria-label={t("page.agent.provider_select")}
+          <Select
             value={settings.provider}
-            onChange={(event) => selectProvider(event.target.value)}
+            items={providerOptions}
+            onValueChange={(value) => {
+              // Base UI reports a repeat pick of the current option, which must not reset the form.
+              if (value === null || value === settings.provider) return;
+              selectProvider(value);
+            }}
           >
-            {(catalog?.providers ?? []).map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.custom ? t("page.agent.provider_custom") : provider.name}
-                {provider.credential?.kind && provider.credential.kind !== "none"
-                  ? ` · ${t("page.agent.provider_connected")}`
-                  : ""}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full" aria-label={t("page.agent.provider_select")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {providerOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         {!settings.provider && <p className="text-[11px] text-muted-foreground">…</p>}
         <Field label={t("page.agent.model")}>
@@ -453,16 +487,27 @@ function AgentSettingsRoute() {
           <>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("page.agent.protocol")}>
-                <select
-                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
-                  aria-label={t("page.agent.protocol")}
+                <Select
                   value={settings.protocol}
-                  onChange={(event) => setSettings({ ...settings, protocol: event.target.value })}
+                  items={protocolOptions}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setSettings({ ...settings, protocol: value });
+                  }}
                 >
-                  <option value="openai-responses">OpenAI Responses</option>
-                  <option value="openai-compatible">OpenAI-compatible Chat Completions</option>
-                  <option value="anthropic">Anthropic Messages</option>
-                </select>
+                  <SelectTrigger className="w-full" aria-label={t("page.agent.protocol")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {protocolOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label={t("page.agent.endpoint")}>
                 <Input
@@ -511,16 +556,26 @@ function AgentSettingsRoute() {
         )}
         {showReasoning && (
           <Field label={t("page.agent.reasoning")}>
-            <select
-              className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
-              aria-label={t("page.agent.reasoning")}
+            <Select
               value={settings.reasoning}
-              onChange={(event) => setSettings({ ...settings, reasoning: event.target.value })}
+              onValueChange={(value) => {
+                if (value === null) return;
+                setSettings({ ...settings, reasoning: value });
+              }}
             >
-              {reasoningOptions.map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full" aria-label={t("page.agent.reasoning")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {reasoningOptions.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
         )}
         <div className="space-y-1.5">
@@ -584,20 +639,27 @@ function AgentSettingsRoute() {
               )
             ) : (
               <>
-                <select
-                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
-                  aria-label={t("page.agent.api_key")}
+                <Select
                   value={apiKeyAction}
-                  onChange={(event) => setAPIKeyAction(event.target.value)}
+                  items={keyActionOptions}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setAPIKeyAction(value);
+                  }}
                 >
-                  <option value="keep">
-                    {connected ? t("page.agent.secret_configured") : t("page.agent.keep")}
-                  </option>
-                  <option value="replace">{t("page.agent.replace")}</option>
-                  {credential.kind !== "oauth" && (
-                    <option value="clear">{t("page.agent.clear")}</option>
-                  )}
-                </select>
+                  <SelectTrigger className="w-full" aria-label={t("page.agent.api_key")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {keyActionOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 {apiKeyAction === "replace" && (
                   <Input
                     type="password"
@@ -804,6 +866,11 @@ function MCPEditor({
   onSave: () => void;
 }) {
   const { t } = useTranslation();
+  const transportOptions = [
+    { value: "stdio", label: "stdio" },
+    { value: "streamable-http", label: "Streamable HTTP" },
+    { value: "blender", label: t("page.agent.transport_blender") },
+  ];
   const entries = value.entries ?? [];
   const updateEntry = (index: number, patch: Partial<MCPEntryInput>) =>
     onChange({
@@ -820,15 +887,27 @@ function MCPEditor({
           value={value.name}
           onChange={(event) => onChange({ ...value, name: event.target.value })}
         />
-        <select
-          className="h-8 rounded-lg border bg-background px-2 text-sm"
+        <Select
           value={value.transport}
-          onChange={(event) => onChange({ ...value, transport: event.target.value })}
+          items={transportOptions}
+          onValueChange={(transport) => {
+            if (transport === null) return;
+            onChange({ ...value, transport });
+          }}
         >
-          <option value="stdio">stdio</option>
-          <option value="streamable-http">Streamable HTTP</option>
-          <option value="blender">{t("page.agent.transport_blender")}</option>
-        </select>
+          <SelectTrigger className="w-full" aria-label="Transport">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {transportOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
       {value.transport === "stdio" ? (
         <>

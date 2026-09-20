@@ -9,7 +9,7 @@ import type {
   AgentSettingsView,
   MCPServerView,
 } from "@bindings/agent/models";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CancellablePromise } from "@wailsio/runtime";
 import { Suspense, type ComponentType } from "react";
 import { toast } from "sonner";
@@ -208,6 +208,42 @@ async function clickButton(name: string) {
   });
 }
 
+async function openSelectList(name: string) {
+  const trigger = screen.getByRole("combobox", { name });
+  await act(async () => {
+    fireEvent.click(trigger);
+  });
+  // The trigger points at the listbox it opened, so queries stay scoped to that popup.
+  const list = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
+  if (!list) throw new Error(`select "${name}" did not open`);
+  return list;
+}
+
+async function clickOption(list: HTMLElement, optionName: string) {
+  const option = await within(list).findByRole("option", { name: optionName });
+  // Base UI commits a mouse selection only after the item saw a pointer down.
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  await act(async () => {
+    fireEvent.click(option);
+  });
+}
+
+async function chooseOption(selectName: string, optionName: string) {
+  await clickOption(await openSelectList(selectName), optionName);
+}
+
+async function expectOptions(selectName: string, optionNames: string[]) {
+  const list = await openSelectList(selectName);
+  expect(within(list).getAllByRole("option")).toHaveLength(optionNames.length);
+  for (const optionName of optionNames) {
+    expect(within(list).getByRole("option", { name: optionName })).toBeTruthy();
+  }
+}
+
+// The mocked translator returns the key, so a connected provider keeps the raw suffix.
+const providerLabel = (name: string, connected = false) =>
+  connected ? `${name} · page.agent.provider_connected` : name;
+
 it("renders the configured headers", async () => {
   await renderSettings();
   expect(screen.getByDisplayValue("X-Title")).toBeTruthy();
@@ -304,18 +340,25 @@ it("drops empty header rows before saving", async () => {
 
 it("lists built-in providers with their connection state", async () => {
   await renderSettings();
-  expect(screen.getByRole("option", { name: "OpenAI" })).toBeTruthy();
+  // The trigger shows the provider name instead of its raw id.
   expect(
-    screen.getByRole("option", { name: "OpenCode Go · page.agent.provider_connected" }),
+    within(screen.getByLabelText("page.agent.provider_select")).getByText(
+      "page.agent.provider_custom",
+    ),
   ).toBeTruthy();
-  expect(screen.getByRole("option", { name: "page.agent.provider_custom" })).toBeTruthy();
+  const providers = await openSelectList("page.agent.provider_select");
+  expect(within(providers).getByRole("option", { name: "OpenAI" })).toBeTruthy();
+  expect(
+    within(providers).getByRole("option", { name: providerLabel("OpenCode Go", true) }),
+  ).toBeTruthy();
+  expect(
+    within(providers).getByRole("option", { name: providerLabel("page.agent.provider_custom") }),
+  ).toBeTruthy();
 });
 
 it("fills endpoint, protocol, and model limits when a built-in provider is selected", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
   await clickButton("g.save");
 
   const input = vi.mocked(Agent.UpdateSettings).mock.calls[0][0];
@@ -332,23 +375,32 @@ it("fills endpoint, protocol, and model limits when a built-in provider is selec
   );
 });
 
+it("keeps the chosen model when the current provider is picked again", async () => {
+  await renderSettings();
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+  fireEvent.change(screen.getByLabelText("page.agent.model"), {
+    target: { value: "gpt-5.4-mini" },
+  });
+
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+
+  expect((screen.getByLabelText("page.agent.model") as HTMLInputElement).value).toBe(
+    "gpt-5.4-mini",
+  );
+});
+
 it("follows the provider for the model, limits, and the key draft", async () => {
   await renderSettings();
   // A key typed for the previous provider must not survive the switch.
-  fireEvent.change(screen.getByLabelText("page.agent.api_key"), { target: { value: "replace" } });
+  await chooseOption("page.agent.api_key", "page.agent.replace");
   fireEvent.change(screen.getByLabelText("page.agent.api_key_value"), {
     target: { value: "typed-for-custom" },
   });
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+  await chooseOption("page.agent.provider_select", providerLabel("OpenCode Go", true));
 
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "opencode-go" },
-  });
-  const keyAction = screen.getByLabelText("page.agent.api_key") as HTMLSelectElement;
-  expect(keyAction.value).toBe("keep");
-  expect(keyAction.selectedOptions[0]?.textContent).toBe("page.agent.secret_configured");
+  const keyAction = screen.getByLabelText("page.agent.api_key");
+  expect(within(keyAction).getByText("page.agent.secret_configured")).toBeTruthy();
   expect(screen.queryByLabelText("page.agent.api_key_value")).toBeNull();
 
   await clickButton("g.save");
@@ -371,21 +423,21 @@ it("hides the custom-only detail settings for a built-in provider", async () => 
   expect(screen.getByLabelText("page.agent.protocol")).toBeTruthy();
   expect(screen.getByLabelText("page.agent.endpoint")).toBeTruthy();
   expect(screen.getByLabelText("page.agent.reasoning")).toBeTruthy();
-  // A custom endpoint offers every effort the adapter can send.
-  expect(screen.getByRole("option", { name: "xhigh" })).toBeTruthy();
   expect(screen.getAllByPlaceholderText("Header")).toHaveLength(2);
+  // A custom endpoint offers every effort the adapter can send.
+  const reasoningList = await openSelectList("page.agent.reasoning");
+  expect(within(reasoningList).getByRole("option", { name: "xhigh" })).toBeTruthy();
+  await clickOption(reasoningList, "auto");
 
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+
   expect(screen.queryByLabelText("page.agent.protocol")).toBeNull();
   expect(screen.queryByLabelText("page.agent.endpoint")).toBeNull();
   expect(screen.queryByRole("checkbox", { name: "page.agent.supports_images" })).toBeNull();
   expect(screen.queryAllByPlaceholderText("Header")).toHaveLength(0);
   // The built-in model keeps its catalog efforts instead of the full custom list.
-  const reasoning = screen.getByLabelText("page.agent.reasoning") as HTMLSelectElement;
-  expect(reasoning.value).toBe("auto");
-  expect([...reasoning.options].map((option) => option.value)).toEqual(["auto", "low", "high"]);
+  expect(within(screen.getByLabelText("page.agent.reasoning")).getByText("auto")).toBeTruthy();
+  await expectOptions("page.agent.reasoning", ["auto", "low", "high"]);
   // Picking a model and connecting the provider stay available.
   expect(screen.getByLabelText("page.agent.model")).toBeTruthy();
   expect(screen.getByLabelText("page.agent.api_key")).toBeTruthy();
@@ -393,10 +445,8 @@ it("hides the custom-only detail settings for a built-in provider", async () => 
 
 it("saves the reasoning effort chosen for a built-in model", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
-  fireEvent.change(screen.getByLabelText("page.agent.reasoning"), { target: { value: "high" } });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+  await chooseOption("page.agent.reasoning", "high");
   await clickButton("g.save");
   expect(Agent.UpdateSettings).toHaveBeenCalledOnce();
   const input = vi.mocked(Agent.UpdateSettings).mock.calls[0][0];
@@ -407,17 +457,14 @@ it("saves the reasoning effort chosen for a built-in model", async () => {
 
 it("offers the catalog efforts of an Anthropic-routed built-in model", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "opencode-go" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenCode Go", true));
   // The selected model declares no effort, so there is nothing to adjust.
   expect(screen.queryByLabelText("page.agent.reasoning")).toBeNull();
 
   fireEvent.change(screen.getByLabelText("page.agent.model"), {
     target: { value: "qwen3.8-flash" },
   });
-  const reasoning = screen.getByLabelText("page.agent.reasoning") as HTMLSelectElement;
-  expect([...reasoning.options].map((option) => option.value)).toEqual(["auto", "low", "medium"]);
+  await expectOptions("page.agent.reasoning", ["auto", "low", "medium"]);
 });
 
 it("shows the connection state of the provider being selected", async () => {
@@ -428,9 +475,7 @@ it("shows the connection state of the provider being selected", async () => {
   // The custom provider is the selected one, so its key form is what renders first.
   expect(screen.getByLabelText("page.agent.api_key")).toBeTruthy();
 
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI", true));
   expect(screen.getByText("user@example.com")).toBeTruthy();
   expect(screen.getByRole("button", { name: "page.agent.sign_out" })).toBeTruthy();
   expect(screen.queryByLabelText("page.agent.api_key")).toBeNull();
@@ -441,14 +486,10 @@ it("restores the stored headers when the provider changes", async () => {
   fireEvent.change(screen.getByDisplayValue("Nahida Desktop"), {
     target: { value: "edited-value" },
   });
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
   expect(screen.queryByDisplayValue("edited-value")).toBeNull();
 
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "custom" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("page.agent.provider_custom"));
   expect(screen.getByDisplayValue("Nahida Desktop")).toBeTruthy();
   expect(screen.queryByDisplayValue("edited-value")).toBeNull();
 });
@@ -458,12 +499,8 @@ it("keeps the custom endpoint for the next time the custom provider is selected"
   fireEvent.change(screen.getByLabelText("page.agent.endpoint"), {
     target: { value: "https://mine.example/v1" },
   });
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "custom" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
+  await chooseOption("page.agent.provider_select", providerLabel("page.agent.provider_custom"));
   expect((screen.getByLabelText("page.agent.endpoint") as HTMLInputElement).value).toBe(
     "https://mine.example/v1",
   );
@@ -471,9 +508,7 @@ it("keeps the custom endpoint for the next time the custom provider is selected"
 
 it("applies catalog limits when a model id is typed", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "openai" },
-  });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenAI"));
   fireEvent.change(screen.getByLabelText("page.agent.model"), {
     target: { value: "gpt-5.4-mini" },
   });
@@ -492,10 +527,8 @@ it("applies catalog limits when a model id is typed", async () => {
 
 it("stores a replacement API key for the selected provider", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "opencode-go" },
-  });
-  fireEvent.change(screen.getByLabelText("page.agent.api_key"), { target: { value: "replace" } });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenCode Go", true));
+  await chooseOption("page.agent.api_key", "page.agent.replace");
   fireEvent.change(screen.getByLabelText("page.agent.api_key_value"), {
     target: { value: "go-key" },
   });
@@ -511,10 +544,8 @@ it("stores a replacement API key for the selected provider", async () => {
 
 it("tests a typed API key before it is saved", async () => {
   await renderSettings();
-  fireEvent.change(screen.getByLabelText("page.agent.provider_select"), {
-    target: { value: "opencode-go" },
-  });
-  fireEvent.change(screen.getByLabelText("page.agent.api_key"), { target: { value: "replace" } });
+  await chooseOption("page.agent.provider_select", providerLabel("OpenCode Go", true));
+  await chooseOption("page.agent.api_key", "page.agent.replace");
   fireEvent.change(screen.getByLabelText("page.agent.api_key_value"), {
     target: { value: "go-key" },
   });
@@ -610,6 +641,23 @@ it("reports the tool count after a successful MCP connection test", async () => 
   await clickMCPTestButton();
   expect(Agent.TestMCPServer).toHaveBeenCalledWith("server-1");
   expect(toast.success).toHaveBeenCalledWith("page.agent.mcp_connected");
+});
+
+it("saves the transport chosen in the MCP editor", async () => {
+  vi.mocked(Agent.ListMCPServers).mockResolvedValue([mcpServer]);
+  vi.mocked(Agent.UpsertMCPServer).mockResolvedValue(mcpServer);
+  await renderSettings();
+  // The row button's accessible name also carries the transport and state, so click the name.
+  await act(async () => {
+    fireEvent.click(screen.getByText(mcpServer.name));
+  });
+
+  await chooseOption("Transport", "Streamable HTTP");
+  await clickButton("Save");
+
+  expect(Agent.UpsertMCPServer).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "server-1", transport: "streamable-http", name: "everything" }),
+  );
 });
 
 it("surfaces an MCP connection failure reported by the backend", async () => {
