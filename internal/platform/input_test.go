@@ -7,6 +7,45 @@ import (
 	"time"
 )
 
+func TestNormalizeWindowTextCollapsesUnicodeWhitespace(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "nbsp", value: "붕괴:\u00A0스타레일", want: "붕괴: 스타레일"},
+		{name: "em space", value: "Other\u2003Window", want: "Other Window"},
+		{name: "tab and ideographic space", value: "\tGame\u3000Window\t", want: "Game Window"},
+		{name: "repeated spaces", value: "a  \u00A0 b", want: "a b"},
+		{name: "blank stays blank", value: "\u00A0 \t", want: ""},
+		{name: "already normalized", value: "plain title", want: "plain title"},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if got := normalizeWindowText(testCase.value); got != testCase.want {
+				t.Fatalf("normalizeWindowText(%q) = %q, want %q", testCase.value, got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestWindowTargetEmptyTreatsWhitespaceAsBlank(t *testing.T) {
+	t.Parallel()
+
+	blank := WindowTarget{Title: "\u00A0", Process: "\u00A0"}
+	if !blank.empty() {
+		t.Fatal("WindowTarget with only NBSP is not empty")
+	}
+	titled := WindowTarget{Title: "Game"}
+	if titled.empty() {
+		t.Fatal("WindowTarget with a title is empty")
+	}
+}
+
 func TestResolveKeyRequestTrimsKeysAndAppliesDefaults(t *testing.T) {
 	t.Parallel()
 

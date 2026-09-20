@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Input sentinel errors. UPPER_SNAKE prefixes are part of the renderer and
@@ -51,7 +52,7 @@ type WindowTarget struct {
 }
 
 func (t WindowTarget) empty() bool {
-	return strings.TrimSpace(t.Title) == "" && strings.TrimSpace(t.Process) == "" && t.PID == 0
+	return normalizeWindowText(t.Title) == "" && normalizeWindowText(t.Process) == "" && t.PID == 0
 }
 
 func (t WindowTarget) describe() string {
@@ -69,6 +70,17 @@ func (t WindowTarget) describe() string {
 		return "no target"
 	}
 	return strings.Join(parts, ", ")
+}
+
+// resolveDiagnosticFields describes a window resolution failure for the
+// diagnostic log. The normalized title tells a title that only differs by
+// invisible whitespace apart from a real mismatch.
+func (t WindowTarget) resolveDiagnosticFields() map[string]any {
+	fields := map[string]any{"target": t.describe()}
+	if title := normalizeWindowText(t.Title); title != "" {
+		fields["normalizedTitle"] = title
+	}
+	return fields
 }
 
 // WindowInfo describes a visible top-level window. Handle is informational
@@ -90,6 +102,14 @@ type WindowFilter struct {
 	Process string `json:"process,omitempty"`
 	PID     uint32 `json:"pid,omitempty"`
 	Limit   int    `json:"limit,omitempty"`
+}
+
+// normalizeWindowText folds every Unicode whitespace sequence into one ASCII
+// space. Actual window titles carry NBSP and other invisible spaces that
+// render like a regular space, so matching compares the normalized form while
+// WindowInfo keeps the original text for display.
+func normalizeWindowText(value string) string {
+	return strings.Join(strings.FieldsFunc(value, unicode.IsSpace), " ")
 }
 
 // KeyRequest is the payload of Input.SendKeys. Each Keys entry is one key

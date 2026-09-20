@@ -58,6 +58,7 @@ type Dependencies struct {
 	XXMI      *xxmi.XXMI
 	MenuMaker *menumaker.MenuMaker
 	Input     *platform.Input
+	Screen    *platform.Screen
 }
 
 // Resolver turns a sandbox root id and relative path into an absolute local path.
@@ -116,6 +117,18 @@ type Proposal struct {
 	Kind      string
 }
 
+// CapturedImage is an action result whose payload is an image the model should see. The agent
+// runtime replaces the bytes with a text placeholder in the persisted tool result and stores them as
+// tool images, the same way MCP image content is handled.
+type CapturedImage struct {
+	Window   platform.WindowInfo `json:"window"`
+	Width    int                 `json:"width"`
+	Height   int                 `json:"height"`
+	Scale    float64             `json:"scale"`
+	MIMEType string              `json:"mimeType"`
+	PNG      []byte              `json:"-"`
+}
+
 // Plan is a prepared action. A non-nil Proposal means the caller must collect user approval before
 // running it.
 type Plan struct {
@@ -143,6 +156,7 @@ func NewRegistry(deps Dependencies) *Registry {
 	registerToolActions(registry, deps)
 	registerMenuMakerActions(registry, deps)
 	registerInputActions(registry, deps)
+	registerScreenActions(registry, deps)
 	return registry
 }
 

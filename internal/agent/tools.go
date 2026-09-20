@@ -295,7 +295,8 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			return toolExecution{Approval: plan.Proposal}, nil
 		}
 		output, err := plan.Run(ctx)
-		return toolExecution{Output: output}, err
+		persisted, images := splitActionImage(output)
+		return toolExecution{Output: persisted, Images: images}, err
 	case "list_mcp_resources":
 		var input struct{ Server string }
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
@@ -347,7 +348,8 @@ func (e *toolExecutor) ExecuteApproved(
 			return toolExecution{}, errors.New("desktop actions are unavailable")
 		}
 		output, err := e.desktop.Execute(ctx, e.scope.Type, e.sandbox, actionID, arguments)
-		return toolExecution{Output: output}, err
+		persisted, images := splitActionImage(output)
+		return toolExecution{Output: persisted, Images: images}, err
 	case "sandbox":
 		switch actionID {
 		case "sandbox.apply_patch":

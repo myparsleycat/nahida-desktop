@@ -10,7 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -162,4 +164,38 @@ func splitImageContent(result *mcp.CallToolResult) (*mcp.CallToolResult, []pendi
 	trimmed := *result
 	trimmed.Content = content
 	return &trimmed, images
+}
+
+// splitActionImage turns an action result that carries an image into the metadata the run persists
+// and the image the model receives, mirroring splitImageContent for MCP results.
+func splitActionImage(output any) (any, []pendingImage) {
+	captured, isImage := output.(agentactions.CapturedImage)
+	if !isImage {
+		return output, nil
+	}
+
+	persisted := map[string]any{
+		"window": captured.Window,
+		"width":  captured.Width,
+		"height": captured.Height,
+		"scale":  captured.Scale,
+		"image":  fmt.Sprintf("[image: %s, %d bytes]", captured.MIMEType, len(captured.PNG)),
+	}
+	image := pendingImage{
+		Name:     captureImageName(captured.Window),
+		MIMEType: captured.MIMEType,
+		Data:     captured.PNG,
+	}
+	return persisted, []pendingImage{image}
+}
+
+// captureImageName labels a capture in the chat, where the stored file name is a generated id.
+func captureImageName(window platform.WindowInfo) string {
+	if title := strings.TrimSpace(window.Title); title != "" {
+		return title
+	}
+	if process := strings.TrimSpace(window.ProcessName); process != "" {
+		return process
+	}
+	return "window capture"
 }

@@ -55,6 +55,7 @@ type Options struct {
 	EventEmit func(string, ...any)
 	Shell     *platform.Shell
 	Input     *platform.Input
+	Screen    *platform.Screen
 }
 
 type Service struct {
@@ -124,7 +125,7 @@ func New(options Options) *Service {
 		settings:  options.Setting,
 		actions: agentactions.NewRegistry(agentactions.Dependencies{
 			Mod: options.Mod, Tools: options.Tools, Settings: options.Setting, Transfer: options.Transfer,
-			XXMI: options.XXMI, MenuMaker: options.MenuMaker, Input: options.Input,
+			XXMI: options.XXMI, MenuMaker: options.MenuMaker, Input: options.Input, Screen: options.Screen,
 		}),
 		workers:   make(map[string]*sessionWorker),
 		oauth:     defaultOpenAIOAuth,
