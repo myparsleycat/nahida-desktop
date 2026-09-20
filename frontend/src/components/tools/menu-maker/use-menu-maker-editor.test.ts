@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MenuMakerSource } from "@bindings/menumaker";
+import type { MenuMakerSource } from "@bindings/tools";
 import { type MenuMakerDraftMeta, saveDraftMetadata } from "@shared/menu-maker/drafts";
 import { slotSignature } from "@shared/menu-maker/parser";
 import { DEFAULT_MENU_MAKER_SETTINGS, emptyMenuMakerGeometry } from "@shared/menu-maker/types";
@@ -24,14 +24,14 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     t: (key: string) => key,
 }));
-vi.mock("@bindings/menumaker", () => ({
-    MenuMaker: {
-        LoadSource: mocks.load,
-        Generate: mocks.generate,
-        Parse: mocks.parse,
-        SaveINI: mocks.saveINI,
-        SaveZIP: mocks.saveZIP,
-        ApplyBundle: mocks.apply,
+vi.mock("@bindings/tools", () => ({
+    Tools: {
+        MenuMakerLoadSource: mocks.load,
+        MenuMakerGenerate: mocks.generate,
+        MenuMakerParse: mocks.parse,
+        MenuMakerSaveINI: mocks.saveINI,
+        MenuMakerSaveZIP: mocks.saveZIP,
+        MenuMakerApplyBundle: mocks.apply,
     },
 }));
 vi.mock("@bindings/platform", () => ({ Dialog: { SaveFile: mocks.saveFile } }));

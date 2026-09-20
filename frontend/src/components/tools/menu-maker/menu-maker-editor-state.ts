@@ -1,4 +1,4 @@
-import type { MenuMakerDocument, MenuMakerScanResult, MenuMakerSource } from "@bindings/menumaker";
+import type { MenuMakerDocument, MenuMakerScanResult, MenuMakerSource } from "@bindings/tools";
 import { withSuggestedIcons } from "@shared/menu-maker/parser";
 import { type MenuMakerSettings, type MenuMakerSlot } from "@shared/menu-maker/types";
 

@@ -1,8 +1,8 @@
 /**
  * Strict command generation is derived from XXMI-Menu-Maker.
- * Copyright (c) 2026 星念. MIT licensed; see internal/menumaker/NOTICE.md.
+ * Copyright (c) 2026 星念. MIT licensed; see internal/tools/menumaker/NOTICE.md.
  */
-import type { MenuMakerHandler } from "@bindings/menumaker";
+import type { MenuMakerHandler } from "@bindings/tools/menumaker";
 
 import type { MenuMakerSettings, MenuMakerSlot } from "./types";
 

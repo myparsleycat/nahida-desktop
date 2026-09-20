@@ -22,7 +22,6 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/menumaker"
 	modservice "nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -50,7 +49,6 @@ type Options struct {
 	Setting   *setting.Setting
 	Transfer  *transfer.Transfer
 	XXMI      *xxmi.XXMI
-	MenuMaker *menumaker.MenuMaker
 	Log       *infra.Log
 	EventEmit func(string, ...any)
 	Shell     *platform.Shell
@@ -125,7 +123,7 @@ func New(options Options) *Service {
 		settings:  options.Setting,
 		actions: agentactions.NewRegistry(agentactions.Dependencies{
 			Mod: options.Mod, Tools: options.Tools, Settings: options.Setting, Transfer: options.Transfer,
-			XXMI: options.XXMI, MenuMaker: options.MenuMaker, Input: options.Input, Screen: options.Screen,
+			XXMI: options.XXMI, Input: options.Input, Screen: options.Screen,
 		}),
 		workers:   make(map[string]*sessionWorker),
 		oauth:     defaultOpenAIOAuth,

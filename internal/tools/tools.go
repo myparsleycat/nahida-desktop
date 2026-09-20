@@ -12,6 +12,7 @@ import (
 	fixinspection "nahida.live/desktop/internal/tools/fix_inspection"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 	fixer4001 "nahida.live/desktop/internal/tools/fixer_4001"
+	"nahida.live/desktop/internal/tools/menumaker"
 	modbisect "nahida.live/desktop/internal/tools/mod_bisect"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 	"nahida.live/desktop/internal/tools/texture"
@@ -64,6 +65,7 @@ type Tools struct {
 	fixInspection *fixinspection.Service
 	fixTool       *fixtool.Service
 	fixer4001     *fixer4001.Service
+	menuMaker     *menumaker.MenuMaker
 	modelViewer   *modelviewer.Service
 	texture       *texture.Service
 	persist       *togglepersist.Service
@@ -124,6 +126,7 @@ func NewWithOptions(opts Options) *Tools {
 			XXMI:          opts.XXMI,
 			PEDiversifier: opts.PEDiversifier,
 		}),
+		menuMaker: menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
 		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{
 			Log:                    opts.Log,
 			Protocol:               opts.Protocol,

@@ -36,16 +36,18 @@ describe("generated Wails binding contract", () => {
         expect(protocol).toContain("LocalFileURL");
     });
 
-    it("exposes the focused Menu Maker service contract", () => {
+    it("exposes the Menu Maker contract through the Tools service", () => {
         const service = readFileSync(
-            "bindings/nahida.live/desktop/internal/menumaker/menumaker.ts",
+            "bindings/nahida.live/desktop/internal/tools/tools.ts",
             "utf8",
         );
         const models = readFileSync(
-            "bindings/nahida.live/desktop/internal/menumaker/models.ts",
+            "bindings/nahida.live/desktop/internal/tools/models.ts",
             "utf8",
         );
-        expect(service).toMatch(/ApplyBundle|Generate|LoadSource|Parse|SaveINI|SaveZIP|ScanFolder/);
+        expect(service).toMatch(
+            /MenuMakerApplyBundle|MenuMakerGenerate|MenuMakerLoadSource|MenuMakerParse|MenuMakerSaveINI|MenuMakerSaveZIP|MenuMakerScanFolder/,
+        );
         expect(models).toMatch(/MenuMakerDocument|MenuMakerGenerateRequest|MenuMakerSource/);
     });
 });

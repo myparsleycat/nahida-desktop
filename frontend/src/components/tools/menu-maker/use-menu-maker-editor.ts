@@ -1,6 +1,5 @@
-import type { MenuMakerGenerateResult } from "@bindings/menumaker";
-import { MenuMaker } from "@bindings/menumaker";
 import { Dialog } from "@bindings/platform";
+import { Tools, type MenuMakerGenerateResult } from "@bindings/tools";
 import { Logger } from "@renderer/lib/logger";
 import { moveMenuMakerSlot } from "@shared/menu-maker/generator";
 import { withSuggestedIcons } from "@shared/menu-maker/parser";
@@ -44,7 +43,7 @@ export function useMenuMakerEditor({
         async (filePath: string) => {
             dispatch({ type: "busy", value: true });
             try {
-                const source = await MenuMaker.LoadSource(filePath);
+                const source = await Tools.MenuMakerLoadSource(filePath);
                 const document = source.document;
                 const { draft, restored } = await restoreSourceDraft(source);
                 dispatch({
@@ -78,7 +77,7 @@ export function useMenuMakerEditor({
         async (root: string, includeTXT = false) => {
             dispatch({ type: "busy", value: true });
             try {
-                const result = await MenuMaker.ScanFolder(root, includeTXT);
+                const result = await Tools.MenuMakerScanFolder(root, includeTXT);
                 dispatch({ type: "scan", value: result });
                 if (result.files?.length === 1) await loadSource(result.files[0].path);
             } catch (error) {
@@ -102,7 +101,7 @@ export function useMenuMakerEditor({
     useEffect(() => {
         if (!state.source?.text) return;
         let cancelled = false;
-        void MenuMaker.Generate({
+        void Tools.MenuMakerGenerate({
             sourcePath: state.source.path,
             sourceText: state.source.text,
             slots: state.slots,
@@ -146,7 +145,7 @@ export function useMenuMakerEditor({
     const generateCurrent = async () => {
         if (!state.source) return null;
         try {
-            const result = await MenuMaker.Generate({
+            const result = await Tools.MenuMakerGenerate({
                 sourcePath: state.source.path,
                 sourceText: state.source.text,
                 slots: state.slots,
@@ -182,7 +181,7 @@ export function useMenuMakerEditor({
             if (!generated) return;
             const assets = await buildAssets(generated);
             if (!assets) return;
-            const result = await MenuMaker.ApplyBundle({
+            const result = await Tools.MenuMakerApplyBundle({
                 sourcePath: state.source.path,
                 sourceSHA256: state.source.sha256,
                 slots: state.slots,
@@ -194,7 +193,7 @@ export function useMenuMakerEditor({
             });
             toast.success(t("page.tools.menu_maker.applied", { path: result.outputINIPath }));
             if (result.outputINIPath && result.sourceSHA256) {
-                const document = await MenuMaker.Parse(generated.iniText);
+                const document = await Tools.MenuMakerParse(generated.iniText);
                 dispatch({
                     type: "sourceContent",
                     path: result.outputINIPath,
@@ -226,7 +225,7 @@ export function useMenuMakerEditor({
         if (selection.canceled || !selection.filePath) return;
         dispatch({ type: "busy", value: true });
         try {
-            await MenuMaker.SaveINI({
+            await Tools.MenuMakerSaveINI({
                 destinationPath: selection.filePath,
                 sourcePath: state.source.path,
                 sourceText: state.source.text,
@@ -260,7 +259,7 @@ export function useMenuMakerEditor({
             if (!generated) return;
             const assets = await buildAssets(generated);
             if (!assets) return;
-            await MenuMaker.SaveZIP({
+            await Tools.MenuMakerSaveZIP({
                 destinationPath: selection.filePath,
                 sourcePath: state.source.path,
                 sourceText: state.source.text,

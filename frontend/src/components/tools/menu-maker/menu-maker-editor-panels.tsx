@@ -1,4 +1,4 @@
-import type { MenuMakerScanResult } from "@bindings/menumaker";
+import type { MenuMakerScanResult } from "@bindings/tools";
 import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@renderer/components/ui/field";

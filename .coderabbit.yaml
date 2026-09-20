@@ -114,7 +114,7 @@ reviews:
         These packages mutate user mod trees and coordinate external game/importer processes. Check canonical and relative path validation, junction/reparse-point behavior, watcher races, process discovery and quoting, file identity, atomic replacement, cancellation, rollback, and recovery after interruption.
         Compression, merge, disable/enable, and restore operations must never lose the only copy of user data. Verify cleanup and rollback errors remain observable and that concurrent operations cannot target the same files unsafely.
 
-    - path: "internal/{menumaker,pepad,tools}/**/*.go"
+    - path: "internal/{pepad,tools}/**/*.go"
       instructions: |
         Treat INI, PE, DDS, mesh, archive, and rule inputs as untrusted binary or text formats. Check offsets, lengths, alignment, integer conversions, allocation limits, decompression limits, path traversal, deterministic output, and preservation of unknown-but-valid data.
         Multi-file generators and fixers need source-change detection, atomic writes, explicit cleanup, and rollback that reports both the primary and rollback failures.

@@ -1,6 +1,6 @@
 /**
  * Strict key mapping behavior is derived from XXMI-Menu-Maker.
- * Copyright (c) 2026 星念. MIT licensed; see internal/menumaker/NOTICE.md.
+ * Copyright (c) 2026 星念. MIT licensed; see internal/tools/menumaker/NOTICE.md.
  */
 package menumaker
 

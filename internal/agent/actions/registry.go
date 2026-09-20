@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 
-	"nahida.live/desktop/internal/menumaker"
 	modservice "nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -51,14 +50,13 @@ type Hint struct {
 // Dependencies are the desktop services the catalog binds to. A nil service keeps its domain out of
 // the registry, so a model is never offered an action that cannot run.
 type Dependencies struct {
-	Mod       *modservice.Mod
-	Tools     *tools.Tools
-	Settings  *setting.Setting
-	Transfer  *transfer.Transfer
-	XXMI      *xxmi.XXMI
-	MenuMaker *menumaker.MenuMaker
-	Input     *platform.Input
-	Screen    *platform.Screen
+	Mod      *modservice.Mod
+	Tools    *tools.Tools
+	Settings *setting.Setting
+	Transfer *transfer.Transfer
+	XXMI     *xxmi.XXMI
+	Input    *platform.Input
+	Screen   *platform.Screen
 }
 
 // Resolver turns a sandbox root id and relative path into an absolute local path.

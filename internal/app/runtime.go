@@ -11,7 +11,6 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/menumaker"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -40,7 +39,6 @@ type runtime struct {
 	drive             *drive.Drive
 	transfer          *transfer.Transfer
 	gamebanana        *gamebanana.GameBanana
-	menuMaker         *menumaker.MenuMaker
 	mod               *mod.Mod
 	xxmi              *xxmi.XXMI
 	tools             *tools.Tools
@@ -189,7 +187,6 @@ func newRuntime() *runtime {
 		}),
 		transfer:   transferService,
 		gamebanana: gameBananaService,
-		menuMaker:  menumaker.NewWithOptions(menumaker.Options{Log: log}),
 		mod:        modService,
 		xxmi:       xxmiService,
 		tools: tools.NewWithOptions(tools.Options{
@@ -233,7 +230,6 @@ func newRuntime() *runtime {
 		Setting:   rt.setting,
 		Transfer:  rt.transfer,
 		XXMI:      rt.xxmi,
-		MenuMaker: rt.menuMaker,
 		Log:       log,
 		EventEmit: eventEmit,
 		Shell:     shell,
@@ -280,7 +276,6 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "GameBanana", rt.gamebanana),
 		newLoggedService(rt, "Input", rt.input),
 		application.NewService(rt.log),
-		newLoggedService(rt, "MenuMaker", rt.menuMaker),
 		newLoggedService(rt, "Mod", rt.mod),
 		application.NewService(rt.notifications),
 		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
@@ -302,7 +297,6 @@ func (rt *runtime) fileMutatingServices() []application.Service {
 		application.NewService(rt.agent),
 		application.NewService(rt.drive),
 		application.NewService(rt.fs),
-		application.NewService(rt.menuMaker),
 		application.NewService(rt.mod),
 		application.NewService(rt.tools),
 		application.NewService(rt.transfer),

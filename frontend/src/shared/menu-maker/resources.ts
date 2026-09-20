@@ -1,13 +1,13 @@
 /**
  * Resource output is derived from XXMI-Menu-Maker.
- * Copyright (c) 2026 星念. MIT licensed; see internal/menumaker/NOTICE.md.
+ * Copyright (c) 2026 星念. MIT licensed; see internal/tools/menumaker/NOTICE.md.
  */
 import type {
     MenuMakerGeneratedAsset,
     MenuMakerGeometry,
     MenuMakerSlotStateGroup,
     MenuMakerSlotValueState,
-} from "@bindings/menumaker";
+} from "@bindings/tools/menumaker";
 import { dynamicIconImports } from "lucide-react/dynamic";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

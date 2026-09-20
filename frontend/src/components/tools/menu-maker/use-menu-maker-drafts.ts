@@ -1,5 +1,4 @@
-import type { MenuMakerSource } from "@bindings/menumaker";
-import { MenuMaker } from "@bindings/menumaker";
+import { Tools, type MenuMakerSource } from "@bindings/tools";
 import { Logger } from "@renderer/lib/logger";
 import {
     canRestoreDraft,
@@ -101,7 +100,9 @@ export function useMenuMakerDrafts(
             );
             const originalText = matchesCurrent ? state.source?.text : blobs?.originalText;
             if (typeof originalText !== "string") throw new Error("MENU_MAKER_DRAFT_TEXT_MISSING");
-            const document = matchesCurrent ? state.document! : await MenuMaker.Parse(originalText);
+            const document = matchesCurrent
+                ? state.document!
+                : await Tools.MenuMakerParse(originalText);
             if (!canRestoreDraft(draft, draft.sourceSHA256, slotSignature(document.slots ?? [])))
                 throw new Error("MENU_MAKER_DRAFT_SIGNATURE_CHANGED");
             const restored = restoreDraftMedia(draft, blobs);

@@ -105,10 +105,10 @@ func TestRuntimeSettingHooksApplyOpenConsoleToWindow(t *testing.T) {
 	}
 }
 
-func TestRuntimeRegistersMenuMakerService(t *testing.T) {
+func TestRuntimeRegistersMenuMakerThroughTools(t *testing.T) {
 	rt := newRuntime()
-	if rt.menuMaker == nil {
-		t.Fatal("Menu Maker service is not initialized")
+	if rt.tools == nil {
+		t.Fatal("Tools service is not initialized")
 	}
 	if rt.cdnTrace == nil {
 		t.Fatal("CDN trace service is not initialized")
@@ -122,8 +122,8 @@ func TestRuntimeRegistersMenuMakerService(t *testing.T) {
 	if rt.screen == nil {
 		t.Fatal("Screen service is not initialized")
 	}
-	if len(rt.services()) != 21 {
-		t.Fatalf("services = %d, want 21 including Nahida Agent, CDN trace, Input, and Screen",
+	if len(rt.services()) != 20 {
+		t.Fatalf("services = %d, want 20 including Nahida Agent, CDN trace, Input, and Screen",
 			len(rt.services()))
 	}
 }

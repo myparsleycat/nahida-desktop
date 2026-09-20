@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
-	"nahida.live/desktop/internal/menumaker"
+	"nahida.live/desktop/internal/tools"
 )
 
 // registerMenuMakerActions registers the MenuMaker actions.
 func registerMenuMakerActions(registry *Registry, deps Dependencies) {
-	if deps.MenuMaker == nil {
+	if deps.Tools == nil {
 		return
 	}
 	registry.add(simpleAction("menumaker.parse", "Parse MenuMaker source text.", "menumaker", RiskRead,
@@ -21,11 +21,11 @@ func registerMenuMakerActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.MenuMaker.Parse(ctx, input.Text)
+			return deps.Tools.MenuMakerParse(ctx, input.Text)
 		}))
 	registry.add(pathAction("menumaker.load", "Load and parse a MenuMaker source file.", RiskRead,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {
-			return deps.MenuMaker.LoadSource(ctx, path)
+			return deps.Tools.MenuMakerLoadSource(ctx, path)
 		}))
 	registry.add(pathAction("menumaker.scan", "Scan a local folder for MenuMaker sources.", RiskRead,
 		func(ctx context.Context, path string, raw json.RawMessage) (any, error) {
@@ -37,21 +37,21 @@ func registerMenuMakerActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.MenuMaker.ScanFolder(ctx, path, input.IncludeTXT)
+			return deps.Tools.MenuMakerScanFolder(ctx, path, input.IncludeTXT)
 		}))
 	generate := pathAction("menumaker.generate", "Generate MenuMaker output in memory.", RiskRead,
 		func(ctx context.Context, path string, raw json.RawMessage) (any, error) {
 			var input struct {
-				RootID       string                      `json:"rootId"`
-				RelativePath string                      `json:"relativePath"`
-				SourceText   string                      `json:"sourceText"`
-				Slots        []menumaker.MenuMakerSlot   `json:"slots"`
-				Settings     menumaker.MenuMakerSettings `json:"settings"`
+				RootID       string                  `json:"rootId"`
+				RelativePath string                  `json:"relativePath"`
+				SourceText   string                  `json:"sourceText"`
+				Slots        []tools.MenuMakerSlot   `json:"slots"`
+				Settings     tools.MenuMakerSettings `json:"settings"`
 			}
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.MenuMaker.Generate(ctx, menumaker.MenuMakerGenerateRequest{
+			return deps.Tools.MenuMakerGenerate(ctx, tools.MenuMakerGenerateRequest{
 				SourcePath: path, SourceText: input.SourceText, Slots: input.Slots, Settings: input.Settings,
 			})
 		})
@@ -66,7 +66,7 @@ func registerMenuMakerActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.MenuMaker.SaveINI(ctx, menumaker.MenuMakerSaveINIRequest{
+			return deps.Tools.MenuMakerSaveINI(ctx, tools.MenuMakerSaveINIRequest{
 				SourcePath: source, DestinationPath: destination, SourceText: input.SourceText,
 				Slots: input.Slots, Settings: input.Settings, Encoding: input.Encoding,
 				HasBOM: input.HasBOM, Newline: input.Newline,
@@ -78,7 +78,7 @@ func registerMenuMakerActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.MenuMaker.SaveZIP(ctx, menumaker.MenuMakerSaveZIPRequest{
+			return deps.Tools.MenuMakerSaveZIP(ctx, tools.MenuMakerSaveZIPRequest{
 				SourcePath: source, DestinationPath: destination,
 				SourceText: input.SourceText, Slots: input.Slots, Settings: input.Settings,
 				Encoding: input.Encoding, HasBOM: input.HasBOM, Newline: input.Newline, Assets: input.Assets,
@@ -88,20 +88,20 @@ func registerMenuMakerActions(registry *Registry, deps Dependencies) {
 
 // menuMakerSaveINIInput is the shared save argument of the MenuMaker save actions.
 type menuMakerSaveINIInput struct {
-	SourceRootID            string                      `json:"sourceRootId"`
-	SourceRelativePath      string                      `json:"sourceRelativePath"`
-	DestinationRootID       string                      `json:"destinationRootId"`
-	DestinationRelativePath string                      `json:"destinationRelativePath"`
-	SourceText              string                      `json:"sourceText"`
-	Slots                   []menumaker.MenuMakerSlot   `json:"slots"`
-	Settings                menumaker.MenuMakerSettings `json:"settings"`
-	Encoding                string                      `json:"encoding"`
-	HasBOM                  bool                        `json:"hasBOM"`
-	Newline                 string                      `json:"newline"`
+	SourceRootID            string                  `json:"sourceRootId"`
+	SourceRelativePath      string                  `json:"sourceRelativePath"`
+	DestinationRootID       string                  `json:"destinationRootId"`
+	DestinationRelativePath string                  `json:"destinationRelativePath"`
+	SourceText              string                  `json:"sourceText"`
+	Slots                   []tools.MenuMakerSlot   `json:"slots"`
+	Settings                tools.MenuMakerSettings `json:"settings"`
+	Encoding                string                  `json:"encoding"`
+	HasBOM                  bool                    `json:"hasBOM"`
+	Newline                 string                  `json:"newline"`
 }
 
 // menuMakerSaveZIPInput adds the generated assets of a ZIP save.
 type menuMakerSaveZIPInput struct {
 	menuMakerSaveINIInput
-	Assets []menumaker.MenuMakerGeneratedAsset `json:"assets"`
+	Assets []tools.MenuMakerGeneratedAsset `json:"assets"`
 }

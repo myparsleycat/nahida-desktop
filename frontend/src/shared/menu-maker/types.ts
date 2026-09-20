@@ -1,12 +1,12 @@
 /**
  * Portions of the Menu Maker model are derived from XXMI-Menu-Maker.
- * Copyright (c) 2026 星念. MIT licensed; see internal/menumaker/NOTICE.md.
+ * Copyright (c) 2026 星念. MIT licensed; see internal/tools/menumaker/NOTICE.md.
  */
 import type {
     MenuMakerGeometry,
     MenuMakerSettings as BoundMenuMakerSettings,
     MenuMakerSlot as BoundMenuMakerSlot,
-} from "@bindings/menumaker";
+} from "@bindings/tools/menumaker";
 
 export type MenuMakerKeyType = "cycle" | "toggle" | "hold" | "activate";
 
