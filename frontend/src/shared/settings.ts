@@ -20,6 +20,7 @@ export interface AppSettings {
     "general.powerSaveBlockInTransfer": boolean;
     "general.bisectPreserveD3dx": boolean;
     "general.titlebarActivityBadgeClickNavigate": boolean;
+    "general.elevatedHelperEnabled": boolean;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -135,6 +136,11 @@ export const APP_SETTINGS = {
         publicKey: "general.titlebarActivityBadgeClickNavigate",
         scope: "general",
         storageKey: "general_titlebar_activity_badge_click_navigate",
+    },
+    "general.elevatedHelperEnabled": {
+        publicKey: "general.elevatedHelperEnabled",
+        scope: "general",
+        storageKey: "general_elevated_helper_enabled",
     },
 
     "mod.archiveExtractPathMode": {

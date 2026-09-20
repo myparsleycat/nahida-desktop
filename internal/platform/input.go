@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,14 +13,68 @@ import (
 // Input sentinel errors. UPPER_SNAKE prefixes are part of the renderer and
 // agent contract, so keep them stable and add detail after the prefix.
 var (
-	ErrInputTargetRequired = errors.New("INPUT_TARGET_REQUIRED")
-	ErrInputOptionInvalid  = errors.New("INPUT_OPTION_INVALID")
-	ErrInputKeyInvalid     = errors.New("INPUT_KEY_INVALID")
-	ErrInputKeyUnsupported = errors.New("INPUT_KEY_UNSUPPORTED")
-	ErrWindowNotFound      = errors.New("WINDOW_NOT_FOUND")
-	ErrWindowNotForeground = errors.New("WINDOW_NOT_FOREGROUND")
-	ErrSendInputBlocked    = errors.New("SEND_INPUT_BLOCKED")
+	ErrInputTargetRequired    = errors.New("INPUT_TARGET_REQUIRED")
+	ErrInputOptionInvalid     = errors.New("INPUT_OPTION_INVALID")
+	ErrInputKeyInvalid        = errors.New("INPUT_KEY_INVALID")
+	ErrInputKeyUnsupported    = errors.New("INPUT_KEY_UNSUPPORTED")
+	ErrWindowNotFound         = errors.New("WINDOW_NOT_FOUND")
+	ErrWindowNotForeground    = errors.New("WINDOW_NOT_FOREGROUND")
+	ErrSendInputBlocked       = errors.New("SEND_INPUT_BLOCKED")
+	ErrElevatedHelperRequired = errors.New("ELEVATED_HELPER_REQUIRED")
 )
+
+// inputErrorSentinels is the stable classification set shared with the elevated
+// helper. Classification order is stable so an error that wraps more than one
+// sentinel always reports the first.
+var inputErrorSentinels = []error{
+	ErrInputTargetRequired,
+	ErrInputOptionInvalid,
+	ErrInputKeyInvalid,
+	ErrInputKeyUnsupported,
+	ErrWindowNotFound,
+	ErrWindowNotForeground,
+	ErrSendInputBlocked,
+	ErrElevatedHelperRequired,
+}
+
+// ClassifyInputError splits err into its stable UPPER_SNAKE code and the
+// remaining detail. The elevated helper transports the code in a dedicated
+// field because it cannot pass an error object across the pipe; the client
+// rebuilds the sentinel so the renderer and agent see the same prefix and
+// errors.Is result they see for a local target. The code is empty when err
+// carries no input classification.
+func ClassifyInputError(err error) (code string, detail string) {
+	if err == nil {
+		return "", ""
+	}
+	for _, sentinel := range inputErrorSentinels {
+		if errors.Is(err, sentinel) {
+			code = sentinel.Error()
+			return code, strings.TrimPrefix(strings.TrimPrefix(err.Error(), code), ": ")
+		}
+	}
+	return "", err.Error()
+}
+
+// InputErrorFromCode resolves a stable classification code back to its sentinel.
+func InputErrorFromCode(code string) (error, bool) {
+	for _, sentinel := range inputErrorSentinels {
+		if sentinel.Error() == code {
+			return sentinel, true
+		}
+	}
+	return nil, false
+}
+
+// ElevatedInputSender handles requests that Windows UIPI prevents this
+// process from delivering to a higher-integrity target.
+type ElevatedInputSender interface {
+	// EnsureReady connects or reconnects the helper. Launching the helper can
+	// wait on a UAC prompt, so callers invoke it before taking the lock that
+	// serializes key delivery.
+	EnsureReady(context.Context) error
+	SendKeys(context.Context, KeyRequest) (KeyResult, error)
+}
 
 // KeyDelivery selects how a key reaches the target window.
 type KeyDelivery string

@@ -15,6 +15,7 @@ const (
 	KeyGeneralPowerSaveBlockInTransfer           = "general.powerSaveBlockInTransfer"
 	KeyGeneralBisectPreserveD3dx                 = "general.bisectPreserveD3dx"
 	KeyGeneralTitlebarActivityBadgeClickNavigate = "general.titlebarActivityBadgeClickNavigate"
+	KeyGeneralElevatedHelperEnabled              = "general.elevatedHelperEnabled"
 
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
@@ -94,6 +95,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralPowerSaveBlockInTransfer, ScopeGeneral, "general_power_save_block_in_transfer"},
 	{KeyGeneralBisectPreserveD3dx, ScopeGeneral, "general_bisect_preserve_d3dx"},
 	{KeyGeneralTitlebarActivityBadgeClickNavigate, ScopeGeneral, "general_titlebar_activity_badge_click_navigate"},
+	{KeyGeneralElevatedHelperEnabled, ScopeGeneral, "general_elevated_helper_enabled"},
 
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},

@@ -1,0 +1,6 @@
+The Windows build task writes nahida-elevated-helper.exe into this directory
+before compiling the application. It is embedded into the main binary and
+extracted next to the shared per-user app data at runtime.
+
+This placeholder keeps the directory present so //go:embed resolves in
+development and test builds that do not produce the helper.

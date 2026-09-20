@@ -1754,6 +1754,8 @@
           "title": "애플리케이션",
           "runOnStartup": "로그인할 때 실행",
           "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
+          "elevatedHelper": "권한 상승 헬퍼",
+          "elevatedHelperDescription": "관리자 권한으로 실행 중인 게임에 키 입력을 보내기 위해 앱 시작 시 별도 헬퍼를 실행합니다. 시작할 때 Windows UAC 확인이 표시됩니다. 이 헬퍼는 코드 서명이 없으므로 Nahida에서 직접 시작한 경우에만 UAC 확인을 승인하세요.",
           "titlebarActivityBadgeClickNavigate": "타이틀바 작업 배지 클릭으로 이동",
           "titlebarActivityBadgeClickNavigateDescription": "켜면 배지를 클릭해 관련 화면으로 이동합니다. 끄면 배지를 잡고 창을 드래그할 수 있습니다.",
           "checkUpdate": "업데이트 확인",

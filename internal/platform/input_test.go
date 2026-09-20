@@ -2,6 +2,7 @@ package platform
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -160,5 +161,41 @@ func TestResolveKeyRequestRejectsInvalidInput(t *testing.T) {
 				t.Fatalf("resolveKeyRequest = %v, want %v", err, testCase.want)
 			}
 		})
+	}
+}
+
+func TestClassifyInputErrorRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	err := fmt.Errorf("%w: no visible window matches title %q", ErrWindowNotFound, "Game")
+	code, detail := ClassifyInputError(err)
+	if code != ErrWindowNotFound.Error() {
+		t.Fatalf("ClassifyInputError code = %q, want %q", code, ErrWindowNotFound)
+	}
+	if want := `no visible window matches title "Game"`; detail != want {
+		t.Fatalf("ClassifyInputError detail = %q, want %q", detail, want)
+	}
+
+	sentinel, ok := InputErrorFromCode(code)
+	if !ok {
+		t.Fatalf("InputErrorFromCode(%q) = not found", code)
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("InputErrorFromCode(%q) = %v, want it to match %v", code, sentinel, err)
+	}
+}
+
+func TestClassifyInputErrorWithoutCode(t *testing.T) {
+	t.Parallel()
+
+	code, detail := ClassifyInputError(errors.New("boom"))
+	if code != "" || detail != "boom" {
+		t.Fatalf("ClassifyInputError = (%q, %q), want (\"\", \"boom\")", code, detail)
+	}
+	if emptyCode, emptyDetail := ClassifyInputError(nil); emptyCode != "" || emptyDetail != "" {
+		t.Fatalf("ClassifyInputError(nil) = (%q, %q), want empty", emptyCode, emptyDetail)
+	}
+	if _, ok := InputErrorFromCode("NOT_A_CODE"); ok {
+		t.Fatal("InputErrorFromCode accepted an unknown code")
 	}
 }

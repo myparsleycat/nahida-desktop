@@ -129,6 +129,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			autostartSync,
 			emitAppEvent,
 			syncModelViewerMenu,
+			rt.configureElevatedHelper,
 		),
 	)
 	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
@@ -185,6 +186,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		rt.startElevatedHelperIfEnabled()
 		rt.startup.start(rt.runStartupWork)
 		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
 			newLaunchHandler(viewers.Open, func() { newWindow(app, rt.window) }, rt.window.HandleArguments))

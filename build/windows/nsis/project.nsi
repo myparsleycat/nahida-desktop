@@ -147,6 +147,12 @@ Section
     SetOutPath $INSTDIR
     
     !insertmacro wails.files
+    # The elevated helper is embedded into the application binary and extracted
+    # under the shared per-user app data directory at runtime, so the installer
+    # no longer ships a sibling copy that in-place updates could never refresh.
+    # The unsigned per-user install still lets an ordinary user replace the
+    # extracted binary before it is launched elevated; that is an accepted
+    # limitation, not a closed defense.
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -166,6 +172,9 @@ Section "uninstall"
     SetOutPath "$TEMP"
     ClearErrors
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    # Remove the helper left next to the app by installers that predate the
+    # embedded-helper build.
+    Delete "$INSTDIR\nahida-elevated-helper.exe"
     IfErrors uninstallFailed
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath

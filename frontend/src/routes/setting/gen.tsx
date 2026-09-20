@@ -45,6 +45,7 @@ const settingsConfig = {
   titlebarActivityBadgeClickNavigate: "general.titlebarActivityBadgeClickNavigate",
   defaultStartPage: "general.defaultStartPage",
   logLevel: "general.logLevel",
+  elevatedHelperEnabled: "general.elevatedHelperEnabled",
 } as const;
 
 function RouteComponent() {
@@ -306,6 +307,23 @@ function RouteComponent() {
                 )}
               </Button>
             )}
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.elevatedHelper")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.application.elevatedHelperDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.elevatedHelperEnabled}
+              onCheckedChange={(val) => update("elevatedHelperEnabled", val)}
+            />
           </div>
 
           <Separator />

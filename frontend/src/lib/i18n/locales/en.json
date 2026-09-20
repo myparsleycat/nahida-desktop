@@ -1768,6 +1768,8 @@
           "title": "Application",
           "runOnStartup": "Run on startup",
           "runOnStartupDescription": "Automatically launch the app when the system starts.",
+          "elevatedHelper": "Elevated helper",
+          "elevatedHelperDescription": "Start a separate helper with administrator rights to send keys to elevated games. Windows will show a UAC prompt when the app starts. The helper is not code-signed, so approve that prompt only when you started it from Nahida.",
           "titlebarActivityBadgeClickNavigate": "Click titlebar activity badges to open",
           "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
           "checkUpdate": "Check for updates",
