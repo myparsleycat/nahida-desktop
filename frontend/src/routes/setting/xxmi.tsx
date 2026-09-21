@@ -1,6 +1,7 @@
 import { XXMI } from "@bindings/xxmi";
 import { XXMIDllVersion } from "@renderer/components/setting/xxmi/xxmi-dll-version";
 import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
+import { XXMIPackageVersion } from "@renderer/components/setting/xxmi/xxmi-package-version";
 import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
 import { Separator } from "@renderer/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
@@ -29,6 +30,12 @@ function XXMIRouteContent() {
       <XXMIDllVersion xxmiData={xxmiData} refetch={refetch} />
       {xxmiData?.xxmiConfig && (
         <>
+          {(xxmiData.enabledImporters?.length ?? 0) > 0 && (
+            <>
+              <Separator />
+              <XXMIPackageVersion xxmiData={xxmiData} refetch={refetch} />
+            </>
+          )}
           <Separator />
           <XXMIImporters xxmiData={xxmiData} />
         </>

@@ -1931,6 +1931,14 @@
         "dllVersionEmpty": "사용 가능한 버전이 없습니다.",
         "dllVersionCurrent": "현재: {{version}}",
         "dllVersionUnknown": "알 수 없음",
+        "packageVersion": "Importer 패키지 버전",
+        "packageVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다. Mods 폴더는 유지됩니다.",
+        "packageVersionLoading": "버전을 불러오는 중...",
+        "packageVersionLoadFailed": "버전을 불러오지 못했습니다.",
+        "packageVersionRetry": "다시 시도",
+        "packageVersionEmpty": "사용 가능한 버전이 없습니다.",
+        "packageVersionCurrent": "현재: {{version}}",
+        "packageVersionUnknown": "알 수 없음",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
@@ -1946,6 +1954,11 @@
           "installDllVersion": {
             "success": "XXMI DLL 버전 {{version}} 을 적용했습니다",
             "failed": "선택한 XXMI DLL 버전을 적용하지 못했습니다",
+            "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
+          },
+          "installImporterPackage": {
+            "success": "{{importer}} 패키지 버전 {{version}} 을 적용했습니다",
+            "failed": "선택한 importer 패키지 버전을 적용하지 못했습니다",
             "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
           }
         }

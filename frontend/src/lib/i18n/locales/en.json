@@ -1997,6 +1997,14 @@
         "dllVersionEmpty": "No versions available.",
         "dllVersionCurrent": "Current: {{version}}",
         "dllVersionUnknown": "Unknown",
+        "packageVersion": "Importer Package Version",
+        "packageVersionDescription": "Changing the version disables XXMI Launcher auto-update. The Mods folder is preserved.",
+        "packageVersionLoading": "Loading versions...",
+        "packageVersionLoadFailed": "Failed to load versions.",
+        "packageVersionRetry": "Retry",
+        "packageVersionEmpty": "No versions available.",
+        "packageVersionCurrent": "Current: {{version}}",
+        "packageVersionUnknown": "Unknown",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",
@@ -2012,6 +2020,11 @@
           "installDllVersion": {
             "success": "XXMI DLL version {{version}} has been applied",
             "failed": "Failed to apply the selected XXMI DLL version",
+            "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
+          },
+          "installImporterPackage": {
+            "success": "{{importer}} package version {{version}} has been applied",
+            "failed": "Failed to apply the selected importer package version",
             "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
           }
         }

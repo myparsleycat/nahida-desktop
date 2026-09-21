@@ -43,9 +43,10 @@ type PackageInfo struct {
 }
 
 type EnabledImporter struct {
-	Key            string      `json:"key"`
-	ImporterFolder string      `json:"importerFolder"`
-	PackageInfo    PackageInfo `json:"packageInfo"`
+	Key              string      `json:"key"`
+	ImporterFolder   string      `json:"importerFolder"`
+	InstalledVersion *string     `json:"installedVersion"`
+	PackageInfo      PackageInfo `json:"packageInfo"`
 }
 
 type Data struct {
@@ -66,6 +67,7 @@ type parsedConfig struct {
 		Importer struct {
 			GameEXENames   []string `json:"game_exe_names"`
 			ImporterFolder string   `json:"importer_folder"`
+			OverwriteINI   bool     `json:"overwrite_ini"`
 		} `json:"Importer"`
 	} `json:"Importers"`
 	Security map[string]any `json:"Security"`
@@ -84,10 +86,14 @@ type XXMI struct {
 	config        map[string]any
 	parsed        parsedConfig
 	busy          bool
-	releases      []string
-	releasesReady bool
-	fetched       time.Time
-	releaseCall   *releaseFetchCall
+	releaseCaches map[string]*githubReleaseCache
+}
+
+type githubReleaseCache struct {
+	tags    []string
+	ready   bool
+	fetched time.Time
+	call    *releaseFetchCall
 }
 
 type releaseFetchCall struct {
@@ -107,6 +113,7 @@ func NewWithOptions(opts Options) *XXMI {
 	return &XXMI{
 		http: opts.HTTP, log: opts.Log, download: opts.Download, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots,
+		releaseCaches: make(map[string]*githubReleaseCache),
 	}
 }
 
@@ -233,23 +240,33 @@ func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, erro
 }
 
 func (x *XXMI) GetLibsReleases(ctx context.Context) ([]string, error) {
-	return x.getLibsReleases(ctx, false)
+	return x.getGitHubReleases(ctx, "SpectrumQT", "XXMI-Libs-Package", false)
 }
 
 func (x *XXMI) UpdateLibsReleases(ctx context.Context) error {
-	_, err := x.getLibsReleases(ctx, true)
+	_, err := x.getGitHubReleases(ctx, "SpectrumQT", "XXMI-Libs-Package", true)
 	return err
 }
 
-func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, error) {
+func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]string, error) {
+	spec, ok := lookupImporterPackage(importer)
+	if !ok {
+		return nil, errors.New("unknown importer")
+	}
+	return x.getGitHubReleases(ctx, spec.owner, spec.repo, false)
+}
+
+func (x *XXMI) getGitHubReleases(ctx context.Context, owner, repo string, refresh bool) ([]string, error) {
+	key := owner + "/" + repo
 	x.mu.Lock()
-	if x.releasesReady && (!refresh || time.Since(x.fetched) < releaseCacheTimeout) {
-		cached := slices.Clone(x.releases)
+	cache := x.releaseCacheLocked(key)
+	if cache.ready && (!refresh || time.Since(cache.fetched) < releaseCacheTimeout) {
+		cached := slices.Clone(cache.tags)
 		x.mu.Unlock()
 		return cached, nil
 	}
-	if x.releaseCall != nil {
-		call := x.releaseCall
+	if cache.call != nil {
+		call := cache.call
 		x.mu.Unlock()
 		select {
 		case <-ctx.Done():
@@ -257,7 +274,10 @@ func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, err
 		case <-call.done:
 		}
 		x.mu.RLock()
-		cached := slices.Clone(x.releases)
+		var cached []string
+		if ready := x.releaseCaches[key]; ready != nil {
+			cached = slices.Clone(ready.tags)
+		}
 		x.mu.RUnlock()
 		return cached, call.err
 	}
@@ -267,10 +287,10 @@ func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, err
 		return nil, errors.New("XXMI HTTP client is not configured")
 	}
 	call := &releaseFetchCall{done: make(chan struct{})}
-	x.releaseCall = call
+	cache.call = call
 	x.mu.Unlock()
 
-	rawURL := "https://api.github.com/repos/SpectrumQT/XXMI-Libs-Package/releases"
+	rawURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
 	header := make(http.Header)
 	header.Set("Accept", "application/vnd.github+json")
 	header.Set("X-GitHub-Api-Version", "2026-03-10")
@@ -284,18 +304,20 @@ func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, err
 		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
 	)
 	if err != nil {
-		return x.finishReleaseFetch(call, nil, err)
+		return x.finishGitHubReleaseFetch(key, call, nil, err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return x.finishReleaseFetch(call, nil, fmt.Errorf("failed to fetch XXMI libs releases: %s", response.Status))
+		return x.finishGitHubReleaseFetch(
+			key, call, nil, fmt.Errorf("failed to fetch %s/%s releases: %s", owner, repo, response.Status),
+		)
 	}
 	var releases []struct {
 		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
-		return x.finishReleaseFetch(call, nil, err)
+		return x.finishGitHubReleaseFetch(key, call, nil, err)
 	}
 	out := make([]string, 0, len(releases))
 	for _, release := range releases {
@@ -305,24 +327,39 @@ func (x *XXMI) getLibsReleases(ctx context.Context, refresh bool) ([]string, err
 		}
 		out = append(out, tag)
 	}
-	return x.finishReleaseFetch(call, out, nil)
+	return x.finishGitHubReleaseFetch(key, call, out, nil)
 }
 
-func (x *XXMI) finishReleaseFetch(call *releaseFetchCall, releases []string, err error) ([]string, error) {
+func (x *XXMI) finishGitHubReleaseFetch(
+	key string, call *releaseFetchCall, releases []string, err error,
+) ([]string, error) {
 	x.mu.Lock()
+	cache := x.releaseCacheLocked(key)
 	if err == nil {
-		x.releases = slices.Clone(releases)
-		x.releasesReady = true
-		x.fetched = time.Now()
+		cache.tags = slices.Clone(releases)
+		cache.ready = true
+		cache.fetched = time.Now()
 	}
 	call.err = err
-	if x.releaseCall == call {
-		x.releaseCall = nil
+	if cache.call == call {
+		cache.call = nil
 	}
 	close(call.done)
-	cached := slices.Clone(x.releases)
+	cached := slices.Clone(cache.tags)
 	x.mu.Unlock()
 	return cached, err
+}
+
+func (x *XXMI) releaseCacheLocked(key string) *githubReleaseCache {
+	if x.releaseCaches == nil {
+		x.releaseCaches = make(map[string]*githubReleaseCache)
+	}
+	cache, ok := x.releaseCaches[key]
+	if !ok {
+		cache = &githubReleaseCache{}
+		x.releaseCaches[key] = cache
+	}
+	return cache
 }
 
 func (x *XXMI) load(ctx context.Context) error {
@@ -375,13 +412,24 @@ func (x *XXMI) enabledImportersLocked() []EnabledImporter {
 		if !ok || strings.TrimSpace(packageInfo.LatestVersion) == "" {
 			continue
 		}
-		folder := x.parsed.Importers[key].Importer.ImporterFolder
-		if !filepath.IsAbs(folder) && x.path != nil {
-			folder = filepath.Join(*x.path, folder)
+		folder := x.importerFolderLocked(key)
+		var installed *string
+		if spec, ok := lookupImporterPackage(key); ok {
+			installed = readImporterVersion(folder, spec)
 		}
-		out = append(out, EnabledImporter{Key: key, ImporterFolder: folder, PackageInfo: packageInfo})
+		out = append(out, EnabledImporter{
+			Key: key, ImporterFolder: folder, InstalledVersion: installed, PackageInfo: packageInfo,
+		})
 	}
 	return out
+}
+
+func (x *XXMI) importerFolderLocked(key string) string {
+	folder := x.parsed.Importers[key].Importer.ImporterFolder
+	if !filepath.IsAbs(folder) && x.path != nil {
+		folder = filepath.Join(*x.path, folder)
+	}
+	return folder
 }
 
 func readAndValidateConfig(path string) (map[string]any, parsedConfig, error) {
