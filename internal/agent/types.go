@@ -53,8 +53,22 @@ type AgentSessionSnapshot struct {
 	Roots             []SandboxRoot       `json:"roots"`
 	Approvals         []AgentApproval     `json:"approvals"`
 	Revert            *AgentSessionRevert `json:"revert,omitempty"`
+	ContextUsage      *AgentContextUsage  `json:"contextUsage,omitempty"`
 	SupportsImages    bool                `json:"supportsImages"`
 	UnavailableReason string              `json:"unavailableReason,omitempty"`
+}
+
+// AgentContextUsage is the context occupancy of one session. ProjectedTokens is what the next
+// request's prompt would cost; PressureTokens is the provider-reported prompt size and is present
+// only while a matching usage anchor exists. The breakdown fields are the heuristic composition of
+// the current surface, so their sum need not equal ProjectedTokens.
+type AgentContextUsage struct {
+	PressureTokens  int64 `json:"pressureTokens,omitempty"`
+	ProjectedTokens int64 `json:"projectedTokens"`
+	ContextWindow   int   `json:"contextWindow"`
+	SystemTokens    int   `json:"systemTokens"`
+	ToolsTokens     int   `json:"toolsTokens"`
+	MessageTokens   int   `json:"messageTokens"`
 }
 
 // AgentImage references one stored image. Chat attachments and images returned by tools are
@@ -75,10 +89,12 @@ type AgentImageInput struct {
 	Data     string `json:"data"`
 }
 
-// MessageImage is one image sent to a model provider; Data is base64-encoded image bytes.
+// MessageImage is one image sent to a model provider; Data is base64-encoded image bytes. Bytes
+// carries the decoded size for estimation replays that must not read payloads from disk.
 type MessageImage struct {
 	MIMEType string `json:"mimeType"`
-	Data     string `json:"data"`
+	Bytes    int    `json:"bytes,omitempty"`
+	Data     string `json:"data,omitempty"`
 }
 
 type AgentApproval struct {

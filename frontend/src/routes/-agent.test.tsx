@@ -62,7 +62,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     useNavigate: () => navigate,
   };
 });
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
 vi.mock("@renderer/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
@@ -744,5 +746,99 @@ describe("Agent conversation revert", () => {
       name: "page.agent.copy_message",
     }) as HTMLButtonElement;
     expect(copy.disabled).toBe(true);
+  });
+});
+
+describe("Agent context meter", () => {
+  const conversation = [
+    {
+      sequence: 1,
+      turnId: RUN_ID,
+      type: "turn/start",
+      role: "user",
+      text: "first request",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  it("renders nothing while the session reports no context usage", async () => {
+    await renderAgent(conversation);
+
+    expect(screen.queryByRole("button", { name: "page.agent.context_used" })).toBeNull();
+  });
+
+  it("shows the occupancy ring and opens the composition panel", async () => {
+    const contextUsage = {
+      projectedTokens: 32_000,
+      contextWindow: 128_000,
+      systemTokens: 120,
+      toolsTokens: 21_500,
+      messageTokens: 477_000,
+    };
+    await renderAgent(conversation, () =>
+      Promise.resolve(makeSnapshot(conversation, { contextUsage })),
+    );
+
+    const trigger = await screen.findByRole("button", { name: "page.agent.context_used" });
+    expect(trigger.textContent).toContain("25%");
+
+    fireEvent.click(trigger);
+    const panel = await screen.findByRole("dialog");
+    expect(panel.textContent).toContain("~32K / 128K");
+    expect(panel.textContent).toContain("page.agent.context_system");
+    expect(panel.textContent).toContain("~21.5K");
+    expect(panel.textContent).toContain("~477K");
+  });
+
+  it("prefers live usage from the usage stream event over the snapshot", async () => {
+    const contextUsage = {
+      projectedTokens: 32_000,
+      contextWindow: 128_000,
+      systemTokens: 0,
+      toolsTokens: 0,
+      messageTokens: 0,
+    };
+    await renderAgent(conversation, () =>
+      Promise.resolve(makeSnapshot(conversation, { contextUsage })),
+    );
+    await screen.findByRole("button", { name: "page.agent.context_used" });
+
+    emit("status", { status: "running" });
+    emit("usage", {
+      inputTokens: 64_000,
+      outputTokens: 10,
+      contextUsage: { ...contextUsage, projectedTokens: 64_000 },
+    });
+
+    await waitFor(() => expect(screen.getByText("50%")).toBeTruthy());
+  });
+
+  it("applies live usage while a restored session is still running", async () => {
+    const contextUsage = {
+      projectedTokens: 32_000,
+      contextWindow: 128_000,
+      systemTokens: 0,
+      toolsTokens: 0,
+      messageTokens: 0,
+    };
+    await renderAgent(conversation, () =>
+      Promise.resolve(
+        makeSnapshot(conversation, {
+          summary: { id: SESSION_ID, title: "Nahida", running: true, scope: { type: "global" } },
+          contextUsage,
+        }),
+      ),
+    );
+    await screen.findByRole("button", { name: "page.agent.context_used" });
+
+    // A restored running session only knows the "restored" run sentinel, so live usage is matched by
+    // session instead; the streamed reading must still replace the snapshot one.
+    emit("usage", {
+      inputTokens: 64_000,
+      outputTokens: 5,
+      contextUsage: { ...contextUsage, projectedTokens: 64_000 },
+    });
+
+    await waitFor(() => expect(screen.getByText("50%")).toBeTruthy());
   });
 });

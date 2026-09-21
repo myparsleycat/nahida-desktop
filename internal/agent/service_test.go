@@ -321,7 +321,7 @@ func TestMessagesFromEventsPreservesToolResultEnvelope(t *testing.T) {
 		Payload:   `{"toolCallId":"tool","result":{"ok":false},"error":"failed","changedFiles":["a"]}`,
 	}}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 1 || messages[0].ToolCallID != "tool" {
 		t.Fatalf("messages = %#v", messages)
 	}
@@ -355,7 +355,7 @@ func TestMessagesFromEventsRestoresReasoningWithoutDuplicatingToolCalls(t *testi
 		},
 	}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 2 {
 		t.Fatalf("messages = %#v", messages)
 	}
@@ -379,7 +379,7 @@ func TestMessagesFromEventsRestoresLegacyToolCalls(t *testing.T) {
 		},
 	}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 3 || len(messages[1].ToolCalls) != 1 || messages[1].ToolCalls[0].ID != "tool" ||
 		messages[2].Role != "tool" || messages[2].ToolCallID != "tool" ||
 		!strings.Contains(messages[2].Content, interruptedToolErrorMessage) {
@@ -488,7 +488,7 @@ func TestAppendSkippedToolCallsPersistsPairedResults(t *testing.T) {
 	if len(events) != 4 {
 		t.Fatalf("events = %#v", events)
 	}
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 4 || messages[0].ToolCalls[0].ID != "second" || messages[1].ToolCallID != "second" ||
 		messages[2].ToolCalls[0].ID != "third" || messages[3].ToolCallID != "third" {
 		t.Fatalf("paired messages = %#v", messages)

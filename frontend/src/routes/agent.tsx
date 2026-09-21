@@ -1,11 +1,13 @@
 import { Service as Agent } from "@bindings/agent";
 import type {
   AgentApproval,
+  AgentContextUsage,
   AgentImage,
   AgentScope,
   AgentSessionSnapshot,
   AgentSessionSummary,
 } from "@bindings/agent/models";
+import { AgentContextMeter } from "@renderer/components/agent/context-meter";
 import { Markdown } from "@renderer/components/markdown";
 import {
   AlertDialog,
@@ -152,6 +154,9 @@ function AgentRoute() {
   const [images, setImages] = useState<PendingImage[]>([]);
   const [liveEntries, setLiveEntries] = useState<LiveAgentChatEntry[]>([]);
   const [runId, setRunId] = useState<string>();
+  // Live context usage arrives from the active run's `usage` events and is cleared whenever the
+  // snapshot is refetched, so a refreshed snapshot is always authoritative once a run ends.
+  const [liveUsage, setLiveUsage] = useState<{ sessionId: string; usage: AgentContextUsage }>();
   const [decidingApproval, setDecidingApproval] = useState<string>();
   const [reverting, setReverting] = useState(false);
   const [menuSessionId, setMenuSessionId] = useState<string>();
@@ -178,6 +183,7 @@ function AgentRoute() {
     // at this session before its snapshot renders.
     displayedSessionId.current = sessionId;
     setReverting(false);
+    setLiveUsage(undefined);
     const value = await Agent.GetSession(sessionId);
     if (generation !== sessionGeneration.current || displayedSessionId.current !== sessionId)
       return;
@@ -246,6 +252,10 @@ function AgentRoute() {
         update.type === "tool-end"
       ) {
         setLiveEntries((entries) => updateAgentLiveEntries(entries, update));
+      } else if (update.type === "usage") {
+        if (update.payload?.contextUsage) {
+          setLiveUsage({ sessionId: update.sessionId, usage: update.payload.contextUsage });
+        }
       } else if (isAgentApprovalEvent(update.type)) {
         if (update.type === "approval-requested") {
           setRunId(undefined);
@@ -509,6 +519,10 @@ function AgentRoute() {
     [sessions, t],
   );
   const empty = !loading && entries.length === 0;
+  const contextUsage =
+    liveUsage && liveUsage.sessionId === snapshot?.summary.id
+      ? liveUsage.usage
+      : snapshot?.contextUsage;
 
   return (
     <div className="agent-page flex h-full min-h-0 overflow-hidden bg-background text-foreground">
@@ -752,6 +766,7 @@ function AgentRoute() {
             }
             snapshot={snapshot}
             runId={runId}
+            contextUsage={contextUsage}
             hasPendingApproval={hasPendingApproval}
             reverting={reverting}
             empty={empty}
@@ -836,6 +851,7 @@ function Composer({
   onRemoveImage,
   snapshot,
   runId,
+  contextUsage,
   hasPendingApproval,
   reverting,
   empty,
@@ -849,6 +865,7 @@ function Composer({
   onRemoveImage: (index: number) => void;
   snapshot?: AgentSessionSnapshot;
   runId?: string;
+  contextUsage?: AgentContextUsage | null;
   hasPendingApproval: boolean;
   reverting: boolean;
   empty: boolean;
@@ -995,6 +1012,7 @@ function Composer({
               <FolderIcon className="size-3.5 flex-none" />
               <span className="min-w-0 truncate">{scopeLabel}</span>
             </div>
+            {!empty && <AgentContextMeter usage={contextUsage} />}
           </div>
           {runId ? (
             <button
