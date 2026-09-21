@@ -17,8 +17,11 @@ func TestEnsureLauncherClosedTerminatesUntilAbsent(t *testing.T) {
 	pids := []int{41, 42, 0}
 	var killed []int
 	err := ensureLauncherClosedWith(
-		context.Background(), time.Second, time.Millisecond,
-		func(context.Context, string) (int, error) {
+		context.Background(), `C:\XXMI\XXMI Launcher.exe`, time.Second, time.Millisecond,
+		func(_ context.Context, executable string) (int, error) {
+			if executable != `C:\XXMI\XXMI Launcher.exe` {
+				t.Fatalf("executable = %q", executable)
+			}
 			pid := pids[0]
 			pids = pids[1:]
 			return pid, nil
@@ -39,7 +42,7 @@ func TestEnsureLauncherClosedTerminatesUntilAbsent(t *testing.T) {
 func TestEnsureLauncherClosedPreservesContractError(t *testing.T) {
 	t.Parallel()
 	err := ensureLauncherClosedWith(
-		context.Background(), time.Second, time.Millisecond,
+		context.Background(), launcherImageName, time.Second, time.Millisecond,
 		func(context.Context, string) (int, error) { return 41, nil },
 		func(int) error { return errors.New("access denied") },
 	)
@@ -72,6 +75,21 @@ func TestFindProcessPIDReturnsZeroForUnknownImage(t *testing.T) {
 	}
 	if pid != 0 {
 		t.Fatalf("pid = %d, want 0", pid)
+	}
+}
+
+func TestFindProcessPIDMatchesExactExecutable(t *testing.T) {
+	t.Parallel()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := findProcessPID(context.Background(), executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != os.Getpid() {
+		t.Fatalf("pid = %d, want %d", pid, os.Getpid())
 	}
 }
 

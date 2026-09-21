@@ -60,7 +60,9 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
               </div>
 
               <span className="text-center text-xs">{importer.key}</span>
-              <span className="text-center text-xs">{importer.packageInfo.latest_version}</span>
+              <span className="text-center text-xs">
+                {importer.installedVersion ?? t("page.setting.xxmi.packageVersionUnknown")}
+              </span>
             </button>
           );
         })}

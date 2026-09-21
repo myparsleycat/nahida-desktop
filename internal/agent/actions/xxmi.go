@@ -51,6 +51,20 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 			return actionOK(deps.XXMI.InstallDLLVersion(ctx, input))
 		}))
 	registry.add(simpleAction(
+		"xxmi.install_importer_package",
+		"Download and install a selected XXMI importer package version.",
+		"xxmi",
+		RiskConfirm,
+		objectSchema(map[string]any{"importer": stringSchema(), "version": stringSchema()}, "importer", "version"),
+		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+			var input xxmi.InstallImporterPackageInput
+			if err := decodeActionArguments(raw, &input); err != nil {
+				return nil, err
+			}
+			return actionOK(deps.XXMI.InstallImporterPackage(ctx, input))
+		},
+	))
+	registry.add(simpleAction(
 		"xxmi.disable_genshin_dcr",
 		"Disable Genshin dynamic character resolution.",
 		"xxmi",

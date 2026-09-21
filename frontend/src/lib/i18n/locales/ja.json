@@ -1913,6 +1913,14 @@
         "dllVersionEmpty": "利用可能なバージョンがありません。",
         "dllVersionCurrent": "現在: {{version}}",
         "dllVersionUnknown": "不明",
+        "packageVersion": "Importerパッケージバージョン",
+        "packageVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。Modsフォルダーは保持されます。",
+        "packageVersionLoading": "バージョンを読み込み中...",
+        "packageVersionLoadFailed": "バージョンの読み込みに失敗しました。",
+        "packageVersionRetry": "再試行",
+        "packageVersionEmpty": "利用可能なバージョンがありません。",
+        "packageVersionCurrent": "現在: {{version}}",
+        "packageVersionUnknown": "不明",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",
@@ -1928,6 +1936,11 @@
           "installDllVersion": {
             "success": "XXMI DLLバージョン {{version}} を適用しました",
             "failed": "選択したXXMI DLLバージョンの適用に失敗しました",
+            "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
+          },
+          "installImporterPackage": {
+            "success": "{{importer}} パッケージバージョン {{version}} を適用しました",
+            "failed": "選択したImporterパッケージバージョンの適用に失敗しました",
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
           }
         }

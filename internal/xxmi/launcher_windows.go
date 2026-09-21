@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -65,11 +67,25 @@ type visibleWindowSearch struct {
 }
 
 func ensureLauncherClosed(ctx context.Context) error {
-	return ensureLauncherClosedWith(ctx, 5*time.Second, 100*time.Millisecond, findProcessPID, killProcess)
+	return ensureLauncherClosedWith(
+		ctx, launcherImageName, 5*time.Second, 100*time.Millisecond, findProcessPID, killProcess,
+	)
+}
+
+func ensureLauncherClosedAt(ctx context.Context, executable string) error {
+	return ensureLauncherClosedWith(
+		ctx,
+		executable,
+		5*time.Second,
+		100*time.Millisecond,
+		findProcessPID,
+		killProcessForExecutable(executable),
+	)
 }
 
 func ensureLauncherClosedWith(
 	ctx context.Context,
+	executable string,
 	timeout time.Duration,
 	pollInterval time.Duration,
 	find func(context.Context, string) (int, error),
@@ -77,7 +93,7 @@ func ensureLauncherClosedWith(
 ) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		pid, err := find(ctx, launcherImageName)
+		pid, err := find(ctx, executable)
 		if err != nil {
 			return err
 		}
@@ -90,7 +106,7 @@ func ensureLauncherClosedWith(
 				infra.Diagnostic{
 					Operation: "close-launcher",
 					Stage:     "terminate",
-					Fields:    map[string]any{"pid": pid, "executable": launcherImageName},
+					Fields:    map[string]any{"pid": pid, "executable": executable},
 				},
 			)
 		}
@@ -100,7 +116,7 @@ func ensureLauncherClosedWith(
 				infra.Diagnostic{
 					Operation: "close-launcher",
 					Stage:     "wait",
-					Fields:    map[string]any{"pid": pid, "executable": launcherImageName},
+					Fields:    map[string]any{"pid": pid, "executable": executable},
 				},
 			)
 		}
@@ -126,6 +142,19 @@ func killProcess(pid int) error {
 	return windows.TerminateProcess(handle, 1)
 }
 
+func killProcessForExecutable(executable string) func(int) error {
+	return func(pid int) error {
+		matches, err := processMatchesExecutable(pid, executable)
+		if err != nil {
+			return err
+		}
+		if !matches {
+			return errors.New("XXMI Launcher process identity changed before termination")
+		}
+		return killProcess(pid)
+	}
+}
+
 func startLauncher(ctx context.Context, executable, importer string) error {
 	verb, err := syscall.UTF16PtrFromString("runas")
 	if err != nil {
@@ -135,7 +164,7 @@ func startLauncher(ctx context.Context, executable, importer string) error {
 	if err != nil {
 		return err
 	}
-	parameters, err := syscall.UTF16PtrFromString("--nogui --xxmi " + importer)
+	parameters, err := syscall.UTF16PtrFromString("--nogui --xxmi " + syscall.EscapeArg(importer))
 	if err != nil {
 		return err
 	}
@@ -209,10 +238,11 @@ func enumVisibleProcessWindow(hwnd, lparam uintptr) uintptr {
 	return 1
 }
 
-func findProcessPID(ctx context.Context, imageName string) (int, error) {
+func findProcessPID(ctx context.Context, executable string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	imageName := filepath.Base(executable)
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return 0, err
@@ -222,7 +252,17 @@ func findProcessPID(ctx context.Context, imageName string) (int, error) {
 	var entry windows.ProcessEntry32
 	entry.Size = uint32(unsafe.Sizeof(entry))
 	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
-		if strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), imageName) {
+		if !strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), imageName) {
+			continue
+		}
+		if !filepath.IsAbs(executable) {
+			return int(entry.ProcessID), nil
+		}
+		matches, matchErr := processMatchesExecutable(int(entry.ProcessID), executable)
+		if matchErr != nil {
+			return 0, matchErr
+		}
+		if matches {
 			return int(entry.ProcessID), nil
 		}
 	}
@@ -230,4 +270,47 @@ func findProcessPID(ctx context.Context, imageName string) (int, error) {
 		return 0, nil
 	}
 	return 0, err
+}
+
+func processMatchesExecutable(pid int, executable string) (bool, error) {
+	if pid <= 0 {
+		return false, errors.New("invalid pid")
+	}
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+
+	buffer := make([]uint16, windows.MAX_LONG_PATH)
+	size := uint32(len(buffer))
+	if err := windows.QueryFullProcessImageName(
+		handle,
+		0,
+		&buffer[0],
+		&size,
+	); errors.Is(
+		err,
+		windows.ERROR_ACCESS_DENIED,
+	) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	processPath := filepath.Clean(windows.UTF16ToString(buffer[:size]))
+	expectedInfo, err := os.Stat(filepath.Clean(executable))
+	if err != nil {
+		return false, err
+	}
+	processInfo, err := os.Stat(processPath)
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(expectedInfo, processInfo), nil
 }

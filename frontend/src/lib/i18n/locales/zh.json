@@ -1912,6 +1912,14 @@
         "dllVersionEmpty": "没有可用版本。",
         "dllVersionCurrent": "当前：{{version}}",
         "dllVersionUnknown": "未知",
+        "packageVersion": "Importer 包版本",
+        "packageVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。Mods 文件夹会被保留。",
+        "packageVersionLoading": "正在加载版本...",
+        "packageVersionLoadFailed": "无法加载版本。",
+        "packageVersionRetry": "重试",
+        "packageVersionEmpty": "没有可用版本。",
+        "packageVersionCurrent": "当前：{{version}}",
+        "packageVersionUnknown": "未知",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "未找到XXMI",
@@ -1927,6 +1935,11 @@
           "installDllVersion": {
             "success": "已应用 XXMI DLL 版本 {{version}}",
             "failed": "应用所选 XXMI DLL 版本失败",
+            "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
+          },
+          "installImporterPackage": {
+            "success": "已应用 {{importer}} 包版本 {{version}}",
+            "failed": "应用所选 Importer 包版本失败",
             "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
           }
         }
