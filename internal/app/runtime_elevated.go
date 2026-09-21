@@ -32,8 +32,8 @@ type elevatedLifecycle struct {
 	report func(err error, stage string)
 	emit   func(string, ...any)
 
-	// ctx is cancelled by shutdown so an in-flight client start releases its
-	// pipe wait instead of holding the worker until a UAC prompt resolves.
+	// ctx is cancelled by shutdown so in-flight work, including health watches
+	// and client starts, releases instead of blocking process exit.
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -53,6 +53,9 @@ type elevatedLifecycle struct {
 	version    uint64
 	applied    uint64
 	desired    bool
+	// startCancel cancels the in-flight client.Start so disable can unblock
+	// the worker without cancelling l.ctx. Guarded by mu.
+	startCancel context.CancelFunc
 }
 
 // elevatedStartup tracks the single startup goroutine that reads the setting.
@@ -129,7 +132,8 @@ func (l *elevatedLifecycle) request(resolve func() (enabled bool, ok bool)) {
 
 // setEnabled cancels and waits for the tracked startup goroutine, then enqueues
 // the latest state. Waiting keeps disable and re-enable ordered against the
-// startup read before the worker starts or closes the client.
+// startup read before the worker starts or closes the client. Disable also
+// cancels an in-flight client.Start so the worker can return and process stop.
 func (l *elevatedLifecycle) setEnabled(enabled bool) {
 	if l == nil {
 		return
@@ -204,6 +208,9 @@ func (l *elevatedLifecycle) enqueue(enabled bool) {
 	}
 	l.desired = enabled
 	l.version++
+	if !enabled && l.startCancel != nil {
+		l.startCancel()
+	}
 	l.cond.Signal()
 }
 
@@ -258,7 +265,23 @@ func (l *elevatedLifecycle) startClient() error {
 	if l.client == nil {
 		return nil
 	}
-	return l.client.Start(l.ctx)
+
+	l.mu.Lock()
+	if !l.desired || l.workerStop {
+		l.mu.Unlock()
+		return context.Canceled
+	}
+	ctx, cancel := context.WithCancel(l.ctx)
+	l.startCancel = cancel
+	l.mu.Unlock()
+	defer func() {
+		cancel()
+		l.mu.Lock()
+		l.startCancel = nil
+		l.mu.Unlock()
+	}()
+
+	return l.client.Start(ctx)
 }
 
 func (l *elevatedLifecycle) stopClient() error {
@@ -311,7 +334,7 @@ func (l *elevatedLifecycle) status() platform.ElevatedHelperStatus {
 	if !enabled {
 		return platform.ElevatedHelperStatus{}
 	}
-	running := l.starting.Load() || l.client != nil && l.client.Connected()
+	running := l.client != nil && l.client.Connected()
 	return platform.ElevatedHelperStatus{Enabled: true, Running: running}
 }
 

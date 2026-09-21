@@ -12,5 +12,8 @@ export type ElevatedHelperStatus = {
 };
 
 export function isElevatedHelperRequiredError(error: unknown): boolean {
-    return toErrorMessage(error).includes(ELEVATED_HELPER_REQUIRED);
+    const message = toErrorMessage(error);
+    return (
+        message === ELEVATED_HELPER_REQUIRED || message.startsWith(`${ELEVATED_HELPER_REQUIRED}:`)
+    );
 }

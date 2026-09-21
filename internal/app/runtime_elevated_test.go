@@ -73,6 +73,40 @@ func TestElevatedLifecycleStartSuccessReportsRunning(t *testing.T) {
 	}
 }
 
+func TestElevatedLifecycleDisableCancelsInFlightStart(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	stub := &stubElevatedClient{
+		startFn: func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	statuses := make(chan platform.ElevatedHelperStatus, 4)
+	lifecycle := newElevatedLifecycle(stub, nil, statusEmitter(statuses))
+	defer lifecycle.shutdown()
+
+	lifecycle.setEnabled(true)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for helper start")
+	}
+	lifecycle.setEnabled(false)
+	got := waitHelperStatus(t, statuses)
+	if got.Enabled || got.Running {
+		t.Fatalf("status = %+v, want disabled", got)
+	}
+	if gotStarts := stub.startCount(); gotStarts != 1 {
+		t.Fatalf("starts = %d, want 1", gotStarts)
+	}
+	if stub.closes != 1 {
+		t.Fatalf("closes = %d, want 1", stub.closes)
+	}
+}
+
 func TestElevatedLifecycleDisableClearsStatus(t *testing.T) {
 	t.Parallel()
 
@@ -100,10 +134,14 @@ func TestElevatedLifecycleCoalescesDuplicateStartWhileStarting(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	stub := &stubElevatedClient{
-		startFn: func() error {
+		startFn: func(ctx context.Context) error {
 			close(started)
-			<-release
-			return errors.New("uac declined")
+			select {
+			case <-release:
+				return errors.New("uac declined")
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		},
 	}
 	statuses := make(chan platform.ElevatedHelperStatus, 4)
@@ -220,28 +258,28 @@ func TestElevatedLifecycleStatusTreatsInFlightStartAsRunning(t *testing.T) {
 	lifecycle.starting.Store(true)
 
 	got := lifecycle.status()
-	if !got.Enabled || !got.Running {
-		t.Fatalf("status = %+v, want enabled and running while starting", got)
+	if !got.Enabled || got.Running {
+		t.Fatalf("status = %+v, want enabled and not running while starting", got)
 	}
 }
 
 type stubElevatedClient struct {
 	mu        sync.Mutex
 	startErr  error
-	startFn   func() error
+	startFn   func(context.Context) error
 	connected bool
 	starts    int
 	closes    int
 }
 
-func (s *stubElevatedClient) Start(context.Context) error {
+func (s *stubElevatedClient) Start(ctx context.Context) error {
 	s.mu.Lock()
 	s.starts++
 	startFn := s.startFn
 	startErr := s.startErr
 	s.mu.Unlock()
 	if startFn != nil {
-		return startFn()
+		return startFn(ctx)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
