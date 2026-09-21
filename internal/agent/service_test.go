@@ -595,3 +595,183 @@ func TestSessionScopesResolveCurrentGameRoots(t *testing.T) {
 		t.Fatal("outside mod scope unexpectedly succeeded")
 	}
 }
+
+func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Install the client before writing events: UseClient seals turns that look interrupted, and a
+	// test turn has no terminal event.
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	session := db.AgentSessionRow{
+		ID: "session", ScopeType: "global", Title: "Test", CreatedAt: "1", UpdatedAt: "1",
+	}
+	if err := client.AgentSessions.Insert(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []db.AgentEventRow{
+		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "1"},
+		{SessionID: session.ID, TurnID: "first", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "2"},
+		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "3"},
+		{SessionID: session.ID, TurnID: "second", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "4"},
+	} {
+		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	staged, err := service.RevertSession(ctx, session.ID, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.Revert == nil || staged.Revert.BoundarySequence != 3 || staged.Revert.BoundaryTurnID != "second" ||
+		staged.Revert.RevertedCount != 2 {
+		t.Fatalf("staged revert = %#v", staged.Revert)
+	}
+	for _, entry := range staged.Entries {
+		want := entry.Sequence >= 3
+		if entry.Reverted != want {
+			t.Fatalf("entry %d reverted = %v, want %v", entry.Sequence, entry.Reverted, want)
+		}
+	}
+
+	if _, err := service.RevertSession(ctx, session.ID, 2); err == nil {
+		t.Fatal("revert accepted a non user-message boundary")
+	}
+
+	cleared, err := service.UnrevertSession(ctx, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Revert != nil {
+		t.Fatalf("revert survived unrevert: %#v", cleared.Revert)
+	}
+	for _, entry := range cleared.Entries {
+		if entry.Reverted {
+			t.Fatalf("entry %d still reverted after unrevert", entry.Sequence)
+		}
+	}
+}
+
+func TestServiceCommitRevertKeepsSurvivingSummary(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Install the client before writing events: UseClient seals turns that look interrupted.
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	session := db.AgentSessionRow{
+		ID: "session", ScopeType: "global", Title: "Test", DurableSummary: "stale", CreatedAt: "1", UpdatedAt: "1",
+	}
+	if err := client.AgentSessions.Insert(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []db.AgentEventRow{
+		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "1"},
+		{SessionID: session.ID, TurnID: "first", EventType: "summary",
+			Payload: `{"summary":"surviving","compactedMessages":1}`, CreatedAt: "2"},
+		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "3"},
+		{SessionID: session.ID, TurnID: "second", EventType: "tool/start",
+			Payload: `{"id":"tool","name":"apply_patch"}`, CreatedAt: "4"},
+	} {
+		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := client.AgentApprovals.Insert(ctx, db.AgentApprovalRow{
+		ID: "approval", SessionID: session.ID, TurnID: "second", ToolCallID: "tool",
+		ActionID: "sandbox.apply_patch", Arguments: `{}`, Summary: "Test", Status: "completed", CreatedAt: "4",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RevertSession(ctx, session.ID, 3); err != nil {
+		t.Fatal(err)
+	}
+	row, err := client.AgentSessions.Get(ctx, session.ID)
+	if err != nil || row == nil {
+		t.Fatalf("session = %#v, %v", row, err)
+	}
+
+	staged := parseSessionRevert(row.Revert)
+	if staged == nil {
+		t.Fatal("revert marker did not parse")
+	}
+	run := queuedRun{id: "replacement", text: "three"}
+	sequence, err := service.appendRevertedTurn(ctx, client, *row, *staged, run, map[string]any{"text": run.text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sequence != 3 {
+		t.Fatalf("replacement sequence = %d, want 3", sequence)
+	}
+	updated, err := client.AgentSessions.Get(ctx, session.ID)
+	if err != nil || updated == nil {
+		t.Fatalf("session = %#v, %v", updated, err)
+	}
+	if updated.Revert != "" || updated.DurableSummary != "surviving" {
+		t.Fatalf("committed session = %#v", updated)
+	}
+	events, err := client.AgentEvents.List(ctx, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 || events[0].EventType != "turn/start" || events[1].EventType != "summary" ||
+		events[2].TurnID != run.id || events[2].EventType != "turn/start" {
+		t.Fatalf("surviving events = %#v", events)
+	}
+	approval, err := client.AgentApprovals.Get(ctx, "approval")
+	if err != nil || approval != nil {
+		t.Fatalf("approval survived commit: %#v, %v", approval, err)
+	}
+
+	// A stale second send must fail without inserting an event or changing the committed session.
+	if _, err := client.AgentSessions.CommitRevertAndAppend(
+		ctx,
+		session.ID,
+		3,
+		row.Revert,
+		"stale",
+		db.AgentEventRow{
+			SessionID: session.ID,
+			TurnID:    "stale",
+			EventType: "turn/start",
+			Payload:   `{}`,
+			CreatedAt: "9",
+		},
+	); err == nil {
+		t.Fatal("stale revert commit unexpectedly succeeded")
+	}
+	after, err := client.AgentEvents.List(ctx, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 3 {
+		t.Fatalf("stale commit changed events = %#v", after)
+	}
+	reloaded, err := client.AgentSessions.Get(ctx, session.ID)
+	if err != nil || reloaded == nil {
+		t.Fatalf("session = %#v, %v", reloaded, err)
+	}
+	if reloaded.DurableSummary != "surviving" {
+		t.Fatalf("stale commit overwrote summary = %#v", reloaded)
+	}
+}

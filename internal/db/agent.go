@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -16,7 +17,8 @@ func scanAgentSession(scanner interface{ Scan(...any) error }) (*AgentSessionRow
 	var row AgentSessionRow
 	var modPath, modName sql.NullString
 	err := scanner.Scan(
-		&row.ID, &row.ScopeType, &modPath, &modName, &row.Title, &row.DurableSummary, &row.CreatedAt, &row.UpdatedAt,
+		&row.ID, &row.ScopeType, &modPath, &modName, &row.Title, &row.DurableSummary, &row.Revert, &row.CreatedAt,
+		&row.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -25,6 +27,9 @@ func scanAgentSession(scanner interface{ Scan(...any) error }) (*AgentSessionRow
 	row.ModName = ptrString(modName)
 	return &row, nil
 }
+
+const agentSessionSelect = `SELECT "id", "scope_type", "mod_path", "mod_name", "title",
+"durable_summary", "revert", "created_at", "updated_at" FROM "agent_session"`
 
 func (s AgentSessionsStore) Insert(ctx context.Context, row AgentSessionRow) error {
 	return s.c.exec(ctx, `INSERT INTO "agent_session"
@@ -35,8 +40,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, row.ID, row.ScopeType, argString(row.ModPath),
 
 func (s AgentSessionsStore) Get(ctx context.Context, id string) (*AgentSessionRow, error) {
 	row, err := scanAgentSession(
-		s.c.db.QueryRowContext(ctx, `SELECT "id", "scope_type", "mod_path", "mod_name", "title",
-"durable_summary", "created_at", "updated_at" FROM "agent_session" WHERE "id" = ?`, id),
+		s.c.db.QueryRowContext(ctx, agentSessionSelect+` WHERE "id" = ?`, id),
 	)
 	if isNoRows(err) {
 		return nil, nil
@@ -45,8 +49,7 @@ func (s AgentSessionsStore) Get(ctx context.Context, id string) (*AgentSessionRo
 }
 
 func (s AgentSessionsStore) List(ctx context.Context) ([]AgentSessionRow, error) {
-	rows, err := s.c.query(ctx, `SELECT "id", "scope_type", "mod_path", "mod_name", "title", "durable_summary",
-"created_at", "updated_at" FROM "agent_session" ORDER BY "updated_at" DESC`)
+	rows, err := s.c.query(ctx, agentSessionSelect+` ORDER BY "updated_at" DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +66,7 @@ func (s AgentSessionsStore) List(ctx context.Context) ([]AgentSessionRow, error)
 }
 
 func (s AgentSessionsStore) FindLatestScope(ctx context.Context, scopeType, modPath string) (*AgentSessionRow, error) {
-	query := `SELECT "id", "scope_type", "mod_path", "mod_name", "title", "durable_summary", "created_at", "updated_at"
-FROM "agent_session" WHERE "scope_type" = ? AND COALESCE("mod_path", '') = ? ORDER BY "updated_at" DESC LIMIT 1`
+	query := agentSessionSelect + ` WHERE "scope_type" = ? AND COALESCE("mod_path", '') = ? ORDER BY "updated_at" DESC LIMIT 1`
 	row, err := scanAgentSession(s.c.db.QueryRowContext(ctx, query, scopeType, modPath))
 	if isNoRows(err) {
 		return nil, nil
@@ -110,6 +112,73 @@ func (s AgentSessionsStore) Touch(ctx context.Context, id, updatedAt string) err
 func (s AgentSessionsStore) UpdateSummary(ctx context.Context, id, summary, updatedAt string) error {
 	return s.c.exec(ctx, `UPDATE "agent_session" SET "durable_summary" = ?, "updated_at" = ? WHERE "id" = ?`,
 		summary, updatedAt, id)
+}
+
+// SetRevert stages a revert on the session. The row is untouched until the next Send commits it.
+func (s AgentSessionsStore) SetRevert(ctx context.Context, id, revert, updatedAt string) error {
+	return s.c.exec(
+		ctx,
+		`UPDATE "agent_session" SET "revert" = ?, "updated_at" = ? WHERE "id" = ?`,
+		revert,
+		updatedAt,
+		id,
+	)
+}
+
+// ClearRevert drops a staged revert without deleting anything.
+func (s AgentSessionsStore) ClearRevert(ctx context.Context, id, updatedAt string) error {
+	return s.c.exec(ctx, `UPDATE "agent_session" SET "revert" = '', "updated_at" = ? WHERE "id" = ?`, updatedAt, id)
+}
+
+// CommitRevertAndAppend applies a staged revert and appends the new turn/start event in one
+// transaction. The marker is claimed before the reverted events are removed, so a concurrent send
+// cannot delete the new event accepted by an earlier commit.
+func (s AgentSessionsStore) CommitRevertAndAppend(
+	ctx context.Context,
+	id string,
+	boundarySequence int64,
+	revert, summary string,
+	event AgentEventRow,
+) (int64, error) {
+	var sequence int64
+	err := s.c.withImmediate(ctx, func(tx queryExec) error {
+		claim, err := tx.ExecContext(ctx, `UPDATE "agent_session" SET "durable_summary" = ?, "revert" = '',
+"updated_at" = ? WHERE "id" = ? AND "revert" = ?`, summary, event.CreatedAt, id, revert)
+		if err != nil {
+			return err
+		}
+		affected, err := claim.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected != 1 {
+			return errors.New("agent revert changed concurrently")
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM "agent_approval" WHERE "session_id" = ? AND "turn_id" IN (
+SELECT DISTINCT "turn_id" FROM "agent_event" WHERE "session_id" = ? AND "sequence" >= ?)`,
+			id, id, boundarySequence); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM "agent_event" WHERE "session_id" = ? AND "sequence" >= ?`, id, boundarySequence,
+		); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(MAX("sequence"), 0) + 1 FROM "agent_event" WHERE "session_id" = ?`, id,
+		).Scan(&sequence); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO "agent_event"
+("session_id", "sequence", "turn_id", "event_type", "payload", "created_at") VALUES (?, ?, ?, ?, ?, ?)`,
+			event.SessionID, sequence, event.TurnID, event.EventType, event.Payload, event.CreatedAt,
+		)
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("commit agent revert and append event: %w", err)
+	}
+	return sequence, nil
 }
 
 func (s AgentSessionsStore) Delete(ctx context.Context, id string) error {
@@ -197,6 +266,22 @@ FROM "agent_event" WHERE "session_id" = ? ORDER BY "sequence"`, sessionID)
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+// LatestSummaryBefore returns the payload of the latest compaction summary event before sequence, or
+// an empty string when the surviving events carry none.
+func (s AgentEventsStore) LatestSummaryBefore(ctx context.Context, sessionID string, sequence int64) (string, error) {
+	var payload string
+	err := s.c.db.QueryRowContext(ctx, `SELECT "payload" FROM "agent_event"
+WHERE "session_id" = ? AND "event_type" = 'summary' AND "sequence" < ? ORDER BY "sequence" DESC LIMIT 1`,
+		sessionID, sequence).Scan(&payload)
+	if isNoRows(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return payload, nil
 }
 
 func (s AgentEventsStore) SealInterrupted(ctx context.Context, createdAt string) error {
