@@ -1780,7 +1780,7 @@
           "runOnStartup": "Run on startup",
           "runOnStartupDescription": "Automatically launch the app when the system starts.",
           "elevatedHelper": "Elevated helper",
-          "elevatedHelperDescription": "Start a separate helper with administrator rights to send keys to elevated games. Windows will show a UAC prompt when the app starts. The helper is not code-signed, so approve that prompt only when you started it from Nahida.",
+          "elevatedHelperDescription": "Start a separate helper with administrator rights to send keys to elevated games. Windows will show a UAC prompt when the app starts.",
           "titlebarActivityBadgeClickNavigate": "Click titlebar activity badges to open",
           "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
           "checkUpdate": "Check for updates",
@@ -2133,7 +2133,7 @@
       "elevatedHelper": {
         "label": "Helper not running",
         "title": "Elevated helper is not running",
-        "description": "This action needs the elevated helper to send keys to an administrator-level game. Windows will show a UAC prompt. Approve it only if you started it from Nahida.",
+        "description": "The helper must be running for actions that need administrator rights. Windows will show a UAC prompt when you start it.",
         "start": "Start helper"
       }
     }
