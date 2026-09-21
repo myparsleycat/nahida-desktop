@@ -81,7 +81,7 @@ const scrollAreaClasses =
   "[&_[data-slot=scroll-area-content]]:min-w-0! [&_[data-slot=scroll-area-content]]:w-full [&_[data-slot=scroll-area-content]]:max-w-full [&_[data-slot=scroll-area-viewport]]:overflow-x-hidden!";
 
 const pulseDot =
-  "size-[7px] flex-none animate-[agent-pulse_1.4s_ease-in-out_infinite_alternate] rounded-full bg-(--agent-blue) shadow-[0_0_0_3px_color-mix(in_oklab,var(--agent-blue)_16%,transparent)] motion-reduce:animate-none";
+  "size-[7px] flex-none animate-[agent-pulse_1.4s_ease-in-out_infinite_alternate] rounded-full bg-accent shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_16%,transparent)] motion-reduce:animate-none";
 
 const disclosure = "ml-px transition-transform duration-120 group-open:rotate-180";
 
@@ -529,7 +529,7 @@ function AgentRoute() {
       <aside className="flex h-full w-(--agent-sidebar-width) max-w-(--agent-sidebar-width) min-w-(--agent-sidebar-width) flex-none flex-col overflow-hidden border-r border-border/78 bg-[color-mix(in_oklab,var(--sidebar)_76%,var(--muted))] px-3 py-1.5">
         <div className="mb-2 flex h-[60px] flex-none items-center px-1 py-2">
           <div className="flex w-full max-w-full min-w-0 items-center gap-[9px] overflow-hidden text-[17px] font-semibold tracking-[-0.01em]">
-            <span className="inline-grid size-6 flex-none place-items-center text-(--agent-blue)">
+            <span className="inline-grid size-6 flex-none place-items-center text-accent">
               <SparklesIcon className="size-[22px]" />
             </span>
             <span className="min-w-0 truncate">{t("page.agent.title")}</span>
@@ -689,7 +689,7 @@ function AgentRoute() {
             </div>
           </div>
           <div className="mt-2.5 flex gap-9 pl-2">
-            <span className="relative pb-[9px] text-[13px] leading-4 font-medium text-(--agent-blue) after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[2px] after:bg-(--agent-blue) after:content-['']">
+            <span className="relative pb-[9px] text-[13px] leading-4 font-medium text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[2px] after:bg-accent after:content-['']">
               {t("page.agent.chat")}
             </span>
           </div>
@@ -716,7 +716,7 @@ function AgentRoute() {
               {empty && (
                 <div className="absolute inset-x-0 top-[clamp(72px,23%,180px)] flex flex-col items-center gap-2 px-6 text-center">
                   <div className="flex items-center justify-center gap-2.5 text-[26px] leading-8 font-medium tracking-[-0.025em]">
-                    <span className="inline-grid size-[34px] flex-none place-items-center text-(--agent-blue)">
+                    <span className="inline-grid size-[34px] flex-none place-items-center text-accent">
                       <SparklesIcon className="size-[30px]" />
                     </span>
                     <span>{t("page.agent.hero_title")}</span>
@@ -748,7 +748,7 @@ function AgentRoute() {
                   </div>
                 ))}
               {runId && liveEntries.length === 0 && (
-                <div className="inline-flex h-[26px] animate-[agent-shimmer_1.8s_linear_infinite] items-center self-start bg-[linear-gradient(90deg,#4176e6_0%,#4176e6_38%,#b7c8fe_50%,#4176e6_62%,#4176e6_100%)] [background-size:250%_100%] bg-clip-text [background-position:100%_50%] text-sm font-medium text-transparent motion-reduce:animate-none">
+                <div className="inline-flex h-[26px] animate-[agent-shimmer_1.8s_linear_infinite] items-center self-start bg-[linear-gradient(90deg,var(--accent)_0%,var(--accent)_38%,color-mix(in_oklab,var(--accent)_35%,white)_50%,var(--accent)_62%,var(--accent)_100%)] [background-size:250%_100%] bg-clip-text [background-position:100%_50%] text-sm font-medium text-transparent motion-reduce:animate-none">
                   <span>{t("page.agent.thinking")}</span>
                 </div>
               )}
@@ -896,9 +896,9 @@ function Composer({
     >
       <div
         className={cn(
-          "pointer-events-auto flex w-(--agent-composer-width) flex-col gap-[9px] rounded-[22px] border border-border bg-[color-mix(in_oklab,var(--card)_96%,var(--muted))] p-2 pb-[7px] shadow-[0_1px_2px_rgb(0_0_0/6%),0_8px_30px_rgb(0_0_0/8%)] transition-[border-color,box-shadow] duration-120 focus-within:border-[color-mix(in_oklab,var(--agent-blue)_45%,var(--border))] focus-within:shadow-[0_1px_2px_rgb(0_0_0/6%),0_8px_30px_rgb(0_0_0/9%)]",
+          "pointer-events-auto flex w-(--agent-composer-width) flex-col gap-[9px] rounded-[22px] border border-border bg-[color-mix(in_oklab,var(--card)_96%,var(--muted))] p-2 pb-[7px] shadow-[0_1px_2px_rgb(0_0_0/6%),0_8px_30px_rgb(0_0_0/8%)] transition-[border-color,box-shadow] duration-120 focus-within:border-[color-mix(in_oklab,var(--accent)_45%,var(--border))] focus-within:shadow-[0_1px_2px_rgb(0_0_0/6%),0_8px_30px_rgb(0_0_0/9%)]",
           empty && "w-[min(712px,calc(100%_-_48px))]",
-          dragging && "border-(--agent-blue)",
+          dragging && "border-accent",
         )}
         onDragOver={(event) => {
           if (!canAttachImages || !event.dataTransfer.types.includes("Files")) return;
@@ -1018,7 +1018,7 @@ function Composer({
             {runId ? (
               <button
                 type="button"
-                className="grid size-[34px] flex-none place-items-center rounded-full bg-foreground text-background transition-colors duration-100"
+                className="grid size-[34px] flex-none place-items-center rounded-full bg-accent text-white transition-colors duration-100 hover:bg-[color-mix(in_oklab,var(--accent)_72%,white)]"
                 aria-label={t("page.agent.stop")}
                 onClick={() => snapshot && void Agent.Cancel(snapshot.summary.id, runId)}
               >
@@ -1027,7 +1027,7 @@ function Composer({
             ) : (
               <button
                 type="button"
-                className="grid size-[34px] flex-none place-items-center rounded-full bg-(--agent-blue) text-white transition-colors duration-100 hover:bg-[#679efe] disabled:cursor-default disabled:opacity-35"
+                className="grid size-[34px] flex-none place-items-center rounded-full bg-accent text-white transition-colors duration-100 hover:bg-[color-mix(in_oklab,var(--accent)_72%,white)] disabled:cursor-default disabled:opacity-35"
                 aria-label={t("page.agent.send")}
                 disabled={(!draft.trim() && images.length === 0) || disabled}
                 onClick={() => void onSend()}

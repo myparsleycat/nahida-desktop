@@ -15,7 +15,7 @@ const ROWS = [
   {
     key: "messageTokens",
     label: "page.agent.context_messages",
-    tint: "bg-[var(--agent-blue,#4176e6)]",
+    tint: "bg-accent",
   },
 ] as const;
 
@@ -72,7 +72,7 @@ export function AgentContextMeter({
             strokeLinecap="round"
             strokeDasharray={`${(CIRCUMFERENCE * context.percent) / 100} ${CIRCUMFERENCE}`}
             transform="rotate(-90 7 7)"
-            className="fill-none stroke-(--agent-blue)"
+            className="fill-none stroke-accent"
           />
         </svg>
         <span>{reading}</span>
