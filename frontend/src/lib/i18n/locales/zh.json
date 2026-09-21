@@ -1917,7 +1917,7 @@
         "dllVersionCurrent": "当前：{{version}}",
         "dllVersionUnknown": "未知",
         "packageVersion": "Importer 包版本",
-        "packageVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。Mods 文件夹会被保留。",
+        "packageVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。",
         "packageVersionLoading": "正在加载版本...",
         "packageVersionLoadFailed": "无法加载版本。",
         "packageVersionRetry": "重试",

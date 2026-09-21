@@ -1936,7 +1936,7 @@
         "dllVersionCurrent": "현재: {{version}}",
         "dllVersionUnknown": "알 수 없음",
         "packageVersion": "Importer 패키지 버전",
-        "packageVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다. Mods 폴더는 유지됩니다.",
+        "packageVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다.",
         "packageVersionLoading": "버전을 불러오는 중...",
         "packageVersionLoadFailed": "버전을 불러오지 못했습니다.",
         "packageVersionRetry": "다시 시도",

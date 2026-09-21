@@ -2002,7 +2002,7 @@
         "dllVersionCurrent": "Current: {{version}}",
         "dllVersionUnknown": "Unknown",
         "packageVersion": "Importer Package Version",
-        "packageVersionDescription": "Changing the version disables XXMI Launcher auto-update. The Mods folder is preserved.",
+        "packageVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
         "packageVersionLoading": "Loading versions...",
         "packageVersionLoadFailed": "Failed to load versions.",
         "packageVersionRetry": "Retry",
