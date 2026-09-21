@@ -437,6 +437,10 @@ func readAndValidateConfig(path string) (map[string]any, parsedConfig, error) {
 	if err != nil {
 		return nil, parsedConfig{}, err
 	}
+	return parseAndValidateConfig(raw)
+}
+
+func parseAndValidateConfig(raw []byte) (map[string]any, parsedConfig, error) {
 	var config map[string]any
 	if err := json.Unmarshal(raw, &config); err != nil {
 		return nil, parsedConfig{}, err
