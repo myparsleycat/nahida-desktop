@@ -636,6 +636,8 @@ func decodeText(data []byte) (string, textFormat, bool) {
 	format := textFormat{encoding: "utf-8", newline: "\n"}
 	if bytes.Contains(data, []byte("\r\n")) {
 		format.newline = "\r\n"
+	} else if bytes.IndexByte(data, '\r') >= 0 {
+		format.newline = "\r"
 	}
 	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
 		format.bom = true
@@ -651,6 +653,8 @@ func decodeText(data []byte) (string, textFormat, bool) {
 		text := string(utf16.Decode(units))
 		if strings.Contains(text, "\r\n") {
 			format.newline = "\r\n"
+		} else if strings.Contains(text, "\r") {
+			format.newline = "\r"
 		}
 		return text, format, false
 	}

@@ -468,3 +468,47 @@ func TestSandboxResolversReportUnavailableSandbox(t *testing.T) {
 		t.Fatal("nil sandbox unexpectedly resolved a target path")
 	}
 }
+
+func TestDecodeTextDetectsCarriageReturnNewlines(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		data     []byte
+		encoding string
+		newline  string
+	}{
+		{name: "UTF-8 CR-only", data: []byte("first\rsecond\r"), encoding: "utf-8", newline: "\r"},
+		{name: "UTF-8 CRLF precedence", data: []byte("first\r\nsecond\r"), encoding: "utf-8", newline: "\r\n"},
+		{
+			name:     "UTF-16LE CR-only",
+			data:     encodeText("first\rsecond\r", textFormat{encoding: "utf-16le", newline: "\r", bom: true}),
+			encoding: "utf-16le",
+			newline:  "\r",
+		},
+		{
+			name: "UTF-16LE CRLF precedence",
+			data: encodeText(
+				"first\r\nsecond\r",
+				textFormat{encoding: "utf-16le", newline: "\r\n", bom: true},
+			),
+			encoding: "utf-16le",
+			newline:  "\r\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, format, binaryFile := decodeText(test.data)
+			if binaryFile {
+				t.Fatal("decodeText classified text as binary")
+			}
+			if format.encoding != test.encoding {
+				t.Errorf("encoding = %q, want %q", format.encoding, test.encoding)
+			}
+			if format.newline != test.newline {
+				t.Errorf("newline = %q, want %q", format.newline, test.newline)
+			}
+		})
+	}
+}
