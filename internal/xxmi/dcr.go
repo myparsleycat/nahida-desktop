@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -22,12 +21,9 @@ const (
 	genshinGlobalPerfDataKey = "globalPerfData"
 	genshinVolatileGradesKey = "customVolatileGrades"
 	genshinSaveItemsKey      = "saveItems"
-	xxmiCheckDCRWhere        = "XXMI.checkDCR"
 	xxmiDisableDCRWhere      = "XXMI.disableDCR"
 	gimiImporterKey          = "GIMI"
 )
-
-var errGimiDCREnabled = errors.New("GIMI_DCR_ENABLED")
 
 type volatileGrade struct {
 	Key   int `json:"key"`
@@ -76,37 +72,19 @@ func (x *XXMI) DisableGenshinDynamicCharacterResolution(ctx context.Context) err
 	return nil
 }
 
-func (x *XXMI) rejectEnabledGimiDCR(ctx context.Context, importer string) error {
-	if !strings.EqualFold(importer, gimiImporterKey) {
-		return nil
-	}
+func readGenshinDCR(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	raw, err := readGenshinRegistryGeneralData()
 	if err != nil {
-		return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
-			Severity: infra.DiagnosticError, Operation: "start-game", Stage: "dcr-read",
-			Fields: map[string]any{"importer": importer},
-		})
+		return false, err
 	}
 	data, err := parseGenshinGeneralData(raw)
 	if err != nil {
-		return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
-			Severity: infra.DiagnosticError, Operation: "start-game", Stage: "dcr-decode",
-			Fields: map[string]any{"importer": importer},
-		})
+		return false, err
 	}
-	if data.dcrEnabled() {
-		if x.log != nil {
-			x.log.Info(fmt.Sprintf("Rejected StartGame at DCR check for importer %s", importer), xxmiCheckDCRWhere)
-		}
-		return infra.AnnotateError(errGimiDCREnabled, infra.Diagnostic{
-			Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "dcr-policy",
-			Fields: map[string]any{"importer": importer},
-		})
-	}
-	return nil
+	return data.dcrEnabled(), nil
 }
 
 func (x *XXMI) reportDCRFailure(err error, stage string) error {

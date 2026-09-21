@@ -182,13 +182,6 @@ func TestDisableDCRSkipsAlreadyDisabledSettings(t *testing.T) {
 	}
 }
 
-func TestRejectEnabledGimiDCRSkipsNonGIMI(t *testing.T) {
-	t.Parallel()
-	if err := New().rejectEnabledGimiDCR(t.Context(), "WWMI"); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func mustEncodeGeneralData(t *testing.T, grades []volatileGrade, items []saveItem) []byte {
 	t.Helper()
 	graphics, err := json.Marshal(map[string]any{genshinVolatileGradesKey: grades})

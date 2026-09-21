@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { useGimiDCRLaunch } from "@renderer/hooks/use-gimi-dcr-launch";
+import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import { isNteImporter } from "@shared/mod";
@@ -81,7 +81,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 
   const { data: presets = [] } = usePresets(selectedGame);
   const { data: enabledImporters = [] } = useEnabledImporters();
-  const { startImporter, gimiDCRDialog } = useGimiDCRLaunch();
+  const { startImporter, launchGuardDialog } = useLaunchGuard();
   const { data: xxmiData } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
     queryFn: () => XXMI.GetXXMIData(),
@@ -253,7 +253,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       />
 
       <NteLaunchDialog />
-      {gimiDCRDialog}
+      {launchGuardDialog}
     </div>
   );
 });

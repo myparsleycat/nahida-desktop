@@ -10,12 +10,19 @@ import (
 	"time"
 )
 
+type preparedLaunch struct {
+	importer string
+	exe      string
+	root     string
+	timeout  float64
+}
+
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
-	importer = strings.TrimSpace(importer)
-	if importer == "" {
-		return errors.New("importer is required")
+	ready, err := x.prepareGameLaunch(ctx, importer)
+	if err != nil {
+		return err
 	}
-	if err := x.rejectEnabledGimiDCR(ctx, importer); err != nil {
+	if err := x.rejectLaunchBlockers(ctx, ready.importer, ready.exe); err != nil {
 		return err
 	}
 	x.mu.Lock()
@@ -30,44 +37,58 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 		x.busy = false
 		x.mu.Unlock()
 	}()
+	return x.launchPrepared(ctx, ready)
+}
+
+func (x *XXMI) prepareGameLaunch(ctx context.Context, importer string) (preparedLaunch, error) {
+	importer = strings.TrimSpace(importer)
+	if importer == "" {
+		return preparedLaunch{}, errors.New("importer is required")
+	}
 	if err := x.load(ctx); err != nil {
-		return err
+		return preparedLaunch{}, err
 	}
 	x.mu.RLock()
+	defer x.mu.RUnlock()
 	if x.path == nil || x.config == nil {
-		x.mu.RUnlock()
-		return errors.New("XXMI is not configured")
+		return preparedLaunch{}, errors.New("XXMI is not configured")
 	}
-	root := *x.path
 	importerConfig, ok := x.parsed.Importers[importer]
-	timeoutSeconds := x.parsed.Launcher.StartTimeout
-	x.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("importer %s not found", importer)
+		return preparedLaunch{}, fmt.Errorf("importer %s not found", importer)
 	}
-	executable := filepath.Join(root, "Resources", "Bin", "XXMI Launcher.exe")
+	return preparedLaunch{
+		importer: importer,
+		exe:      gameProcessName(importer, importerConfig.Importer.GameEXENames),
+		root:     *x.path,
+		timeout:  x.parsed.Launcher.StartTimeout,
+	}, nil
+}
+
+func (x *XXMI) launchPrepared(ctx context.Context, ready preparedLaunch) error {
+	executable := filepath.Join(ready.root, "Resources", "Bin", "XXMI Launcher.exe")
 	if info, err := os.Stat(executable); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("XXMI Launcher not found at %s", executable)
 	}
-	processName := gameProcessName(importer, importerConfig.Importer.GameEXENames)
-	if processName == "" {
-		return fmt.Errorf("game process is not configured for importer %s", importer)
+	if ready.exe == "" {
+		return fmt.Errorf("game process is not configured for importer %s", ready.importer)
 	}
 	if x.log != nil {
-		x.log.Info("Starting game "+importer+" via XXMI Launcher", "XXMI.startGame")
+		x.log.Info("Starting game "+ready.importer+" via XXMI Launcher", "XXMI.startGame")
 	}
-	if err := startLauncher(ctx, executable, importer); err != nil {
+	if err := startLauncher(ctx, executable, ready.importer); err != nil {
 		return err
 	}
+	timeoutSeconds := ready.timeout
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 60
 	}
-	pid, err := waitForVisibleProcess(ctx, processName, time.Duration(timeoutSeconds*float64(time.Second)))
+	pid, err := waitForVisibleProcess(ctx, ready.exe, time.Duration(timeoutSeconds*float64(time.Second)))
 	if err != nil {
 		return err
 	}
 	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Detected %s (PID: %d)", processName, pid), "XXMI.startGame")
+		x.log.Info(fmt.Sprintf("Detected %s (PID: %d)", ready.exe, pid), "XXMI.startGame")
 	}
 	timer := time.NewTimer(time.Second)
 	select {

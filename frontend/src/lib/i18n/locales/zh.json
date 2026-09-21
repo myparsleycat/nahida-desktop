@@ -542,6 +542,16 @@
           "description": "要在原神中正常应用模组，需要关闭动态角色分辨率。要关闭并启动游戏吗？",
           "confirm": "关闭并启动"
         },
+        "smooth-motion": {
+          "title": "平滑运动已开启",
+          "description": "要正常应用模组，需要关闭平滑运动。要关闭并启动游戏吗？",
+          "confirm": "关闭并启动"
+        },
+        "launch-blockers": {
+          "title": "启动前需要关闭设置",
+          "description": "动态角色分辨率和平滑运动已开启。要正常应用模组，需要将两者都关闭。要关闭并启动游戏吗？",
+          "confirm": "关闭并启动"
+        },
         "preset-management": {
           "description": "此预设包含 {{length}} 个模组。",
           "legacy-badge": "旧版",

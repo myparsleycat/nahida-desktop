@@ -74,4 +74,20 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 			return actionOK(deps.XXMI.DisableGenshinDynamicCharacterResolution(ctx))
 		},
 	))
+	registry.add(simpleAction(
+		"xxmi.clear_launch_blockers",
+		"Turn off Genshin dynamic character resolution and NVIDIA Smooth Motion when they would block launching the game.",
+		"xxmi",
+		RiskConfirm,
+		objectSchema(map[string]any{"importer": stringSchema()}, "importer"),
+		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+			var input struct {
+				Importer string `json:"importer"`
+			}
+			if err := decodeActionArguments(raw, &input); err != nil {
+				return nil, err
+			}
+			return actionOK(deps.XXMI.ClearLaunchBlockers(ctx, input.Importer))
+		},
+	))
 }
