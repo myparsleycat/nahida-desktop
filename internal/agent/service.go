@@ -505,12 +505,6 @@ func (s *Service) Send(ctx context.Context, id, text string, images []AgentImage
 	if err != nil || row == nil {
 		return SendResult{}, errors.New("agent session not found")
 	}
-	if row.Revert != "" {
-		row, err = s.commitRevert(ctx, client, *row)
-		if err != nil {
-			return SendResult{}, err
-		}
-	}
 	if _, _, err := s.resolveScope(ctx, rowScope(*row)); err != nil {
 		return SendResult{}, err
 	}
@@ -540,19 +534,32 @@ func (s *Service) Send(ctx context.Context, id, text string, images []AgentImage
 	if err != nil {
 		return SendResult{}, fmt.Errorf("store agent images: %w", err)
 	}
+	persisted := false
+	defer func() {
+		if !persisted {
+			s.cleanupStoredImages(stored)
+		}
+	}()
+
 	run := queuedRun{id: uuid.NewString(), text: text, fallbackTitle: messageTitle(text, stored)}
 	payload := map[string]any{"text": run.text}
 	if len(stored) > 0 {
 		payload["images"] = stored
 	}
-	startSequence, err := s.appendEvent(
-		ctx,
-		db.AgentEventRow{SessionID: id, TurnID: run.id, EventType: "turn/start"},
-		payload,
-	)
+	var startSequence int64
+	if staged := parseSessionRevert(row.Revert); staged != nil {
+		startSequence, err = s.appendRevertedTurn(ctx, client, *row, *staged, run, payload)
+	} else {
+		startSequence, err = s.appendEvent(
+			ctx,
+			db.AgentEventRow{SessionID: id, TurnID: run.id, EventType: "turn/start"},
+			payload,
+		)
+	}
 	if err != nil {
 		return SendResult{}, fmt.Errorf("persist agent message: %w", err)
 	}
+	persisted = true
 	worker := s.worker(id)
 	if worker == nil {
 		s.finishRunDetached(id, run.id, "turn/cancelled", map[string]any{
@@ -1926,44 +1933,46 @@ func parseSessionRevert(raw string) *AgentSessionRevert {
 	return &staged
 }
 
-// commitRevert applies a staged revert before a new turn is queued: it deletes the hidden events
-// with their approvals and keeps the session summary consistent with the surviving events.
-func (s *Service) commitRevert(
+// appendRevertedTurn commits a staged revert and the replacement turn/start event atomically.
+func (s *Service) appendRevertedTurn(
 	ctx context.Context,
 	client *db.Client,
 	row db.AgentSessionRow,
-) (*db.AgentSessionRow, error) {
-	staged := parseSessionRevert(row.Revert)
-	if staged == nil {
-		return &row, nil
-	}
-	payload, err := client.AgentEvents.LatestSummaryBefore(ctx, row.ID, staged.BoundarySequence)
+	staged AgentSessionRevert,
+	run queuedRun,
+	payload any,
+) (int64, error) {
+	summaryPayload, err := client.AgentEvents.LatestSummaryBefore(ctx, row.ID, staged.BoundarySequence)
 	if err != nil {
-		return nil, fmt.Errorf("commit agent revert: %w", err)
+		return 0, fmt.Errorf("load agent summary before revert: %w", err)
 	}
 	summary := ""
-	if payload != "" {
+	if summaryPayload != "" {
 		var decoded struct {
 			Summary string `json:"summary"`
 		}
-		if json.Unmarshal([]byte(payload), &decoded) == nil {
+		if json.Unmarshal([]byte(summaryPayload), &decoded) == nil {
 			summary = decoded.Summary
 		}
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := client.AgentSessions.CommitRevert(
-		ctx, row.ID, staged.BoundarySequence, row.Revert, summary, now,
-	); err != nil {
-		return nil, err
-	}
-	updated, err := client.AgentSessions.Get(ctx, row.ID)
+	data, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return 0, fmt.Errorf("encode agent message: %w", err)
 	}
-	if updated == nil {
-		return nil, errors.New("agent session not found")
-	}
-	return updated, nil
+	return client.AgentSessions.CommitRevertAndAppend(
+		ctx,
+		row.ID,
+		staged.BoundarySequence,
+		row.Revert,
+		summary,
+		db.AgentEventRow{
+			SessionID: row.ID,
+			TurnID:    run.id,
+			EventType: "turn/start",
+			Payload:   string(data),
+			CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	)
 }
 
 func rowScope(row db.AgentSessionRow) AgentScope {

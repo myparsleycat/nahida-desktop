@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -91,13 +92,17 @@ func (s *Service) storeImages(sessionID string, images []pendingImage) ([]AgentI
 		return nil, errors.New("app data store is unavailable")
 	}
 	stored := make([]AgentImage, 0, len(images))
+	stagedPaths := make([]string, 0, len(images))
 	for _, image := range images {
 		relative := filepath.Join(imageDirectory, sessionID, uuid.NewString()+supportedImageMIME[image.MIMEType])
+		stagedPaths = append(stagedPaths, relative)
 		if err := s.appData.WriteFile(relative, image.Data, 0o600); err != nil {
+			s.removeImageFiles(stagedPaths)
 			return nil, err
 		}
 		source, err := s.appData.Resolve(relative)
 		if err != nil {
+			s.removeImageFiles(stagedPaths)
 			return nil, err
 		}
 		stored = append(stored, AgentImage{
@@ -105,6 +110,39 @@ func (s *Service) storeImages(sessionID string, images []pendingImage) ([]AgentI
 		})
 	}
 	return stored, nil
+}
+
+func (s *Service) cleanupStoredImages(images []AgentImage) {
+	if len(images) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(images))
+	for _, image := range images {
+		paths = append(paths, image.Path)
+	}
+	s.removeImageFiles(paths)
+}
+
+func (s *Service) removeImageFiles(relativePaths []string) {
+	if s.appData == nil {
+		return
+	}
+	for _, relative := range relativePaths {
+		path, err := s.appData.Resolve(relative)
+		if err != nil {
+			_ = infra.ReportError(s.log, err, "Agent", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "agent-image", Stage: "cleanup",
+				Fields: map[string]any{"path": relative},
+			})
+			continue
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = infra.ReportError(s.log, err, "Agent", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "agent-image", Stage: "cleanup",
+				Fields: map[string]any{"path": relative},
+			})
+		}
+	}
 }
 
 // loadMessageImages reads stored images back for a provider request. An unreadable file is

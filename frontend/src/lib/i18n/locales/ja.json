@@ -53,7 +53,7 @@
       "revert_message": "この時点まで戻す",
       "revert_pending": "{{count}} 件のメッセージを元に戻しました",
       "revert_files_notice": "ファイルの変更は復元されません",
-      "revert_undo": "元に戻すのを取消",
+      "revert_undo": "復元を取り消す",
       "copy_message": "メッセージをコピー",
       "copied": "コピーしました",
       "copy_failed": "メッセージをコピーできませんでした",

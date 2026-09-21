@@ -711,9 +711,21 @@ func TestServiceCommitRevertKeepsSurvivingSummary(t *testing.T) {
 		t.Fatalf("session = %#v, %v", row, err)
 	}
 
-	updated, err := service.commitRevert(ctx, client, *row)
+	staged := parseSessionRevert(row.Revert)
+	if staged == nil {
+		t.Fatal("revert marker did not parse")
+	}
+	run := queuedRun{id: "replacement", text: "three"}
+	sequence, err := service.appendRevertedTurn(ctx, client, *row, *staged, run, map[string]any{"text": run.text})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if sequence != 3 {
+		t.Fatalf("replacement sequence = %d, want 3", sequence)
+	}
+	updated, err := client.AgentSessions.Get(ctx, session.ID)
+	if err != nil || updated == nil {
+		t.Fatalf("session = %#v, %v", updated, err)
 	}
 	if updated.Revert != "" || updated.DurableSummary != "surviving" {
 		t.Fatalf("committed session = %#v", updated)
@@ -722,7 +734,8 @@ func TestServiceCommitRevertKeepsSurvivingSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 || events[0].EventType != "turn/start" || events[1].EventType != "summary" {
+	if len(events) != 3 || events[0].EventType != "turn/start" || events[1].EventType != "summary" ||
+		events[2].TurnID != run.id || events[2].EventType != "turn/start" {
 		t.Fatalf("surviving events = %#v", events)
 	}
 	approval, err := client.AgentApprovals.Get(ctx, "approval")
@@ -730,23 +743,35 @@ func TestServiceCommitRevertKeepsSurvivingSummary(t *testing.T) {
 		t.Fatalf("approval survived commit: %#v, %v", approval, err)
 	}
 
-	// Committing the same marker again must be a no-op: a concurrent second Send would otherwise
-	// delete the turn the first commit just accepted.
-	if err := client.AgentSessions.CommitRevert(ctx, session.ID, 3, row.Revert, "stale", "9"); err != nil {
-		t.Fatal(err)
+	// A stale second send must fail without inserting an event or changing the committed session.
+	if _, err := client.AgentSessions.CommitRevertAndAppend(
+		ctx,
+		session.ID,
+		3,
+		row.Revert,
+		"stale",
+		db.AgentEventRow{
+			SessionID: session.ID,
+			TurnID:    "stale",
+			EventType: "turn/start",
+			Payload:   `{}`,
+			CreatedAt: "9",
+		},
+	); err == nil {
+		t.Fatal("stale revert commit unexpectedly succeeded")
 	}
 	after, err := client.AgentEvents.List(ctx, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(after) != 2 {
-		t.Fatalf("second commit changed events = %#v", after)
+	if len(after) != 3 {
+		t.Fatalf("stale commit changed events = %#v", after)
 	}
 	reloaded, err := client.AgentSessions.Get(ctx, session.ID)
 	if err != nil || reloaded == nil {
 		t.Fatalf("session = %#v, %v", reloaded, err)
 	}
 	if reloaded.DurableSummary != "surviving" {
-		t.Fatalf("second commit overwrote summary = %#v", reloaded)
+		t.Fatalf("stale commit overwrote summary = %#v", reloaded)
 	}
 }

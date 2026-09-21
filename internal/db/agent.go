@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -129,20 +130,20 @@ func (s AgentSessionsStore) ClearRevert(ctx context.Context, id, updatedAt strin
 	return s.c.exec(ctx, `UPDATE "agent_session" SET "revert" = '', "updated_at" = ? WHERE "id" = ?`, updatedAt, id)
 }
 
-// CommitRevert applies a staged revert: it deletes every event at or after boundarySequence together
-// with the approvals of the turns it removes, then stores the summary of the surviving events. The
-// update claims the staged marker inside the same transaction, so a second commit of the same marker
-// becomes a no-op instead of deleting turns the first commit already accepted. The summary is passed
-// in already decoded because its payload shape belongs to the agent package.
-func (s AgentSessionsStore) CommitRevert(
+// CommitRevertAndAppend applies a staged revert and appends the new turn/start event in one
+// transaction. The marker is claimed before the reverted events are removed, so a concurrent send
+// cannot delete the new event accepted by an earlier commit.
+func (s AgentSessionsStore) CommitRevertAndAppend(
 	ctx context.Context,
 	id string,
 	boundarySequence int64,
-	revert, summary, updatedAt string,
-) error {
+	revert, summary string,
+	event AgentEventRow,
+) (int64, error) {
+	var sequence int64
 	err := s.c.withImmediate(ctx, func(tx queryExec) error {
 		claim, err := tx.ExecContext(ctx, `UPDATE "agent_session" SET "durable_summary" = ?, "revert" = '',
-"updated_at" = ? WHERE "id" = ? AND "revert" = ?`, summary, updatedAt, id, revert)
+"updated_at" = ? WHERE "id" = ? AND "revert" = ?`, summary, event.CreatedAt, id, revert)
 		if err != nil {
 			return err
 		}
@@ -150,10 +151,8 @@ func (s AgentSessionsStore) CommitRevert(
 		if err != nil {
 			return err
 		}
-		if affected == 0 {
-			// Another commit already consumed the marker, or the session is gone; either way there is
-			// nothing left to delete.
-			return nil
+		if affected != 1 {
+			return errors.New("agent revert changed concurrently")
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM "agent_approval" WHERE "session_id" = ? AND "turn_id" IN (
 SELECT DISTINCT "turn_id" FROM "agent_event" WHERE "session_id" = ? AND "sequence" >= ?)`,
@@ -165,12 +164,21 @@ SELECT DISTINCT "turn_id" FROM "agent_event" WHERE "session_id" = ? AND "sequenc
 		); err != nil {
 			return err
 		}
-		return nil
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(MAX("sequence"), 0) + 1 FROM "agent_event" WHERE "session_id" = ?`, id,
+		).Scan(&sequence); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO "agent_event"
+("session_id", "sequence", "turn_id", "event_type", "payload", "created_at") VALUES (?, ?, ?, ?, ?, ?)`,
+			event.SessionID, sequence, event.TurnID, event.EventType, event.Payload, event.CreatedAt,
+		)
+		return err
 	})
 	if err != nil {
-		return fmt.Errorf("commit agent revert: %w", err)
+		return 0, fmt.Errorf("commit agent revert and append event: %w", err)
 	}
-	return nil
+	return sequence, nil
 }
 
 func (s AgentSessionsStore) Delete(ctx context.Context, id string) error {

@@ -162,6 +162,7 @@ function AgentRoute() {
   const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const latestSequence = useRef(new Map<string, number>());
+  const sessionGeneration = useRef(0);
   const displayedSessionId = useRef<string | undefined>(undefined);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -172,10 +173,14 @@ function AgentRoute() {
   }, []);
 
   const openSnapshot = useCallback(async (sessionId: string) => {
+    const generation = ++sessionGeneration.current;
+    // Invalidate the previous load before awaiting the backend, and point the stream subscription
+    // at this session before its snapshot renders.
+    displayedSessionId.current = sessionId;
+    setReverting(false);
     const value = await Agent.GetSession(sessionId);
-    // Point the stream subscription at this session before the snapshot renders: an event that
-    // arrives for the conversation the user just left must not reach the one on screen.
-    displayedSessionId.current = value.summary.id;
+    if (generation !== sessionGeneration.current || displayedSessionId.current !== sessionId)
+      return;
     setSnapshot(value);
     setRunId(value.summary.running ? "restored" : undefined);
     setLiveEntries([]);
@@ -314,6 +319,7 @@ function AgentRoute() {
       (!draft.trim() && images.length === 0) ||
       runId ||
       hasPendingApproval ||
+      reverting ||
       snapshot.unavailableReason
     )
       return;
@@ -448,28 +454,49 @@ function AgentRoute() {
 
   const revertToMessage = async (entry: LiveAgentChatEntry) => {
     if (!snapshot || runId || hasPendingApproval || reverting) return;
+    const sessionId = snapshot.summary.id;
+    const generation = ++sessionGeneration.current;
+    displayedSessionId.current = sessionId;
     setReverting(true);
     try {
-      setSnapshot(await Agent.RevertSession(snapshot.summary.id, entry.sequence));
+      const value = await Agent.RevertSession(sessionId, entry.sequence);
+      if (generation !== sessionGeneration.current || displayedSessionId.current !== sessionId)
+        return;
+      setSnapshot(value);
       setLiveEntries([]);
       // Only refill an empty composer: overwriting an in-progress draft would discard it silently.
-      if (entry.text && !draft.trim()) setDraft(entry.text);
+      const revertedText = entry.text;
+      if (revertedText) setDraft((current) => (current.trim() ? current : revertedText));
     } catch (error) {
-      toast.error(String(error));
+      if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
+        toast.error(String(error));
+      }
     } finally {
-      setReverting(false);
+      if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
+        setReverting(false);
+      }
     }
   };
 
   const unrevertSession = async () => {
     if (!snapshot || reverting) return;
+    const sessionId = snapshot.summary.id;
+    const generation = ++sessionGeneration.current;
+    displayedSessionId.current = sessionId;
     setReverting(true);
     try {
-      setSnapshot(await Agent.UnrevertSession(snapshot.summary.id));
+      const value = await Agent.UnrevertSession(sessionId);
+      if (generation !== sessionGeneration.current || displayedSessionId.current !== sessionId)
+        return;
+      setSnapshot(value);
     } catch (error) {
-      toast.error(String(error));
+      if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
+        toast.error(String(error));
+      }
     } finally {
-      setReverting(false);
+      if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
+        setReverting(false);
+      }
     }
   };
 
@@ -832,7 +859,7 @@ function Composer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const unavailable = !!snapshot?.unavailableReason;
-  const disabled = hasPendingApproval || unavailable;
+  const disabled = hasPendingApproval || reverting || unavailable;
   const canAttachImages = !!snapshot?.supportsImages;
   const attachHint = t("page.agent.attach_hint", {
     count: maxAttachedImages,
