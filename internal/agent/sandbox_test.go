@@ -323,6 +323,70 @@ func TestSandboxUpdateRejectsMissingFileAndDuplicatePath(t *testing.T) {
 	}
 }
 
+func TestSandboxUpdateOldStringPreservesUntouchedLines(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	if err := os.WriteFile(path, []byte("[A]\r\nvalue=old\r\nother=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	result, err := sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini",
+		OldString: "[A]\nvalue=old", NewString: "[A]\nvalue=new",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ChangedFiles) != 1 || result.ChangedFiles[0] != "mod.ini" {
+		t.Fatalf("changed files = %#v", result.ChangedFiles)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "[A]\r\nvalue=new\r\nother=1\r\n" {
+		t.Fatalf("file = %q", got)
+	}
+}
+
+func TestSandboxUpdateOldStringRejectsAmbiguousAndMixedForms(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	if err := os.WriteFile(path, []byte("[A]\r\nkey=1\r\n[B]\r\nkey=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini", OldString: "key=1", NewString: "key=2",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "oldString matches 2 times") {
+		t.Fatalf("ambiguous err = %v", err)
+	}
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini",
+		OldString: "key=1", NewString: "key=2",
+		Hunks: []PatchHunk{{OldLines: []string{"key=1"}, NewLines: []string{"key=2"}}},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "oldString/newString or hunks, not both") {
+		t.Fatalf("mixed form err = %v", err)
+	}
+
+	got, _ := os.ReadFile(path)
+	if string(got) != "[A]\r\nkey=1\r\n[B]\r\nkey=1\r\n" {
+		t.Fatalf("file changed after rejected updates: %q", got)
+	}
+}
+
 func TestSandboxSearchIsCancellable(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

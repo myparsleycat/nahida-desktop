@@ -70,6 +70,9 @@ type PatchOperation struct {
 	Path            string      `json:"path"`
 	Content         string      `json:"content,omitempty"`
 	ExpectedContent *string     `json:"expectedContent,omitempty"`
+	OldString       string      `json:"oldString,omitempty"`
+	NewString       string      `json:"newString,omitempty"`
+	ReplaceAll      bool        `json:"replaceAll,omitempty"`
 	Hunks           []PatchHunk `json:"hunks,omitempty"`
 }
 
@@ -417,15 +420,7 @@ func (s *Sandbox) preparePatch(
 		case "write":
 			item.data = encodeText(normalizeNewlines(operation.Content, item.format.newline), item.format)
 		case "update":
-			if !item.exists {
-				return nil, nil, fmt.Errorf("update %q: file does not exist", clean)
-			}
-			updated, warnings, err := applyPatchHunks(
-				item.text,
-				operation.Hunks,
-				filepath.ToSlash(clean),
-				item.format.newline,
-			)
+			updated, warnings, err := applyUpdate(item, filepath.ToSlash(clean))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -443,6 +438,24 @@ func (s *Sandbox) preparePatch(
 		items = append(items, item)
 	}
 	return root, items, nil
+}
+
+func applyUpdate(item preparedPatch, path string) (string, []string, error) {
+	if !item.exists {
+		return "", nil, fmt.Errorf("update %q: file does not exist", path)
+	}
+	hasHunks := len(item.op.Hunks) > 0
+	hasReplace := item.op.OldString != "" || item.op.NewString != ""
+	if hasHunks && hasReplace {
+		return "", nil, fmt.Errorf("update %q: use oldString/newString or hunks, not both", path)
+	}
+	if hasHunks {
+		return applyPatchHunks(item.text, item.op.Hunks, path, item.format.newline)
+	}
+	updated, err := applySearchReplace(
+		item.text, item.op.OldString, item.op.NewString, path, item.format.newline, item.op.ReplaceAll,
+	)
+	return updated, nil, err
 }
 
 // patchNeedsApproval reports whether a patch operation mutates an existing file. Those operations

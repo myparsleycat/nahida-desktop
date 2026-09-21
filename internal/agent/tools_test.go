@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// Targeted edits go through the `update` operation, so the schema the model sees must offer it
-// together with the hunk fields it needs.
+// Targeted edits go through `update`, so the schema the model sees must lead with that operation
+// and offer both oldString/newString and hunk fields.
 func TestApplyPatchSchemaOffersUpdateHunks(t *testing.T) {
 	t.Parallel()
 	definitions := builtInToolDefinitions()
@@ -27,8 +27,13 @@ func TestApplyPatchSchemaOffersUpdateHunks(t *testing.T) {
 	items, _ := operations["items"].(map[string]any)
 	operationProperties, _ := items["properties"].(map[string]any)
 	operationTypes, _ := operationProperties["type"].(map[string]any)["enum"].([]string)
-	if !slices.Contains(operationTypes, "update") {
-		t.Fatalf("apply_patch operation enum = %v, want it to contain update", operationTypes)
+	if len(operationTypes) == 0 || operationTypes[0] != "update" {
+		t.Fatalf("apply_patch operation enum = %v, want update first", operationTypes)
+	}
+	for _, field := range []string{"oldString", "newString", "replaceAll", "hunks"} {
+		if _, ok := operationProperties[field]; !ok {
+			t.Fatalf("apply_patch operation schema is missing %q: %#v", field, operationProperties)
+		}
 	}
 
 	hunks, _ := operationProperties["hunks"].(map[string]any)
@@ -69,6 +74,55 @@ func TestExecuteApprovesUpdateHunks(t *testing.T) {
 	}
 	if !strings.Contains(string(execution.Approval.Arguments), `"expectedContent":"[A]\r\nvalue=old\r\n"`) {
 		t.Fatalf("approval arguments are not sealed: %s", execution.Approval.Arguments)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "[A]\r\nvalue=old\r\n" {
+		t.Fatalf("file changed before approval: %q", got)
+	}
+
+	approved, err := executor.ExecuteApproved(
+		context.Background(),
+		"sandbox.apply_patch",
+		"sandbox",
+		execution.Approval.Arguments,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(approved.ChangedFiles) != 1 || approved.ChangedFiles[0] != "mod.ini" {
+		t.Fatalf("changed files = %#v", approved.ChangedFiles)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "[A]\r\nvalue=new\r\n" {
+		t.Fatalf("file after approval = %q", got)
+	}
+}
+
+func TestExecuteApprovesUpdateOldString(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	if err := os.WriteFile(path, []byte("[A]\r\nvalue=old\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+	executor := &toolExecutor{sandbox: sandbox}
+
+	execution, err := executor.Execute(context.Background(), ToolCall{
+		ID: "call-1", Name: "apply_patch", Arguments: json.RawMessage(
+			`{"rootId":"root","operations":[{"type":"update","path":"mod.ini","oldString":"[A]\nvalue=old","newString":"[A]\nvalue=new"}]}`,
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execution.Approval == nil || execution.Approval.ActionID != "sandbox.apply_patch" {
+		t.Fatalf("execution = %#v", execution)
+	}
+	if !strings.Contains(string(execution.Approval.Arguments), `"oldString":"[A]\nvalue=old"`) {
+		t.Fatalf("approval arguments dropped oldString: %s", execution.Approval.Arguments)
 	}
 	if got, _ := os.ReadFile(path); string(got) != "[A]\r\nvalue=old\r\n" {
 		t.Fatalf("file changed before approval: %q", got)
