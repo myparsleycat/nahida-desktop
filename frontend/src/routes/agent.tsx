@@ -1012,28 +1012,30 @@ function Composer({
               <FolderIcon className="size-3.5 flex-none" />
               <span className="min-w-0 truncate">{scopeLabel}</span>
             </div>
-            {!empty && <AgentContextMeter usage={contextUsage} />}
           </div>
-          {runId ? (
-            <button
-              type="button"
-              className="grid size-[34px] flex-none place-items-center rounded-full bg-foreground text-background transition-colors duration-100"
-              aria-label={t("page.agent.stop")}
-              onClick={() => snapshot && void Agent.Cancel(snapshot.summary.id, runId)}
-            >
-              <CircleStopIcon className="size-[17px] stroke-[2.2]" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="grid size-[34px] flex-none place-items-center rounded-full bg-(--agent-blue) text-white transition-colors duration-100 hover:bg-[#679efe] disabled:cursor-default disabled:opacity-35"
-              aria-label={t("page.agent.send")}
-              disabled={(!draft.trim() && images.length === 0) || disabled}
-              onClick={() => void onSend()}
-            >
-              <ArrowUpIcon className="size-[17px] stroke-[2.2]" />
-            </button>
-          )}
+          <div className="flex flex-none items-center gap-1">
+            {!empty && <AgentContextMeter usage={contextUsage} />}
+            {runId ? (
+              <button
+                type="button"
+                className="grid size-[34px] flex-none place-items-center rounded-full bg-foreground text-background transition-colors duration-100"
+                aria-label={t("page.agent.stop")}
+                onClick={() => snapshot && void Agent.Cancel(snapshot.summary.id, runId)}
+              >
+                <CircleStopIcon className="size-[17px] stroke-[2.2]" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="grid size-[34px] flex-none place-items-center rounded-full bg-(--agent-blue) text-white transition-colors duration-100 hover:bg-[#679efe] disabled:cursor-default disabled:opacity-35"
+                aria-label={t("page.agent.send")}
+                disabled={(!draft.trim() && images.length === 0) || disabled}
+                onClick={() => void onSend()}
+              >
+                <ArrowUpIcon className="size-[17px] stroke-[2.2]" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

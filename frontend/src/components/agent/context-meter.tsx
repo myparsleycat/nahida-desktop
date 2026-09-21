@@ -79,7 +79,7 @@ export function AgentContextMeter({
       </PopoverTrigger>
       <PopoverContent
         side="top"
-        align="start"
+        align="end"
         sideOffset={8}
         aria-label={t("page.agent.context_used", { percent: reading })}
         className="w-64 gap-0 rounded-[12px] p-3 text-xs leading-5"
