@@ -631,13 +631,13 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstUsage, err := json.Marshal(contextUsagePayload{
-		Provider: settings.Provider, Model: settings.Model, InputTokens: 1_000,
+		Provider: settings.Provider, Model: settings.Model, RouteKey: contextRouteKey(settings), InputTokens: 1_000,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	secondUsage, err := json.Marshal(contextUsagePayload{
-		Provider: settings.Provider, Model: settings.Model, InputTokens: 100_000,
+		Provider: settings.Provider, Model: settings.Model, RouteKey: contextRouteKey(settings), InputTokens: 100_000,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -676,7 +676,7 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	}
 	effectiveEvents := storedEvents[:3]
 	wantUsage, ok := buildContextUsage(
-		settings.ContextWindowSize, settings.Provider, settings.Model,
+		settings.ContextWindowSize, contextRouteKey(settings),
 		service.systemPrompt(ctx, session, roots, settings.SupportsImages),
 		service.messagesFromEvents(effectiveEvents, settings.SupportsImages, false),
 		builtInToolDefinitions(), parseContextAnchor(effectiveEvents),
@@ -718,6 +718,99 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 		if entry.Reverted {
 			t.Fatalf("entry %d still reverted after unrevert", entry.Sequence)
 		}
+	}
+}
+
+func TestServiceRevertContextUsageUsesSurvivingSummary(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mods := filepath.Join(t.TempDir(), "Mods")
+	if err := os.MkdirAll(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: mods}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	session := db.AgentSessionRow{
+		ID: "session", ScopeType: "global", Title: "Test", CreatedAt: "1", UpdatedAt: "1",
+	}
+	if err := client.AgentSessions.Insert(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+
+	const survivingSummary = "surviving summary"
+	staleSummary := strings.Repeat("future summary ", 400)
+	if _, err := client.AgentEvents.AppendAndUpdateSummary(ctx, db.AgentEventRow{
+		SessionID: session.ID, TurnID: "first", EventType: "summary",
+		Payload: `{"summary":"surviving summary","compactedMessages":0}`, CreatedAt: "2",
+	}, survivingSummary); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []db.AgentEventRow{
+		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "3"},
+		{
+			SessionID: session.ID, TurnID: "first", EventType: "message/assistant",
+			Payload: `{"text":"answer"}`, CreatedAt: "4",
+		},
+		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "5"},
+	} {
+		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stalePayload, err := json.Marshal(map[string]any{"summary": staleSummary, "compactedMessages": 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AgentEvents.AppendAndUpdateSummary(ctx, db.AgentEventRow{
+		SessionID: session.ID, TurnID: "second", EventType: "summary",
+		Payload: string(stalePayload), CreatedAt: "6",
+	}, staleSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	staged, err := service.RevertSession(ctx, session.ID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.ContextUsage == nil {
+		t.Fatal("staged context usage is nil")
+	}
+	settings, err := readSettings(ctx, client, service.crypto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, roots, err := service.resolveScope(ctx, rowScope(session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectiveRow := session
+	effectiveRow.DurableSummary = survivingSummary
+	wantSystemTokens := estimateTextTokens(service.systemPrompt(ctx, effectiveRow, roots, settings.SupportsImages))
+	if staged.ContextUsage.SystemTokens != wantSystemTokens {
+		t.Fatalf(
+			"systemTokens = %d, want %d from the surviving summary",
+			staged.ContextUsage.SystemTokens,
+			wantSystemTokens,
+		)
+	}
+	staleRow := session
+	staleRow.DurableSummary = staleSummary
+	staleSystemTokens := estimateTextTokens(service.systemPrompt(ctx, staleRow, roots, settings.SupportsImages))
+	if staged.ContextUsage.SystemTokens == staleSystemTokens {
+		t.Fatal("staged context usage retained the reverted summary")
 	}
 }
 

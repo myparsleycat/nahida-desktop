@@ -335,6 +335,7 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	scope := rowScope(*row)
 	_, roots, scopeErr := s.resolveScope(ctx, scope)
 	var staged *AgentSessionRevert
+	contextRow := *row
 	// A staged revert already defines the next request surface even though Send has not committed
 	// the event deletion yet.
 	contextEvents := events
@@ -354,6 +355,7 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 				break
 			}
 		}
+		contextRow.DurableSummary = latestSummary(contextEvents)
 	}
 	snapshot := AgentSessionSnapshot{
 		Summary:   s.sessionSummary(*row),
@@ -366,13 +368,13 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 		snapshot.SupportsImages = settings.SupportsImages
 		if scopeErr == nil {
 			messages := s.messagesFromEvents(contextEvents, settings.SupportsImages, false)
-			system := s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
+			system := s.systemPrompt(ctx, contextRow, roots, settings.SupportsImages)
 			// Tools are priced from the built-in set alone, which under-counts the MCP definitions a
 			// request may also carry. A matching anchor overrides the figure, so only the no-anchor
 			// fallback is approximate; rebuilding the MCP set here would open provider connections on
 			// a read path.
 			if usage, ok := buildContextUsage(
-				settings.ContextWindowSize, settings.Provider, settings.Model,
+				settings.ContextWindowSize, contextRouteKey(settings),
 				system, messages, builtInToolDefinitions(), parseContextAnchor(contextEvents),
 			); ok {
 				snapshot.ContextUsage = &usage
@@ -977,6 +979,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
 		return
 	}
+	routeKey := contextRouteKey(settings)
 	credential, err := credentialFor(ctx, client, s.crypto, settings.Provider)
 	if err != nil {
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
@@ -1126,7 +1129,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		var anchor *contextAnchor
 		if response.InputTokens > 0 {
 			anchor = &contextAnchor{
-				Provider: settings.Provider, Model: settings.Model,
+				RouteKey:      routeKey,
 				InputTokens:   response.InputTokens,
 				SystemTokens:  breakdown.System,
 				ToolsTokens:   breakdown.Tools,
@@ -1137,6 +1140,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 				db.AgentEventRow{SessionID: sessionID, TurnID: run.id, EventType: contextUsageEventType},
 				contextUsagePayload{
 					Provider: settings.Provider, Model: settings.Model,
+					RouteKey:    routeKey,
 					InputTokens: response.InputTokens, OutputTokens: response.OutputTokens,
 					SystemTokens: breakdown.System, ToolsTokens: breakdown.Tools, MessageTokens: breakdown.Messages,
 				},
@@ -1164,7 +1168,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			})
 		}
 		if contextUsage, ok := buildContextUsage(
-			settings.ContextWindowSize, settings.Provider, settings.Model,
+			settings.ContextWindowSize, routeKey,
 			system, projectedMessages, toolDefinitions, anchor,
 		); ok {
 			usagePayload["contextUsage"] = contextUsage
@@ -1987,6 +1991,28 @@ func parseSessionRevert(raw string) *AgentSessionRevert {
 	return &staged
 }
 
+// latestSummary returns the durable summary represented by an event prefix. Internal summary
+// events are already ordered, so the last summary event is the summary a request at that point used.
+func latestSummary(events []db.AgentEventRow) string {
+	for index := len(events) - 1; index >= 0; index-- {
+		if events[index].EventType != "summary" {
+			continue
+		}
+		return summaryFromPayload(events[index].Payload)
+	}
+	return ""
+}
+
+func summaryFromPayload(payload string) string {
+	var decoded struct {
+		Summary string `json:"summary"`
+	}
+	if json.Unmarshal([]byte(payload), &decoded) != nil {
+		return ""
+	}
+	return decoded.Summary
+}
+
 // appendRevertedTurn commits a staged revert and the replacement turn/start event atomically.
 func (s *Service) appendRevertedTurn(
 	ctx context.Context,
@@ -2002,12 +2028,7 @@ func (s *Service) appendRevertedTurn(
 	}
 	summary := ""
 	if summaryPayload != "" {
-		var decoded struct {
-			Summary string `json:"summary"`
-		}
-		if json.Unmarshal([]byte(summaryPayload), &decoded) == nil {
-			summary = decoded.Summary
-		}
+		summary = summaryFromPayload(summaryPayload)
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

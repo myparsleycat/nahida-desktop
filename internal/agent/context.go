@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"strings"
 
 	"nahida.live/desktop/internal/db"
 )
@@ -19,11 +22,12 @@ type tokenBreakdown struct {
 	Messages int
 }
 
-// contextUsagePayload is the durable body of a contextUsageEventType event. Provider and Model
-// identify the route the provider usage belongs to; a route change invalidates the anchor.
+// contextUsagePayload is the durable body of a contextUsageEventType event. RouteKey identifies the
+// full provider route the usage belongs to; Provider and Model remain as readable diagnostics.
 type contextUsagePayload struct {
 	Provider      string `json:"provider"`
 	Model         string `json:"model"`
+	RouteKey      string `json:"routeKey"`
 	InputTokens   int64  `json:"inputTokens"`
 	OutputTokens  int64  `json:"outputTokens"`
 	SystemTokens  int    `json:"systemTokens"`
@@ -34,12 +38,23 @@ type contextUsagePayload struct {
 // contextAnchor is the newest provider-reported prompt measurement together with the heuristic
 // breakdown of that same prompt.
 type contextAnchor struct {
-	Provider      string
-	Model         string
+	RouteKey      string
 	InputTokens   int64
 	SystemTokens  int
 	ToolsTokens   int
 	MessageTokens int
+}
+
+// contextRouteKey fingerprints every setting that can change how the request is serialized or
+// tokenized. Hashing avoids copying a custom endpoint, which may contain sensitive query data, into
+// every durable usage event.
+func contextRouteKey(settings AgentSettingsView) string {
+	route := strings.Join(
+		[]string{settings.Provider, settings.Protocol, settings.Endpoint, settings.Model},
+		"\x00",
+	)
+	digest := sha256.Sum256([]byte(route))
+	return hex.EncodeToString(digest[:])
 }
 
 // estimateBreakdown prices a request surface with the fixed heuristic. The per-message and
@@ -104,12 +119,11 @@ func parseContextAnchor(events []db.AgentEventRow) *contextAnchor {
 		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
 			continue
 		}
-		if payload.InputTokens <= 0 {
+		if payload.InputTokens <= 0 || payload.RouteKey == "" {
 			continue
 		}
 		anchor = &contextAnchor{
-			Provider:      payload.Provider,
-			Model:         payload.Model,
+			RouteKey:      payload.RouteKey,
 			InputTokens:   payload.InputTokens,
 			SystemTokens:  payload.SystemTokens,
 			ToolsTokens:   payload.ToolsTokens,
@@ -122,10 +136,10 @@ func parseContextAnchor(events []db.AgentEventRow) *contextAnchor {
 // buildContextUsage resolves the display occupancy of one session. The provider anchor supplies the
 // exact scale of the last measured prompt, while the live surface is repriced heuristically so a
 // compaction or an appended turn moves the projection immediately. A missing capacity, or an anchor
-// recorded for another provider or model, falls back to the heuristic total.
+// recorded for another request route, falls back to the heuristic total.
 func buildContextUsage(
 	window int,
-	provider, model, system string,
+	routeKey, system string,
 	messages []Message,
 	tools []ToolDefinition,
 	anchor *contextAnchor,
@@ -141,7 +155,7 @@ func buildContextUsage(
 		ToolsTokens:     live.Tools,
 		MessageTokens:   live.Messages,
 	}
-	if anchor == nil || anchor.Provider != provider || anchor.Model != model {
+	if anchor == nil || anchor.RouteKey != routeKey {
 		return usage, true
 	}
 

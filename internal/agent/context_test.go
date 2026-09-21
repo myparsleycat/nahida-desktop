@@ -106,12 +106,13 @@ func TestEstimateBreakdownSumMatchesEstimateTokens(t *testing.T) {
 
 func TestBuildContextUsageFallsBackWithoutAnchor(t *testing.T) {
 	t.Parallel()
+	routeKey := testContextRoute("gpt")
 	system := "system"
 	messages := []Message{{Role: "user", Content: "hello world"}}
 	tools := []ToolDefinition{{Name: "read_file", Description: "read"}}
 
 	want := estimateBreakdown(system, messages, tools)
-	usage, ok := buildContextUsage(128_000, "openai", "gpt", system, messages, tools, nil)
+	usage, ok := buildContextUsage(128_000, routeKey, system, messages, tools, nil)
 	if !ok {
 		t.Fatal("usage is unavailable with a known window")
 	}
@@ -128,14 +129,15 @@ func TestBuildContextUsageFallsBackWithoutAnchor(t *testing.T) {
 
 func TestBuildContextUsageAnchorsProviderPromptSize(t *testing.T) {
 	t.Parallel()
+	routeKey := testContextRoute("gpt")
 	system := "hello"
 	messages := []Message{{Role: "user", Content: "world"}}
 	anchor := &contextAnchor{
-		Provider: "openai", Model: "gpt", InputTokens: 1_000,
+		RouteKey: routeKey, InputTokens: 1_000,
 		SystemTokens: 10, ToolsTokens: 500, MessageTokens: 400,
 	}
 
-	usage, ok := buildContextUsage(128_000, "openai", "gpt", system, messages, nil, anchor)
+	usage, ok := buildContextUsage(128_000, routeKey, system, messages, nil, anchor)
 	if !ok {
 		t.Fatal("usage is unavailable with a known window")
 	}
@@ -158,26 +160,60 @@ func TestBuildContextUsageRejectsForeignRoute(t *testing.T) {
 	t.Parallel()
 	system := "hello"
 	messages := []Message{{Role: "user", Content: "world"}}
-	anchor := &contextAnchor{Provider: "openai", Model: "other", InputTokens: 1_000, MessageTokens: 400}
+	base := AgentSettingsView{
+		Provider: providerCustom, Protocol: protocolOpenAICompatible,
+		Endpoint: "https://first.example/v1", Model: "shared-name",
+	}
+	tests := []struct {
+		name     string
+		settings AgentSettingsView
+	}{
+		{
+			name: "endpoint changed",
+			settings: AgentSettingsView{
+				Provider: providerCustom, Protocol: protocolOpenAICompatible,
+				Endpoint: "https://second.example/v1", Model: "shared-name",
+			},
+		},
+		{
+			name: "protocol changed",
+			settings: AgentSettingsView{
+				Provider: providerCustom, Protocol: protocolAnthropic,
+				Endpoint: "https://first.example/v1", Model: "shared-name",
+			},
+		},
+	}
 
-	usage, ok := buildContextUsage(128_000, "openai", "gpt", system, messages, nil, anchor)
-	if !ok {
-		t.Fatal("usage is unavailable with a known window")
-	}
-	if usage.PressureTokens != 0 {
-		t.Fatalf("pressureTokens = %d, want 0 for a foreign route", usage.PressureTokens)
-	}
-	if usage.ProjectedTokens != int64(estimateBreakdown(system, messages, nil).total()) {
-		t.Fatalf("projectedTokens = %d, want the heuristic total", usage.ProjectedTokens)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			anchor := &contextAnchor{
+				RouteKey: contextRouteKey(base), InputTokens: 1_000, MessageTokens: 400,
+			}
+
+			usage, ok := buildContextUsage(
+				128_000, contextRouteKey(test.settings), system, messages, nil, anchor,
+			)
+			if !ok {
+				t.Fatal("usage is unavailable with a known window")
+			}
+			if usage.PressureTokens != 0 {
+				t.Fatalf("pressureTokens = %d, want 0 for a foreign route", usage.PressureTokens)
+			}
+			if usage.ProjectedTokens != int64(estimateBreakdown(system, messages, nil).total()) {
+				t.Fatalf("projectedTokens = %d, want the heuristic total", usage.ProjectedTokens)
+			}
+		})
 	}
 }
 
 func TestBuildContextUsageClampsShrinkingProjection(t *testing.T) {
 	t.Parallel()
+	routeKey := testContextRoute("gpt")
 	messages := []Message{{Role: "user", Content: "small"}}
-	anchor := &contextAnchor{Provider: "openai", Model: "gpt", InputTokens: 100, MessageTokens: 10_000}
+	anchor := &contextAnchor{RouteKey: routeKey, InputTokens: 100, MessageTokens: 10_000}
 
-	usage, ok := buildContextUsage(128_000, "openai", "gpt", "", messages, nil, anchor)
+	usage, ok := buildContextUsage(128_000, routeKey, "", messages, nil, anchor)
 	if !ok {
 		t.Fatal("usage is unavailable with a known window")
 	}
@@ -191,7 +227,7 @@ func TestBuildContextUsageClampsShrinkingProjection(t *testing.T) {
 
 func TestBuildContextUsageRequiresCapacity(t *testing.T) {
 	t.Parallel()
-	if _, ok := buildContextUsage(0, "openai", "gpt", "system", nil, nil, nil); ok {
+	if _, ok := buildContextUsage(0, testContextRoute("gpt"), "system", nil, nil, nil); ok {
 		t.Fatal("usage is available without a context window")
 	}
 }
@@ -209,12 +245,19 @@ func TestEstimateMessageImageTokensUsesStoredSize(t *testing.T) {
 
 func TestParseContextAnchorKeepsNewestUsableEvent(t *testing.T) {
 	t.Parallel()
+	routeKey := testContextRoute("gpt")
 	events := []db.AgentEventRow{
 		{EventType: contextUsageEventType, Payload: `{"provider":"openai","model":"gpt","inputTokens":10}`},
-		{EventType: contextUsageEventType, Payload: `{"provider":"openai","model":"gpt","inputTokens":0}`},
 		{
 			EventType: contextUsageEventType,
-			Payload:   `{"provider":"openai","model":"gpt","inputTokens":250,"messageTokens":7}`,
+			Payload:   fmt.Sprintf(`{"routeKey":%q,"inputTokens":0}`, routeKey),
+		},
+		{
+			EventType: contextUsageEventType,
+			Payload: fmt.Sprintf(
+				`{"routeKey":%q,"inputTokens":250,"messageTokens":7}`,
+				routeKey,
+			),
 		},
 		{EventType: "turn/end", Payload: `{}`},
 	}
@@ -223,9 +266,16 @@ func TestParseContextAnchorKeepsNewestUsableEvent(t *testing.T) {
 	if anchor == nil {
 		t.Fatal("anchor is nil")
 	}
-	if anchor.InputTokens != 250 || anchor.MessageTokens != 7 {
+	if anchor.RouteKey != routeKey || anchor.InputTokens != 250 || anchor.MessageTokens != 7 {
 		t.Fatalf("anchor = %#v", anchor)
 	}
+}
+
+func testContextRoute(model string) string {
+	return contextRouteKey(AgentSettingsView{
+		Provider: providerOpenAI, Protocol: protocolOpenAIResponses,
+		Endpoint: "https://api.openai.com/v1", Model: model,
+	})
 }
 
 func TestImageReferencesKeepStoredSizeWithoutPayload(t *testing.T) {
