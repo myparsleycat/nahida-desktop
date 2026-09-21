@@ -66,15 +66,29 @@ func builtInToolDefinitions() []ToolDefinition {
 		},
 		{
 			Name:        "apply_patch",
-			Description: "Atomically create, update, rewrite, or delete text files after preflight validation. For write, content is the complete replacement and expectedContent is the complete decoded text previously read; for update, hunks replace only the lines they name, in file order. A hunk may reuse the immediately preceding hunk's final old line as its context when the replacement keeps that line unchanged, but hunks must not otherwise overlap. Existing encoding, BOM, and newline style are preserved.",
+			Description: "Atomically create, update, or delete text files after preflight validation. For an existing file, use type update with oldString/newString; oldString must match exactly one place unless replaceAll is true, so include a unique nearby section header when the snippet repeats. If update is rejected, enlarge oldString and retry that update — do not switch to write. Ordered hunks are an alternative for several disjoint regions in one file; a hunk may reuse the immediately preceding hunk's final old line as its context when the replacement keeps that line unchanged, but hunks must not otherwise overlap. type write replaces an entire file and must not be used for a targeted edit. Existing encoding, BOM, and newline style are preserved.",
 			InputSchema: objectSchema(map[string]any{
 				"rootId": map[string]any{
 					"type": "string",
 				},
 				"operations": map[string]any{"type": "array", "items": objectSchema(map[string]any{
-					"type": map[string]any{"type": "string", "enum": []string{"create", "write", "update", "delete"}},
+					"type": map[string]any{
+						"type": "string", "enum": []string{"update", "create", "delete", "write"},
+					},
 					"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
 					"expectedContent": map[string]any{"type": "string"},
+					"oldString": map[string]any{
+						"type":        "string",
+						"description": "Exact text to replace. Must match once unless replaceAll is true.",
+					},
+					"newString": map[string]any{
+						"type":        "string",
+						"description": "Replacement text. Must differ from oldString.",
+					},
+					"replaceAll": map[string]any{
+						"type":        "boolean",
+						"description": "Replace every occurrence of oldString. Default false.",
+					},
 					"hunks": map[string]any{"type": "array", "items": objectSchema(map[string]any{
 						"context":  map[string]any{"type": "string"},
 						"oldLines": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},

@@ -116,6 +116,41 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 	return joinTextLines(edited), warnings, nil
 }
 
+// applySearchReplace substitutes oldString with newString in decoded file text. Newlines in the
+// search and replacement are rewritten to the file's existing style first, so a model that emits
+// LF still matches a CRLF INI. A non-replaceAll call requires exactly one match.
+func applySearchReplace(text, oldString, newString, path, newline string, replaceAll bool) (string, error) {
+	if oldString == "" {
+		return "", fmt.Errorf("update %q: oldString must not be empty", path)
+	}
+	old, next := oldString, newString
+	if newline != "" {
+		old = normalizeNewlines(oldString, newline)
+		next = normalizeNewlines(newString, newline)
+	}
+	if old == next {
+		return "", fmt.Errorf("update %q: oldString and newString are identical", path)
+	}
+	count := strings.Count(text, old)
+	if count == 0 {
+		return "", fmt.Errorf(
+			"update %q: oldString not found; include a unique nearby section header or more surrounding lines, then retry this update",
+			path,
+		)
+	}
+	if count > 1 && !replaceAll {
+		return "", fmt.Errorf(
+			"update %q: oldString matches %d times; include a unique nearby section header or more surrounding lines, or set replaceAll",
+			path,
+			count,
+		)
+	}
+	if replaceAll {
+		return strings.ReplaceAll(text, old, next), nil
+	}
+	return strings.Replace(text, old, next, 1), nil
+}
+
 func resolveHunk(
 	lines []string,
 	hunk PatchHunk,
@@ -166,8 +201,10 @@ func resolveHunk(
 	if !match.found {
 		if len(match.candidates) > 1 {
 			return hunkResolution{}, 0, fmt.Errorf(
-				"hunk %d: ambiguous match in %q at lines %s; add a context line or more oldLines",
-				number, path, lineNumberList(match.candidates),
+				"hunk %d: ambiguous match in %q at lines %s; add a unique section header as context or more oldLines, then retry this update",
+				number,
+				path,
+				lineNumberList(match.candidates),
 			)
 		}
 		if cursor > 0 {
@@ -179,8 +216,10 @@ func resolveHunk(
 				)
 			}
 		}
-		return hunkResolution{}, 0, fmt.Errorf("hunk %d: expected lines not found in %q: %s",
-			number, path, hunkPreview(hunk.OldLines))
+		return hunkResolution{}, 0, fmt.Errorf(
+			"hunk %d: expected lines not found in %q: %s; copy the exact text and retry this update",
+			number, path, hunkPreview(hunk.OldLines),
+		)
 	}
 
 	warning := ""

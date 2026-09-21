@@ -340,3 +340,52 @@ func TestApplyPatchHunksRejectsInvalidHunks(t *testing.T) {
 		})
 	}
 }
+
+func TestApplySearchReplace(t *testing.T) {
+	t.Parallel()
+	text := "[A]\r\nhandling = skip\r\n[B]\r\nhandling = skip\r\n"
+
+	updated, err := applySearchReplace(
+		text, "[A]\nhandling = skip", "[A]\nhandling = skip\n; kept", "mod.ini", "\r\n", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated != "[A]\r\nhandling = skip\r\n; kept\r\n[B]\r\nhandling = skip\r\n" {
+		t.Fatalf("updated = %q", updated)
+	}
+
+	replacedAll, err := applySearchReplace(text, "handling = skip", "handling = skip\n; note", "mod.ini", "\r\n", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacedAll != "[A]\r\nhandling = skip\r\n; note\r\n[B]\r\nhandling = skip\r\n; note\r\n" {
+		t.Fatalf("replaceAll = %q", replacedAll)
+	}
+}
+
+func TestApplySearchReplaceRejects(t *testing.T) {
+	t.Parallel()
+	text := "[A]\r\nkey=1\r\n[B]\r\nkey=1\r\n"
+	cases := []struct {
+		name       string
+		old, next  string
+		replaceAll bool
+		errMsg     string
+	}{
+		{name: "empty oldString", next: "key=2", errMsg: "oldString must not be empty"},
+		{name: "identical", old: "key=1", next: "key=1", errMsg: "oldString and newString are identical"},
+		{name: "missing", old: "key=missing", next: "key=2", errMsg: "oldString not found"},
+		{name: "ambiguous", old: "key=1", next: "key=2", errMsg: "oldString matches 2 times"},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := applySearchReplace(text, testCase.old, testCase.next, "mod.ini", "\r\n", testCase.replaceAll)
+			if err == nil || !strings.Contains(err.Error(), testCase.errMsg) {
+				t.Fatalf("err = %v, want message containing %q", err, testCase.errMsg)
+			}
+		})
+	}
+}

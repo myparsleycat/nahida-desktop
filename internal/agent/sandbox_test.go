@@ -323,6 +323,70 @@ func TestSandboxUpdateRejectsMissingFileAndDuplicatePath(t *testing.T) {
 	}
 }
 
+func TestSandboxUpdateOldStringPreservesUntouchedLines(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	if err := os.WriteFile(path, []byte("[A]\r\nvalue=old\r\nother=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	result, err := sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini",
+		OldString: "[A]\nvalue=old", NewString: "[A]\nvalue=new",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ChangedFiles) != 1 || result.ChangedFiles[0] != "mod.ini" {
+		t.Fatalf("changed files = %#v", result.ChangedFiles)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "[A]\r\nvalue=new\r\nother=1\r\n" {
+		t.Fatalf("file = %q", got)
+	}
+}
+
+func TestSandboxUpdateOldStringRejectsAmbiguousAndMixedForms(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	if err := os.WriteFile(path, []byte("[A]\r\nkey=1\r\n[B]\r\nkey=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini", OldString: "key=1", NewString: "key=2",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "oldString matches 2 times") {
+		t.Fatalf("ambiguous err = %v", err)
+	}
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{{
+		Type: "update", Path: "mod.ini",
+		OldString: "key=1", NewString: "key=2",
+		Hunks: []PatchHunk{{OldLines: []string{"key=1"}, NewLines: []string{"key=2"}}},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "oldString/newString or hunks, not both") {
+		t.Fatalf("mixed form err = %v", err)
+	}
+
+	got, _ := os.ReadFile(path)
+	if string(got) != "[A]\r\nkey=1\r\n[B]\r\nkey=1\r\n" {
+		t.Fatalf("file changed after rejected updates: %q", got)
+	}
+}
+
 func TestSandboxSearchIsCancellable(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -402,5 +466,49 @@ func TestSandboxResolversReportUnavailableSandbox(t *testing.T) {
 	}
 	if _, err := sandbox.ResolveTarget("root", "output.ini"); err == nil {
 		t.Fatal("nil sandbox unexpectedly resolved a target path")
+	}
+}
+
+func TestDecodeTextDetectsCarriageReturnNewlines(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		data     []byte
+		encoding string
+		newline  string
+	}{
+		{name: "UTF-8 CR-only", data: []byte("first\rsecond\r"), encoding: "utf-8", newline: "\r"},
+		{name: "UTF-8 CRLF precedence", data: []byte("first\r\nsecond\r"), encoding: "utf-8", newline: "\r\n"},
+		{
+			name:     "UTF-16LE CR-only",
+			data:     encodeText("first\rsecond\r", textFormat{encoding: "utf-16le", newline: "\r", bom: true}),
+			encoding: "utf-16le",
+			newline:  "\r",
+		},
+		{
+			name: "UTF-16LE CRLF precedence",
+			data: encodeText(
+				"first\r\nsecond\r",
+				textFormat{encoding: "utf-16le", newline: "\r\n", bom: true},
+			),
+			encoding: "utf-16le",
+			newline:  "\r\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, format, binaryFile := decodeText(test.data)
+			if binaryFile {
+				t.Fatal("decodeText classified text as binary")
+			}
+			if format.encoding != test.encoding {
+				t.Errorf("encoding = %q, want %q", format.encoding, test.encoding)
+			}
+			if format.newline != test.newline {
+				t.Errorf("newline = %q, want %q", format.newline, test.newline)
+			}
+		})
 	}
 }

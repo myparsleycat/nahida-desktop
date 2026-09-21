@@ -5,7 +5,8 @@ description: Analyze and safely edit standard or XXMI/3DMigoto INI files while p
 
 # INI editing
 
-- Match inspection depth to the edit. For an explicit modification request with a known, deterministic local pattern, inspect the affected section, check that the target command is not already active, apply the smallest patch, re-read the changed region, and stop.
+- Match inspection depth to the edit. For an explicit modification request with a known, deterministic local pattern, inspect the affected section, check that the target command is not already active, apply the smallest `apply_patch` `update` with `oldString`/`newString`, re-read the changed region, and stop.
+- Include the surrounding section header in `oldString` when a command repeats elsewhere in the file. If the update is rejected, enlarge `oldString` until it is unique and retry; never replace the whole INI with `write`.
 - Read the relevant section, nearby comments, and referenced sections before changing a value.
 - Preserve encoding, BOM, newline style, comments, section ordering, indentation, and unknown keys.
 - Use patch preconditions when replacing content observed earlier in the turn.
