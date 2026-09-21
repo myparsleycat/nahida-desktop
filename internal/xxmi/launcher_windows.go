@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -305,6 +306,9 @@ func processMatchesExecutable(pid int, executable string) (bool, error) {
 		return false, err
 	}
 	processInfo, err := os.Stat(processPath)
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
