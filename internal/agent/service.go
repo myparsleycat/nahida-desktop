@@ -335,6 +335,9 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	scope := rowScope(*row)
 	_, roots, scopeErr := s.resolveScope(ctx, scope)
 	var staged *AgentSessionRevert
+	// A staged revert already defines the next request surface even though Send has not committed
+	// the event deletion yet.
+	contextEvents := events
 	if parsed := parseSessionRevert(row.Revert); parsed != nil {
 		reverted := 0
 		for index := range entries {
@@ -345,6 +348,12 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 		}
 		parsed.RevertedCount = reverted
 		staged = parsed
+		for index := range events {
+			if events[index].Sequence >= parsed.BoundarySequence {
+				contextEvents = events[:index]
+				break
+			}
+		}
 	}
 	snapshot := AgentSessionSnapshot{
 		Summary:   s.sessionSummary(*row),
@@ -356,7 +365,7 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	if settings, settingsErr := readSettings(ctx, client, s.crypto); settingsErr == nil {
 		snapshot.SupportsImages = settings.SupportsImages
 		if scopeErr == nil {
-			messages := s.messagesFromEvents(events, settings.SupportsImages, false)
+			messages := s.messagesFromEvents(contextEvents, settings.SupportsImages, false)
 			system := s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
 			// Tools are priced from the built-in set alone, which under-counts the MCP definitions a
 			// request may also carry. A matching anchor overrides the figure, so only the no-anchor
@@ -364,7 +373,7 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 			// a read path.
 			if usage, ok := buildContextUsage(
 				settings.ContextWindowSize, settings.Provider, settings.Model,
-				system, messages, builtInToolDefinitions(), parseContextAnchor(events),
+				system, messages, builtInToolDefinitions(), parseContextAnchor(contextEvents),
 			); ok {
 				snapshot.ContextUsage = &usage
 			}
@@ -1095,7 +1104,8 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			s.finishRunDetached(sessionID, run.id, eventType, payload)
 			return
 		}
-		if response.Text != "" || response.Reasoning != "" || len(response.ToolCalls) > 0 {
+		hasAssistantMessage := response.Text != "" || response.Reasoning != "" || len(response.ToolCalls) > 0
+		if hasAssistantMessage {
 			if _, err := s.appendEvent(
 				ctx,
 				db.AgentEventRow{SessionID: sessionID, TurnID: run.id, EventType: "message/assistant"},
@@ -1143,9 +1153,19 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		usagePayload := map[string]any{
 			"inputTokens": response.InputTokens, "outputTokens": response.OutputTokens,
 		}
+		// The streamed meter projects the next request, so include the assistant response persisted
+		// above while tool execution is still in progress.
+		projectedMessages := messages
+		if hasAssistantMessage {
+			projectedMessages = make([]Message, 0, len(messages)+1)
+			projectedMessages = append(projectedMessages, messages...)
+			projectedMessages = append(projectedMessages, Message{
+				Role: "assistant", Content: response.Text, Reasoning: response.Reasoning, ToolCalls: response.ToolCalls,
+			})
+		}
 		if contextUsage, ok := buildContextUsage(
 			settings.ContextWindowSize, settings.Provider, settings.Model,
-			system, messages, toolDefinitions, anchor,
+			system, projectedMessages, toolDefinitions, anchor,
 		); ok {
 			usagePayload["contextUsage"] = contextUsage
 		}

@@ -2,10 +2,90 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/db"
 )
+
+func TestExecuteRunProjectsAssistantResponseIntoLiveUsage(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	assistantText := strings.Repeat("a", 4_000)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(
+			response,
+			"data: {\"choices\":[{\"delta\":{\"content\":%q}}]}\n\n"+
+				"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":1000}}\n\n"+
+				"data: [DONE]\n\n",
+			assistantText,
+		)
+	}))
+	defer server.Close()
+
+	var streamed *AgentContextUsage
+	service := newSettingsService(t, Options{
+		HTTP: server.Client(),
+		EventEmit: func(name string, payload ...any) {
+			if name != "agent:update" || len(payload) != 1 {
+				return
+			}
+			event, ok := payload[0].(AgentStreamEvent)
+			if !ok || event.Type != "usage" {
+				return
+			}
+			values, ok := event.Payload.(map[string]any)
+			if !ok {
+				return
+			}
+			usage, ok := values["contextUsage"].(AgentContextUsage)
+			if ok {
+				streamed = &usage
+			}
+		},
+	})
+	if _, err := service.UpdateSettings(ctx, UpdateAgentSettingsInput{
+		Provider: providerCustom, Protocol: protocolOpenAICompatible, Endpoint: server.URL,
+		Model: "test-model", ContextWindowSize: 128_000, MaxOutputTokens: 4_096, Reasoning: "auto",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client, err := service.dbClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mods := filepath.Join(t.TempDir(), "Mods")
+	if err := os.MkdirAll(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: mods}); err != nil {
+		t.Fatal(err)
+	}
+	session := createNamedSession(t, service, AgentScope{Type: "global"})
+	if _, err := service.appendEvent(
+		ctx,
+		db.AgentEventRow{SessionID: session.ID, TurnID: "run", EventType: "turn/start"},
+		map[string]any{"text": "hello"},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	service.executeRun(ctx, session.ID, queuedRun{id: "run", resume: true})
+
+	if streamed == nil {
+		t.Fatal("usage event did not include context usage")
+	}
+	want := int64(1_000 + estimateTextTokens(assistantText) + 8)
+	if streamed.ProjectedTokens != want {
+		t.Fatalf("projectedTokens = %d, want %d after the assistant response", streamed.ProjectedTokens, want)
+	}
+}
 
 func TestEstimateBreakdownSumMatchesEstimateTokens(t *testing.T) {
 	t.Parallel()

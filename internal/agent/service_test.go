@@ -607,6 +607,13 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	mods := filepath.Join(t.TempDir(), "Mods")
+	if err := os.MkdirAll(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: mods}); err != nil {
+		t.Fatal(err)
+	}
 	// Install the client before writing events: UseClient seals turns that look interrupted, and a
 	// test turn has no terminal event.
 	service := New(Options{})
@@ -619,27 +626,78 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	if err := client.AgentSessions.Insert(ctx, session); err != nil {
 		t.Fatal(err)
 	}
+	settings, err := readSettings(ctx, client, service.crypto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstUsage, err := json.Marshal(contextUsagePayload{
+		Provider: settings.Provider, Model: settings.Model, InputTokens: 1_000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUsage, err := json.Marshal(contextUsagePayload{
+		Provider: settings.Provider, Model: settings.Model, InputTokens: 100_000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, event := range []db.AgentEventRow{
 		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "1"},
 		{SessionID: session.ID, TurnID: "first", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "2"},
-		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "3"},
-		{SessionID: session.ID, TurnID: "second", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "4"},
+		{
+			SessionID: session.ID, TurnID: "first", EventType: contextUsageEventType,
+			Payload: string(firstUsage), CreatedAt: "3",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: "turn/start",
+			Payload: `{"text":"two two two two two two two two two two"}`, CreatedAt: "4",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: "message/assistant",
+			Payload: `{"text":"answer answer answer answer answer answer answer answer answer answer"}`, CreatedAt: "5",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: contextUsageEventType,
+			Payload: string(secondUsage), CreatedAt: "6",
+		},
 	} {
 		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
 			t.Fatal(err)
 		}
 	}
-
-	staged, err := service.RevertSession(ctx, session.ID, 3)
+	storedEvents, err := client.AgentEvents.List(ctx, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if staged.Revert == nil || staged.Revert.BoundarySequence != 3 || staged.Revert.BoundaryTurnID != "second" ||
+	_, roots, err := service.resolveScope(ctx, rowScope(session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectiveEvents := storedEvents[:3]
+	wantUsage, ok := buildContextUsage(
+		settings.ContextWindowSize, settings.Provider, settings.Model,
+		service.systemPrompt(ctx, session, roots, settings.SupportsImages),
+		service.messagesFromEvents(effectiveEvents, settings.SupportsImages, false),
+		builtInToolDefinitions(), parseContextAnchor(effectiveEvents),
+	)
+	if !ok {
+		t.Fatal("expected context usage for the staged conversation")
+	}
+
+	staged, err := service.RevertSession(ctx, session.ID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.Revert == nil || staged.Revert.BoundarySequence != 4 || staged.Revert.BoundaryTurnID != "second" ||
 		staged.Revert.RevertedCount != 2 {
 		t.Fatalf("staged revert = %#v", staged.Revert)
 	}
+	if staged.ContextUsage == nil || *staged.ContextUsage != wantUsage {
+		t.Fatalf("staged context usage = %#v, want %#v", staged.ContextUsage, wantUsage)
+	}
 	for _, entry := range staged.Entries {
-		want := entry.Sequence >= 3
+		want := entry.Sequence >= 4
 		if entry.Reverted != want {
 			t.Fatalf("entry %d reverted = %v, want %v", entry.Sequence, entry.Reverted, want)
 		}
