@@ -1,9 +1,11 @@
 import type { CompressionState } from "@bindings/mod";
 import {
+    buildElevatedHelperTitlebarActivity,
     buildModCompressionTitlebarActivity,
     buildModFixTitlebarActivity,
     buildTransferTitlebarActivity,
 } from "@renderer/components/titlebar/titlebar-activity";
+import { ELEVATED_HELPER_ACTIVITY_ID } from "@shared/elevated-helper";
 import type { TransferWithoutData } from "@shared/types";
 import { describe, expect, it, vi } from "vitest";
 
@@ -311,5 +313,41 @@ describe("buildModFixTitlebarActivity", () => {
         });
 
         expect(activity.detail).toBe("Skimpier…");
+    });
+});
+
+describe("buildElevatedHelperTitlebarActivity", () => {
+    it("builds a warning badge that starts the helper", () => {
+        const onStart = vi.fn();
+        const activity = buildElevatedHelperTitlebarActivity({
+            onStart,
+            defaultOpen: true,
+            t,
+        });
+
+        expect(activity).toMatchObject({
+            id: ELEVATED_HELPER_ACTIVITY_ID,
+            status: "warning",
+            order: 2,
+            label: "titlebar.activity.elevatedHelper.label",
+        });
+        expect(activity.popover).toMatchObject({
+            title: "titlebar.activity.elevatedHelper.title",
+            description: "titlebar.activity.elevatedHelper.description",
+            defaultOpen: true,
+        });
+        activity.popover?.action?.onClick();
+        expect(onStart).toHaveBeenCalledOnce();
+        expect(activity.popover?.action?.disabled).toBeFalsy();
+    });
+
+    it("disables the start action while the helper is starting", () => {
+        const activity = buildElevatedHelperTitlebarActivity({
+            onStart: vi.fn(),
+            starting: true,
+            t,
+        });
+
+        expect(activity.popover?.action?.disabled).toBe(true);
     });
 });

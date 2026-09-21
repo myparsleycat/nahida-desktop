@@ -58,6 +58,9 @@ vi.mock("@renderer/components/titlebar/use-texture-resizer-titlebar-activity", (
 vi.mock("@renderer/components/titlebar/use-transfer-titlebar-activity", () => ({
   useTransferTitlebarActivity: vi.fn(),
 }));
+vi.mock("@renderer/components/titlebar/use-elevated-helper", () => ({
+  useElevatedHelper: vi.fn(() => null),
+}));
 
 afterEach(cleanup);
 it("renders only the independent window shell without main providers or global hooks", async () => {

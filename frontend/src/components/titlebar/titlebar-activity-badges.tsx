@@ -121,6 +121,7 @@ export function TitlebarActivityBadges() {
                       <Button
                         size="xs"
                         className="h-6 px-2.5 text-xs font-medium"
+                        disabled={popover.action.disabled}
                         onClick={popover.action.onClick}
                       >
                         <WrenchIcon className="size-3" />

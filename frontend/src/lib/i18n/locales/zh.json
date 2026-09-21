@@ -2096,6 +2096,12 @@
       "modFix": {
         "label": "需要修复",
         "dismiss": "忽略"
+      },
+      "elevatedHelper": {
+        "label": "助手未运行",
+        "title": "提权助手未在运行",
+        "description": "此操作需要提权助手才能向以管理员权限运行的游戏发送按键。Windows 将显示 UAC 提示。请仅在从 Nahida 启动时批准该提示。",
+        "start": "启动助手"
       }
     }
   },

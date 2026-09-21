@@ -2129,6 +2129,12 @@
       "modFix": {
         "label": "Fix Needed",
         "dismiss": "Dismiss"
+      },
+      "elevatedHelper": {
+        "label": "Helper not running",
+        "title": "Elevated helper is not running",
+        "description": "This action needs the elevated helper to send keys to an administrator-level game. Windows will show a UAC prompt. Approve it only if you started it from Nahida.",
+        "start": "Start helper"
       }
     }
   },

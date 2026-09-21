@@ -367,6 +367,30 @@ func TestSendKeysPostsKeysToBackgroundWindow(t *testing.T) {
 	}
 }
 
+func TestGetElevatedHelperStatusUsesProvider(t *testing.T) {
+	t.Parallel()
+
+	input := NewInput()
+	got, err := input.GetElevatedHelperStatus(context.Background())
+	if err != nil {
+		t.Fatalf("GetElevatedHelperStatus = %v", err)
+	}
+	if got.Enabled || got.Running {
+		t.Fatalf("status = %+v, want zero value without a provider", got)
+	}
+
+	input.UseElevatedHelperStatus(func() ElevatedHelperStatus {
+		return ElevatedHelperStatus{Enabled: true, Running: false}
+	})
+	got, err = input.GetElevatedHelperStatus(context.Background())
+	if err != nil {
+		t.Fatalf("GetElevatedHelperStatus = %v", err)
+	}
+	if !got.Enabled || got.Running {
+		t.Fatalf("status = %+v, want enabled and not running", got)
+	}
+}
+
 func TestSendKeysRoutesHigherIntegrityTargetThroughHelper(t *testing.T) {
 	title := "Nahida Elevated Input Test " + t.Name()
 	window := newTestWindow(t, title)

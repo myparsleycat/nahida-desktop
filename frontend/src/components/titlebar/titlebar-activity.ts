@@ -2,6 +2,7 @@ import type { CompressionState } from "@bindings/mod";
 import type { FixInspectionResult } from "@bindings/tools";
 import type { TitlebarActivity } from "@renderer/store/titlebar-activity";
 import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
+import { ELEVATED_HELPER_ACTIVITY_ID } from "@shared/elevated-helper";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type {
     BisectSnapshot,
@@ -15,6 +16,7 @@ import {
     ArrowUpDownIcon,
     GitCompareIcon,
     ScalingIcon,
+    ShieldAlertIcon,
     WrenchIcon,
 } from "lucide-react";
 
@@ -211,6 +213,36 @@ function truncateModName(name: string, maxLength = 8): string {
     const trimmed = name.trim();
     if (trimmed.length <= maxLength) return trimmed;
     return `${trimmed.slice(0, maxLength)}…`;
+}
+
+export function buildElevatedHelperTitlebarActivity({
+    onStart,
+    defaultOpen,
+    starting,
+    t,
+}: {
+    onStart: () => void;
+    defaultOpen?: boolean;
+    starting?: boolean;
+    t: Translate;
+}): TitlebarActivity {
+    return {
+        id: ELEVATED_HELPER_ACTIVITY_ID,
+        label: t("titlebar.activity.elevatedHelper.label"),
+        status: "warning",
+        icon: ShieldAlertIcon,
+        order: 2,
+        popover: {
+            title: t("titlebar.activity.elevatedHelper.title"),
+            description: t("titlebar.activity.elevatedHelper.description"),
+            action: {
+                label: t("titlebar.activity.elevatedHelper.start"),
+                onClick: onStart,
+                disabled: starting,
+            },
+            defaultOpen,
+        },
+    };
 }
 
 export function buildModFixTitlebarActivity({

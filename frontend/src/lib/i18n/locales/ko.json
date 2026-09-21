@@ -2115,6 +2115,12 @@
       "modFix": {
         "label": "수정 필요",
         "dismiss": "알림 닫기"
+      },
+      "elevatedHelper": {
+        "label": "헬퍼 꺼짐",
+        "title": "권한 상승 헬퍼가 실행 중이 아닙니다",
+        "description": "이 작업은 관리자 권한으로 실행 중인 게임에 키 입력을 보내려면 헬퍼가 필요합니다. Windows UAC 확인이 표시됩니다. Nahida에서 직접 시작한 경우에만 승인하세요.",
+        "start": "헬퍼 켜기"
       }
     }
   },
