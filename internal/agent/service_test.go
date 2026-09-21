@@ -321,7 +321,7 @@ func TestMessagesFromEventsPreservesToolResultEnvelope(t *testing.T) {
 		Payload:   `{"toolCallId":"tool","result":{"ok":false},"error":"failed","changedFiles":["a"]}`,
 	}}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 1 || messages[0].ToolCallID != "tool" {
 		t.Fatalf("messages = %#v", messages)
 	}
@@ -355,7 +355,7 @@ func TestMessagesFromEventsRestoresReasoningWithoutDuplicatingToolCalls(t *testi
 		},
 	}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 2 {
 		t.Fatalf("messages = %#v", messages)
 	}
@@ -379,7 +379,7 @@ func TestMessagesFromEventsRestoresLegacyToolCalls(t *testing.T) {
 		},
 	}
 
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 3 || len(messages[1].ToolCalls) != 1 || messages[1].ToolCalls[0].ID != "tool" ||
 		messages[2].Role != "tool" || messages[2].ToolCallID != "tool" ||
 		!strings.Contains(messages[2].Content, interruptedToolErrorMessage) {
@@ -488,7 +488,7 @@ func TestAppendSkippedToolCallsPersistsPairedResults(t *testing.T) {
 	if len(events) != 4 {
 		t.Fatalf("events = %#v", events)
 	}
-	messages := New(Options{}).messagesFromEvents(events, true)
+	messages := New(Options{}).messagesFromEvents(events, true, true)
 	if len(messages) != 4 || messages[0].ToolCalls[0].ID != "second" || messages[1].ToolCallID != "second" ||
 		messages[2].ToolCalls[0].ID != "third" || messages[3].ToolCallID != "third" {
 		t.Fatalf("paired messages = %#v", messages)
@@ -607,6 +607,13 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	mods := filepath.Join(t.TempDir(), "Mods")
+	if err := os.MkdirAll(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: mods}); err != nil {
+		t.Fatal(err)
+	}
 	// Install the client before writing events: UseClient seals turns that look interrupted, and a
 	// test turn has no terminal event.
 	service := New(Options{})
@@ -619,27 +626,78 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	if err := client.AgentSessions.Insert(ctx, session); err != nil {
 		t.Fatal(err)
 	}
+	settings, err := readSettings(ctx, client, service.crypto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstUsage, err := json.Marshal(contextUsagePayload{
+		Provider: settings.Provider, Model: settings.Model, RouteKey: contextRouteKey(settings), InputTokens: 1_000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUsage, err := json.Marshal(contextUsagePayload{
+		Provider: settings.Provider, Model: settings.Model, RouteKey: contextRouteKey(settings), InputTokens: 100_000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, event := range []db.AgentEventRow{
 		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "1"},
 		{SessionID: session.ID, TurnID: "first", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "2"},
-		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "3"},
-		{SessionID: session.ID, TurnID: "second", EventType: "message/assistant", Payload: `{"text":"answer"}`, CreatedAt: "4"},
+		{
+			SessionID: session.ID, TurnID: "first", EventType: contextUsageEventType,
+			Payload: string(firstUsage), CreatedAt: "3",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: "turn/start",
+			Payload: `{"text":"two two two two two two two two two two"}`, CreatedAt: "4",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: "message/assistant",
+			Payload: `{"text":"answer answer answer answer answer answer answer answer answer answer"}`, CreatedAt: "5",
+		},
+		{
+			SessionID: session.ID, TurnID: "second", EventType: contextUsageEventType,
+			Payload: string(secondUsage), CreatedAt: "6",
+		},
 	} {
 		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
 			t.Fatal(err)
 		}
 	}
-
-	staged, err := service.RevertSession(ctx, session.ID, 3)
+	storedEvents, err := client.AgentEvents.List(ctx, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if staged.Revert == nil || staged.Revert.BoundarySequence != 3 || staged.Revert.BoundaryTurnID != "second" ||
+	_, roots, err := service.resolveScope(ctx, rowScope(session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectiveEvents := storedEvents[:3]
+	wantUsage, ok := buildContextUsage(
+		settings.ContextWindowSize, contextRouteKey(settings),
+		service.systemPrompt(ctx, session, roots, settings.SupportsImages),
+		service.messagesFromEvents(effectiveEvents, settings.SupportsImages, false),
+		builtInToolDefinitions(), parseContextAnchor(effectiveEvents),
+	)
+	if !ok {
+		t.Fatal("expected context usage for the staged conversation")
+	}
+
+	staged, err := service.RevertSession(ctx, session.ID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.Revert == nil || staged.Revert.BoundarySequence != 4 || staged.Revert.BoundaryTurnID != "second" ||
 		staged.Revert.RevertedCount != 2 {
 		t.Fatalf("staged revert = %#v", staged.Revert)
 	}
+	if staged.ContextUsage == nil || *staged.ContextUsage != wantUsage {
+		t.Fatalf("staged context usage = %#v, want %#v", staged.ContextUsage, wantUsage)
+	}
 	for _, entry := range staged.Entries {
-		want := entry.Sequence >= 3
+		want := entry.Sequence >= 4
 		if entry.Reverted != want {
 			t.Fatalf("entry %d reverted = %v, want %v", entry.Sequence, entry.Reverted, want)
 		}
@@ -660,6 +718,99 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 		if entry.Reverted {
 			t.Fatalf("entry %d still reverted after unrevert", entry.Sequence)
 		}
+	}
+}
+
+func TestServiceRevertContextUsageUsesSurvivingSummary(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mods := filepath.Join(t.TempDir(), "Mods")
+	if err := os.MkdirAll(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: mods}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	session := db.AgentSessionRow{
+		ID: "session", ScopeType: "global", Title: "Test", CreatedAt: "1", UpdatedAt: "1",
+	}
+	if err := client.AgentSessions.Insert(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+
+	const survivingSummary = "surviving summary"
+	staleSummary := strings.Repeat("future summary ", 400)
+	if _, err := client.AgentEvents.AppendAndUpdateSummary(ctx, db.AgentEventRow{
+		SessionID: session.ID, TurnID: "first", EventType: "summary",
+		Payload: `{"summary":"surviving summary","compactedMessages":0}`, CreatedAt: "2",
+	}, survivingSummary); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []db.AgentEventRow{
+		{SessionID: session.ID, TurnID: "first", EventType: "turn/start", Payload: `{"text":"one"}`, CreatedAt: "3"},
+		{
+			SessionID: session.ID, TurnID: "first", EventType: "message/assistant",
+			Payload: `{"text":"answer"}`, CreatedAt: "4",
+		},
+		{SessionID: session.ID, TurnID: "second", EventType: "turn/start", Payload: `{"text":"two"}`, CreatedAt: "5"},
+	} {
+		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stalePayload, err := json.Marshal(map[string]any{"summary": staleSummary, "compactedMessages": 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AgentEvents.AppendAndUpdateSummary(ctx, db.AgentEventRow{
+		SessionID: session.ID, TurnID: "second", EventType: "summary",
+		Payload: string(stalePayload), CreatedAt: "6",
+	}, staleSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	staged, err := service.RevertSession(ctx, session.ID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.ContextUsage == nil {
+		t.Fatal("staged context usage is nil")
+	}
+	settings, err := readSettings(ctx, client, service.crypto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, roots, err := service.resolveScope(ctx, rowScope(session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectiveRow := session
+	effectiveRow.DurableSummary = survivingSummary
+	wantSystemTokens := estimateTextTokens(service.systemPrompt(ctx, effectiveRow, roots, settings.SupportsImages))
+	if staged.ContextUsage.SystemTokens != wantSystemTokens {
+		t.Fatalf(
+			"systemTokens = %d, want %d from the surviving summary",
+			staged.ContextUsage.SystemTokens,
+			wantSystemTokens,
+		)
+	}
+	staleRow := session
+	staleRow.DurableSummary = staleSummary
+	staleSystemTokens := estimateTextTokens(service.systemPrompt(ctx, staleRow, roots, settings.SupportsImages))
+	if staged.ContextUsage.SystemTokens == staleSystemTokens {
+		t.Fatal("staged context usage retained the reverted summary")
 	}
 }
 

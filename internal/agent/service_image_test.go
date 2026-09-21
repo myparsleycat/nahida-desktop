@@ -133,7 +133,7 @@ func TestSendDeliversAttachedImagesToTheProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := service.messagesFromEvents(events, true)
+	messages := service.messagesFromEvents(events, true, true)
 	if len(messages) == 0 || len(messages[0].Images) != 1 || messages[0].Images[0].MIMEType != "image/png" {
 		t.Fatalf("replayed messages = %#v", messages)
 	}
@@ -142,7 +142,7 @@ func TestSendDeliversAttachedImagesToTheProvider(t *testing.T) {
 	}
 
 	// A text-only provider must never receive image parts.
-	textOnly := service.messagesFromEvents(events, false)
+	textOnly := service.messagesFromEvents(events, false, true)
 	if len(textOnly) == 0 || len(textOnly[0].Images) != 0 {
 		t.Fatalf("text-only messages = %#v", textOnly)
 	}

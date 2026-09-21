@@ -1,4 +1,4 @@
-import type { AgentChatEntry, AgentImage } from "@bindings/agent/models";
+import type { AgentChatEntry, AgentContextUsage, AgentImage } from "@bindings/agent/models";
 
 export interface SequencedAgentEvent {
     runId: string;
@@ -21,6 +21,7 @@ export interface AgentStreamEvent extends SequencedAgentEvent {
         result?: unknown;
         images?: AgentImage[];
         changedFiles?: string[];
+        contextUsage?: AgentContextUsage;
     };
 }
 

@@ -7,7 +7,6 @@
  */
 
 .agent-page {
-    --agent-blue: #4176e6;
     --agent-sidebar-width: 272px;
     --agent-chat-width: clamp(680px, 64%, 920px);
     --agent-composer-width: min(calc(var(--agent-chat-width) + 32px), calc(100% - 32px));

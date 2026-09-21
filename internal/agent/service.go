@@ -335,6 +335,10 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	scope := rowScope(*row)
 	_, roots, scopeErr := s.resolveScope(ctx, scope)
 	var staged *AgentSessionRevert
+	contextRow := *row
+	// A staged revert already defines the next request surface even though Send has not committed
+	// the event deletion yet.
+	contextEvents := events
 	if parsed := parseSessionRevert(row.Revert); parsed != nil {
 		reverted := 0
 		for index := range entries {
@@ -345,6 +349,13 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 		}
 		parsed.RevertedCount = reverted
 		staged = parsed
+		for index := range events {
+			if events[index].Sequence >= parsed.BoundarySequence {
+				contextEvents = events[:index]
+				break
+			}
+		}
+		contextRow.DurableSummary = latestSummary(contextEvents)
 	}
 	snapshot := AgentSessionSnapshot{
 		Summary:   s.sessionSummary(*row),
@@ -355,6 +366,20 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	}
 	if settings, settingsErr := readSettings(ctx, client, s.crypto); settingsErr == nil {
 		snapshot.SupportsImages = settings.SupportsImages
+		if scopeErr == nil {
+			messages := s.messagesFromEvents(contextEvents, settings.SupportsImages, false)
+			system := s.systemPrompt(ctx, contextRow, roots, settings.SupportsImages)
+			// Tools are priced from the built-in set alone, which under-counts the MCP definitions a
+			// request may also carry. A matching anchor overrides the figure, so only the no-anchor
+			// fallback is approximate; rebuilding the MCP set here would open provider connections on
+			// a read path.
+			if usage, ok := buildContextUsage(
+				settings.ContextWindowSize, contextRouteKey(settings),
+				system, messages, builtInToolDefinitions(), parseContextAnchor(contextEvents),
+			); ok {
+				snapshot.ContextUsage = &usage
+			}
+		}
 	}
 	if scopeErr != nil {
 		snapshot.UnavailableReason = scopeErr.Error()
@@ -954,6 +979,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
 		return
 	}
+	routeKey := contextRouteKey(settings)
 	credential, err := credentialFor(ctx, client, s.crypto, settings.Provider)
 	if err != nil {
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
@@ -985,7 +1011,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
 		return
 	}
-	messages := s.messagesFromEvents(events, settings.SupportsImages)
+	messages := s.messagesFromEvents(events, settings.SupportsImages, true)
 	mcpRuntime, mcpDefinitions := s.openMCPRuntime(ctx, roots)
 	defer func() { _ = mcpRuntime.Close() }()
 	executor := &toolExecutor{
@@ -1081,7 +1107,8 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			s.finishRunDetached(sessionID, run.id, eventType, payload)
 			return
 		}
-		if response.Text != "" || response.Reasoning != "" || len(response.ToolCalls) > 0 {
+		hasAssistantMessage := response.Text != "" || response.Reasoning != "" || len(response.ToolCalls) > 0
+		if hasAssistantMessage {
 			if _, err := s.appendEvent(
 				ctx,
 				db.AgentEventRow{SessionID: sessionID, TurnID: run.id, EventType: "message/assistant"},
@@ -1095,13 +1122,58 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 				return
 			}
 		}
-		s.emit(
-			sessionID,
-			run.id,
-			0,
-			"usage",
-			map[string]any{"inputTokens": response.InputTokens, "outputTokens": response.OutputTokens},
-		)
+		// Anchor the provider's own prompt size to the surface that produced it. The event is durable
+		// so a later snapshot can reprice the next request against the same scale; a provider that
+		// reports no usage leaves the previous anchor in place.
+		breakdown := estimateBreakdown(system, messages, toolDefinitions)
+		var anchor *contextAnchor
+		if response.InputTokens > 0 {
+			anchor = &contextAnchor{
+				RouteKey:      routeKey,
+				InputTokens:   response.InputTokens,
+				SystemTokens:  breakdown.System,
+				ToolsTokens:   breakdown.Tools,
+				MessageTokens: breakdown.Messages,
+			}
+			if _, err := s.appendEvent(
+				ctx,
+				db.AgentEventRow{SessionID: sessionID, TurnID: run.id, EventType: contextUsageEventType},
+				contextUsagePayload{
+					Provider: settings.Provider, Model: settings.Model,
+					RouteKey:    routeKey,
+					InputTokens: response.InputTokens, OutputTokens: response.OutputTokens,
+					SystemTokens: breakdown.System, ToolsTokens: breakdown.Tools, MessageTokens: breakdown.Messages,
+				},
+			); err != nil {
+				// The anchor is observability data: losing it must not discard the assistant response
+				// that was already accepted above. Keep the in-memory anchor for this turn's live
+				// reading and let the next successful call re-anchor.
+				_ = infra.ReportError(s.log, err, "Agent", infra.Diagnostic{
+					Severity: infra.DiagnosticWarn, Operation: "agent-context", Stage: "persist-anchor",
+					Fields: map[string]any{"sessionId": sessionID, "turnId": run.id},
+				})
+			}
+		}
+		usagePayload := map[string]any{
+			"inputTokens": response.InputTokens, "outputTokens": response.OutputTokens,
+		}
+		// The streamed meter projects the next request, so include the assistant response persisted
+		// above while tool execution is still in progress.
+		projectedMessages := messages
+		if hasAssistantMessage {
+			projectedMessages = make([]Message, 0, len(messages)+1)
+			projectedMessages = append(projectedMessages, messages...)
+			projectedMessages = append(projectedMessages, Message{
+				Role: "assistant", Content: response.Text, Reasoning: response.Reasoning, ToolCalls: response.ToolCalls,
+			})
+		}
+		if contextUsage, ok := buildContextUsage(
+			settings.ContextWindowSize, routeKey,
+			system, projectedMessages, toolDefinitions, anchor,
+		); ok {
+			usagePayload["contextUsage"] = contextUsage
+		}
+		s.emit(sessionID, run.id, 0, "usage", usagePayload)
 		if len(response.ToolCalls) == 0 {
 			s.finishRunDetached(sessionID, run.id, "turn/end", map[string]any{"status": "completed"})
 			return
@@ -1190,7 +1262,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			s.failRunPersistence(sessionID, run.id, "reload durable messages", err)
 			return
 		}
-		messages = s.messagesFromEvents(events, settings.SupportsImages)
+		messages = s.messagesFromEvents(events, settings.SupportsImages, true)
 	}
 	s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": "maximum tool rounds exceeded"})
 }
@@ -1730,23 +1802,11 @@ func (s *Service) compactMessages(
 }
 
 func estimateTokens(system string, messages []Message, tools ...[]ToolDefinition) int {
-	tokens := estimateTextTokens(system)
-	for _, message := range messages {
-		tokens += estimateTextTokens(message.Content) + estimateTextTokens(message.Reasoning) + 8
-		for _, image := range message.Images {
-			tokens += estimateImageTokens(len(image.Data))
-		}
-		for _, call := range message.ToolCalls {
-			tokens += estimateTextTokens(call.Name) + estimateTextTokens(string(call.Arguments)) + 8
-		}
-	}
+	var definitions []ToolDefinition
 	if len(tools) > 0 {
-		encoded, err := json.Marshal(tools[0])
-		if err == nil {
-			tokens += estimateTextTokens(string(encoded))
-		}
+		definitions = tools[0]
 	}
-	return tokens
+	return estimateBreakdown(system, messages, definitions).total()
 }
 
 func estimateTextTokens(value string) int {
@@ -1931,6 +1991,28 @@ func parseSessionRevert(raw string) *AgentSessionRevert {
 	return &staged
 }
 
+// latestSummary returns the durable summary represented by an event prefix. Internal summary
+// events are already ordered, so the last summary event is the summary a request at that point used.
+func latestSummary(events []db.AgentEventRow) string {
+	for index := len(events) - 1; index >= 0; index-- {
+		if events[index].EventType != "summary" {
+			continue
+		}
+		return summaryFromPayload(events[index].Payload)
+	}
+	return ""
+}
+
+func summaryFromPayload(payload string) string {
+	var decoded struct {
+		Summary string `json:"summary"`
+	}
+	if json.Unmarshal([]byte(payload), &decoded) != nil {
+		return ""
+	}
+	return decoded.Summary
+}
+
 // appendRevertedTurn commits a staged revert and the replacement turn/start event atomically.
 func (s *Service) appendRevertedTurn(
 	ctx context.Context,
@@ -1946,12 +2028,7 @@ func (s *Service) appendRevertedTurn(
 	}
 	summary := ""
 	if summaryPayload != "" {
-		var decoded struct {
-			Summary string `json:"summary"`
-		}
-		if json.Unmarshal([]byte(summaryPayload), &decoded) == nil {
-			summary = decoded.Summary
-		}
+		summary = summaryFromPayload(summaryPayload)
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -2113,13 +2190,18 @@ func projectEvent(event db.AgentEventRow) (AgentChatEntry, bool) {
 }
 
 // messagesFromEvents rebuilds the conversation from durable events. Images are attached only when
-// the configured model accepts them, so a text-only provider never receives image parts.
-func (s *Service) messagesFromEvents(events []db.AgentEventRow, supportsImages bool) []Message {
+// the configured model accepts them, so a text-only provider never receives image parts. loadImages
+// false keeps just the stored size, which lets a token estimate price images without reading the
+// payloads back from disk.
+func (s *Service) messagesFromEvents(events []db.AgentEventRow, supportsImages, loadImages bool) []Message {
 	imagesFor := func(references []AgentImage) []MessageImage {
 		if !supportsImages {
 			return nil
 		}
-		return s.loadMessageImages(references)
+		if loadImages {
+			return s.loadMessageImages(references)
+		}
+		return imageReferences(references)
 	}
 	messages := make([]Message, 0)
 	restoredToolCalls := make(map[string]struct{})
