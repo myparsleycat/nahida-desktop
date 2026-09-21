@@ -11,10 +11,11 @@ import (
 )
 
 type preparedLaunch struct {
-	importer string
-	exe      string
-	root     string
-	timeout  float64
+	importer       string
+	exe            string
+	gameExecutable string
+	root           string
+	timeout        float64
 }
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
@@ -22,7 +23,7 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 	if err != nil {
 		return err
 	}
-	if err := x.rejectLaunchBlockers(ctx, ready.importer, ready.exe); err != nil {
+	if err := x.rejectLaunchBlockers(ctx, ready.importer, ready.gameExecutable); err != nil {
 		return err
 	}
 	x.mu.Lock()
@@ -57,11 +58,20 @@ func (x *XXMI) prepareGameLaunch(ctx context.Context, importer string) (prepared
 	if !ok {
 		return preparedLaunch{}, fmt.Errorf("importer %s not found", importer)
 	}
+	exe := gameProcessName(importer, importerConfig.Importer.GameEXENames)
+	gameExecutable := configuredGameExecutable(
+		importerConfig.Importer.GameFolder,
+		importerConfig.Importer.GameEXENames,
+	)
+	if gameExecutable == "" {
+		gameExecutable = exe
+	}
 	return preparedLaunch{
-		importer: importer,
-		exe:      gameProcessName(importer, importerConfig.Importer.GameEXENames),
-		root:     *x.path,
-		timeout:  x.parsed.Launcher.StartTimeout,
+		importer:       importer,
+		exe:            exe,
+		gameExecutable: gameExecutable,
+		root:           *x.path,
+		timeout:        x.parsed.Launcher.StartTimeout,
 	}, nil
 }
 
@@ -154,4 +164,30 @@ func gameProcessName(importer string, configured []string) string {
 		}
 		return configured[0]
 	}
+}
+
+func configuredGameExecutable(folder string, configured []string) string {
+	folder = strings.TrimSpace(folder)
+	var first string
+	for _, name := range configured {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+
+		candidate := filepath.Clean(name)
+		if !filepath.IsAbs(candidate) {
+			if !filepath.IsAbs(folder) {
+				continue
+			}
+			candidate = filepath.Join(folder, candidate)
+		}
+		if first == "" {
+			first = candidate
+		}
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			return candidate
+		}
+	}
+	return first
 }

@@ -112,11 +112,11 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 	if err != nil {
 		return err
 	}
-	if err := applyLaunchFixes(ctx, ready.importer, ready.exe, x); err != nil {
+	if err := applyLaunchFixes(ctx, ready.importer, ready.gameExecutable, x); err != nil {
 		if infra.IsReportedError(err) {
 			return err
 		}
-		return x.reportLaunchGuard(err, "clear-launch-blockers", ready.importer, ready.exe)
+		return x.reportLaunchGuard(err, "clear-launch-blockers", ready.importer, ready.gameExecutable)
 	}
 	return nil
 }

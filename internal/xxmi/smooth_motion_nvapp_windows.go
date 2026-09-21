@@ -53,6 +53,8 @@ type nvAppFGXProcs struct {
 
 var nvAppFGXMu sync.Mutex
 
+var errNVAppApplicationAmbiguous = errors.New("multiple NVIDIA App applications match")
+
 func readNVAppSmoothMotion(exe string) (enabled, handled bool, err error) {
 	handled, err = withNVAppFGX(exe, func(app nvAppStoredApplication, procs nvAppFGXProcs) error {
 		state, err := getNVAppFGXState(procs, app)
@@ -130,8 +132,14 @@ func withNVAppFGX(
 	fn func(nvAppStoredApplication, nvAppFGXProcs) error,
 ) (handled bool, err error) {
 	app, found, err := resolveNVAppApplication(exe)
-	if err != nil {
+	if errors.Is(err, errNVAppApplicationAmbiguous) {
+		// NVIDIA App may own this executable, but selecting either matching application
+		// could read or update an unrelated game's setting. Keep the operation handled so
+		// callers do not fall through to the driver database as though NVIDIA App were absent.
 		return true, err
+	}
+	if err != nil {
+		return true, fmt.Errorf("resolve NVIDIA App application: %w", err)
 	}
 	if !found {
 		return false, nil
@@ -261,7 +269,7 @@ func findNVAppApplication(data []byte, exe string) (nvAppStoredApplication, bool
 	}
 	switch {
 	case ambiguous:
-		return nvAppStoredApplication{}, false, fmt.Errorf("multiple NVIDIA App applications match %s", exe)
+		return nvAppStoredApplication{}, false, fmt.Errorf("%w %s", errNVAppApplicationAmbiguous, exe)
 	case !found:
 		return nvAppStoredApplication{}, false, nil
 	default:

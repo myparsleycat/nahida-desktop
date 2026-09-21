@@ -115,20 +115,8 @@ type drsProcs struct {
 
 func readSmoothMotion(exe string) (smoothMotionSample, error) {
 	nvAppEnabled, nvAppHandled, nvAppErr := readNVAppSmoothMotion(exe)
-	if nvAppHandled {
-		// NVIDIA App owns this executable, so its FGX backend is authoritative. Falling back to
-		// the driver database here could report "off" while the App has Smooth Motion on.
-		if nvAppErr != nil {
-			return smoothMotionSample{}, fmt.Errorf("read NVIDIA App smooth motion for %s: %w", exe, nvAppErr)
-		}
-		value := uint32(0)
-		if nvAppEnabled {
-			value = 1
-		}
-		return smoothMotionSample{
-			profileFound: true,
-			profile:      storedDword{present: true, explicit: true, value: value},
-		}, nil
+	if sample, handled, err := nvAppSmoothMotionSample(exe, nvAppEnabled, nvAppHandled, nvAppErr); handled {
+		return sample, err
 	}
 
 	var sample smoothMotionSample
@@ -160,6 +148,34 @@ func readSmoothMotion(exe string) (smoothMotionSample, error) {
 		return smoothMotionSample{}, err
 	}
 	return mergeFileSmoothMotion(sample, gameProfile)
+}
+
+func nvAppSmoothMotionSample(
+	exe string,
+	enabled, handled bool,
+	err error,
+) (smoothMotionSample, bool, error) {
+	if errors.Is(err, errNVAppApplicationAmbiguous) {
+		// A basename shared by multiple NVIDIA App applications is unknown, not a launch
+		// blocker. Do not fall back to DRS: NVIDIA App may still be authoritative for the
+		// intended application, and DRS could incorrectly report the setting as disabled.
+		return smoothMotionSample{}, true, nil
+	}
+	if err != nil {
+		return smoothMotionSample{}, true, fmt.Errorf("read NVIDIA App smooth motion for %s: %w", exe, err)
+	}
+	if !handled {
+		return smoothMotionSample{}, false, nil
+	}
+
+	value := uint32(0)
+	if enabled {
+		value = 1
+	}
+	return smoothMotionSample{
+		profileFound: true,
+		profile:      storedDword{present: true, explicit: true, value: value},
+	}, true, nil
 }
 
 func writeSmoothMotionOff(exe string) error {

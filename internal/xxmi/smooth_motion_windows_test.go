@@ -77,7 +77,7 @@ func TestFindNVAppApplicationRejectsAmbiguousBasename(t *testing.T) {
 	}
 
 	_, _, err = findNVAppApplication(data, "Game.exe")
-	if err == nil || !strings.Contains(err.Error(), "multiple NVIDIA App applications") {
+	if !errors.Is(err, errNVAppApplicationAmbiguous) {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestFindNVAppApplicationRejectsBasenameAcrossApplications(t *testing.T) {
 	}
 
 	_, _, err = findNVAppApplication(data, "Client-Win64-Shipping.exe")
-	if err == nil || !strings.Contains(err.Error(), "multiple NVIDIA App applications") {
+	if !errors.Is(err, errNVAppApplicationAmbiguous) {
 		t.Fatalf("error = %v", err)
 	}
 
@@ -132,6 +132,37 @@ func TestNVAppFGXStateLayout(t *testing.T) {
 	t.Parallel()
 	if got := unsafe.Sizeof(nvAppFGXState{}); got != 2 {
 		t.Fatalf("NVIDIA App FGX state size = %d, want 2", got)
+	}
+}
+
+func TestNVAppSmoothMotionSampleTreatsAmbiguityAsUnknown(t *testing.T) {
+	t.Parallel()
+	sample, handled, err := nvAppSmoothMotionSample(
+		"Game.exe",
+		false,
+		true,
+		fmt.Errorf("resolve application: %w", errNVAppApplicationAmbiguous),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled {
+		t.Fatal("ambiguous NVIDIA App application was not handled")
+	}
+	if smoothMotionApplied(sample) {
+		t.Fatal("ambiguous NVIDIA App application blocked launch")
+	}
+}
+
+func TestNVAppSmoothMotionSamplePreservesOrdinaryFailure(t *testing.T) {
+	t.Parallel()
+	want := errors.New("storage unreadable")
+	_, handled, err := nvAppSmoothMotionSample("Game.exe", false, true, want)
+	if !handled {
+		t.Fatal("NVIDIA App failure was not handled")
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
 	}
 }
 
