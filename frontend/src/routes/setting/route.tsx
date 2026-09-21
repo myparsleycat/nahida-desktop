@@ -1,4 +1,3 @@
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
@@ -148,11 +147,11 @@ function RouteComponent() {
           </div>
         </header>
 
-        <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
           <div className="mx-auto min-h-full w-full max-w-xl">
             <Outlet />
           </div>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );
