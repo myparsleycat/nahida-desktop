@@ -66,12 +66,18 @@ func InputErrorFromCode(code string) (error, bool) {
 	return nil, false
 }
 
+// ElevatedHelperStatus is the renderer-facing snapshot of whether the helper
+// setting is on and whether the helper process is actually connected.
+type ElevatedHelperStatus struct {
+	Enabled bool `json:"enabled"`
+	Running bool `json:"running"`
+}
+
 // ElevatedInputSender handles requests that Windows UIPI prevents this
 // process from delivering to a higher-integrity target.
 type ElevatedInputSender interface {
-	// EnsureReady connects or reconnects the helper. Launching the helper can
-	// wait on a UAC prompt, so callers invoke it before taking the lock that
-	// serializes key delivery.
+	// EnsureReady reports whether the helper connection is live. It does not
+	// launch the helper; a missing connection returns ErrElevatedHelperRequired.
 	EnsureReady(context.Context) error
 	SendKeys(context.Context, KeyRequest) (KeyResult, error)
 }

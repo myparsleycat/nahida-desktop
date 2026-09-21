@@ -75,8 +75,10 @@ func newRuntime() *runtime {
 	elevatedClient := elevated.NewClient()
 	elevatedHelper := newElevatedLifecycle(elevatedClient, func(err error, stage string) {
 		reportElevatedHelperError(log, err, stage)
-	})
+	}, emitAppEvent)
+	elevatedClient.UseDisconnect(elevatedHelper.publishStatus)
 	input.UseElevatedInput(elevatedClient)
+	input.UseElevatedHelperStatus(elevatedHelper.status)
 	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
 			log,

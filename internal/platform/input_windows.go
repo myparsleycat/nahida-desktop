@@ -166,6 +166,7 @@ type Input struct {
 	mapVirtualKey  func(co.VK) uint32
 	integrityLevel func(uint32) (uint32, error)
 	elevated       ElevatedInputSender
+	helperStatus   func() ElevatedHelperStatus
 
 	focusTimeout time.Duration
 	focusPoll    time.Duration
@@ -201,8 +202,31 @@ func (i *Input) UseElevatedInput(sender ElevatedInputSender) {
 }
 
 //wails:ignore
+func (i *Input) UseElevatedHelperStatus(status func() ElevatedHelperStatus) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.helperStatus = status
+}
+
+//wails:ignore
 func (i *Input) UseDiagnostic(report func(error, string, map[string]any)) {
 	i.diagnostic = report
+}
+
+// GetElevatedHelperStatus returns whether the helper setting is on and whether
+// the helper process is connected. The renderer uses it to restore titlebar
+// state before the first status event arrives.
+func (i *Input) GetElevatedHelperStatus(ctx context.Context) (ElevatedHelperStatus, error) {
+	if err := ctx.Err(); err != nil {
+		return ElevatedHelperStatus{}, err
+	}
+	i.mu.Lock()
+	status := i.helperStatus
+	i.mu.Unlock()
+	if status == nil {
+		return ElevatedHelperStatus{}, nil
+	}
+	return status(), nil
 }
 
 // ListWindows returns the visible top-level windows that match filter, in
@@ -325,9 +349,9 @@ func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, er
 	return KeyResult{Window: record.info(), Delivery: options.delivery, Keys: keys}, nil
 }
 
-// sendElevatedKeys readies the helper before taking the send lock, then holds
-// the lock for the send itself. A connection that drops in between is reported
-// instead of restarting the helper while the lock is held.
+// sendElevatedKeys checks that the helper is already connected, then holds the
+// send lock for the send itself. A missing helper is reported so the renderer
+// can ask the user to start it; this path never launches a UAC prompt.
 func (i *Input) sendElevatedKeys(
 	ctx context.Context,
 	request KeyRequest,

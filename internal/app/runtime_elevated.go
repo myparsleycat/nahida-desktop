@@ -4,17 +4,33 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
+
+const (
+	elevatedStatusEvent    = "elevated:status"
+	elevatedHealthInterval = 10 * time.Second
+)
+
+// elevatedHelperClient is the lifecycle's view of the helper process.
+type elevatedHelperClient interface {
+	Start(context.Context) error
+	Close() error
+	Connected() bool
+}
 
 // elevatedLifecycle serializes elevated-helper start and stop requests on one
 // worker, so a setting change never blocks on a UAC prompt, and gates the
 // startup read against disable and shutdown.
 type elevatedLifecycle struct {
-	client *elevated.Client
+	client elevatedHelperClient
 	report func(err error, stage string)
+	emit   func(string, ...any)
 
 	// ctx is cancelled by shutdown so an in-flight client start releases its
 	// pipe wait instead of holding the worker until a UAC prompt resolves.
@@ -27,6 +43,7 @@ type elevatedLifecycle struct {
 	generation uint64
 	stopping   bool
 	startup    *elevatedStartup
+	starting   atomic.Bool
 
 	mu         sync.Mutex
 	cond       *sync.Cond
@@ -44,8 +61,12 @@ type elevatedStartup struct {
 	done   chan struct{}
 }
 
-func newElevatedLifecycle(client *elevated.Client, report func(err error, stage string)) *elevatedLifecycle {
-	lifecycle := &elevatedLifecycle{client: client, report: report, done: make(chan struct{})}
+func newElevatedLifecycle(
+	client elevatedHelperClient,
+	report func(err error, stage string),
+	emit func(string, ...any),
+) *elevatedLifecycle {
+	lifecycle := &elevatedLifecycle{client: client, report: report, emit: emit, done: make(chan struct{})}
 	lifecycle.cond = sync.NewCond(&lifecycle.mu)
 	lifecycle.ctx, lifecycle.cancel = context.WithCancel(context.Background())
 	return lifecycle
@@ -166,6 +187,8 @@ func (l *elevatedLifecycle) cancelStartup() {
 
 // enqueue records the latest requested state on the worker, starting it on
 // first use. The worker coalesces bursts, so only the newest state is applied.
+// A duplicate start while one is pending or in flight is dropped so a second
+// click cannot queue another UAC prompt behind a declined first attempt.
 func (l *elevatedLifecycle) enqueue(enabled bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -176,6 +199,9 @@ func (l *elevatedLifecycle) enqueue(enabled bool) {
 		l.started = true
 		go l.run()
 	}
+	if l.desired == enabled && (l.version != l.applied || l.starting.Load()) {
+		return
+	}
 	l.desired = enabled
 	l.version++
 	l.cond.Signal()
@@ -183,6 +209,14 @@ func (l *elevatedLifecycle) enqueue(enabled bool) {
 
 func (l *elevatedLifecycle) run() {
 	defer close(l.done)
+
+	healthDone := make(chan struct{})
+	go func() {
+		defer close(healthDone)
+		l.watchHealth()
+	}()
+	defer func() { <-healthDone }()
+
 	for {
 		l.mu.Lock()
 		for !l.workerStop && l.applied == l.version {
@@ -194,22 +228,98 @@ func (l *elevatedLifecycle) run() {
 		}
 		version, enabled := l.version, l.desired
 		l.applied = version
+		if enabled {
+			l.starting.Store(true)
+		}
 		l.mu.Unlock()
 
 		stage := "stop"
 		var err error
 		if enabled {
 			stage = "start"
-			err = l.client.Start(l.ctx)
+			err = l.startClient()
+			l.starting.Store(false)
 		} else {
-			err = l.client.Close()
+			err = l.stopClient()
 		}
 		// A cancellation means shutdown or a racing disable superseded this
 		// start; it is an expected stop, not a failure worth reporting.
-		if err != nil && !errors.Is(err, context.Canceled) {
+		if err != nil && !errors.Is(err, context.Canceled) && l.report != nil {
 			l.report(err, stage)
 		}
+		if errors.Is(err, context.Canceled) {
+			continue
+		}
+		l.publishStatus()
 	}
+}
+
+func (l *elevatedLifecycle) startClient() error {
+	if l.client == nil {
+		return nil
+	}
+	return l.client.Start(l.ctx)
+}
+
+func (l *elevatedLifecycle) stopClient() error {
+	if l.client == nil {
+		return nil
+	}
+	return l.client.Close()
+}
+
+func (l *elevatedLifecycle) watchHealth() {
+	ticker := time.NewTicker(elevatedHealthInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-l.ctx.Done():
+			return
+		case <-ticker.C:
+			l.checkHealth()
+		}
+	}
+}
+
+func (l *elevatedLifecycle) checkHealth() {
+	if l.starting.Load() {
+		return
+	}
+	l.mu.Lock()
+	desired := l.desired && !l.workerStop
+	l.mu.Unlock()
+	if !desired {
+		return
+	}
+
+	// A timed-out session.ping would invalidate the half-duplex pipe, so health
+	// only republishes when the connection is already gone. Process death is
+	// observed by the watcher; a hung pipe surfaces on the next SendKeys.
+	if l.client != nil && l.client.Connected() {
+		return
+	}
+	l.publishStatus()
+}
+
+func (l *elevatedLifecycle) status() platform.ElevatedHelperStatus {
+	if l == nil {
+		return platform.ElevatedHelperStatus{}
+	}
+	l.mu.Lock()
+	enabled := l.desired && !l.workerStop
+	l.mu.Unlock()
+	if !enabled {
+		return platform.ElevatedHelperStatus{}
+	}
+	running := l.starting.Load() || l.client != nil && l.client.Connected()
+	return platform.ElevatedHelperStatus{Enabled: true, Running: running}
+}
+
+func (l *elevatedLifecycle) publishStatus() {
+	if l == nil || l.emit == nil {
+		return
+	}
+	l.emit(elevatedStatusEvent, l.status())
 }
 
 func (rt *runtime) startElevatedHelperIfEnabled() {
@@ -256,3 +366,5 @@ func reportElevatedHelperError(log *infra.Log, err error, stage string) {
 		Severity: infra.DiagnosticWarn, Operation: "elevated-helper", Stage: stage,
 	})
 }
+
+var _ elevatedHelperClient = (*elevated.Client)(nil)

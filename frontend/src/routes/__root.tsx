@@ -8,6 +8,7 @@ import { ThemeProvider } from "@renderer/components/theme-provider";
 import { TitlebarActivityBadges } from "@renderer/components/titlebar/titlebar-activity-badges";
 import { TitlebarWindowControls } from "@renderer/components/titlebar/titlebar-window-controls";
 import { use4001FixerTitlebarActivity } from "@renderer/components/titlebar/use-4001-fixer-titlebar-activity";
+import { useElevatedHelper } from "@renderer/components/titlebar/use-elevated-helper";
 import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-mod-bisect-titlebar-activity";
 import { useModCompressionTitlebarActivity } from "@renderer/components/titlebar/use-mod-compression-titlebar-activity";
 import { useTextureResizerTitlebarActivity } from "@renderer/components/titlebar/use-texture-resizer-titlebar-activity";
@@ -68,6 +69,7 @@ function RootComponent() {
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
   useTitleBarOverlay();
   useTransferTitlebarActivity();
+  const elevatedHelperDialog = useElevatedHelper();
   use4001FixerTitlebarActivity();
   useModBisectTitlebarActivity();
   useModCompressionTitlebarActivity();
@@ -204,6 +206,7 @@ function RootComponent() {
       <Toaster position="bottom-right" richColors closeButton />
 
       {shouldShowUpdateDialog && <UpdateAlertDialog />}
+      {elevatedHelperDialog}
 
       {pathSelectorData && (
         <PathSelectorDialog

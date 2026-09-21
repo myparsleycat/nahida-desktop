@@ -6,6 +6,7 @@ export type TitlebarActivityStatus = "running" | "paused" | "error" | "warning";
 export type TitlebarActivityPopoverAction = {
     label: string;
     onClick: () => void;
+    disabled?: boolean;
 };
 
 export type TitlebarActivityPopover = {
@@ -41,7 +42,7 @@ function isSamePopoverAction(
     a: TitlebarActivityPopoverAction | undefined,
     b: TitlebarActivityPopoverAction | undefined,
 ) {
-    return a?.label === b?.label && a?.onClick === b?.onClick;
+    return a?.label === b?.label && a?.onClick === b?.onClick && a?.disabled === b?.disabled;
 }
 
 function isSameActivity(a: TitlebarActivity, b: TitlebarActivity) {

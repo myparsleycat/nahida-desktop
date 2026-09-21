@@ -70,9 +70,12 @@ type Client struct {
 	wanted     bool
 	generation uint64
 	nextID     atomic.Uint64
+	watchStop  windows.Handle
+	// onDisconnect is called after an unexpected connection loss. It must not
+	// take mu; the client invokes it after releasing the state lock.
+	onDisconnect func()
 
-	// startMu serializes launch attempts so a lifecycle start and an input
-	// EnsureReady cannot race two helpers. It is separate from mu because it is
+	// startMu serializes launch attempts. It is separate from mu because it is
 	// held across launch, and Close must stay reachable while ShellExecuteExW
 	// waits on a UAC prompt.
 	startMu sync.Mutex
@@ -80,6 +83,21 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{}
+}
+
+// UseDisconnect registers fn to run after the helper connection drops while it
+// is still wanted. Passing nil clears the callback.
+func (c *Client) UseDisconnect(fn func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onDisconnect = fn
+}
+
+// Connected reports whether the authenticated helper pipe is live.
+func (c *Client) Connected() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.conn != nil
 }
 
 // Start enables the helper and connects to it. Launching may wait on a UAC
@@ -217,6 +235,7 @@ func (c *Client) start(ctx context.Context) error {
 		return errors.Join(err, closeErr)
 	}
 	c.mu.Unlock()
+	c.watch(process, generation)
 	return nil
 }
 
@@ -294,25 +313,33 @@ func verifyHelperHandle(handle windows.Handle, want []byte) error {
 	return nil
 }
 
-// EnsureReady connects the helper when it is enabled, reconnecting after a
-// dropped connection. Launching the helper can wait on a UAC prompt, so callers
-// run it before taking the lock that serializes key delivery.
+// EnsureReady reports whether the helper connection is live. It does not
+// launch or restart the helper; a UAC prompt is reserved for an explicit Start.
 func (c *Client) EnsureReady(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.conn != nil {
-		c.mu.Unlock()
 		return nil
 	}
-	if !c.wanted {
-		c.mu.Unlock()
+	return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
+}
+
+// Ping round-trips session.ping on the live connection. A transport failure
+// invalidates the connection the same way a failed SendKeys does.
+func (c *Client) Ping(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == nil {
 		return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
 	}
-	c.mu.Unlock()
-
-	if err := c.start(ctx); err != nil {
-		return fmt.Errorf("%w: restart elevated helper: %w", platform.ErrElevatedHelperRequired, err)
-	}
-	return nil
+	_, err := c.callLocked(ctx, operationPing, nil)
+	return err
 }
 
 func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (platform.KeyResult, error) {
@@ -344,6 +371,7 @@ func (c *Client) Close() error {
 	defer c.mu.Unlock()
 	c.wanted = false
 	c.generation++
+	c.signalWatchLocked()
 	if c.conn == nil {
 		return nil
 	}
@@ -394,6 +422,13 @@ func elevatedHelperError(response message) error {
 }
 
 func (c *Client) closeLocked() error {
+	hadConn := c.conn != nil || c.process != 0
+
+	// Drop the watchStop reference before the watcher goroutine closes that
+	// event. SetEvent is safe while the handle is still open; a later Start
+	// must not SetEvent on a recycled handle.
+	c.signalWatchLocked()
+
 	var err error
 	if c.conn != nil {
 		err = c.conn.Close()
@@ -402,7 +437,24 @@ func (c *Client) closeLocked() error {
 		err = errors.Join(err, windows.CloseHandle(c.process))
 	}
 	c.conn, c.process, c.pid, c.secret = nil, 0, 0, ""
+	if hadConn {
+		// Transport errors and process death reuse this path without Close, so
+		// a replacement Start would otherwise keep the same generation and a
+		// delayed watcher could close the new connection.
+		c.generation++
+		if c.wanted {
+			c.scheduleDisconnectLocked()
+		}
+	}
 	return err
+}
+
+func (c *Client) scheduleDisconnectLocked() {
+	fn := c.onDisconnect
+	if fn == nil {
+		return
+	}
+	go fn()
 }
 
 func launch(helper, pipe, secret string, parentPID uint32, parentExe string) (windows.Handle, uint32, error) {
