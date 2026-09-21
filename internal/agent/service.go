@@ -747,12 +747,16 @@ func (s *Service) TestProvider(
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, modelTimeout)
 	defer cancel()
-	headers := providerHeaders(view.Provider, view.Headers, secrets, "", "")
+	// Connection tests have no conversation, but providers such as OpenCode Go require a session
+	// header. A throwaway id is enough for that check.
+	sessionID := uuid.NewString()
+	headers := providerHeaders(view.Provider, view.Headers, secrets, sessionID, uuid.NewString())
 	started := time.Now()
 	_, err = newModelAdapter(modelAdapterConfig{
 		settings:   view,
 		credential: credential,
 		headers:    headers,
+		sessionID:  sessionID,
 		refresh:    s.credentialRefresher(client, view.Provider),
 	}, s.http).Complete(requestCtx, ModelRequest{
 		System: "Reply with OK.", Messages: []Message{{Role: "user", Content: "Connection test"}}, MaxOutputTokens: 8,

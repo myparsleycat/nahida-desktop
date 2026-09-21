@@ -188,8 +188,8 @@ func TestTestProviderResolvesStoredHeaderSecrets(t *testing.T) {
 	if headers.Get("X-Title") != "Nahida Desktop" || headers.Get("api-key") != "header-secret" {
 		t.Fatalf("request headers = %#v", headers)
 	}
-	if values := headers.Values("X-Session"); len(values) != 1 || values[0] != "" {
-		t.Fatalf("connection test session header = %#v", values)
+	if headers.Get("X-Session") == "" {
+		t.Fatal("connection test omitted the session header")
 	}
 }
 

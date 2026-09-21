@@ -434,8 +434,8 @@ func leadingRunes(value string, limit int) string {
 
 // headerValues resolves the configured headers for one provider request. Secret values come from
 // storage, and both secret and plain values may reference the current conversation as
-// {{ session_id }} and {{ turn_id }}; the connection test has no session or turn and expands both
-// placeholders to empty values.
+// {{ session_id }} and {{ turn_id }}. Connection tests mint throwaway ids so providers that
+// require a session header still receive one.
 func headerValues(headers []AgentHeaderView, secrets map[string]string, sessionID, turnID string) map[string]string {
 	values := make(map[string]string, len(headers))
 	for _, header := range headers {
