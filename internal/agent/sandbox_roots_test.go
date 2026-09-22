@@ -163,10 +163,18 @@ func TestSandboxRootsFromEvents(t *testing.T) {
 	if len(roots) != 2 {
 		t.Fatalf("roots = %#v, want two available turn roots", roots)
 	}
-	if roots[0].ID == "untrusted" || roots[0].Path != filepath.Clean(first) {
+	canonicalFirst, err := canonicalExistingDir(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalSecond, err := canonicalExistingDir(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots[0].ID == "untrusted" || roots[0].Path != canonicalFirst {
 		t.Errorf("first root was not revalidated: %#v", roots[0])
 	}
-	if roots[1].Name != filepath.Base(second) || roots[1].Path != filepath.Clean(second) {
+	if roots[1].Name != filepath.Base(canonicalSecond) || roots[1].Path != canonicalSecond {
 		t.Errorf("second root = %#v", roots[1])
 	}
 }
@@ -191,10 +199,14 @@ func TestSandboxRootsFromEventsDoesNotChargeUnavailableRootsToActiveLimit(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
+	canonicalAvailable, err := canonicalExistingDir(available)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	roots := sandboxRootsFromEvents([]db.AgentEventRow{{EventType: "turn/start", Payload: string(payload)}})
-	if len(roots) != 1 || !strings.EqualFold(roots[0].Path, available) {
-		t.Fatalf("roots = %#v, want only %q", roots, available)
+	if len(roots) != 1 || roots[0].Path != canonicalAvailable {
+		t.Fatalf("roots = %#v, want only %q", roots, canonicalAvailable)
 	}
 }
 
