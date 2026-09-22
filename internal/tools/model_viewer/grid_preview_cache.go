@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -146,7 +147,19 @@ func gridPreviewFingerprint(ctx context.Context, modPath string) (string, error)
 			info.Size(),
 			info.ModTime().UnixNano(),
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
 	})
 	if err != nil {
 		return "", fmt.Errorf("scan grid preview mod files: %w", err)
@@ -182,6 +195,9 @@ func validateGridPreviewImage(image string) error {
 	}
 	if config.Width != 512 || config.Height != 512 {
 		return errors.New("grid preview image must be 512 by 512")
+	}
+	if _, err := png.Decode(bytes.NewReader(raw)); err != nil {
+		return fmt.Errorf("decode grid preview PNG: %w", err)
 	}
 	return nil
 }

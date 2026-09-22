@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,9 +42,13 @@ func TestGridPreviewFingerprintTracksModFiles(t *testing.T) {
 		} else {
 			previous = next
 		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
 		writeGridPreviewTestFile(t, path, []byte("other"))
-		// Same-size edits still invalidate via nanosecond file modification time.
-		if err := os.Chtimes(path, time.Now(), time.Now().Add(time.Hour)); err != nil {
+		// Content changes must invalidate even when size and modification time are preserved.
+		if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
 			t.Fatal(err)
 		}
 		if next := fingerprint(); next == previous {
@@ -126,6 +132,10 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 	if initial.Fingerprint == "" || initial.Image != "" {
 		t.Fatalf("unexpected initial cache: %+v", initial)
 	}
+	sourceInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	encoded := gridPreviewTestEncodedImage(t)
 	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
 		t.Fatal(err)
@@ -139,7 +149,10 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 	if get("settings-a").Image != encoded || get("settings-b").Image != "" {
 		t.Fatal("ignored files or render settings were not handled correctly")
 	}
-	writeGridPreviewTestFile(t, path, []byte("changed during rendering"))
+	writeGridPreviewTestFile(t, path, []byte("replaced"))
+	if err := os.Chtimes(path, sourceInfo.ModTime(), sourceInfo.ModTime()); err != nil {
+		t.Fatal(err)
+	}
 	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +164,7 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	if get("settings-a").Image != encoded {
-		t.Fatal("replacement image was not saved")
+		t.Fatal("replacement image was not cached after a same-metadata source edit")
 	}
 	cachePath, err := service.gridPreviewCachePath(dir, "settings-a")
 	if err != nil {
@@ -213,6 +226,32 @@ func TestGridPreviewFingerprintRejectsMissingAndCancelledSources(t *testing.T) {
 	cancel()
 	if _, err := gridPreviewFingerprint(ctx, dir); err == nil {
 		t.Fatal("cancelled scan succeeded")
+	}
+}
+
+func TestValidateGridPreviewImageRejectsTruncatedPNG(t *testing.T) {
+	t.Parallel()
+	encoded := gridPreviewTestEncodedImage(t)
+	raw, err := base64.StdEncoding.DecodeString(encoded[len("data:image/png;base64,"):])
+	if err != nil {
+		t.Fatal(err)
+	}
+	const pngHeaderLength = 33
+	truncated := raw[:pngHeaderLength]
+	config, err := png.DecodeConfig(bytes.NewReader(truncated))
+	if err != nil {
+		t.Fatalf("truncated PNG did not retain a valid configuration: %v", err)
+	}
+	if config.Width != 512 || config.Height != 512 {
+		t.Fatalf("unexpected truncated PNG dimensions: %d by %d", config.Width, config.Height)
+	}
+	image := "data:image/png;base64," + base64.StdEncoding.EncodeToString(truncated)
+	err = validateGridPreviewImage(image)
+	if err == nil {
+		t.Fatal("truncated PNG was accepted")
+	}
+	if !strings.Contains(err.Error(), "decode grid preview PNG") || errors.Unwrap(err) == nil {
+		t.Fatalf("truncated PNG returned an unexpected error: %v", err)
 	}
 }
 
