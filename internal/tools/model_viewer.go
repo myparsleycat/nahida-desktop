@@ -44,6 +44,17 @@ func (t *Tools) LoadModGridPreview(ctx context.Context, modPath string) (ModelVi
 	return t.modelViewer.LoadModGridPreview(ctx, modPath)
 }
 
+func (t *Tools) GetModGridPreviewCache(
+	ctx context.Context,
+	modPath, variant string,
+) (modelviewer.GridPreviewCache, error) {
+	return t.modelViewer.GetModGridPreviewCache(ctx, modPath, variant)
+}
+
+func (t *Tools) SaveModGridPreviewCache(ctx context.Context, modPath, variant, fingerprint, image string) error {
+	return t.modelViewer.SaveModGridPreviewCache(ctx, modPath, variant, fingerprint, image)
+}
+
 func (t *Tools) CleanupModelViewer(ctx context.Context, memorySessionID string) (bool, error) {
 	return t.modelViewer.CleanupModelViewer(ctx, memorySessionID)
 }
