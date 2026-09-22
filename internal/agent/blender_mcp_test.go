@@ -143,11 +143,12 @@ func resultText(t *testing.T, result *mcp.CallToolResult) string {
 	return text.String()
 }
 
-func TestBuiltInBlenderToolsMatchReferenceCatalog(t *testing.T) {
+func TestBuiltInBlenderToolsExposeReferenceCatalogAndNahidaExtensions(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
 		"execute_blender_code",
+		"run_xxmi_audit",
 		"get_objects_summary",
 		"get_object_detail_summary",
 		"get_blendfile_summary_datablocks",
@@ -185,13 +186,14 @@ func TestBuiltInBlenderToolsMatchReferenceCatalog(t *testing.T) {
 	}
 }
 
-// TestBuiltInBlenderRenderToolsKeepReferenceAnnotations pins the annotations to the reference
-// bridge, including the quirk that render_viewport_to_path writes a file yet is read-only.
-func TestBuiltInBlenderRenderToolsKeepReferenceAnnotations(t *testing.T) {
+// TestBuiltInBlenderToolsKeepAnnotations pins reference annotations and Nahida extension safety,
+// including the quirk that render_viewport_to_path writes a file yet is read-only.
+func TestBuiltInBlenderToolsKeepAnnotations(t *testing.T) {
 	t.Parallel()
 
 	readOnly := map[string]bool{
 		"execute_blender_code":                      false,
+		"run_xxmi_audit":                            true,
 		"get_objects_summary":                       true,
 		"get_object_detail_summary":                 true,
 		"get_blendfile_summary_datablocks":          true,

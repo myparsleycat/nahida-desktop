@@ -81,6 +81,7 @@ func bindBlenderTools(server *mcp.Server) {
 func blenderTools() []blenderTool {
 	tools := []blenderTool{
 		executeBlenderCodeTool(),
+		runXXMIAuditTool(),
 		getObjectsSummaryTool(),
 		getObjectDetailSummaryTool(),
 		getBlendfileSummaryDatablocksTool(),
