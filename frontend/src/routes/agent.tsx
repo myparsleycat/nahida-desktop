@@ -737,6 +737,9 @@ function AgentRoute() {
               "min-w-0 flex-1",
               scrollAreaClasses,
               "[&_[data-slot=scroll-area-content]]:min-h-full",
+              // Keep the scrollbar above the composer's bottom fade (z-7) so the
+              // opaque gradient backdrop does not cover the thumb.
+              "[&_[data-slot=scroll-area-scrollbar]]:z-8",
             )}
             viewportClassName="min-h-full"
           >
@@ -1247,7 +1250,7 @@ function ChatEntry({
             <AgentImages images={entry.images} alt="" />
             {entry.text}
           </div>
-          <div className="flex w-full items-center justify-between gap-2 px-1">
+          <div className="flex w-full items-center justify-end gap-1 px-1">
             <button
               type="button"
               aria-label={t("page.agent.revert_message")}
