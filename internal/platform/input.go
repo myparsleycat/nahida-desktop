@@ -174,8 +174,8 @@ func normalizeWindowText(value string) string {
 }
 
 // KeyRequest is the payload of Input.SendKeys. Each Keys entry is one key
-// press written in the notation the app already stores for 3dmigoto keys, for
-// example "vk_f10", "ctrl alt vk_f5", or a single character key.
+// press in the notation KeyNotation documents: "vk_f10", "f12", "ctrl alt vk_f5",
+// or a single character key. A plus sign is not a separator.
 type KeyRequest struct {
 	Target       WindowTarget `json:"target"`
 	Keys         []string     `json:"keys"`
@@ -184,6 +184,43 @@ type KeyRequest struct {
 	IntervalMs   int          `json:"intervalMs,omitempty"`
 	RestoreFocus *bool        `json:"restoreFocus,omitempty"`
 }
+
+// KeyNotation is the keys-parameter spelling for SendKeys. It is not the action
+// description: that text is copied into the routing index on every turn.
+// Letters, digits, and function keys can be written as typed. Every other key
+// is listed with the accepted vk_ token first, so a caller copies that token
+// rather than the rejected everyday name.
+func KeyNotation() string {
+	return strings.Join([]string{
+		"Each keys item is one press.",
+		`Separate modifiers with spaces, never '+': "ctrl f12", not "Ctrl+F12".`,
+		"Letters, digits, and f1-f24 are accepted as written; vk_a, vk_7, and vk_f12 also work.",
+		"Any other name is rejected before the window is targeted.",
+		"Send the vk_ token exactly. Do not send the parenthetical label.",
+		"Tokens: " + uncommonKeyTokens + ".",
+		"Punctuation is the character itself: [ ] \\ ; ' , . / ` - = +.",
+		"Modifiers are ctrl, alt, shift, and win.",
+		"Gamepad names starting with xb_ cannot be sent.",
+	}, " ")
+}
+
+// uncommonKeyTokens lists accepted tokens before the name a caller would
+// invent. Function keys, letters, and digits are omitted because those
+// spellings are accepted directly.
+const uncommonKeyTokens = "vk_return (not enter), vk_escape (not escape), vk_back (not backspace), " +
+	"vk_tab (not tab), vk_space (not space), vk_left (not left), vk_up (not up), " +
+	"vk_right (not right), vk_down (not down), vk_home (not home), vk_end (not end), " +
+	"vk_prior (not pageup), vk_next (not pagedown), vk_insert (not insert), " +
+	"vk_delete (not delete), vk_pause (not pause), vk_snapshot (not printscreen), " +
+	"vk_apps (not menu), " +
+	"vk_numpad0 (not numpad0), vk_numpad1 (not numpad1), vk_numpad2 (not numpad2), " +
+	"vk_numpad3 (not numpad3), vk_numpad4 (not numpad4), vk_numpad5 (not numpad5), " +
+	"vk_numpad6 (not numpad6), vk_numpad7 (not numpad7), vk_numpad8 (not numpad8), " +
+	"vk_numpad9 (not numpad9), vk_multiply (numpad star), vk_add (numpad plus), " +
+	"vk_subtract (numpad minus), vk_decimal (numpad decimal), vk_divide (numpad slash), " +
+	"vk_lshift (left shift), vk_rshift (right shift), vk_lcontrol (left ctrl), " +
+	"vk_rcontrol (right ctrl), vk_lmenu (left alt), vk_rmenu (right alt), " +
+	"vk_lwin (left win), vk_rwin (right win)"
 
 // KeyResult reports which window received the keys.
 type KeyResult struct {

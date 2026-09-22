@@ -5,7 +5,9 @@ package platform
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/rodrigocfd/windigo/co"
@@ -22,6 +24,9 @@ func TestParseKeyChordAcceptsToggleKeyNotation(t *testing.T) {
 	}{
 		{name: "single key", spec: "vk_f10", key: co.VK_F10},
 		{name: "uppercase", spec: "VK_F10", key: co.VK_F10},
+		{name: "bare function key", spec: "f12", key: co.VK_F12},
+		{name: "bare function key uppercase", spec: "F12", key: co.VK_F12},
+		{name: "modified bare function key", spec: "ctrl f12", modifiers: []co.VK{co.VK_CONTROL}, key: co.VK_F12},
 		{name: "two modifiers", spec: "ctrl alt vk_f5", modifiers: []co.VK{co.VK_CONTROL, co.VK_MENU}, key: co.VK_F5},
 		{name: "repeated modifier", spec: "ctrl ctrl vk_a", modifiers: []co.VK{co.VK_CONTROL}, key: co.VK_A},
 		{name: "negated modifiers are not pressed", spec: "no_ctrl no_alt vk_f1", key: co.VK_F1},
@@ -66,6 +71,7 @@ func TestParseKeyChordRejectsInvalidNotation(t *testing.T) {
 		{spec: "ctrl", want: ErrInputKeyInvalid},
 		{spec: "vk_f10 vk_f11", want: ErrInputKeyInvalid},
 		{spec: "vk_unknown", want: ErrInputKeyInvalid},
+		{spec: "Ctrl+F12", want: ErrInputKeyInvalid},
 		{spec: "xb_a", want: ErrInputKeyUnsupported},
 		{spec: "xb_left_trigger", want: ErrInputKeyUnsupported},
 	}
@@ -73,6 +79,28 @@ func TestParseKeyChordRejectsInvalidNotation(t *testing.T) {
 	for _, testCase := range cases {
 		if _, err := parseKeyChord(testCase.spec); !errors.Is(err, testCase.want) {
 			t.Fatalf("parseKeyChord(%q) = %v, want %v", testCase.spec, err, testCase.want)
+		}
+	}
+}
+
+func TestKeyNotationCitesOnlyAcceptedTokens(t *testing.T) {
+	t.Parallel()
+
+	notation := KeyNotation()
+	for _, phrase := range []string{`"ctrl f12"`, "f1-f24", "xb_", "vk_return (not enter)"} {
+		if !strings.Contains(notation, phrase) {
+			t.Fatalf("KeyNotation() missing %q", phrase)
+		}
+	}
+	if strings.Contains(notation, "=vk_") {
+		t.Fatal("KeyNotation() uses an assignment form a caller can copy as a key")
+	}
+	for _, token := range regexp.MustCompile(`vk_[a-z0-9]+`).FindAllString(notation, -1) {
+		if _, ok := keyTokens[token]; !ok {
+			t.Errorf("KeyNotation cites unknown token %q", token)
+		}
+		if _, err := parseKeyChord(token); err != nil {
+			t.Errorf("parseKeyChord(%q) = %v", token, err)
 		}
 	}
 }
@@ -94,8 +122,13 @@ func TestKeyTokensMatchToggleKeyNotation(t *testing.T) {
 	}
 
 	for index := 1; index <= 24; index++ {
-		if _, ok := keyTokens[fmt.Sprintf("vk_f%d", index)]; !ok {
-			t.Errorf("keyTokens is missing vk_f%d", index)
+		for _, token := range []string{
+			fmt.Sprintf("vk_f%d", index),
+			fmt.Sprintf("f%d", index),
+		} {
+			if _, ok := keyTokens[token]; !ok {
+				t.Errorf("keyTokens is missing %q", token)
+			}
 		}
 	}
 	for index := range 10 {
