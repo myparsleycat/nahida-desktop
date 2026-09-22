@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"nahida.live/desktop/internal/db"
@@ -19,8 +21,10 @@ import (
 // PUT targets of a session's images, and the submit stores the transcript after
 // the bytes are in the bucket.
 const (
-	trainingPlanPath   = "/desktop/agent-conversations/uploads"
-	trainingSubmitPath = "/desktop/agent-conversations"
+	trainingPlanPath    = "/desktop/agent-conversations/uploads"
+	trainingSubmitPath  = "/desktop/agent-conversations"
+	trainingStorageHost = "s3.ap-tokyo-1.megas4.com"
+	trainingBucketHost  = "nahida-agent-usercontents." + trainingStorageHost
 
 	// maxTrainingResponseBytes bounds how much of a backend answer is read back.
 	maxTrainingResponseBytes = 1 << 20
@@ -137,23 +141,12 @@ func (s *Service) SubmitSessionForTraining(ctx context.Context, sessionID string
 	if s.remote == nil {
 		return ShareSessionResult{}, errors.New("the Nahida backend is not configured")
 	}
-	client, err := s.dbClient()
-	if err != nil {
-		return ShareSessionResult{}, err
-	}
-	row, err := client.AgentSessions.Get(ctx, sessionID)
-	if err != nil {
-		return ShareSessionResult{}, err
-	}
-	if row == nil {
-		return ShareSessionResult{}, errors.New("agent session not found")
-	}
-	events, err := client.AgentEvents.List(ctx, sessionID)
+	row, events, settings, err := s.trainingSnapshot(ctx, sessionID)
 	if err != nil {
 		return ShareSessionResult{}, err
 	}
 
-	entries, uploads, err := s.trainingEntries(row.Revert, events)
+	entries, uploads, err := s.trainingEntries(events)
 	if err != nil {
 		return ShareSessionResult{}, err
 	}
@@ -169,11 +162,10 @@ func (s *Service) SubmitSessionForTraining(ctx context.Context, sessionID string
 		return ShareSessionResult{}, err
 	}
 
-	settings, _ := readSettings(ctx, client, s.crypto)
 	document := trainingDocument{
 		ClientSessionID: row.ID,
 		Title:           row.Title,
-		Scope:           rowScope(*row),
+		Scope:           rowScope(row),
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,
 		Provider:        settings.Provider,
@@ -198,22 +190,66 @@ func (s *Service) SubmitSessionForTraining(ctx context.Context, sessionID string
 	return ShareSessionResult{ID: id, Messages: document.MessageCount, Images: len(images)}, nil
 }
 
-// trainingEntries folds the durable events into the transcript and collects the
-// images it references. A staged revert hides the events at or after its
-// boundary, exactly as the session screen does.
-func (s *Service) trainingEntries(revert string, events []db.AgentEventRow) ([]trainingEntry, []trainingUpload, error) {
-	boundary := int64(0)
-	if staged := parseSessionRevert(revert); staged != nil {
-		boundary = staged.BoundarySequence
-	}
+// trainingSnapshot reads the session and its events while the same per-session lock excludes
+// revert mutations and run lifecycle transitions. Once a run is inactive, it cannot append more
+// events, so the returned rows remain one coherent contribution snapshot after the lock is released.
+func (s *Service) trainingSnapshot(
+	ctx context.Context,
+	sessionID string,
+) (db.AgentSessionRow, []db.AgentEventRow, AgentSettingsView, error) {
+	lock := s.sessionLock(sessionID)
+	lock.Lock()
+	defer lock.Unlock()
 
+	client, err := s.dbClient()
+	if err != nil {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, err
+	}
+	row, err := client.AgentSessions.Get(ctx, sessionID)
+	if err != nil {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, err
+	}
+	if row == nil {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, errors.New("agent session not found")
+	}
+	events, err := client.AgentEvents.List(ctx, sessionID)
+	if err != nil {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, err
+	}
+	if s.sessionSummary(*row).Running || hasUnfinishedRun(events) {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, errors.New("the agent is still responding to this chat")
+	}
+	if strings.TrimSpace(row.Revert) != "" {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, errors.New(
+			"finish or discard the staged revert before sharing this conversation",
+		)
+	}
+	settings, err := readSettings(ctx, client, s.crypto)
+	if err != nil {
+		return db.AgentSessionRow{}, nil, AgentSettingsView{}, err
+	}
+	return *row, events, settings, nil
+}
+
+func hasUnfinishedRun(events []db.AgentEventRow) bool {
+	unfinished := make(map[string]struct{})
+	for _, event := range events {
+		switch event.EventType {
+		case "turn/start":
+			unfinished[event.TurnID] = struct{}{}
+		case "turn/end", "turn/error", "turn/cancelled", "turn/interrupted", "turn/awaiting-approval":
+			delete(unfinished, event.TurnID)
+		}
+	}
+	return len(unfinished) > 0
+}
+
+// trainingEntries folds the durable events into the transcript and collects the images it references.
+func (s *Service) trainingEntries(events []db.AgentEventRow) ([]trainingEntry, []trainingUpload, error) {
 	refByPath := make(map[string]string)
 	uploads := make([]trainingUpload, 0)
 	entries := make([]trainingEntry, 0, len(events))
 	for _, event := range events {
-		if boundary > 0 && event.Sequence >= boundary {
-			continue
-		}
 		entry, paths, ok := trainingEntryFromEvent(event)
 		if !ok {
 			continue
@@ -388,12 +424,39 @@ func (s *Service) uploadTrainingImages(
 }
 
 // uploadTrainingImage performs one presigned PUT and closes its response.
-func (s *Service) uploadTrainingImage(ctx context.Context, url string, header http.Header, data []byte) error {
-	response, err := s.remote.Fetch(ctx, url, infra.FetchOptions{
+func (s *Service) uploadTrainingImage(ctx context.Context, rawURL string, header http.Header, data []byte) error {
+	uploadURL, err := validateTrainingUploadURL(rawURL)
+	if err != nil {
+		return err
+	}
+
+	uploadClient := *s.remote.HTTPClient()
+	sharedRedirectPolicy := uploadClient.CheckRedirect
+	uploadClient.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		redirectURL, redirectErr := validateTrainingUploadURL(request.URL.String())
+		if redirectErr != nil {
+			return fmt.Errorf("reject training upload redirect: %w", redirectErr)
+		}
+		if !strings.EqualFold(redirectURL.Hostname(), uploadURL.Hostname()) {
+			return errors.New("training upload redirects cannot change hosts")
+		}
+		if sharedRedirectPolicy != nil {
+			return sharedRedirectPolicy(request, via)
+		}
+		return nil
+	}
+
+	retryLimit := 0
+	response, err := s.remote.Fetch(ctx, uploadURL.String(), infra.FetchOptions{
 		Method:            http.MethodPut,
 		Header:            header,
 		Body:              bytes.NewReader(data),
 		DisableHTTPErrors: true,
+		HTTPClient:        &uploadClient,
+		RetryLimit:        &retryLimit,
 	})
 	if err != nil {
 		return err
@@ -407,6 +470,35 @@ func (s *Service) uploadTrainingImage(ctx context.Context, url string, header ht
 		return trainingError(status, body)
 	}
 	return nil
+}
+
+func validateTrainingUploadURL(rawURL string) (*url.URL, error) {
+	uploadURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse the training upload URL: %w", err)
+	}
+	if !strings.EqualFold(uploadURL.Scheme, "https") {
+		return nil, errors.New("the training upload URL must use HTTPS")
+	}
+	if uploadURL.Opaque != "" || uploadURL.Host == "" || uploadURL.User != nil || uploadURL.Fragment != "" {
+		return nil, errors.New("the training upload URL is invalid")
+	}
+	if port := uploadURL.Port(); port != "" && port != "443" {
+		return nil, errors.New("the training upload URL must use the HTTPS port")
+	}
+
+	host := strings.ToLower(strings.TrimSuffix(uploadURL.Hostname(), "."))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return nil, errors.New("the training upload URL cannot target a local host")
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast()) {
+		return nil, errors.New("the training upload URL cannot target a private address")
+	}
+	if host != trainingStorageHost && host != trainingBucketHost {
+		return nil, fmt.Errorf("training upload host %q is not approved", host)
+	}
+	return uploadURL, nil
 }
 
 func (s *Service) submitTrainingConversation(
@@ -436,6 +528,9 @@ func (s *Service) submitTrainingConversation(
 	}
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return "", fmt.Errorf("decode the stored conversation: %w", err)
+	}
+	if strings.TrimSpace(stored.ID) == "" {
+		return "", errors.New("the server did not return a stored conversation id")
 	}
 	return stored.ID, nil
 }

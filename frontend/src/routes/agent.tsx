@@ -450,12 +450,12 @@ function AgentRoute() {
   };
 
   const openShareDialog = () => {
-    if (!snapshot) return;
+    if (!snapshot || runId || reverting || snapshot.revert) return;
     setShareTarget(snapshot.summary);
   };
 
   const confirmShare = async () => {
-    if (!shareTarget || sharing) return;
+    if (!shareTarget || sharing || runId || reverting || snapshot?.revert) return;
     setSharing(true);
     try {
       const result = await Agent.SubmitSessionForTraining(shareTarget.id);
@@ -717,6 +717,7 @@ function AgentRoute() {
               type="button"
               variant="outline"
               className="h-[26px] flex-none gap-1.5 rounded-full px-2.5 text-[11px] font-normal text-muted-foreground"
+              disabled={!!runId || reverting || !!snapshot?.revert}
               onClick={openShareDialog}
               title={t("page.agent.share")}
             >
@@ -886,7 +887,11 @@ function AgentRoute() {
               {t("g.cancel")}
             </Button>
             {isLoggedIn ? (
-              <Button type="button" disabled={sharing} onClick={() => void confirmShare()}>
+              <Button
+                type="button"
+                disabled={sharing || !!runId || reverting || !!snapshot?.revert}
+                onClick={() => void confirmShare()}
+              >
                 {sharing && <Loader2Icon className="size-4 animate-spin" />}
                 {t("page.agent.share_confirm")}
               </Button>

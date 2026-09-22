@@ -2,12 +2,16 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"nahida.live/desktop/internal/appdata"
@@ -24,7 +28,6 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 	var mu sync.Mutex
 	uploaded := map[string][]byte{}
 	var submit trainingSubmitRequest
-	var baseURL string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == trainingPlanPath:
@@ -34,7 +37,7 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 			for _, image := range request.Images {
 				plan.Objects = append(plan.Objects, trainingPlanObject{
 					Ref: image.Ref, Key: "agent-conversation/user/session/" + image.Ref + ".png",
-					URL: baseURL + "/put/" + image.Ref, ContentType: image.ContentType,
+					URL: "https://" + trainingStorageHost + "/put/" + image.Ref, ContentType: image.ContentType,
 					Headers: map[string]string{"Content-Type": image.ContentType},
 				})
 			}
@@ -53,7 +56,22 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 		}
 	}))
 	defer server.Close()
-	baseURL = server.URL
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverTransport := server.Client().Transport
+	httpClient := &http.Client{Transport: shareRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() != trainingStorageHost {
+			return serverTransport.RoundTrip(request)
+		}
+		forwarded := request.Clone(request.Context())
+		forwardedURL := *request.URL
+		forwardedURL.Scheme = serverURL.Scheme
+		forwardedURL.Host = serverURL.Host
+		forwarded.URL = &forwardedURL
+		return serverTransport.RoundTrip(forwarded)
+	})}
 
 	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
 	if err != nil {
@@ -70,7 +88,7 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 	}
 
 	remote := infra.NewClientWithOptions(infra.ClientOptions{
-		BackendURL: server.URL, HTTPClient: server.Client(),
+		BackendURL: server.URL, HTTPClient: httpClient,
 	})
 	service := New(Options{Remote: remote})
 	if err := service.UseClient(ctx, client); err != nil {
@@ -116,6 +134,7 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 	appendEvent("turn-1", "tool/end", map[string]any{
 		"toolName": "read_file", "toolCallId": "call-1", "result": map[string]any{"ok": true},
 	})
+	appendEvent("turn-1", "turn/end", map[string]any{"status": "completed"})
 
 	result, err := service.SubmitSessionForTraining(ctx, "session-1")
 	if err != nil {
@@ -135,6 +154,9 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 	if submit.Document.ClientSessionID != "session-1" || submit.Document.MessageCount != 2 {
 		t.Errorf("document = %+v", submit.Document)
 	}
+	if submit.Document.Provider != providerOpenAI || submit.Document.Model != "gpt-5.2" {
+		t.Errorf("settings metadata = %q/%q", submit.Document.Provider, submit.Document.Model)
+	}
 	if len(submit.Images) != 1 || submit.Images[0].Ref != "img-0" || submit.Images[0].MimeType != "image/png" {
 		t.Errorf("images = %+v", submit.Images)
 	}
@@ -152,20 +174,13 @@ func TestSubmitSessionForTrainingUploadsImagesAndStoresTheTranscript(t *testing.
 	}
 }
 
-// TestSubmitSessionForTrainingSkipsRevertedTurns keeps the staged revert, which
-// hides the events at and after its boundary on the session screen, out of the
-// contribution as well.
-func TestSubmitSessionForTrainingSkipsRevertedTurns(t *testing.T) {
+func TestSubmitSessionForTrainingRejectsRevertedSession(t *testing.T) {
 	ctx := t.Context()
 
-	var submit trainingSubmitRequest
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == trainingSubmitPath {
-			_ = json.NewDecoder(r.Body).Decode(&submit)
-			writeShareJSON(t, w, map[string]string{"id": "stored-2"})
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
@@ -203,11 +218,244 @@ func TestSubmitSessionForTrainingSkipsRevertedTurns(t *testing.T) {
 	if err := service.UseClient(ctx, client); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.SubmitSessionForTraining(ctx, "session-1"); err != nil {
-		t.Fatalf("SubmitSessionForTraining: %v", err)
+	if _, err := service.SubmitSessionForTraining(ctx, "session-1"); err == nil ||
+		!strings.Contains(err.Error(), "staged revert") {
+		t.Fatalf("SubmitSessionForTraining error = %v", err)
 	}
-	if len(submit.Document.Entries) != 1 || submit.Document.Entries[0].Text != "kept" {
-		t.Fatalf("entries = %+v, want the event before the boundary alone", submit.Document.Entries)
+	if requests.Load() != 0 {
+		t.Fatalf("backend requests = %d, want 0", requests.Load())
+	}
+}
+
+func TestSubmitSessionForTrainingRejectsRunningSession(t *testing.T) {
+	ctx := t.Context()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AgentSessions.Insert(ctx, db.AgentSessionRow{
+		ID: "session-1", ScopeType: "global", Title: "A chat", CreatedAt: "1", UpdatedAt: "2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(map[string]any{"text": "still running"})
+	var requests atomic.Int32
+	remote := infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: shareRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests.Add(1)
+			return nil, errors.New("unexpected request")
+		})},
+	})
+	service := New(Options{Remote: remote})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AgentEvents.Append(ctx, db.AgentEventRow{
+		SessionID: "session-1", TurnID: "run-1", EventType: "turn/start", Payload: string(payload), CreatedAt: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.SubmitSessionForTraining(ctx, "session-1"); err == nil ||
+		!strings.Contains(err.Error(), "still responding") {
+		t.Fatalf("unfinished run error = %v", err)
+	}
+	if _, err := client.AgentEvents.Append(ctx, db.AgentEventRow{
+		SessionID: "session-1", TurnID: "run-1", EventType: "turn/end", Payload: `{}`, CreatedAt: "2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service.mu.Lock()
+	service.workers["session-1"] = &sessionWorker{active: "run-2"}
+	service.mu.Unlock()
+	if _, err := service.SubmitSessionForTraining(ctx, "session-1"); err == nil ||
+		!strings.Contains(err.Error(), "still responding") {
+		t.Fatalf("active worker error = %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("backend requests = %d, want 0", requests.Load())
+	}
+}
+
+func TestSubmitSessionForTrainingReturnsSettingsErrorBeforeImageProcessing(t *testing.T) {
+	ctx := t.Context()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AgentSessions.Insert(ctx, db.AgentSessionRow{
+		ID: "session-1", ScopeType: "global", Title: "A chat", CreatedAt: "1", UpdatedAt: "2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	start, _ := json.Marshal(map[string]any{
+		"text": "look", "images": []AgentImage{{Path: "missing.png", MIMEType: "image/png"}},
+	})
+	for _, event := range []db.AgentEventRow{
+		{SessionID: "session-1", TurnID: "run-1", EventType: "turn/start", Payload: string(start), CreatedAt: "1"},
+		{SessionID: "session-1", TurnID: "run-1", EventType: "turn/end", Payload: `{}`, CreatedAt: "2"},
+	} {
+		if _, err := client.AgentEvents.Append(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var requests atomic.Int32
+	remote := infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: shareRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests.Add(1)
+			return nil, errors.New("unexpected request")
+		})},
+	})
+	service := New(Options{Remote: remote})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	invalidSettings := "{"
+	if err := client.Settings.Upsert(ctx, settingsKey, &invalidSettings); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.SubmitSessionForTraining(ctx, "session-1"); err == nil ||
+		!strings.Contains(err.Error(), "decode agent settings") {
+		t.Fatalf("SubmitSessionForTraining error = %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("backend requests = %d, want 0", requests.Load())
+	}
+}
+
+func TestSubmitTrainingConversationRejectsBlankStoredID(t *testing.T) {
+	for _, storedID := range []string{"", " \t "} {
+		t.Run(strconv.Quote(storedID), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeShareJSON(t, w, map[string]string{"id": storedID})
+			}))
+			defer server.Close()
+
+			service := New(Options{Remote: infra.NewClientWithOptions(infra.ClientOptions{
+				BackendURL: server.URL, HTTPClient: server.Client(),
+			})})
+			if _, err := service.submitTrainingConversation(t.Context(), trainingDocument{}, nil); err == nil ||
+				!strings.Contains(err.Error(), "stored conversation id") {
+				t.Fatalf("submitTrainingConversation error = %v", err)
+			}
+		})
+	}
+}
+
+func TestUploadTrainingImageRejectsUnsafeInitialURL(t *testing.T) {
+	var requests atomic.Int32
+	service := New(Options{Remote: infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: shareRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests.Add(1)
+			return nil, errors.New("unexpected request")
+		})},
+	})})
+
+	for _, rawURL := range []string{
+		"http://" + trainingStorageHost + "/object",
+		"https://localhost/object",
+		"https://127.0.0.1/object",
+		"https://attacker.example/object",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			if err := service.uploadTrainingImage(t.Context(), rawURL, nil, []byte("image")); err == nil {
+				t.Fatal("uploadTrainingImage accepted an unsafe URL")
+			}
+		})
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("transport requests = %d, want 0", requests.Load())
+	}
+}
+
+func TestUploadTrainingImageRejectsUnsafeRedirects(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		location string
+	}{
+		{name: "cross-host 307", status: http.StatusTemporaryRedirect, location: "https://attacker.example/object"},
+		{name: "cross-host 308", status: http.StatusPermanentRedirect, location: "https://attacker.example/object"},
+		{
+			name:     "HTTPS downgrade",
+			status:   http.StatusTemporaryRedirect,
+			location: "http://" + trainingStorageHost + "/object",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var requests atomic.Int32
+			service := New(Options{Remote: infra.NewClientWithOptions(infra.ClientOptions{
+				HTTPClient: &http.Client{
+					Transport: shareRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+						requests.Add(1)
+						body, err := io.ReadAll(request.Body)
+						if err != nil {
+							return nil, err
+						}
+						if string(body) != "image" {
+							t.Errorf("first request body = %q", body)
+						}
+						return redirectResponse(request, test.status, test.location), nil
+					}),
+				},
+			})})
+
+			if err := service.uploadTrainingImage(
+				t.Context(), "https://"+trainingStorageHost+"/start", nil, []byte("image"),
+			); err == nil {
+				t.Fatal("uploadTrainingImage followed an unsafe redirect")
+			}
+			if requests.Load() != 1 {
+				t.Fatalf("transport requests = %d, want 1", requests.Load())
+			}
+		})
+	}
+}
+
+func TestUploadTrainingImageAllowsSameHostHTTPSRedirect(t *testing.T) {
+	var requests atomic.Int32
+	service := New(Options{Remote: infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: shareRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			requests.Add(1)
+			if request.URL.Path == "/start" {
+				return redirectResponse(
+					request, http.StatusTemporaryRedirect, "https://"+trainingBucketHost+"/finish",
+				), nil
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				return nil, err
+			}
+			if request.Method != http.MethodPut || string(body) != "image" {
+				t.Errorf("redirected request = %s %q", request.Method, body)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    request,
+			}, nil
+		})},
+	})})
+
+	if err := service.uploadTrainingImage(
+		t.Context(), "https://"+trainingBucketHost+"/start", nil, []byte("image"),
+	); err != nil {
+		t.Fatalf("uploadTrainingImage: %v", err)
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("transport requests = %d, want 2", requests.Load())
 	}
 }
 
@@ -261,5 +509,22 @@ func writeShareJSON(t *testing.T, w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		t.Errorf("encode response: %v", err)
+	}
+}
+
+type shareRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f shareRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+func redirectResponse(request *http.Request, status int, location string) *http.Response {
+	header := make(http.Header)
+	header.Set("Location", location)
+	return &http.Response{
+		StatusCode: status,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Request:    request,
 	}
 }
