@@ -112,6 +112,9 @@ type FetchOptions struct {
 	Header            http.Header
 	Body              io.Reader
 	DisableHTTPErrors bool
+	// HTTPClient overrides the client for this request without changing the shared client policy.
+	// Callers use it for request-scoped redirect handling while retaining the configured transport.
+	HTTPClient *http.Client
 	// RetryLimit overrides the client's retry limit for this request. A nil
 	// value inherits the client policy; zero makes the request one-shot.
 	RetryLimit *int
@@ -350,6 +353,10 @@ func (c *Client) Fetch(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	requestClient := c.http
+	if opts.HTTPClient != nil {
+		requestClient = opts.HTTPClient
+	}
 	nhd := isNHD(rawURL)
 	session := isSessionRequest(rawURL)
 	if err := c.recoverIfNeeded(ctx, nhd); err != nil {
@@ -415,7 +422,7 @@ func (c *Client) Fetch(
 
 		stage = "request"
 		attemptsMade++
-		resp, err = c.http.Do(req)
+		resp, err = requestClient.Do(req)
 		diagnosticResponse = resp
 		if err != nil {
 			if attempt+1 < attempts && IsUnreachable(err) {
@@ -457,7 +464,7 @@ func (c *Client) Fetch(
 			request.Header = header.Clone()
 			stage = "fallback-request"
 			attemptsMade++
-			resp, requestErr = c.http.Do(request)
+			resp, requestErr = requestClient.Do(request)
 			diagnosticResponse = resp
 			if requestErr != nil {
 				if IsUnreachable(requestErr) {

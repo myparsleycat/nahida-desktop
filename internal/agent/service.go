@@ -43,6 +43,7 @@ const (
 
 type Options struct {
 	HTTP      *http.Client
+	Remote    *infra.Client
 	Crypto    *platform.Crypto
 	Tools     *tools.Tools
 	Mod       *modservice.Mod
@@ -61,6 +62,7 @@ type Service struct {
 	client           *db.Client
 	appData          *appdata.Store
 	http             *http.Client
+	remote           *infra.Client
 	crypto           *platform.Crypto
 	emitEvent        func(string, ...any)
 	shell            *platform.Shell
@@ -80,8 +82,8 @@ type Service struct {
 	refreshMu sync.Mutex
 	workers   map[string]*sessionWorker
 	sequences sync.Map
-	// sessionLocks serializes revert staging with the destructive revert commit in Send, so a
-	// concurrent send cannot read a stale revert marker or delete a turn it just appended.
+	// sessionLocks serializes revert staging, run lifecycle transitions, and stable share snapshots.
+	// A concurrent send cannot read a stale revert marker or delete a turn it just appended.
 	sessionLocks sync.Map
 	global       chan struct{}
 	stop         chan struct{}
@@ -119,6 +121,7 @@ func New(options Options) *Service {
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	return &Service{
 		http:      httpClient,
+		remote:    options.Remote,
 		crypto:    crypto,
 		log:       options.Log,
 		emitEvent: options.EventEmit,
@@ -904,10 +907,13 @@ func (s *Service) worker(sessionID string) *sessionWorker {
 			case s.global <- struct{}{}:
 			}
 			runCtx, cancel := context.WithCancel(s.runCtx)
+			lock := s.sessionLock(sessionID)
+			lock.Lock()
 			worker.mu.Lock()
 			worker.active = run.id
 			worker.cancel = cancel
 			worker.mu.Unlock()
+			lock.Unlock()
 			if run.approvalID != "" {
 				err := s.executeApprovedAction(runCtx, run.approvalID)
 				if run.result != nil {
@@ -917,10 +923,12 @@ func (s *Service) worker(sessionID string) *sessionWorker {
 				s.executeRun(runCtx, sessionID, run)
 			}
 			cancel()
+			lock.Lock()
 			worker.mu.Lock()
 			worker.active = ""
 			worker.cancel = nil
 			worker.mu.Unlock()
+			lock.Unlock()
 			<-s.global
 		}
 	}()
@@ -1956,8 +1964,9 @@ func (s *Service) dbClient() (*db.Client, error) {
 	return s.client, nil
 }
 
-// sessionLock returns the per-session mutex that serializes revert staging with the revert commit in
-// Send. The lock is never removed: sessions are few and a stale entry costs one mutex.
+// sessionLock returns the per-session mutex that serializes revert staging, the revert commit in
+// Send, run lifecycle transitions, and stable share snapshots. The lock is never removed: sessions
+// are few and a stale entry costs one mutex.
 func (s *Service) sessionLock(id string) *sync.Mutex {
 	value, _ := s.sessionLocks.LoadOrStore(id, &sync.Mutex{})
 	return value.(*sync.Mutex)
