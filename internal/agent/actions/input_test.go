@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/platform"
@@ -42,6 +43,38 @@ func TestRegistryRegistersWindowInputActions(t *testing.T) {
 	empty := NewRegistry(Dependencies{})
 	if len(empty.Definitions("global", "input", "")) != 0 {
 		t.Fatal("input actions registered without the input service")
+	}
+}
+
+func TestSendKeysDescriptionListsUncommonKeys(t *testing.T) {
+	t.Parallel()
+	registry := NewRegistry(Dependencies{Input: platform.NewInput()})
+
+	definitions := registry.Definitions("global", "input", "send")
+	if len(definitions) != 1 {
+		t.Fatalf("send keys definitions = %#v", definitions)
+	}
+	definition := definitions[0]
+	if strings.Contains(definition.Description, "vk_return") {
+		t.Fatal("send keys routing description includes the key catalog")
+	}
+	properties, _ := definition.InputSchema["properties"].(map[string]any)
+	keys, _ := properties["keys"].(map[string]any)
+	notation, _ := keys["description"].(string)
+	if notation != platform.KeyNotation() {
+		t.Fatal("keys parameter description does not use the key notation")
+	}
+	for _, token := range []string{"vk_return (not enter)", "vk_prior (not pageup)", "vk_numpad0", "vk_snapshot", "f1-f24"} {
+		if !strings.Contains(notation, token) {
+			t.Fatalf("keys parameter description missing %q", token)
+		}
+	}
+	for _, query := range []string{"delete", "menu", "shift"} {
+		for _, match := range registry.Definitions("global", "", query) {
+			if match.ID == "input.send_keys" {
+				t.Fatalf("query %q matched send keys through the routing description", query)
+			}
+		}
 	}
 }
 

@@ -126,8 +126,10 @@ func buildKeyTokens() map[string]co.VK {
 		tokens["vk_"+digit] = co.VK_0 + co.VK(index)
 		tokens[fmt.Sprintf("vk_numpad%d", index)] = co.VK_NUMPAD0 + co.VK(index)
 	}
+	// f1-f24 are the names callers type. vk_fN remains the form the toggle-key editor stores.
 	for index := range 24 {
 		tokens[fmt.Sprintf("vk_f%d", index+1)] = co.VK_F1 + co.VK(index)
+		tokens[fmt.Sprintf("f%d", index+1)] = co.VK_F1 + co.VK(index)
 	}
 	return tokens
 }
