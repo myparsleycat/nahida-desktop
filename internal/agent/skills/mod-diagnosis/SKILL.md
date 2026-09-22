@@ -45,6 +45,7 @@ For toggle-dependent transparency gaps, DDS effect masks, abrupt transparency gr
 - Identify the game/importer, affected object or character part, expected result, visible symptom, when it started, and whether it affects one mod or the whole setup.
 - Read the active scope and query available XXMI or desktop state before asking the user for a path, importer, version, or running process that Nahida can already determine locally. Ask only when the available values conflict or remain ambiguous.
 - Inspect the authorized sandbox for INIs, resources, bundled instructions, dependencies, disabled files, and logs. Do not claim to inspect the game, launcher, sibling mods, or directories outside the exposed roots.
+- Treat a failed directory listing, recursive walk, or basename search as a failure of that operation, not proof that the target is inaccessible or absent. Before asking the user to upload or paste content, list parent directories one level at a time, search a narrower ancestor, or directly read a known filename. Report which operation failed and which alternate access path succeeded.
 - Preserve originals and prefer a focused, reversible patch.
 - Separate direct observations from hypotheses. Before a trial patch, state the evidence, the predicted visible result, the required reload method, and the rollback. Do not describe a plausible cause as confirmed until the file or runtime evidence verifies it.
 
@@ -108,6 +109,8 @@ State the observed evidence, rejected hypotheses, most likely cause, remaining u
 Use `F10` first for ordinary INI/resource changes when the importer supports reloading them. Require a full game-process restart when the diagnostic feature or shader source is initialized only on first load, when an importer or DLL changed, or when runtime evidence shows that reload did not refresh the relevant state. Do not require restarting the XXMI application when restarting only the game process is sufficient.
 
 After the user or a captured screen confirms the fix, restore every temporary diagnostic setting. Clean up only artifacts that the current diagnostic session recorded as its own. Preserve the working mod, the final patch, a straightforward original backup, pre-existing ShaderFixes and caches, and any generated file that changed after creation. Report what was restored, removed, and retained.
+
+Do not call the repair complete while a known hunting, shader-save, warning-display, skip, or other diagnostic setting remains unintentionally enabled. Restore it through an available action; when only the user can do so, name the exact pending setting and verify or explicitly report that cleanup remains manual. Treat a shader or dump copied into the active mod solely for this diagnosis as a cleanup candidate, not part of the repair.
 
 ## GIMI outline and reflection diagnosis
 
