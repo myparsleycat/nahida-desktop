@@ -226,6 +226,7 @@ func newRuntime() *runtime {
 	}
 	rt.agent = agent.New(agent.Options{
 		HTTP:      httpClient.HTTPClient(),
+		Remote:    httpClient,
 		Crypto:    platform.NewCrypto(),
 		Tools:     rt.tools,
 		Mod:       rt.mod,

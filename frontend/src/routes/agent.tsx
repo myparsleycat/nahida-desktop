@@ -37,6 +37,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Textarea } from "@renderer/components/ui/textarea";
+import { useAuth } from "@renderer/hooks/use-auth";
 import type { AgentStreamEvent, LiveAgentChatEntry } from "@renderer/lib/agent-stream";
 import {
   acceptAgentStreamEvent,
@@ -53,9 +54,9 @@ import {
   BrainIcon,
   CheckIcon,
   ChevronDownIcon,
-  CircleStopIcon,
   CopyIcon,
   FolderIcon,
+  HeartHandshakeIcon,
   Loader2Icon,
   MessageSquarePlusIcon,
   MoreHorizontalIcon,
@@ -63,6 +64,7 @@ import {
   PencilIcon,
   ShieldAlertIcon,
   SparklesIcon,
+  SquareIcon,
   Trash2Icon,
   Undo2Icon,
   WrenchIcon,
@@ -146,6 +148,7 @@ export const Route = createFileRoute("/agent")({
 
 function AgentRoute() {
   const { t } = useTranslation();
+  const { isLoggedIn, startLogin } = useAuth();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<AgentSessionSummary[]>([]);
@@ -165,6 +168,8 @@ function AgentRoute() {
   const [renaming, setRenaming] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AgentSessionSummary>();
   const [deleting, setDeleting] = useState(false);
+  const [shareTarget, setShareTarget] = useState<AgentSessionSummary>();
+  const [sharing, setSharing] = useState(false);
   const [loading, setLoading] = useState(true);
   const latestSequence = useRef(new Map<string, number>());
   const sessionGeneration = useRef(0);
@@ -444,6 +449,27 @@ function AgentRoute() {
     }
   };
 
+  const openShareDialog = () => {
+    if (!snapshot) return;
+    setShareTarget(snapshot.summary);
+  };
+
+  const confirmShare = async () => {
+    if (!shareTarget || sharing) return;
+    setSharing(true);
+    try {
+      const result = await Agent.SubmitSessionForTraining(shareTarget.id);
+      setShareTarget(undefined);
+      toast.success(
+        t("page.agent.share_success", { messages: result.messages, images: result.images }),
+      );
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const decideApproval = async (approval: AgentApproval, approved: boolean) => {
     if (approval.status !== "pending" || decidingApproval) return;
     setDecidingApproval(approval.id);
@@ -687,6 +713,16 @@ function AgentRoute() {
                 </span>
               ))}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-[26px] flex-none gap-1.5 rounded-full px-2.5 text-[11px] font-normal text-muted-foreground"
+              onClick={openShareDialog}
+              title={t("page.agent.share")}
+            >
+              <HeartHandshakeIcon className="size-3.5" />
+              <span className="max-[1180px]:hidden">{t("page.agent.share")}</span>
+            </Button>
           </div>
           <div className="mt-2.5 flex gap-9 pl-2">
             <span className="relative pb-[9px] text-[13px] leading-4 font-medium text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-[2px] after:bg-accent after:content-['']">
@@ -811,6 +847,52 @@ function AgentRoute() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={shareTarget !== undefined}
+        onOpenChange={(open) => {
+          if (!open && !sharing) setShareTarget(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("page.agent.share_title")}</DialogTitle>
+            <DialogDescription>{t("page.agent.share_description")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-[13px] leading-5 text-muted-foreground">
+            <p>{t("page.agent.share_details")}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>{t("page.agent.share_point_messages")}</li>
+              <li>{t("page.agent.share_point_images")}</li>
+              <li>{t("page.agent.share_point_metadata")}</li>
+            </ul>
+            <p>{t("page.agent.share_withdraw")}</p>
+            {!isLoggedIn && (
+              <p className="text-destructive">{t("page.agent.share_login_required")}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={sharing}
+              onClick={() => setShareTarget(undefined)}
+            >
+              {t("g.cancel")}
+            </Button>
+            {isLoggedIn ? (
+              <Button type="button" disabled={sharing} onClick={() => void confirmShare()}>
+                {sharing && <Loader2Icon className="size-4 animate-spin" />}
+                {t("page.agent.share_confirm")}
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => void startLogin()}>
+                {t("page.agent.share_login")}
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1022,7 +1104,7 @@ function Composer({
                 aria-label={t("page.agent.stop")}
                 onClick={() => snapshot && void Agent.Cancel(snapshot.summary.id, runId)}
               >
-                <CircleStopIcon className="size-[17px] stroke-[2.2]" />
+                <SquareIcon className="size-[17px] stroke-[2.2]" />
               </button>
             ) : (
               <button

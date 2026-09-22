@@ -43,6 +43,7 @@ const (
 
 type Options struct {
 	HTTP      *http.Client
+	Remote    *infra.Client
 	Crypto    *platform.Crypto
 	Tools     *tools.Tools
 	Mod       *modservice.Mod
@@ -61,6 +62,7 @@ type Service struct {
 	client           *db.Client
 	appData          *appdata.Store
 	http             *http.Client
+	remote           *infra.Client
 	crypto           *platform.Crypto
 	emitEvent        func(string, ...any)
 	shell            *platform.Shell
@@ -119,6 +121,7 @@ func New(options Options) *Service {
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	return &Service{
 		http:      httpClient,
+		remote:    options.Remote,
 		crypto:    crypto,
 		log:       options.Log,
 		emitEvent: options.EventEmit,
