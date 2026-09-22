@@ -1,5 +1,5 @@
 import { GameIcon } from "@renderer/components/game-icon";
-import { useGimiDCRLaunch } from "@renderer/hooks/use-gimi-dcr-launch";
+import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { toErrorMessage } from "@shared/utils";
@@ -11,7 +11,7 @@ import { toast } from "sonner";
 export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   const { t } = useTranslation();
   const [processingKey, setProcessingKey] = useState<string | null>(null);
-  const { startImporter, gimiDCRDialog } = useGimiDCRLaunch();
+  const { startImporter, launchGuardDialog } = useLaunchGuard();
 
   if (!xxmiData?.xxmiConfig) {
     return null;
@@ -67,7 +67,7 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
           );
         })}
       </div>
-      {gimiDCRDialog}
+      {launchGuardDialog}
     </div>
   );
 }

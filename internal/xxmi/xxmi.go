@@ -66,6 +66,7 @@ type parsedConfig struct {
 	Importers map[string]struct {
 		Importer struct {
 			GameEXENames   []string `json:"game_exe_names"`
+			GameFolder     string   `json:"game_folder"`
 			ImporterFolder string   `json:"importer_folder"`
 			OverwriteINI   bool     `json:"overwrite_ini"`
 		} `json:"Importer"`
