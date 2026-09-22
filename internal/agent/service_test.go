@@ -20,7 +20,8 @@ func TestSystemPromptRoutesRequestsToMatchingSkills(t *testing.T) {
 	}}, false)
 	requiredInstructions := []string{
 		"call `load_skill` for every skill whose description matches the request",
-		"load `mod-diagnosis` before modifying a mod or diagnosing a mod problem",
+		"Load `mod-diagnosis` before diagnosing or repairing a broken or conflicting mod",
+		"Intentional content creation, Blender shaping, and source-model conversion",
 	}
 	for _, required := range requiredInstructions {
 		if !strings.Contains(prompt, required) {

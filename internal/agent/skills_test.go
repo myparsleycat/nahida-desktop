@@ -209,9 +209,71 @@ func TestBuiltInModdingBasicsAllowsConnectedBlenderMCP(t *testing.T) {
 		"Use Blender directly when an enabled Blender MCP exposes the required operation",
 		"If no capable Blender MCP is enabled, give optional manual instructions instead",
 		"not permission to install Blender or an add-on",
+		"also load `blender-xxmi-workflows`",
+		"takes precedence over the generic and imported Blender examples here",
 	} {
 		if !strings.Contains(content, instruction) {
 			t.Fatalf("modding-basics skill is missing Blender MCP guidance %q", instruction)
+		}
+	}
+}
+
+func TestBlenderXXMIWorkflowSkillAndReferencesAreEmbedded(t *testing.T) {
+	t.Parallel()
+
+	catalog := newSkillCatalog(t.TempDir())
+	views := catalog.Reload()
+	found := false
+	for _, view := range views {
+		if view.Name == "blender-xxmi-workflows" {
+			found = view.Source == "built-in" && view.Error == "" && view.Description != ""
+			break
+		}
+	}
+	if !found {
+		t.Fatal("blender-xxmi-workflows is not a discoverable built-in skill")
+	}
+
+	references := []struct {
+		path string
+		want string
+	}{
+		{path: "", want: "run_xxmi_audit"},
+		{path: "references/scene-contract.md", want: "Build the target profile"},
+		{path: "references/body-garment.md", want: "Classify before deforming"},
+		{path: "references/pmx-mmd-conversion.md", want: "Keep two independent contracts"},
+		{path: "references/mesh-transfer-export.md", want: "Define transfer direction"},
+		{path: "references/xxmi_audits.py", want: "def preservation_signature("},
+	}
+	for _, reference := range references {
+		content, err := catalog.Load("blender-xxmi-workflows", reference.path)
+		if err != nil {
+			t.Fatalf("load %q: %v", reference.path, err)
+		}
+		if !strings.Contains(content, reference.want) {
+			t.Errorf("%q is missing %q", reference.path, reference.want)
+		}
+	}
+}
+
+func TestBlenderXXMIWorkflowDefersToExistingSpecialists(t *testing.T) {
+	t.Parallel()
+
+	catalog := newSkillCatalog(t.TempDir())
+	catalog.Reload()
+	content, err := catalog.Load("blender-xxmi-workflows", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, boundary := range []string{
+		"`ini-editing` owns INI and toggle text",
+		"`mod-diagnosis` owns broken or conflicting mods and runtime evidence",
+		"`texture-render-diagnosis` owns DDS channels",
+		"`modding-basics` still owns general XXMI concepts",
+		"Those specialized skills take precedence",
+	} {
+		if !strings.Contains(content, boundary) {
+			t.Errorf("workflow skill is missing specialist boundary %q", boundary)
 		}
 	}
 }
