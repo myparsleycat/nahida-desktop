@@ -360,6 +360,9 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 		}
 		contextRow.DurableSummary = latestSummary(contextEvents)
 	}
+	if scopeErr == nil {
+		roots = mergeSandboxRoots(roots, sandboxRootsFromEvents(contextEvents))
+	}
 	snapshot := AgentSessionSnapshot{
 		Summary:   s.sessionSummary(*row),
 		Entries:   entries,
@@ -571,6 +574,9 @@ func (s *Service) Send(ctx context.Context, id, text string, images []AgentImage
 	payload := map[string]any{"text": run.text}
 	if len(stored) > 0 {
 		payload["images"] = stored
+	}
+	if promoted := promotedSandboxRoots(text); len(promoted) > 0 {
+		payload["sandboxRoots"] = promoted
 	}
 	var startSequence int64
 	if staged := parseSessionRevert(row.Revert); staged != nil {
@@ -955,6 +961,12 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
 		return
 	}
+	events, err := client.AgentEvents.List(ctx, sessionID)
+	if err != nil {
+		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
+		return
+	}
+	roots = mergeSandboxRoots(roots, sandboxRootsFromEvents(events))
 	sandbox, err := NewSandbox(roots)
 	if err != nil {
 		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
@@ -1017,11 +1029,6 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 	}, s.http)
 	if pendingTitle != "" && strings.TrimSpace(run.text) != "" {
 		s.startSessionTitleGeneration(adapter, sessionID, run.id, pendingTitle, run.text)
-	}
-	events, err := client.AgentEvents.List(ctx, sessionID)
-	if err != nil {
-		s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
-		return
 	}
 	messages := s.messagesFromEvents(events, settings.SupportsImages, true)
 	mcpRuntime, mcpDefinitions := s.openMCPRuntime(ctx, roots)
@@ -1391,6 +1398,11 @@ func (s *Service) executeApprovedAction(ctx context.Context, approvalID string) 
 	if err != nil {
 		return s.failApprovalDetached(*row, err)
 	}
+	events, err := client.AgentEvents.List(ctx, row.SessionID)
+	if err != nil {
+		return s.failApprovalDetached(*row, err)
+	}
+	roots = mergeSandboxRoots(roots, sandboxRootsFromEvents(events))
 	sandbox, err := NewSandbox(roots)
 	if err != nil {
 		return s.failApprovalDetached(*row, err)
