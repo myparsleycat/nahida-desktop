@@ -198,6 +198,114 @@ func TestSandboxRootsFromEventsDoesNotChargeUnavailableRootsToActiveLimit(t *tes
 	}
 }
 
+func TestSandboxRootsRejectVolumeRoots(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	volume := filepath.VolumeName(base) + string(filepath.Separator)
+	if !isWindowsVolumeRoot(volume) || !isWindowsVolumeRoot(strings.ToLower(volume)) || isWindowsVolumeRoot(base) {
+		t.Fatalf("isWindowsVolumeRoot(%q) = %v", volume, isWindowsVolumeRoot(volume))
+	}
+
+	if roots := promotedSandboxRoots("inspect `" + volume + "`"); len(roots) != 0 {
+		t.Fatalf("promoted volume root: %#v", roots)
+	}
+	if _, ok := existingSandboxRoot(volume); ok {
+		t.Fatalf("existingSandboxRoot accepted %q", volume)
+	}
+	if roots := sandboxRootsFromEvents([]db.AgentEventRow{{
+		EventType: "turn/start",
+		Payload:   mustSandboxRootsPayload(t, SandboxRoot{ID: "volume", Name: "Volume", Path: volume}),
+	}}); len(roots) != 0 {
+		t.Fatalf("restored volume root: %#v", roots)
+	}
+
+	missing := volume + "nahida-missing-sandbox-root.txt"
+	if roots := promotedSandboxRoots("write `" + missing + "`"); len(roots) != 0 {
+		t.Fatalf("missing file at volume root promoted: %#v", roots)
+	}
+
+	child := base
+	for parent := filepath.Dir(child); !isWindowsVolumeRoot(parent); parent = filepath.Dir(child) {
+		if parent == child {
+			t.Fatal("temp dir is not under a volume root")
+		}
+		child = parent
+	}
+	roots := promotedSandboxRoots("inspect `" + child + "`")
+	if len(roots) != 1 || isWindowsVolumeRoot(roots[0].Path) {
+		t.Fatalf("directory under volume root = %#v", roots)
+	}
+
+	entries, err := os.ReadDir(volume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(volume, entry.Name())
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		if roots := promotedSandboxRoots("edit `" + path + "`"); len(roots) != 0 {
+			t.Fatalf("file at volume root promoted: %#v", roots)
+		}
+		if _, ok := existingSandboxRoot(path); ok {
+			t.Fatalf("existingSandboxRoot accepted volume-root file %q", path)
+		}
+		if restored := sandboxRootsFromEvents([]db.AgentEventRow{{
+			EventType: "turn/start",
+			Payload:   mustSandboxRootsPayload(t, SandboxRoot{ID: "file", Name: "File", Path: path}),
+		}}); len(restored) != 0 {
+			t.Fatalf("restored file at volume root: %#v", restored)
+		}
+		break
+	}
+
+	volumeLink := filepath.Join(base, "volume-link")
+	if err := os.Symlink(volume, volumeLink); err != nil {
+		t.Fatal(err)
+	}
+	if roots := promotedSandboxRoots("inspect `" + volumeLink + "`"); len(roots) != 0 {
+		t.Fatalf("promoted volume symlink: %#v", roots)
+	}
+	if _, ok := existingSandboxRoot(volumeLink); ok {
+		t.Fatalf("existingSandboxRoot accepted volume symlink %q", volumeLink)
+	}
+	if restored := sandboxRootsFromEvents([]db.AgentEventRow{{
+		EventType: "turn/start",
+		Payload:   mustSandboxRootsPayload(t, SandboxRoot{ID: "link", Name: "Link", Path: volumeLink}),
+	}}); len(restored) != 0 {
+		t.Fatalf("restored volume symlink: %#v", restored)
+	}
+
+	target := filepath.Join(base, "nested")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	normalLink := filepath.Join(base, "normal-link")
+	if err := os.Symlink(target, normalLink); err != nil {
+		t.Fatal(err)
+	}
+	roots = promotedSandboxRoots("inspect `" + normalLink + "`")
+	canonical, err := canonicalExistingDir(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 || !strings.EqualFold(roots[0].Path, canonical) {
+		t.Fatalf("normal symlink roots = %#v, want %q", roots, canonical)
+	}
+}
+
+func mustSandboxRootsPayload(t *testing.T, roots ...SandboxRoot) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{"sandboxRoots": roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(payload)
+}
+
 func TestMergeSandboxRootsKeepsLeastPrivilege(t *testing.T) {
 	t.Parallel()
 

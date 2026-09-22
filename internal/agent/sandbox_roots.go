@@ -23,6 +23,7 @@ const (
 // promotedSandboxRoots finds local absolute Windows paths that the user explicitly included in a
 // message. Existing directories become roots directly, existing files expose their parent, and a
 // missing final path component exposes its existing parent so the agent can create that target.
+// Drive roots are never promoted.
 func promotedSandboxRoots(text string) []SandboxRoot {
 	roots := make([]SandboxRoot, 0)
 	candidates := 0
@@ -73,11 +74,11 @@ func sandboxRootsFromEvents(events []db.AgentEventRow) []SandboxRoot {
 				return roots
 			}
 			seenCandidates[key] = struct{}{}
-			if !isLocalAbsoluteWindowsPath(clean) {
+			if !isLocalAbsoluteWindowsPath(clean) || isWindowsVolumeRoot(clean) || isVolumeRootFile(clean) {
 				continue
 			}
 			canonical, err := canonicalExistingDir(clean)
-			if err != nil {
+			if err != nil || isWindowsVolumeRoot(canonical) {
 				continue
 			}
 			if len(roots) >= maxPromotedRootsPerSession {
@@ -166,8 +167,13 @@ func promotedRootPath(candidate string) (string, bool) {
 		if !isLocalAbsoluteWindowsPath(clean) {
 			continue
 		}
+		// Parent promotion is only for a missing final component. An existing path, including a
+		// symlink, was already considered and must not expose its parent after being rejected.
+		if _, err := os.Lstat(clean); err == nil {
+			continue
+		}
 		parent := filepath.Dir(clean)
-		if parent == clean || strings.EqualFold(parent, filepath.VolumeName(parent)+string(filepath.Separator)) {
+		if parent == clean || isWindowsVolumeRoot(parent) {
 			continue
 		}
 		if root, ok := existingSandboxRoot(parent); ok {
@@ -228,7 +234,7 @@ func windowsPathVariants(candidate string) []string {
 
 func existingSandboxRoot(path string) (string, bool) {
 	clean := filepath.Clean(path)
-	if !isLocalAbsoluteWindowsPath(clean) {
+	if !isLocalAbsoluteWindowsPath(clean) || isWindowsVolumeRoot(clean) || isVolumeRootFile(clean) {
 		return "", false
 	}
 	info, err := os.Stat(clean)
@@ -239,7 +245,31 @@ func existingSandboxRoot(path string) (string, bool) {
 		clean = filepath.Dir(clean)
 	}
 	canonical, err := canonicalExistingDir(clean)
-	return canonical, err == nil
+	if err != nil || isWindowsVolumeRoot(canonical) {
+		return "", false
+	}
+	return canonical, true
+}
+
+// isWindowsVolumeRoot reports whether path is a drive root such as C:\.
+// Promoting one would grant the agent the whole volume.
+func isWindowsVolumeRoot(path string) bool {
+	clean := filepath.Clean(path)
+	volume := filepath.VolumeName(clean)
+	if volume == "" {
+		return false
+	}
+	return strings.EqualFold(clean, volume+string(filepath.Separator))
+}
+
+// isVolumeRootFile reports whether path is an existing file directly on a drive root.
+// Its parent must not be promoted as a sandbox root.
+func isVolumeRootFile(path string) bool {
+	if !isWindowsVolumeRoot(filepath.Dir(path)) {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func isLocalAbsoluteWindowsPath(path string) bool {
