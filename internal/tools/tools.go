@@ -188,6 +188,7 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 		return
 	}
 	t.bisect.UseAppData(data)
+	t.modelViewer.UseAppData(data)
 	t.texture.UseAppData(data)
 	t.touchProfile.UseAppData(data)
 	t.wuwa.UseAppData(data)

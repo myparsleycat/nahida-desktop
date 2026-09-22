@@ -62,6 +62,8 @@ export type PreviewRenderTask = {
   entry: PreviewEntry;
   evaluated: EvaluatedViewerState;
   finalKey: string;
+  fingerprint: string;
+  variant: string;
   finished: boolean;
   sessionId: string;
   timeout: ReturnType<typeof setTimeout> | null;
@@ -129,7 +131,7 @@ export class GridModelPreviewCache {
 }
 
 export class GridModelPreviewController {
-  private readonly aliases = new Map<string, string | null>();
+  private readonly failedKeys = new Set<string>();
   private readonly cache = new GridModelPreviewCache();
   private readonly entries = new Map<string, PreviewEntry>();
   private readonly queue: PreviewEntry[] = [];
@@ -150,20 +152,6 @@ export class GridModelPreviewController {
     }
 
     const requestKey = createGridModelPreviewRequestKey(mod, this.settings);
-    const alias = this.aliases.get(requestKey);
-    if (alias === null) {
-      listener({ status: "unavailable" });
-      return () => {};
-    }
-    if (alias) {
-      const url = this.cache.get(alias);
-      if (url) {
-        listener({ status: "ready", url });
-        return () => {};
-      }
-      this.aliases.delete(requestKey);
-    }
-
     const existing = this.entries.get(requestKey);
     const entry = existing ?? {
       requestKey,
@@ -219,13 +207,33 @@ export class GridModelPreviewController {
     let state: GridModelPreviewState = { status: "unavailable" };
     if (!this.disposed && blob) {
       const url = this.cache.set(task.finalKey, blob);
-      this.aliases.set(task.entry.requestKey, task.finalKey);
       state = { status: "ready", url };
-    } else if (!this.disposed) {
-      this.aliases.set(task.entry.requestKey, null);
+      if (task.fingerprint) {
+        await blobToDataURL(blob)
+          .then((image) =>
+            Tools.SaveModGridPreviewCache(
+              task.entry.mod.path,
+              task.variant,
+              task.fingerprint,
+              image,
+            ),
+          )
+          .catch((cacheError: unknown) =>
+            Logger.capture(
+              "mod-grid:model-preview-cache-save",
+              { modPath: task.entry.mod.path },
+              cacheError,
+            ),
+          );
+      }
+    } else if (!this.disposed && task.fingerprint) {
+      this.failedKeys.add(task.finalKey);
     }
 
     await cleanupModelPreviewSession(task.sessionId);
+    if (this.disposed) {
+      return;
+    }
     for (const listener of task.entry.listeners) {
       listener(state);
     }
@@ -252,7 +260,7 @@ export class GridModelPreviewController {
     }
     this.queue.splice(0);
     this.entries.clear();
-    this.aliases.clear();
+    this.failedKeys.clear();
     this.cache.clear();
     this.showRenderTask(null);
 
@@ -287,7 +295,32 @@ export class GridModelPreviewController {
     this.activeEntry = entry;
     entry.state = "loading";
     let sessionId = "";
+    let validatedKey: string | undefined;
     try {
+      const variant = createGridModelPreviewRequestKey({ ...entry.mod, mtime: 0 }, this.settings);
+      const saved = await Tools.GetModGridPreviewCache(entry.mod.path, variant).catch(
+        (error: unknown) => {
+          Logger.capture("mod-grid:model-preview-cache-read", { modPath: entry.mod.path }, error);
+          return { fingerprint: "", image: "" };
+        },
+      );
+      if (this.disposed) {
+        this.activeEntry = null;
+        return;
+      }
+      const finalKey = JSON.stringify([variant, saved.fingerprint]);
+      validatedKey = saved.fingerprint ? finalKey : undefined;
+      const cached = saved.image || (saved.fingerprint ? this.cache.get(finalKey) : undefined);
+      if (cached || this.failedKeys.has(finalKey)) {
+        for (const listener of entry.listeners) {
+          listener(cached ? { status: "ready", url: cached } : { status: "unavailable" });
+        }
+        this.entries.delete(entry.requestKey);
+        this.activeEntry = null;
+        void this.pump();
+        return;
+      }
+
       const loaded = await Tools.LoadModGridPreview(entry.mod.path);
       sessionId = loaded.memorySessionId;
       if (this.disposed) {
@@ -301,26 +334,14 @@ export class GridModelPreviewController {
         transport,
         resolveGridModelPreviewState(transport, entry.mod),
       );
-      const finalKey = createGridModelPreviewFinalKey(entry.mod, evaluated.state, this.settings);
-      const cached = this.cache.get(finalKey);
-      if (cached) {
-        this.aliases.set(entry.requestKey, finalKey);
-        await cleanupModelPreviewSession(sessionId);
-        for (const listener of entry.listeners) {
-          listener({ status: "ready", url: cached });
-        }
-        this.entries.delete(entry.requestKey);
-        this.activeEntry = null;
-        void this.pump();
-        return;
-      }
-
       entry.state = "rendering";
       const task: PreviewRenderTask = {
         controllerId: this.id,
         entry,
         evaluated,
         finalKey,
+        fingerprint: saved.fingerprint,
+        variant,
         finished: false,
         sessionId,
         timeout: null,
@@ -341,7 +362,9 @@ export class GridModelPreviewController {
           { modName: entry.mod.name, modPath: entry.mod.path, sessionId },
           error,
         );
-        this.aliases.set(entry.requestKey, null);
+        if (validatedKey) {
+          this.failedKeys.add(validatedKey);
+        }
         for (const listener of entry.listeners) {
           listener({ status: "unavailable" });
         }
@@ -594,18 +617,22 @@ export function createGridModelPreviewRequestKey(
       toggle.currentValue ?? null,
     ]),
   );
-  return JSON.stringify([mod.path.toLowerCase(), mod.mtime, toggles, settings, "512@1"]);
+  return JSON.stringify([mod.path.toLowerCase(), mod.mtime, toggles, settings, "512@1-v1"]);
 }
 
-export function createGridModelPreviewFinalKey(
-  mod: ModInfo,
-  state: Record<string, ViewerStateValue>,
-  settings: ModelPreviewRenderSettings,
-) {
-  const sortedState = Object.fromEntries(
-    Object.entries(state).sort(([left], [right]) => left.localeCompare(right)),
-  );
-  return JSON.stringify([mod.path.toLowerCase(), mod.mtime, sortedState, settings, "512@1"]);
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Preview image reader returned no data URL."));
+      }
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read preview image."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function cleanupModelPreviewSession(sessionId: string) {
