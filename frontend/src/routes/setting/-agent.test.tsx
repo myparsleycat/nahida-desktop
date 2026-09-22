@@ -9,12 +9,16 @@ import type {
   AgentSettingsView,
   MCPServerView,
 } from "@bindings/agent/models";
+import { Shell } from "@bindings/platform";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CancellablePromise } from "@wailsio/runtime";
 import { Suspense, type ComponentType } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
+vi.mock("@bindings/platform", () => ({
+  Shell: { CopyStr: vi.fn() },
+}));
 vi.mock("@bindings/agent", () => ({
   Service: {
     GetSettings: vi.fn(),
@@ -586,6 +590,32 @@ it("signs in to ChatGPT and reloads the provider list", async () => {
   expect(Agent.ListProviders).toHaveBeenCalledTimes(2);
   // The plan does not serve the stored model, so the form moves to the newest one it does.
   expect((screen.getByLabelText("page.agent.model") as HTMLInputElement).value).toBe("gpt-5.5");
+});
+
+it("copies the ChatGPT sign-in link without showing it", async () => {
+  const url = "https://auth.openai.com/oauth/authorize?state=1";
+  vi.mocked(Agent.GetSettings).mockResolvedValue({
+    ...view,
+    provider: "openai",
+    credential: { kind: "none" },
+  });
+  vi.mocked(Agent.StartProviderLogin).mockResolvedValue({ provider: "openai", url });
+  vi.mocked(Agent.CompleteProviderLogin).mockReturnValue(new CancellablePromise(() => {}));
+  vi.mocked(Shell.CopyStr).mockResolvedValue();
+  await renderSettings();
+
+  fireEvent.click(screen.getByRole("radio", { name: "page.agent.auth_account" }));
+  await clickButton("page.agent.connect_chatgpt");
+
+  expect(screen.queryByText(url)).toBeNull();
+  expect(screen.queryByRole("link", { name: url })).toBeNull();
+  const copy = await screen.findByRole("button", { name: "page.agent.login_copy_link" });
+  const cancel = screen.getByRole("button", { name: "page.agent.login_cancel" });
+  expect(copy.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  await clickButton("page.agent.login_copy_link");
+  expect(Shell.CopyStr).toHaveBeenCalledWith(url);
+  expect(toast.success).toHaveBeenCalledWith("page.agent.login_copied");
 });
 
 it("signs out of the ChatGPT account", async () => {

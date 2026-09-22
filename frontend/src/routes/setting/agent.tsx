@@ -13,6 +13,7 @@ import type {
   SkillView,
   UpdateAgentSettingsInput,
 } from "@bindings/agent/models";
+import { Shell } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -290,6 +291,16 @@ function AgentSettingsRoute() {
     } finally {
       setLogin(undefined);
       setBusy(false);
+    }
+  };
+
+  const copyLogin = async () => {
+    if (!login) return;
+    try {
+      await Shell.CopyStr(login.url);
+      toast.success(t("page.agent.login_copied"));
+    } catch {
+      toast.error(t("page.agent.login_copy_failed"));
     }
   };
 
@@ -625,10 +636,10 @@ function AgentSettingsRoute() {
                   {login && (
                     <div className="space-y-1 text-[11px] text-muted-foreground">
                       <p>{t("page.agent.login_waiting")}</p>
-                      <a className="break-all underline" href={login.url}>
-                        {login.url}
-                      </a>
-                      <div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => void copyLogin()}>
+                          {t("page.agent.login_copy_link")}
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => void cancelLogin()}>
                           {t("page.agent.login_cancel")}
                         </Button>

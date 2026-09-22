@@ -108,7 +108,7 @@ type providerLogin struct {
 }
 
 // StartProviderLogin begins a ChatGPT login, opens the authorization page, and returns its URL.
-// The renderer shows the URL as a fallback when the browser does not open.
+// The renderer copies the URL when the browser does not open.
 func (s *Service) StartProviderLogin(ctx context.Context, providerID string) (AgentLoginView, error) {
 	spec, ok := providerSpecFor(strings.TrimSpace(providerID))
 	if !ok || !spec.OAuth {

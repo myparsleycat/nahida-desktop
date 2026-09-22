@@ -184,7 +184,7 @@ type AgentProviderTestView struct {
 }
 
 // AgentLoginView carries the URL of a pending provider login; the provider opens it in the
-// browser and the renderer shows it as a fallback link.
+// browser and the renderer can copy it when that fails.
 type AgentLoginView struct {
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
