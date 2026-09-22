@@ -81,7 +81,7 @@
       "provider": "LLM 提供商",
       "provider_hint": "配置用于对话和工具决策的模型。",
       "provider_select": "提供商",
-      "provider_custom": "自定义（OpenAI 兼容）",
+      "provider_custom": "自定义",
       "provider_connected": "已连接",
       "auth_account": "ChatGPT Pro/Plus",
       "auth_key": "API 密钥",

@@ -81,7 +81,7 @@
       "provider": "LLM 공급자",
       "provider_hint": "대화와 도구 결정을 수행할 모델을 설정합니다.",
       "provider_select": "공급자",
-      "provider_custom": "사용자 지정(OpenAI 호환)",
+      "provider_custom": "사용자 지정",
       "provider_connected": "연결됨",
       "auth_account": "ChatGPT Pro/Plus",
       "auth_key": "API 키",

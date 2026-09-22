@@ -81,7 +81,7 @@
       "provider": "LLM provider",
       "provider_hint": "Configure the model used for conversations and tool decisions.",
       "provider_select": "Provider",
-      "provider_custom": "Custom (OpenAI-compatible)",
+      "provider_custom": "Custom",
       "provider_connected": "Connected",
       "auth_account": "ChatGPT Pro/Plus",
       "auth_key": "API key",

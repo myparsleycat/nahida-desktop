@@ -81,7 +81,7 @@
       "provider": "LLM プロバイダー",
       "provider_hint": "会話とツール判断に使用するモデルを設定します。",
       "provider_select": "プロバイダー",
-      "provider_custom": "カスタム（OpenAI 互換）",
+      "provider_custom": "カスタム",
       "provider_connected": "接続済み",
       "auth_account": "ChatGPT Pro/Plus",
       "auth_key": "API キー",
