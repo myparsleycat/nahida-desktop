@@ -21,6 +21,7 @@ import (
 	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/hunting"
 	"nahida.live/desktop/internal/infra"
 	modservice "nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
@@ -34,6 +35,7 @@ const (
 	maxToolRounds                   = 32
 	modelTimeout                    = 5 * time.Minute
 	persistenceTimeout              = 10 * time.Second
+	defaultCancelWaitTimeout        = 5 * time.Second
 	maxToolOutput                   = 64 << 10
 	minimumOutputReserve            = 4096
 	interruptedApprovalErrorMessage = "application restarted while action was executing"
@@ -55,6 +57,7 @@ type Options struct {
 	Shell     *platform.Shell
 	Input     *platform.Input
 	Screen    *platform.Screen
+	Hunting   *hunting.Service
 }
 
 type Service struct {
@@ -69,6 +72,7 @@ type Service struct {
 	settings         *setting.Setting
 	skills           *skillCatalog
 	actions          *agentactions.Registry
+	hunting          *hunting.Service
 	log              *infra.Log
 	oauth            providerOAuthConfig
 	loginMu          sync.Mutex
@@ -79,9 +83,10 @@ type Service struct {
 	// overwrite a credential saved at the same moment.
 	credentialMu sync.Mutex
 	// refreshMu serializes token refreshes: a rotated refresh token cannot be redeemed twice.
-	refreshMu sync.Mutex
-	workers   map[string]*sessionWorker
-	sequences sync.Map
+	refreshMu         sync.Mutex
+	workers           map[string]*sessionWorker
+	cancelWaitTimeout time.Duration
+	sequences         sync.Map
 	// sessionLocks serializes revert staging, run lifecycle transitions, and stable share snapshots.
 	// A concurrent send cannot read a stale revert marker or delete a turn it just appended.
 	sessionLocks sync.Map
@@ -107,6 +112,10 @@ type sessionWorker struct {
 	mu     sync.Mutex
 	active string
 	cancel context.CancelFunc
+	done   chan struct{}
+	// paused holds queued runs while DeleteSession restores the hunting state.
+	// The worker stays registered so a retryable cleanup failure can resume it.
+	paused bool
 }
 
 func New(options Options) *Service {
@@ -119,6 +128,21 @@ func New(options Options) *Service {
 		crypto = platform.NewCrypto()
 	}
 	runCtx, cancelRun := context.WithCancel(context.Background())
+	huntingService := options.Hunting
+	if huntingService == nil && options.XXMI != nil && options.Input != nil && options.Screen != nil &&
+		options.Shell != nil {
+		huntingService = hunting.New(hunting.Options{
+			Importer: options.XXMI, Input: options.Input, Screen: options.Screen, Clipboard: options.Shell,
+			Report: func(err error, stage string, fields map[string]any) {
+				if options.Log == nil {
+					return
+				}
+				_ = infra.ReportError(options.Log, err, "Hunting", infra.Diagnostic{
+					Operation: "hunting-session", Stage: stage, Fields: fields,
+				})
+			},
+		})
+	}
 	return &Service{
 		http:      httpClient,
 		remote:    options.Remote,
@@ -127,16 +151,18 @@ func New(options Options) *Service {
 		emitEvent: options.EventEmit,
 		shell:     options.Shell,
 		settings:  options.Setting,
+		hunting:   huntingService,
 		actions: agentactions.NewRegistry(agentactions.Dependencies{
 			Mod: options.Mod, Tools: options.Tools, Settings: options.Setting, Transfer: options.Transfer,
-			XXMI: options.XXMI, Input: options.Input, Screen: options.Screen,
+			XXMI: options.XXMI, Input: options.Input, Screen: options.Screen, Hunting: huntingService,
 		}),
-		workers:   make(map[string]*sessionWorker),
-		oauth:     defaultOpenAIOAuth,
-		global:    make(chan struct{}, 2),
-		stop:      make(chan struct{}),
-		runCtx:    runCtx,
-		cancelRun: cancelRun,
+		workers:           make(map[string]*sessionWorker),
+		cancelWaitTimeout: defaultCancelWaitTimeout,
+		oauth:             defaultOpenAIOAuth,
+		global:            make(chan struct{}, 2),
+		stop:              make(chan struct{}),
+		runCtx:            runCtx,
+		cancelRun:         cancelRun,
 	}
 }
 
@@ -390,7 +416,85 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 	if scopeErr != nil {
 		snapshot.UnavailableReason = scopeErr.Error()
 	}
+	if s.hunting != nil {
+		snapshot.Hunting = s.hunting.Current(id)
+	}
 	return snapshot, nil
+}
+
+// HuntingNext sends one user-requested 3DMigoto next-resource binding to the
+// game owned by this Agent conversation.
+func (s *Service) HuntingNext(
+	ctx context.Context,
+	agentSessionID string,
+	category hunting.Category,
+) (hunting.Snapshot, error) {
+	if err := s.validateHuntingSession(ctx, agentSessionID); err != nil {
+		return hunting.Snapshot{}, err
+	}
+	if s.hunting == nil {
+		return hunting.Snapshot{}, errors.New("hunting controls are unavailable")
+	}
+	snapshot, err := s.hunting.Next(ctx, agentSessionID, category)
+	return snapshot, s.reportHuntingControlError(err, "next", agentSessionID, category)
+}
+
+// HuntingFound marks the resource currently selected by the user and reads
+// the hash that 3DMigoto puts on the clipboard.
+func (s *Service) HuntingFound(ctx context.Context, agentSessionID string) (hunting.Snapshot, error) {
+	if err := s.validateHuntingSession(ctx, agentSessionID); err != nil {
+		return hunting.Snapshot{}, err
+	}
+	if s.hunting == nil {
+		return hunting.Snapshot{}, errors.New("hunting controls are unavailable")
+	}
+	snapshot, err := s.hunting.Found(ctx, agentSessionID)
+	return snapshot, s.reportHuntingControlError(err, "found", agentSessionID, snapshot.SelectedCategory)
+}
+
+// HuntingCancel restores the hunting state that existed before the session.
+func (s *Service) HuntingCancel(ctx context.Context, agentSessionID string) (hunting.Snapshot, error) {
+	if err := s.validateHuntingSession(ctx, agentSessionID); err != nil {
+		return hunting.Snapshot{}, err
+	}
+	if s.hunting == nil {
+		return hunting.Snapshot{}, errors.New("hunting controls are unavailable")
+	}
+	snapshot, err := s.hunting.CancelOwner(ctx, agentSessionID)
+	return snapshot, s.reportHuntingControlError(err, "cancel", agentSessionID, snapshot.SelectedCategory)
+}
+
+func (s *Service) validateHuntingSession(ctx context.Context, id string) error {
+	client, err := s.dbClient()
+	if err != nil {
+		return err
+	}
+	row, err := client.AgentSessions.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return errors.New("agent session not found")
+	}
+	return nil
+}
+
+func (s *Service) reportHuntingControlError(
+	err error,
+	stage, sessionID string,
+	category hunting.Category,
+) error {
+	if err == nil || infra.IsReportedError(err) || infra.IsCancellationError(err) {
+		return err
+	}
+	return infra.ReportError(s.log, err, "Agent", infra.Diagnostic{
+		Operation: "hunting-control",
+		Stage:     stage,
+		Fields: map[string]any{
+			"sessionId": sessionID,
+			"category":  category,
+		},
+	})
 }
 
 func (s *Service) RenameSession(ctx context.Context, id, title string) error {
@@ -406,8 +510,35 @@ func (s *Service) RenameSession(ctx context.Context, id, title string) error {
 }
 
 func (s *Service) DeleteSession(ctx context.Context, id string) error {
+	// End the conversation's in-flight and queued work before restoring the
+	// hunting state. An approved hunting.begin that is still resolving its
+	// configuration has not registered its hunting session yet, so CancelOwner
+	// would report no session and the begin would go on to enable hunting mode
+	// for a conversation that no longer exists. The worker stays registered
+	// while the cleanup runs: a retryable cleanup failure must keep the
+	// conversation fully usable, including its serialization worker, so the
+	// user can retry the deletion from the same session. A cleanup that can no
+	// longer be retried must not block deletion.
+	worker := s.pauseWorker(id)
+	if s.hunting != nil {
+		snapshot, cancelErr := s.hunting.CancelOwner(ctx, id)
+		if cancelErr != nil && !errors.Is(cancelErr, hunting.ErrSessionNotFound) &&
+			!errors.Is(cancelErr, hunting.ErrSessionOwnerMismatch) &&
+			!errors.Is(cancelErr, hunting.ErrSessionExpired) {
+			// Only a cleanup failure that can no longer be retried must not block
+			// deletion; every other error keeps the conversation and its worker.
+			if !errors.Is(cancelErr, hunting.ErrCleanupIncomplete) || snapshot.Cleanup.Pending {
+				s.resumeWorker(worker)
+				return s.reportHuntingControlError(cancelErr, "delete-session", id, "")
+			}
+			// The game process exited, so the hunting service already released
+			// the session and no retry can restore anything. Report the failure
+			// and keep deleting the conversation.
+			_ = s.reportHuntingControlError(cancelErr, "delete-session", id, "")
+		}
+	}
+
 	s.mu.Lock()
-	worker := s.workers[id]
 	delete(s.workers, id)
 	s.mu.Unlock()
 	if worker != nil {
@@ -417,6 +548,7 @@ func (s *Service) DeleteSession(ctx context.Context, id string) error {
 		}
 		worker.mu.Unlock()
 	}
+
 	client, err := s.dbClient()
 	if err != nil {
 		return err
@@ -624,11 +756,60 @@ func (s *Service) Cancel(id, runID string) error {
 		return nil
 	}
 	worker.mu.Lock()
-	defer worker.mu.Unlock()
-	if worker.active == runID && worker.cancel != nil {
+	var done <-chan struct{}
+	if (worker.active == runID || runID == "restored") && worker.cancel != nil {
 		worker.cancel()
+		done = worker.done
+	}
+	worker.mu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(s.cancelWaitTimeout):
+			// The run remains cancelled and will publish its completion when it exits.
+		}
 	}
 	return nil
+}
+
+// pauseWorker stops a conversation's in-flight run and holds its queued runs
+// while DeleteSession restores the hunting state. Waiting for the cancelled run
+// keeps an approved hunting.begin from registering its hunting session after
+// the deletion already reported that no session exists. The worker stays
+// registered so resumeWorker can release it when the deletion failed and the
+// user must retry it from the same conversation.
+func (s *Service) pauseWorker(id string) *sessionWorker {
+	s.mu.Lock()
+	worker := s.workers[id]
+	s.mu.Unlock()
+	if worker == nil {
+		return nil
+	}
+
+	worker.mu.Lock()
+	worker.paused = true
+	if worker.cancel != nil {
+		worker.cancel()
+	}
+	done := worker.done
+	worker.mu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(s.cancelWaitTimeout):
+			// The run stays cancelled and will publish its completion when it exits.
+		}
+	}
+	return worker
+}
+
+func (s *Service) resumeWorker(worker *sessionWorker) {
+	if worker == nil {
+		return
+	}
+	worker.mu.Lock()
+	worker.paused = false
+	worker.mu.Unlock()
 }
 
 func (s *Service) GetSettings(ctx context.Context) (AgentSettingsView, error) {
@@ -879,10 +1060,24 @@ func (s *Service) ServiceShutdown() error {
 	}()
 	select {
 	case <-done:
-		return nil
+		// Continue to the owned hunting service shutdown below.
 	case <-time.After(5 * time.Second):
-		return errors.New("timed out waiting for Nahida Agent runs to stop")
+		if s.hunting == nil {
+			return errors.New("timed out waiting for Nahida Agent runs to stop")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return errors.Join(
+			errors.New("timed out waiting for Nahida Agent runs to stop"),
+			s.hunting.Shutdown(ctx),
+		)
 	}
+	if s.hunting == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return s.hunting.Shutdown(ctx)
 }
 
 func (s *Service) worker(sessionID string) *sessionWorker {
@@ -912,12 +1107,22 @@ func (s *Service) worker(sessionID string) *sessionWorker {
 				return
 			case s.global <- struct{}{}:
 			}
-			runCtx, cancel := context.WithCancel(s.runCtx)
 			lock := s.sessionLock(sessionID)
 			lock.Lock()
 			worker.mu.Lock()
+			if worker.paused {
+				worker.mu.Unlock()
+				lock.Unlock()
+				<-s.global
+				ctx, cancel := context.WithTimeout(context.Background(), persistenceTimeout)
+				s.failQueuedRun(ctx, sessionID, run, errors.New("agent session deletion cancelled the queued work"))
+				cancel()
+				continue
+			}
+			runCtx, cancel := context.WithCancel(s.runCtx)
 			worker.active = run.id
 			worker.cancel = cancel
+			worker.done = make(chan struct{})
 			worker.mu.Unlock()
 			lock.Unlock()
 			if run.approvalID != "" {
@@ -931,8 +1136,10 @@ func (s *Service) worker(sessionID string) *sessionWorker {
 			cancel()
 			lock.Lock()
 			worker.mu.Lock()
+			close(worker.done)
 			worker.active = ""
 			worker.cancel = nil
+			worker.done = nil
 			worker.mu.Unlock()
 			lock.Unlock()
 			<-s.global
@@ -1035,7 +1242,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 	defer func() { _ = mcpRuntime.Close() }()
 	executor := &toolExecutor{
 		sandbox: sandbox, skills: s.skills, desktop: s.actions,
-		scope: rowScope(*row), mcp: mcpRuntime,
+		scope: rowScope(*row), mcp: mcpRuntime, sessionID: sessionID, supportsImages: settings.SupportsImages,
 	}
 	toolDefinitions := append(builtInToolDefinitions(), mcpDefinitions...)
 	system := s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
@@ -1408,9 +1615,14 @@ func (s *Service) executeApprovedAction(ctx context.Context, approvalID string) 
 		return s.failApprovalDetached(*row, err)
 	}
 	defer func() { _ = sandbox.Close() }()
+	settings, err := readSettings(ctx, client, s.crypto)
+	if err != nil {
+		return s.failApprovalDetached(*row, err)
+	}
 
 	executor := &toolExecutor{sandbox: sandbox, skills: s.skills, desktop: s.actions,
-		scope: rowScope(*session)}
+		scope: rowScope(*session), sessionID: row.SessionID, supportsImages: settings.SupportsImages,
+		toolCallID: row.ToolCallID}
 	kind := "desktop"
 	if strings.HasPrefix(row.ActionID, "sandbox.") {
 		kind = "sandbox"
@@ -1422,6 +1634,16 @@ func (s *Service) executeApprovedAction(ctx context.Context, approvalID string) 
 	output, artifact := s.toolOutput(row.SessionID, row.TurnID, row.ToolCallID, result.Output)
 	payload := map[string]any{"toolName": approvalToolName(row.ActionID), "toolCallId": row.ToolCallID,
 		"result": output, "changedFiles": result.ChangedFiles, "artifact": artifact}
+	if len(result.Images) > 0 {
+		if images, imageErr := s.storeImages(row.SessionID, result.Images); imageErr != nil {
+			_ = infra.ReportError(s.log, imageErr, "Agent", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "agent-tool", Stage: "store-images",
+				Fields: map[string]any{"sessionId": row.SessionID, "runId": row.TurnID, "tool": row.ActionID},
+			})
+		} else {
+			payload["images"] = images
+		}
+	}
 	status, errorMessage := "completed", ""
 	if actionErr != nil {
 		status, errorMessage = "failed", actionErr.Error()
@@ -1660,25 +1882,31 @@ func (s *Service) cancelQueuedRuns(sessionID string, worker *sessionWorker) {
 	for {
 		select {
 		case run := <-worker.queue:
-			err := errors.New("agent shut down before the queued work started")
-			if run.approvalID != "" {
-				if client, clientErr := s.dbClient(); clientErr == nil {
-					if row, getErr := client.AgentApprovals.Get(ctx, run.approvalID); getErr == nil && row != nil {
-						err = s.failApproval(ctx, *row, err)
-					}
-				}
-				if run.result != nil {
-					run.result <- err
-				}
-				continue
-			}
-			_ = s.finishRun(ctx, sessionID, run.id, "turn/cancelled", map[string]any{
-				"error": err.Error(), "status": "cancelled",
-			})
+			s.failQueuedRun(ctx, sessionID, run, errors.New("agent shut down before the queued work started"))
 		default:
 			return
 		}
 	}
+}
+
+// failQueuedRun reports a run that will never execute, so a caller waiting on
+// an approved action is released and the turn records its terminal state.
+func (s *Service) failQueuedRun(ctx context.Context, sessionID string, run queuedRun, cause error) {
+	if run.approvalID != "" {
+		err := cause
+		if client, clientErr := s.dbClient(); clientErr == nil {
+			if row, getErr := client.AgentApprovals.Get(ctx, run.approvalID); getErr == nil && row != nil {
+				err = s.failApproval(ctx, *row, cause)
+			}
+		}
+		if run.result != nil {
+			run.result <- err
+		}
+		return
+	}
+	_ = s.finishRun(ctx, sessionID, run.id, "turn/cancelled", map[string]any{
+		"error": cause.Error(), "status": "cancelled",
+	})
 }
 
 func approvalToolName(actionID string) string {
@@ -1753,7 +1981,7 @@ func (s *Service) systemPrompt(
 ) string {
 	rootData, _ := json.Marshal(roots)
 	skillData, _ := json.Marshal(s.ListSkills())
-	actionData, _ := json.Marshal(s.actions.Hints(row.ScopeType))
+	actionData, _ := json.Marshal(s.actions.HintsFor(row.ScopeType, supportsImages))
 	language := "en"
 	if s.settings != nil {
 		if configured, err := s.settings.GetLanguage(ctx); err == nil {

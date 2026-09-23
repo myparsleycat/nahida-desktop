@@ -3,14 +3,20 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/hunting"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 func TestSystemPromptRoutesRequestsToMatchingSkills(t *testing.T) {
@@ -27,6 +33,84 @@ func TestSystemPromptRoutesRequestsToMatchingSkills(t *testing.T) {
 		if !strings.Contains(prompt, required) {
 			t.Fatalf("system prompt is missing %q", required)
 		}
+	}
+}
+
+func TestCancelAcceptsRestoredRunSentinel(t *testing.T) {
+	t.Parallel()
+	service := New(Options{})
+	cancelled := false
+	service.workers["session"] = &sessionWorker{
+		active: "actual-run-id",
+		cancel: func() { cancelled = true },
+	}
+	if err := service.Cancel("session", "restored"); err != nil {
+		t.Fatalf("Cancel = %v", err)
+	}
+	if !cancelled {
+		t.Fatal("Cancel did not stop the restored active run")
+	}
+}
+
+func TestCancelWaitsForActiveRunCleanup(t *testing.T) {
+	t.Parallel()
+	service := New(Options{})
+	done := make(chan struct{})
+	cancelled := make(chan struct{})
+	service.workers["session"] = &sessionWorker{
+		active: "run",
+		cancel: func() { close(cancelled) },
+		done:   done,
+	}
+	returned := make(chan struct{})
+	go func() {
+		_ = service.Cancel("session", "run")
+		close(returned)
+	}()
+
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("Cancel did not signal the active run")
+	}
+	select {
+	case <-returned:
+		t.Fatal("Cancel returned before cleanup completed")
+	default:
+	}
+	close(done)
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("Cancel did not return after cleanup completed")
+	}
+}
+
+func TestCancelReturnsWhenRunDoesNotFinish(t *testing.T) {
+	t.Parallel()
+	service := New(Options{})
+	service.cancelWaitTimeout = 20 * time.Millisecond
+	cancelled := make(chan struct{})
+	service.workers["session"] = &sessionWorker{
+		active: "run",
+		cancel: func() { close(cancelled) },
+		done:   make(chan struct{}),
+	}
+	returned := make(chan error, 1)
+	go func() { returned <- service.Cancel("session", "run") }()
+
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatalf("Cancel = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Cancel blocked on an unfinished run")
+	}
+	select {
+	case <-cancelled:
+	default:
+		t.Fatal("Cancel did not signal the run")
 	}
 }
 
@@ -926,4 +1010,344 @@ func TestServiceCommitRevertKeepsSurvivingSummary(t *testing.T) {
 	if reloaded.DurableSummary != "surviving" {
 		t.Fatalf("stale commit overwrote summary = %#v", reloaded)
 	}
+}
+
+func TestDeleteSessionKeepsWorkerWhenHuntingRestoreFails(t *testing.T) {
+	root := t.TempDir()
+	contents := `[Hunting]
+hunting = 2
+marking_mode = skip
+marking_actions = clipboard
+toggle_hunting = no_modifiers VK_NUMPAD0
+next_pixelshader = no_modifiers VK_F8
+mark_pixelshader = no_modifiers VK_F9
+`
+	if err := os.WriteFile(filepath.Join(root, "d3dx.ini"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	input := &fakeHuntingInput{windows: []platform.WindowInfo{{PID: 42, Title: "Game"}}}
+	huntingService := hunting.New(hunting.Options{
+		Importer: fakeHuntingImporter{root: root}, Input: input, Screen: fakeHuntingScreen{},
+		IdleTimeout: time.Hour, SessionTimeout: time.Hour,
+		Wait: func(ctx context.Context, _ time.Duration) error { return ctx.Err() },
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := huntingService.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown = %v", err)
+		}
+	})
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(Options{Hunting: huntingService})
+	service.client = client
+	worker := &sessionWorker{active: "run", cancel: func() {}}
+	service.workers["session"] = worker
+
+	if _, err := huntingService.Begin(t.Context(), "session", "GIMI", 42, true); err != nil {
+		t.Fatalf("Begin = %v", err)
+	}
+	input.setAcquireError(errors.New("game window is gone"))
+
+	if err := service.DeleteSession(t.Context(), "session"); !errors.Is(err, hunting.ErrCleanupIncomplete) {
+		t.Fatalf("DeleteSession = %v", err)
+	}
+	if service.workers["session"] != worker {
+		t.Fatal("DeleteSession removed the worker before the hunting restore succeeded")
+	}
+	worker.mu.Lock()
+	paused := worker.paused
+	worker.mu.Unlock()
+	if paused {
+		t.Fatal("DeleteSession left the worker paused after the hunting restore failed")
+	}
+
+	input.setAcquireError(nil)
+	if err := service.DeleteSession(t.Context(), "session"); err != nil {
+		t.Fatalf("retry DeleteSession = %v", err)
+	}
+	if service.workers["session"] != nil {
+		t.Fatal("DeleteSession kept the worker after the hunting restore succeeded")
+	}
+}
+
+func TestDeleteSessionContinuesWhenHuntingRestoreIsNotRetryable(t *testing.T) {
+	root := t.TempDir()
+	contents := `[Hunting]
+hunting = 2
+marking_mode = skip
+marking_actions = clipboard
+toggle_hunting = no_modifiers VK_NUMPAD0
+next_pixelshader = no_modifiers VK_F8
+mark_pixelshader = no_modifiers VK_F9
+`
+	if err := os.WriteFile(filepath.Join(root, "d3dx.ini"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The game exited with its window, so the hunting service releases the
+	// session and reports the cleanup as no longer retryable.
+	input := &fakeHuntingInput{windows: []platform.WindowInfo{{PID: 42, Title: "Game"}}, processAlive: false}
+	huntingService := hunting.New(hunting.Options{
+		Importer: fakeHuntingImporter{root: root}, Input: input, Screen: fakeHuntingScreen{},
+		IdleTimeout: time.Hour, SessionTimeout: time.Hour,
+		Wait: func(ctx context.Context, _ time.Duration) error { return ctx.Err() },
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := huntingService.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown = %v", err)
+		}
+	})
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(Options{Hunting: huntingService})
+	service.client = client
+	worker := &sessionWorker{active: "run", cancel: func() {}}
+	service.workers["session"] = worker
+
+	if _, err := huntingService.Begin(t.Context(), "session", "GIMI", 42, true); err != nil {
+		t.Fatalf("Begin = %v", err)
+	}
+	input.setWindows(nil)
+	input.setAcquireError(errors.New("game window is gone"))
+
+	if err := service.DeleteSession(t.Context(), "session"); err != nil {
+		t.Fatalf("DeleteSession = %v", err)
+	}
+	if service.workers["session"] != nil {
+		t.Fatal("DeleteSession kept the worker although the cleanup cannot be retried")
+	}
+}
+
+func TestDeleteSessionWaitsForInFlightHuntingBegin(t *testing.T) {
+	root := t.TempDir()
+	contents := `[Hunting]
+hunting = 2
+marking_mode = skip
+marking_actions = clipboard
+toggle_hunting = no_modifiers VK_NUMPAD0
+next_pixelshader = no_modifiers VK_F8
+mark_pixelshader = no_modifiers VK_F9
+`
+	if err := os.WriteFile(filepath.Join(root, "d3dx.ini"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The approved hunting.begin blocks inside its resolution stage, after the
+	// deletion already started, and ignores context cancellation like a config
+	// read that is already in progress.
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	importer := &blockingHuntingImporter{root: root, entered: make(chan struct{}), release: release}
+	input := &fakeHuntingInput{windows: []platform.WindowInfo{{PID: 42, Title: "Game"}}}
+	huntingService := hunting.New(hunting.Options{
+		Importer: importer, Input: input, Screen: fakeHuntingScreen{},
+		IdleTimeout: time.Hour, SessionTimeout: time.Hour,
+		Wait: func(ctx context.Context, _ time.Duration) error { return ctx.Err() },
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := huntingService.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown = %v", err)
+		}
+	})
+	// Release the blocked resolve before the service stops so a failed test
+	// cannot leave the begin goroutine waiting forever.
+	t.Cleanup(unblock)
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(Options{Hunting: huntingService})
+	service.client = client
+	beginCtx, cancelBegin := context.WithCancel(t.Context())
+	defer cancelBegin()
+	beginDone := make(chan struct{})
+	beginFinished := make(chan struct{})
+	// The worker keeps a run active until it returns, so the test holds the run
+	// in flight after Begin itself returned to observe the deletion waiting.
+	releaseRun := make(chan struct{})
+	var releaseRunOnce sync.Once
+	releaseActiveRun := func() { releaseRunOnce.Do(func() { close(releaseRun) }) }
+	t.Cleanup(releaseActiveRun)
+	service.workers["session"] = &sessionWorker{active: "begin", cancel: cancelBegin, done: beginDone}
+	go func() {
+		defer close(beginDone)
+		_, _ = huntingService.Begin(beginCtx, "session", "GIMI", 42, true)
+		close(beginFinished)
+		<-releaseRun
+	}()
+	select {
+	case <-importer.entered:
+	case <-time.After(time.Second):
+		t.Fatal("hunting begin did not start resolving")
+	}
+
+	deleted := make(chan error, 1)
+	go func() { deleted <- service.DeleteSession(t.Context(), "session") }()
+	select {
+	case <-beginCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("DeleteSession did not cancel the in-flight hunting begin")
+	}
+
+	unblock()
+	select {
+	case <-beginFinished:
+	case <-time.After(time.Second):
+		t.Fatal("hunting begin did not return after it was unblocked")
+	}
+	// The run is still active, so deletion must still be waiting for it.
+	select {
+	case err := <-deleted:
+		t.Fatalf("DeleteSession returned before the in-flight hunting begin finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	releaseActiveRun()
+	select {
+	case err := <-deleted:
+		if err != nil {
+			t.Fatalf("DeleteSession = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("DeleteSession did not finish after the hunting begin stopped")
+	}
+	if snapshot := huntingService.Current("session"); snapshot != nil {
+		t.Fatalf("hunting session survived deletion: %+v", snapshot)
+	}
+	if service.workers["session"] != nil {
+		t.Fatal("DeleteSession kept the worker after the hunting restore succeeded")
+	}
+}
+
+type blockingHuntingImporter struct {
+	root    string
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (f *blockingHuntingImporter) ResolveHuntingRuntime(
+	context.Context,
+	string,
+) (xxmi.HuntingRuntime, error) {
+	close(f.entered)
+	<-f.release
+	return xxmi.HuntingRuntime{
+		ImporterKey: "GIMI", ImporterFolder: f.root, INIPath: filepath.Join(f.root, "d3dx.ini"),
+		GameEXENames: []string{"game.exe"},
+	}, nil
+}
+
+type fakeHuntingImporter struct {
+	root string
+}
+
+func (f fakeHuntingImporter) ResolveHuntingRuntime(context.Context, string) (xxmi.HuntingRuntime, error) {
+	return xxmi.HuntingRuntime{
+		ImporterKey: "GIMI", ImporterFolder: f.root, INIPath: filepath.Join(f.root, "d3dx.ini"),
+		GameEXENames: []string{"game.exe"},
+	}, nil
+}
+
+type fakeHuntingInput struct {
+	mu           sync.Mutex
+	windows      []platform.WindowInfo
+	acquireErr   error
+	processAlive bool
+}
+
+func (f *fakeHuntingInput) ListWindows(
+	_ context.Context,
+	filter platform.WindowFilter,
+) ([]platform.WindowInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	result := make([]platform.WindowInfo, 0, len(f.windows))
+	for _, window := range f.windows {
+		if filter.PID == 0 || filter.PID == window.PID {
+			result = append(result, window)
+		}
+	}
+	return result, nil
+}
+
+func (f *fakeHuntingInput) AcquireForeground(
+	_ context.Context,
+	_ platform.WindowTarget,
+) (platform.ForegroundController, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.acquireErr != nil {
+		return nil, f.acquireErr
+	}
+	return fakeHuntingLease{}, nil
+}
+
+func (f *fakeHuntingInput) ValidateKeys([]string, []string) error { return nil }
+
+func (f *fakeHuntingInput) ProcessAlive(uint32) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.processAlive
+}
+
+func (f *fakeHuntingInput) setWindows(windows []platform.WindowInfo) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.windows = windows
+}
+
+func (f *fakeHuntingInput) setAcquireError(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acquireErr = err
+}
+
+type fakeHuntingLease struct{}
+
+func (fakeHuntingLease) Window() platform.WindowInfo {
+	return platform.WindowInfo{PID: 42, Title: "Game"}
+}
+
+func (fakeHuntingLease) SendKeys(context.Context, []string) (platform.KeyResult, error) {
+	return platform.KeyResult{}, nil
+}
+
+func (fakeHuntingLease) PressedKeys([]string) ([]string, error) { return nil, nil }
+
+func (fakeHuntingLease) Close() error { return nil }
+
+type fakeHuntingScreen struct{}
+
+func (fakeHuntingScreen) CaptureWindow(
+	_ context.Context,
+	request platform.CaptureRequest,
+) (platform.CaptureResult, error) {
+	return platform.CaptureResult{
+		Window: platform.WindowInfo{PID: request.Target.PID, Title: "Game"},
+		Width:  100, Height: 100, Scale: 1, PNG: []byte("png"),
+	}, nil
 }

@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+
+	"nahida.live/desktop/internal/hunting"
 )
 
 type AgentScope struct {
@@ -54,6 +56,7 @@ type AgentSessionSnapshot struct {
 	Approvals         []AgentApproval     `json:"approvals"`
 	Revert            *AgentSessionRevert `json:"revert,omitempty"`
 	ContextUsage      *AgentContextUsage  `json:"contextUsage,omitempty"`
+	Hunting           *hunting.Snapshot   `json:"hunting,omitempty"`
 	SupportsImages    bool                `json:"supportsImages"`
 	UnavailableReason string              `json:"unavailableReason,omitempty"`
 }

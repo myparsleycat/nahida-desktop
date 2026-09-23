@@ -219,6 +219,9 @@ func splitActionImage(output any) (any, []pendingImage) {
 		"scale":  captured.Scale,
 		"image":  fmt.Sprintf("[image: %s, %d bytes]", captured.MIMEType, len(captured.PNG)),
 	}
+	if captured.Result != nil {
+		persisted["result"] = captured.Result
+	}
 	image := pendingImage{
 		Name:     captureImageName(captured.Window),
 		MIMEType: captured.MIMEType,

@@ -10,12 +10,12 @@ import (
 	"github.com/rodrigocfd/windigo/co"
 )
 
-// keyChord is one key press parsed from a key spec. Modifiers are pressed
-// before the key and released in reverse order.
+// keyChord is one simultaneous key combination parsed from a key spec. Modifier
+// keys are pressed first, the remaining keys follow in notation order, and all
+// keys are released in reverse order.
 type keyChord struct {
-	spec      string
-	modifiers []co.VK
-	key       co.VK
+	spec string
+	keys []co.VK
 }
 
 // keyModifierTokens are pressed down before the key and released afterwards.
@@ -141,13 +141,16 @@ func parseKeyChord(spec string) (keyChord, error) {
 	}
 
 	chord := keyChord{spec: strings.TrimSpace(spec)}
+	var modifiers []co.VK
+	var keys []co.VK
+	hasTrigger := false
 	for _, token := range tokens {
 		if _, ok := keyCancelTokens[token]; ok {
 			continue
 		}
 		if modifier, ok := keyModifierTokens[token]; ok {
-			if !slices.Contains(chord.modifiers, modifier) {
-				chord.modifiers = append(chord.modifiers, modifier)
+			if !slices.Contains(modifiers, modifier) {
+				modifiers = append(modifiers, modifier)
 			}
 			continue
 		}
@@ -158,13 +161,21 @@ func parseKeyChord(spec string) (keyChord, error) {
 		if !ok {
 			return keyChord{}, fmt.Errorf("%w: unknown key %q", ErrInputKeyInvalid, token)
 		}
-		if chord.key != 0 {
-			return keyChord{}, fmt.Errorf("%w: %s names more than one key", ErrInputKeyInvalid, chord.spec)
+		hasTrigger = true
+		if !slices.Contains(keys, key) {
+			keys = append(keys, key)
 		}
-		chord.key = key
 	}
-	if chord.key == 0 {
+	if !hasTrigger {
 		return keyChord{}, fmt.Errorf("%w: %s names no key", ErrInputKeyInvalid, chord.spec)
+	}
+	// Hold modifiers before the trigger key regardless of notation order, matching
+	// what a user pressing the combination sends.
+	chord.keys = append(chord.keys, modifiers...)
+	for _, key := range keys {
+		if !slices.Contains(chord.keys, key) {
+			chord.keys = append(chord.keys, key)
+		}
 	}
 	return chord, nil
 }

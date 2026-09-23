@@ -7,6 +7,7 @@ import type {
   AgentSessionSnapshot,
   AgentSessionSummary,
 } from "@bindings/agent/models";
+import type { Category, Snapshot as HuntingSnapshot } from "@bindings/hunting/models";
 import { AgentContextMeter } from "@renderer/components/agent/context-meter";
 import { Markdown } from "@renderer/components/markdown";
 import {
@@ -56,6 +57,8 @@ import {
   ChevronDownIcon,
   CopyIcon,
   FolderIcon,
+  Gamepad2Icon,
+  HashIcon,
   HeartHandshakeIcon,
   Loader2Icon,
   MessageSquarePlusIcon,
@@ -170,6 +173,7 @@ function AgentRoute() {
   const [deleting, setDeleting] = useState(false);
   const [shareTarget, setShareTarget] = useState<AgentSessionSummary>();
   const [sharing, setSharing] = useState(false);
+  const [huntingBusy, setHuntingBusy] = useState<string>();
   const [loading, setLoading] = useState(true);
   const latestSequence = useRef(new Map<string, number>());
   const sessionGeneration = useRef(0);
@@ -485,6 +489,54 @@ function AgentRoute() {
       await openSnapshot(approval.sessionId);
     } finally {
       setDecidingApproval(undefined);
+    }
+  };
+
+  const updateHuntingSnapshot = useCallback((sessionId: string, hunting: HuntingSnapshot) => {
+    setSnapshot((current) =>
+      current?.summary.id === sessionId ? { ...current, hunting } : current,
+    );
+  }, []);
+
+  const huntingNext = async (category: Category) => {
+    if (!snapshot || huntingBusy) return;
+    const sessionId = snapshot.summary.id;
+    setHuntingBusy(category);
+    try {
+      updateHuntingSnapshot(sessionId, await Agent.HuntingNext(sessionId, category));
+    } catch (error) {
+      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
+    } finally {
+      setHuntingBusy(undefined);
+    }
+  };
+
+  const huntingFound = async () => {
+    if (!snapshot || huntingBusy) return;
+    const sessionId = snapshot.summary.id;
+    setHuntingBusy("found");
+    try {
+      updateHuntingSnapshot(sessionId, await Agent.HuntingFound(sessionId));
+    } catch (error) {
+      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
+    } finally {
+      setHuntingBusy(undefined);
+    }
+  };
+
+  const huntingCancel = async () => {
+    if (!snapshot || huntingBusy) return;
+    const sessionId = snapshot.summary.id;
+    setHuntingBusy("cancel");
+    try {
+      updateHuntingSnapshot(sessionId, await Agent.HuntingCancel(sessionId));
+    } catch (error) {
+      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
+    } finally {
+      setHuntingBusy(undefined);
     }
   };
 
@@ -810,6 +862,10 @@ function AgentRoute() {
             hasPendingApproval={hasPendingApproval}
             reverting={reverting}
             empty={empty}
+            huntingBusy={huntingBusy}
+            onHuntingNext={huntingNext}
+            onHuntingFound={huntingFound}
+            onHuntingCancel={huntingCancel}
             onSend={send}
             onUnrevert={unrevertSession}
           />
@@ -933,6 +989,180 @@ function AgentRoute() {
   );
 }
 
+const huntingCategoryLabels: Record<string, string> = {
+  index_buffer: "IB",
+  vertex_buffer: "VB",
+  vertex_shader: "VS",
+  pixel_shader: "PS",
+  compute_shader: "CS",
+  geometry_shader: "GS",
+  domain_shader: "DS",
+  hull_shader: "HS",
+};
+
+function HuntingControls({
+  hunting,
+  busy,
+  onNext,
+  onFound,
+  onCancel,
+}: {
+  hunting: HuntingSnapshot;
+  busy?: string;
+  onNext: (category: Category) => Promise<void>;
+  onFound: () => Promise<void>;
+  onCancel: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const manual = hunting.status === "manual";
+  const cleanupFailed = !manual && hunting.cleanup?.complete === false;
+  const cleanupRetryable = cleanupFailed && hunting.cleanup?.pending === true;
+  const selectedSteps =
+    hunting.categories?.find((state) => state.category === hunting.selectedCategory)?.steps ?? 0;
+
+  const copyHash = async () => {
+    if (!hunting.hash) return;
+    try {
+      await navigator.clipboard.writeText(hunting.hash);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(t("page.agent.hunting_copy_failed"));
+    }
+  };
+
+  return (
+    <section className="rounded-[14px] border border-accent/30 bg-[color-mix(in_oklab,var(--accent)_5%,var(--card))] px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 grid size-7 flex-none place-items-center rounded-[9px] bg-accent/12 text-accent">
+          <Gamepad2Icon className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold text-foreground">{t("page.agent.hunting_title")}</p>
+            <span className="truncate text-[10px] text-muted-foreground">
+              {hunting.importerKey} · {hunting.windowTitle}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+            {manual
+              ? t("page.agent.hunting_description")
+              : cleanupFailed
+                ? cleanupRetryable
+                  ? t("page.agent.hunting_cleanup_failed")
+                  : t("page.agent.hunting_cleanup_abandoned")
+                : t(`page.agent.hunting_status_${hunting.status}`)}
+          </p>
+        </div>
+      </div>
+
+      {manual && (
+        <>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {hunting.availableCategories?.map((category) => (
+              <button
+                key={category}
+                type="button"
+                aria-label={t(`page.agent.hunting_category_${category}`)}
+                title={t(`page.agent.hunting_category_${category}`)}
+                disabled={!!busy}
+                className={cn(
+                  "relative h-8 min-w-10 rounded-[9px] border px-2.5 text-xs font-semibold transition-colors duration-100 disabled:cursor-default disabled:opacity-45",
+                  hunting.selectedCategory === category
+                    ? "border-accent bg-accent text-white"
+                    : "border-border bg-background text-foreground hover:border-accent/55 hover:bg-accent/7",
+                )}
+                onClick={() => void onNext(category)}
+              >
+                {busy === category ? (
+                  <Loader2Icon className="mx-auto size-3.5 animate-spin" />
+                ) : (
+                  (huntingCategoryLabels[category] ?? category)
+                )}
+                {(hunting.categories?.find((state) => state.category === category)?.steps ?? 0) >
+                  0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-4 rounded-full bg-foreground px-1 text-[9px] leading-4 text-background">
+                    {hunting.categories?.find((state) => state.category === category)?.steps}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              {hunting.selectedCategory
+                ? t("page.agent.hunting_selected", {
+                    category:
+                      huntingCategoryLabels[hunting.selectedCategory] ?? hunting.selectedCategory,
+                    steps: selectedSteps,
+                  })
+                : t("page.agent.hunting_select_category")}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5 rounded-[9px] px-3 text-xs"
+              disabled={!!busy || !hunting.selectedCategory}
+              onClick={() => void onFound()}
+            >
+              {busy === "found" ? <Loader2Icon className="animate-spin" /> : <HashIcon />}
+              {t("page.agent.hunting_found")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-[9px] px-3 text-xs"
+              disabled={!!busy}
+              onClick={() => void onCancel()}
+            >
+              {busy === "cancel" && <Loader2Icon className="animate-spin" />}
+              {t("page.agent.hunting_cancel")}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {hunting.status === "completed" && hunting.hash && (
+        <div className="mt-2.5 flex items-center gap-2 rounded-[9px] border border-border bg-background px-2.5 py-2">
+          <HashIcon className="size-3.5 flex-none text-accent" />
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {huntingCategoryLabels[hunting.selectedCategory ?? ""] ?? hunting.selectedCategory}
+          </span>
+          <code className="min-w-0 flex-1 truncate text-xs text-foreground">{hunting.hash}</code>
+          <button
+            type="button"
+            aria-label={t("page.agent.hunting_copy")}
+            title={copied ? t("page.agent.copied") : t("page.agent.hunting_copy")}
+            className="grid size-7 flex-none place-items-center rounded-[8px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => void copyHash()}
+          >
+            {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+          </button>
+        </div>
+      )}
+
+      {cleanupRetryable && (
+        <div className="mt-2.5 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-[9px] px-3 text-xs"
+            title={hunting.cleanup?.error}
+            disabled={!!busy}
+            onClick={() => void onCancel()}
+          >
+            {busy === "cancel" && <Loader2Icon className="animate-spin" />}
+            {t("page.agent.hunting_retry_cleanup")}
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Composer({
   draft,
   setDraft,
@@ -945,6 +1175,10 @@ function Composer({
   hasPendingApproval,
   reverting,
   empty,
+  huntingBusy,
+  onHuntingNext,
+  onHuntingFound,
+  onHuntingCancel,
   onSend,
   onUnrevert,
 }: {
@@ -959,6 +1193,10 @@ function Composer({
   hasPendingApproval: boolean;
   reverting: boolean;
   empty: boolean;
+  huntingBusy?: string;
+  onHuntingNext: (category: Category) => Promise<void>;
+  onHuntingFound: () => Promise<void>;
+  onHuntingCancel: () => Promise<void>;
   onSend: () => Promise<void>;
   onUnrevert: () => Promise<void>;
 }) {
@@ -1003,6 +1241,15 @@ function Composer({
           void onAddImages([...event.dataTransfer.files]);
         }}
       >
+        {snapshot?.hunting && (
+          <HuntingControls
+            hunting={snapshot.hunting}
+            busy={huntingBusy}
+            onNext={onHuntingNext}
+            onFound={onHuntingFound}
+            onCancel={onHuntingCancel}
+          />
+        )}
         {snapshot?.revert && (
           <div className="flex items-center justify-between gap-3 rounded-[14px] bg-muted px-3 py-2">
             <div className="min-w-0">

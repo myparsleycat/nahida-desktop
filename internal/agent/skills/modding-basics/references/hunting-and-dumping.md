@@ -1,6 +1,6 @@
 # Resource hunting and frame dumps
 
-Hunting and dumping are interactive 3DMigoto/XXMI workflows. Nahida can inspect resulting files and write or explain INI changes. When registered desktop actions are available, Nahida may also capture the resolved game window, start a configured game through XXMI after approval, or send a focused shortcut to that window after approval. Nahida cannot understand or navigate an arbitrary in-game scene on the user's behalf, and it cannot operate third-party collection utilities unless a registered action or enabled MCP explicitly provides that capability.
+Hunting and dumping are interactive 3DMigoto/XXMI workflows. Nahida can inspect resulting files and write or explain INI changes. When `hunting.*` actions are available, Nahida can inspect the live importer configuration and prepare a recoverable manual hunting session. The user always chooses when to advance a category and when to mark a found resource from the controls on the Agent conversation page.
 
 ## Choose the smallest useful capture
 
@@ -8,14 +8,29 @@ Start with a precise question: which visible mesh, texture, shader, or draw call
 
 Full frame dumps can consume many gigabytes and produce thousands of files. Prefer a targeted shader/resource dump when a relevant shader hash or index-buffer hash is already known. Do not enable broad dumping or alter the importer's base configuration automatically. Record the output location and pre-existing state before a diagnostic change so only artifacts created by that session can later be proposed for cleanup.
 
-## Interactive hunting workflow
+## User-controlled hunting workflow
 
-Bindings vary by importer configuration. Use the on-screen instructions or inspected local configuration rather than treating the example keys below as universal. The user must prepare the meaningful game state and identify when the correct target is visible. If registered capture and input actions exist, Nahida may perform the mechanical capture or key delivery after resolving one exact game window and obtaining any required approval.
+Prefer this workflow whenever the high-level actions are listed:
+
+1. Ask the user to make the target visible in the game.
+2. Call `hunting.inspect` for the relevant importer. Do not guess whether the green hunting overlay is active; inspect the returned image. If the overlay cannot be classified, ask the user to turn it off and inspect again.
+3. Call `hunting.begin` with the exact PID and observed `initiallyActive` state. This approval prepares hunting mode and exposes the configured category buttons on the conversation page.
+4. Stop using hunting actions. Never cycle, scan, continue, accept, or cancel resources on the user's behalf. Those autonomous actions do not exist by design.
+5. Tell the user which category is likely useful and let them press the corresponding IB, VB, VS, PS, CS, GS, DS, or HS button. Each press focuses the selected game and sends exactly one configured next-resource binding.
+6. When the visible result isolates the target, the user presses **Found hash**. The page sends the configured mark binding, reads the clipboard hash, restores the pre-session hunting state, and displays the category together with the hash. The user can also press **Cancel** to restore state without marking anything.
+
+Animated scenes are supported because the application does not infer candidates from screenshots. The visual decision belongs to the user, so background motion, login animations, particles, subtitles, and camera movement do not produce `hunting_scene_unstable` failures. Vertex-buffer hunting still covers only the current/default slot.
+
+If inspect reports `HUNTING_DISABLED`, tell the user to enable **Enable Hunting** in the corresponding XXMI importer settings and relaunch the game. Do not edit `d3dx.ini` to bypass that setting. If the clean baseline still shows the hunting overlay, cancel and repeat inspection with the correct initial state.
+
+## Manual controls
+
+Bindings vary by importer configuration. The conversation-page controls use the bindings read from the active importer; do not treat example keys as universal. The user must prepare the meaningful game state and identify when the correct target is visible.
 
 1. Enable the importer's development/hunting overlay using its documented launcher setting.
 2. Display the target in a stable scene.
-3. Cycle the relevant category, such as vertex buffers, index buffers, pixel shaders, or textures, until hiding or skipping the selected item isolates the target.
-4. Copy the selected hash using the key shown by that overlay. Record the resource category with the hash; a bare hash is ambiguous.
+3. Use the category buttons on the Agent conversation page to cycle resources until hiding or skipping the selected item isolates the target.
+4. Press **Found hash** to mark the selected resource. Record the resource category with the hash; a bare hash is ambiguous.
 5. If an INI was added or changed to constrain analysis, press `F10` in game to reload it.
 6. Trigger frame analysis, commonly with `F8`, only after the target is visible and capture scope is constrained.
 

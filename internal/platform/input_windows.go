@@ -29,10 +29,12 @@ const (
 )
 
 var (
-	procEnumWindows     = modUser32.NewProc("EnumWindows")
-	enumWindowsProc     = syscall.NewCallback(collectEnumeratedWindow)
-	enumeratedWindows   sync.Map // scan token -> *[]win.HWND
-	enumeratedWindowSeq atomic.Uint64
+	procEnumWindows      = modUser32.NewProc("EnumWindows")
+	procGetAsyncKeyState = modUser32.NewProc("GetAsyncKeyState")
+	procGetForeground    = modUser32.NewProc("GetForegroundWindow")
+	enumWindowsProc      = syscall.NewCallback(collectEnumeratedWindow)
+	enumeratedWindows    sync.Map // scan token -> *[]win.HWND
+	enumeratedWindowSeq  atomic.Uint64
 )
 
 // collectEnumeratedWindow appends to the collector named by lParam. The
@@ -75,9 +77,14 @@ func defaultWindowScanner() windowScanner {
 	return windowScanner{
 		enumerate:  enumerateTopLevel,
 		isVisible:  isWindowVisible,
-		foreground: win.GetForegroundWindow,
+		foreground: foregroundWindow,
 		processOf:  processName,
 	}
+}
+
+func foregroundWindow() win.HWND {
+	handle, _, _ := procGetForeground.Call()
+	return win.HWND(handle)
 }
 
 // records returns every visible, non-tool top-level window in Z-order.
@@ -154,6 +161,7 @@ func (r windowRecord) describe() string {
 // combination of them.
 type Input struct {
 	mu         sync.Mutex
+	focusMu    sync.Mutex
 	diagnostic func(error, string, map[string]any)
 
 	enumerate      func() []win.HWND
@@ -171,6 +179,28 @@ type Input struct {
 	focusTimeout time.Duration
 	focusPoll    time.Duration
 }
+
+// ForegroundLease serializes foreground input while preserving the window the
+// user had focused before the operation. Close must be called exactly once;
+// repeated calls are harmless.
+type ForegroundLease struct {
+	input    *Input
+	target   WindowTarget
+	window   WindowInfo
+	previous win.HWND
+	once     sync.Once
+}
+
+// ForegroundController is the bounded input surface exposed to internal
+// multi-step consumers.
+type ForegroundController interface {
+	Window() WindowInfo
+	SendKeys(context.Context, []string) (KeyResult, error)
+	PressedKeys([]string) ([]string, error)
+	Close() error
+}
+
+var _ ForegroundController = (*ForegroundLease)(nil)
 
 func NewInput() *Input {
 	scanner := defaultWindowScanner()
@@ -269,6 +299,26 @@ func (i *Input) ListWindows(ctx context.Context, filter WindowFilter) ([]WindowI
 	return matched, nil
 }
 
+// ProcessAlive reports whether the process with pid is still running. Hunting
+// uses it to tell a game that hid its window from a game that exited.
+//
+//wails:ignore
+func (i *Input) ProcessAlive(pid uint32) bool {
+	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	if err != nil {
+		// Windows reports ERROR_INVALID_PARAMETER for a PID that no longer
+		// exists; access denied still means the process is running.
+		return !errors.Is(err, windows.ERROR_INVALID_PARAMETER)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+
+	event, err := windows.WaitForSingleObject(handle, 0)
+	if err != nil {
+		return true
+	}
+	return event == uint32(windows.WAIT_TIMEOUT)
+}
+
 // ResolveWindow returns the window that a request would address. It reports
 // WINDOW_NOT_FOUND instead of guessing when nothing matches.
 func (i *Input) ResolveWindow(ctx context.Context, target WindowTarget) (WindowInfo, error) {
@@ -282,11 +332,114 @@ func (i *Input) ResolveWindow(ctx context.Context, target WindowTarget) (WindowI
 	return record.info(), nil
 }
 
+// AcquireForeground serializes a multi-step foreground operation and keeps
+// the target focused until the returned lease is closed.
+//
+//wails:ignore
+func (i *Input) AcquireForeground(ctx context.Context, target WindowTarget) (ForegroundController, error) {
+	i.focusMu.Lock()
+	record, err := selectWindow(i.enumerateRecords(), target)
+	if err != nil {
+		i.focusMu.Unlock()
+		return nil, err
+	}
+	previous := i.foreground()
+	if !windowInProcess(record, previous) {
+		i.focus(record.handle)
+		if err := i.waitForForeground(ctx, record); err != nil {
+			i.focusMu.Unlock()
+			return nil, err
+		}
+	}
+	return &ForegroundLease{
+		input: i, target: WindowTarget{PID: record.pid}, window: record.info(), previous: previous,
+	}, nil
+}
+
+// ValidateKeys verifies that every chord and forbidden-key token can be
+// represented by the Windows input backend without sending input.
+//
+//wails:ignore
+func (i *Input) ValidateKeys(chords, forbidden []string) error {
+	for _, chord := range chords {
+		if _, err := parseKeyChord(chord); err != nil {
+			return err
+		}
+	}
+	for _, token := range forbidden {
+		if _, err := keyStateVirtualKey(token); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Window reports the resolved target held by the lease.
+func (l *ForegroundLease) Window() WindowInfo {
+	return l.window
+}
+
+// SendKeys injects keys without releasing foreground ownership between calls.
+func (l *ForegroundLease) SendKeys(ctx context.Context, keys []string) (KeyResult, error) {
+	noRestore := false
+	return l.input.sendKeys(ctx, KeyRequest{
+		Target: l.target, Keys: keys, Delivery: KeyDeliveryForeground, RestoreFocus: &noRestore,
+	})
+}
+
+// PressedKeys returns the configured keys that are currently held down.
+func (l *ForegroundLease) PressedKeys(keys []string) ([]string, error) {
+	pressed := make([]string, 0, len(keys))
+	for _, token := range keys {
+		key, err := keyStateVirtualKey(token)
+		if err != nil {
+			return nil, err
+		}
+		state, _, _ := procGetAsyncKeyState.Call(uintptr(key))
+		if state&0x8000 != 0 {
+			pressed = append(pressed, token)
+		}
+	}
+	return pressed, nil
+}
+
+// Close restores the previous foreground window and releases exclusive input
+// ownership.
+func (l *ForegroundLease) Close() error {
+	if l == nil || l.input == nil {
+		return nil
+	}
+	l.once.Do(func() {
+		if l.previous.IsWindow() {
+			l.input.focus(l.previous)
+		}
+		l.input.focusMu.Unlock()
+	})
+	return nil
+}
+
+func keyStateVirtualKey(token string) (co.VK, error) {
+	normalized := strings.ToLower(strings.TrimSpace(token))
+	if modifier, ok := keyModifierTokens[normalized]; ok {
+		return modifier, nil
+	}
+	if key, ok := keyTokens[normalized]; ok {
+		return key, nil
+	}
+	return 0, fmt.Errorf("%w: unknown key %q", ErrInputKeyInvalid, token)
+}
+
 // SendKeys sends every key of the request to the resolved target window. With
 // KeyDeliveryMessage the window stays in the background; with
 // KeyDeliveryForeground it is focused first and the keys are injected with
 // SendInput, which is what games and other raw-input targets need.
 func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, error) {
+	i.focusMu.Lock()
+	defer i.focusMu.Unlock()
+	return i.sendKeys(ctx, request)
+}
+
+func (i *Input) sendKeys(ctx context.Context, request KeyRequest) (KeyResult, error) {
 	keys, options, err := resolveKeyRequest(request)
 	if err != nil {
 		return KeyResult{}, err
@@ -589,14 +742,14 @@ func (i *Input) sendMessageKeys(
 }
 
 // sendMessageChord posts the chord and always releases what it pressed, so a
-// modifier never stays logically down when a later step fails.
+// key never stays logically down when a later step fails.
 func (i *Input) sendMessageChord(
 	ctx context.Context,
 	record *windowRecord,
 	chord keyChord,
 	hold time.Duration,
 ) error {
-	pressed := make([]co.VK, 0, len(chord.modifiers)+1)
+	pressed := make([]co.VK, 0, len(chord.keys))
 	release := func(cause error) error {
 		var releaseErr error
 		for index := len(pressed) - 1; index >= 0; index-- {
@@ -607,16 +760,12 @@ func (i *Input) sendMessageChord(
 		return errors.Join(cause, releaseErr)
 	}
 
-	for _, modifier := range chord.modifiers {
-		if err := i.postKey(record.handle, modifier, false); err != nil {
+	for _, key := range chord.keys {
+		if err := i.postKey(record.handle, key, false); err != nil {
 			return release(err)
 		}
-		pressed = append(pressed, modifier)
+		pressed = append(pressed, key)
 	}
-	if err := i.postKey(record.handle, chord.key, false); err != nil {
-		return release(err)
-	}
-	pressed = append(pressed, chord.key)
 
 	if err := waitForInput(ctx, hold); err != nil {
 		return release(err)
@@ -718,11 +867,10 @@ func (i *Input) sendInjectedKeys(
 }
 
 func (i *Input) sendInjectedChord(ctx context.Context, chord keyChord, hold time.Duration) error {
-	downs := make([]win.INPUT, 0, len(chord.modifiers)+1)
-	for _, modifier := range chord.modifiers {
-		downs = append(downs, i.keyInput(modifier, false))
+	downs := make([]win.INPUT, 0, len(chord.keys))
+	for _, key := range chord.keys {
+		downs = append(downs, i.keyInput(key, false))
 	}
-	downs = append(downs, i.keyInput(chord.key, false))
 	if err := i.injectBatch(downs); err != nil {
 		return errors.Join(err, i.releaseChord(chord))
 	}
@@ -734,10 +882,9 @@ func (i *Input) sendInjectedChord(ctx context.Context, chord keyChord, hold time
 }
 
 func (i *Input) releaseChord(chord keyChord) error {
-	ups := make([]win.INPUT, 0, len(chord.modifiers)+1)
-	ups = append(ups, i.keyInput(chord.key, true))
-	for index := len(chord.modifiers) - 1; index >= 0; index-- {
-		ups = append(ups, i.keyInput(chord.modifiers[index], true))
+	ups := make([]win.INPUT, 0, len(chord.keys))
+	for index := len(chord.keys) - 1; index >= 0; index-- {
+		ups = append(ups, i.keyInput(chord.keys[index], true))
 	}
 	return i.injectBatch(ups)
 }

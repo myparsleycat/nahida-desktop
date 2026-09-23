@@ -49,6 +49,13 @@ type CaptureResult struct {
 	PNG []byte `json:"png"`
 }
 
+// PixelCapture is an unencoded window capture for internal high-frequency
+// consumers. It is never exposed through Wails.
+type PixelCapture struct {
+	Window WindowInfo
+	Image  *image.RGBA
+}
+
 // captureFrame is one encoded capture: its PNG bytes, their pixel size, and the
 // downscale that was applied to fit the byte budget.
 type captureFrame struct {

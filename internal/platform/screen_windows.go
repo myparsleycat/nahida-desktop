@@ -82,7 +82,6 @@ func (s *Screen) CaptureWindow(ctx context.Context, request CaptureRequest) (Cap
 	if err := resolveCaptureRequest(request); err != nil {
 		return CaptureResult{}, err
 	}
-
 	record, err := selectWindow(s.windows.records(), request.Target)
 	if err != nil {
 		s.report(err, "resolve", request.Target.resolveDiagnosticFields())
@@ -93,7 +92,6 @@ func (s *Screen) CaptureWindow(ctx context.Context, request CaptureRequest) (Cap
 		s.report(err, "geometry", map[string]any{"window": record.describe()})
 		return CaptureResult{}, err
 	}
-
 	captured, stage, err := s.captureWithinTimeout(ctx, grabTarget{
 		handle: record.handle, rect: rect, clientOnly: request.ClientOnly,
 	}, request.MaxBytes)
@@ -110,13 +108,69 @@ func (s *Screen) CaptureWindow(ctx context.Context, request CaptureRequest) (Cap
 	}, nil
 }
 
-// captureWithinTimeout runs the Win32 grab and the PNG encode on their own
-// goroutine, so a window that never answers its print message cannot block the
-// caller and a large frame cannot outlive the deadline. The goroutine keeps
-// running until it finishes, then releases the bitmap it allocated. The stage
-// names the step that failed, and is empty on success.
+// CapturePixels returns an unencoded frame for internal high-frequency image
+// comparison. The capture remains bounded by the same timeout and pixel cap as
+// CaptureWindow.
+//
+//wails:ignore
+func (s *Screen) CapturePixels(ctx context.Context, request CaptureRequest) (PixelCapture, error) {
+	if err := ctx.Err(); err != nil {
+		return PixelCapture{}, err
+	}
+	if err := resolveCaptureRequest(request); err != nil {
+		return PixelCapture{}, err
+	}
+
+	record, err := selectWindow(s.windows.records(), request.Target)
+	if err != nil {
+		s.report(err, "resolve", request.Target.resolveDiagnosticFields())
+		return PixelCapture{}, err
+	}
+	rect, err := captureWindowRect(record.handle, request.ClientOnly)
+	if err != nil {
+		s.report(err, "geometry", map[string]any{"window": record.describe()})
+		return PixelCapture{}, err
+	}
+	pixels, err := s.grabPixelsWithinTimeout(ctx, grabTarget{
+		handle: record.handle, rect: rect, clientOnly: request.ClientOnly,
+	})
+	if err != nil {
+		s.report(err, "grab", map[string]any{
+			"window": record.describe(), "clientOnly": request.ClientOnly,
+			"foreground": record.isForeground,
+		})
+		return PixelCapture{}, err
+	}
+	return PixelCapture{Window: record.info(), Image: pixels}, nil
+}
+
+func (s *Screen) grabPixelsWithinTimeout(ctx context.Context, target grabTarget) (*image.RGBA, error) {
+	type outcome struct {
+		pixels *image.RGBA
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		pixels, err := s.grab(target)
+		done <- outcome{pixels: pixels, err: err}
+	}()
+
+	timer := time.NewTimer(captureTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		return nil, fmt.Errorf("%w: the capture did not finish within %s", ErrCaptureUnavailable, captureTimeout)
+	case got := <-done:
+		return got.pixels, got.err
+	}
+}
+
 func (s *Screen) captureWithinTimeout(
-	ctx context.Context, target grabTarget, maxBytes int,
+	ctx context.Context,
+	target grabTarget,
+	maxBytes int,
 ) (captureFrame, string, error) {
 	type outcome struct {
 		frame captureFrame
@@ -241,7 +295,7 @@ func captureWindowPixelsWith(
 	target grabTarget, screen, compositor, print captureAttempt,
 ) (*image.RGBA, error) {
 	var screenErr error
-	if !target.handle.IsIconic() && win.GetForegroundWindow() == target.handle {
+	if !target.handle.IsIconic() && foregroundWindow() == target.handle {
 		frame, err := screen(target)
 		if err == nil {
 			return frame, nil

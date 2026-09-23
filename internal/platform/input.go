@@ -173,9 +173,9 @@ func normalizeWindowText(value string) string {
 	return strings.Join(strings.FieldsFunc(value, unicode.IsSpace), " ")
 }
 
-// KeyRequest is the payload of Input.SendKeys. Each Keys entry is one key
-// press in the notation KeyNotation documents: "vk_f10", "f12", "ctrl alt vk_f5",
-// or a single character key. A plus sign is not a separator.
+// KeyRequest is the payload of Input.SendKeys. Each Keys entry is one chord in
+// the notation KeyNotation documents: "vk_f10", "f12", "ctrl alt vk_f5",
+// "vk_decimal vk_numpad2", or a single character key. A plus sign is not a separator.
 type KeyRequest struct {
 	Target       WindowTarget `json:"target"`
 	Keys         []string     `json:"keys"`
@@ -192,8 +192,8 @@ type KeyRequest struct {
 // rather than the rejected everyday name.
 func KeyNotation() string {
 	return strings.Join([]string{
-		"Each keys item is one press.",
-		`Separate modifiers with spaces, never '+': "ctrl f12", not "Ctrl+F12".`,
+		"Each keys item is one chord; its tokens are pressed together in order and released in reverse order.",
+		`Separate chord keys with spaces, never '+': "ctrl f12" or "vk_decimal vk_numpad2", not "Ctrl+F12".`,
 		"Letters, digits, and f1-f24 are accepted as written; vk_a, vk_7, and vk_f12 also work.",
 		"Any other name is rejected before the window is targeted.",
 		"Send the vk_ token exactly. Do not send the parenthetical label.",

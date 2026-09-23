@@ -12,6 +12,9 @@ const backend = vi.hoisted(() => ({
   CreateSession: vi.fn(),
   DeleteSession: vi.fn(),
   GetSession: vi.fn(),
+  HuntingCancel: vi.fn(),
+  HuntingFound: vi.fn(),
+  HuntingNext: vi.fn(),
   ListSessions: vi.fn(),
   OpenSession: vi.fn(),
   RejectAction: vi.fn(),
@@ -68,7 +71,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@renderer/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@wailsio/runtime", () => ({
   Events: {
     On: (_name: string, handler: (event: { data: unknown }) => void) => {
@@ -98,6 +101,27 @@ function makeSnapshot(entries: unknown[] = [], overrides: Record<string, unknown
     approvals: [],
     roots: [],
     supportsImages: false,
+    ...overrides,
+  };
+}
+
+function makeHunting(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "hunt-1",
+    status: "manual",
+    importerKey: "GIMI",
+    pid: 42,
+    windowTitle: "Game",
+    availableCategories: ["index_buffer", "vertex_shader", "pixel_shader"],
+    categories: [
+      { category: "index_buffer", steps: 0 },
+      { category: "vertex_shader", steps: 0 },
+      { category: "pixel_shader", steps: 0 },
+    ],
+    totalSteps: 0,
+    startedAt: new Date().toISOString(),
+    elapsedMs: 0,
+    cleanup: { complete: false },
     ...overrides,
   };
 }
@@ -746,6 +770,182 @@ describe("Agent conversation revert", () => {
       name: "page.agent.copy_message",
     }) as HTMLButtonElement;
     expect(copy.disabled).toBe(true);
+  });
+});
+
+describe("manual hunting controls", () => {
+  const conversation = [
+    {
+      sequence: 1,
+      turnId: RUN_ID,
+      type: "message/assistant",
+      role: "assistant",
+      text: "Use the controls below.",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  it("only advances a category after the user presses its button", async () => {
+    const advanced = makeHunting({
+      selectedCategory: "pixel_shader",
+      categories: [
+        { category: "index_buffer", steps: 0 },
+        { category: "vertex_shader", steps: 0 },
+        { category: "pixel_shader", steps: 1 },
+      ],
+      totalSteps: 1,
+    });
+    backend.HuntingNext.mockResolvedValue(advanced);
+    await renderAgent(conversation, () =>
+      Promise.resolve(makeSnapshot(conversation, { hunting: makeHunting() })),
+    );
+
+    expect(backend.HuntingNext).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "page.agent.hunting_category_index_buffer" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "page.agent.hunting_category_vertex_shader" }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "page.agent.hunting_category_pixel_shader" }),
+    );
+
+    await waitFor(() =>
+      expect(backend.HuntingNext).toHaveBeenCalledWith(SESSION_ID, "pixel_shader"),
+    );
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
+  it("marks the selected resource only when the user presses found", async () => {
+    const selected = makeHunting({ selectedCategory: "pixel_shader" });
+    backend.HuntingFound.mockResolvedValue(
+      makeHunting({
+        status: "completed",
+        selectedCategory: "pixel_shader",
+        hash: "deadbeef",
+        cleanup: { complete: true },
+      }),
+    );
+    await renderAgent(conversation, () =>
+      Promise.resolve(makeSnapshot(conversation, { hunting: selected })),
+    );
+
+    expect(backend.HuntingFound).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.hunting_found" }));
+
+    await waitFor(() => expect(backend.HuntingFound).toHaveBeenCalledWith(SESSION_ID));
+    expect(await screen.findByText("deadbeef")).toBeTruthy();
+  });
+
+  it("keeps found disabled until the user selects a category and can cancel", async () => {
+    backend.HuntingCancel.mockResolvedValue(
+      makeHunting({ status: "cancelled", cleanup: { complete: true } }),
+    );
+    await renderAgent(conversation, () =>
+      Promise.resolve(makeSnapshot(conversation, { hunting: makeHunting() })),
+    );
+
+    expect(
+      (screen.getByRole("button", { name: "page.agent.hunting_found" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.hunting_cancel" }));
+
+    await waitFor(() => expect(backend.HuntingCancel).toHaveBeenCalledWith(SESSION_ID));
+    expect(await screen.findByText("page.agent.hunting_status_cancelled")).toBeTruthy();
+  });
+
+  it("offers a restore retry when hunting cleanup fails", async () => {
+    backend.HuntingCancel.mockResolvedValue(
+      makeHunting({ status: "cancelled", cleanup: { complete: true, pending: false } }),
+    );
+    await renderAgent(conversation, () =>
+      Promise.resolve(
+        makeSnapshot(conversation, {
+          hunting: makeHunting({
+            status: "cancelled",
+            cleanup: { complete: false, pending: true, error: "game window is gone" },
+          }),
+        }),
+      ),
+    );
+
+    expect(screen.queryByText("page.agent.hunting_status_cancelled")).toBeNull();
+    expect(screen.getByText("page.agent.hunting_cleanup_failed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.hunting_retry_cleanup" }));
+
+    await waitFor(() => expect(backend.HuntingCancel).toHaveBeenCalledWith(SESSION_ID));
+    expect(await screen.findByText("page.agent.hunting_status_cancelled")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "page.agent.hunting_retry_cleanup" })).toBeNull();
+  });
+
+  it("keeps a found hash while the restore is retried", async () => {
+    backend.HuntingCancel.mockResolvedValue(
+      makeHunting({
+        status: "completed",
+        selectedCategory: "pixel_shader",
+        hash: "deadbeef",
+        cleanup: { complete: true, pending: false },
+      }),
+    );
+    await renderAgent(conversation, () =>
+      Promise.resolve(
+        makeSnapshot(conversation, {
+          hunting: makeHunting({
+            status: "completed",
+            selectedCategory: "pixel_shader",
+            hash: "deadbeef",
+            cleanup: { complete: false, pending: true, error: "game window is gone" },
+          }),
+        }),
+      ),
+    );
+
+    expect(screen.getByText("deadbeef")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.hunting_retry_cleanup" }));
+
+    await waitFor(() => expect(backend.HuntingCancel).toHaveBeenCalledWith(SESSION_ID));
+    expect(await screen.findByText("page.agent.hunting_status_completed")).toBeTruthy();
+    expect(screen.getByText("deadbeef")).toBeTruthy();
+  });
+
+  it("shows a restore failure without a retry once the game window is gone", async () => {
+    await renderAgent(conversation, () =>
+      Promise.resolve(
+        makeSnapshot(conversation, {
+          hunting: makeHunting({
+            status: "cancelled",
+            cleanup: { complete: false, pending: false, error: "game window is gone" },
+          }),
+        }),
+      ),
+    );
+
+    expect(screen.getByText("page.agent.hunting_cleanup_abandoned")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "page.agent.hunting_retry_cleanup" })).toBeNull();
+  });
+
+  it("copies a completed hash", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await renderAgent(conversation, () =>
+      Promise.resolve(
+        makeSnapshot(conversation, {
+          hunting: makeHunting({
+            status: "completed",
+            selectedCategory: "index_buffer",
+            hash: "cafebabe",
+            cleanup: { complete: true },
+          }),
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.hunting_copy" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("cafebabe"));
   });
 });
 
