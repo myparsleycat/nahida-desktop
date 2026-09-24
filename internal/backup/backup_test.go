@@ -399,7 +399,10 @@ func TestRunFailsWhenAnIncludedFolderDisappears(t *testing.T) {
 	}
 }
 
-func TestRunFailsWhenFileVanishesBeforeHash(t *testing.T) {
+// TestRunKeepsTheBaseOfAFileThatVanishesBeforeHash pins that a file which
+// cannot be read after the scan neither fails the run nor is removed from the
+// backup: it keeps the base content and is counted as unreadable.
+func TestRunKeepsTheBaseOfAFileThatVanishesBeforeHash(t *testing.T) {
 	t.Parallel()
 	client := testClient(t)
 	root := t.TempDir()
@@ -427,15 +430,85 @@ func TestRunFailsWhenFileVanishesBeforeHash(t *testing.T) {
 		return ""
 	}
 	result := backup.run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeCompleted || len(remote.uploaded) != 0 || len(remote.deleted) != 0 ||
+		scanSkipped(remote, "unreadable") != 1 {
+		t.Fatalf("result=%+v uploaded=%+v deleted=%+v", result, remote.uploaded, remote.deleted)
+	}
+	if remote.files["game:GI"]["a.ini"] == "" {
+		t.Fatalf("the unreadable file left the backup: %v", remote.files)
+	}
+	rows, err := client.BackupCommitted.All(t.Context())
+	if err != nil || len(rows) != 1 || rows[0].RelPath != "a.ini" {
+		t.Fatalf("committed=%+v err=%v", rows, err)
+	}
+}
+
+func TestRunFailsWhenManyFilesAreUnreadable(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	for index := range missingToleranceFiles + 5 {
+		writeFile(t, filepath.Join(root, fmt.Sprintf("%02d.ini", index)), fmt.Sprint(index))
+	}
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{filter: func(name string, _ int64) string {
+		if err := os.Remove(filepath.Join(root, name)); err != nil {
+			t.Error(err)
+		}
+		return ""
+	}}
+	result := testBackup(t, client, remote).run(t.Context(), client, "manual")
 	if result.Outcome != OutcomeFailed || !strings.Contains(result.Error, ErrUnreadable.Error()) ||
-		remote.creates != 0 || len(remote.deleted) != 0 || len(remote.commits) != 0 {
-		t.Fatalf(
-			"result=%+v creates=%d deleted=%+v commits=%+v",
-			result,
-			remote.creates,
-			remote.deleted,
-			remote.commits,
-		)
+		remote.creates != 0 {
+		t.Fatalf("result=%+v creates=%d", result, remote.creates)
+	}
+}
+
+// TestRunDropsMissingFilesOverSeveralCommits pins a refused commit that names
+// only a page of the missing hashes: the run keeps adding failed files until
+// the commit goes through.
+func TestRunDropsMissingFilesOverSeveralCommits(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	for index := range 5 {
+		writeFile(t, filepath.Join(root, fmt.Sprintf("%02d.ini", index)), fmt.Sprint(index))
+	}
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{missingOnce: 3, missingCap: 1}
+	result := testBackup(t, client, remote).run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeCompleted || remote.aborted {
+		t.Fatalf("result = %+v, aborted = %v", result, remote.aborted)
+	}
+	if len(remote.commits) != 4 || len(remote.commits[3].Failed) != 3 {
+		t.Fatalf("commits = %+v", remote.commits)
+	}
+	rows, err := client.BackupCommitted.All(t.Context())
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("committed=%+v err=%v", rows, err)
+	}
+}
+
+// TestRestoreRemovesItsOutputWhenItFails pins that a failed restore leaves the
+// destination as it found it, so the same folder can be chosen again.
+func TestRestoreRemovesItsOutputWhenItFails(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	remote := &fakeRemote{files: map[string]map[string]string{
+		"game:GI": {"a.ini": strings.Repeat("0", 64)},
+	}}
+	backup := testBackup(t, client, remote)
+	destination := filepath.Join(t.TempDir(), "restore")
+	if err := backup.Restore(t.Context(), "snapshot-1", []string{fakeTargetID("game:GI")}, destination); err != nil {
+		t.Fatal(err)
+	}
+	backup.runs.Wait()
+	if _, err := os.Stat(destination); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("destination after a failed restore: %v", err)
 	}
 }
 
@@ -525,7 +598,8 @@ func TestRunTakesTheBaseFromTheServer(t *testing.T) {
 	remote := &fakeRemote{latest: "snapshot-7", snapshots: 7, files: map[string]map[string]string{
 		"game:GI": {"a.ini": a.sha256, "gone.ini": strings.Repeat("0", 64)},
 	}, metadata: map[string]map[string]fakeFileMetadata{
-		"game:GI": {"a.ini": {size: a.size, modifiedAt: a.modified}},
+		// The server keeps modification times to the microsecond.
+		"game:GI": {"a.ini": {size: a.size, modifiedAt: a.modified.Truncate(time.Microsecond)}},
 	}}
 
 	backup := testBackup(t, client, remote)
@@ -762,6 +836,9 @@ type fakeRemote struct {
 	mu          sync.Mutex
 	unchanged   bool
 	missingOnce int
+	// missingCap, when set, bounds how many missing hashes a refused commit
+	// names, the way the server pages them.
+	missingCap  int
 	planningErr error
 	uploadErr   error
 	uploaded    []drive.BackupUploadFile
@@ -796,12 +873,25 @@ type fakePending struct {
 	deletes []drive.BackupDeletedFile
 }
 
+type failedFile struct {
+	TargetID string `json:"targetId"`
+	Path     string `json:"path"`
+	Reason   string `json:"reason"`
+}
+
 type commitBody struct {
-	Failed []struct {
-		TargetID string `json:"targetId"`
-		Path     string `json:"path"`
-		Reason   string `json:"reason"`
-	} `json:"failed"`
+	Failed  []failedFile     `json:"failed"`
+	Skipped map[string]int32 `json:"skipped"`
+}
+
+// scanSkipped answers what the last commit counted as left out for reason.
+func scanSkipped(remote *fakeRemote, reason string) int32 {
+	remote.mu.Lock()
+	defer remote.mu.Unlock()
+	if len(remote.commits) == 0 {
+		return 0
+	}
+	return remote.commits[len(remote.commits)-1].Skipped[reason]
 }
 
 func fakeTargetID(key string) string { return "target:" + key }
@@ -863,14 +953,33 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 		var commit commitBody
 		_ = json.Unmarshal(raw, &commit)
 		f.commits = append(f.commits, commit)
-		if len(f.commits) == 1 && f.missingOnce > 0 {
-			missing := make([]string, 0, f.missingOnce)
-			for _, file := range f.pending.upserts[:min(f.missingOnce, len(f.pending.upserts))] {
+		// The first missingOnce upserts never arrived; a commit is refused
+		// while one of them is not named failed.
+		failed := lo.Keyify(lo.Map(commit.Failed, func(file failedFile, _ int) string {
+			return file.TargetID + "\x00" + file.Path
+		}))
+		var missing []string
+		for _, file := range f.pending.upserts[:min(f.missingOnce, len(f.pending.upserts))] {
+			if _, ok := failed[file.TargetID+"\x00"+file.RelPath]; !ok {
 				missing = append(missing, file.SHA256)
 			}
+		}
+		if f.missingCap > 0 && len(missing) > f.missingCap {
+			missing = missing[:f.missingCap]
+		}
+		if len(missing) > 0 {
 			return &drive.BackupAPIError{Status: http.StatusConflict, Code: "backup_incomplete", Missing: missing}
 		}
 		answer = f.commit(commit)
+	case strings.HasSuffix(route, "/files:download"):
+		raw, _ := json.Marshal(body)
+		var request struct {
+			IDs []string `json:"ids"`
+		}
+		_ = json.Unmarshal(raw, &request)
+		answer = lo.Map(request.IDs, func(id string, _ int) map[string]any {
+			return map[string]any{"id": id, "name": id, "url": "https://cdn.test/" + id, "size": 1}
+		})
 	case strings.HasSuffix(route, "/abort"):
 		f.aborted = true
 	default:
@@ -886,11 +995,7 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 // commit applies the pending changes, less the failed files, the way the
 // server turns them into file versions.
 func (f *fakeRemote) commit(commit commitBody) map[string]any {
-	failed := lo.Keyify(lo.Map(commit.Failed, func(file struct {
-		TargetID string `json:"targetId"`
-		Path     string `json:"path"`
-		Reason   string `json:"reason"`
-	}, _ int) string {
+	failed := lo.Keyify(lo.Map(commit.Failed, func(file failedFile, _ int) string {
 		return file.TargetID + "\x00" + file.Path
 	}))
 	next := map[string]map[string]string{}
@@ -955,8 +1060,19 @@ func (f *fakeRemote) reset() {
 	f.uploaded, f.deleted, f.commits, f.creates, f.manifests = nil, nil, nil, 0, 0
 }
 
-func (f *fakeRemote) DownloadBackupFile(context.Context, string, drive.BackupDownload, string, func(int64)) error {
-	return nil
+// DownloadBackupFile writes bytes that match no manifest hash, so a restore
+// fails its check once the first file lands.
+func (f *fakeRemote) DownloadBackupFile(
+	_ context.Context,
+	_ string,
+	_ drive.BackupDownload,
+	destination string,
+	_ func(int64),
+) error {
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(destination, []byte("x"), 0o644)
 }
 
 func testClient(t *testing.T) *db.Client {

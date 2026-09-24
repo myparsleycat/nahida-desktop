@@ -173,6 +173,9 @@ type Backup struct {
 	watchMu    sync.Mutex
 	watchRoots []string
 	watch      interface{ Close() error }
+	// watchRetryAt is when a watch of watchRoots that failed to open is tried
+	// again.
+	watchRetryAt time.Time
 
 	now func() time.Time
 }

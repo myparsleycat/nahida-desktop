@@ -28,6 +28,9 @@ const (
 	watchMinGap = time.Hour
 	// watchDebounce folds a burst of file events into one.
 	watchDebounce = 2 * time.Second
+	// watchRetry is how long a folder watch that failed to open waits before
+	// it is tried again.
+	watchRetry = 10 * time.Minute
 )
 
 // schedule runs until ctx ends: a catch-up shortly after startup, then a check
@@ -167,7 +170,9 @@ func (b *Backup) syncWatch(ctx context.Context, client *db.Client, wanted bool) 
 
 	b.watchMu.Lock()
 	defer b.watchMu.Unlock()
-	if slices.Equal(roots, b.watchRoots) {
+	// A watch that failed to open keeps its roots and is tried again after
+	// watchRetry, not on every tick.
+	if slices.Equal(roots, b.watchRoots) && (b.watch != nil || len(roots) == 0 || b.now().Before(b.watchRetryAt)) {
 		return
 	}
 	if b.watch != nil {
@@ -192,7 +197,7 @@ func (b *Backup) syncWatch(ctx context.Context, client *db.Client, wanted bool) 
 	})
 	if err != nil {
 		b.report(err, "watch", "open", map[string]any{"roots": roots})
-		b.watchRoots = nil
+		b.watchRetryAt = b.now().Add(watchRetry)
 		return
 	}
 	b.watch = watch

@@ -19,8 +19,10 @@ import (
 	"nahida.live/desktop/internal/drive"
 )
 
-// missingTolerance is how many files a run may give up on, beyond a share of
-// the whole, before it fails instead of committing a snapshot with holes.
+// missingToleranceFiles and missingToleranceShare bound how many files a run
+// may give up on (unreadable, or not uploaded), the larger of a count and a
+// share of the whole, before it fails instead of committing a snapshot with
+// holes.
 const (
 	missingToleranceFiles = 20
 	missingToleranceShare = 0.05
@@ -250,8 +252,30 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 		return fail(err, "hash")
 	}
 	throttle.flush()
+
+	// A file that is locked or vanished since the scan keeps what the base
+	// snapshot has, so one open log does not cost the backup; many of them
+	// fail the run.
+	var held []committedKey
 	if len(unreadable) > 0 {
-		return fail(fmt.Errorf("%w: %d file(s)", ErrUnreadable, len(unreadable)), "hash")
+		unreadableErr := fmt.Errorf("%w: %d file(s)", ErrUnreadable, len(unreadable))
+		if len(unreadable) > missingTolerance(len(scan.files)) {
+			return fail(unreadableErr, "hash")
+		}
+		b.report(unreadableErr, "run", "hash-skip", map[string]any{
+			"trigger": trigger,
+			"paths":   lo.Map(unreadable, func(index int, _ int) string { return scan.files[index].fullPath }),
+		})
+		gone := lo.Keyify(unreadable)
+		held = lo.Map(unreadable, func(index int, _ int) committedKey {
+			return committedKey{targetKey(targets[scan.files[index].target]), scan.files[index].relPath}
+		})
+		scan.files = lo.Reject(scan.files, func(_ scannedFile, index int) bool {
+			_, ok := gone[index]
+			return ok
+		})
+		scan.skipped["unreadable"] += int32(len(unreadable))
+		totalBytes = lo.SumBy(scan.files, func(file scannedFile) int64 { return file.size })
 	}
 
 	deviceID, err := b.registerDevice(ctx, client)
@@ -293,7 +317,7 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	if err != nil {
 		return fail(err, "base")
 	}
-	changes := diffCommitted(targets, scan.files, committed)
+	changes := diffCommitted(targets, scan.files, committed, held)
 	snapshot, kept, commitErr := b.upload(ctx, created.SnapshotID, created.TargetIDs, targets, scan, changes, trigger)
 	if commitErr != nil {
 		abortCtx, cancelAbort := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
@@ -441,27 +465,39 @@ type committedChanges struct {
 	deleted []db.BackupCommittedRow
 }
 
-func diffCommitted(targets []Target, files []scannedFile, committed []db.BackupCommittedRow) committedChanges {
-	type fileKey struct{ target, path string }
-	remembered := make(map[fileKey]db.BackupCommittedRow, len(committed))
+// committedKey names one remembered file by its target key and path.
+type committedKey struct{ target, path string }
+
+// diffCommitted compares a scan with the remembered files. The held files were
+// found but could not be read, so they are neither changed nor removed. The
+// modification time is compared to the microsecond, which is what the server
+// keeps: a base taken from the server's list matches the files it came from.
+func diffCommitted(
+	targets []Target,
+	files []scannedFile,
+	committed []db.BackupCommittedRow,
+	held []committedKey,
+) committedChanges {
+	remembered := make(map[committedKey]db.BackupCommittedRow, len(committed))
 	for _, row := range committed {
-		remembered[fileKey{row.TargetKey, row.RelPath}] = row
+		remembered[committedKey{row.TargetKey, row.RelPath}] = row
 	}
 
 	var changes committedChanges
-	seen := make(map[fileKey]struct{}, len(files))
+	seen := lo.Keyify(held)
 	for index, file := range files {
-		key := fileKey{targetKey(targets[file.target]), file.relPath}
+		key := committedKey{targetKey(targets[file.target]), file.relPath}
 		seen[key] = struct{}{}
 		if row, ok := remembered[key]; !ok || row.SHA256 != file.sha256 ||
-			row.Size == nil || *row.Size != file.size || row.Mtime == nil || *row.Mtime != file.modified.UnixNano() {
+			row.Size == nil || *row.Size != file.size || row.Mtime == nil ||
+			*row.Mtime/int64(time.Microsecond) != file.modified.UnixNano()/int64(time.Microsecond) {
 			changes.changed = append(changes.changed, index)
 		}
 	}
 
 	scanned := lo.Keyify(lo.Map(targets, func(target Target, _ int) string { return targetKey(target) }))
 	for _, row := range committed {
-		key := fileKey{row.TargetKey, row.RelPath}
+		key := committedKey{row.TargetKey, row.RelPath}
 		if _, covered := scanned[row.TargetKey]; !covered {
 			continue
 		}
@@ -543,35 +579,60 @@ func (b *Backup) upload(
 	b.setStatus(Status{State: StateCommitting, Trigger: trigger, Total: len(files), TotalBytes: totalBytes})
 	route := "/backup/snapshots/" + url.PathEscape(snapshotID) + "/commit"
 	body := map[string]any{"skipped": scan.skipped}
-	var snapshot Snapshot
-	err := b.opts.Remote.BackupJSON(ctx, http.MethodPost, route, body, &snapshot)
+	tolerance := missingTolerance(len(scan.files))
 
-	if err == nil {
-		return snapshot, keep(), nil
-	}
-	var apiErr *drive.BackupAPIError
-	if !errors.As(err, &apiErr) || apiErr.Code != "backup_incomplete" {
-		return Snapshot{}, nil, errors.Join(err, uploadErr)
-	}
-	missing := lo.Filter(files, func(file drive.BackupUploadFile, _ int) bool {
-		return lo.Contains(apiErr.Missing, file.SHA256)
-	})
-	tolerance := max(missingToleranceFiles, int(float64(len(scan.files))*missingToleranceShare))
-	if len(missing) == 0 || len(missing) > tolerance {
-		return Snapshot{}, nil, errors.Join(errTooManyMissing, uploadErr, err)
-	}
+	// A refused commit names at most a page of the missing hashes, so the
+	// failed files add up over rounds until the commit goes through. Every
+	// round adds at least one, and the tolerance bounds how many there are.
+	var failed []drive.BackupUploadFile
+	failedIDs := map[string]struct{}{}
+	for {
+		var snapshot Snapshot
+		err := b.opts.Remote.BackupJSON(ctx, http.MethodPost, route, body, &snapshot)
+		if err == nil {
+			if len(failed) > 0 {
+				b.report(
+					uploadErr,
+					"run",
+					"partial-upload",
+					map[string]any{"snapshotId": snapshotID, "dropped": len(failed)},
+				)
+			}
+			for _, file := range failed {
+				dropped[file.ClientID] = struct{}{}
+			}
+			return snapshot, keep(), nil
+		}
+		var apiErr *drive.BackupAPIError
+		if !errors.As(err, &apiErr) || apiErr.Code != "backup_incomplete" {
+			return Snapshot{}, nil, errors.Join(err, uploadErr)
+		}
 
-	body["failed"] = lo.Map(missing, func(file drive.BackupUploadFile, _ int) map[string]string {
-		return map[string]string{"targetId": file.TargetID, "path": file.RelPath, "reason": "upload_failed"}
-	})
-	b.report(uploadErr, "run", "partial-upload", map[string]any{"snapshotId": snapshotID, "dropped": len(missing)})
-	if err := b.opts.Remote.BackupJSON(ctx, http.MethodPost, route, body, &snapshot); err != nil {
-		return Snapshot{}, nil, err
+		missing := lo.Keyify(apiErr.Missing)
+		added := 0
+		for _, file := range files {
+			if _, ok := missing[file.SHA256]; !ok {
+				continue
+			}
+			if _, ok := failedIDs[file.ClientID]; ok {
+				continue
+			}
+			failedIDs[file.ClientID] = struct{}{}
+			failed = append(failed, file)
+			added++
+		}
+		if added == 0 || len(failed) > tolerance {
+			return Snapshot{}, nil, errors.Join(errTooManyMissing, uploadErr, err)
+		}
+		body["failed"] = lo.Map(failed, func(file drive.BackupUploadFile, _ int) map[string]string {
+			return map[string]string{"targetId": file.TargetID, "path": file.RelPath, "reason": "upload_failed"}
+		})
 	}
-	for _, file := range missing {
-		dropped[file.ClientID] = struct{}{}
-	}
-	return snapshot, keep(), nil
+}
+
+// missingTolerance is how many of total files a run may leave out.
+func missingTolerance(total int) int {
+	return max(missingToleranceFiles, int(float64(total)*missingToleranceShare))
 }
 
 // registerDevice registers this PC with the server, or updates its name and

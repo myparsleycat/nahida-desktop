@@ -43,10 +43,13 @@ func (b *Backup) Restore(ctx context.Context, snapshotID string, targetIDs []str
 	if !empty {
 		return ErrDestination
 	}
+	_, statErr := os.Stat(destination)
+	existed := statErr == nil
 	loaded, err := b.manifest(ctx, snapshotID)
 	if err != nil {
 		return err
 	}
+	folders := restoreFolders(loaded.Snapshot.Targets, targetIDs)
 
 	b.mu.Lock()
 	if b.cancel != nil {
@@ -71,7 +74,7 @@ func (b *Backup) Restore(ctx context.Context, snapshotID string, targetIDs []str
 			b.mu.Unlock()
 			b.setStatus(Status{State: StateIdle})
 		}()
-		err := b.restore(runCtx, snapshotID, loaded, targetIDs, destination)
+		err := b.restore(runCtx, snapshotID, loaded, folders, destination)
 		outcome := OutcomeCompleted
 		message := ""
 		switch {
@@ -81,6 +84,18 @@ func (b *Backup) Restore(ctx context.Context, snapshotID string, targetIDs []str
 			outcome = OutcomeFailed
 			message = err.Error()
 			b.report(err, "restore", "download", map[string]any{"snapshotId": snapshotID, "destination": destination})
+		}
+		// The destination was empty, so what a stopped restore leaves there is
+		// only its own partial output; it goes, and the same folder can be
+		// chosen again.
+		if outcome != OutcomeCompleted {
+			cleanupErr := cleanupRestore(destination, folders, existed)
+			b.report(
+				cleanupErr,
+				"restore",
+				"cleanup",
+				map[string]any{"snapshotId": snapshotID, "destination": destination},
+			)
 		}
 		if b.opts.EventEmit != nil {
 			b.opts.EventEmit("backup:restore", map[string]any{
@@ -95,10 +110,9 @@ func (b *Backup) restore(
 	ctx context.Context,
 	snapshotID string,
 	loaded manifest,
-	targetIDs []string,
+	folders map[string]string,
 	destination string,
 ) error {
-	folders := restoreFolders(loaded.Snapshot.Targets, targetIDs)
 	files := lo.Filter(loaded.Files, func(file ManifestFile, _ int) bool {
 		_, ok := folders[file.TargetID]
 		return ok
@@ -212,6 +226,21 @@ func safeFolderName(label string) string {
 		return "backup"
 	}
 	return name
+}
+
+// cleanupRestore removes the sub-folders a stopped restore wrote into, and the
+// destination itself when the restore created it.
+func cleanupRestore(destination string, folders map[string]string, existed bool) error {
+	var errs []error
+	for _, name := range folders {
+		errs = append(errs, os.RemoveAll(filepath.Join(destination, name)))
+	}
+	if !existed {
+		if err := os.Remove(destination); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func isEmptyOrMissing(path string) (bool, error) {
