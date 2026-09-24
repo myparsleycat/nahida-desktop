@@ -2189,6 +2189,8 @@
         "BACKUP_RUNNING": "バックアップまたは復元がすでに実行中です。",
         "BACKUP_NOT_LOGGED_IN": "バックアップするにはログインしてください。",
         "BACKUP_NO_TARGETS": "バックアップするフォルダーがありません。",
+        "BACKUP_TARGET_MISSING": "バックアップ対象のフォルダーにアクセスできません。確認してから再試行してください。",
+        "BACKUP_UNREADABLE_FILE": "一部のファイルを読み取れないため、今回のバックアップを中止しました。再試行してください。",
         "BACKUP_NOT_DIRECTORY": "フォルダーが存在しません。",
         "BACKUP_UPLOAD_FAILED": "アップロードに失敗したファイルが多すぎます。",
         "BACKUP_INVALID_DEVICE_NAME": "PC名は1–80文字で入力してください。",

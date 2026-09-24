@@ -103,7 +103,7 @@ SET "size" = excluded."size", "mtime" = excluded."mtime", "sha256" = excluded."s
 type BackupCommittedStore struct{ c *Client }
 
 func (s BackupCommittedStore) All(ctx context.Context) ([]BackupCommittedRow, error) {
-	rows, err := s.c.query(ctx, `SELECT "target_key", "rel_path", "sha256" FROM "backup_committed"`)
+	rows, err := s.c.query(ctx, `SELECT "target_key", "rel_path", "sha256", "size", "mtime" FROM "backup_committed"`)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (s BackupCommittedStore) All(ctx context.Context) ([]BackupCommittedRow, er
 	out := []BackupCommittedRow{}
 	for rows.Next() {
 		var row BackupCommittedRow
-		if err := rows.Scan(&row.TargetKey, &row.RelPath, &row.SHA256); err != nil {
+		if err := rows.Scan(&row.TargetKey, &row.RelPath, &row.SHA256, &row.Size, &row.Mtime); err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -158,10 +158,11 @@ DELETE FROM "backup_committed" WHERE "target_key" = ? AND "rel_path" = ?`, row.T
 func upsertBackupCommitted(ctx context.Context, tx queryExec, rows []BackupCommittedRow) error {
 	for _, row := range rows {
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO "backup_committed" ("target_key", "rel_path", "sha256")
-VALUES (?, ?, ?)
-ON CONFLICT("target_key", "rel_path") DO UPDATE SET "sha256" = excluded."sha256"`,
-			row.TargetKey, row.RelPath, row.SHA256); err != nil {
+INSERT INTO "backup_committed" ("target_key", "rel_path", "sha256", "size", "mtime")
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT("target_key", "rel_path") DO UPDATE SET
+"sha256" = excluded."sha256", "size" = excluded."size", "mtime" = excluded."mtime"`,
+			row.TargetKey, row.RelPath, row.SHA256, row.Size, row.Mtime); err != nil {
 			return err
 		}
 	}

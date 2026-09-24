@@ -54,6 +54,8 @@ var (
 	ErrRunning        = errors.New("BACKUP_RUNNING")
 	ErrNotLoggedIn    = errors.New("BACKUP_NOT_LOGGED_IN")
 	ErrNoTargets      = errors.New("BACKUP_NO_TARGETS")
+	ErrMissingTarget  = errors.New("BACKUP_TARGET_MISSING")
+	ErrUnreadable     = errors.New("BACKUP_UNREADABLE_FILE")
 	ErrNotDirectory   = errors.New("BACKUP_NOT_DIRECTORY")
 	ErrDestination    = errors.New("RESTORE_DESTINATION_NOT_EMPTY")
 	ErrNotConfigured  = errors.New("backup service is not configured")
@@ -370,7 +372,7 @@ func (b *Backup) targets(ctx context.Context, client *db.Client) ([]Target, erro
 	if err != nil {
 		return nil, err
 	}
-	return listTargets(games, custom, excluded), nil
+	return listTargets(games, custom, excluded)
 }
 
 func (b *Backup) excludedGames(ctx context.Context) ([]string, error) {

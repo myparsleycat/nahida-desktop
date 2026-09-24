@@ -258,6 +258,8 @@ var TableSpecs = []TableSpec{
 			{Name: "target_key", Type: TypeText, NotNull: true},
 			{Name: "rel_path", Type: TypeText, NotNull: true},
 			{Name: "sha256", Type: TypeText, NotNull: true},
+			{Name: "size", Type: TypeInteger},
+			{Name: "mtime", Type: TypeInteger},
 		},
 		CompositePrimaryKey: []string{"target_key", "rel_path"},
 	},
@@ -408,6 +410,8 @@ type BackupCommittedRow struct {
 	TargetKey string
 	RelPath   string
 	SHA256    string
+	Size      *int64
+	Mtime     *int64
 }
 
 type ModScanCacheRow struct {

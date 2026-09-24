@@ -30,6 +30,9 @@ type BackupAPIError struct {
 // A caller must abort it rather than commit the pages registered so far.
 var ErrBackupPlanning = errors.New("backup file planning failed")
 
+// ErrBackupSourceRead means a local file could not be read during upload.
+var ErrBackupSourceRead = errors.New("backup source read failed")
+
 func (e *BackupAPIError) Error() string {
 	if e.Code == "" {
 		return fmt.Sprintf("backup request failed with status %d", e.Status)
@@ -231,6 +234,9 @@ func (d *Drive) UploadBackupFiles(
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return nil, ctxErr
+			}
+			if errors.Is(err, ErrBackupSourceRead) {
+				return nil, err
 			}
 			failures = append(failures, err)
 		}

@@ -52,6 +52,28 @@ func TestReconcileCreatesMissingTables(t *testing.T) {
 	assertElectronSchema(t, client)
 }
 
+func TestReconcileAddsBackupMetadataWithoutInventingValues(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := t.Context()
+	if err := client.exec(ctx, `CREATE TABLE "backup_committed" (
+"target_key" TEXT NOT NULL, "rel_path" TEXT NOT NULL, "sha256" TEXT NOT NULL,
+PRIMARY KEY ("target_key", "rel_path"))`); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.exec(ctx, `INSERT INTO "backup_committed" ("target_key", "rel_path", "sha256")
+VALUES ('game:GI', 'a.ini', 'abc')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := client.BackupCommitted.All(ctx)
+	if err != nil || len(rows) != 1 || rows[0].SHA256 != "abc" || rows[0].Size != nil || rows[0].Mtime != nil {
+		t.Fatalf("migrated backup rows = %+v, err = %v", rows, err)
+	}
+}
+
 func TestReconcileAddsNullableAndDefaultColumns(t *testing.T) {
 	t.Parallel()
 

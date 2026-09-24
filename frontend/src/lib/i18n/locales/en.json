@@ -2223,6 +2223,8 @@
         "BACKUP_RUNNING": "A backup or restore is already running.",
         "BACKUP_NOT_LOGGED_IN": "Sign in to back up.",
         "BACKUP_NO_TARGETS": "There are no folders to back up.",
+        "BACKUP_TARGET_MISSING": "A backup folder is unavailable. Check the folder and try again.",
+        "BACKUP_UNREADABLE_FILE": "Some files could not be read, so this backup was stopped. Try again.",
         "BACKUP_NOT_DIRECTORY": "That folder does not exist.",
         "BACKUP_UPLOAD_FAILED": "Too many files failed to upload.",
         "BACKUP_INVALID_DEVICE_NAME": "Enter a PC name of 1–80 characters.",

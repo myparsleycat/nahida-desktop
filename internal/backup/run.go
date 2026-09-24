@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -52,11 +53,12 @@ type ManifestTarget struct {
 
 // ManifestFile is one file of a snapshot.
 type ManifestFile struct {
-	ID       string `json:"id"`
-	TargetID string `json:"targetId"`
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	Size     int64  `json:"size"`
+	ID         string    `json:"id"`
+	TargetID   string    `json:"targetId"`
+	Path       string    `json:"path"`
+	SHA256     string    `json:"sha256"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modifiedAt"`
 }
 
 type manifestSnapshot struct {
@@ -217,6 +219,11 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	if err != nil {
 		return fail(err, "targets")
 	}
+	for _, target := range allTargets {
+		if !target.Excluded && target.Missing {
+			return fail(fmt.Errorf("%w: %s", ErrMissingTarget, target.Path), "targets")
+		}
+	}
 	targets := includedTargets(allTargets)
 	if len(targets) == 0 {
 		return fail(ErrNoTargets, "targets")
@@ -244,13 +251,7 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	}
 	throttle.flush()
 	if len(unreadable) > 0 {
-		dropped := lo.Keyify(unreadable)
-		scan.files = lo.Reject(scan.files, func(_ scannedFile, index int) bool {
-			_, gone := dropped[index]
-			return gone
-		})
-		scan.skipped["unreadable"] += int32(len(unreadable))
-		totalBytes = lo.SumBy(scan.files, func(file scannedFile) int64 { return file.size })
+		return fail(fmt.Errorf("%w: %d file(s)", ErrUnreadable, len(unreadable)), "hash")
 	}
 
 	deviceID, err := b.registerDevice(ctx, client)
@@ -385,7 +386,10 @@ func (b *Backup) rebase(ctx context.Context, client *db.Client, latest string) e
 		}
 		for _, file := range loaded.Files {
 			if key := keys[file.TargetID]; key != "" {
-				rows = append(rows, db.BackupCommittedRow{TargetKey: key, RelPath: file.Path, SHA256: file.SHA256})
+				size, mtime := file.Size, file.ModifiedAt.UnixNano()
+				rows = append(rows, db.BackupCommittedRow{
+					TargetKey: key, RelPath: file.Path, SHA256: file.SHA256, Size: &size, Mtime: &mtime,
+				})
 			}
 		}
 	}
@@ -413,10 +417,13 @@ func (b *Backup) recordCommitted(
 	}
 	upserts := lo.Map(kept, func(index int, _ int) db.BackupCommittedRow {
 		file := files[index]
+		size, mtime := file.size, file.modified.UnixNano()
 		return db.BackupCommittedRow{
 			TargetKey: targetKey(targets[file.target]),
 			RelPath:   file.relPath,
 			SHA256:    file.sha256,
+			Size:      &size,
+			Mtime:     &mtime,
 		}
 	})
 	keys := lo.Map(targets, func(target Target, _ int) string { return targetKey(target) })
@@ -436,9 +443,9 @@ type committedChanges struct {
 
 func diffCommitted(targets []Target, files []scannedFile, committed []db.BackupCommittedRow) committedChanges {
 	type fileKey struct{ target, path string }
-	remembered := make(map[fileKey]string, len(committed))
+	remembered := make(map[fileKey]db.BackupCommittedRow, len(committed))
 	for _, row := range committed {
-		remembered[fileKey{row.TargetKey, row.RelPath}] = row.SHA256
+		remembered[fileKey{row.TargetKey, row.RelPath}] = row
 	}
 
 	var changes committedChanges
@@ -446,7 +453,8 @@ func diffCommitted(targets []Target, files []scannedFile, committed []db.BackupC
 	for index, file := range files {
 		key := fileKey{targetKey(targets[file.target]), file.relPath}
 		seen[key] = struct{}{}
-		if sha, ok := remembered[key]; !ok || sha != file.sha256 {
+		if row, ok := remembered[key]; !ok || row.SHA256 != file.sha256 ||
+			row.Size == nil || *row.Size != file.size || row.Mtime == nil || *row.Mtime != file.modified.UnixNano() {
 			changes.changed = append(changes.changed, index)
 		}
 	}
@@ -518,6 +526,9 @@ func (b *Backup) upload(
 		return Snapshot{}, nil, err
 	}
 	if errors.Is(uploadErr, drive.ErrBackupPlanning) {
+		return Snapshot{}, nil, uploadErr
+	}
+	if errors.Is(uploadErr, drive.ErrBackupSourceRead) {
 		return Snapshot{}, nil, uploadErr
 	}
 	dropped := lo.Keyify(denied)

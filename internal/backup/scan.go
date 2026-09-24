@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -59,10 +61,14 @@ func gameTargetID(game string) string {
 
 // listTargets answers the mod folders of the registered games followed by the
 // folders the user added, each marked excluded or missing.
-func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, excluded []string) []Target {
+func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, excluded []string) ([]Target, error) {
 	targets := make([]Target, 0, len(games)+len(custom))
 	for _, row := range games {
 		game := row.Game
+		missing, err := targetMissing(row.ModFolderPath)
+		if err != nil && !slices.Contains(excluded, game) {
+			return nil, fmt.Errorf("stat backup target %q: %w", row.ModFolderPath, err)
+		}
 		targets = append(targets, Target{
 			ID:       gameTargetID(game),
 			Kind:     TargetKindGame,
@@ -70,19 +76,37 @@ func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, exclud
 			Label:    game,
 			Path:     row.ModFolderPath,
 			Excluded: slices.Contains(excluded, game),
-			Missing:  !isDirectory(row.ModFolderPath),
+			Missing:  missing,
 		})
 	}
 	for _, row := range custom {
+		missing, err := targetMissing(row.Path)
+		if err != nil {
+			return nil, fmt.Errorf("stat backup target %q: %w", row.Path, err)
+		}
 		targets = append(targets, Target{
 			ID:      row.ID,
 			Kind:    TargetKindCustom,
 			Label:   row.Label,
 			Path:    row.Path,
-			Missing: !isDirectory(row.Path),
+			Missing: missing,
 		})
 	}
-	return targets
+	return targets, nil
+}
+
+func targetMissing(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("%s is not a directory", path)
+	}
+	return false, nil
 }
 
 // includedTargets keeps the targets a run backs up: not excluded, present on
@@ -151,11 +175,7 @@ func scanTargets(
 				if path == root {
 					return err
 				}
-				result.skipped["unreadable"]++
-				if entry != nil && entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, err)
 			}
 			if path != root && entry.Type()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 				result.skipped["link"]++
@@ -169,9 +189,7 @@ func scanTargets(
 			}
 			info, infoErr := entry.Info()
 			if infoErr != nil {
-				// A file that vanished or cannot be read is left out, not fatal.
-				result.skipped["unreadable"]++
-				return nil //nolint:nilerr // counted as skipped
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, infoErr)
 			}
 			if reason := filter(entry.Name(), info.Size()); reason != "" {
 				result.skipped[reason]++
@@ -179,8 +197,7 @@ func scanTargets(
 			}
 			relPath, relErr := filepath.Rel(root, path)
 			if relErr != nil {
-				result.skipped["unreadable"]++
-				return nil //nolint:nilerr // counted as skipped
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, relErr)
 			}
 			result.files = append(result.files, scannedFile{
 				target:   index,
@@ -192,7 +209,7 @@ func scanTargets(
 			return nil
 		})
 		if err != nil {
-			return scanResult{}, err
+			return scanResult{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 		}
 	}
 	return result, nil
@@ -286,10 +303,11 @@ func hashFiles(
 func manifestDigest(targets []Target, files []scannedFile) string {
 	lines := make([]string, 0, len(files)+len(targets))
 	for _, target := range targets {
-		lines = append(lines, "target\x00"+targetKey(target))
+		lines = append(lines, "target\x00"+targetKey(target)+"\x00"+target.Label+"\x00"+target.Path)
 	}
 	for _, file := range files {
-		lines = append(lines, "file\x00"+targetKey(targets[file.target])+"\x00"+file.relPath+"\x00"+file.sha256)
+		lines = append(lines, "file\x00"+targetKey(targets[file.target])+"\x00"+file.relPath+"\x00"+
+			file.sha256+"\x00"+strconv.FormatInt(file.size, 10)+"\x00"+strconv.FormatInt(file.modified.UnixNano(), 10))
 	}
 	slices.Sort(lines)
 
