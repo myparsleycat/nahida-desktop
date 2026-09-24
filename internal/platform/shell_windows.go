@@ -99,6 +99,7 @@ var (
 	procEmptyClipboard           = user32.NewProc("EmptyClipboard")
 	procSetClipboardData         = user32.NewProc("SetClipboardData")
 	procGetClipboardData         = user32.NewProc("GetClipboardData")
+	procGetClipboardSequence     = user32.NewProc("GetClipboardSequenceNumber")
 	procRegisterClipboardFormatW = user32.NewProc("RegisterClipboardFormatW")
 	procGlobalAlloc              = kernel32.NewProc("GlobalAlloc")
 	procGlobalLock               = kernel32.NewProc("GlobalLock")
@@ -107,6 +108,21 @@ var (
 	fileNameWFormat              uint32
 	uriListFormat                uint32
 )
+
+func readClipboardText() (ClipboardText, error) {
+	sequence, _, _ := procGetClipboardSequence.Call()
+	if r, _, err := procOpenClipboard.Call(0); r == 0 {
+		return ClipboardText{Sequence: uint32(sequence)}, fmt.Errorf("open clipboard: %w", err)
+	}
+	defer func() { _, _, _ = procCloseClipboard.Call() }()
+	handle, _, err := procGetClipboardData.Call(cfUnicodeText)
+	if handle == 0 {
+		return ClipboardText{Sequence: uint32(sequence)}, fmt.Errorf("read Unicode clipboard text: %w", err)
+	}
+	return ClipboardText{
+		Sequence: uint32(sequence), Text: trimTrailingNUL(utf16FromGlobal(handle)),
+	}, nil
+}
 
 func writeClipboardText(text string) error {
 	utf16, err := syscall.UTF16FromString(text)

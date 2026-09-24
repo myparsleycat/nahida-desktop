@@ -16,11 +16,14 @@ import (
 )
 
 type toolExecutor struct {
-	sandbox *Sandbox
-	skills  *skillCatalog
-	desktop *agentactions.Registry
-	scope   AgentScope
-	mcp     *mcpRuntime
+	sandbox        *Sandbox
+	skills         *skillCatalog
+	desktop        *agentactions.Registry
+	scope          AgentScope
+	mcp            *mcpRuntime
+	sessionID      string
+	supportsImages bool
+	toolCallID     string
 }
 
 type toolExecution struct {
@@ -164,7 +167,11 @@ func objectSchema(properties map[string]any, required ...string) map[string]any 
 }
 
 func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecution, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	timeout := 2 * time.Minute
+	if call.Name == "run_desktop_action" {
+		timeout = 4 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if strings.HasPrefix(call.Name, "mcp__") {
 		if e.mcp == nil {
@@ -292,7 +299,9 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		if e.desktop == nil {
 			return toolExecution{}, errors.New("desktop actions are unavailable")
 		}
-		return toolExecution{Output: e.desktop.Definitions(e.scope.Type, input.Domain, input.Query)}, nil
+		return toolExecution{Output: e.desktop.DefinitionsFor(
+			e.scope.Type, input.Domain, input.Query, e.supportsImages,
+		)}, nil
 	case "run_desktop_action":
 		if e.desktop == nil {
 			return toolExecution{}, errors.New("desktop actions are unavailable")
@@ -301,7 +310,9 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
 		}
-		plan, err := e.desktop.Prepare(e.scope.Type, e.sandbox, input)
+		plan, err := e.desktop.PrepareWithContext(e.scope.Type, e.sandbox, input, agentactions.ExecutionContext{
+			SessionID: e.sessionID, SupportsImages: e.supportsImages,
+		})
 		if err != nil {
 			return toolExecution{}, err
 		}
@@ -361,7 +372,12 @@ func (e *toolExecutor) ExecuteApproved(
 		if e.desktop == nil {
 			return toolExecution{}, errors.New("desktop actions are unavailable")
 		}
-		output, err := e.desktop.Execute(ctx, e.scope.Type, e.sandbox, actionID, arguments)
+		output, err := e.desktop.ExecuteWithContext(
+			ctx, e.scope.Type, e.sandbox, actionID, arguments,
+			agentactions.ExecutionContext{
+				SessionID: e.sessionID, SupportsImages: e.supportsImages,
+			},
+		)
 		persisted, images := splitActionImage(output)
 		return toolExecution{Output: persisted, Images: images}, err
 	case "sandbox":

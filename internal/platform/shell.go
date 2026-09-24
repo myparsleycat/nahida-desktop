@@ -30,6 +30,12 @@ type Shell struct {
 	diagnostic func(error, string, map[string]any)
 }
 
+// ClipboardText is one atomic observation of the Windows text clipboard.
+type ClipboardText struct {
+	Sequence uint32
+	Text     string
+}
+
 //wails:ignore
 func (s *Shell) UseDiagnostic(report func(error, string, map[string]any)) {
 	s.diagnostic = report
@@ -84,6 +90,14 @@ func (s *Shell) OpenCmd(path string) error {
 
 func (s *Shell) GetClipboardFiles() []string {
 	return clipboardFiles()
+}
+
+// ReadClipboardText returns Unicode text together with the clipboard sequence
+// number used to reject stale hunting results.
+//
+//wails:ignore
+func (s *Shell) ReadClipboardText() (ClipboardText, error) {
+	return readClipboardText()
 }
 
 func parseExternalURL(str string) (string, bool) {

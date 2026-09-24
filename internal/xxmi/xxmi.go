@@ -56,6 +56,15 @@ type Data struct {
 	XXMIConfig       map[string]any    `json:"xxmiConfig"`
 }
 
+// HuntingRuntime is the resolved on-disk and process metadata a high-level
+// hunting session needs. It is deliberately not part of the Wails surface.
+type HuntingRuntime struct {
+	ImporterKey    string
+	ImporterFolder string
+	INIPath        string
+	GameEXENames   []string
+}
+
 type parsedConfig struct {
 	Launcher struct {
 		StartTimeout float64 `json:"start_timeout"`
@@ -238,6 +247,34 @@ func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, erro
 	out := x.enabledImportersLocked()
 	x.mu.RUnlock()
 	return out, nil
+}
+
+// ResolveHuntingRuntime returns the active importer's game and INI metadata.
+//
+//wails:ignore
+func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
+	if err := x.load(ctx); err != nil {
+		return HuntingRuntime{}, err
+	}
+
+	wanted := strings.TrimSpace(importerKey)
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	for key, importer := range x.parsed.Importers {
+		if !strings.EqualFold(key, wanted) {
+			continue
+		}
+		packageInfo, enabled := x.parsed.Packages.Packages[key]
+		if !enabled || strings.TrimSpace(packageInfo.LatestVersion) == "" {
+			return HuntingRuntime{}, fmt.Errorf("importer %q is not enabled", key)
+		}
+		folder := x.importerFolderLocked(key)
+		return HuntingRuntime{
+			ImporterKey: key, ImporterFolder: folder, INIPath: filepath.Join(folder, "d3dx.ini"),
+			GameEXENames: slices.Clone(importer.Importer.GameEXENames),
+		}, nil
+	}
+	return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
 }
 
 func (x *XXMI) GetLibsReleases(ctx context.Context) ([]string, error) {

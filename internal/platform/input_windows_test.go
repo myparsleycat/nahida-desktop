@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -307,6 +308,33 @@ func TestListWindowsAndResolveWindowSkipHiddenWindows(t *testing.T) {
 	}
 }
 
+func TestProcessAliveTracksProcessLifetime(t *testing.T) {
+	t.Parallel()
+	input := NewInput()
+	if !input.ProcessAlive(uint32(os.Getpid())) {
+		t.Fatal("ProcessAlive(current process) = false, want true")
+	}
+
+	cmd := exec.Command("cmd", "/c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := uint32(cmd.Process.Pid)
+	// Keep the process object referenced until the check so the PID cannot be
+	// reused by another process in the meantime.
+	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if input.ProcessAlive(pid) {
+		t.Fatalf("ProcessAlive(exited process %d) = true, want false", pid)
+	}
+}
+
 func TestWindowInProcessMatchesHandleAndProcess(t *testing.T) {
 	window := newTestWindow(t, "Nahida Input Test "+t.Name())
 	record := &windowRecord{handle: window.handle, pid: uint32(os.Getpid())}
@@ -320,6 +348,83 @@ func TestWindowInProcessMatchesHandleAndProcess(t *testing.T) {
 	if windowInProcess(record, win.GetDesktopWindow()) {
 		t.Fatal("windowInProcess(desktop window) = true, want false")
 	}
+}
+
+type focusWaitContext struct {
+	context.Context
+	entered chan struct{}
+}
+
+func (c focusWaitContext) Done() <-chan struct{} {
+	select {
+	case c.entered <- struct{}{}:
+	default:
+	}
+	return c.Context.Done()
+}
+
+func TestInputFocusWaitRespectsContext(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		call func(context.Context, *Input) error
+	}{
+		{
+			name: "AcquireForeground",
+			call: func(ctx context.Context, input *Input) error {
+				_, err := input.AcquireForeground(ctx, WindowTarget{PID: 1})
+				return err
+			},
+		},
+		{
+			name: "SendKeys",
+			call: func(ctx context.Context, input *Input) error {
+				_, err := input.SendKeys(ctx, KeyRequest{})
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := NewInput()
+			input.focusGate <- struct{}{}
+			defer input.releaseFocus()
+			baseCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx := focusWaitContext{Context: baseCtx, entered: make(chan struct{}, 1)}
+
+			result := make(chan error, 1)
+			go func() { result <- test.call(ctx, input) }()
+			select {
+			case <-ctx.entered:
+			case <-time.After(time.Second):
+				t.Fatalf("%s did not reach the context wait", test.name)
+			}
+			cancel()
+			select {
+			case err := <-result:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("%s = %v, want context canceled", test.name, err)
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("%s did not return after cancellation", test.name)
+			}
+		})
+	}
+}
+
+func TestForegroundLeaseCloseReleasesFocus(t *testing.T) {
+	input := NewInput()
+	input.focusGate <- struct{}{}
+	lease := &ForegroundLease{input: input}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+	if err := input.acquireFocus(context.Background()); err != nil {
+		t.Fatalf("acquireFocus after Close = %v", err)
+	}
+	input.releaseFocus()
 }
 
 func TestSendKeysPostsKeysToBackgroundWindow(t *testing.T) {
@@ -364,6 +469,42 @@ func TestSendKeysPostsKeysToBackgroundWindow(t *testing.T) {
 	}
 	if want := keyLParam(f10Scan, false, true); uintptr(up.lParam) != want {
 		t.Fatalf("key up lParam = 0x%X, want 0x%X", up.lParam, want)
+	}
+}
+
+func TestSendKeysPostsMultiKeyChordToBackgroundWindow(t *testing.T) {
+	title := "Nahida Input Test " + t.Name()
+	window := newTestWindow(t, title)
+	input := NewInput()
+	window.restrictTo(input)
+
+	_, err := input.SendKeys(context.Background(), KeyRequest{
+		Target:   WindowTarget{Title: title},
+		Keys:     []string{"vk_decimal vk_numpad2"},
+		Delivery: KeyDeliveryMessage,
+	})
+	if err != nil {
+		t.Fatalf("SendKeys = %v", err)
+	}
+
+	want := []struct {
+		message co.WM
+		key     co.VK
+	}{
+		{message: co.WM_KEYDOWN, key: co.VK_DECIMAL},
+		{message: co.WM_KEYDOWN, key: co.VK_NUMPAD2},
+		{message: co.WM_KEYUP, key: co.VK_NUMPAD2},
+		{message: co.WM_KEYUP, key: co.VK_DECIMAL},
+	}
+	for index, expected := range want {
+		got := window.next(t)
+		for got.msg != co.WM_KEYDOWN && got.msg != co.WM_KEYUP {
+			got = window.next(t)
+		}
+		if got.msg != expected.message || co.VK(got.wParam) != expected.key {
+			t.Fatalf("message %d = 0x%X with key 0x%X, want 0x%X with key 0x%X",
+				index, got.msg, got.wParam, expected.message, expected.key)
+		}
 	}
 }
 
@@ -545,6 +686,57 @@ func TestSendKeysInjectsScanCodesAndRestoresFocus(t *testing.T) {
 	}
 	if want := []win.HWND{window.handle, previous, window.handle}; !slices.Equal(focused, want) {
 		t.Fatalf("focus calls = %+v, want the target window only after the first request", focused)
+	}
+}
+
+func TestSendKeysInjectsMultiKeyChordInOrder(t *testing.T) {
+	title := "Nahida Input Test " + t.Name()
+	window := newTestWindow(t, title)
+	input := NewInput()
+	window.restrictTo(input)
+
+	current := win.GetDesktopWindow()
+	input.foreground = func() win.HWND { return current }
+	input.focus = func(handle win.HWND) { current = handle }
+	var batches [][]win.INPUT
+	input.sendInput = func(inputs []win.INPUT) (int, error) {
+		batches = append(batches, slices.Clone(inputs))
+		return len(inputs), nil
+	}
+
+	_, err := input.SendKeys(context.Background(), KeyRequest{
+		Target: WindowTarget{Title: title},
+		Keys:   []string{"vk_decimal vk_numpad2"},
+	})
+	if err != nil {
+		t.Fatalf("SendKeys = %v", err)
+	}
+
+	type pressedKey struct {
+		scan  uint16
+		flags co.KEYEVENTF
+	}
+	want := []pressedKey{
+		{scan: uint16(win.MapVirtualKey(co.VK_DECIMAL, co.MAPVK_VK_TO_VSC)), flags: co.KEYEVENTF_SCANCODE},
+		{scan: uint16(win.MapVirtualKey(co.VK_NUMPAD2, co.MAPVK_VK_TO_VSC)), flags: co.KEYEVENTF_SCANCODE},
+		{
+			scan:  uint16(win.MapVirtualKey(co.VK_NUMPAD2, co.MAPVK_VK_TO_VSC)),
+			flags: co.KEYEVENTF_SCANCODE | co.KEYEVENTF_KEYUP,
+		},
+		{
+			scan:  uint16(win.MapVirtualKey(co.VK_DECIMAL, co.MAPVK_VK_TO_VSC)),
+			flags: co.KEYEVENTF_SCANCODE | co.KEYEVENTF_KEYUP,
+		},
+	}
+	got := make([]pressedKey, 0, len(want))
+	for _, batch := range batches {
+		for _, injected := range batch {
+			keyboard := injected.KeybdInput()
+			got = append(got, pressedKey{scan: keyboard.WScan, flags: keyboard.DwFlags})
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("injected keys = %+v, want %+v", got, want)
 	}
 }
 

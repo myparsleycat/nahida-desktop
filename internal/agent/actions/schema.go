@@ -126,6 +126,21 @@ func validateActionSchema(schema map[string]any, value any, path string) error {
 		if maximum, ok := schema["maximum"].(int); ok && integer > int64(maximum) {
 			return fmt.Errorf("%s must be at most %d", path, maximum)
 		}
+	case "number":
+		number, ok := value.(json.Number)
+		if !ok {
+			return fmt.Errorf("%s must be a number", path)
+		}
+		decimal, err := number.Float64()
+		if err != nil {
+			return fmt.Errorf("%s must be a number", path)
+		}
+		if minimum, ok := schema["minimum"].(float64); ok && decimal < minimum {
+			return fmt.Errorf("%s must be at least %g", path, minimum)
+		}
+		if maximum, ok := schema["maximum"].(float64); ok && decimal > maximum {
+			return fmt.Errorf("%s must be at most %g", path, maximum)
+		}
 	case "array":
 		items, ok := value.([]any)
 		if !ok {

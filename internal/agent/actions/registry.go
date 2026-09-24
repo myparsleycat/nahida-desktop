@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"nahida.live/desktop/internal/hunting"
 	modservice "nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -32,12 +33,13 @@ const (
 
 // Definition is the model-facing description of one action.
 type Definition struct {
-	ID          string         `json:"id"`
-	Description string         `json:"description"`
-	Domain      string         `json:"domain"`
-	Risk        Risk           `json:"risk"`
-	Scopes      []string       `json:"scopes"`
-	InputSchema map[string]any `json:"inputSchema"`
+	ID             string         `json:"id"`
+	Description    string         `json:"description"`
+	Domain         string         `json:"domain"`
+	Risk           Risk           `json:"risk"`
+	Scopes         []string       `json:"scopes"`
+	InputSchema    map[string]any `json:"inputSchema"`
+	RequiresImages bool           `json:"requiresImages,omitempty"`
 }
 
 // Hint is the compact index entry the system prompt carries.
@@ -57,6 +59,7 @@ type Dependencies struct {
 	XXMI     *xxmi.XXMI
 	Input    *platform.Input
 	Screen   *platform.Screen
+	Hunting  *hunting.Service
 }
 
 // Resolver turns a sandbox root id and relative path into an absolute local path.
@@ -68,8 +71,16 @@ type Resolver interface {
 }
 
 type actionContext struct {
-	resolver Resolver
-	scope    string
+	resolver       Resolver
+	scope          string
+	sessionID      string
+	supportsImages bool
+}
+
+// ExecutionContext carries per-run capabilities and ownership into an action.
+type ExecutionContext struct {
+	SessionID      string
+	SupportsImages bool
 }
 
 func (c actionContext) resolve(rootID, relativePath string) (string, error) {
@@ -92,6 +103,7 @@ type action struct {
 	validate   func(json.RawMessage) error
 	risk       func(json.RawMessage) Risk
 	describe   func(actionContext, json.RawMessage) (string, string, error)
+	impact     string
 }
 
 // Registry holds the actions the agent may run, keyed by action id.
@@ -125,6 +137,7 @@ type CapturedImage struct {
 	Scale    float64             `json:"scale"`
 	MIMEType string              `json:"mimeType"`
 	PNG      []byte              `json:"-"`
+	Result   any                 `json:"result,omitempty"`
 }
 
 // Plan is a prepared action. A non-nil Proposal means the caller must collect user approval before
@@ -155,6 +168,7 @@ func NewRegistry(deps Dependencies) *Registry {
 	registerMenuMakerActions(registry, deps)
 	registerInputActions(registry, deps)
 	registerScreenActions(registry, deps)
+	registerHuntingActions(registry, deps)
 	return registry
 }
 
@@ -190,10 +204,18 @@ func (r *Registry) register(action action) error {
 }
 
 func (r *Registry) Definitions(scope, domain, query string) []Definition {
+	return r.DefinitionsFor(scope, domain, query, true)
+}
+
+// DefinitionsFor filters the catalog by scope and model capabilities.
+func (r *Registry) DefinitionsFor(scope, domain, query string, supportsImages bool) []Definition {
 	domain, query = strings.ToLower(strings.TrimSpace(domain)), strings.ToLower(strings.TrimSpace(query))
 	definitions := make([]Definition, 0, len(r.actions))
 	for _, action := range r.actions {
 		definition := action.definition
+		if definition.RequiresImages && !supportsImages {
+			continue
+		}
 		if domain != "" && definition.Domain != domain {
 			continue
 		}
@@ -210,7 +232,12 @@ func (r *Registry) Definitions(scope, domain, query string) []Definition {
 }
 
 func (r *Registry) Hints(scope string) []Hint {
-	definitions := r.Definitions(scope, "", "")
+	return r.HintsFor(scope, true)
+}
+
+// HintsFor returns prompt hints available to the current model.
+func (r *Registry) HintsFor(scope string, supportsImages bool) []Hint {
+	definitions := r.DefinitionsFor(scope, "", "", supportsImages)
 	hints := make([]Hint, 0, len(definitions))
 	for _, definition := range definitions {
 		hints = append(hints, Hint{
@@ -223,12 +250,26 @@ func (r *Registry) Hints(scope string) []Hint {
 // Prepare validates one call and returns the plan for it, including the approval request when the
 // action needs user confirmation.
 func (r *Registry) Prepare(scope string, resolver Resolver, call Call) (Plan, error) {
+	return r.PrepareWithContext(scope, resolver, call, ExecutionContext{SupportsImages: true})
+}
+
+// PrepareWithContext prepares an action with the current Agent ownership and
+// model capabilities.
+func (r *Registry) PrepareWithContext(
+	scope string,
+	resolver Resolver,
+	call Call,
+	execution ExecutionContext,
+) (Plan, error) {
 	action, ok := r.actions[call.ActionID]
 	if !ok {
 		return Plan{}, fmt.Errorf("unregistered desktop action %q", call.ActionID)
 	}
 	if !containsString(action.definition.Scopes, scope) {
 		return Plan{}, fmt.Errorf("desktop action %q is unavailable in %s scope", call.ActionID, scope)
+	}
+	if action.definition.RequiresImages && !execution.SupportsImages {
+		return Plan{}, hunting.ErrImagesRequired
 	}
 	arguments := call.Arguments
 	if len(arguments) == 0 || bytes.Equal(bytes.TrimSpace(arguments), []byte("null")) {
@@ -255,7 +296,10 @@ func (r *Registry) Prepare(scope string, resolver Resolver, call Call) (Plan, er
 			return Plan{}, err
 		}
 	}
-	actionCtx := actionContext{resolver: resolver, scope: scope}
+	actionCtx := actionContext{
+		resolver: resolver, scope: scope, sessionID: execution.SessionID,
+		supportsImages: execution.SupportsImages,
+	}
 	plan := Plan{
 		Definition: action.definition,
 		Risk:       action.definition.Risk,
@@ -276,12 +320,16 @@ func (r *Registry) Prepare(scope string, resolver Resolver, call Call) (Plan, er
 			return Plan{}, err
 		}
 	}
+	impact := action.impact
+	if impact == "" {
+		impact = "This action can make broad or difficult-to-reverse local changes."
+	}
 	plan.Proposal = &Proposal{
 		ActionID:  call.ActionID,
 		Arguments: canonical,
 		Summary:   summary,
 		Target:    target,
-		Impact:    "This action can make broad or difficult-to-reverse local changes.",
+		Impact:    impact,
 		Kind:      "desktop",
 	}
 	return plan, nil
@@ -295,7 +343,22 @@ func (r *Registry) Execute(
 	actionID string,
 	arguments json.RawMessage,
 ) (any, error) {
-	plan, err := r.Prepare(scope, resolver, Call{ActionID: actionID, Arguments: arguments})
+	return r.ExecuteWithContext(
+		ctx, scope, resolver, actionID, arguments, ExecutionContext{SupportsImages: true},
+	)
+}
+
+// ExecuteWithContext runs an already approved action with current runtime
+// capabilities and Agent ownership.
+func (r *Registry) ExecuteWithContext(
+	ctx context.Context,
+	scope string,
+	resolver Resolver,
+	actionID string,
+	arguments json.RawMessage,
+	execution ExecutionContext,
+) (any, error) {
+	plan, err := r.PrepareWithContext(scope, resolver, Call{ActionID: actionID, Arguments: arguments}, execution)
 	if err != nil {
 		return nil, err
 	}

@@ -17,28 +17,28 @@ func TestParseKeyChordAcceptsToggleKeyNotation(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		spec      string
-		modifiers []co.VK
-		key       co.VK
+		name string
+		spec string
+		keys []co.VK
 	}{
-		{name: "single key", spec: "vk_f10", key: co.VK_F10},
-		{name: "uppercase", spec: "VK_F10", key: co.VK_F10},
-		{name: "bare function key", spec: "f12", key: co.VK_F12},
-		{name: "bare function key uppercase", spec: "F12", key: co.VK_F12},
-		{name: "modified bare function key", spec: "ctrl f12", modifiers: []co.VK{co.VK_CONTROL}, key: co.VK_F12},
-		{name: "two modifiers", spec: "ctrl alt vk_f5", modifiers: []co.VK{co.VK_CONTROL, co.VK_MENU}, key: co.VK_F5},
-		{name: "repeated modifier", spec: "ctrl ctrl vk_a", modifiers: []co.VK{co.VK_CONTROL}, key: co.VK_A},
-		{name: "negated modifiers are not pressed", spec: "no_ctrl no_alt vk_f1", key: co.VK_F1},
-		{name: "win key", spec: "win vk_space", modifiers: []co.VK{co.VK_LWIN}, key: co.VK_SPACE},
-		{name: "letter", spec: "a", key: co.VK_A},
-		{name: "digit", spec: "7", key: co.VK_7},
-		{name: "ini letter", spec: "VK_A", key: co.VK_A},
-		{name: "ini digit", spec: "vk_7", key: co.VK_7},
-		{name: "backslash", spec: `\`, key: co.VK_OEM_5},
-		{name: "numpad key", spec: "vk_numpad7", key: co.VK_NUMPAD7},
-		{name: "oem name", spec: "vk_oem_plus", key: co.VK_OEM_PLUS},
-		{name: "extended key", spec: "vk_left", key: co.VK_LEFT},
+		{name: "single key", spec: "vk_f10", keys: []co.VK{co.VK_F10}},
+		{name: "uppercase", spec: "VK_F10", keys: []co.VK{co.VK_F10}},
+		{name: "bare function key", spec: "f12", keys: []co.VK{co.VK_F12}},
+		{name: "bare function key uppercase", spec: "F12", keys: []co.VK{co.VK_F12}},
+		{name: "modified bare function key", spec: "ctrl f12", keys: []co.VK{co.VK_CONTROL, co.VK_F12}},
+		{name: "modifier after the key", spec: "f12 ctrl", keys: []co.VK{co.VK_CONTROL, co.VK_F12}},
+		{name: "two modifiers", spec: "ctrl alt vk_f5", keys: []co.VK{co.VK_CONTROL, co.VK_MENU, co.VK_F5}},
+		{name: "repeated modifier", spec: "ctrl ctrl vk_a", keys: []co.VK{co.VK_CONTROL, co.VK_A}},
+		{name: "negated modifiers are not pressed", spec: "no_ctrl no_alt vk_f1", keys: []co.VK{co.VK_F1}},
+		{name: "win key", spec: "win vk_space", keys: []co.VK{co.VK_LWIN, co.VK_SPACE}},
+		{name: "letter", spec: "a", keys: []co.VK{co.VK_A}},
+		{name: "digit", spec: "7", keys: []co.VK{co.VK_7}},
+		{name: "ini letter", spec: "VK_A", keys: []co.VK{co.VK_A}},
+		{name: "ini digit", spec: "vk_7", keys: []co.VK{co.VK_7}},
+		{name: "backslash", spec: `\`, keys: []co.VK{co.VK_OEM_5}},
+		{name: "numpad key", spec: "vk_numpad7", keys: []co.VK{co.VK_NUMPAD7}},
+		{name: "oem name", spec: "vk_oem_plus", keys: []co.VK{co.VK_OEM_PLUS}},
+		{name: "extended key", spec: "vk_left", keys: []co.VK{co.VK_LEFT}},
 	}
 
 	for _, testCase := range cases {
@@ -48,14 +48,18 @@ func TestParseKeyChordAcceptsToggleKeyNotation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseKeyChord(%q) = %v", testCase.spec, err)
 			}
-			if chord.key != testCase.key {
-				t.Fatalf("parseKeyChord(%q).key = 0x%X, want 0x%X", testCase.spec, chord.key, testCase.key)
-			}
-			if !slices.Equal(chord.modifiers, testCase.modifiers) {
-				t.Fatalf("parseKeyChord(%q).modifiers = %v, want %v",
-					testCase.spec, chord.modifiers, testCase.modifiers)
+			if !slices.Equal(chord.keys, testCase.keys) {
+				t.Fatalf("parseKeyChord(%q).keys = %v, want %v", testCase.spec, chord.keys, testCase.keys)
 			}
 		})
+	}
+}
+
+func TestParseKeyChordAcceptsMultipleNonModifierKeys(t *testing.T) {
+	t.Parallel()
+
+	if _, err := parseKeyChord("vk_decimal vk_numpad2"); err != nil {
+		t.Fatalf("parseKeyChord(ZZMI compute-shader binding) = %v", err)
 	}
 }
 
@@ -69,7 +73,6 @@ func TestParseKeyChordRejectsInvalidNotation(t *testing.T) {
 		{spec: "", want: ErrInputKeyInvalid},
 		{spec: "   ", want: ErrInputKeyInvalid},
 		{spec: "ctrl", want: ErrInputKeyInvalid},
-		{spec: "vk_f10 vk_f11", want: ErrInputKeyInvalid},
 		{spec: "vk_unknown", want: ErrInputKeyInvalid},
 		{spec: "Ctrl+F12", want: ErrInputKeyInvalid},
 		{spec: "xb_a", want: ErrInputKeyUnsupported},
