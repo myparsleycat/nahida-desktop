@@ -372,7 +372,7 @@ func (b *Backup) targets(ctx context.Context, client *db.Client) ([]Target, erro
 	if err != nil {
 		return nil, err
 	}
-	return listTargets(games, custom, excluded), nil
+	return listTargets(games, custom, excluded)
 }
 
 func (b *Backup) excludedGames(ctx context.Context) ([]string, error) {

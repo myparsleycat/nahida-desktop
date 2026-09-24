@@ -39,6 +39,20 @@ type uploadProgressReader struct {
 	onProgress func(int64)
 }
 
+type backupSourceReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (r *backupSourceReader) Read(buffer []byte) (int, error) {
+	n, err := r.reader.Read(buffer)
+	r.remaining -= int64(n)
+	if err != nil && (err != io.EOF || r.remaining > 0) {
+		return n, fmt.Errorf("%w: %w", ErrBackupSourceRead, err)
+	}
+	return n, err
+}
+
 func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
 	read, err := r.reader.Read(buffer)
 	if read > 0 && r.onProgress != nil {
@@ -195,7 +209,7 @@ func (d *Drive) uploadParts(
 ) (returnErr error) {
 	handle, err := os.Open(filepath.FromSlash(file.FullPath))
 	if err != nil {
-		return fmt.Errorf("open upload file %q: %w", file.Name, err)
+		return fmt.Errorf("%w: open upload file %q: %w", ErrBackupSourceRead, file.Name, err)
 	}
 	defer func() { _ = handle.Close() }()
 	partSize, ok := rules.partSizeForFile(file.Size)
@@ -222,7 +236,7 @@ func (d *Drive) uploadParts(
 			completedEarly := false
 			for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 				attemptReported := int64(0)
-				section := io.NewSectionReader(handle, start, size)
+				section := &backupSourceReader{reader: io.NewSectionReader(handle, start, size), remaining: size}
 				partURL := fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index)
 				result, sendErr := d.sendMultipart(ctx, partURL, http.MethodPut, multipartUpload{
 					fields: [][2]string{
@@ -242,7 +256,7 @@ func (d *Drive) uploadParts(
 					if attemptReported > 0 {
 						report(-attemptReported)
 					}
-					if ctx.Err() != nil || attempt == uploadRetryLimit {
+					if ctx.Err() != nil || errors.Is(sendErr, ErrBackupSourceRead) || attempt == uploadRetryLimit {
 						return false, sendErr
 					}
 					if sleepErr := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); sleepErr != nil {
@@ -507,7 +521,7 @@ func sanitizeMultipartValue(value string) string {
 func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRules) ([]byte, string, error) {
 	data, err := os.ReadFile(filepath.FromSlash(file.FullPath))
 	if err != nil {
-		return nil, "", fmt.Errorf("read upload file %q: %w", file.Name, err)
+		return nil, "", fmt.Errorf("%w: read upload file %q: %w", ErrBackupSourceRead, file.Name, err)
 	}
 	if skipUploadCompression(data, file.Size, compression) {
 		return data, "", nil

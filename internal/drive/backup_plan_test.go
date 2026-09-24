@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -68,7 +69,7 @@ func TestUploadBackupFilesSendsRemovalsAndReportsRefusals(t *testing.T) {
 		{TargetID: "t", RelPath: "z.ini"},
 	}, nil)
 	// A refused file is reported like any upload failure, which a run commits
-	// through; only a planning failure stops it.
+	// through; local source failures and planning failures stop it.
 	if errors.Is(err, ErrBackupPlanning) {
 		t.Fatal(err)
 	}
@@ -79,6 +80,43 @@ func TestUploadBackupFilesSendsRemovalsAndReportsRefusals(t *testing.T) {
 		len(pages[1].Files) != 0 || len(pages[1].Deleted) != 2 || len(pages[2].Deleted) != 1 ||
 		pages[2].Deleted[0]["path"] != "z.ini" {
 		t.Fatalf("pages = %+v", pages)
+	}
+}
+
+func TestUploadBackupFilesStopsAfterSourceReadFailure(t *testing.T) {
+	var pages int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		pages++
+		var page struct {
+			Files []struct {
+				ClientID string `json:"clientId"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil {
+			t.Error(err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items":   []UploadPlanItem{{ClientID: page.Files[0].ClientID, Status: "pending", IntentID: "intent"}},
+			"uploads": []UploadPlanEntry{{IntentID: "intent", URL: "https://example.invalid/upload"}},
+		})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	rules := testUploadRules()
+	rules.MaxPlanFiles = 1
+	drive.setUploadRules(rules)
+
+	_, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
+		{ClientID: "0", RelPath: "gone.ini", FullPath: filepath.Join(t.TempDir(), "gone.ini")},
+		{ClientID: "1", RelPath: "later.ini"},
+	}, nil, nil)
+	if !errors.Is(err, ErrBackupSourceRead) || pages != 1 {
+		t.Fatalf("source error = %v, planned pages = %d", err, pages)
 	}
 }
 

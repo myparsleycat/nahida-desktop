@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -60,10 +61,14 @@ func gameTargetID(game string) string {
 
 // listTargets answers the mod folders of the registered games followed by the
 // folders the user added, each marked excluded or missing.
-func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, excluded []string) []Target {
+func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, excluded []string) ([]Target, error) {
 	targets := make([]Target, 0, len(games)+len(custom))
 	for _, row := range games {
 		game := row.Game
+		missing, err := targetMissing(row.ModFolderPath)
+		if err != nil && !slices.Contains(excluded, game) {
+			return nil, fmt.Errorf("stat backup target %q: %w", row.ModFolderPath, err)
+		}
 		targets = append(targets, Target{
 			ID:       gameTargetID(game),
 			Kind:     TargetKindGame,
@@ -71,19 +76,37 @@ func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, exclud
 			Label:    game,
 			Path:     row.ModFolderPath,
 			Excluded: slices.Contains(excluded, game),
-			Missing:  !isDirectory(row.ModFolderPath),
+			Missing:  missing,
 		})
 	}
 	for _, row := range custom {
+		missing, err := targetMissing(row.Path)
+		if err != nil {
+			return nil, fmt.Errorf("stat backup target %q: %w", row.Path, err)
+		}
 		targets = append(targets, Target{
 			ID:      row.ID,
 			Kind:    TargetKindCustom,
 			Label:   row.Label,
 			Path:    row.Path,
-			Missing: !isDirectory(row.Path),
+			Missing: missing,
 		})
 	}
-	return targets
+	return targets, nil
+}
+
+func targetMissing(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("%s is not a directory", path)
+	}
+	return false, nil
 }
 
 // includedTargets keeps the targets a run backs up: not excluded, present on

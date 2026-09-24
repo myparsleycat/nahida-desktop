@@ -37,6 +37,34 @@ func uploadTestDrive(server *httptest.Server) *Drive {
 	return drive
 }
 
+func TestUploadSourceFailuresAreMarked(t *testing.T) {
+	t.Parallel()
+	file := FinalUploadFile{UploadFile: UploadFile{FullPath: filepath.Join(t.TempDir(), "gone.ini"), Name: "gone.ini"}}
+	if _, _, err := prepareDirectUpload(file, UploadCompressionRules{}); !errors.Is(err, ErrBackupSourceRead) {
+		t.Fatalf("direct source error = %v", err)
+	}
+	if err := (&Drive{}).uploadParts(
+		t.Context(),
+		UploadPlanEntry{},
+		file,
+		UploadRules{},
+		nil,
+	); !errors.Is(
+		err,
+		ErrBackupSourceRead,
+	) {
+		t.Fatalf("multipart source error = %v", err)
+	}
+	if _, err := io.ReadAll(
+		&backupSourceReader{reader: bytes.NewReader([]byte("x")), remaining: 2},
+	); !errors.Is(
+		err,
+		ErrBackupSourceRead,
+	) {
+		t.Fatalf("short multipart source error = %v", err)
+	}
+}
+
 func TestUploadIntentSendsDirectMultipart(t *testing.T) {
 	content := []byte("small")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {

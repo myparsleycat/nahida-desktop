@@ -50,6 +50,26 @@ func TestIncludedTargets(t *testing.T) {
 	}
 }
 
+func TestListTargetsReturnsStatErrors(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "missing")
+	targets, err := listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: missing}}, nil, nil)
+	if err != nil || len(targets) != 1 || !targets[0].Missing {
+		t.Fatalf("missing target = %+v, error = %v", targets, err)
+	}
+
+	path := string([]byte{'b', 'a', 'd', 0, 'p', 'a', 't', 'h'})
+	_, err = listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: path}}, nil, nil)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat error = %v, want a non-missing error", err)
+	}
+
+	targets, err = listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: path}}, nil, []string{"GI"})
+	if err != nil || len(targets) != 1 || !targets[0].Excluded {
+		t.Fatalf("excluded target = %+v, error = %v", targets, err)
+	}
+}
+
 func TestScanTargetsFiltersAndCountsSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -241,6 +261,22 @@ func TestRunAbortsWhenPlanningStopsAfterSomeFiles(t *testing.T) {
 			remote.aborted,
 			remote.commits,
 		)
+	}
+}
+
+func TestRunAbortsWhenSourceReadFailsDuringUpload(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.ini"), "a")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	remote := &fakeRemote{uploadErr: fmt.Errorf("%w: source disappeared", drive.ErrBackupSourceRead)}
+	result := testBackup(t, client, remote).run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeFailed || !remote.aborted || len(remote.commits) != 0 {
+		t.Fatalf("source failure: result=%+v aborted=%v commits=%+v", result, remote.aborted, remote.commits)
 	}
 }
 
@@ -727,6 +763,7 @@ type fakeRemote struct {
 	unchanged   bool
 	missingOnce int
 	planningErr error
+	uploadErr   error
 	uploaded    []drive.BackupUploadFile
 	deleted     []drive.BackupDeletedFile
 	commits     []commitBody
@@ -905,6 +942,9 @@ func (f *fakeRemote) UploadBackupFiles(
 	f.pending.deletes = append(f.pending.deletes, deleted...)
 	if f.planningErr != nil {
 		return nil, errors.Join(drive.ErrBackupPlanning, f.planningErr)
+	}
+	if f.uploadErr != nil {
+		return nil, f.uploadErr
 	}
 	return nil, nil
 }

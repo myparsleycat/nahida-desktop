@@ -528,6 +528,9 @@ func (b *Backup) upload(
 	if errors.Is(uploadErr, drive.ErrBackupPlanning) {
 		return Snapshot{}, nil, uploadErr
 	}
+	if errors.Is(uploadErr, drive.ErrBackupSourceRead) {
+		return Snapshot{}, nil, uploadErr
+	}
 	dropped := lo.Keyify(denied)
 	keep := func() []int {
 		return lo.FilterMap(files, func(file drive.BackupUploadFile, _ int) (int, bool) {
