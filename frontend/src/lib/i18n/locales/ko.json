@@ -2207,6 +2207,8 @@
         "BACKUP_RUNNING": "이미 백업 또는 복원이 진행 중입니다.",
         "BACKUP_NOT_LOGGED_IN": "백업하려면 로그인하세요.",
         "BACKUP_NO_TARGETS": "백업할 폴더가 없습니다.",
+        "BACKUP_TARGET_MISSING": "백업할 폴더에 접근할 수 없습니다. 폴더를 확인한 뒤 다시 시도하세요.",
+        "BACKUP_UNREADABLE_FILE": "일부 파일을 읽을 수 없어 이번 백업을 중단했습니다. 다시 시도하세요.",
         "BACKUP_NOT_DIRECTORY": "폴더가 존재하지 않습니다.",
         "BACKUP_UPLOAD_FAILED": "업로드에 실패한 파일이 너무 많습니다.",
         "BACKUP_INVALID_DEVICE_NAME": "PC 이름은 1–80자로 입력하세요.",

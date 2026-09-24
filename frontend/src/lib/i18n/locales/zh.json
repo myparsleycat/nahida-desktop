@@ -2188,6 +2188,8 @@
         "BACKUP_RUNNING": "已有备份或恢复正在进行。",
         "BACKUP_NOT_LOGGED_IN": "请登录后再备份。",
         "BACKUP_NO_TARGETS": "没有可备份的文件夹。",
+        "BACKUP_TARGET_MISSING": "无法访问备份文件夹。请检查后重试。",
+        "BACKUP_UNREADABLE_FILE": "部分文件无法读取，本次备份已停止。请重试。",
         "BACKUP_NOT_DIRECTORY": "该文件夹不存在。",
         "BACKUP_UPLOAD_FAILED": "上传失败的文件过多。",
         "BACKUP_INVALID_DEVICE_NAME": "请输入 1–80 个字符的电脑名称。",

@@ -143,6 +143,28 @@ func TestManifestDigestIgnoresOrder(t *testing.T) {
 	if manifestDigest(targets, files) == manifestDigest(targets, changed) {
 		t.Fatal("the digest ignores a content change")
 	}
+	metadata := slices.Clone(files)
+	metadata[0].modified = time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	if manifestDigest(targets, files) == manifestDigest(targets, metadata) {
+		t.Fatal("the digest ignores a modification time change")
+	}
+	renamed := slices.Clone(targets)
+	renamed[0].Label = "Renamed"
+	if manifestDigest(targets, files) == manifestDigest(renamed, files) {
+		t.Fatal("the digest ignores a target label change")
+	}
+}
+
+func TestScanTargetsFailsWhenFolderDisappears(t *testing.T) {
+	t.Parallel()
+	_, err := scanTargets(
+		t.Context(),
+		[]Target{{Path: filepath.Join(t.TempDir(), "gone")}},
+		func(string, int64) string { return "" },
+	)
+	if !errors.Is(err, ErrUnreadable) {
+		t.Fatalf("scan error = %v, want unreadable", err)
+	}
 }
 
 func TestRestoreFolders(t *testing.T) {
@@ -304,6 +326,145 @@ func TestRunSendsOnlyWhatChanged(t *testing.T) {
 	requireCommitted(t, client, backup, remote)
 }
 
+func TestRunFailsWhenAnIncludedFolderDisappears(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	first, second := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(first, "a.ini"), "a")
+	writeFile(t, filepath.Join(second, "b.ini"), "b")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: first}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.BackupCustomPaths.Insert(
+		t.Context(),
+		db.BackupCustomPathRow{ID: "c", Path: second, Label: "Extra"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("first run = %+v", result)
+	}
+	if err := os.RemoveAll(second); err != nil {
+		t.Fatal(err)
+	}
+	remote.reset()
+	result := backup.run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeFailed || !strings.Contains(result.Error, ErrMissingTarget.Error()) ||
+		remote.creates != 0 || len(remote.deleted) != 0 || len(remote.commits) != 0 {
+		t.Fatalf(
+			"result=%+v creates=%d deleted=%+v commits=%+v",
+			result,
+			remote.creates,
+			remote.deleted,
+			remote.commits,
+		)
+	}
+}
+
+func TestRunFailsWhenFileVanishesBeforeHash(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	path := filepath.Join(root, "a.ini")
+	writeFile(t, path, "a")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("first run = %+v", result)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	remote.reset()
+	remote.filter = func(name string, _ int64) string {
+		if name == "a.ini" {
+			if err := os.Remove(path); err != nil {
+				t.Error(err)
+			}
+		}
+		return ""
+	}
+	result := backup.run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeFailed || !strings.Contains(result.Error, ErrUnreadable.Error()) ||
+		remote.creates != 0 || len(remote.deleted) != 0 || len(remote.commits) != 0 {
+		t.Fatalf(
+			"result=%+v creates=%d deleted=%+v commits=%+v",
+			result,
+			remote.creates,
+			remote.deleted,
+			remote.commits,
+		)
+	}
+}
+
+func TestRunPlansModificationTimeOnlyChange(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	path := filepath.Join(root, "a.ini")
+	writeFile(t, path, "a")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("first run = %+v", result)
+	}
+	later := time.Now().Add(time.Hour).UTC()
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	remote.reset()
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("second run = %+v", result)
+	}
+	if len(remote.uploaded) != 1 || remote.uploaded[0].RelPath != "a.ini" || len(remote.deleted) != 0 {
+		t.Fatalf("metadata plan uploaded=%+v deleted=%+v", remote.uploaded, remote.deleted)
+	}
+	rows, err := client.BackupCommitted.All(t.Context())
+	if err != nil || len(rows) != 1 || rows[0].Mtime == nil ||
+		*rows[0].Mtime != remote.uploaded[0].ModifiedAt.UnixNano() {
+		t.Fatalf("committed=%+v err=%v", rows, err)
+	}
+}
+
+func TestRunPlansCommittedRowsWithoutMetadata(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.ini"), "a")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+	remote := &fakeRemote{}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("first run = %+v", result)
+	}
+	if _, err := client.SQL().
+		ExecContext(t.Context(), `UPDATE "backup_committed" SET "size" = NULL, "mtime" = NULL`); err != nil {
+		t.Fatal(err)
+	}
+	remote.reset()
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("second run = %+v", result)
+	}
+	if len(remote.uploaded) != 1 || remote.uploaded[0].RelPath != "a.ini" {
+		t.Fatalf("rows without metadata were not planned: %+v", remote.uploaded)
+	}
+	rows, err := client.BackupCommitted.All(t.Context())
+	if err != nil || len(rows) != 1 || rows[0].Size == nil || rows[0].Mtime == nil {
+		t.Fatalf("committed=%+v err=%v", rows, err)
+	}
+}
+
 func TestRunTakesTheBaseFromTheServer(t *testing.T) {
 	t.Parallel()
 
@@ -327,6 +488,8 @@ func TestRunTakesTheBaseFromTheServer(t *testing.T) {
 	a, _ := lo.Find(scan.files, func(file scannedFile) bool { return file.relPath == "a.ini" })
 	remote := &fakeRemote{latest: "snapshot-7", snapshots: 7, files: map[string]map[string]string{
 		"game:GI": {"a.ini": a.sha256, "gone.ini": strings.Repeat("0", 64)},
+	}, metadata: map[string]map[string]fakeFileMetadata{
+		"game:GI": {"a.ini": {size: a.size, modifiedAt: a.modified}},
 	}}
 
 	backup := testBackup(t, client, remote)
@@ -579,7 +742,14 @@ type fakeRemote struct {
 	latest    string
 	snapshots int
 	files     map[string]map[string]string
+	metadata  map[string]map[string]fakeFileMetadata
+	filter    func(string, int64) string
 	pending   fakePending
+}
+
+type fakeFileMetadata struct {
+	size       int64
+	modifiedAt time.Time
 }
 
 // fakePending is the snapshot a run is writing.
@@ -640,9 +810,13 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 		for key, paths := range f.files {
 			targets = append(targets, map[string]string{"id": fakeTargetID(key), "key": key})
 			for path, sha := range paths {
+				metadata := f.metadata[key][path]
 				files = append(
 					files,
-					map[string]any{"id": key + path, "targetId": fakeTargetID(key), "path": path, "sha256": sha},
+					map[string]any{
+						"id": key + path, "targetId": fakeTargetID(key), "path": path,
+						"sha256": sha, "size": metadata.size, "modifiedAt": metadata.modifiedAt,
+					},
 				)
 			}
 		}
@@ -705,6 +879,9 @@ func (f *fakeRemote) commit(commit commitBody) map[string]any {
 }
 
 func (f *fakeRemote) BackupFilter(context.Context) (func(string, int64) string, error) {
+	if f.filter != nil {
+		return f.filter, nil
+	}
 	return func(string, int64) string { return "" }, nil
 }
 

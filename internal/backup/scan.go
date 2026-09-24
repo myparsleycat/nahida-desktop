@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -151,11 +152,7 @@ func scanTargets(
 				if path == root {
 					return err
 				}
-				result.skipped["unreadable"]++
-				if entry != nil && entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, err)
 			}
 			if path != root && entry.Type()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 				result.skipped["link"]++
@@ -169,9 +166,7 @@ func scanTargets(
 			}
 			info, infoErr := entry.Info()
 			if infoErr != nil {
-				// A file that vanished or cannot be read is left out, not fatal.
-				result.skipped["unreadable"]++
-				return nil //nolint:nilerr // counted as skipped
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, infoErr)
 			}
 			if reason := filter(entry.Name(), info.Size()); reason != "" {
 				result.skipped[reason]++
@@ -179,8 +174,7 @@ func scanTargets(
 			}
 			relPath, relErr := filepath.Rel(root, path)
 			if relErr != nil {
-				result.skipped["unreadable"]++
-				return nil //nolint:nilerr // counted as skipped
+				return fmt.Errorf("%w: %s: %w", ErrUnreadable, path, relErr)
 			}
 			result.files = append(result.files, scannedFile{
 				target:   index,
@@ -192,7 +186,7 @@ func scanTargets(
 			return nil
 		})
 		if err != nil {
-			return scanResult{}, err
+			return scanResult{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 		}
 	}
 	return result, nil
@@ -286,10 +280,11 @@ func hashFiles(
 func manifestDigest(targets []Target, files []scannedFile) string {
 	lines := make([]string, 0, len(files)+len(targets))
 	for _, target := range targets {
-		lines = append(lines, "target\x00"+targetKey(target))
+		lines = append(lines, "target\x00"+targetKey(target)+"\x00"+target.Label+"\x00"+target.Path)
 	}
 	for _, file := range files {
-		lines = append(lines, "file\x00"+targetKey(targets[file.target])+"\x00"+file.relPath+"\x00"+file.sha256)
+		lines = append(lines, "file\x00"+targetKey(targets[file.target])+"\x00"+file.relPath+"\x00"+
+			file.sha256+"\x00"+strconv.FormatInt(file.size, 10)+"\x00"+strconv.FormatInt(file.modified.UnixNano(), 10))
 	}
 	slices.Sort(lines)
 
