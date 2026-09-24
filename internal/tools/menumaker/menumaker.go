@@ -20,6 +20,7 @@ import (
 	"golang.org/x/text/transform"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -768,29 +769,7 @@ func writeAtomic(path string, data []byte, reports ...func(error)) error {
 	if err != nil {
 		return err
 	}
-	rollback := tempPath + ".old"
-	existed := false
-	if _, statErr := os.Stat(path); statErr == nil {
-		existed = true
-		if err = os.Rename(path, rollback); err != nil {
-			return err
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return statErr
-	}
-	if err = os.Rename(tempPath, path); err != nil {
-		if existed {
-			err = infra.WithCause(
-				err,
-				infra.AnnotateError(os.Rename(rollback, path), infra.Diagnostic{Stage: "rollback"}),
-			)
-		}
-		return err
-	}
-	if existed {
-		report(os.Remove(rollback))
-	}
-	return nil
+	return platform.ReplaceAtomic(tempPath, path)
 }
 
 func sha256Hex(data []byte) string {
@@ -799,7 +778,7 @@ func sha256Hex(data []byte) string {
 }
 
 func samePath(left, right string) bool {
-	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+	return platform.SamePathFold(left, right)
 }
 
 func (m *MenuMaker) reportCleanup(err error) {

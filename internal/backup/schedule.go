@@ -107,7 +107,10 @@ func (b *Backup) dueTrigger(ctx context.Context, client *db.Client, startup bool
 	changed := b.changed
 	b.mu.Unlock()
 
-	interval := b.interval(ctx)
+	interval, err := b.interval(ctx)
+	if err != nil {
+		return "", err
+	}
 	onStartup := b.settingBool(ctx, setting.KeyBackupOnStartup)
 	if startup {
 		if onStartup && now.Sub(lastSuccess) >= interval {
@@ -147,7 +150,11 @@ func (b *Backup) nextRunAt(ctx context.Context, client *db.Client) (*time.Time, 
 	if err != nil {
 		return nil, err
 	}
-	next := b.scheduleBase(lastSuccess, b.settingBool(ctx, setting.KeyBackupOnStartup)).Add(b.interval(ctx))
+	interval, err := b.interval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	next := b.scheduleBase(lastSuccess, b.settingBool(ctx, setting.KeyBackupOnStartup)).Add(interval)
 	if next.Before(b.now()) {
 		next = b.now()
 	}

@@ -1,5 +1,5 @@
 import { Window as AppWindow } from "@bindings/app";
-import "@renderer/wails/bridge";
+import "@renderer/wails/file-drop";
 import "@renderer/lib/i18n";
 import { Shell } from "@bindings/platform";
 import { Logger } from "@renderer/lib/logger";

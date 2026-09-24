@@ -17,6 +17,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/google/uuid"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -618,12 +620,7 @@ func canonicalExistingDir(path string) (string, error) {
 }
 
 func pathWithin(root, child string) bool {
-	relative, err := filepath.Rel(root, child)
-	if err != nil {
-		return false
-	}
-	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		strings.EqualFold(filepath.VolumeName(root), filepath.VolumeName(child))
+	return platform.SameOrChildPath(root, child)
 }
 
 type textFormat struct {

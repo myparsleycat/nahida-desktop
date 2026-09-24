@@ -51,41 +51,20 @@ export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui", "drive"] as 
 export type DownloadSource = (typeof DOWNLOAD_SOURCES)[number];
 
 export const NTE_IMPORTER_KEY = "NTE";
-export const NTE_GAMEBANANA_ID = 23012;
-
-export const GAMEBANANA_ID_TO_IMPORTER = {
-    8552: "GIMI",
-    18366: "SRMI",
-    10349: "HIMI",
-    19567: "ZZMI",
-    20357: "WWMI",
-    21842: "EFMI",
-    [NTE_GAMEBANANA_ID]: NTE_IMPORTER_KEY,
-} as const;
-
-export const IMPORTER_TO_GAMEBANANA_GAME_KEY = {
-    GIMI: "gi",
-    SRMI: "sr",
-    HIMI: "hi",
-    ZZMI: "zz",
-    WWMI: "ww",
-    EFMI: "ef",
-    [NTE_IMPORTER_KEY]: "nte",
-} as const;
 
 export const isNteImporter = (importer: string | null | undefined) => importer === NTE_IMPORTER_KEY;
 
-export function getImporterForGameBananaId(gameId: number): string | null {
-    return GAMEBANANA_ID_TO_IMPORTER[gameId as keyof typeof GAMEBANANA_ID_TO_IMPORTER] ?? null;
+export function getParentGroupPath(groupPath: string) {
+    const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
+    return separatorIndex < 0 ? null : groupPath.slice(0, separatorIndex);
 }
 
-export function getGameBananaKeyForImporter(importer: string | null | undefined) {
+export function getGameBananaKeyForImporter(
+    importer: string | null | undefined,
+    registry: readonly { key: string; importer: string }[],
+) {
     if (!importer) return null;
-    if (isNteImporter(importer)) return IMPORTER_TO_GAMEBANANA_GAME_KEY[NTE_IMPORTER_KEY];
-    return (
-        IMPORTER_TO_GAMEBANANA_GAME_KEY[importer as keyof typeof IMPORTER_TO_GAMEBANANA_GAME_KEY] ??
-        null
-    );
+    return registry.find((game) => game.importer === importer)?.key ?? null;
 }
 
 export function findGameByImporter<T extends { game: string; importer: string | null }>(

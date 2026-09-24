@@ -1,9 +1,9 @@
 package transfer
 
 import (
-	"path/filepath"
 	"slices"
-	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 //wails:ignore
@@ -58,24 +58,5 @@ func destinationTargetPaths(targets []DestinationTarget) []string {
 }
 
 func transferPathsOverlap(first, second string) bool {
-	first = cleanTransferPath(first)
-	second = cleanTransferPath(second)
-	return pathContains(first, second) || pathContains(second, first)
-}
-
-func cleanTransferPath(path string) string {
-	if absolute, err := filepath.Abs(path); err == nil {
-		path = absolute
-	}
-	return filepath.Clean(path)
-}
-
-func pathContains(parent, child string) bool {
-	if strings.EqualFold(parent, child) {
-		return true
-	}
-	if !strings.HasSuffix(parent, string(filepath.Separator)) {
-		parent += string(filepath.Separator)
-	}
-	return strings.HasPrefix(strings.ToLower(child), strings.ToLower(parent))
+	return platform.SameOrChildPath(first, second) || platform.SameOrChildPath(second, first)
 }

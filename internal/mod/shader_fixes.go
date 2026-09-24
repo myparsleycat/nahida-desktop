@@ -16,6 +16,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -962,13 +963,7 @@ func normalizeModPath(modPath string) string {
 }
 
 func isSameOrChildPath(parentPath, targetPath string) bool {
-	parent := normalizeModPath(mustAbs(parentPath))
-	target := normalizeModPath(mustAbs(targetPath))
-	rel, err := filepath.Rel(parent, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel == "" || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
+	return platform.SameOrChildPath(parentPath, targetPath)
 }
 
 func normalizeShaderFixesRelativePath(targetPath string) string {

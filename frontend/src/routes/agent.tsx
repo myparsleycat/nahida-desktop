@@ -48,6 +48,7 @@ import {
 } from "@renderer/lib/agent-stream";
 import { localFileSrc } from "@renderer/lib/local-file";
 import { cn } from "@renderer/lib/utils";
+import { toErrorMessage } from "@shared/utils";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Events } from "@wailsio/runtime";
 import {
@@ -217,7 +218,7 @@ function AgentRoute() {
         await openSnapshot(session.id);
         if (!search.session) await refreshSessions();
       } catch (error) {
-        toast.error(String(error));
+        toast.error(toErrorMessage(error));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -321,7 +322,7 @@ function AgentRoute() {
       try {
         accepted.push(await readImageFile(file));
       } catch (error) {
-        toast.error(String(error));
+        toast.error(toErrorMessage(error));
       }
     }
     if (overflow) {
@@ -384,7 +385,7 @@ function AgentRoute() {
       setRunId(run.runId);
       latestSequence.current.delete(run.runId);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(toErrorMessage(error));
       setDraft(text);
       setImages(attachments);
       await openSnapshot(snapshot.summary.id);
@@ -428,7 +429,7 @@ function AgentRoute() {
         await openSnapshot(renameTarget.id);
       }
     } catch (error) {
-      toast.error(String(error));
+      toast.error(toErrorMessage(error));
     } finally {
       setRenaming(false);
     }
@@ -447,7 +448,7 @@ function AgentRoute() {
       const next = remaining[0] ?? (await Agent.OpenSession({ type: "global" }));
       await navigate({ to: "/agent", search: { session: next.id }, replace: true });
     } catch (error) {
-      toast.error(String(error));
+      toast.error(toErrorMessage(error));
     } finally {
       setDeleting(false);
     }
@@ -468,7 +469,7 @@ function AgentRoute() {
         t("page.agent.share_success", { messages: result.messages, images: result.images }),
       );
     } catch (error) {
-      toast.error(String(error));
+      toast.error(toErrorMessage(error));
     } finally {
       setSharing(false);
     }
@@ -485,7 +486,7 @@ function AgentRoute() {
       }
       await openSnapshot(approval.sessionId);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(toErrorMessage(error));
       await openSnapshot(approval.sessionId);
     } finally {
       setDecidingApproval(undefined);
@@ -505,7 +506,7 @@ function AgentRoute() {
     try {
       updateHuntingSnapshot(sessionId, await Agent.HuntingNext(sessionId, category));
     } catch (error) {
-      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      toast.error(t("page.agent.hunting_action_failed", { error: toErrorMessage(error) }));
       if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
     } finally {
       setHuntingBusy(undefined);
@@ -519,7 +520,7 @@ function AgentRoute() {
     try {
       updateHuntingSnapshot(sessionId, await Agent.HuntingFound(sessionId));
     } catch (error) {
-      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      toast.error(t("page.agent.hunting_action_failed", { error: toErrorMessage(error) }));
       if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
     } finally {
       setHuntingBusy(undefined);
@@ -533,7 +534,7 @@ function AgentRoute() {
     try {
       updateHuntingSnapshot(sessionId, await Agent.HuntingCancel(sessionId));
     } catch (error) {
-      toast.error(t("page.agent.hunting_action_failed", { error: String(error) }));
+      toast.error(t("page.agent.hunting_action_failed", { error: toErrorMessage(error) }));
       if (displayedSessionId.current === sessionId) await openSnapshot(sessionId);
     } finally {
       setHuntingBusy(undefined);
@@ -557,7 +558,7 @@ function AgentRoute() {
       if (revertedText) setDraft((current) => (current.trim() ? current : revertedText));
     } catch (error) {
       if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
-        toast.error(String(error));
+        toast.error(toErrorMessage(error));
       }
     } finally {
       if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
@@ -579,7 +580,7 @@ function AgentRoute() {
       setSnapshot(value);
     } catch (error) {
       if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {
-        toast.error(String(error));
+        toast.error(toErrorMessage(error));
       }
     } finally {
       if (generation === sessionGeneration.current && displayedSessionId.current === sessionId) {

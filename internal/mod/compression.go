@@ -16,6 +16,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
 
@@ -437,9 +438,7 @@ func addCompressionScope(scopes map[string]struct{}, path string) {
 }
 
 func pathContains(parent, child string) bool {
-	parent = strings.TrimSuffix(strings.ToLower(filepath.Clean(parent)), string(filepath.Separator))
-	child = strings.ToLower(filepath.Clean(child))
-	return child == parent || strings.HasPrefix(child, parent+string(filepath.Separator))
+	return platform.SameOrChildPath(parent, child)
 }
 
 func (c *compressionCoordinator) reconcile(ctx context.Context, work compressionWork) {

@@ -9,16 +9,6 @@ import (
 	"strings"
 )
 
-var gameBananaIDToImporter = map[int]string{
-	8552:  "GIMI",
-	18366: "SRMI",
-	10349: "HIMI",
-	19567: "ZZMI",
-	20357: "WWMI",
-	21842: "EFMI",
-	23012: "NTE",
-}
-
 type DownloadFileInput struct {
 	ItemID    int    `json:"itemId"`
 	FileID    int    `json:"fileId"`
@@ -116,8 +106,11 @@ func (g *GameBanana) getModProfile(ctx context.Context, itemID int, model string
 }
 
 func importerForGameBananaID(id int) *string {
-	if name, ok := gameBananaIDToImporter[id]; ok {
-		return &name
+	for _, game := range games {
+		if game.ID == id {
+			name := game.Importer
+			return &name
+		}
 	}
 	return nil
 }

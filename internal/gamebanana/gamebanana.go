@@ -26,14 +26,21 @@ const (
 
 var submissionModelPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 
-var games = map[string]int{
-	"gi":  8552,
-	"sr":  18366,
-	"hi":  10349,
-	"zz":  19567,
-	"ww":  20357,
-	"ef":  21842,
-	"nte": 23012,
+// GameRegistration links a GameBanana game to its mod importer.
+type GameRegistration struct {
+	Key      string `json:"key"`
+	ID       int    `json:"id"`
+	Importer string `json:"importer"`
+}
+
+var games = []GameRegistration{
+	{Key: "gi", ID: 8552, Importer: "GIMI"},
+	{Key: "sr", ID: 18366, Importer: "SRMI"},
+	{Key: "hi", ID: 10349, Importer: "HIMI"},
+	{Key: "zz", ID: 19567, Importer: "ZZMI"},
+	{Key: "ww", ID: 20357, Importer: "WWMI"},
+	{Key: "ef", ID: 21842, Importer: "EFMI"},
+	{Key: "nte", ID: 23012, Importer: "NTE"},
 }
 
 type Crypto interface {
@@ -152,10 +159,15 @@ func (g *GameBanana) UseClient(client *db.Client) {
 
 func (g *GameBanana) GetGames() map[string]int {
 	out := make(map[string]int, len(games))
-	for key, value := range games {
-		out[key] = value
+	for _, game := range games {
+		out[game.Key] = game.ID
 	}
 	return out
+}
+
+// GetGameRegistry returns the game and importer mapping used by downloads.
+func (g *GameBanana) GetGameRegistry() []GameRegistration {
+	return append([]GameRegistration(nil), games...)
 }
 
 // EnsureSession is the explicit sign-in entry point. It validates the stored

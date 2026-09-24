@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -209,8 +210,34 @@ func normalizePasswordList(value any) []string {
 	return out
 }
 
+var backupIntervalOptions = []struct {
+	value    string
+	duration time.Duration
+}{
+	{"6h", 6 * time.Hour},
+	{"12h", 12 * time.Hour},
+	{"24h", 24 * time.Hour},
+	{"7d", 7 * 24 * time.Hour},
+}
+
 // BackupIntervals are the periods an automatic backup may run on.
-var BackupIntervals = []string{"6h", "12h", "24h", "7d"}
+var BackupIntervals = func() []string {
+	values := make([]string, len(backupIntervalOptions))
+	for index, option := range backupIntervalOptions {
+		values[index] = option.value
+	}
+	return values
+}()
+
+// BackupIntervalDuration resolves a configured backup period.
+func BackupIntervalDuration(value string) (time.Duration, bool) {
+	for _, option := range backupIntervalOptions {
+		if option.value == value {
+			return option.duration, true
+		}
+	}
+	return 0, false
+}
 
 func normalizeExcludedGames(value any) []string {
 	items, ok := asStringSlice(value)

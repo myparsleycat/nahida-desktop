@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -282,9 +281,7 @@ func processImagePath(process windows.Handle) (string, error) {
 }
 
 func equalPath(left, right string) bool {
-	leftPath, leftErr := filepath.Abs(left)
-	rightPath, rightErr := filepath.Abs(right)
-	return leftErr == nil && rightErr == nil && strings.EqualFold(filepath.Clean(leftPath), filepath.Clean(rightPath))
+	return platform.SamePathFold(left, right)
 }
 
 // verifyHelperHandle hashes the bytes read from the already-locked handle and

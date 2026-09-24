@@ -1,6 +1,7 @@
 import { Mod } from "@bindings/mod";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { FolderGroup, GameConfig, ModInfo, PresetCreateConflict } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -17,19 +18,6 @@ export function useGameMutations() {
     const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
     const setEditingGame = useModStore((s) => s.setEditingGame);
     const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
-    const getMutationErrorMessage = (error: unknown) => {
-        if (error instanceof Error) {
-            return error.message || "";
-        }
-
-        if (typeof error === "object" && error !== null) {
-            const maybeError = error as { message?: string; code?: string };
-            return maybeError.message || maybeError.code || "";
-        }
-
-        return "";
-    };
-
     const addGameMutation = useMutation({
         mutationFn: ({
             name,
@@ -60,7 +48,7 @@ export function useGameMutations() {
             toast.success(t("page.mod.hooks.use-mod-mutations.add-game-mutation.success"));
         },
         onError: (error) => {
-            const errorMessage = (error as Error).message || "";
+            const errorMessage = toErrorMessage(error);
 
             if (errorMessage.includes("DUPLICATE_GAME_NAME")) {
                 toast.warning(
@@ -173,7 +161,7 @@ export function useGameMutations() {
             toast.success(t("page.mod.hooks.use-mod-mutations.update-game-mutation.success"));
         },
         onError: (error) => {
-            const errorMessage = getMutationErrorMessage(error);
+            const errorMessage = toErrorMessage(error);
 
             if (errorMessage.includes("DUPLICATE_MOD_FOLDER_PATH")) {
                 toast.warning(
@@ -209,7 +197,9 @@ export function useGameMutations() {
             }
 
             toast.error(
-                errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"),
+                errorMessage === "Unknown error"
+                    ? t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed")
+                    : errorMessage,
             );
         },
     });
@@ -246,7 +236,7 @@ export function useGameMutations() {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
         },
         onError: (error) => {
-            const errorMessage = getMutationErrorMessage(error);
+            const errorMessage = toErrorMessage(error);
 
             if (errorMessage.includes("INVALID_LAUNCHER_PATH")) {
                 toast.error(
@@ -279,7 +269,7 @@ export function useModMutations() {
     };
 
     const showToggleMutationError = (error: unknown) => {
-        const errorMessage = (error as Error).message || "";
+        const errorMessage = toErrorMessage(error);
         if (errorMessage.includes("ALREADY_EXISTS")) {
             const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
             toast.error(
@@ -313,7 +303,7 @@ export function useModMutations() {
     };
 
     const showRenameMutationError = (error: unknown) => {
-        const errorMessage = (error as Error).message || "";
+        const errorMessage = toErrorMessage(error);
         if (errorMessage.includes("ALREADY_EXISTS")) {
             const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
             toast.error(
@@ -495,14 +485,14 @@ export function usePresetMutations() {
             toast.success(t("page.mod.hooks.use-mod-mutations.create-preset-mutation.success"));
         },
         onError: (error) => {
-            if ((error as Error).message.includes("PRESET_NAME_EXISTS")) {
+            if (toErrorMessage(error).includes("PRESET_NAME_EXISTS")) {
                 toast.error(
                     t("page.mod.hooks.use-mod-mutations.create-preset-mutation.duplicate-name"),
                 );
                 return;
             }
 
-            if ((error as Error).message.includes("PRESET_CONFLICT_RESOLUTION_FAILED")) {
+            if (toErrorMessage(error).includes("PRESET_CONFLICT_RESOLUTION_FAILED")) {
                 toast.error(
                     t(
                         "page.mod.hooks.use-mod-mutations.create-preset-mutation.conflict-resolve-failed",
@@ -537,7 +527,7 @@ export function usePresetMutations() {
             toast.success(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.success"));
         },
         onError: (error) => {
-            if ((error as Error).message.includes("LEGACY_PRESET_NOT_SUPPORTED")) {
+            if (toErrorMessage(error).includes("LEGACY_PRESET_NOT_SUPPORTED")) {
                 toast.error(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.legacy"));
             }
         },

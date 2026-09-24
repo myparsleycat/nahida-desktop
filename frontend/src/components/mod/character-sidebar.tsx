@@ -47,6 +47,7 @@ import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import { getParentGroupPath } from "@shared/mod";
 import type { ModFixerAction } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
@@ -71,15 +72,6 @@ import { ScrollArea } from "../ui/scroll-area";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
 import { hasPreviewFile, isPreviewMediaPath } from "./preview-media";
-
-function getParentGroupPath(groupPath: string) {
-  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
-  if (separatorIndex < 0) {
-    return null;
-  }
-
-  return groupPath.slice(0, separatorIndex);
-}
 
 function getGroupName(groupPath: string) {
   const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));

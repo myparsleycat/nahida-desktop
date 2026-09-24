@@ -31,7 +31,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@renderer/store/mod", () => ({ modStore: { getState: () => ({ selectedGame: "" }) } }));
 vi.mock("@renderer/hooks/use-mod-data", () => ({ useGames: () => ({ data: [] }) }));
 vi.mock("@renderer/hooks/use-gamebanana-data", () => ({
-  useGameBananaGames: () => ({ data: {} }),
+  useGameBananaRegistry: () => ({ data: [] }),
   useGameBananaGameOverview: () => ({}),
   useGameBananaGameSubfeed: () => ({}),
   useGameBananaModCategoryOverview: () => ({}),

@@ -775,6 +775,40 @@ func TestDueTrigger(t *testing.T) {
 	}
 }
 
+type intervalSettings struct {
+	value any
+	err   error
+}
+
+func (s intervalSettings) Get(context.Context, string) (any, error) {
+	return s.value, s.err
+}
+
+func (s intervalSettings) Set(context.Context, string, any) error {
+	return nil
+}
+
+func TestIntervalRejectsInvalidSettings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		settings intervalSettings
+	}{
+		{"read failure", intervalSettings{err: errors.New("settings unavailable")}},
+		{"invalid type", intervalSettings{value: 24}},
+		{"unknown value", intervalSettings{value: "2d"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			backup := New(Options{Settings: tc.settings})
+			if _, err := backup.interval(t.Context()); err == nil {
+				t.Fatal("invalid backup interval was accepted")
+			}
+		})
+	}
+}
+
 func TestScanTargetsWalksALinkedRoot(t *testing.T) {
 	t.Parallel()
 

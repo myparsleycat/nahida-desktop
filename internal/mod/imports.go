@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const maxPreviewBytes = 50 << 20
@@ -400,24 +401,7 @@ func atomicWriteFile(path string, content []byte, mode os.FileMode, reports ...f
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	backup := path + ".nhd-backup"
-	report(os.Remove(backup))
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Rename(path, backup); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return infra.WithCause(
-			err,
-			infra.AnnotateError(
-				os.Rename(backup, path),
-				infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path, "backupPath": backup}},
-			),
-		)
-	}
-	report(os.Remove(backup))
-	return nil
+	return platform.ReplaceAtomic(temporaryPath, path)
 }
 
 func copyDirectory(source, target string) error {
