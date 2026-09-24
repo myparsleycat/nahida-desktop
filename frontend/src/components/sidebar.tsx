@@ -15,6 +15,7 @@ import {
   BookOpenIcon,
   BugIcon,
   BugPlayIcon,
+  DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
   SettingsIcon,
@@ -73,6 +74,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isTransferPage = pathname.startsWith("/transfer");
   const isDrivePage = pathname.startsWith("/drive/drive");
   const isSharePage = pathname.startsWith("/drive/share");
+  const isBackupPage = pathname.startsWith("/backup");
   const isModPage = pathname.startsWith("/mod");
   const isToolsPage = pathname.startsWith("/tools");
   const isAgentPage = pathname.startsWith("/agent");
@@ -335,6 +337,27 @@ export function Sidebar({ className }: { className?: string }) {
                     ? t("page.share_drive.title_server_error")
                     : t("page.share_drive.title")}
                 </TooltipContent>
+              </Tooltip>
+
+              <Tooltip disableHoverablePopup>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      className={getNavButtonClassName(isBackupPage)}
+                      aria-current={isBackupPage ? "page" : undefined}
+                      aria-label={t("page.backup.title")}
+                      onPointerDown={handlePointerDown}
+                      onClick={() => {
+                        void navi({ to: "/backup" });
+                      }}
+                    />
+                  }
+                >
+                  <DatabaseBackupIcon className={cn(iconSize)} />
+                </TooltipTrigger>
+                <TooltipContent side="right">{t("page.backup.title")}</TooltipContent>
               </Tooltip>
 
               <Separator orientation="horizontal" />

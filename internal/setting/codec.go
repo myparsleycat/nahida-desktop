@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -42,6 +43,11 @@ const (
 	modCharacterSidebarWidthDefault   = 256
 
 	drivePasswordListMax = 10
+
+	backupKeepCountDefault = 5
+	backupKeepCountMin     = 1
+	backupKeepCountMax     = 30
+	defaultBackupInterval  = "24h"
 
 	defaultTouchProfileLlmProtocol  = "openai-response"
 	defaultTouchProfileLlmEndpoint  = "https://api.openai.com/v1"
@@ -201,6 +207,36 @@ func normalizePasswordList(value any) []string {
 		}
 	}
 	return out
+}
+
+// BackupIntervals are the periods an automatic backup may run on.
+var BackupIntervals = []string{"6h", "12h", "24h", "7d"}
+
+func normalizeExcludedGames(value any) []string {
+	items, ok := asStringSlice(value)
+	if !ok {
+		return []string{}
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" || slices.Contains(out, trimmed) {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func parseExcludedGames(value *string) []string {
+	if value == nil || *value == "" {
+		return []string{}
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(*value), &parsed); err != nil {
+		return []string{}
+	}
+	return normalizeExcludedGames(parsed)
 }
 
 func parsePasswordList(value *string) []string {

@@ -2070,6 +2070,130 @@
     },
     "docs": {
       "title": "使用说明"
+    },
+    "backup": {
+      "title": "备份",
+      "description": "自动备份已登记游戏的模组文件夹以及您添加的文件夹。仅上传服务器允许的文件类型，未更改的文件不会重复上传。",
+      "loading": "加载中…",
+      "nav": {
+        "sections": "分区",
+        "toggle": "切换备份导航"
+      },
+      "status": {
+        "title": "状态",
+        "auto_on": "自动备份已开启",
+        "auto_off": "自动备份已关闭",
+        "run_now": "立即备份",
+        "last_run": "上次备份",
+        "next_run": "下次备份",
+        "never": "无",
+        "not_scheduled": "未计划",
+        "error": "错误",
+        "files_other": "{{count}} 个文件"
+      },
+      "state": {
+        "idle": "空闲",
+        "scanning": "正在检查文件夹…",
+        "hashing": "正在检查文件…",
+        "uploading": "正在上传…",
+        "committing": "正在完成…",
+        "restoring": "正在恢复…"
+      },
+      "outcome": {
+        "completed": "已完成",
+        "unchanged": "无变化",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "trigger": {
+        "manual": "手动",
+        "schedule": "计划",
+        "startup": "启动时",
+        "watch": "检测到变化"
+      },
+      "schedule": {
+        "title": "计划",
+        "enabled": {
+          "title": "自动备份",
+          "description": "应用运行时在后台备份。"
+        },
+        "interval": {
+          "title": "间隔",
+          "description": "计划备份的运行间隔。",
+          "options": {
+            "6h": "每 6 小时",
+            "12h": "每 12 小时",
+            "24h": "每天",
+            "7d": "每周"
+          }
+        },
+        "on_startup": {
+          "title": "启动时补做",
+          "description": "应用启动时若错过了计划备份，立即执行。"
+        },
+        "watch_changes": {
+          "title": "变化时备份",
+          "description": "监视备份文件夹，变化停止 10 分钟后备份（每小时最多一次）。"
+        },
+        "keep_count": {
+          "title": "保留数量",
+          "description": "此电脑较旧的备份会从服务器删除（1–30）。"
+        },
+        "device_name": {
+          "title": "电脑名称",
+          "description": "在网页上显示此电脑的名称。"
+        }
+      },
+      "targets": {
+        "title": "备份文件夹",
+        "description": "默认包含已登记游戏的模组文件夹。",
+        "add_folder": "添加文件夹",
+        "empty": "没有已登记的游戏或添加的文件夹。",
+        "include": "备份 {{name}}",
+        "remove": "移除 {{name}}",
+        "missing": "文件夹不存在",
+        "excluded": "已排除"
+      },
+      "snapshots": {
+        "title": "此电脑的备份",
+        "description": "保存在服务器上的备份，也可以在网页上查看和下载。",
+        "refresh": "刷新",
+        "empty": "还没有备份。",
+        "loading": "加载中…",
+        "pending": "进行中",
+        "restore": "恢复",
+        "delete": "删除",
+        "skipped_other": "已跳过 {{count}} 个",
+        "delete_confirm": {
+          "title": "删除此备份？",
+          "description": "{{date}} 的备份将从服务器永久删除。此操作无法撤销。"
+        }
+      },
+      "restore": {
+        "title": "恢复备份",
+        "description": "选择要恢复的文件夹和一个空的目标文件夹。不会覆盖现有文件。",
+        "choose_folder": "选择文件夹",
+        "no_folder": "未选择文件夹",
+        "start": "恢复",
+        "started": "已开始恢复"
+      },
+      "toast": {
+        "completed": "备份完成",
+        "unchanged": "自上次备份以来没有变化",
+        "failed": "备份失败",
+        "restored": "恢复完成",
+        "restore_failed": "恢复失败"
+      },
+      "error": {
+        "BACKUP_RUNNING": "已有备份或恢复正在进行。",
+        "BACKUP_NOT_LOGGED_IN": "请登录后再备份。",
+        "BACKUP_NO_TARGETS": "没有可备份的文件夹。",
+        "BACKUP_NOT_DIRECTORY": "该文件夹不存在。",
+        "BACKUP_UPLOAD_FAILED": "上传失败的文件过多。",
+        "BACKUP_INVALID_DEVICE_NAME": "请输入 1–80 个字符的电脑名称。",
+        "RESTORE_DESTINATION_NOT_EMPTY": "请选择一个空文件夹作为恢复目标。",
+        "RESTORE_HASH_MISMATCH": "恢复的文件与备份不一致。"
+      }
     }
   },
   "components": {

@@ -420,6 +420,32 @@ func buildSpecs() map[string]spec {
 			},
 		},
 
+		KeyBackupEnabled:      boolSpec(definitionsByKey[KeyBackupEnabled], false),
+		KeyBackupInterval:     enumSpec(definitionsByKey[KeyBackupInterval], defaultBackupInterval, BackupIntervals),
+		KeyBackupOnStartup:    boolSpec(definitionsByKey[KeyBackupOnStartup], true),
+		KeyBackupWatchChanges: boolSpec(definitionsByKey[KeyBackupWatchChanges], false),
+		KeyBackupKeepCount: clampedIntSpec(
+			definitionsByKey[KeyBackupKeepCount],
+			backupKeepCountDefault,
+			backupKeepCountMin,
+			backupKeepCountMax,
+		),
+		KeyBackupExcludedGames: {
+			def: definitionsByKey[KeyBackupExcludedGames],
+			getDefault: func(*Setting) any {
+				return []string{}
+			},
+			fromStored: func(_ *Setting, value *string) any {
+				return parseExcludedGames(value)
+			},
+			normalize: func(_ *Setting, value any) any {
+				return normalizeExcludedGames(value)
+			},
+			toStored: func(_ *Setting, value any) string {
+				return encodeJSON(normalizeExcludedGames(value))
+			},
+		},
+
 		KeyDebugOpenConsole: {
 			def:        definitionsByKey[KeyDebugOpenConsole],
 			getDefault: func(*Setting) any { return false },

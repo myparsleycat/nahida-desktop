@@ -234,6 +234,34 @@ var TableSpecs = []TableSpec{
 		Indexes: []IndexSpec{{Name: "agent_mcp_server_name_idx", Columns: []string{"name"}, Unique: true}},
 	},
 	{
+		Name: "backup_custom_path",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "path", Type: TypeText, NotNull: true},
+			{Name: "label", Type: TypeText, NotNull: true},
+			{Name: "order", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
+		},
+		Indexes: []IndexSpec{{Name: "backup_custom_path_path_idx", Columns: []string{"path"}, Unique: true}},
+	},
+	{
+		Name: "backup_file_cache",
+		Columns: []ColumnSpec{
+			{Name: "path", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "size", Type: TypeInteger, NotNull: true},
+			{Name: "mtime", Type: TypeInteger, NotNull: true},
+			{Name: "sha256", Type: TypeText, NotNull: true},
+		},
+	},
+	{
+		Name: "backup_committed",
+		Columns: []ColumnSpec{
+			{Name: "target_key", Type: TypeText, NotNull: true},
+			{Name: "rel_path", Type: TypeText, NotNull: true},
+			{Name: "sha256", Type: TypeText, NotNull: true},
+		},
+		CompositePrimaryKey: []string{"target_key", "rel_path"},
+	},
+	{
 		Name: "mod_scan_cache",
 		Columns: []ColumnSpec{
 			{Name: "path", Type: TypeText, PrimaryKey: true, NotNull: true},
@@ -360,6 +388,26 @@ type TouchProfileVisionCacheRow struct {
 	CacheKey  string
 	Result    string
 	UpdatedAt string
+}
+
+type BackupCustomPathRow struct {
+	ID    string
+	Path  string
+	Label string
+	Order int64
+}
+
+type BackupFileCacheRow struct {
+	Path   string
+	Size   int64
+	Mtime  int64
+	SHA256 string
+}
+
+type BackupCommittedRow struct {
+	TargetKey string
+	RelPath   string
+	SHA256    string
 }
 
 type ModScanCacheRow struct {

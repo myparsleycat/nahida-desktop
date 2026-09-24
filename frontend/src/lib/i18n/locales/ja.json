@@ -2071,6 +2071,130 @@
     },
     "docs": {
       "title": "使い方"
+    },
+    "backup": {
+      "title": "バックアップ",
+      "description": "登録したゲームのModフォルダーと追加したフォルダーを自動でバックアップします。サーバーが許可するファイル形式のみアップロードされ、変更のないファイルは再アップロードされません。",
+      "loading": "読み込み中…",
+      "nav": {
+        "sections": "セクション",
+        "toggle": "バックアップナビゲーションを切り替え"
+      },
+      "status": {
+        "title": "状態",
+        "auto_on": "自動バックアップ オン",
+        "auto_off": "自動バックアップ オフ",
+        "run_now": "今すぐバックアップ",
+        "last_run": "前回のバックアップ",
+        "next_run": "次回のバックアップ",
+        "never": "なし",
+        "not_scheduled": "予定なし",
+        "error": "エラー",
+        "files_other": "{{count}} ファイル"
+      },
+      "state": {
+        "idle": "待機中",
+        "scanning": "フォルダーを確認中…",
+        "hashing": "ファイルを確認中…",
+        "uploading": "アップロード中…",
+        "committing": "仕上げ中…",
+        "restoring": "復元中…"
+      },
+      "outcome": {
+        "completed": "完了",
+        "unchanged": "変更なし",
+        "failed": "失敗",
+        "cancelled": "キャンセル"
+      },
+      "trigger": {
+        "manual": "手動",
+        "schedule": "予約",
+        "startup": "起動時",
+        "watch": "変更検知"
+      },
+      "schedule": {
+        "title": "スケジュール",
+        "enabled": {
+          "title": "自動バックアップ",
+          "description": "アプリの実行中にバックグラウンドでバックアップします。"
+        },
+        "interval": {
+          "title": "間隔",
+          "description": "予約バックアップを実行する間隔です。",
+          "options": {
+            "6h": "6時間ごと",
+            "12h": "12時間ごと",
+            "24h": "毎日",
+            "7d": "毎週"
+          }
+        },
+        "on_startup": {
+          "title": "起動時に追いつく",
+          "description": "起動時に予約バックアップを逃していればすぐに実行します。"
+        },
+        "watch_changes": {
+          "title": "変更時にバックアップ",
+          "description": "バックアップ対象を監視し、変更が落ち着いてから10分後にバックアップします（1時間に最大1回）。"
+        },
+        "keep_count": {
+          "title": "保持数",
+          "description": "このPCの古いバックアップはサーバーから削除されます（1–30）。"
+        },
+        "device_name": {
+          "title": "PC名",
+          "description": "WebでこのPCを表示する名前です。"
+        }
+      },
+      "targets": {
+        "title": "バックアップ対象",
+        "description": "登録したゲームのModフォルダーは既定で含まれます。",
+        "add_folder": "フォルダーを追加",
+        "empty": "登録したゲームや追加したフォルダーがありません。",
+        "include": "{{name}} をバックアップ",
+        "remove": "{{name}} を削除",
+        "missing": "フォルダーがありません",
+        "excluded": "除外"
+      },
+      "snapshots": {
+        "title": "このPCのバックアップ",
+        "description": "サーバーに保存されたバックアップです。Webでも閲覧・ダウンロードできます。",
+        "refresh": "更新",
+        "empty": "まだバックアップはありません。",
+        "loading": "読み込み中…",
+        "pending": "進行中",
+        "restore": "復元",
+        "delete": "削除",
+        "skipped_other": "{{count}} 件スキップ",
+        "delete_confirm": {
+          "title": "このバックアップを削除しますか？",
+          "description": "{{date}} のバックアップがサーバーから完全に削除されます。この操作は元に戻せません。"
+        }
+      },
+      "restore": {
+        "title": "バックアップを復元",
+        "description": "復元するフォルダーと空の復元先フォルダーを選んでください。既存のファイルは上書きしません。",
+        "choose_folder": "フォルダーを選択",
+        "no_folder": "フォルダー未選択",
+        "start": "復元",
+        "started": "復元を開始しました"
+      },
+      "toast": {
+        "completed": "バックアップが完了しました",
+        "unchanged": "前回のバックアップから変更はありません",
+        "failed": "バックアップに失敗しました",
+        "restored": "復元が完了しました",
+        "restore_failed": "復元に失敗しました"
+      },
+      "error": {
+        "BACKUP_RUNNING": "バックアップまたは復元がすでに実行中です。",
+        "BACKUP_NOT_LOGGED_IN": "バックアップするにはログインしてください。",
+        "BACKUP_NO_TARGETS": "バックアップするフォルダーがありません。",
+        "BACKUP_NOT_DIRECTORY": "フォルダーが存在しません。",
+        "BACKUP_UPLOAD_FAILED": "アップロードに失敗したファイルが多すぎます。",
+        "BACKUP_INVALID_DEVICE_NAME": "PC名は1–80文字で入力してください。",
+        "RESTORE_DESTINATION_NOT_EMPTY": "復元先には空のフォルダーを選んでください。",
+        "RESTORE_HASH_MISMATCH": "復元したファイルがバックアップと一致しません。"
+      }
     }
   },
   "components": {

@@ -52,6 +52,13 @@ const (
 	KeyDriveAutoTryPasswords = "drive.autoTryPasswords"
 	KeyDrivePasswordList     = "drive.passwordList"
 
+	KeyBackupEnabled       = "backup.enabled"
+	KeyBackupInterval      = "backup.interval"
+	KeyBackupOnStartup     = "backup.onStartup"
+	KeyBackupWatchChanges  = "backup.watchChanges"
+	KeyBackupKeepCount     = "backup.keepCount"
+	KeyBackupExcludedGames = "backup.excludedGames"
+
 	KeyDebugOpenConsole = "debug.openConsole"
 
 	KeyModelViewerToneMapping = "modelViewer.toneMapping"
@@ -73,6 +80,7 @@ const (
 	ScopeTools       = "tools"
 	ScopeTransfer    = "transfer"
 	ScopeDrive       = "drive"
+	ScopeBackup      = "backup"
 	ScopeDebug       = "debug"
 	ScopeModelViewer = "modelViewer"
 	ScopeXXMI        = "xxmi"
@@ -131,6 +139,13 @@ var allDefinitions = []Definition{
 	{KeyDriveNameSortPolicy, ScopeDrive, "drive_name_sort_policy"},
 	{KeyDriveAutoTryPasswords, ScopeDrive, "drive_auto_try_passwords"},
 	{KeyDrivePasswordList, ScopeDrive, "drive_password_list"},
+
+	{KeyBackupEnabled, ScopeBackup, "backup_enabled"},
+	{KeyBackupInterval, ScopeBackup, "backup_interval"},
+	{KeyBackupOnStartup, ScopeBackup, "backup_on_startup"},
+	{KeyBackupWatchChanges, ScopeBackup, "backup_watch_changes"},
+	{KeyBackupKeepCount, ScopeBackup, "backup_keep_count"},
+	{KeyBackupExcludedGames, ScopeBackup, "backup_excluded_games"},
 
 	{KeyDebugOpenConsole, ScopeDebug, "debug_open_console"},
 
