@@ -197,7 +197,9 @@ export function useGameMutations() {
             }
 
             toast.error(
-                errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"),
+                errorMessage === "Unknown error"
+                    ? t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed")
+                    : errorMessage,
             );
         },
     });

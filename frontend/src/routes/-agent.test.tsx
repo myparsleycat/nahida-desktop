@@ -91,6 +91,9 @@ const SESSION_ID = "session-1";
 const RUN_ID = "run-1";
 const ROUTE_LOAD_TIMEOUT_MS = 10_000;
 
+// Route loading can use the full helper timeout; give Vitest enough time for the test too.
+const itR = (name: string, test: () => Promise<void>) => it(name, test, ROUTE_LOAD_TIMEOUT_MS * 2);
+
 // jsdom has no layout engine, so the chat auto-scroll is a no-op here
 Element.prototype.scrollIntoView = vi.fn();
 
@@ -204,7 +207,7 @@ describe("Agent session list", () => {
     ROUTE_LOAD_TIMEOUT_MS * 2,
   );
 
-  it("renames a session from the row menu dialog", async () => {
+  itR("renames a session from the row menu dialog", async () => {
     backend.RenameSession.mockResolvedValue(undefined);
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
@@ -228,7 +231,7 @@ describe("Agent session list", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("shows a generated session title while the turn is still running", async () => {
+  itR("shows a generated session title while the turn is still running", async () => {
     backend.ListSessions.mockResolvedValue([makeSession(SESSION_ID, "New conversation")]);
     await renderAgent();
 
@@ -240,7 +243,7 @@ describe("Agent session list", () => {
     );
   });
 
-  it("keeps a generated title for another conversation out of the open one", async () => {
+  itR("keeps a generated title for another conversation out of the open one", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Second chat"),
@@ -254,7 +257,7 @@ describe("Agent session list", () => {
     expect(screen.getByText("Nahida")).toBeTruthy();
   });
 
-  it("keeps the row menu-open until the closing popup finishes animating", async () => {
+  itR("keeps the row menu-open until the closing popup finishes animating", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Second chat"),
@@ -301,7 +304,7 @@ describe("Agent session list", () => {
     }
   });
 
-  it("keeps the previous title when the rename dialog is cancelled", async () => {
+  itR("keeps the previous title when the rename dialog is cancelled", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Second chat"),
@@ -319,7 +322,7 @@ describe("Agent session list", () => {
     expect(backend.RenameSession).not.toHaveBeenCalled();
   });
 
-  it("deletes a session after the row menu confirmation", async () => {
+  itR("deletes a session after the row menu confirmation", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Second chat"),
@@ -338,7 +341,7 @@ describe("Agent session list", () => {
     await waitFor(() => expect(backend.DeleteSession).toHaveBeenCalledWith("session-2"));
   });
 
-  it("keeps the session when the delete confirmation is cancelled", async () => {
+  itR("keeps the session when the delete confirmation is cancelled", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Second chat"),
@@ -356,7 +359,7 @@ describe("Agent session list", () => {
     expect(screen.getByText("Second chat")).toBeTruthy();
   });
 
-  it("keeps the current empty conversation when starting a new chat", async () => {
+  itR("keeps the current empty conversation when starting a new chat", async () => {
     await renderAgent();
 
     fireEvent.click(screen.getByRole("button", { name: "page.agent.new_chat" }));
@@ -367,7 +370,7 @@ describe("Agent session list", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("reuses an empty conversation in the scope instead of creating another", async () => {
+  itR("reuses an empty conversation in the scope instead of creating another", async () => {
     backend.ListSessions.mockResolvedValue([
       makeSession(SESSION_ID, "Current chat"),
       makeSession("session-2", "Empty chat"),
@@ -391,7 +394,7 @@ describe("Agent session list", () => {
     expect(backend.CreateSession).not.toHaveBeenCalled();
   });
 
-  it("creates a conversation when the scope has no empty one", async () => {
+  itR("creates a conversation when the scope has no empty one", async () => {
     backend.ListSessions.mockResolvedValue([makeSession(SESSION_ID, "Current chat")]);
     backend.CreateSession.mockResolvedValue(makeSession("session-new", "New conversation"));
     await renderAgent([{ sequence: 1, type: "message/user" }]);
@@ -406,54 +409,62 @@ describe("Agent session list", () => {
     });
   });
 
-  it("keeps the previous conversation's streamed reasoning out of a new conversation", async () => {
-    const emptySnapshot = makeSnapshot([], {
-      summary: { id: "session-2", title: "Empty chat", running: false, scope: { type: "global" } },
-    });
-    backend.ListSessions.mockResolvedValue([
-      makeSession(SESSION_ID, "Current chat"),
-      makeSession("session-2", "Empty chat"),
-    ]);
-    await renderAgent([], async (id: string) =>
-      id === SESSION_ID ? makeSnapshot([{ sequence: 1, type: "message/user" }]) : emptySnapshot,
-    );
-
-    emit("reasoning-delta", { delta: "이전 대화 추론" });
-    expect(reasoningPanel()?.textContent).toContain("이전 대화 추론");
-
-    // React replaces the subscription only once the new conversation has rendered, so a delta can
-    // still be delivered through the handler that was bound to the conversation on screen when
-    // the user asked for a new one.
-    const staleHandler = subscriptions.active.at(-1);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "page.agent.new_chat" }));
-    });
-    await screen.findByText("page.agent.hero_title");
-
-    act(() => {
-      staleHandler?.({
-        data: {
-          sessionId: SESSION_ID,
-          runId: RUN_ID,
-          sequence: 99,
-          type: "reasoning-delta",
-          payload: { delta: "이어지는 추론" },
+  itR(
+    "keeps the previous conversation's streamed reasoning out of a new conversation",
+    async () => {
+      const emptySnapshot = makeSnapshot([], {
+        summary: {
+          id: "session-2",
+          title: "Empty chat",
+          running: false,
+          scope: { type: "global" },
         },
       });
-    });
+      backend.ListSessions.mockResolvedValue([
+        makeSession(SESSION_ID, "Current chat"),
+        makeSession("session-2", "Empty chat"),
+      ]);
+      await renderAgent([], async (id: string) =>
+        id === SESSION_ID ? makeSnapshot([{ sequence: 1, type: "message/user" }]) : emptySnapshot,
+      );
 
-    expect(screen.queryByText("page.agent.reasoning")).toBeNull();
-    expect(screen.getByText("page.agent.hero_title")).toBeTruthy();
+      emit("reasoning-delta", { delta: "이전 대화 추론" });
+      expect(reasoningPanel()?.textContent).toContain("이전 대화 추론");
 
-    // The new conversation still streams its own reasoning.
-    emit("reasoning-delta", { delta: "새 대화 추론" }, "session-2");
-    expect(reasoningPanel()?.textContent).toContain("새 대화 추론");
-  });
+      // React replaces the subscription only once the new conversation has rendered, so a delta can
+      // still be delivered through the handler that was bound to the conversation on screen when
+      // the user asked for a new one.
+      const staleHandler = subscriptions.active.at(-1);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "page.agent.new_chat" }));
+      });
+      await screen.findByText("page.agent.hero_title");
+
+      act(() => {
+        staleHandler?.({
+          data: {
+            sessionId: SESSION_ID,
+            runId: RUN_ID,
+            sequence: 99,
+            type: "reasoning-delta",
+            payload: { delta: "이어지는 추론" },
+          },
+        });
+      });
+
+      expect(screen.queryByText("page.agent.reasoning")).toBeNull();
+      expect(screen.getByText("page.agent.hero_title")).toBeTruthy();
+
+      // The new conversation still streams its own reasoning.
+      emit("reasoning-delta", { delta: "새 대화 추론" }, "session-2");
+      expect(reasoningPanel()?.textContent).toContain("새 대화 추론");
+    },
+  );
 });
 
 describe("Agent reasoning panel", () => {
-  it("renders the reference-style empty conversation shell", async () => {
+  itR("renders the reference-style empty conversation shell", async () => {
     await renderAgent();
 
     expect(screen.getByText("page.agent.new_chat")).toBeTruthy();
@@ -464,7 +475,7 @@ describe("Agent reasoning panel", () => {
     );
   });
 
-  it("streams reasoning expanded and folds it once the answer starts", async () => {
+  itR("streams reasoning expanded and folds it once the answer starts", async () => {
     await renderAgent();
 
     emit("reasoning-delta", { delta: "모드 폴더를 확인합니다." });
@@ -476,7 +487,7 @@ describe("Agent reasoning panel", () => {
     expect(reasoningPanel()?.open).toBe(false);
   });
 
-  it("keeps a manual collapse while reasoning keeps streaming", async () => {
+  itR("keeps a manual collapse while reasoning keeps streaming", async () => {
     await renderAgent();
 
     emit("reasoning-delta", { delta: "첫 단계" });
@@ -489,7 +500,7 @@ describe("Agent reasoning panel", () => {
     expect(reasoningPanel()?.textContent).toContain("첫 단계 둘째 단계");
   });
 
-  it("folds saved assistant reasoning", async () => {
+  itR("folds saved assistant reasoning", async () => {
     await renderAgent([
       {
         sequence: 1,
@@ -507,7 +518,7 @@ describe("Agent reasoning panel", () => {
     expect(screen.getByText("정리했습니다.")).toBeTruthy();
   });
 
-  it("keeps streamed assistant text before the tool that follows it", async () => {
+  itR("keeps streamed assistant text before the tool that follows it", async () => {
     await renderAgent();
 
     emit("assistant-delta", { delta: "조사 시작하겠습니다" });
@@ -550,7 +561,7 @@ describe("Agent image input", () => {
     await waitFor(() => expect(input).toBeTruthy());
   }
 
-  it("hides the attachment control while the model does not accept images", async () => {
+  itR("hides the attachment control while the model does not accept images", async () => {
     await renderAgent();
 
     expect(screen.queryByRole("button", { name: "page.agent.attach_image" })).toBeNull();
@@ -603,7 +614,7 @@ describe("Agent image input", () => {
     expect(screen.queryByRole("img", { name: "scan.tiff" })).toBeNull();
   });
 
-  it("renders stored attachments and tool images from the session snapshot", async () => {
+  itR("renders stored attachments and tool images from the session snapshot", async () => {
     await renderAgent([
       {
         sequence: 1,
@@ -671,7 +682,7 @@ describe("Agent conversation revert", () => {
     },
   ];
 
-  it("stages a revert from a user message and refills the composer", async () => {
+  itR("stages a revert from a user message and refills the composer", async () => {
     backend.RevertSession.mockResolvedValue(
       makeSnapshot(conversation, {
         revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
@@ -692,7 +703,7 @@ describe("Agent conversation revert", () => {
     expect(screen.getByRole("button", { name: "page.agent.revert_undo" })).toBeTruthy();
   });
 
-  it("clears a staged revert from the banner", async () => {
+  itR("clears a staged revert from the banner", async () => {
     const staged = makeSnapshot(conversation, {
       revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
     });
@@ -705,7 +716,7 @@ describe("Agent conversation revert", () => {
     await waitFor(() => expect(screen.queryByText("page.agent.revert_pending")).toBeNull());
   });
 
-  it("copies a user message", async () => {
+  itR("copies a user message", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     await renderAgent(conversation);
@@ -715,7 +726,7 @@ describe("Agent conversation revert", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("first request"));
   });
 
-  it("keeps an in-progress composer draft when reverting", async () => {
+  itR("keeps an in-progress composer draft when reverting", async () => {
     backend.RevertSession.mockResolvedValue(
       makeSnapshot(conversation, {
         revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
@@ -733,7 +744,7 @@ describe("Agent conversation revert", () => {
     expect(composer.value).toBe("still typing");
   });
 
-  it("drops reverted entries from the optimistic view after sending", async () => {
+  itR("drops reverted entries from the optimistic view after sending", async () => {
     const reverted = conversation.map((entry) => ({ ...entry, reverted: true }));
     const staged = makeSnapshot(reverted, {
       revert: { boundarySequence: 1, boundaryTurnId: RUN_ID, revertedCount: 2, createdAt: "now" },
@@ -750,7 +761,7 @@ describe("Agent conversation revert", () => {
     expect(screen.getByText("next request")).toBeTruthy();
   });
 
-  it("disables copy for a message with no text", async () => {
+  itR("disables copy for a message with no text", async () => {
     await renderAgent([
       {
         sequence: 1,
@@ -789,7 +800,7 @@ describe("manual hunting controls", () => {
     },
   ];
 
-  it("only advances a category after the user presses its button", async () => {
+  itR("only advances a category after the user presses its button", async () => {
     const advanced = makeHunting({
       selectedCategory: "pixel_shader",
       categories: [
@@ -822,7 +833,7 @@ describe("manual hunting controls", () => {
     expect(screen.getByText("1")).toBeTruthy();
   });
 
-  it("marks the selected resource only when the user presses found", async () => {
+  itR("marks the selected resource only when the user presses found", async () => {
     const selected = makeHunting({ selectedCategory: "pixel_shader" });
     backend.HuntingFound.mockResolvedValue(
       makeHunting({
@@ -843,7 +854,7 @@ describe("manual hunting controls", () => {
     expect(await screen.findByText("deadbeef")).toBeTruthy();
   });
 
-  it("keeps found disabled until the user selects a category and can cancel", async () => {
+  itR("keeps found disabled until the user selects a category and can cancel", async () => {
     backend.HuntingCancel.mockResolvedValue(
       makeHunting({ status: "cancelled", cleanup: { complete: true } }),
     );
@@ -861,7 +872,7 @@ describe("manual hunting controls", () => {
     expect(await screen.findByText("page.agent.hunting_status_cancelled")).toBeTruthy();
   });
 
-  it("offers a restore retry when hunting cleanup fails", async () => {
+  itR("offers a restore retry when hunting cleanup fails", async () => {
     backend.HuntingCancel.mockResolvedValue(
       makeHunting({ status: "cancelled", cleanup: { complete: true, pending: false } }),
     );
@@ -885,7 +896,7 @@ describe("manual hunting controls", () => {
     expect(screen.queryByRole("button", { name: "page.agent.hunting_retry_cleanup" })).toBeNull();
   });
 
-  it("keeps a found hash while the restore is retried", async () => {
+  itR("keeps a found hash while the restore is retried", async () => {
     backend.HuntingCancel.mockResolvedValue(
       makeHunting({
         status: "completed",
@@ -915,7 +926,7 @@ describe("manual hunting controls", () => {
     expect(screen.getByText("deadbeef")).toBeTruthy();
   });
 
-  it("shows a restore failure without a retry once the game window is gone", async () => {
+  itR("shows a restore failure without a retry once the game window is gone", async () => {
     await renderAgent(conversation, () =>
       Promise.resolve(
         makeSnapshot(conversation, {
@@ -931,7 +942,7 @@ describe("manual hunting controls", () => {
     expect(screen.queryByRole("button", { name: "page.agent.hunting_retry_cleanup" })).toBeNull();
   });
 
-  it("copies a completed hash", async () => {
+  itR("copies a completed hash", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     await renderAgent(conversation, () =>
@@ -965,13 +976,13 @@ describe("Agent context meter", () => {
     },
   ];
 
-  it("renders nothing while the session reports no context usage", async () => {
+  itR("renders nothing while the session reports no context usage", async () => {
     await renderAgent(conversation);
 
     expect(screen.queryByRole("button", { name: "page.agent.context_used" })).toBeNull();
   });
 
-  it("shows the occupancy ring and opens the composition panel", async () => {
+  itR("shows the occupancy ring and opens the composition panel", async () => {
     const contextUsage = {
       projectedTokens: 32_000,
       contextWindow: 128_000,
@@ -994,7 +1005,7 @@ describe("Agent context meter", () => {
     expect(panel.textContent).toContain("~477K");
   });
 
-  it("prefers live usage from the usage stream event over the snapshot", async () => {
+  itR("prefers live usage from the usage stream event over the snapshot", async () => {
     const contextUsage = {
       projectedTokens: 32_000,
       contextWindow: 128_000,
@@ -1017,7 +1028,7 @@ describe("Agent context meter", () => {
     await waitFor(() => expect(screen.getByText("50%")).toBeTruthy());
   });
 
-  it("applies live usage while a restored session is still running", async () => {
+  itR("applies live usage while a restored session is still running", async () => {
     const contextUsage = {
       projectedTokens: 32_000,
       contextWindow: 128_000,
