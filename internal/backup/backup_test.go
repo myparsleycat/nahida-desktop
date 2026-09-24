@@ -302,6 +302,33 @@ func TestRunAbortsWhenMostContentIsMissing(t *testing.T) {
 	}
 }
 
+func TestRunSharesMissingToleranceBetweenHashAndUpload(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	root := t.TempDir()
+	for index := range missingToleranceFiles + 1 {
+		writeFile(t, filepath.Join(root, fmt.Sprintf("%02d.ini", index)), fmt.Sprint(index))
+	}
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	remote := &fakeRemote{missingOnce: missingToleranceFiles}
+	remote.filter = func(name string, _ int64) string {
+		if name == "00.ini" {
+			if err := os.Remove(filepath.Join(root, name)); err != nil {
+				t.Error(err)
+			}
+		}
+		return ""
+	}
+	result := testBackup(t, client, remote).run(t.Context(), client, "manual")
+	if result.Outcome != OutcomeFailed || !remote.aborted ||
+		!strings.Contains(result.Error, errTooManyMissing.Error()) {
+		t.Fatalf("result=%+v aborted=%v", result, remote.aborted)
+	}
+}
+
 func TestRunStopsWhenTheManifestIsUnchanged(t *testing.T) {
 	t.Parallel()
 

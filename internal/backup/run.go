@@ -239,6 +239,7 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 		return fail(err, "scan")
 	}
 	result.Skipped = scan.skipped
+	tolerance := missingTolerance(len(scan.files))
 
 	totalBytes := lo.SumBy(scan.files, func(file scannedFile) int64 { return file.size })
 	throttle := newStatusThrottle(
@@ -259,7 +260,7 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	var held []committedKey
 	if len(unreadable) > 0 {
 		unreadableErr := fmt.Errorf("%w: %d file(s)", ErrUnreadable, len(unreadable))
-		if len(unreadable) > missingTolerance(len(scan.files)) {
+		if len(unreadable) > tolerance {
 			return fail(unreadableErr, "hash")
 		}
 		b.report(unreadableErr, "run", "hash-skip", map[string]any{
@@ -318,7 +319,9 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 		return fail(err, "base")
 	}
 	changes := diffCommitted(targets, scan.files, committed, held)
-	snapshot, kept, commitErr := b.upload(ctx, created.SnapshotID, created.TargetIDs, targets, scan, changes, trigger)
+	snapshot, kept, commitErr := b.upload(
+		ctx, created.SnapshotID, created.TargetIDs, targets, scan, changes, trigger, tolerance, len(unreadable),
+	)
 	if commitErr != nil {
 		abortCtx, cancelAbort := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
 		defer cancelAbort()
@@ -521,6 +524,7 @@ func (b *Backup) upload(
 	scan scanResult,
 	changes committedChanges,
 	trigger string,
+	tolerance, unreadable int,
 ) (Snapshot, []int, error) {
 	files := make([]drive.BackupUploadFile, len(changes.changed))
 	for position, index := range changes.changed {
@@ -579,7 +583,7 @@ func (b *Backup) upload(
 	b.setStatus(Status{State: StateCommitting, Trigger: trigger, Total: len(files), TotalBytes: totalBytes})
 	route := "/backup/snapshots/" + url.PathEscape(snapshotID) + "/commit"
 	body := map[string]any{"skipped": scan.skipped}
-	tolerance := missingTolerance(len(scan.files))
+	tolerance -= unreadable
 
 	// A refused commit names at most a page of the missing hashes, so the
 	// failed files add up over rounds until the commit goes through. Every

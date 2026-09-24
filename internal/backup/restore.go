@@ -96,6 +96,10 @@ func (b *Backup) Restore(ctx context.Context, snapshotID string, targetIDs []str
 				"cleanup",
 				map[string]any{"snapshotId": snapshotID, "destination": destination},
 			)
+			if cleanupErr != nil {
+				message = errors.Join(err, fmt.Errorf("cleanup failed: %w", cleanupErr)).Error() +
+					"; remove partial files from the destination manually before retrying"
+			}
 		}
 		if b.opts.EventEmit != nil {
 			b.opts.EventEmit("backup:restore", map[string]any{
