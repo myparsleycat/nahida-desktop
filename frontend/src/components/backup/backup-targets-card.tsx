@@ -27,10 +27,14 @@ export function BackupTargetsCard({ targets }: { targets: Target[] }) {
   };
 
   const addFolder = async () => {
-    const result = await Dialog.SelectDirectory();
-    const path = result.filePath;
-    if (result.canceled || !path) return;
-    await attempt(() => Backup.AddCustomPath(path));
+    try {
+      const result = await Dialog.SelectDirectory();
+      if (result.canceled || !result.filePath) return;
+      await Backup.AddCustomPath(result.filePath);
+      await refresh();
+    } catch (error) {
+      toast.error(backupErrorMessage(t, error));
+    }
   };
 
   const games = targets.filter((target) => target.kind === "game");

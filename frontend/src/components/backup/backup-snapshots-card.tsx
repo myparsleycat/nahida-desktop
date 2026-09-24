@@ -1,5 +1,15 @@
 import { Backup, type ManifestTarget, type Snapshot } from "@bindings/backup";
 import { Dialog as PlatformDialog } from "@bindings/platform";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
@@ -30,12 +40,17 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
     queryFn: () => Backup.ListSnapshots(),
   });
   const [restoring, setRestoring] = useState<Snapshot | null>(null);
+  const [deleting, setDeleting] = useState<Snapshot | null>(null);
   const dateFormat = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: "medium",
     timeStyle: "short",
   });
 
+  const snapshotDate = (snapshot: Snapshot) =>
+    dateFormat.format(new Date(snapshot.completedAt ?? snapshot.createdAt));
+
   const remove = async (snapshot: Snapshot) => {
+    setDeleting(null);
     try {
       await Backup.DeleteSnapshot(snapshot.id);
       await queryClient.invalidateQueries({ queryKey: backupSnapshotsKey });
@@ -82,9 +97,7 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium tabular-nums">
-                  {dateFormat.format(new Date(snapshot.completedAt ?? snapshot.createdAt))}
-                </span>
+                <span className="text-sm font-medium tabular-nums">{snapshotDate(snapshot)}</span>
                 <Badge variant="outline">{t(`page.backup.trigger.${snapshot.trigger}`)}</Badge>
                 {snapshot.state === "PENDING" && (
                   <Badge variant="secondary">{t("page.backup.snapshots.pending")}</Badge>
@@ -111,7 +124,7 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
               size="icon-sm"
               aria-label={t("page.backup.snapshots.delete")}
               disabled={busy}
-              onClick={() => void remove(snapshot)}
+              onClick={() => setDeleting(snapshot)}
             >
               <TrashIcon />
             </Button>
@@ -119,6 +132,28 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
         ))}
       </CardContent>
       <RestoreDialog snapshot={restoring} onClose={() => setRestoring(null)} />
+      <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.backup.snapshots.delete_confirm.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleting &&
+                t("page.backup.snapshots.delete_confirm.description", {
+                  date: snapshotDate(deleting),
+                })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => deleting && void remove(deleting)}
+            >
+              {t("page.backup.snapshots.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -149,8 +184,12 @@ function RestoreDialog({ snapshot, onClose }: { snapshot: Snapshot | null; onClo
   };
 
   const pickDestination = async () => {
-    const result = await PlatformDialog.SelectDirectory();
-    if (!result.canceled && result.filePath) setDestination(result.filePath);
+    try {
+      const result = await PlatformDialog.SelectDirectory();
+      if (!result.canceled && result.filePath) setDestination(result.filePath);
+    } catch (error) {
+      toast.error(backupErrorMessage(t, error));
+    }
   };
 
   const start = async () => {

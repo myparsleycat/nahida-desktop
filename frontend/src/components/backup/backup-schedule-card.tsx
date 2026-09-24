@@ -14,7 +14,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import type { BackupInterval } from "@shared/settings";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -38,15 +38,18 @@ function Row({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: (labelId: string) => React.ReactNode;
 }) {
+  const labelId = useId();
   return (
     <div className="flex items-center justify-between gap-6">
       <div className="space-y-0.5">
-        <span className="text-sm font-medium">{title}</span>
+        <span id={labelId} className="text-sm font-medium">
+          {title}
+        </span>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
-      {children}
+      {children(labelId)}
     </div>
   );
 }
@@ -98,91 +101,108 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
           title={t("page.backup.schedule.enabled.title")}
           description={t("page.backup.schedule.enabled.description")}
         >
-          <Switch
-            checked={settings.enabled}
-            onCheckedChange={(value) => update("enabled", value)}
-          />
+          {(labelId) => (
+            <Switch
+              aria-labelledby={labelId}
+              checked={settings.enabled}
+              onCheckedChange={(value) => update("enabled", value)}
+            />
+          )}
         </Row>
         <Separator />
         <Row
           title={t("page.backup.schedule.interval.title")}
           description={t("page.backup.schedule.interval.description")}
         >
-          <Select
-            value={settings.interval}
-            items={INTERVALS.map((value) => ({
-              value,
-              label: t(`page.backup.schedule.interval.options.${value}`),
-            }))}
-            onValueChange={(value) => update("interval", value as BackupInterval)}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {INTERVALS.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {t(`page.backup.schedule.interval.options.${value}`)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {(labelId) => (
+            <Select
+              value={settings.interval}
+              items={INTERVALS.map((value) => ({
+                value,
+                label: t(`page.backup.schedule.interval.options.${value}`),
+              }))}
+              onValueChange={(value) => update("interval", value as BackupInterval)}
+            >
+              <SelectTrigger className="w-40" aria-labelledby={labelId}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {INTERVALS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {t(`page.backup.schedule.interval.options.${value}`)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
         </Row>
         <Separator />
         <Row
           title={t("page.backup.schedule.on_startup.title")}
           description={t("page.backup.schedule.on_startup.description")}
         >
-          <Switch
-            checked={settings.onStartup}
-            onCheckedChange={(value) => update("onStartup", value)}
-          />
+          {(labelId) => (
+            <Switch
+              aria-labelledby={labelId}
+              checked={settings.onStartup}
+              onCheckedChange={(value) => update("onStartup", value)}
+            />
+          )}
         </Row>
         <Separator />
         <Row
           title={t("page.backup.schedule.watch_changes.title")}
           description={t("page.backup.schedule.watch_changes.description")}
         >
-          <Switch
-            checked={settings.watchChanges}
-            onCheckedChange={(value) => update("watchChanges", value)}
-          />
+          {(labelId) => (
+            <Switch
+              aria-labelledby={labelId}
+              checked={settings.watchChanges}
+              onCheckedChange={(value) => update("watchChanges", value)}
+            />
+          )}
         </Row>
         <Separator />
         <Row
           title={t("page.backup.schedule.keep_count.title")}
           description={t("page.backup.schedule.keep_count.description")}
         >
-          <Input
-            type="number"
-            min={1}
-            max={30}
-            className="w-24 tabular-nums"
-            value={keepCount}
-            onChange={(event) => setKeepCountDraft(event.target.value)}
-            onBlur={saveKeepCount}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
+          {(labelId) => (
+            <Input
+              aria-labelledby={labelId}
+              type="number"
+              min={1}
+              max={30}
+              className="w-24 tabular-nums"
+              value={keepCount}
+              onChange={(event) => setKeepCountDraft(event.target.value)}
+              onBlur={saveKeepCount}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+          )}
         </Row>
         <Separator />
         <Row
           title={t("page.backup.schedule.device_name.title")}
           description={t("page.backup.schedule.device_name.description")}
         >
-          <Input
-            className="w-56"
-            maxLength={80}
-            value={name}
-            onChange={(event) => setNameDraft(event.target.value)}
-            onBlur={() => void saveName()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
+          {(labelId) => (
+            <Input
+              aria-labelledby={labelId}
+              className="w-56"
+              maxLength={80}
+              value={name}
+              onChange={(event) => setNameDraft(event.target.value)}
+              onBlur={() => void saveName()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+          )}
         </Row>
       </CardContent>
     </Card>

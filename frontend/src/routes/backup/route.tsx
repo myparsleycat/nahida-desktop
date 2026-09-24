@@ -114,7 +114,7 @@ function RouteComponent() {
 
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           <p className="mb-2 px-2 text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
-            Sections
+            {t("page.backup.nav.sections")}
           </p>
           <ul className="space-y-0.5">
             {navItems.map((item) => {
@@ -160,7 +160,7 @@ function RouteComponent() {
             type="button"
             onClick={() => setSidebarOpen((open) => !open)}
             className="rounded p-1.5 transition-colors hover:bg-secondary md:hidden"
-            aria-label="Toggle backup navigation"
+            aria-label={t("page.backup.nav.toggle")}
           >
             {sidebarOpen ? (
               <X className="h-4 w-4 text-muted-foreground" />

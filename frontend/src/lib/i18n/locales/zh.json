@@ -2074,6 +2074,11 @@
     "backup": {
       "title": "备份",
       "description": "自动备份已登记游戏的模组文件夹以及您添加的文件夹。仅上传服务器允许的文件类型，未更改的文件不会重复上传。",
+      "loading": "加载中…",
+      "nav": {
+        "sections": "分区",
+        "toggle": "切换备份导航"
+      },
       "status": {
         "title": "状态",
         "auto_on": "自动备份已开启",
@@ -2158,7 +2163,11 @@
         "pending": "进行中",
         "restore": "恢复",
         "delete": "删除",
-        "skipped_other": "已跳过 {{count}} 个"
+        "skipped_other": "已跳过 {{count}} 个",
+        "delete_confirm": {
+          "title": "删除此备份？",
+          "description": "{{date}} 的备份将从服务器永久删除。此操作无法撤销。"
+        }
       },
       "restore": {
         "title": "恢复备份",
