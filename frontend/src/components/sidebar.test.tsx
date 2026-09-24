@@ -65,3 +65,9 @@ it("retries drive queries and navigates when Share is clicked while offline", ()
     params: { id: "last-share" },
   });
 });
+
+it("navigates to the backup page when Backup is clicked", () => {
+  render(<Sidebar />);
+  fireEvent.click(screen.getByRole("button", { name: "page.backup.title" }));
+  expect(calls.navigate).toHaveBeenCalledWith({ to: "/backup" });
+});

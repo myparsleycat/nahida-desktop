@@ -171,6 +171,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.tools != nil {
 		rt.tools.UseClient(store.DB)
 	}
+	if rt.backup != nil {
+		rt.backup.UseClient(store.DB)
+	}
 	if rt.agent != nil {
 		if err := rt.agent.UseClient(ctx, store.DB); err != nil {
 			return rt.failInit(err, "agent")
@@ -226,6 +229,9 @@ func (rt *runtime) Close() error {
 	}
 	if rt.auth != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
+	}
+	if rt.backup != nil {
+		err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
 	}
 	if rt.mod != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))

@@ -14,6 +14,9 @@ type Client struct {
 	Settings                SettingsStore
 	AppState                AppStateStore
 	GamePaths               GamePathsStore
+	BackupCustomPaths       BackupCustomPathsStore
+	BackupFileCache         BackupFileCacheStore
+	BackupCommitted         BackupCommittedStore
 	ModPresets              ModPresetsStore
 	ModPresetItems          ModPresetItemsStore
 	ImageCache              ImageCacheStore
@@ -43,6 +46,9 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.Settings = SettingsStore{c: c}
 	c.AppState = AppStateStore{c: c}
 	c.GamePaths = GamePathsStore{c: c}
+	c.BackupCustomPaths = BackupCustomPathsStore{c: c}
+	c.BackupFileCache = BackupFileCacheStore{c: c}
+	c.BackupCommitted = BackupCommittedStore{c: c}
 	c.ModPresets = ModPresetsStore{c: c}
 	c.ModPresetItems = ModPresetItemsStore{c: c}
 	c.ImageCache = ImageCacheStore{c: c}

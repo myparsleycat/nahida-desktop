@@ -2089,6 +2089,121 @@
     },
     "docs": {
       "title": "사용 방법"
+    },
+    "backup": {
+      "title": "백업",
+      "description": "등록된 게임의 모드 폴더와 추가한 폴더를 자동으로 백업합니다. 서버가 허용하는 파일 형식만 올라가며, 바뀌지 않은 파일은 다시 올리지 않습니다.",
+      "status": {
+        "title": "상태",
+        "auto_on": "자동 백업 켜짐",
+        "auto_off": "자동 백업 꺼짐",
+        "run_now": "지금 백업",
+        "last_run": "마지막 백업",
+        "next_run": "다음 백업",
+        "never": "없음",
+        "not_scheduled": "예약 없음",
+        "error": "오류",
+        "files_other": "파일 {{count}}개"
+      },
+      "state": {
+        "idle": "대기 중",
+        "scanning": "폴더 확인 중…",
+        "hashing": "파일 확인 중…",
+        "uploading": "업로드 중…",
+        "committing": "마무리 중…",
+        "restoring": "복원 중…"
+      },
+      "outcome": {
+        "completed": "완료",
+        "unchanged": "변경 없음",
+        "failed": "실패",
+        "cancelled": "취소됨"
+      },
+      "trigger": {
+        "manual": "수동",
+        "schedule": "예약",
+        "startup": "앱 시작 시",
+        "watch": "변경 감지"
+      },
+      "schedule": {
+        "title": "일정",
+        "enabled": {
+          "title": "자동 백업",
+          "description": "앱이 실행 중일 때 백그라운드에서 백업합니다."
+        },
+        "interval": {
+          "title": "주기",
+          "description": "예약 백업을 실행하는 간격입니다.",
+          "options": {
+            "6h": "6시간마다",
+            "12h": "12시간마다",
+            "24h": "매일",
+            "7d": "매주"
+          }
+        },
+        "on_startup": {
+          "title": "앱 시작 시 따라잡기",
+          "description": "앱을 켰을 때 놓친 예약 백업이 있으면 바로 실행합니다."
+        },
+        "watch_changes": {
+          "title": "변경 시 백업",
+          "description": "백업 폴더를 감시하다가 변경이 멈추고 10분 뒤에 백업합니다(최대 1시간에 한 번)."
+        },
+        "keep_count": {
+          "title": "보관 개수",
+          "description": "이 PC의 오래된 백업은 서버에서 삭제됩니다(1–30)."
+        },
+        "device_name": {
+          "title": "PC 이름",
+          "description": "웹에서 이 PC를 표시할 이름입니다."
+        }
+      },
+      "targets": {
+        "title": "백업 폴더",
+        "description": "등록된 게임의 모드 폴더는 기본으로 포함됩니다.",
+        "add_folder": "폴더 추가",
+        "empty": "등록된 게임이나 추가한 폴더가 없습니다.",
+        "include": "{{name}} 백업",
+        "remove": "{{name}} 제거",
+        "missing": "폴더 없음",
+        "excluded": "제외됨"
+      },
+      "snapshots": {
+        "title": "이 PC의 백업",
+        "description": "서버에 보관된 백업입니다. 웹에서도 보고 내려받을 수 있습니다.",
+        "refresh": "새로고침",
+        "empty": "아직 백업이 없습니다.",
+        "loading": "불러오는 중…",
+        "pending": "진행 중",
+        "restore": "복원",
+        "delete": "삭제",
+        "skipped_other": "{{count}}개 건너뜀"
+      },
+      "restore": {
+        "title": "백업 복원",
+        "description": "복원할 폴더와 비어 있는 대상 폴더를 고르세요. 기존 파일은 덮어쓰지 않습니다.",
+        "choose_folder": "폴더 선택",
+        "no_folder": "선택한 폴더 없음",
+        "start": "복원",
+        "started": "복원을 시작했습니다"
+      },
+      "toast": {
+        "completed": "백업을 완료했습니다",
+        "unchanged": "마지막 백업 이후 바뀐 것이 없습니다",
+        "failed": "백업에 실패했습니다",
+        "restored": "복원을 완료했습니다",
+        "restore_failed": "복원에 실패했습니다"
+      },
+      "error": {
+        "BACKUP_RUNNING": "이미 백업 또는 복원이 진행 중입니다.",
+        "BACKUP_NOT_LOGGED_IN": "백업하려면 로그인하세요.",
+        "BACKUP_NO_TARGETS": "백업할 폴더가 없습니다.",
+        "BACKUP_NOT_DIRECTORY": "폴더가 존재하지 않습니다.",
+        "BACKUP_UPLOAD_FAILED": "업로드에 실패한 파일이 너무 많습니다.",
+        "BACKUP_INVALID_DEVICE_NAME": "PC 이름은 1–80자로 입력하세요.",
+        "RESTORE_DESTINATION_NOT_EMPTY": "비어 있는 폴더를 복원 대상으로 고르세요.",
+        "RESTORE_HASH_MISMATCH": "복원한 파일이 백업과 일치하지 않습니다."
+      }
     }
   },
   "components": {

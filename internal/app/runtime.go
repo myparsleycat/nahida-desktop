@@ -7,6 +7,7 @@ import (
 	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
+	"nahida.live/desktop/internal/backup"
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
@@ -35,6 +36,7 @@ type runtime struct {
 	archive           *infra.Archive
 	agent             *agent.Service
 	auth              *auth.Auth
+	backup            *backup.Backup
 	setting           *setting.Setting
 	drive             *drive.Drive
 	transfer          *transfer.Transfer
@@ -239,6 +241,13 @@ func newRuntime() *runtime {
 		Input:     rt.input,
 		Screen:    rt.screen,
 	})
+	rt.backup = backup.New(backup.Options{
+		Remote:    rt.drive,
+		Settings:  rt.setting,
+		Session:   rt.auth,
+		Log:       log,
+		EventEmit: eventEmit,
+	})
 	rt.localHTTP.UseHandler(rt.handleLocalHTTPMessage)
 	if rt.mod != nil {
 		rt.mod.UseFocus(rt.window.Focus)
@@ -272,6 +281,7 @@ func (rt *runtime) services() []application.Service {
 	return []application.Service{
 		newLoggedService(rt, "Agent", rt.agent),
 		newLoggedService(rt, "Auth", rt.auth),
+		newLoggedService(rt, "Backup", rt.backup),
 		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
 		newLoggedService(rt, "Dialog", rt.dialog),
 		newLoggedService(rt, "Drive", rt.drive),
@@ -298,6 +308,7 @@ func (rt *runtime) services() []application.Service {
 func (rt *runtime) fileMutatingServices() []application.Service {
 	return []application.Service{
 		application.NewService(rt.agent),
+		application.NewService(rt.backup),
 		application.NewService(rt.drive),
 		application.NewService(rt.fs),
 		application.NewService(rt.mod),

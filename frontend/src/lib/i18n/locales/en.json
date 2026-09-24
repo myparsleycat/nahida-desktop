@@ -2103,6 +2103,123 @@
     },
     "docs": {
       "title": "Documentation"
+    },
+    "backup": {
+      "title": "Backup",
+      "description": "Automatically back up the mod folders of your registered games and any folders you add. Only file types the server accepts are uploaded, and unchanged files are never uploaded twice.",
+      "status": {
+        "title": "Status",
+        "auto_on": "Automatic backup on",
+        "auto_off": "Automatic backup off",
+        "run_now": "Back up now",
+        "last_run": "Last backup",
+        "next_run": "Next backup",
+        "never": "Never",
+        "not_scheduled": "Not scheduled",
+        "error": "Error",
+        "files_one": "{{count}} file",
+        "files_other": "{{count}} files"
+      },
+      "state": {
+        "idle": "Idle",
+        "scanning": "Scanning folders…",
+        "hashing": "Checking files…",
+        "uploading": "Uploading…",
+        "committing": "Finishing…",
+        "restoring": "Restoring…"
+      },
+      "outcome": {
+        "completed": "Completed",
+        "unchanged": "No changes",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "trigger": {
+        "manual": "Manual",
+        "schedule": "Scheduled",
+        "startup": "At startup",
+        "watch": "Change detected"
+      },
+      "schedule": {
+        "title": "Schedule",
+        "enabled": {
+          "title": "Automatic backup",
+          "description": "Back up in the background while the app is running."
+        },
+        "interval": {
+          "title": "Interval",
+          "description": "How often a scheduled backup runs.",
+          "options": {
+            "6h": "Every 6 hours",
+            "12h": "Every 12 hours",
+            "24h": "Every day",
+            "7d": "Every week"
+          }
+        },
+        "on_startup": {
+          "title": "Catch up at startup",
+          "description": "When the app starts and a scheduled backup was missed, run it right away."
+        },
+        "watch_changes": {
+          "title": "Back up on changes",
+          "description": "Watch the backed-up folders and back up 10 minutes after changes settle (at most once an hour)."
+        },
+        "keep_count": {
+          "title": "Backups to keep",
+          "description": "Older backups of this PC are deleted from the server (1–30)."
+        },
+        "device_name": {
+          "title": "PC name",
+          "description": "The name this PC is listed under on the web."
+        }
+      },
+      "targets": {
+        "title": "Backed-up folders",
+        "description": "The mod folders of registered games are included by default.",
+        "add_folder": "Add folder",
+        "empty": "No registered games or added folders.",
+        "include": "Back up {{name}}",
+        "remove": "Remove {{name}}",
+        "missing": "Folder not found",
+        "excluded": "Excluded"
+      },
+      "snapshots": {
+        "title": "Backups of this PC",
+        "description": "Backups stored on the server. You can also view and download them on the web.",
+        "refresh": "Refresh",
+        "empty": "No backups yet.",
+        "loading": "Loading…",
+        "pending": "In progress",
+        "restore": "Restore",
+        "delete": "Delete",
+        "skipped_one": "{{count}} skipped",
+        "skipped_other": "{{count}} skipped"
+      },
+      "restore": {
+        "title": "Restore backup",
+        "description": "Choose the folders to restore and an empty destination folder. Existing files are never overwritten.",
+        "choose_folder": "Choose folder",
+        "no_folder": "No folder selected",
+        "start": "Restore",
+        "started": "Restore started"
+      },
+      "toast": {
+        "completed": "Backup completed",
+        "unchanged": "Nothing changed since the last backup",
+        "failed": "Backup failed",
+        "restored": "Restore completed",
+        "restore_failed": "Restore failed"
+      },
+      "error": {
+        "BACKUP_RUNNING": "A backup or restore is already running.",
+        "BACKUP_NOT_LOGGED_IN": "Sign in to back up.",
+        "BACKUP_NO_TARGETS": "There are no folders to back up.",
+        "BACKUP_NOT_DIRECTORY": "That folder does not exist.",
+        "BACKUP_UPLOAD_FAILED": "Too many files failed to upload.",
+        "BACKUP_INVALID_DEVICE_NAME": "Enter a PC name of 1–80 characters.",
+        "RESTORE_DESTINATION_NOT_EMPTY": "Choose an empty folder to restore into.",
+        "RESTORE_HASH_MISMATCH": "A restored file did not match the backup."
+      }
     }
   },
   "components": {

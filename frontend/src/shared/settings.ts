@@ -9,6 +9,8 @@ import type {
 import type { TouchProfileLlmProtocol, TouchProfileLlmReasoning } from "./touch-profile-llm";
 import type { AutoUpdateMode } from "./updater";
 
+export type BackupInterval = "6h" | "12h" | "24h" | "7d";
+
 export interface AppSettings {
     "general.runOnStartup": boolean;
     "general.language": string;
@@ -57,6 +59,13 @@ export interface AppSettings {
     "drive.autoTryPasswords": boolean;
     "drive.passwordList": string[];
 
+    "backup.enabled": boolean;
+    "backup.interval": BackupInterval;
+    "backup.onStartup": boolean;
+    "backup.watchChanges": boolean;
+    "backup.keepCount": number;
+    "backup.excludedGames": string[];
+
     "debug.openConsole": boolean;
 
     "modelViewer.toneMapping": "neutral" | "aces" | "none";
@@ -75,6 +84,7 @@ export type SettingScope =
     | "tools"
     | "transfer"
     | "drive"
+    | "backup"
     | "debug"
     | "modelViewer"
     | "xxmi";
@@ -304,6 +314,37 @@ export const APP_SETTINGS = {
         publicKey: "drive.passwordList",
         scope: "drive",
         storageKey: "drive_password_list",
+    },
+
+    "backup.enabled": {
+        publicKey: "backup.enabled",
+        scope: "backup",
+        storageKey: "backup_enabled",
+    },
+    "backup.interval": {
+        publicKey: "backup.interval",
+        scope: "backup",
+        storageKey: "backup_interval",
+    },
+    "backup.onStartup": {
+        publicKey: "backup.onStartup",
+        scope: "backup",
+        storageKey: "backup_on_startup",
+    },
+    "backup.watchChanges": {
+        publicKey: "backup.watchChanges",
+        scope: "backup",
+        storageKey: "backup_watch_changes",
+    },
+    "backup.keepCount": {
+        publicKey: "backup.keepCount",
+        scope: "backup",
+        storageKey: "backup_keep_count",
+    },
+    "backup.excludedGames": {
+        publicKey: "backup.excludedGames",
+        scope: "backup",
+        storageKey: "backup_excluded_games",
     },
 
     "debug.openConsole": {
