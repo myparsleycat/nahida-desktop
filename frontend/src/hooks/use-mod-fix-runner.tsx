@@ -11,6 +11,7 @@ import {
   type WuwaFixerPrepareResult,
   type FixToolLogEvent,
 } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -224,7 +225,7 @@ export function useModFixRunner() {
 
       openOptionsDialog();
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsPreparing(false);
     }
@@ -239,7 +240,7 @@ export function useModFixRunner() {
       resetWuwaDialogs();
       openOptionsDialog();
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsPreparing(false);
     }
@@ -284,7 +285,7 @@ export function useModFixRunner() {
       await prepareZZMI(modPath, false);
       setShowZZMIDialog(true);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsPreparing(false);
     }
@@ -296,7 +297,7 @@ export function useModFixRunner() {
     try {
       await prepareZZMI(activeModPath, true);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setZZMIUpdateBusy(false);
     }
@@ -310,7 +311,7 @@ export function useModFixRunner() {
       await prepareZZMI(activeModPath, false);
       toast.success(t("page.mod.dialog.zzmi-fix-runner.update.success"));
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setZZMIUpdateBusy(false);
     }
@@ -338,7 +339,7 @@ export function useModFixRunner() {
       }
     } catch (error) {
       Logger.capture("hooks/use-mod-fix-runner.tsx", error);
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsRunning(false);
       runInProgressRef.current = false;
@@ -366,7 +367,7 @@ export function useModFixRunner() {
       toast.success(t("page.mod.dialog.zzmi-fix-runner.rollback.success"));
       await refreshZZMIBackups(activeModPath);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setZZMIRollbackBusy(false);
     }
@@ -379,7 +380,7 @@ export function useModFixRunner() {
       await Tools.ZZMIFixerDeleteBackup({ path: activeModPath, sessionId, entryId });
       await refreshZZMIBackups(activeModPath);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setZZMIRollbackBusy(false);
     }
@@ -393,7 +394,7 @@ export function useModFixRunner() {
       setShowZZMICleanConfirm(false);
       await refreshZZMIBackups(activeModPath);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setZZMIRollbackBusy(false);
     }
@@ -447,7 +448,7 @@ export function useModFixRunner() {
       toast.success(t(`${translationKey}.rollback.success`));
       await refreshBackups(activeModPath);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsRollbackBusy(false);
       setPendingRollbackKey(null);
@@ -465,7 +466,7 @@ export function useModFixRunner() {
       toast.success(t(`${translationKey}.rollback.clean_success`));
       await refreshBackups(activeModPath);
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsRollbackBusy(false);
       setShowCleanConfirm(false);

@@ -1,4 +1,5 @@
 import { GameBanana } from "@bindings/gamebanana";
+import type { GameRegistration } from "@bindings/gamebanana/models";
 import { Shell } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -13,7 +14,7 @@ import { Input } from "@renderer/components/ui/input";
 import {
   type GameBananaGameKey,
   useGameBananaGameOverview,
-  useGameBananaGames,
+  useGameBananaRegistry,
   useGameBananaGameSubfeed,
   useGameBananaModCategoryOverview,
   useGameBananaModOverview,
@@ -44,7 +45,7 @@ import { showGameBananaAuthFailureToast, signInGameBanana } from "./-shared/auth
 import { CategorySidebar } from "./-sidebars/category-sidebar";
 import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
 
-const EMPTY_GAMES_MAP: Record<string, number> = {};
+const EMPTY_GAME_REGISTRY: GameRegistration[] = [];
 
 export const Route = createFileRoute("/gamebanana/")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -101,7 +102,12 @@ function RouteComponent() {
   const sessionStatusQuery = useGameBananaSessionStatus();
   const sessionStatus = sessionStatusQuery.data;
   const isSignedIn = sessionStatus?.authenticated === true;
-  const { data: gamesMap, isLoading: isGamesLoading, error: gamesError } = useGameBananaGames();
+  const {
+    data: registryData,
+    isLoading: isGamesLoading,
+    error: gamesError,
+  } = useGameBananaRegistry();
+  const gameRegistry = registryData ?? EMPTY_GAME_REGISTRY;
   const { data: modGames = [], isLoading: isModGamesLoading } = useGames();
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
@@ -129,11 +135,11 @@ function RouteComponent() {
 
   const games = useMemo<GameOption[]>(
     () =>
-      Object.entries(gamesMap ?? EMPTY_GAMES_MAP).map(([key, id]) => ({
-        key: key as GameBananaGameKey,
-        id,
+      gameRegistry.map((game) => ({
+        key: game.key as GameBananaGameKey,
+        id: game.id,
       })),
-    [gamesMap],
+    [gameRegistry],
   );
 
   const selectedGame = games.find((game) => game.key === selectedGameKey) ?? games[0];
@@ -168,7 +174,7 @@ function RouteComponent() {
     if (!modSelectedGame) return;
 
     const modGameConfig = modGames.find((game) => game.game === modSelectedGame);
-    const gameBananaKey = getGameBananaKeyForImporter(modGameConfig?.importer);
+    const gameBananaKey = getGameBananaKeyForImporter(modGameConfig?.importer, gameRegistry);
     if (!gameBananaKey || !games.some((game) => game.key === gameBananaKey)) return;
 
     setSelectedGame(gameBananaKey as GameBananaGameKey);

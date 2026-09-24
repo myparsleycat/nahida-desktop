@@ -1,7 +1,6 @@
 import { GameBanana } from "@bindings/gamebanana";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
-export type GameBananaGames = Record<string, number>;
 type GameBananaGameOverview = Awaited<ReturnType<typeof GameBanana.GetGameOverview>>;
 type GameBananaGameSubfeed = Awaited<ReturnType<typeof GameBanana.GetGameSubfeed>>;
 type GameBananaModCategoryOverview = Awaited<ReturnType<typeof GameBanana.GetModCategoryOverview>>;
@@ -9,7 +8,7 @@ type GameBananaModOverview = Awaited<ReturnType<typeof GameBanana.GetModOverview
 type GameBananaModPosts = Awaited<ReturnType<typeof GameBanana.GetModPosts>>;
 type GameBananaSessionStatus = Awaited<ReturnType<typeof GameBanana.GetSessionStatus>>;
 
-export type GameBananaGameKey = keyof GameBananaGames;
+export type GameBananaGameKey = string;
 export type GameBananaModPostsSort = "popular" | "newest";
 export type GameBananaModIndexSort =
     | "Generic_Newest"
@@ -21,11 +20,10 @@ export interface GameBananaSubmissionSelection {
     modelName: string;
 }
 
-export function useGameBananaGames(enabled = true) {
-    return useQuery<GameBananaGames>({
-        queryKey: ["gamebanana", "games"],
-        queryFn: async () => ((await GameBanana.GetGames()) ?? {}) as GameBananaGames,
-        enabled,
+export function useGameBananaRegistry() {
+    return useQuery({
+        queryKey: ["gamebanana", "registry"],
+        queryFn: () => GameBanana.GetGameRegistry(),
     });
 }
 

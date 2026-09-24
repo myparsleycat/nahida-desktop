@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -402,18 +403,20 @@ func (b *Backup) keepCount(ctx context.Context) int {
 	return count
 }
 
-func (b *Backup) interval(ctx context.Context) time.Duration {
-	value, _ := b.opts.Settings.Get(ctx, setting.KeyBackupInterval)
-	switch value {
-	case "6h":
-		return 6 * time.Hour
-	case "12h":
-		return 12 * time.Hour
-	case "7d":
-		return 7 * 24 * time.Hour
-	default:
-		return 24 * time.Hour
+func (b *Backup) interval(ctx context.Context) (time.Duration, error) {
+	value, err := b.opts.Settings.Get(ctx, setting.KeyBackupInterval)
+	if err != nil {
+		return 0, fmt.Errorf("read backup interval: %w", err)
 	}
+	name, ok := value.(string)
+	if !ok {
+		return 0, fmt.Errorf("backup interval has invalid type %T", value)
+	}
+	duration, ok := setting.BackupIntervalDuration(name)
+	if !ok {
+		return 0, fmt.Errorf("unsupported backup interval %q", name)
+	}
+	return duration, nil
 }
 
 func (b *Backup) loggedIn(ctx context.Context) (bool, error) {

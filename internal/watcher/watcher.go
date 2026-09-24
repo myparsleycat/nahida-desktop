@@ -14,6 +14,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 // Op identifies a filesystem operation. Multiple operations may be combined
@@ -537,17 +539,7 @@ func defaultFileOps(ops Op) Op {
 
 // SamePath compares cleaned absolute paths using Windows case semantics.
 func SamePath(left, right string) bool {
-	leftAbs, leftErr := filepath.Abs(left)
-	rightAbs, rightErr := filepath.Abs(right)
-	if leftErr == nil {
-		left = leftAbs
-	}
-	if rightErr == nil {
-		right = rightAbs
-	}
-	left = filepath.Clean(left)
-	right = filepath.Clean(right)
-	return strings.EqualFold(left, right)
+	return platform.SamePathFold(left, right)
 }
 
 type contentGate struct {

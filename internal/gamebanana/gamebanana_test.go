@@ -178,6 +178,14 @@ func TestGetGameSubfeedAppliesDefaultsAndGamesMatchSource(t *testing.T) {
 	if service.GetGames()["nte"] != 23012 {
 		t.Fatalf("games = %v", service.GetGames())
 	}
+	for _, game := range service.GetGameRegistry() {
+		if service.GetGames()[game.Key] != game.ID {
+			t.Fatalf("registry entry %+v differs from games map", game)
+		}
+		if importer := importerForGameBananaID(game.ID); importer == nil || *importer != game.Importer {
+			t.Fatalf("registry entry %+v differs from download importer", game)
+		}
+	}
 }
 
 func TestResponseSchemasRejectMalformedPayloads(t *testing.T) {

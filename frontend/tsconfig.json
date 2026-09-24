@@ -29,10 +29,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src", "bindings"],
-  "exclude": [
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx",
-    "src/shared/client-runtime.ts",
-    "src/shared/types.gen.ts"
-  ]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/shared/types.gen.ts"]
 }

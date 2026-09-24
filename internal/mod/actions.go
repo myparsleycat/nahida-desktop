@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
@@ -282,7 +283,7 @@ func isRetryableExclusiveToggleError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if strings.HasPrefix(err.Error(), "MOD_FOLDER_LOCKED") {
+	if errors.Is(err, ErrModFolderLocked) {
 		return true
 	}
 	return isRetryableTogglePlatformError(err)
@@ -437,13 +438,13 @@ func (m *Mod) lockedFolderError(err error, modPath string) error {
 		return err
 	}
 	if len(lock.Processes) == 0 {
-		return errors.New("MOD_FOLDER_LOCKED")
+		return ErrModFolderLocked
 	}
 	names := make([]string, len(lock.Processes))
 	for i, proc := range lock.Processes {
 		names[i] = proc.Name
 	}
-	return fmt.Errorf("MOD_FOLDER_LOCKED|%s", strings.Join(names, ", "))
+	return fmt.Errorf("%w|%s", ErrModFolderLocked, strings.Join(names, ", "))
 }
 
 func renameUnique(source, desiredName string) (string, error) {
@@ -466,7 +467,5 @@ func renameUnique(source, desiredName string) (string, error) {
 }
 
 func samePath(a, b string) bool {
-	a, _ = filepath.Abs(a)
-	b, _ = filepath.Abs(b)
-	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	return platform.SamePathFold(a, b)
 }

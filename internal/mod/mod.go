@@ -34,6 +34,9 @@ const (
 
 var disabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
 
+// ErrModFolderLocked marks a toggle blocked by an open mod folder.
+var ErrModFolderLocked = errors.New("MOD_FOLDER_LOCKED")
+
 type Settings interface {
 	GetSearchModPreview(context.Context) (bool, error)
 	GetDisabledPrefixStyle(context.Context) (string, error)
@@ -916,13 +919,7 @@ func decodeStringSlice(value string) []string {
 }
 
 func pathWithin(root, target string) bool {
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(root, target)
-	return err == nil && rel != ".." &&
-		!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel)
+	return platform.SameOrChildPath(root, target)
 }
 
 func isDisabled(name string) bool { return disabledPrefixRE.MatchString(strings.TrimSpace(name)) }

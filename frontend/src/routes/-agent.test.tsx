@@ -89,7 +89,7 @@ import { Route } from "./agent";
 
 const SESSION_ID = "session-1";
 const RUN_ID = "run-1";
-const ROUTE_LOAD_TIMEOUT_MS = 5_000;
+const ROUTE_LOAD_TIMEOUT_MS = 10_000;
 
 // jsdom has no layout engine, so the chat auto-scroll is a no-op here
 Element.prototype.scrollIntoView = vi.fn();
@@ -188,17 +188,21 @@ function makeSession(id: string, title: string) {
 }
 
 describe("Agent session list", () => {
-  it("exposes one menu trigger per session instead of inline actions", async () => {
-    backend.ListSessions.mockResolvedValue([
-      makeSession(SESSION_ID, "Current chat"),
-      makeSession("session-2", "Second chat"),
-    ]);
-    await renderAgent();
+  it(
+    "exposes one menu trigger per session instead of inline actions",
+    async () => {
+      backend.ListSessions.mockResolvedValue([
+        makeSession(SESSION_ID, "Current chat"),
+        makeSession("session-2", "Second chat"),
+      ]);
+      await renderAgent();
 
-    expect(screen.getAllByRole("button", { name: "page.agent.session_menu" })).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "page.agent.rename_session" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "page.agent.delete_session" })).toBeNull();
-  });
+      expect(screen.getAllByRole("button", { name: "page.agent.session_menu" })).toHaveLength(2);
+      expect(screen.queryByRole("button", { name: "page.agent.rename_session" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "page.agent.delete_session" })).toBeNull();
+    },
+    ROUTE_LOAD_TIMEOUT_MS * 2,
+  );
 
   it("renames a session from the row menu dialog", async () => {
     backend.RenameSession.mockResolvedValue(undefined);

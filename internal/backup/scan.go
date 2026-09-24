@@ -18,6 +18,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/drive"
+	"nahida.live/desktop/internal/platform"
 )
 
 // The kinds of backup target.
@@ -141,16 +142,12 @@ func normalizedPath(path string) string {
 }
 
 func samePath(a, b string) bool {
-	return normalizedPath(a) == normalizedPath(b)
+	return platform.SamePathFold(a, b)
 }
 
 // isWithin reports whether path is root or lies below it.
 func isWithin(path, root string) bool {
-	path, root = normalizedPath(path), normalizedPath(root)
-	if path == root {
-		return true
-	}
-	return strings.HasPrefix(path, strings.TrimRight(root, `\/`)+string(filepath.Separator))
+	return platform.SameOrChildPath(root, path)
 }
 
 // scanTargets walks every target. Links and junctions are not followed, so a

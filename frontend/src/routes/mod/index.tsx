@@ -32,7 +32,11 @@ import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { modStore, useModStore } from "@renderer/store/mod";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
-import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
+import {
+  findGameByImporter,
+  getParentGroupPath,
+  type ResolvedArchiveExtractPathMode,
+} from "@shared/mod";
 import type { FolderGroup } from "@shared/types";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -49,12 +53,6 @@ const downloadTargetSettingsConfig = {
 
 function RouteComponent() {
   return <ModRouteContent />;
-}
-
-function getParentGroupPath(groupPath: string) {
-  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
-  if (separatorIndex < 0) return null;
-  return groupPath.slice(0, separatorIndex);
 }
 
 function isPathInside(parent: string, child: string) {
