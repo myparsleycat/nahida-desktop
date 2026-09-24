@@ -350,6 +350,83 @@ func TestWindowInProcessMatchesHandleAndProcess(t *testing.T) {
 	}
 }
 
+type focusWaitContext struct {
+	context.Context
+	entered chan struct{}
+}
+
+func (c focusWaitContext) Done() <-chan struct{} {
+	select {
+	case c.entered <- struct{}{}:
+	default:
+	}
+	return c.Context.Done()
+}
+
+func TestInputFocusWaitRespectsContext(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		call func(context.Context, *Input) error
+	}{
+		{
+			name: "AcquireForeground",
+			call: func(ctx context.Context, input *Input) error {
+				_, err := input.AcquireForeground(ctx, WindowTarget{PID: 1})
+				return err
+			},
+		},
+		{
+			name: "SendKeys",
+			call: func(ctx context.Context, input *Input) error {
+				_, err := input.SendKeys(ctx, KeyRequest{})
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := NewInput()
+			input.focusGate <- struct{}{}
+			defer input.releaseFocus()
+			baseCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx := focusWaitContext{Context: baseCtx, entered: make(chan struct{}, 1)}
+
+			result := make(chan error, 1)
+			go func() { result <- test.call(ctx, input) }()
+			select {
+			case <-ctx.entered:
+			case <-time.After(time.Second):
+				t.Fatalf("%s did not reach the context wait", test.name)
+			}
+			cancel()
+			select {
+			case err := <-result:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("%s = %v, want context canceled", test.name, err)
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("%s did not return after cancellation", test.name)
+			}
+		})
+	}
+}
+
+func TestForegroundLeaseCloseReleasesFocus(t *testing.T) {
+	input := NewInput()
+	input.focusGate <- struct{}{}
+	lease := &ForegroundLease{input: input}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+	if err := input.acquireFocus(context.Background()); err != nil {
+		t.Fatalf("acquireFocus after Close = %v", err)
+	}
+	input.releaseFocus()
+}
+
 func TestSendKeysPostsKeysToBackgroundWindow(t *testing.T) {
 	title := "Nahida Input Test " + t.Name()
 	window := newTestWindow(t, title)

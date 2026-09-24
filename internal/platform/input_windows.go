@@ -161,7 +161,7 @@ func (r windowRecord) describe() string {
 // combination of them.
 type Input struct {
 	mu         sync.Mutex
-	focusMu    sync.Mutex
+	focusGate  chan struct{}
 	diagnostic func(error, string, map[string]any)
 
 	enumerate      func() []win.HWND
@@ -205,6 +205,7 @@ var _ ForegroundController = (*ForegroundLease)(nil)
 func NewInput() *Input {
 	scanner := defaultWindowScanner()
 	return &Input{
+		focusGate:  make(chan struct{}, 1),
 		enumerate:  scanner.enumerate,
 		isVisible:  scanner.isVisible,
 		foreground: scanner.foreground,
@@ -337,17 +338,19 @@ func (i *Input) ResolveWindow(ctx context.Context, target WindowTarget) (WindowI
 //
 //wails:ignore
 func (i *Input) AcquireForeground(ctx context.Context, target WindowTarget) (ForegroundController, error) {
-	i.focusMu.Lock()
+	if err := i.acquireFocus(ctx); err != nil {
+		return nil, err
+	}
 	record, err := selectWindow(i.enumerateRecords(), target)
 	if err != nil {
-		i.focusMu.Unlock()
+		i.releaseFocus()
 		return nil, err
 	}
 	previous := i.foreground()
 	if !windowInProcess(record, previous) {
 		i.focus(record.handle)
 		if err := i.waitForForeground(ctx, record); err != nil {
-			i.focusMu.Unlock()
+			i.releaseFocus()
 			return nil, err
 		}
 	}
@@ -413,7 +416,7 @@ func (l *ForegroundLease) Close() error {
 		if l.previous.IsWindow() {
 			l.input.focus(l.previous)
 		}
-		l.input.focusMu.Unlock()
+		l.input.releaseFocus()
 	})
 	return nil
 }
@@ -434,9 +437,31 @@ func keyStateVirtualKey(token string) (co.VK, error) {
 // KeyDeliveryForeground it is focused first and the keys are injected with
 // SendInput, which is what games and other raw-input targets need.
 func (i *Input) SendKeys(ctx context.Context, request KeyRequest) (KeyResult, error) {
-	i.focusMu.Lock()
-	defer i.focusMu.Unlock()
+	if err := i.acquireFocus(ctx); err != nil {
+		return KeyResult{}, err
+	}
+	defer i.releaseFocus()
 	return i.sendKeys(ctx, request)
+}
+
+func (i *Input) acquireFocus(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case i.focusGate <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			i.releaseFocus()
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (i *Input) releaseFocus() {
+	<-i.focusGate
 }
 
 func (i *Input) sendKeys(ctx context.Context, request KeyRequest) (KeyResult, error) {
