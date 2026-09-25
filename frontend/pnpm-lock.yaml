@@ -5,9 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@wailsio/runtime@3.0.0-beta.21':
-    hash: b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba
-    path: patches/@wailsio__runtime@3.0.0-beta.21.patch
+  '@wailsio/runtime@3.0.0-beta.26': b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba
 
 importers:
 
@@ -41,8 +39,8 @@ importers:
         specifier: ^3.14.11
         version: 3.14.11(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@wailsio/runtime':
-        specifier: 3.0.0-beta.21
-        version: 3.0.0-beta.21(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)
+        specifier: 3.0.0-beta.26
+        version: 3.0.0-beta.26(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1260,8 +1258,8 @@ packages:
   '@vitest/spy@5.0.0':
     resolution: {integrity: sha512-uy+luWBAPw9XfthoHi5AkfHUnuPYEESjl0p/r+meoBnU8bxg5GDQ3Ey8MjcJ6sqahkL4PFyrvfMJJBw7LbU06g==}
 
-  '@wailsio/runtime@3.0.0-beta.21':
-    resolution: {integrity: sha512-5khssqPE98JDCHL82XpVnqOHT5ar9HT1NEJqMyTknNML066lhDc1Zd4sVkR+wx0vO80zlG2svGfzals5a0QsZA==}
+  '@wailsio/runtime@3.0.0-beta.26':
+    resolution: {integrity: sha512-sYEngKg3N7rWuK1CEJGuSJz/SfyIX1vcPfJiRX7UCSb1+6Re4CPMbMme/5FiZvqqUHNbD5NBbJcTTkmHDYNHWg==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -3448,7 +3446,7 @@ snapshots:
 
   '@vitest/spy@5.0.0': {}
 
-  '@wailsio/runtime@3.0.0-beta.21(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)': {}
+  '@wailsio/runtime@3.0.0-beta.26(patch_hash=b2f4f4cd14c2d748c07f69ab3f8c2196dc6c3da182d7c2b2819f7cf446b412ba)': {}
 
   ansi-regex@5.0.1: {}
 

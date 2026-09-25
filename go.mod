@@ -18,7 +18,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/rodrigocfd/windigo v0.2.6
 	github.com/samber/lo v1.53.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.23
+	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 	golang.org/x/arch v0.30.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
@@ -27,7 +27,7 @@ require (
 	modernc.org/sqlite v1.57.0
 )
 
-replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.23
+replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.26
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
@@ -48,7 +48,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/atterpac/refresh v1.0.0 // indirect
+	github.com/atterpac/refresh v1.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
