@@ -158,7 +158,6 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
-	settings.UseHooks(runtimeSettingHooks(log, transferService, updaterService, nil, window, nil, eventEmit, nil, nil))
 	rt := &runtime{
 		startup:  newStartupWork(),
 		log:      log,
@@ -265,9 +264,6 @@ func newRuntime() *runtime {
 			rt.drive.UseFixInspection(queueFixInspections)
 		}
 	}
-	settings.UseHooks(
-		runtimeSettingHooks(log, transferService, updaterService, rt.tools, rt.window, nil, eventEmit, nil, nil),
-	)
 	return rt
 }
 
@@ -277,45 +273,48 @@ func emitAppEvent(name string, data ...any) {
 	}
 }
 
-func (rt *runtime) services() []application.Service {
-	return []application.Service{
-		newLoggedService(rt, "Agent", rt.agent),
-		newLoggedService(rt, "Auth", rt.auth),
-		newLoggedService(rt, "Backup", rt.backup),
-		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
-		newLoggedService(rt, "Dialog", rt.dialog),
-		newLoggedService(rt, "Drive", rt.drive),
-		newLoggedService(rt, "FS", rt.fs),
-		newLoggedService(rt, "GameBanana", rt.gamebanana),
-		newLoggedService(rt, "Input", rt.input),
-		application.NewService(rt.log),
-		newLoggedService(rt, "Mod", rt.mod),
-		application.NewService(rt.notifications),
-		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
-		newLoggedService(rt, "Screen", rt.screen),
-		newLoggedService(rt, "Setting", rt.setting),
-		newLoggedService(rt, "Shell", rt.shell),
-		newLoggedService(rt, "Tools", rt.tools),
-		newLoggedService(rt, "Transfer", rt.transfer),
-		newLoggedService(rt, "Updater", rt.updater),
-		newLoggedService(rt, "Window", rt.window),
-		newLoggedService(rt, "XXMI", rt.xxmi),
+type runtimeService struct {
+	service            application.Service
+	waitForMaintenance func(string) bool
+}
+
+func waitForAllMethods(string) bool { return true }
+
+func waitForShellTrash(name string) bool { return name == "Trash" }
+
+func (rt *runtime) serviceRegistrations() []runtimeService {
+	return []runtimeService{
+		{newLoggedService(rt, "Agent", rt.agent), waitForAllMethods},
+		{newLoggedService(rt, "Auth", rt.auth), nil},
+		{newLoggedService(rt, "Backup", rt.backup), waitForAllMethods},
+		{newLoggedService(rt, "CDNTrace", rt.cdnTrace), nil},
+		{newLoggedService(rt, "Dialog", rt.dialog), nil},
+		{newLoggedService(rt, "Drive", rt.drive), waitForAllMethods},
+		{newLoggedService(rt, "FS", rt.fs), waitForAllMethods},
+		{newLoggedService(rt, "GameBanana", rt.gamebanana), nil},
+		{newLoggedService(rt, "Input", rt.input), nil},
+		{application.NewService(rt.log), nil},
+		{newLoggedService(rt, "Mod", rt.mod), waitForAllMethods},
+		{application.NewService(rt.notifications), nil},
+		{newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}), nil},
+		{newLoggedService(rt, "Screen", rt.screen), nil},
+		{newLoggedService(rt, "Setting", rt.setting), isSettingWrite},
+		{newLoggedService(rt, "Shell", rt.shell), waitForShellTrash},
+		{newLoggedService(rt, "Tools", rt.tools), waitForAllMethods},
+		{newLoggedService(rt, "Transfer", rt.transfer), waitForAllMethods},
+		{newLoggedService(rt, "Updater", rt.updater), nil},
+		{newLoggedService(rt, "Window", rt.window), nil},
+		{newLoggedService(rt, "XXMI", rt.xxmi), waitForAllMethods},
 	}
 }
 
-// fileMutatingServices are Wails services whose bindings wait for startup
-// maintenance. Add a service here when it writes user files.
-func (rt *runtime) fileMutatingServices() []application.Service {
-	return []application.Service{
-		application.NewService(rt.agent),
-		application.NewService(rt.backup),
-		application.NewService(rt.drive),
-		application.NewService(rt.fs),
-		application.NewService(rt.mod),
-		application.NewService(rt.tools),
-		application.NewService(rt.transfer),
-		application.NewService(rt.xxmi),
+func (rt *runtime) services() []application.Service {
+	registrations := rt.serviceRegistrations()
+	services := make([]application.Service, 0, len(registrations))
+	for _, registration := range registrations {
+		services = append(services, registration.service)
 	}
+	return services
 }
 
 func newLoggedService[T any](rt *runtime, name string, instance *T) application.Service {

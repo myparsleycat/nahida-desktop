@@ -110,24 +110,10 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if rt.setting == nil {
 		rt.setting = setting.NewWithOptions(store.DB, setting.Options{
 			Locale: platform.SystemLocale(),
-			Hooks: runtimeSettingHooks(
-				rt.log,
-				rt.transfer,
-				rt.updater,
-				rt.tools,
-				rt.window,
-				nil,
-				emitAppEvent,
-				nil,
-				nil,
-			),
 		})
 	} else {
 		rt.setting.UseClient(store.DB)
 		rt.setting.UseLocale(platform.SystemLocale())
-		rt.setting.UseHooks(
-			runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil, emitAppEvent, nil, nil),
-		)
 	}
 	if rt.transfer != nil {
 		rt.transfer.UseSettings(rt.setting)
@@ -187,7 +173,9 @@ func (rt *runtime) Close() error {
 		return nil
 	}
 	var err error
-	rt.startup.stop()
+	if rt.startup != nil {
+		rt.startup.stop()
+	}
 	if rt.elevatedLifecycle != nil {
 		rt.elevatedLifecycle.shutdown()
 	}
@@ -246,25 +234,21 @@ func (rt *runtime) Close() error {
 		err = errors.Join(err, infra.AnnotateError(rt.native.Close(), infra.Diagnostic{Stage: "native"}))
 	}
 	err = infra.ReportError(rt.log, err, "Runtime", infra.Diagnostic{Operation: "shutdown"})
-	if rt.log != nil {
-		err = errors.Join(err, rt.log.Close())
-	}
 	if rt.store != nil {
 		storeErr := rt.store.Close()
 		_ = infra.ReportError(rt.log, storeErr, "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "store"})
 		err = errors.Join(err, storeErr)
-		if storeErr != nil && rt.log != nil {
-			err = errors.Join(err, rt.log.Close())
-		}
+	}
+	if rt.log != nil {
+		err = errors.Join(err, rt.log.Close())
 	}
 	return err
 }
 
 func (rt *runtime) failInit(err error, stage string) error {
-	cleanupErr := rt.Close()
 	_ = infra.ReportError(
 		rt.log,
-		infra.WithCause(err, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"})),
+		err,
 		"Runtime",
 		infra.Diagnostic{Operation: "startup", Stage: stage},
 	)

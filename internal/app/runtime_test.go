@@ -151,6 +151,57 @@ func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 	}
 }
 
+func TestRuntimeInitDefersSettingHooksUntilApplicationIsReady(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime()
+	ctx := context.Background()
+	if err := rt.Init(ctx, filepath.Join(t.TempDir(), "data.db"), nil); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rt.Close() }()
+
+	if err := rt.setting.SetLanguage(ctx, "ko"); err != nil {
+		t.Fatal(err)
+	}
+	var events []string
+	var languages []string
+	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil,
+		func(name string, _ ...any) { events = append(events, name) },
+		func(language string) { languages = append(languages, language) }, nil))
+	if err := rt.setting.SetLanguage(ctx, "en"); err != nil {
+		t.Fatal(err)
+	}
+	if len(languages) != 1 || languages[0] != "en" {
+		t.Errorf("language callbacks = %v, want [en]", languages)
+	}
+	if len(events) != 2 || events[0] != "language:update" || events[1] != "setting:update" {
+		t.Errorf("setting events = %v", events)
+	}
+}
+
+func TestRuntimeInitFailureLeavesCleanupToOwner(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime()
+	want := errors.New("browser arguments rejected")
+	err := rt.Init(context.Background(), filepath.Join(t.TempDir(), "data.db"), func([]string) error {
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("Init error = %v, want %v", err, want)
+	}
+	if rt.store == nil || rt.store.DB == nil {
+		t.Fatal("Init closed the store before its owner could clean up")
+	}
+	if err := rt.Close(); err != nil {
+		t.Fatalf("Close after failed Init: %v", err)
+	}
+	if rt.store.DB != nil || rt.proxyRelay != nil {
+		t.Fatal("Close left partially initialized resources active")
+	}
+}
+
 func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +358,7 @@ func TestBootRuntimeFailsBeforeInjectionWhenHomeIsNotDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := newRuntime()
+	defer func() { _ = rt.Close() }()
 	_, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: home, Cwd: t.TempDir(), Packaged: false,
 	}, nil)
@@ -356,7 +408,6 @@ func TestBootRuntimeFailsWhenLocalHTTPCannotBind(t *testing.T) {
 
 	rt := newRuntime()
 	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: listener.Addr().String()})
-	defer func() { _ = rt.Close() }()
 	_, err = bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir:  t.TempDir(),
 		Cwd:      t.TempDir(),
@@ -364,6 +415,15 @@ func TestBootRuntimeFailsWhenLocalHTTPCannotBind(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "listen local HTTP bridge") {
 		t.Fatalf("bootRuntime error = %v", err)
+	}
+	if rt.store == nil || rt.store.DB == nil {
+		t.Fatal("failed local HTTP start did not reach an open store")
+	}
+	if err := rt.Close(); err != nil {
+		t.Fatalf("Close after failed local HTTP start: %v", err)
+	}
+	if rt.store.DB != nil || rt.proxyRelay != nil {
+		t.Fatal("Close left resources active after local HTTP failure")
 	}
 }
 
