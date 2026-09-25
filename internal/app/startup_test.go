@@ -454,7 +454,16 @@ func TestStartupMiddlewareRejectsDuplicateCallIDInOneWindow(t *testing.T) {
 	go func() { handler.ServeHTTP(first, request()); close(done) }()
 	waitStartupPending(t, rt.startup, "7", "duplicate")
 	second := httptest.NewRecorder()
-	handler.ServeHTTP(second, request())
+	secondDone := make(chan struct{})
+	go func() { handler.ServeHTTP(second, request()); close(secondDone) }()
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		rt.startup.start(func(context.Context) {})
+		waitClosed(t, secondDone, nil, "second request remained blocked after maintenance")
+		waitClosed(t, done, nil, "first request remained blocked after maintenance")
+		t.Fatal("duplicate request blocked during maintenance")
+	}
 	if second.Code != http.StatusUnprocessableEntity || calls.Load() != 0 {
 		t.Fatalf("duplicate = status %d, calls %d", second.Code, calls.Load())
 	}
