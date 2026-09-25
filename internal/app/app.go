@@ -38,17 +38,13 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			},
 		},
 		Assets: application.AssetOptions{
-			Handler:    application.AssetFileServerFS(assets),
-			Middleware: rt.startup.middleware,
+			Handler: application.AssetFileServerFS(assets),
 		},
 		// Closing the last window must not tear down the process. Tray and
 		// background work stay alive; WindowClosing still calls Quit when
 		// runInBackground is off.
 		Windows: windowsApplicationOptions(),
 	})
-	if err := rt.configureStartupBindings(); err != nil {
-		return err
-	}
 	app.OnShutdown(rt.startup.stop)
 	// newLockedApplication waits for a relaunch parent, then application.New
 	// acquires Wails' single-instance lock. Keep all database,
@@ -162,7 +158,6 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			windowReady.Do(func() { rt.logStartupMilestone("window-runtime-ready") })
 		})
 		window.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
-			rt.startup.cancelWindow(window.ID(), window.Name())
 			rt.tools.CleanupModelViewerWindow(window.ID())
 		})
 	})
