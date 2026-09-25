@@ -121,6 +121,103 @@ func TestUploadBackupFilesReturnsNoErrorForSuccessfulPlan(t *testing.T) {
 	}
 }
 
+func TestUploadBackupFilesKeepsAnNteSetOnOnePageAndCompletesItsBundle(t *testing.T) {
+	var mu sync.Mutex
+	var pages [][]string
+	var capabilities [][]string
+	completed := 0
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/bundles/nte/complete" {
+			mu.Lock()
+			completed++
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "completed"})
+			return
+		}
+		var page struct {
+			Capabilities []string `json:"capabilities"`
+			Files        []struct {
+				ClientID string `json:"clientId"`
+				Path     string `json:"path"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil {
+			t.Error(err)
+			return
+		}
+		mu.Lock()
+		paths := make([]string, 0, len(page.Files))
+		for _, file := range page.Files {
+			paths = append(paths, file.Path)
+		}
+		pages = append(pages, paths)
+		capabilities = append(capabilities, page.Capabilities)
+		mu.Unlock()
+
+		items := make([]UploadPlanItem, 0, len(page.Files))
+		var members []string
+		for _, file := range page.Files {
+			if strings.HasPrefix(file.Path, "Mods/X/") {
+				members = append(members, file.ClientID)
+				items = append(
+					items,
+					UploadPlanItem{
+						ClientID: file.ClientID,
+						Status:   "pending",
+						IntentID: "i" + file.ClientID,
+						BundleID: "nte",
+					},
+				)
+				continue
+			}
+			items = append(items, UploadPlanItem{ClientID: file.ClientID, Status: "exists"})
+		}
+		bundles := []map[string]any{}
+		if len(members) > 0 {
+			bundles = append(bundles, map[string]any{
+				"id":              "nte",
+				"memberClientIds": members,
+				"completeUrl":     server.URL + "/bundles/nte/complete",
+				"abortUrl":        server.URL + "/bundles/nte/abort",
+				"form":            map[string]string{"token": "token"},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "uploads": []any{}, "nteBundles": bundles})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	rules := testUploadRules()
+	rules.MaxPlanFiles = 2
+	drive.setUploadRules(rules)
+
+	denied, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
+		{ClientID: "0", TargetID: "t", RelPath: "a.ini", SHA256: "a"},
+		{ClientID: "1", TargetID: "t", RelPath: "Mods/X/x.utoc", SHA256: "b"},
+		{ClientID: "2", TargetID: "t", RelPath: "Mods/X/x.ucas", SHA256: "c"},
+	}, nil, nil)
+	if err != nil || len(denied) != 0 {
+		t.Fatalf("UploadBackupFiles = denied %v, error %v", denied, err)
+	}
+	want := [][]string{{"a.ini"}, {"Mods/X/x.utoc", "Mods/X/x.ucas"}}
+	if !reflect.DeepEqual(pages, want) {
+		t.Fatalf("pages = %v, want %v", pages, want)
+	}
+	for _, announced := range capabilities {
+		if !slices.Equal(announced, []string{"nte-bundle-v1"}) {
+			t.Fatalf("capabilities = %v", capabilities)
+		}
+	}
+	if completed != 1 {
+		t.Fatalf("bundle completed %d times, want once", completed)
+	}
+}
+
 func TestUploadBackupFilesStopsAfterRemovalPageFailure(t *testing.T) {
 	var requested []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
