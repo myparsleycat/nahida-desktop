@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,9 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := newRuntime()
+	rt.http.UseTransport(startupTestTransport(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network disabled during startup test")
+	}))
 	t.Cleanup(func() { _ = rt.Close() })
 	if err := rt.Init(context.Background(), path, nil); err != nil {
 		t.Fatal(err)
@@ -110,17 +114,25 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 	if _, err := os.Stat(disabled); err != nil {
 		t.Fatal("Init ran recovery before the application could create a window")
 	}
-	rt.startup.start(func(ctx context.Context) {
-		if err := rt.tools.RecoverBisects(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	if err := rt.startup.wait(context.Background()); err != nil {
+	if _, err := os.Stat(original); !os.IsNotExist(err) {
+		t.Fatalf("original exists before startup recovery: %v", err)
+	}
+	rt.startup.start(rt.runStartupWork)
+	if err := rt.startup.wait(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if content, err := os.ReadFile(original); err != nil || string(content) != "restore" {
 		t.Fatalf("deferred recovery = %q, %v", content, err)
 	}
+	if _, err := os.Stat(disabled); !os.IsNotExist(err) {
+		t.Fatalf("disabled file remains after recovery: %v", err)
+	}
+}
+
+type startupTestTransport func(*http.Request) (*http.Response, error)
+
+func (f startupTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func TestMaintenanceGuardWaitsForWork(t *testing.T) {

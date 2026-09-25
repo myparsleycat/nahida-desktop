@@ -179,7 +179,10 @@ func (w *fakeLoginWindow) setCookies(cookies ...application.WebviewCookie) {
 
 func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 	win := newFakeLoginWindow()
+	opened := make(chan struct{})
+	win.runHook = func() { close(opened) }
 	login := newGameBananaLogin()
+	t.Cleanup(login.Close)
 	var created atomic.Int32
 	login.factory = func() (loginWindow, error) {
 		created.Add(1)
@@ -192,7 +195,11 @@ func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 		})
 		ownerDone <- err
 	}()
-	time.Sleep(30 * time.Millisecond)
+	select {
+	case <-opened:
+	case <-time.After(2 * time.Second):
+		t.Fatal("owner login window did not open")
+	}
 	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	_, waitErr := login.Open(waitCtx, func(context.Context, string) (bool, error) {
@@ -208,8 +215,7 @@ func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 		t.Fatalf("created = %d", created.Load())
 	}
 	login.Close()
-	if err := <-ownerDone; !errors.Is(err, gamebanana.ErrAuthFailed) && err != nil &&
-		err.Error() != "GAMEBANANA_AUTH_FAILED" {
+	if err := <-ownerDone; !errors.Is(err, gamebanana.ErrAuthFailed) {
 		t.Fatalf("owner err = %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"testing"
@@ -75,6 +76,25 @@ func TestPrepareUploadCollectsAllowedFilesAndSkipsSystemEntries(t *testing.T) {
 	}
 	if len(prepared.Directories) != 2 {
 		t.Fatalf("directories = %#v", prepared.Directories)
+	}
+	gotDirectories := make(map[string]string, len(prepared.Directories))
+	for _, directory := range prepared.Directories {
+		gotDirectories[directory.Path] = directory.ParentPath
+	}
+	wantDirectories := map[string]string{"My Mod": "", "My Mod/Character": "My Mod"}
+	if !reflect.DeepEqual(gotDirectories, wantDirectories) {
+		t.Fatalf("directories = %#v, want %#v", gotDirectories, wantDirectories)
+	}
+	gotFiles := make(map[string]struct{ name, parent string }, len(prepared.Files))
+	for _, file := range prepared.Files {
+		gotFiles[file.Path] = struct{ name, parent string }{file.Name, file.ParentPath}
+	}
+	wantFiles := map[string]struct{ name, parent string }{
+		"My Mod/Character/mod.ini":     {"mod.ini", "My Mod/Character"},
+		"My Mod/Character/texture.dds": {"texture.dds", "My Mod/Character"},
+	}
+	if !reflect.DeepEqual(gotFiles, wantFiles) {
+		t.Fatalf("files = %#v, want %#v", gotFiles, wantFiles)
 	}
 	if prepared.TotalSize != int64(len("ini")+len("texture")) {
 		t.Fatalf("TotalSize = %d", prepared.TotalSize)

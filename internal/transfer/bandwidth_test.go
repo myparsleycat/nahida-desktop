@@ -3,7 +3,6 @@ package transfer
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,40 +19,72 @@ func TestBandwidthLimiterUnlimited(t *testing.T) {
 func TestBandwidthLimiterWaitsAndPreservesFIFO(t *testing.T) {
 	limiter := NewBandwidthLimiter()
 	defer limiter.Close()
-	limiter.SetRateBPS(10_000)
-	if err := limiter.Take(context.Background(), 10_000, nil); err != nil {
-		t.Fatal(err)
+	limiter.SetRateBPS(0.01)
+	type result struct {
+		id  int
+		err error
+	}
+	results := make(chan result, 2)
+	for i := 1; i <= 2; i++ {
+		queued := make(chan struct{})
+		go func() {
+			results <- result{i, limiter.Take(t.Context(), 1, func() { close(queued) })}
+		}()
+		select {
+		case <-queued:
+		case <-time.After(time.Second):
+			t.Fatalf("waiter %d did not enter the queue", i)
+		}
 	}
 
-	var mu sync.Mutex
-	order := make([]int, 0, 2)
-	done := make(chan struct{}, 2)
-	for i := 1; i <= 2; i++ {
-		go func() {
-			if err := limiter.Take(context.Background(), 500, nil); err != nil {
-				t.Errorf("Take() error = %v", err)
-			}
-			mu.Lock()
-			order = append(order, i)
-			mu.Unlock()
-			done <- struct{}{}
-		}()
-		time.Sleep(5 * time.Millisecond)
+	limiter.mu.Lock()
+	if len(limiter.waiters) != 2 {
+		limiter.mu.Unlock()
+		t.Fatalf("queued waiters = %d, want 2", len(limiter.waiters))
+	}
+	first, second := limiter.waiters[0], limiter.waiters[1]
+	limiter.stopTimerLocked()
+	limiter.tokens = 1
+	limiter.lastFill = time.Now()
+	limiter.drainLocked()
+	firstGranted := false
+	select {
+	case <-first.done:
+		firstGranted = true
+	default:
+	}
+	secondGranted := false
+	select {
+	case <-second.done:
+		secondGranted = true
+	default:
+	}
+	limiter.mu.Unlock()
+	if !firstGranted || secondGranted {
+		t.Fatalf("first grant = %v, second grant = %v", firstGranted, secondGranted)
 	}
 	select {
-	case <-done:
+	case got := <-results:
+		if got.id != 1 || got.err != nil {
+			t.Fatalf("first result = %+v", got)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("first waiter did not finish")
+		t.Fatal("first granted waiter did not finish")
 	}
+
+	limiter.mu.Lock()
+	limiter.stopTimerLocked()
+	limiter.tokens = 1
+	limiter.lastFill = time.Now()
+	limiter.drainLocked()
+	limiter.mu.Unlock()
 	select {
-	case <-done:
+	case got := <-results:
+		if got.id != 2 || got.err != nil {
+			t.Fatalf("second result = %+v", got)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("second waiter did not finish")
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
-		t.Fatalf("completion order = %v", order)
+		t.Fatal("second granted waiter did not finish")
 	}
 }
 

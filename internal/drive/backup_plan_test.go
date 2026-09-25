@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -68,18 +70,98 @@ func TestUploadBackupFilesSendsRemovalsAndReportsRefusals(t *testing.T) {
 		{TargetID: "t", RelPath: "y.ini"},
 		{TargetID: "t", RelPath: "z.ini"},
 	}, nil)
-	// A refused file is reported like any upload failure, which a run commits
-	// through; local source failures and planning failures stop it.
-	if errors.Is(err, ErrBackupPlanning) {
-		t.Fatal(err)
+	if err == nil || errors.Is(err, ErrBackupPlanning) || !strings.Contains(err.Error(), "denied_file_type") {
+		t.Fatalf("UploadBackupFiles error = %v, want denied file failure", err)
 	}
 	if !slices.Equal(denied, []string{"1"}) {
 		t.Fatalf("denied = %v", denied)
 	}
 	if len(pages) != 3 || len(pages[0].Files) != 2 || len(pages[0].Deleted) != 0 ||
-		len(pages[1].Files) != 0 || len(pages[1].Deleted) != 2 || len(pages[2].Deleted) != 1 ||
-		pages[2].Deleted[0]["path"] != "z.ini" {
+		len(pages[1].Files) != 0 || len(pages[2].Files) != 0 {
 		t.Fatalf("pages = %+v", pages)
+	}
+	wantDeleted := [][]map[string]string{
+		{{"targetId": "t", "path": "x.ini"}, {"targetId": "t", "path": "y.ini"}},
+		{{"targetId": "t", "path": "z.ini"}},
+	}
+	if !reflect.DeepEqual([][]map[string]string{pages[1].Deleted, pages[2].Deleted}, wantDeleted) {
+		t.Fatalf("deleted pages = %+v, want %+v", pages, wantDeleted)
+	}
+}
+
+func TestUploadBackupFilesReturnsNoErrorForSuccessfulPlan(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		var page struct {
+			Files []struct {
+				ClientID string `json:"clientId"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil || len(page.Files) != 1 {
+			t.Errorf("plan request = %+v, %v", page, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items":   []UploadPlanItem{{ClientID: page.Files[0].ClientID, Status: "exists"}},
+			"uploads": []any{},
+		})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	drive.setUploadRules(testUploadRules())
+
+	denied, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
+		{ClientID: "0", TargetID: "t", RelPath: "a.ini", SHA256: "a"},
+	}, nil, nil)
+	if err != nil || len(denied) != 0 {
+		t.Fatalf("successful plan = denied %v, error %v", denied, err)
+	}
+}
+
+func TestUploadBackupFilesStopsAfterRemovalPageFailure(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		var page struct {
+			Deleted []map[string]string `json:"deleted"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil {
+			t.Error(err)
+			return
+		}
+		if len(page.Deleted) != 1 {
+			t.Errorf("deleted page = %+v", page.Deleted)
+			return
+		}
+		requested = append(requested, page.Deleted[0]["path"])
+		if len(requested) == 2 {
+			http.Error(w, "planning failed", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}, "uploads": []any{}})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	rules := testUploadRules()
+	rules.MaxPlanFiles = 1
+	drive.setUploadRules(rules)
+
+	_, err := drive.UploadBackupFiles(t.Context(), "snap", nil, []BackupDeletedFile{
+		{TargetID: "t", RelPath: "x.ini"},
+		{TargetID: "t", RelPath: "y.ini"},
+		{TargetID: "t", RelPath: "z.ini"},
+	}, nil)
+	if !errors.Is(err, ErrBackupPlanning) {
+		t.Fatalf("error = %v, want backup planning failure", err)
+	}
+	if !slices.Equal(requested, []string{"x.ini", "y.ini"}) {
+		t.Fatalf("requested removals = %v, want first two pages only", requested)
 	}
 }
 

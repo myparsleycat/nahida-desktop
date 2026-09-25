@@ -558,7 +558,6 @@ describe("Agent image input", () => {
     fireEvent.change(input, {
       target: { files: [new File([new Uint8Array(bytes)], name, { type })] },
     });
-    await waitFor(() => expect(input).toBeTruthy());
   }
 
   itR("hides the attachment control while the model does not accept images", async () => {
@@ -600,6 +599,35 @@ describe("Agent image input", () => {
       expect(backend.Send).toHaveBeenCalledWith(SESSION_ID, "", [
         { name: "shot.png", mimeType: "image/png", data: pngData },
       ]),
+    );
+  });
+
+  it.each([
+    { name: "text and image", text: "다시 보내줘", attach: true },
+    { name: "text only", text: "다시 보내줘", attach: false },
+    { name: "image only", text: "", attach: true },
+  ])("restores $name after a failed send", async ({ text, attach }) => {
+    backend.Send.mockRejectedValue(new Error("send failed"));
+    await renderWithImages();
+
+    if (attach) {
+      await attachFile("shot.png", "image/png");
+      await screen.findByRole("img", { name: "shot.png" });
+    }
+    const input = screen.getByRole("textbox", {
+      name: "page.agent.placeholder",
+    }) as HTMLTextAreaElement;
+    if (text) fireEvent.change(input, { target: { value: text } });
+    fireEvent.click(screen.getByRole("button", { name: "page.agent.send" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("send failed"));
+    await waitFor(() => expect(input.value).toBe(text));
+    expect(screen.queryByRole("button", { name: "page.agent.revert_message" })).toBeNull();
+    expect(screen.queryAllByRole("img", { name: "shot.png" })).toHaveLength(attach ? 1 : 0);
+    expect(backend.Send).toHaveBeenCalledWith(
+      SESSION_ID,
+      text,
+      attach ? [{ name: "shot.png", mimeType: "image/png", data: pngData }] : [],
     );
   });
 
