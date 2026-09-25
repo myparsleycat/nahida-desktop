@@ -129,6 +129,7 @@ func TestMaintenanceGuardWaitsForWork(t *testing.T) {
 	t.Cleanup(startup.stop)
 	started := make(chan struct{})
 	release := make(chan struct{})
+	t.Cleanup(func() { closeFinish(release) })
 	startup.start(func(context.Context) {
 		close(started)
 		<-release
@@ -143,7 +144,7 @@ func TestMaintenanceGuardWaitsForWork(t *testing.T) {
 		t.Fatalf("guard released before maintenance: %v", err)
 	default:
 	}
-	close(release)
+	closeFinish(release)
 	waitCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	select {
