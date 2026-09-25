@@ -1,6 +1,9 @@
 package app
 
 import (
+	"context"
+	"strings"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
@@ -273,48 +276,58 @@ func emitAppEvent(name string, data ...any) {
 	}
 }
 
-type runtimeService struct {
-	service            application.Service
-	waitForMaintenance func(string) bool
-}
-
 func waitForAllMethods(string) bool { return true }
 
 func waitForShellTrash(name string) bool { return name == "Trash" }
 
-func (rt *runtime) serviceRegistrations() []runtimeService {
-	return []runtimeService{
-		{newLoggedService(rt, "Agent", rt.agent), waitForAllMethods},
-		{newLoggedService(rt, "Auth", rt.auth), nil},
-		{newLoggedService(rt, "Backup", rt.backup), waitForAllMethods},
-		{newLoggedService(rt, "CDNTrace", rt.cdnTrace), nil},
-		{newLoggedService(rt, "Dialog", rt.dialog), nil},
-		{newLoggedService(rt, "Drive", rt.drive), waitForAllMethods},
-		{newLoggedService(rt, "FS", rt.fs), waitForAllMethods},
-		{newLoggedService(rt, "GameBanana", rt.gamebanana), nil},
-		{newLoggedService(rt, "Input", rt.input), nil},
-		{application.NewService(rt.log), nil},
-		{newLoggedService(rt, "Mod", rt.mod), waitForAllMethods},
-		{application.NewService(rt.notifications), nil},
-		{newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}), nil},
-		{newLoggedService(rt, "Screen", rt.screen), nil},
-		{newLoggedService(rt, "Setting", rt.setting), isSettingWrite},
-		{newLoggedService(rt, "Shell", rt.shell), waitForShellTrash},
-		{newLoggedService(rt, "Tools", rt.tools), waitForAllMethods},
-		{newLoggedService(rt, "Transfer", rt.transfer), waitForAllMethods},
-		{newLoggedService(rt, "Updater", rt.updater), nil},
-		{newLoggedService(rt, "Window", rt.window), nil},
-		{newLoggedService(rt, "XXMI", rt.xxmi), waitForAllMethods},
+func (rt *runtime) services() []application.Service {
+	return []application.Service{
+		newGuardedService(rt, "Agent", rt.agent, waitForAllMethods),
+		newLoggedService(rt, "Auth", rt.auth),
+		newGuardedService(rt, "Backup", rt.backup, waitForAllMethods),
+		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
+		newLoggedService(rt, "Dialog", rt.dialog),
+		newGuardedService(rt, "Drive", rt.drive, waitForAllMethods),
+		newGuardedService(rt, "FS", rt.fs, waitForAllMethods),
+		newLoggedService(rt, "GameBanana", rt.gamebanana),
+		newLoggedService(rt, "Input", rt.input),
+		application.NewService(rt.log),
+		newGuardedService(rt, "Mod", rt.mod, waitForAllMethods),
+		application.NewService(rt.notifications),
+		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
+		newLoggedService(rt, "Screen", rt.screen),
+		newGuardedService(rt, "Setting", rt.setting, isSettingWrite),
+		newGuardedService(rt, "Shell", rt.shell, waitForShellTrash),
+		newGuardedService(rt, "Tools", rt.tools, waitForAllMethods),
+		newGuardedService(rt, "Transfer", rt.transfer, waitForAllMethods),
+		newLoggedService(rt, "Updater", rt.updater),
+		newLoggedService(rt, "Window", rt.window),
+		newGuardedService(rt, "XXMI", rt.xxmi, waitForAllMethods),
 	}
 }
 
-func (rt *runtime) services() []application.Service {
-	registrations := rt.serviceRegistrations()
-	services := make([]application.Service, 0, len(registrations))
-	for _, registration := range registrations {
-		services = append(services, registration.service)
+func isSettingWrite(name string) bool {
+	return strings.HasPrefix(name, "Set") || name == "ClearImageCache" || name == "AdvancedSet"
+}
+
+func newGuardedService[T any](
+	rt *runtime,
+	name string,
+	instance *T,
+	waitForMaintenance func(string) bool,
+) application.Service {
+	return newLoggedServiceWithOptions(rt, name, instance, application.ServiceOptions{
+		BeforeCall: maintenanceGuard(rt.startup, waitForMaintenance),
+	})
+}
+
+func maintenanceGuard(startup *startupWork, waitForMaintenance func(string) bool) func(context.Context, string) error {
+	return func(ctx context.Context, method string) error {
+		if !waitForMaintenance(method) {
+			return nil
+		}
+		return startup.wait(ctx)
 	}
-	return services
 }
 
 func newLoggedService[T any](rt *runtime, name string, instance *T) application.Service {

@@ -18,7 +18,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/rodrigocfd/windigo v0.2.6
 	github.com/samber/lo v1.53.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.21
+	github.com/wailsapp/wails/v3 v3.0.0-beta.23
 	golang.org/x/arch v0.30.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
@@ -27,7 +27,7 @@ require (
 	modernc.org/sqlite v1.57.0
 )
 
-replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.21
+replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.23
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
