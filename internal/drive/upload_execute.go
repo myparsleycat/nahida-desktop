@@ -74,12 +74,12 @@ func (d *Drive) executeUploadPlanV2(
 
 	run.indexPlan()
 	if err := run.dispatchIntents(); err != nil {
-		return nil, err
+		return run.rejections, err
 	}
 	run.finalizeBundles()
 	if err := ctx.Err(); err != nil {
 		d.abortAllNTEBundles(ctx, plan.Bundles)
-		return nil, err
+		return run.rejections, err
 	}
 	return run.rejections, errors.Join(run.failures...)
 }

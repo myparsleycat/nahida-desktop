@@ -273,6 +273,75 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	}
 }
 
+func TestExecuteUploadPlanPreservesRejectionsWhenDispatchIsCanceled(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := []FinalUploadFile{
+		{UploadFile: UploadFile{FID: "refused", Name: "refused.ini"}},
+		{UploadFile: UploadFile{FID: "ready", Name: "ready.ini"}},
+	}
+	plan := UploadPlan{Items: []UploadPlanItem{
+		{ClientID: "refused", Status: "denied", Reason: "unsupported_file_type"},
+		{ClientID: "ready", Status: "exists"},
+	}}
+
+	refused, err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+		if progress.FileID == "ready" {
+			cancel()
+		}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+	if len(refused) != 1 || refused["refused"] != "unsupported_file_type" {
+		t.Fatalf("rejections = %v, want refused file", refused)
+	}
+}
+
+func TestExecuteUploadPlanPreservesRejectionsWhenFinalizationIsCanceled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := []FinalUploadFile{
+		{UploadFile: UploadFile{FID: "refused", Name: "refused.ini"}},
+		{UploadFile: UploadFile{FID: "ready", Name: "ready.pak"}},
+	}
+	bundle := NTEBundle{
+		ID:              "bundle",
+		MemberClientIDs: []string{"ready"},
+		CompleteURL:     server.URL + "/bundle/complete",
+		AbortURL:        server.URL + "/bundle/abort",
+	}
+	plan := UploadPlan{
+		Items: []UploadPlanItem{
+			{ClientID: "refused", Status: "denied", Reason: "unsupported_file_type"},
+			{ClientID: "ready", Status: "exists", BundleID: "bundle"},
+		},
+		Bundles: map[string]NTEBundle{"bundle": bundle},
+	}
+
+	refused, err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+		if progress.FileID == "ready" {
+			cancel()
+		}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+	if len(refused) != 1 || refused["refused"] != "unsupported_file_type" {
+		t.Fatalf("rejections = %v, want refused file", refused)
+	}
+}
+
 func uploadExecutionFile(t *testing.T, directory, id, name, content string) FinalUploadFile {
 	t.Helper()
 	path := filepath.Join(directory, name)
