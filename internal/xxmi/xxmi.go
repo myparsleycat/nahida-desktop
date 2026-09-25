@@ -352,7 +352,8 @@ func (x *XXMI) getGitHubReleases(ctx context.Context, owner, repo string, refres
 		)
 	}
 	var releases []struct {
-		TagName string `json:"tag_name"`
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
 		return x.finishGitHubReleaseFetch(key, call, nil, err)
@@ -360,7 +361,7 @@ func (x *XXMI) getGitHubReleases(ctx context.Context, owner, repo string, refres
 	out := make([]string, 0, len(releases))
 	for _, release := range releases {
 		tag := strings.TrimSpace(release.TagName)
-		if tag == "" || strings.EqualFold(tag, "main") || strings.EqualFold(tag, "master") {
+		if tag == "" || release.Prerelease || strings.EqualFold(tag, "main") || strings.EqualFold(tag, "master") {
 			continue
 		}
 		out = append(out, tag)
