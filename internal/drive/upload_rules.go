@@ -117,21 +117,26 @@ func (d *Drive) UploadRules(ctx context.Context) (UploadRules, error) {
 	}
 	d.uploadRulesMu.Unlock()
 
+	rules, _, err := d.fetchUploadRules(ctx)
+	return rules, err
+}
+
+// fetchUploadRules asks the server for its upload rules, caches them, and
+// answers them with the answer as the server sent it.
+func (d *Drive) fetchUploadRules(ctx context.Context) (UploadRules, any, error) {
 	decoded, edenErr, err := d.doJSON(ctx, http.MethodGet, "/akasha/v2/upload-rules", nil, nil)
 	if err != nil {
-		return UploadRules{}, err
+		return UploadRules{}, nil, err
 	}
 	if edenErr != nil {
-		return UploadRules{}, CreateDriveAPIError(edenErr.asAny(), "get:upload-rules", edenErr.Status)
+		return UploadRules{}, nil, CreateDriveAPIError(edenErr.asAny(), "get:upload-rules", edenErr.Status)
 	}
 	rules, err := parseUploadRules(decoded)
 	if err != nil {
-		return UploadRules{}, err
+		return UploadRules{}, nil, err
 	}
-	d.uploadRulesMu.Lock()
-	d.uploadRules = &rules
-	d.uploadRulesMu.Unlock()
-	return rules, nil
+	d.setUploadRules(rules)
+	return rules, decoded, nil
 }
 
 func (d *Drive) setUploadRules(rules UploadRules) {

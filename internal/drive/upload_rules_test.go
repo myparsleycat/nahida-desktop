@@ -80,6 +80,50 @@ func TestUploadRulesFetchesAndCaches(t *testing.T) {
 	}
 }
 
+func TestBackupRulesRefetchesAndVersionsTheAnswer(t *testing.T) {
+	answer := map[string]any{}
+	raw, _ := json.Marshal(testUploadRules())
+	_ = json.Unmarshal(raw, &answer)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(answer)
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+
+	first, err := drive.BackupRules(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := drive.BackupRules(t.Context())
+	if err != nil || same.Version != first.Version {
+		t.Fatalf("unchanged rules = %q, %v, want %q", same.Version, err, first.Version)
+	}
+
+	// A field this client does not read still changes the version.
+	answer["futureLimit"] = 1
+	unread, err := drive.BackupRules(t.Context())
+	if err != nil || unread.Version == first.Version {
+		t.Fatalf("rules with a new field = %q, %v", unread.Version, err)
+	}
+
+	// Rules that changed while the app was open reach the filter and uploads.
+	answer["maxPlanFiles"] = 7
+	if _, err := drive.BackupRules(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if rules, err := drive.UploadRules(t.Context()); err != nil || rules.MaxPlanFiles != 7 {
+		t.Fatalf("upload rules = %+v, %v", rules, err)
+	}
+	if first.Filter("tool.exe", 1) != "denied_file_type" || first.Filter("a.ini", 1) != "" {
+		t.Fatal("the filter does not follow the rules")
+	}
+}
+
 func TestParseUploadRulesRejectsIncompletePayload(t *testing.T) {
 	if _, err := parseUploadRules(map[string]any{"maxFileSize": 1}); err == nil {
 		t.Fatal("expected unavailable rules")

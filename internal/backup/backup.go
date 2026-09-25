@@ -66,14 +66,14 @@ var (
 // Remote is the drive surface a backup travels through.
 type Remote interface {
 	BackupJSON(ctx context.Context, method, route string, body, out any) error
-	BackupFilter(ctx context.Context) (func(name string, size int64) string, error)
+	BackupRules(ctx context.Context) (drive.BackupRules, error)
 	UploadBackupFiles(
 		ctx context.Context,
 		snapshotID string,
 		files []drive.BackupUploadFile,
 		deleted []drive.BackupDeletedFile,
 		onProgress func(int64),
-	) ([]string, error)
+	) ([]drive.BackupRejection, error)
 	DownloadBackupFile(
 		ctx context.Context,
 		snapshotID string,

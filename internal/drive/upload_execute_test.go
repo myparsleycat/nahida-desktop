@@ -125,7 +125,7 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 2)
-	err := uploadTestDrive(
+	_, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
@@ -172,7 +172,7 @@ func TestExecuteUploadPlanUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
 	rules := testUploadRules()
 	rules.MaxUploadBodyBytes = 32
 	drive.setUploadRules(rules)
-	if err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
+	if _, err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 1 {
@@ -210,7 +210,7 @@ func TestExecuteUploadPlanCompletesNTEBundleAtomically(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 3)
-	if err := uploadTestDrive(
+	if _, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
@@ -256,7 +256,7 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	}
 	var bytes int64
 	completed := 0
-	err := uploadTestDrive(
+	_, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes

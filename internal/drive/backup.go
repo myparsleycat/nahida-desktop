@@ -2,6 +2,8 @@ package drive
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,23 +83,55 @@ func (d *Drive) BackupJSON(ctx context.Context, method, route string, body, out 
 	return json.Unmarshal(raw, out)
 }
 
-// BackupFilter answers why a file may not be backed up, or "" when it may. The
-// rules are the server's upload rules, so a backup holds exactly the files the
-// drive would accept.
+// BackupRules is what a backup run takes from the server's upload rules.
+type BackupRules struct {
+	// Filter answers why a file may not be backed up, or "" when it may, so a
+	// backup holds exactly the files the drive would accept.
+	Filter func(name string, size int64) string
+	// Version names the rules as the server published them. A refusal made
+	// under one version is worth retrying once the version changes.
+	Version string
+}
+
+// BackupRules asks the server for its upload rules afresh, so a run sees rules
+// that changed while the app was open, and refreshes the ones uploads use.
 //
 //wails:ignore
-func (d *Drive) BackupFilter(ctx context.Context) (func(name string, size int64) string, error) {
-	rules, err := d.UploadRules(ctx)
+func (d *Drive) BackupRules(ctx context.Context) (BackupRules, error) {
+	rules, decoded, err := d.fetchUploadRules(ctx)
 	if err != nil {
-		return nil, err
+		return BackupRules{}, err
 	}
+	// The whole answer is hashed, not only the fields this client reads, and
+	// its object keys are marshaled sorted, so the same rules name one version.
+	raw, err := json.Marshal(decoded)
+	if err != nil {
+		return BackupRules{}, err
+	}
+	sum := sha256.Sum256(raw)
+
 	allowed := extensionMaxSizes(rules, nil)
-	return func(name string, size int64) string {
-		if isSystemFile(name) {
-			return "system_file"
-		}
-		return string(classifyUploadFile(name, size, allowed, false, rules.MaxFileSize))
+	return BackupRules{
+		Filter: func(name string, size int64) string {
+			if isSystemFile(name) {
+				return "system_file"
+			}
+			return string(classifyUploadFile(name, size, allowed, false, rules.MaxFileSize))
+		},
+		Version: hex.EncodeToString(sum[:]),
 	}, nil
+}
+
+// BackupRejection is a file of a snapshot the server refused. Denied is set
+// when the plan refused it, so the snapshot leaves it out; otherwise its upload
+// was refused and the commit still misses its content. Permanent is set when
+// the same content is refused again under the same upload rules, so offering
+// it again is pointless until they change.
+type BackupRejection struct {
+	ClientID  string
+	Reason    string
+	Denied    bool
+	Permanent bool
 }
 
 // BackupUploadFile is one hashed file of a backup snapshot.
@@ -124,8 +158,9 @@ type BackupDeletedFile struct {
 // of one NTE archive set stay on the same page, since the server bundles them
 // per folder and base name and the bundle completes once all of them arrived. A page whose uploads fail does
 // not stop the next one; the joined failures are answered at the end, and the
-// commit tells which content is still missing. The client ids of the files the
-// server refused are answered too, since the snapshot leaves them out.
+// commit tells which content is still missing. The files the server refused
+// are answered too, whether the plan or the upload refused them, also beside
+// an error that stops the run.
 //
 //wails:ignore
 func (d *Drive) UploadBackupFiles(
@@ -134,7 +169,7 @@ func (d *Drive) UploadBackupFiles(
 	files []BackupUploadFile,
 	deleted []BackupDeletedFile,
 	onProgress func(bytes int64),
-) ([]string, error) {
+) ([]BackupRejection, error) {
 	rules, err := d.UploadRules(ctx)
 	if err != nil {
 		return nil, err
@@ -165,12 +200,13 @@ func (d *Drive) UploadBackupFiles(
 		return nil, fmt.Errorf("%w: %w", ErrBackupPlanning, err)
 	}
 
-	var denied []string
+	var rejections []BackupRejection
+	denied := map[string]struct{}{}
 	var failures []error
 	start := 0
 	for _, page := range pages {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return rejections, err
 		}
 
 		payload := make([]map[string]any, len(page))
@@ -193,10 +229,10 @@ func (d *Drive) UploadBackupFiles(
 		}
 		body := map[string]any{"capabilities": []string{"nte-bundle-v1"}, "files": payload}
 		if err := d.BackupJSON(ctx, http.MethodPost, route, body, &response); err != nil {
-			return nil, fmt.Errorf("%w: page starting at file %d: %w", ErrBackupPlanning, start, err)
+			return rejections, fmt.Errorf("%w: page starting at file %d: %w", ErrBackupPlanning, start, err)
 		}
 		if len(response.Items) != len(page) {
-			return nil, fmt.Errorf(
+			return rejections, fmt.Errorf(
 				"%w: page starting at file %d returned %d of %d files",
 				ErrBackupPlanning,
 				start,
@@ -210,13 +246,13 @@ func (d *Drive) UploadBackupFiles(
 		}
 		for _, item := range response.Items {
 			if _, ok := requested[item.ClientID]; !ok {
-				return nil, fmt.Errorf("%w: unexpected or duplicate file %s", ErrBackupPlanning, item.ClientID)
+				return rejections, fmt.Errorf("%w: unexpected or duplicate file %s", ErrBackupPlanning, item.ClientID)
 			}
 			delete(requested, item.ClientID)
 			if item.Status != "exists" &&
 				(item.Status != "pending" || item.IntentID == "") &&
 				(item.Status != "denied" || item.Reason == "") {
-				return nil, fmt.Errorf(
+				return rejections, fmt.Errorf(
 					"%w: file %s: %s (%s)",
 					ErrBackupPlanning,
 					item.ClientID,
@@ -225,7 +261,16 @@ func (d *Drive) UploadBackupFiles(
 				)
 			}
 			if item.Status == "denied" {
-				denied = append(denied, item.ClientID)
+				rejections = append(
+					rejections,
+					BackupRejection{
+						ClientID:  item.ClientID,
+						Reason:    item.Reason,
+						Denied:    true,
+						Permanent: permanentUploadRejection(item.Reason),
+					},
+				)
+				denied[item.ClientID] = struct{}{}
 			}
 		}
 		plan := UploadPlan{
@@ -240,7 +285,7 @@ func (d *Drive) UploadBackupFiles(
 			plan.Bundles[bundle.ID] = bundle
 		}
 
-		err := d.executeUploadPlanV2(
+		refused, err := d.executeUploadPlanV2(
 			ctx,
 			page,
 			plan,
@@ -251,12 +296,19 @@ func (d *Drive) UploadBackupFiles(
 				}
 			},
 		)
+		for _, file := range page {
+			// A plan denial is refused by the upload run too; it is answered once.
+			_, planned := denied[file.FID]
+			if reason, ok := refused[file.FID]; ok && !planned {
+				rejections = append(rejections, BackupRejection{ClientID: file.FID, Reason: reason, Permanent: true})
+			}
+		}
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, ctxErr
+				return rejections, ctxErr
 			}
 			if errors.Is(err, ErrBackupSourceRead) {
-				return nil, err
+				return rejections, err
 			}
 			failures = append(failures, err)
 		}
@@ -265,7 +317,7 @@ func (d *Drive) UploadBackupFiles(
 
 	for start := 0; start < len(deleted); start += pageSize {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return rejections, err
 		}
 		page := deleted[start:min(start+pageSize, len(deleted))]
 		payload := make([]map[string]string, len(page))
@@ -274,10 +326,10 @@ func (d *Drive) UploadBackupFiles(
 		}
 		body := map[string]any{"files": []any{}, "deleted": payload}
 		if err := d.BackupJSON(ctx, http.MethodPost, route, body, nil); err != nil {
-			return nil, fmt.Errorf("%w: removals starting at %d: %w", ErrBackupPlanning, start, err)
+			return rejections, fmt.Errorf("%w: removals starting at %d: %w", ErrBackupPlanning, start, err)
 		}
 	}
-	return denied, errors.Join(failures...)
+	return rejections, errors.Join(failures...)
 }
 
 // BackupDownload is where one file of a snapshot is served from, as the

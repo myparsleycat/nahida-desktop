@@ -264,6 +264,16 @@ var TableSpecs = []TableSpec{
 		CompositePrimaryKey: []string{"target_key", "rel_path"},
 	},
 	{
+		Name: "backup_rejected",
+		Columns: []ColumnSpec{
+			{Name: "sha256", Type: TypeText, NotNull: true},
+			{Name: "ext", Type: TypeText, NotNull: true},
+			{Name: "reason", Type: TypeText, NotNull: true},
+			{Name: "rules_version", Type: TypeText, NotNull: true},
+		},
+		CompositePrimaryKey: []string{"sha256", "ext"},
+	},
+	{
 		Name: "mod_scan_cache",
 		Columns: []ColumnSpec{
 			{Name: "path", Type: TypeText, PrimaryKey: true, NotNull: true},
@@ -412,6 +422,13 @@ type BackupCommittedRow struct {
 	SHA256    string
 	Size      *int64
 	Mtime     *int64
+}
+
+type BackupRejectedRow struct {
+	SHA256       string
+	Ext          string
+	Reason       string
+	RulesVersion string
 }
 
 type ModScanCacheRow struct {
