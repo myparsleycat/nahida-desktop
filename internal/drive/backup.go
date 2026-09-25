@@ -120,7 +120,9 @@ type BackupDeletedFile struct {
 
 // UploadBackupFiles announces what a pending snapshot changes against its base
 // page by page: the added or changed files, whose content the server does not
-// hold yet is uploaded, then the removed ones. A page whose uploads fail does
+// hold yet is uploaded, then the removed ones. The .pak, .utoc and .ucas files
+// of one NTE archive set stay on the same page, since the server bundles them
+// per folder and base name and the bundle completes once all of them arrived. A page whose uploads fail does
 // not stop the next one; the joined failures are answered at the end, and the
 // commit tells which content is still missing. The client ids of the files the
 // server refused are answered too, since the snapshot leaves them out.
@@ -140,17 +142,40 @@ func (d *Drive) UploadBackupFiles(
 	pageSize := max(rules.MaxPlanFiles, 1)
 	route := "/backup/snapshots/" + url.PathEscape(snapshotID) + "/files:plan"
 
+	byClientID := make(map[string]BackupUploadFile, len(files))
+	finals := make([]FinalUploadFile, len(files))
+	for index, file := range files {
+		byClientID[file.ClientID] = file
+		// The parent is the folder inside the target, which is what an
+		// archive set is grouped under on both sides.
+		finals[index] = FinalUploadFile{
+			UploadFile: UploadFile{
+				FID:      file.ClientID,
+				Path:     file.RelPath,
+				Name:     path.Base(file.RelPath),
+				Size:     file.Size,
+				FullPath: filepath.ToSlash(file.FullPath),
+			},
+			ParentID: file.TargetID + "/" + path.Dir(file.RelPath),
+			SHA256:   file.SHA256,
+		}
+	}
+	pages, err := paginateUploadFiles(finals, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBackupPlanning, err)
+	}
+
 	var denied []string
 	var failures []error
-	for start := 0; start < len(files); start += pageSize {
+	start := 0
+	for _, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		page := files[start:min(start+pageSize, len(files))]
 
 		payload := make([]map[string]any, len(page))
-		finals := make([]FinalUploadFile, len(page))
-		for index, file := range page {
+		for index, final := range page {
+			file := byClientID[final.FID]
 			payload[index] = map[string]any{
 				"clientId":   file.ClientID,
 				"targetId":   file.TargetID,
@@ -159,23 +184,15 @@ func (d *Drive) UploadBackupFiles(
 				"size":       file.Size,
 				"modifiedAt": file.ModifiedAt.UTC().Format(time.RFC3339Nano),
 			}
-			finals[index] = FinalUploadFile{
-				UploadFile: UploadFile{
-					FID:      file.ClientID,
-					Path:     file.RelPath,
-					Name:     path.Base(file.RelPath),
-					Size:     file.Size,
-					FullPath: filepath.ToSlash(file.FullPath),
-				},
-				SHA256: file.SHA256,
-			}
 		}
 
 		var response struct {
-			Items   []UploadPlanItem  `json:"items"`
-			Uploads []UploadPlanEntry `json:"uploads"`
+			Items      []UploadPlanItem  `json:"items"`
+			Uploads    []UploadPlanEntry `json:"uploads"`
+			NTEBundles []NTEBundle       `json:"nteBundles"`
 		}
-		if err := d.BackupJSON(ctx, http.MethodPost, route, map[string]any{"files": payload}, &response); err != nil {
+		body := map[string]any{"capabilities": []string{"nte-bundle-v1"}, "files": payload}
+		if err := d.BackupJSON(ctx, http.MethodPost, route, body, &response); err != nil {
 			return nil, fmt.Errorf("%w: page starting at file %d: %w", ErrBackupPlanning, start, err)
 		}
 		if len(response.Items) != len(page) {
@@ -189,7 +206,7 @@ func (d *Drive) UploadBackupFiles(
 		}
 		requested := make(map[string]struct{}, len(page))
 		for _, file := range page {
-			requested[file.ClientID] = struct{}{}
+			requested[file.FID] = struct{}{}
 		}
 		for _, item := range response.Items {
 			if _, ok := requested[item.ClientID]; !ok {
@@ -214,15 +231,18 @@ func (d *Drive) UploadBackupFiles(
 		plan := UploadPlan{
 			Items:   response.Items,
 			Uploads: make(map[string]UploadPlanEntry, len(response.Uploads)),
-			Bundles: map[string]NTEBundle{},
+			Bundles: make(map[string]NTEBundle, len(response.NTEBundles)),
 		}
 		for _, upload := range response.Uploads {
 			plan.Uploads[upload.IntentID] = upload
 		}
+		for _, bundle := range response.NTEBundles {
+			plan.Bundles[bundle.ID] = bundle
+		}
 
 		err := d.executeUploadPlanV2(
 			ctx,
-			finals,
+			page,
 			plan,
 			d.uploadConcurrency(ctx),
 			func(progress UploadExecutionProgress) {
@@ -240,6 +260,7 @@ func (d *Drive) UploadBackupFiles(
 			}
 			failures = append(failures, err)
 		}
+		start += len(page)
 	}
 
 	for start := 0; start < len(deleted); start += pageSize {
