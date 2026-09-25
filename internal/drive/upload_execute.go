@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -47,39 +48,40 @@ type uploadRun struct {
 	failedBundles     map[string]struct{}
 	rolledBackBundles map[string]struct{}
 	failures          []error
+	rejections        map[string]string
 	stateMu           sync.Mutex
 	progressMu        sync.Mutex
 }
 
+// executeUploadPlanV2 uploads what a plan still needs. Beside the joined
+// failures it answers the client ids of the files whose content the server
+// refused for good, with the refusal code.
 func (d *Drive) executeUploadPlanV2(
 	ctx context.Context,
 	files []FinalUploadFile,
 	plan UploadPlan,
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
-) error {
+) (map[string]string, error) {
 	if d == nil || d.http == nil {
-		return errDriveHTTPUnconfigured
+		return nil, errDriveHTTPUnconfigured
 	}
 	run, err := d.newUploadRun(ctx, files, plan, concurrency, onProgress)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer run.close()
 
 	run.indexPlan()
 	if err := run.dispatchIntents(); err != nil {
-		return err
+		return run.rejections, err
 	}
 	run.finalizeBundles()
 	if err := ctx.Err(); err != nil {
 		d.abortAllNTEBundles(ctx, plan.Bundles)
-		return err
+		return run.rejections, err
 	}
-	if len(run.failures) > 0 {
-		return errors.Join(run.failures...)
-	}
-	return nil
+	return run.rejections, errors.Join(run.failures...)
 }
 
 func (d *Drive) newUploadRun(
@@ -134,6 +136,7 @@ func (d *Drive) newUploadRun(
 		failedBundles:     make(map[string]struct{}),
 		rolledBackBundles: make(map[string]struct{}, len(plan.Bundles)),
 		failures:          make([]error, 0),
+		rejections:        make(map[string]string),
 	}
 	for bundleID := range plan.Bundles {
 		run.bundleContexts[bundleID], run.bundleCancels[bundleID] = context.WithCancel(ctx)
@@ -354,7 +357,7 @@ func (r *uploadRun) flushPacked() error {
 					},
 				)
 				if err != nil {
-					r.addFailure(err)
+					r.failTargets(err, append([]FinalUploadFile{member.source}, member.copies...))
 					return
 				}
 				r.markIntentReady(member.source, member.copies)
@@ -368,7 +371,7 @@ func (r *uploadRun) flushPacked() error {
 			if err := r.drive.uploadPack(r.ctx, members, func(bytes int64) {
 				r.emitProgress(UploadExecutionProgress{Bytes: bytes})
 			}, r.markIntentReady); err != nil {
-				r.addFailure(err)
+				r.failPack(err)
 			}
 		}); err != nil {
 			return err
@@ -473,10 +476,23 @@ func (r *uploadRun) markIntentReady(source FinalUploadFile, copies []FinalUpload
 	}
 }
 
-func (r *uploadRun) addFailure(failure error) {
-	r.stateMu.Lock()
-	r.failures = append(r.failures, failure)
-	r.stateMu.Unlock()
+// failPack records the failures of a pack upload: a member's own failure fails
+// that member's files, and a failure of the whole pack is recorded as is.
+func (r *uploadRun) failPack(failure error) {
+	failures := []error{failure}
+	if joined, ok := failure.(interface{ Unwrap() []error }); ok {
+		failures = joined.Unwrap()
+	}
+	for _, item := range failures {
+		var member *packMemberError
+		if errors.As(item, &member) {
+			r.failTargets(item, member.files)
+			continue
+		}
+		r.stateMu.Lock()
+		r.failures = append(r.failures, item)
+		r.stateMu.Unlock()
+	}
 }
 
 func (r *uploadRun) isBundleFailed(bundleID string) bool {
@@ -497,8 +513,14 @@ func (r *uploadRun) failTargets(failure error, targets []FinalUploadFile) {
 		}
 		bundleIDs[bundleID] = struct{}{}
 	}
+	code, rejected := uploadRejectionCode(failure)
 	newlyFailed := make([]string, 0, len(bundleIDs))
 	r.stateMu.Lock()
+	if rejected {
+		for _, file := range refusedContent(targets) {
+			r.rejections[file.FID] = code
+		}
+	}
 	if hasNonBundle || len(bundleIDs) == 0 {
 		r.failures = append(r.failures, failure)
 	}
@@ -517,6 +539,45 @@ func (r *uploadRun) failTargets(failure error, targets []FinalUploadFile) {
 		}
 		r.abortBundle(bundleID, failure)
 	}
+}
+
+// uploadRejectionCode answers the code of a failure by which the server refused
+// a file's content for good.
+func uploadRejectionCode(failure error) (string, bool) {
+	var uploadErr *UploadV2Error
+	if !errors.As(failure, &uploadErr) || !permanentUploadRejection(uploadErr.Code) {
+		return "", false
+	}
+	return uploadErr.Code, true
+}
+
+// permanentUploadRejection reports whether a refusal code judges the content
+// and name of a file against the upload rules, so sending the same content
+// under the same name and rules is refused again.
+func permanentUploadRejection(code string) bool {
+	switch code {
+	case "unsupported_file_type", string(uploadFileDenialExtension), string(uploadFileDenialSize):
+		return true
+	}
+	return false
+}
+
+// refusedContent answers the targets a refusal of their upload is about. The
+// copies of an intent share its content but not always its extension, and the
+// server judged the source only; a failure shared by different contents, such
+// as a bundle's, names none of them.
+func refusedContent(targets []FinalUploadFile) []FinalUploadFile {
+	if len(targets) == 0 {
+		return nil
+	}
+	source := targets[0]
+	if slices.ContainsFunc(targets, func(file FinalUploadFile) bool { return file.SHA256 != source.SHA256 }) {
+		return nil
+	}
+	ext := strings.ToLower(path.Ext(source.Name))
+	return slices.DeleteFunc(slices.Clone(targets), func(file FinalUploadFile) bool {
+		return strings.ToLower(path.Ext(file.Name)) != ext
+	})
 }
 
 func (r *uploadRun) abortBundle(bundleID string, cause error) {

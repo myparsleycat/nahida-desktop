@@ -125,7 +125,7 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 2)
-	err := uploadTestDrive(
+	_, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
@@ -172,7 +172,7 @@ func TestExecuteUploadPlanUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
 	rules := testUploadRules()
 	rules.MaxUploadBodyBytes = 32
 	drive.setUploadRules(rules)
-	if err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
+	if _, err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 1 {
@@ -210,7 +210,7 @@ func TestExecuteUploadPlanCompletesNTEBundleAtomically(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 3)
-	if err := uploadTestDrive(
+	if _, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
@@ -256,7 +256,7 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	}
 	var bytes int64
 	completed := 0
-	err := uploadTestDrive(
+	_, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
@@ -270,6 +270,75 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	}
 	if !aborted || bytes != 0 || completed != 0 {
 		t.Fatalf("aborted = %v, bytes = %d, completed = %d", aborted, bytes, completed)
+	}
+}
+
+func TestExecuteUploadPlanPreservesRejectionsWhenDispatchIsCanceled(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := []FinalUploadFile{
+		{UploadFile: UploadFile{FID: "refused", Name: "refused.ini"}},
+		{UploadFile: UploadFile{FID: "ready", Name: "ready.ini"}},
+	}
+	plan := UploadPlan{Items: []UploadPlanItem{
+		{ClientID: "refused", Status: "denied", Reason: "unsupported_file_type"},
+		{ClientID: "ready", Status: "exists"},
+	}}
+
+	refused, err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+		if progress.FileID == "ready" {
+			cancel()
+		}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+	if len(refused) != 1 || refused["refused"] != "unsupported_file_type" {
+		t.Fatalf("rejections = %v, want refused file", refused)
+	}
+}
+
+func TestExecuteUploadPlanPreservesRejectionsWhenFinalizationIsCanceled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := []FinalUploadFile{
+		{UploadFile: UploadFile{FID: "refused", Name: "refused.ini"}},
+		{UploadFile: UploadFile{FID: "ready", Name: "ready.pak"}},
+	}
+	bundle := NTEBundle{
+		ID:              "bundle",
+		MemberClientIDs: []string{"ready"},
+		CompleteURL:     server.URL + "/bundle/complete",
+		AbortURL:        server.URL + "/bundle/abort",
+	}
+	plan := UploadPlan{
+		Items: []UploadPlanItem{
+			{ClientID: "refused", Status: "denied", Reason: "unsupported_file_type"},
+			{ClientID: "ready", Status: "exists", BundleID: "bundle"},
+		},
+		Bundles: map[string]NTEBundle{"bundle": bundle},
+	}
+
+	refused, err := uploadTestDrive(
+		server,
+	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+		if progress.FileID == "ready" {
+			cancel()
+		}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+	if len(refused) != 1 || refused["refused"] != "unsupported_file_type" {
+		t.Fatalf("rejections = %v, want refused file", refused)
 	}
 }
 

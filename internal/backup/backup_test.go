@@ -240,6 +240,115 @@ func TestRunDropsAFewMissingFiles(t *testing.T) {
 	}
 }
 
+func TestRunDoesNotOfferRefusedContentAgain(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.ini"), "a")
+	writeFile(t, filepath.Join(root, "odd.ini"), "odd")
+	writeFile(t, filepath.Join(root, "tool.exe"), "exe")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	remote := &fakeRemote{
+		rulesVersion: "rules-1",
+		deny:         map[string]string{"tool.exe": "denied_file_type"},
+		refuse:       map[string]string{"odd.ini": "unsupported_file_type"},
+	}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("first run = %+v", result)
+	}
+	if len(remote.uploaded) != 3 {
+		t.Fatalf("first run uploaded %d files", len(remote.uploaded))
+	}
+
+	uploadedPaths := func() []string {
+		paths := lo.Map(remote.uploaded, func(file drive.BackupUploadFile, _ int) string { return file.RelPath })
+		slices.Sort(paths)
+		return paths
+	}
+
+	// The refused content is left out, and counted as skipped for its reason.
+	remote.reset()
+	writeFile(t, filepath.Join(root, "a.ini"), "a changed")
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("second run = %+v", result)
+	}
+	if paths := uploadedPaths(); !slices.Equal(paths, []string{"a.ini"}) {
+		t.Fatalf("second run uploaded %v, want only the changed file", paths)
+	}
+	if scanSkipped(remote, "unsupported_file_type") != 1 || scanSkipped(remote, "denied_file_type") != 1 {
+		t.Fatalf("skipped = %+v", remote.commits[len(remote.commits)-1].Skipped)
+	}
+
+	// New content is offered again.
+	remote.reset()
+	writeFile(t, filepath.Join(root, "odd.ini"), "odd changed")
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("third run = %+v", result)
+	}
+	if paths := uploadedPaths(); !slices.Equal(paths, []string{"odd.ini"}) {
+		t.Fatalf("third run uploaded %v, want the changed refused file", paths)
+	}
+
+	// New upload rules offer every refused content again.
+	remote.reset()
+	remote.mu.Lock()
+	remote.rulesVersion = "rules-2"
+	remote.deny, remote.refuse = nil, nil
+	remote.mu.Unlock()
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("fourth run = %+v", result)
+	}
+	if paths := uploadedPaths(); !slices.Equal(paths, []string{"odd.ini", "tool.exe"}) {
+		t.Fatalf("fourth run uploaded %v, want the refused files under the new rules", paths)
+	}
+}
+
+func TestRunRemembersRefusalsOfAFailedRunAndOnlyLastingOnes(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.ini"), "a")
+	writeFile(t, filepath.Join(root, "odd.ini"), "odd")
+	writeFile(t, filepath.Join(root, "held.ini"), "held")
+	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The plan stops after the upload refused odd.ini and denied held.ini
+	// for a reason the server may lift.
+	remote := &fakeRemote{
+		rulesVersion: "rules-1",
+		refuse:       map[string]string{"odd.ini": "unsupported_file_type"},
+		deny:         map[string]string{"held.ini": "quota_exceeded"},
+		transient:    true,
+		planningErr:  errors.New("later plan page failed"),
+	}
+	backup := testBackup(t, client, remote)
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeFailed {
+		t.Fatalf("failed run = %+v", result)
+	}
+
+	remote.reset()
+	remote.mu.Lock()
+	remote.planningErr = nil
+	remote.deny, remote.refuse = nil, nil
+	remote.mu.Unlock()
+	if result := backup.run(t.Context(), client, "manual"); result.Outcome != OutcomeCompleted {
+		t.Fatalf("next run = %+v", result)
+	}
+	paths := lo.Map(remote.uploaded, func(file drive.BackupUploadFile, _ int) string { return file.RelPath })
+	slices.Sort(paths)
+	if !slices.Equal(paths, []string{"a.ini", "held.ini"}) {
+		t.Fatalf("next run uploaded %v, want all but the refused content", paths)
+	}
+}
+
 func TestRunAbortsWhenPlanningStopsAfterSomeFiles(t *testing.T) {
 	t.Parallel()
 
@@ -902,12 +1011,19 @@ type fakeRemote struct {
 	missingCap  int
 	planningErr error
 	uploadErr   error
-	uploaded    []drive.BackupUploadFile
-	deleted     []drive.BackupDeletedFile
-	commits     []commitBody
-	creates     int
-	manifests   int
-	aborted     bool
+	// rulesVersion names the upload rules; deny and refuse map a path to
+	// the reason the plan or the upload refuses it with, and transient makes
+	// the plan's denials ones the server may lift under the same rules.
+	rulesVersion string
+	deny         map[string]string
+	refuse       map[string]string
+	transient    bool
+	uploaded     []drive.BackupUploadFile
+	deleted      []drive.BackupDeletedFile
+	commits      []commitBody
+	creates      int
+	manifests    int
+	aborted      bool
 	// uploading, when set, is closed when an upload starts, and the upload
 	// then waits for its context to end.
 	uploading chan struct{}
@@ -932,6 +1048,7 @@ type fakePending struct {
 	targets []string
 	upserts []drive.BackupUploadFile
 	deletes []drive.BackupDeletedFile
+	refused map[string]struct{}
 }
 
 type failedFile struct {
@@ -1020,7 +1137,11 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 			return file.TargetID + "\x00" + file.Path
 		}))
 		var missing []string
-		for _, file := range f.pending.upserts[:min(f.missingOnce, len(f.pending.upserts))] {
+		for index, file := range f.pending.upserts {
+			_, refused := f.pending.refused[file.ClientID]
+			if index >= f.missingOnce && !refused {
+				continue
+			}
 			if _, ok := failed[file.TargetID+"\x00"+file.RelPath]; !ok {
 				missing = append(missing, file.SHA256)
 			}
@@ -1081,11 +1202,14 @@ func (f *fakeRemote) commit(commit commitBody) map[string]any {
 	return map[string]any{"id": f.latest, "state": "COMPLETED", "fileCount": count}
 }
 
-func (f *fakeRemote) BackupFilter(context.Context) (func(string, int64) string, error) {
-	if f.filter != nil {
-		return f.filter, nil
+func (f *fakeRemote) BackupRules(context.Context) (drive.BackupRules, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rules := drive.BackupRules{Filter: f.filter, Version: f.rulesVersion}
+	if rules.Filter == nil {
+		rules.Filter = func(string, int64) string { return "" }
 	}
-	return func(string, int64) string { return "" }, nil
+	return rules, nil
 }
 
 func (f *fakeRemote) UploadBackupFiles(
@@ -1094,7 +1218,7 @@ func (f *fakeRemote) UploadBackupFiles(
 	files []drive.BackupUploadFile,
 	deleted []drive.BackupDeletedFile,
 	_ func(int64),
-) ([]string, error) {
+) ([]drive.BackupRejection, error) {
 	if f.uploading != nil {
 		close(f.uploading)
 		<-ctx.Done()
@@ -1104,15 +1228,38 @@ func (f *fakeRemote) UploadBackupFiles(
 	defer f.mu.Unlock()
 	f.uploaded = append(f.uploaded, files...)
 	f.deleted = append(f.deleted, deleted...)
-	f.pending.upserts = append(f.pending.upserts, files...)
 	f.pending.deletes = append(f.pending.deletes, deleted...)
+
+	// A denied file is left out of the snapshot; a refused upload is still
+	// missing when the snapshot commits.
+	var rejections []drive.BackupRejection
+	for _, file := range files {
+		if reason, ok := f.deny[file.RelPath]; ok {
+			rejections = append(
+				rejections,
+				drive.BackupRejection{ClientID: file.ClientID, Reason: reason, Denied: true, Permanent: !f.transient},
+			)
+			continue
+		}
+		f.pending.upserts = append(f.pending.upserts, file)
+		if reason, ok := f.refuse[file.RelPath]; ok {
+			rejections = append(
+				rejections,
+				drive.BackupRejection{ClientID: file.ClientID, Reason: reason, Permanent: true},
+			)
+			if f.pending.refused == nil {
+				f.pending.refused = map[string]struct{}{}
+			}
+			f.pending.refused[file.ClientID] = struct{}{}
+		}
+	}
 	if f.planningErr != nil {
-		return nil, errors.Join(drive.ErrBackupPlanning, f.planningErr)
+		return rejections, errors.Join(drive.ErrBackupPlanning, f.planningErr)
 	}
 	if f.uploadErr != nil {
-		return nil, f.uploadErr
+		return rejections, f.uploadErr
 	}
-	return nil, nil
+	return rejections, nil
 }
 
 func (f *fakeRemote) reset() {

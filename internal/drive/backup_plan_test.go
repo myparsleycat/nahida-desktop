@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -73,7 +74,10 @@ func TestUploadBackupFilesSendsRemovalsAndReportsRefusals(t *testing.T) {
 	if err == nil || errors.Is(err, ErrBackupPlanning) || !strings.Contains(err.Error(), "denied_file_type") {
 		t.Fatalf("UploadBackupFiles error = %v, want denied file failure", err)
 	}
-	if !slices.Equal(denied, []string{"1"}) {
+	if !slices.Equal(
+		denied,
+		[]BackupRejection{{ClientID: "1", Reason: "denied_file_type", Denied: true, Permanent: true}},
+	) {
 		t.Fatalf("denied = %v", denied)
 	}
 	if len(pages) != 3 || len(pages[0].Files) != 2 || len(pages[0].Deleted) != 0 ||
@@ -215,6 +219,171 @@ func TestUploadBackupFilesKeepsAnNteSetOnOnePageAndCompletesItsBundle(t *testing
 	}
 	if completed != 1 {
 		t.Fatalf("bundle completed %d times, want once", completed)
+	}
+}
+
+func TestUploadBackupFilesReportsRefusedUploads(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string) string {
+		full := filepath.Join(dir, name)
+		if err := os.WriteFile(full, []byte("content of "+name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return full
+	}
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v2/uploads/dup":
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			_, _ = io.WriteString(w, `{"code":"unsupported_file_type"}`)
+			return
+		case "/v2/uploads:pack":
+			_, _ = io.WriteString(w, `{"results":[`+
+				`{"intentId":"pack-ok","status":"completed"},`+
+				`{"intentId":"pack-refused","status":"failed","reason":"unsupported_file_type"},`+
+				`{"intentId":"pack-broken","status":"failed","reason":"storage_unavailable"}]}`)
+			return
+		}
+		var page struct {
+			Files []struct {
+				ClientID string `json:"clientId"`
+				Path     string `json:"path"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil {
+			t.Error(err)
+			return
+		}
+		items := make([]UploadPlanItem, 0, len(page.Files))
+		uploads := []UploadPlanEntry{}
+		for _, file := range page.Files {
+			switch file.Path {
+			case "tool.exe":
+				items = append(
+					items,
+					UploadPlanItem{ClientID: file.ClientID, Status: "denied", Reason: "denied_file_type"},
+				)
+				continue
+			case "big.ini":
+				items = append(
+					items,
+					UploadPlanItem{ClientID: file.ClientID, Status: "denied", Reason: "quota_exceeded"},
+				)
+				continue
+			}
+			// The two dup files share their content, so they share one intent.
+			intent := strings.TrimSuffix(file.Path, filepath.Ext(file.Path))
+			if strings.HasPrefix(intent, "dup") {
+				intent = "dup"
+				if slices.ContainsFunc(
+					uploads,
+					func(upload UploadPlanEntry) bool { return upload.IntentID == intent },
+				) {
+					items = append(items, UploadPlanItem{ClientID: file.ClientID, Status: "pending", IntentID: intent})
+					continue
+				}
+			}
+			items = append(items, UploadPlanItem{ClientID: file.ClientID, Status: "pending", IntentID: intent})
+			uploads = append(uploads, uploadPlanEntry(intent, server.URL+"/v2/uploads/"+intent, "token", file.Path))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "uploads": uploads})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	// A pack holds three files, so the first three uploads travel as one pack
+	// and the dup intent is sent directly.
+	rules := testUploadRules()
+	rules.Pack.MaxFiles = 3
+	drive.setUploadRules(rules)
+	files := []BackupUploadFile{
+		{ClientID: "0", RelPath: "tool.exe", FullPath: write("tool.exe")},
+		{ClientID: "1", RelPath: "pack-ok.ini", FullPath: write("pack-ok.ini")},
+		{ClientID: "2", RelPath: "pack-refused.ini", FullPath: write("pack-refused.ini")},
+		{ClientID: "3", RelPath: "pack-broken.ini", FullPath: write("pack-broken.ini")},
+		{ClientID: "4", RelPath: "dup.xyz", FullPath: write("dup.xyz")},
+		{ClientID: "5", RelPath: "dup-copy.ini", FullPath: write("dup-copy.ini")},
+		{ClientID: "6", RelPath: "big.ini", FullPath: write("big.ini")},
+	}
+	for index := range files {
+		info, err := os.Stat(files[index].FullPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[index].Size = info.Size()
+		files[index].SHA256 = files[index].RelPath
+	}
+	files[5].SHA256 = files[4].SHA256
+
+	rejections, err := drive.UploadBackupFiles(t.Context(), "snap", files, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "storage_unavailable") {
+		t.Fatalf("UploadBackupFiles error = %v, want the transient pack failure", err)
+	}
+	// The copy of the refused content under another extension is not
+	// refused, and a denial the server may lift is not permanent.
+	want := []BackupRejection{
+		{ClientID: "0", Reason: "denied_file_type", Denied: true, Permanent: true},
+		{ClientID: "2", Reason: "unsupported_file_type", Permanent: true},
+		{ClientID: "4", Reason: "unsupported_file_type", Permanent: true},
+		{ClientID: "6", Reason: "quota_exceeded", Denied: true},
+	}
+	slices.SortFunc(rejections, func(a, b BackupRejection) int { return strings.Compare(a.ClientID, b.ClientID) })
+	if !slices.Equal(rejections, want) {
+		t.Fatalf("rejections = %+v, want %+v", rejections, want)
+	}
+}
+
+func TestUploadBackupFilesKeepsRefusalsBesideALaterPlanFailure(t *testing.T) {
+	pages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		pages++
+		if pages == 2 {
+			http.Error(w, "planning failed", http.StatusBadRequest)
+			return
+		}
+		var page struct {
+			Files []struct {
+				ClientID string `json:"clientId"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&page); err != nil {
+			t.Error(err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []UploadPlanItem{
+				{ClientID: page.Files[0].ClientID, Status: "denied", Reason: "denied_file_type"},
+			},
+			"uploads": []any{},
+		})
+	}))
+	defer server.Close()
+	drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		BackendURL: server.URL,
+		HTTPClient: server.Client(),
+		Status:     infra.BackendOnline,
+	})})
+	rules := testUploadRules()
+	rules.MaxPlanFiles = 1
+	drive.setUploadRules(rules)
+
+	rejections, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
+		{ClientID: "0", RelPath: "tool.exe", SHA256: "a"},
+		{ClientID: "1", RelPath: "later.ini", SHA256: "b"},
+	}, nil, nil)
+	if !errors.Is(err, ErrBackupPlanning) {
+		t.Fatalf("error = %v, want backup planning failure", err)
+	}
+	if !slices.Equal(rejections, []BackupRejection{
+		{ClientID: "0", Reason: "denied_file_type", Denied: true, Permanent: true},
+	}) {
+		t.Fatalf("rejections = %+v, want the first page's denial", rejections)
 	}
 }
 

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -230,11 +232,12 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	if len(targets) == 0 {
 		return fail(ErrNoTargets, "targets")
 	}
-	filter, err := b.opts.Remote.BackupFilter(ctx)
+	rules, err := b.opts.Remote.BackupRules(ctx)
 	if err != nil {
 		return fail(err, "rules")
 	}
-	scan, err := scanTargets(ctx, targets, filter)
+	rulesVersion := rules.Version
+	scan, err := scanTargets(ctx, targets, rules.Filter)
 	if err != nil {
 		return fail(err, "scan")
 	}
@@ -257,7 +260,7 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	// A file that is locked or vanished since the scan keeps what the base
 	// snapshot has, so one open log does not cost the backup; many of them
 	// fail the run.
-	var held []committedKey
+	setAside := map[int]struct{}{}
 	if len(unreadable) > 0 {
 		unreadableErr := fmt.Errorf("%w: %d file(s)", ErrUnreadable, len(unreadable))
 		if len(unreadable) > tolerance {
@@ -267,15 +270,42 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 			"trigger": trigger,
 			"paths":   lo.Map(unreadable, func(index int, _ int) string { return scan.files[index].fullPath }),
 		})
-		gone := lo.Keyify(unreadable)
-		held = lo.Map(unreadable, func(index int, _ int) committedKey {
-			return committedKey{targetKey(targets[scan.files[index].target]), scan.files[index].relPath}
-		})
-		scan.files = lo.Reject(scan.files, func(_ scannedFile, index int) bool {
-			_, ok := gone[index]
-			return ok
-		})
+		for _, index := range unreadable {
+			setAside[index] = struct{}{}
+		}
 		scan.skipped["unreadable"] += int32(len(unreadable))
+	}
+
+	// Content the server refused for good under the current upload rules is
+	// not offered again; like an unreadable file, it keeps what the base
+	// snapshot has until the content or the rules change.
+	rejectedRows, err := client.BackupRejected.Current(ctx, rulesVersion)
+	if err != nil {
+		return fail(err, "rejected")
+	}
+	rejected := make(map[rejectedKey]string, len(rejectedRows))
+	for _, row := range rejectedRows {
+		rejected[rejectedKey{row.SHA256, row.Ext}] = row.Reason
+	}
+	for index, file := range scan.files {
+		if _, gone := setAside[index]; gone {
+			continue
+		}
+		if reason, ok := rejected[fileRejectedKey(file.sha256, file.relPath)]; ok {
+			setAside[index] = struct{}{}
+			scan.skipped[reason]++
+		}
+	}
+
+	var held []committedKey
+	if len(setAside) > 0 {
+		for index := range setAside {
+			held = append(held, committedKey{targetKey(targets[scan.files[index].target]), scan.files[index].relPath})
+		}
+		scan.files = lo.Reject(scan.files, func(_ scannedFile, index int) bool {
+			_, gone := setAside[index]
+			return gone
+		})
 		totalBytes = lo.SumBy(scan.files, func(file scannedFile) int64 { return file.size })
 	}
 
@@ -320,7 +350,8 @@ func (b *Backup) run(ctx context.Context, client *db.Client, trigger string) Run
 	}
 	changes := diffCommitted(targets, scan.files, committed, held)
 	snapshot, kept, commitErr := b.upload(
-		ctx, created.SnapshotID, created.TargetIDs, targets, scan, changes, trigger, tolerance, len(unreadable),
+		ctx, client, rulesVersion, created.SnapshotID, created.TargetIDs, targets, scan, changes, trigger, tolerance,
+		len(unreadable),
 	)
 	if commitErr != nil {
 		abortCtx, cancelAbort := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
@@ -518,6 +549,8 @@ func diffCommitted(
 // beyond that the run fails.
 func (b *Backup) upload(
 	ctx context.Context,
+	client *db.Client,
+	rulesVersion string,
 	snapshotID string,
 	targetIDs []string,
 	targets []Target,
@@ -554,7 +587,7 @@ func (b *Backup) upload(
 		b,
 		Status{State: StateUploading, Trigger: trigger, Total: len(files), TotalBytes: totalBytes},
 	)
-	denied, uploadErr := b.opts.Remote.UploadBackupFiles(ctx, snapshotID, files, deleted, func(bytes int64) {
+	rejections, uploadErr := b.opts.Remote.UploadBackupFiles(ctx, snapshotID, files, deleted, func(bytes int64) {
 		sentMu.Lock()
 		sent += bytes
 		current := sent
@@ -562,6 +595,10 @@ func (b *Backup) upload(
 		throttle.update(func(status *Status) { status.Bytes = current })
 	})
 	throttle.flush()
+
+	// The refusals are remembered before the commit and beside an upload
+	// error, so a run that fails still does not offer the same content again.
+	b.rememberRejections(ctx, client, rulesVersion, snapshotID, files, rejections)
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, nil, err
 	}
@@ -571,7 +608,9 @@ func (b *Backup) upload(
 	if errors.Is(uploadErr, drive.ErrBackupSourceRead) {
 		return Snapshot{}, nil, uploadErr
 	}
-	dropped := lo.Keyify(denied)
+	dropped := lo.Keyify(lo.FilterMap(rejections, func(rejection drive.BackupRejection, _ int) (string, bool) {
+		return rejection.ClientID, rejection.Denied
+	}))
 	keep := func() []int {
 		return lo.FilterMap(files, func(file drive.BackupUploadFile, _ int) (int, bool) {
 			index, _ := strconv.Atoi(file.ClientID)
@@ -632,6 +671,52 @@ func (b *Backup) upload(
 			return map[string]string{"targetId": file.TargetID, "path": file.RelPath, "reason": "upload_failed"}
 		})
 	}
+}
+
+// rejectedKey names refused content by its hash and file extension, since the
+// server judges a file by both.
+type rejectedKey struct{ sha256, ext string }
+
+func fileRejectedKey(sha256, relPath string) rejectedKey {
+	return rejectedKey{sha256, strings.ToLower(path.Ext(relPath))}
+}
+
+// rememberRejections records the content the server refused for good; other
+// refusals are offered again next run. A failure to record costs only a retry
+// next run, so it is logged, not raised.
+func (b *Backup) rememberRejections(
+	ctx context.Context,
+	client *db.Client,
+	rulesVersion, snapshotID string,
+	files []drive.BackupUploadFile,
+	rejections []drive.BackupRejection,
+) {
+	rejections = lo.Filter(rejections, func(rejection drive.BackupRejection, _ int) bool {
+		return rejection.Permanent
+	})
+	if len(rejections) == 0 {
+		return
+	}
+	byClientID := lo.KeyBy(files, func(file drive.BackupUploadFile) string { return file.ClientID })
+	rows := lo.FilterMap(rejections, func(rejection drive.BackupRejection, _ int) (db.BackupRejectedRow, bool) {
+		file, ok := byClientID[rejection.ClientID]
+		if !ok || file.SHA256 == "" || rejection.Reason == "" {
+			return db.BackupRejectedRow{}, false
+		}
+		key := fileRejectedKey(file.SHA256, file.RelPath)
+		return db.BackupRejectedRow{
+			SHA256: key.sha256, Ext: key.ext, Reason: rejection.Reason, RulesVersion: rulesVersion,
+		}, true
+	})
+	err := client.BackupRejected.UpsertMany(context.WithoutCancel(ctx), rows)
+	b.report(err, "run", "record-rejected", map[string]any{
+		"snapshotId":   snapshotID,
+		"rulesVersion": rulesVersion,
+		"paths": lo.FilterMap(rejections, func(rejection drive.BackupRejection, _ int) (string, bool) {
+			file, ok := byClientID[rejection.ClientID]
+			return file.FullPath, ok
+		}),
+	})
 }
 
 // missingTolerance is how many of total files a run may leave out.

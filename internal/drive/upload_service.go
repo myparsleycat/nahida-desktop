@@ -344,7 +344,7 @@ func (d *Drive) runUpload(
 			return d.failUploadTransfer(transfers, pid, stage, planErr)
 		}
 		_ = transfers.Update(pid, transfer.Updates{ClearPlanPhase: true, ClearPlanProgress: true})
-		executeErr := d.executeUploadPlanV2(
+		_, executeErr := d.executeUploadPlanV2(
 			ctx,
 			incomplete,
 			plan,

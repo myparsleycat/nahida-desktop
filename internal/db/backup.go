@@ -155,6 +155,54 @@ DELETE FROM "backup_committed" WHERE "target_key" = ? AND "rel_path" = ?`, row.T
 	})
 }
 
+// BackupRejectedStore remembers the contents the server refused for good, by
+// hash and file extension, under the upload rules version it refused them
+// with. A run does not offer them again until the content or the rules change.
+type BackupRejectedStore struct{ c *Client }
+
+// Current forgets the refusals made under other rules versions and answers the
+// ones made under rulesVersion.
+func (s BackupRejectedStore) Current(ctx context.Context, rulesVersion string) ([]BackupRejectedRow, error) {
+	if err := s.c.exec(ctx, `DELETE FROM "backup_rejected" WHERE "rules_version" <> ?`, rulesVersion); err != nil {
+		return nil, err
+	}
+	rows, err := s.c.query(ctx, `
+SELECT "sha256", "ext", "reason", "rules_version" FROM "backup_rejected" WHERE "rules_version" = ?`, rulesVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := []BackupRejectedRow{}
+	for rows.Next() {
+		var row BackupRejectedRow
+		if err := rows.Scan(&row.SHA256, &row.Ext, &row.Reason, &row.RulesVersion); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (s BackupRejectedStore) UpsertMany(ctx context.Context, rows []BackupRejectedRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return s.c.withImmediate(ctx, func(tx queryExec) error {
+		for _, row := range rows {
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO "backup_rejected" ("sha256", "ext", "reason", "rules_version")
+VALUES (?, ?, ?, ?)
+ON CONFLICT("sha256", "ext") DO UPDATE
+SET "reason" = excluded."reason", "rules_version" = excluded."rules_version"`,
+				row.SHA256, row.Ext, row.Reason, row.RulesVersion); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func upsertBackupCommitted(ctx context.Context, tx queryExec, rows []BackupCommittedRow) error {
 	for _, row := range rows {
 		if _, err := tx.ExecContext(ctx, `

@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+// packMemberError is the failure of one member of a pack, naming the files that
+// member stands for.
+type packMemberError struct {
+	files []FinalUploadFile
+	err   error
+}
+
+func (e *packMemberError) Error() string {
+	return e.files[0].Name + ": " + e.err.Error()
+}
+
+func (e *packMemberError) Unwrap() error {
+	return e.err
+}
+
+func newPackMemberError(member preparedUpload, err error) error {
+	return &packMemberError{files: append([]FinalUploadFile{member.source}, member.copies...), err: err}
+}
+
 type intentPackResult struct {
 	IntentID string `json:"intentId"`
 	Status   string `json:"status"`
@@ -120,7 +139,7 @@ func (d *Drive) uploadPack(
 						onProgress(-credited)
 					}
 					if waitErr != nil {
-						failures = append(failures, fmt.Errorf("%s: %w", member.source.Name, waitErr))
+						failures = append(failures, newPackMemberError(member, waitErr))
 						continue
 					}
 					if err := d.uploadPreparedDirect(
@@ -135,7 +154,7 @@ func (d *Drive) uploadPack(
 							}
 						},
 					); err != nil {
-						failures = append(failures, fmt.Errorf("%s: %w", member.source.Name, err))
+						failures = append(failures, newPackMemberError(member, err))
 						continue
 					}
 					if onReady != nil {
@@ -153,7 +172,7 @@ func (d *Drive) uploadPack(
 						reason = packResult.Status
 					}
 				}
-				failures = append(failures, fmt.Errorf("%s: %s", member.source.Name, reason))
+				failures = append(failures, newPackMemberError(member, &UploadV2Error{Code: reason, Message: reason}))
 			}
 			return errors.Join(failures...)
 		}

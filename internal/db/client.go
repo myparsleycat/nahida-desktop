@@ -17,6 +17,7 @@ type Client struct {
 	BackupCustomPaths       BackupCustomPathsStore
 	BackupFileCache         BackupFileCacheStore
 	BackupCommitted         BackupCommittedStore
+	BackupRejected          BackupRejectedStore
 	ModPresets              ModPresetsStore
 	ModPresetItems          ModPresetItemsStore
 	ImageCache              ImageCacheStore
@@ -49,6 +50,7 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.BackupCustomPaths = BackupCustomPathsStore{c: c}
 	c.BackupFileCache = BackupFileCacheStore{c: c}
 	c.BackupCommitted = BackupCommittedStore{c: c}
+	c.BackupRejected = BackupRejectedStore{c: c}
 	c.ModPresets = ModPresetsStore{c: c}
 	c.ModPresetItems = ModPresetItemsStore{c: c}
 	c.ImageCache = ImageCacheStore{c: c}
