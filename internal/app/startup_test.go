@@ -138,6 +138,28 @@ func TestStartupMiddlewareProtectsFileServices(t *testing.T) {
 	if err := rt.configureStartupBindings(); err != nil {
 		t.Fatal(err)
 	}
+	for _, registration := range rt.serviceRegistrations() {
+		if registration.waitForMaintenance == nil {
+			continue
+		}
+		instanceType := reflect.TypeOf(registration.service.Instance())
+		for index := range instanceType.NumMethod() {
+			methodName := instanceType.Method(index).Name
+			options := application.CallOptions{MethodName: instanceType.Elem().PkgPath() + "." +
+				instanceType.Elem().Name() + "." + methodName}
+			binding := rt.startup.bindings.Get(&options)
+			if binding == nil {
+				continue
+			}
+			want := registration.waitForMaintenance(methodName)
+			if got := rt.startup.needsWait(options); got != want {
+				t.Errorf("%s gate = %v, want %v", options.MethodName, got, want)
+			}
+			if got := rt.startup.needsWait(application.CallOptions{MethodID: binding.ID}); got != want {
+				t.Errorf("numeric ID for %s gate = %v, want %v", options.MethodName, got, want)
+			}
+		}
+	}
 	for _, tc := range []struct {
 		method string
 		wait   bool
@@ -509,19 +531,30 @@ func TestStartupMiddlewareDoesNotForwardUninspectableSubmissions(t *testing.T) {
 	}
 }
 
-func TestFileMutatingServicesAreBound(t *testing.T) {
+func TestServiceRegistrationsMatchBoundServices(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime()
-	bound := map[reflect.Type]bool{}
-	for _, service := range rt.services() {
-		bound[reflect.TypeOf(service.Instance())] = true
+	registrations, services := rt.serviceRegistrations(), rt.services()
+	if len(registrations) != len(services) {
+		t.Fatalf("registrations = %d, bound services = %d", len(registrations), len(services))
 	}
-	if len(rt.fileMutatingServices()) == 0 {
-		t.Fatal("file-mutating services are empty")
-	}
-	for _, service := range rt.fileMutatingServices() {
-		if !bound[reflect.TypeOf(service.Instance())] {
-			t.Errorf("file-mutating %T is not registered in services()", service.Instance())
+	seen := map[reflect.Type]bool{}
+	maintenanceGates := 0
+	for index, registration := range registrations {
+		instance := registration.service.Instance()
+		instanceType := reflect.TypeOf(instance)
+		if seen[instanceType] {
+			t.Errorf("duplicate service type %s", instanceType)
 		}
+		seen[instanceType] = true
+		if services[index].Instance() != instance {
+			t.Errorf("registration %d has a different bound instance", index)
+		}
+		if registration.waitForMaintenance != nil {
+			maintenanceGates++
+		}
+	}
+	if maintenanceGates != 10 {
+		t.Errorf("maintenance gates = %d, want 10", maintenanceGates)
 	}
 }

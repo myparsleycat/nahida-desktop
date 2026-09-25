@@ -125,20 +125,15 @@ func (rt *runtime) configureStartupBindings() error {
 	s.bindings = application.NewBindings(nil, nil)
 	s.gatedIDs = make(map[uint32]struct{})
 	s.gatedNames = make(map[string]struct{})
-	for _, service := range rt.fileMutatingServices() {
-		if err := s.bindings.Add(service); err != nil {
+	for _, registration := range rt.serviceRegistrations() {
+		if registration.waitForMaintenance == nil {
+			continue
+		}
+		if err := s.bindings.Add(registration.service); err != nil {
 			return err
 		}
-		s.gateMethods(service.Instance(), nil)
+		s.gateMethods(registration.service.Instance(), registration.waitForMaintenance)
 	}
-	if err := s.bindings.Add(application.NewService(rt.setting)); err != nil {
-		return err
-	}
-	if err := s.bindings.Add(application.NewService(rt.shell)); err != nil {
-		return err
-	}
-	s.gateMethods(rt.setting, isSettingWrite)
-	s.gateMethods(rt.shell, func(name string) bool { return name == "Trash" })
 	return nil
 }
 

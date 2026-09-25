@@ -16,6 +16,9 @@ import (
 
 func Run(assets embed.FS, icon []byte) (runErr error) {
 	rt := newRuntime()
+	defer func() {
+		runErr = errors.Join(runErr, rt.Close())
+	}()
 	launches := &launchDispatcher{}
 	app := newLockedApplication(application.Options{
 		Name:        "nahida-desktop",
@@ -43,7 +46,6 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		// runInBackground is off.
 		Windows: windowsApplicationOptions(),
 	})
-	defer rt.startup.stop()
 	if err := rt.configureStartupBindings(); err != nil {
 		return err
 	}
@@ -66,9 +68,6 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	rt.logStartupMilestone("essential-ready")
-	defer func() {
-		runErr = errors.Join(runErr, rt.Close())
-	}()
 
 	if err := platform.SetAppUserModelID("com.nahida"); err != nil && rt.log != nil {
 		_ = infra.ReportError(
