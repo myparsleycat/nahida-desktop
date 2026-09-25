@@ -110,6 +110,9 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := newRuntime()
+	rt.http.UseTransport(startupTestTransport(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network disabled during startup test")
+	}))
 	t.Cleanup(func() { _ = rt.Close() })
 	if err := rt.Init(context.Background(), path, nil); err != nil {
 		t.Fatal(err)
@@ -117,17 +120,25 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 	if _, err := os.Stat(disabled); err != nil {
 		t.Fatal("Init ran recovery before the application could create a window")
 	}
-	rt.startup.start(func(ctx context.Context) {
-		if err := rt.tools.RecoverBisects(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	if err := rt.startup.wait(context.Background()); err != nil {
+	if _, err := os.Stat(original); !os.IsNotExist(err) {
+		t.Fatalf("original exists before startup recovery: %v", err)
+	}
+	rt.startup.start(rt.runStartupWork)
+	if err := rt.startup.wait(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if content, err := os.ReadFile(original); err != nil || string(content) != "restore" {
 		t.Fatalf("deferred recovery = %q, %v", content, err)
 	}
+	if _, err := os.Stat(disabled); !os.IsNotExist(err) {
+		t.Fatalf("disabled file remains after recovery: %v", err)
+	}
+}
+
+type startupTestTransport func(*http.Request) (*http.Response, error)
+
+func (f startupTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func TestStartupMiddlewareProtectsFileServices(t *testing.T) {
@@ -363,6 +374,94 @@ func TestStartupMiddlewareRejectsWhenBodyBudgetExhausted(t *testing.T) {
 	)))
 	if calls != 1 {
 		t.Fatal("request stayed blocked after startup body budget was released")
+	}
+}
+
+type startupSpaceReader struct{ remaining int64 }
+
+func (r *startupSpaceReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	n := int(min(int64(len(p)), r.remaining))
+	for i := range p[:n] {
+		p[i] = ' '
+	}
+	r.remaining -= int64(n)
+	return n, nil
+}
+
+func TestStartupMiddlewareBodySizeBoundaries(t *testing.T) {
+	t.Parallel()
+	s := newStartupWork()
+	t.Cleanup(s.stop)
+	var calls int
+	var forwarded int64
+	handler := s.middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		calls++
+		var err error
+		forwarded, err = io.Copy(io.Discard, request.Body)
+		if err != nil {
+			t.Error(err)
+		}
+	}))
+	const envelope = `{"object":6,"method":0,"args":{}}`
+	request := func(size int64, unknownLength bool) *http.Request {
+		body := io.MultiReader(strings.NewReader(envelope), &startupSpaceReader{remaining: size - int64(len(envelope))})
+		r := httptest.NewRequest(http.MethodPost, "/wails/runtime", body)
+		r.ContentLength = size
+		if unknownLength {
+			r.ContentLength = -1
+		}
+		return r
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request(int64(len(envelope)), true))
+	if response.Code != http.StatusOK || calls != 1 || forwarded != int64(len(envelope)) {
+		t.Fatalf("unknown length = status %d, calls %d, forwarded %d", response.Code, calls, forwarded)
+	}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request(maxRuntimeBodyBytes, false))
+	if response.Code != http.StatusOK || calls != 2 || forwarded != maxRuntimeBodyBytes {
+		t.Fatalf("maximum length = status %d, calls %d, forwarded %d", response.Code, calls, forwarded)
+	}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request(maxRuntimeBodyBytes+1, false))
+	if response.Code != http.StatusRequestEntityTooLarge || calls != 2 {
+		t.Fatalf("oversized body = status %d, calls %d", response.Code, calls)
+	}
+}
+
+func TestStartupMiddlewareRejectsDuplicateCallIDInOneWindow(t *testing.T) {
+	application.New(application.Options{Name: "startup-duplicate-call-test"})
+	rt := newRuntime()
+	t.Cleanup(rt.startup.stop)
+	if err := rt.configureStartupBindings(); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	handler := rt.startup.middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	request := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/wails/runtime", strings.NewReader(
+			`{"object":0,"method":0,"args":{"methodName":"nahida.live/desktop/internal/mod.Mod.Toggle","call-id":"duplicate","args":["mod"]}}`,
+		))
+		r.Header.Set("x-wails-window-id", "7")
+		return r
+	}
+	first := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { handler.ServeHTTP(first, request()); close(done) }()
+	waitStartupPending(t, rt.startup, "7", "duplicate")
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, request())
+	if second.Code != http.StatusUnprocessableEntity || calls.Load() != 0 {
+		t.Fatalf("duplicate = status %d, calls %d", second.Code, calls.Load())
+	}
+	rt.startup.start(func(context.Context) {})
+	waitClosed(t, done, nil, "first request did not leave startup gate")
+	if first.Code != http.StatusOK || calls.Load() != 1 {
+		t.Fatalf("original = status %d, calls %d", first.Code, calls.Load())
 	}
 }
 

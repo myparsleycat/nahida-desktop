@@ -23,6 +23,13 @@ func TestShaderFixesUsesOwnerIndexWithoutScanningWhenDisabling(t *testing.T) {
 	if h.service.ownerIndexWrites != 2 {
 		t.Fatalf("owner index writes = %d, want 2", h.service.ownerIndexWrites)
 	}
+	for _, file := range []string{"a.ini", filepath.Join("nested", "b.ini"), filepath.Join("nested", "c.ini")} {
+		target := filepath.Join(h.importerPath, "ShaderFixes", file)
+		content, err := os.ReadFile(target)
+		if err != nil || string(content) != filepath.Base(file) {
+			t.Fatalf("copied shader %q = %q, %v", file, content, err)
+		}
+	}
 	if err := os.RemoveAll(filepath.Join(modPath, "ShaderFixes")); err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +41,10 @@ func TestShaderFixesUsesOwnerIndexWithoutScanningWhenDisabling(t *testing.T) {
 	if len(h.service.globCalls) != 0 {
 		t.Fatalf("glob calls = %#v, want none", h.service.globCalls)
 	}
-	if exists(filepath.Join(h.importerPath, "ShaderFixes", "a.ini")) {
-		t.Fatal("copied shader should be removed")
+	for _, file := range []string{"a.ini", filepath.Join("nested", "b.ini"), filepath.Join("nested", "c.ini")} {
+		if exists(filepath.Join(h.importerPath, "ShaderFixes", file)) {
+			t.Fatalf("copied shader %q should be removed", file)
+		}
 	}
 	if exists(filepath.Join(modPath, shaderFixesModMarkerFile)) {
 		t.Fatal("mod marker should be removed")

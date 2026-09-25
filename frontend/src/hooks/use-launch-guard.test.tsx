@@ -83,3 +83,23 @@ it("surfaces a failed launch instead of reopening the dialog after clearing", as
   expect(xxmi.StartGame).toHaveBeenCalledTimes(2);
   expect(toastError).toHaveBeenCalledTimes(1);
 });
+
+it("does not launch after the dialog closes while blockers are being cleared", async () => {
+  const clearing = Promise.withResolvers<void>();
+  xxmi.StartGame.mockRejectedValueOnce(new Error("GIMI_DCR_ENABLED"));
+  xxmi.ClearLaunchBlockers.mockReturnValue(clearing.promise);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByRole("alertdialog");
+  fireEvent.click(screen.getByRole("button", { name: "page.mod.dialog.gimi-dcr.confirm" }));
+  await waitFor(() => expect(xxmi.ClearLaunchBlockers).toHaveBeenCalledWith("GIMI"));
+
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  await act(async () => {
+    clearing.resolve();
+    await clearing.promise;
+  });
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
+});
