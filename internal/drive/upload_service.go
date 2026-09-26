@@ -191,7 +191,7 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 	if err := d.transfer.RegisterRunner(
 		preparation.PID,
 		func(runCtx context.Context, transfers *transfer.Transfer, pid string) error {
-			return d.runUpload(runCtx, transfers, pid, restart, &state)
+			return d.runUpload(runCtx, transfers, pid, restart, rules, &state)
 		},
 	); err != nil {
 		_ = d.transfer.Cancel(preparation.PID)
@@ -210,6 +210,7 @@ func (d *Drive) runUpload(
 	transfers *transfer.Transfer,
 	pid string,
 	restart *uploadRestartData,
+	rules UploadRules,
 	state *uploadRunnerState,
 ) (returnErr error) {
 	preparation := restart.Preparation
@@ -329,6 +330,7 @@ func (d *Drive) runUpload(
 			restart.Params.DestID,
 			restart.RequestID,
 			incomplete,
+			rules,
 			func(progress UploadPlanProgress) {
 				if progress.Phase != "" {
 					stage = "plan/" + string(progress.Phase)
@@ -348,6 +350,7 @@ func (d *Drive) runUpload(
 			ctx,
 			incomplete,
 			plan,
+			rules,
 			d.uploadConcurrency(ctx),
 			func(progress UploadExecutionProgress) {
 				state.mu.Lock()

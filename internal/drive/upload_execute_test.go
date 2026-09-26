@@ -127,7 +127,7 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	completed := make([]string, 0, 2)
 	_, err := uploadTestDrive(
 		server,
-	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	).executeUploadPlanV2(context.Background(), files, plan, testUploadRules(), 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed = append(completed, progress.FileID)
@@ -171,8 +171,7 @@ func TestExecuteUploadPlanUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
 	drive := uploadTestDrive(server)
 	rules := testUploadRules()
 	rules.MaxUploadBodyBytes = 32
-	drive.setUploadRules(rules)
-	if _, err := drive.executeUploadPlanV2(context.Background(), files, plan, 8, nil); err != nil {
+	if _, err := drive.executeUploadPlanV2(context.Background(), files, plan, rules, 8, nil); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 1 {
@@ -212,7 +211,7 @@ func TestExecuteUploadPlanCompletesNTEBundleAtomically(t *testing.T) {
 	completed := make([]string, 0, 3)
 	if _, err := uploadTestDrive(
 		server,
-	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	).executeUploadPlanV2(context.Background(), files, plan, testUploadRules(), 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed = append(completed, progress.FileID)
@@ -258,7 +257,7 @@ func TestExecuteUploadPlanAbortsAndRollsBackFailedNTEBundle(t *testing.T) {
 	completed := 0
 	_, err := uploadTestDrive(
 		server,
-	).executeUploadPlanV2(context.Background(), files, plan, 8, func(progress UploadExecutionProgress) {
+	).executeUploadPlanV2(context.Background(), files, plan, testUploadRules(), 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
 		if progress.FileID != "" {
 			completed++
@@ -289,7 +288,7 @@ func TestExecuteUploadPlanPreservesRejectionsWhenDispatchIsCanceled(t *testing.T
 
 	refused, err := uploadTestDrive(
 		server,
-	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+	).executeUploadPlanV2(ctx, files, plan, testUploadRules(), 1, func(progress UploadExecutionProgress) {
 		if progress.FileID == "ready" {
 			cancel()
 		}
@@ -329,7 +328,7 @@ func TestExecuteUploadPlanPreservesRejectionsWhenFinalizationIsCanceled(t *testi
 
 	refused, err := uploadTestDrive(
 		server,
-	).executeUploadPlanV2(ctx, files, plan, 1, func(progress UploadExecutionProgress) {
+	).executeUploadPlanV2(ctx, files, plan, testUploadRules(), 1, func(progress UploadExecutionProgress) {
 		if progress.FileID == "ready" {
 			cancel()
 		}

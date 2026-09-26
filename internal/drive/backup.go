@@ -94,11 +94,11 @@ type BackupRules struct {
 }
 
 // BackupRules asks the server for its upload rules afresh, so a run sees rules
-// that changed while the app was open, and refreshes the ones uploads use.
+// that changed while the app was open.
 //
 //wails:ignore
 func (d *Drive) BackupRules(ctx context.Context) (BackupRules, error) {
-	rules, decoded, err := d.fetchUploadRules(ctx)
+	rules, decoded, err := d.rulesFetcher()(ctx)
 	if err != nil {
 		return BackupRules{}, err
 	}
@@ -289,6 +289,7 @@ func (d *Drive) UploadBackupFiles(
 			ctx,
 			page,
 			plan,
+			rules,
 			d.uploadConcurrency(ctx),
 			func(progress UploadExecutionProgress) {
 				if onProgress != nil && progress.Bytes != 0 {

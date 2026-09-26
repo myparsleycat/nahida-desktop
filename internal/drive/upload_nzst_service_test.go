@@ -172,7 +172,7 @@ func TestUploadNZSTServiceTransportsAndRestartCleanup(t *testing.T) {
 			if mode == "parts" {
 				rules.MaxUploadBodyBytes = 32
 			}
-			drive.setUploadRules(rules)
+			withUploadRules(drive, rules)
 			conflicts, err := drive.GetUploadConflicts(
 				t.Context(),
 				GetUploadConflictsParams{DestID: "dest", Paths: paths},
@@ -275,7 +275,7 @@ func TestUploadNZSTRestoreFailureCleansUpBeforeRemoteMutation(t *testing.T) {
 	transfers := transfer.New()
 	drive := uploadServiceTestDrive(server, transfers)
 	drive.UseLog(infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true}))
-	drive.setUploadRules(testUploadRules())
+	withUploadRules(drive, testUploadRules())
 	result, err := drive.StartUpload(t.Context(), StartUploadParams{DestID: "dest", Paths: []string{root}})
 	if err != nil {
 		t.Fatal(err)
@@ -387,14 +387,13 @@ func TestUploadNZSTResumeSkipsDeletedCompletedSources(t *testing.T) {
 				}))
 				defer server.Close()
 				drive := uploadServiceTestDrive(server, transfers)
-				drive.setUploadRules(testUploadRules())
 				state := &uploadRunnerState{
 					hashes: map[string]string{prep.Files[0].FID: "cached-done", prep.Files[1].FID: "cached-pending"},
 				}
 				if err := transfers.RegisterRunner(
 					prep.PID,
 					func(ctx context.Context, transfers *transfer.Transfer, pid string) error {
-						return drive.runUpload(ctx, transfers, pid, restart, state)
+						return drive.runUpload(ctx, transfers, pid, restart, testUploadRules(), state)
 					},
 				); err != nil {
 					t.Fatal(err)

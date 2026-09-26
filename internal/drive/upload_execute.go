@@ -60,13 +60,14 @@ func (d *Drive) executeUploadPlanV2(
 	ctx context.Context,
 	files []FinalUploadFile,
 	plan UploadPlan,
+	rules UploadRules,
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
 ) (map[string]string, error) {
 	if d == nil || d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
-	run, err := d.newUploadRun(ctx, files, plan, concurrency, onProgress)
+	run, err := d.newUploadRun(ctx, files, plan, rules, concurrency, onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -88,14 +89,10 @@ func (d *Drive) newUploadRun(
 	ctx context.Context,
 	files []FinalUploadFile,
 	plan UploadPlan,
+	rules UploadRules,
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
 ) (*uploadRun, error) {
-	rules, err := d.UploadRules(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	filesByID := make(map[string]FinalUploadFile, len(files))
 	for _, file := range files {
 		filesByID[file.FID] = file

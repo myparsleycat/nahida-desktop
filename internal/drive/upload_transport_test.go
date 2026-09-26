@@ -33,8 +33,7 @@ func uploadTestDrive(server *httptest.Server) *Drive {
 		}),
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
-	drive.setUploadRules(testUploadRules())
-	return drive
+	return withUploadRules(drive, testUploadRules())
 }
 
 func TestUploadSourceFailuresAreMarked(t *testing.T) {
@@ -314,7 +313,7 @@ func TestUploadIntentRetriesTransportError(t *testing.T) {
 		HTTP:  infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: client, Status: infra.BackendOnline}),
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
-	drive.setUploadRules(testUploadRules())
+	withUploadRules(drive, testUploadRules())
 	path := filepath.Join(t.TempDir(), "file.ini")
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatal(err)
@@ -357,7 +356,7 @@ func TestUploadIntentUsesPartsWhenDirectBodyExceedsLimit(t *testing.T) {
 	drive := uploadTestDrive(server)
 	rules := testUploadRules()
 	rules.MaxUploadBodyBytes = 32
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 	upload := UploadPlanEntry{URL: server.URL}
 	upload.Form.Token = "token"
 	if err := drive.uploadIntent(context.Background(), upload, FinalUploadFile{
@@ -402,7 +401,7 @@ func TestUploadPartsPollsAcceptedCompletionWithoutResendingParts(t *testing.T) {
 	drive := uploadTestDrive(server)
 	rules := testUploadRules()
 	rules.MaxUploadBodyBytes = 32
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 	upload := UploadPlanEntry{URL: server.URL + "/v2/uploads/intent"}
 	upload.Form.Token = "token"
 	if err := drive.uploadIntent(context.Background(), upload, FinalUploadFile{

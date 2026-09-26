@@ -61,7 +61,7 @@ func TestUploadBackupFilesSendsRemovalsAndReportsRefusals(t *testing.T) {
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 2
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 
 	denied, err := drive.UploadBackupFiles(context.Background(), "snap", []BackupUploadFile{
 		{ClientID: "0", TargetID: "t", RelPath: "a.ini", SHA256: "a"},
@@ -115,7 +115,7 @@ func TestUploadBackupFilesReturnsNoErrorForSuccessfulPlan(t *testing.T) {
 		HTTPClient: server.Client(),
 		Status:     infra.BackendOnline,
 	})})
-	drive.setUploadRules(testUploadRules())
+	withUploadRules(drive, testUploadRules())
 
 	denied, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
 		{ClientID: "0", TargetID: "t", RelPath: "a.ini", SHA256: "a"},
@@ -198,7 +198,7 @@ func TestUploadBackupFilesKeepsAnNteSetOnOnePageAndCompletesItsBundle(t *testing
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 2
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 
 	denied, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
 		{ClientID: "0", TargetID: "t", RelPath: "a.ini", SHA256: "a"},
@@ -301,7 +301,7 @@ func TestUploadBackupFilesReportsRefusedUploads(t *testing.T) {
 	// and the dup intent is sent directly.
 	rules := testUploadRules()
 	rules.Pack.MaxFiles = 3
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 	files := []BackupUploadFile{
 		{ClientID: "0", RelPath: "tool.exe", FullPath: write("tool.exe")},
 		{ClientID: "1", RelPath: "pack-ok.ini", FullPath: write("pack-ok.ini")},
@@ -371,7 +371,7 @@ func TestUploadBackupFilesKeepsRefusalsBesideALaterPlanFailure(t *testing.T) {
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 1
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 
 	rejections, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
 		{ClientID: "0", RelPath: "tool.exe", SHA256: "a"},
@@ -416,7 +416,7 @@ func TestUploadBackupFilesStopsAfterRemovalPageFailure(t *testing.T) {
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 1
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 
 	_, err := drive.UploadBackupFiles(t.Context(), "snap", nil, []BackupDeletedFile{
 		{TargetID: "t", RelPath: "x.ini"},
@@ -457,7 +457,7 @@ func TestUploadBackupFilesStopsAfterSourceReadFailure(t *testing.T) {
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 1
-	drive.setUploadRules(rules)
+	withUploadRules(drive, rules)
 
 	_, err := drive.UploadBackupFiles(t.Context(), "snap", []BackupUploadFile{
 		{ClientID: "0", RelPath: "gone.ini", FullPath: filepath.Join(t.TempDir(), "gone.ini")},
