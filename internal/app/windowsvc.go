@@ -521,15 +521,16 @@ func (w *Window) WaitReady(ctx context.Context) (bool, error) {
 	}
 }
 
-// NotifyUpdateReady focuses or recreates the main window and emits the ready
-// event only to that window, matching Electron's BrowserWindow.webContents.send.
+// NotifyUpdateReady emits the ready event to the main window without stealing
+// focus, matching Electron's BrowserWindow.webContents.send. When the window is
+// hidden or not yet created the renderer picks the pending prompt up from
+// GetStatus on the next window:focus.
 //
 //wails:ignore
 func (w *Window) NotifyUpdateReady() {
 	if w == nil {
 		return
 	}
-	w.Focus()
 	w.mu.Lock()
 	window := w.window
 	w.mu.Unlock()

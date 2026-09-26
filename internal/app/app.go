@@ -173,7 +173,6 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		Emit: func(name string, data ...any) {
 			app.Event.Emit(name, data...)
 		},
-		Focus:   rt.window.Focus,
 		Ready:   rt.window.NotifyUpdateReady,
 		Version: platform.AppVersion,
 	}); err != nil {

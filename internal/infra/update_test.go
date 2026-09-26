@@ -428,11 +428,10 @@ func TestDismissUpdateDialogBeforeDownloadIsNoOp(t *testing.T) {
 func TestNotifyReadyUsesWindowScopedCallback(t *testing.T) {
 	t.Parallel()
 
-	readyCalls, focusCalls := 0, 0
+	readyCalls := 0
 	var events []string
 	u := &Updater{
 		ready: func() { readyCalls++ },
-		focus: func() { focusCalls++ },
 		emit: func(name string, _ ...any) {
 			events = append(events, name)
 		},
@@ -441,8 +440,8 @@ func TestNotifyReadyUsesWindowScopedCallback(t *testing.T) {
 	if readyCalls != 1 {
 		t.Fatalf("ready calls = %d, want 1", readyCalls)
 	}
-	if focusCalls != 0 || len(events) != 0 {
-		t.Fatalf("fallback focus/events = %d/%v, want none", focusCalls, events)
+	if len(events) != 0 {
+		t.Fatalf("events = %v, want none", events)
 	}
 }
 

@@ -48,7 +48,6 @@ type UpdaterOptions struct {
 	HTTP     *Client
 	Log      *Log
 	Emit     func(name string, data ...any)
-	Focus    func()
 	Ready    func()
 	Version  string
 	Provider wailsupdater.Provider
@@ -81,7 +80,6 @@ type Updater struct {
 	log      *Log
 	rate     *GitHubRateCoordinator
 	emit     func(string, ...any)
-	focus    func()
 	ready    func()
 
 	available         bool
@@ -173,7 +171,7 @@ func (u *Updater) Configure(opts UpdaterOptions) error {
 		u.cancel()
 	}
 	u.engine, u.settings, u.http, u.log = opts.Engine, opts.Settings, opts.HTTP, opts.Log
-	u.emit, u.focus, u.ready, u.interval = opts.Emit, opts.Focus, opts.Ready, interval
+	u.emit, u.ready, u.interval = opts.Emit, opts.Ready, interval
 	u.ctx, u.cancel = ctx, cancel
 	u.mu.Unlock()
 	u.loopWG.Add(1)
@@ -659,14 +657,11 @@ func (u *Updater) broadcastStatus(ctx context.Context) {
 // notifiedVersion under u.mu before calling it.
 func (u *Updater) notifyReady() {
 	u.mu.Lock()
-	ready, focus := u.ready, u.focus
+	ready := u.ready
 	u.mu.Unlock()
 	if ready != nil {
 		ready()
 		return
-	}
-	if focus != nil {
-		focus()
 	}
 	u.broadcast("updater:update-downloaded")
 }
