@@ -48,6 +48,9 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 	if err := rt.startup.wait(ctx); err != nil {
 		return "", err
 	}
+	if download.Mod != nil && download.Mod.Token == "" && download.Mod.Sig == "" {
+		return "", errors.New("mod download requires a token or signature")
+	}
 	// Shared links and mods carry their own credentials; only the user's own
 	// drive needs a session.
 	if download.Link == nil && download.Mod == nil {
