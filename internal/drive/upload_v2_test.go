@@ -79,13 +79,12 @@ func TestPlanUploadV2ConsumesProgressAndCompleteEvents(t *testing.T) {
 		infra.ClientOptions{BackendURL: server.URL, HTTPClient: server.Client(), Status: infra.BackendOnline},
 	)
 	drive := NewWithOptions(Options{HTTP: client})
-	drive.setUploadRules(testUploadRules())
 	var progress UploadPlanProgress
 	plan, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini", Path: "file.ini", Size: 4},
 		ParentID:   "destination",
 		SHA256:     "hash",
-	}}, func(update UploadPlanProgress) { progress = update })
+	}}, testUploadRules(), func(update UploadPlanProgress) { progress = update })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,10 +124,9 @@ func TestPlanUploadV2BoundsPageSizeToFileCount(t *testing.T) {
 	})})
 	rules := testUploadRules()
 	rules.MaxPlanFiles = 1_000_000_000
-	drive.setUploadRules(rules)
 	if _, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini"},
-	}}, nil); err != nil {
+	}}, rules, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -145,10 +143,9 @@ func TestPlanUploadV2PreservesServerErrorCode(t *testing.T) {
 		HTTPClient: server.Client(),
 		Status:     infra.BackendOnline,
 	})})
-	drive.setUploadRules(testUploadRules())
 	_, err := drive.planUploadV2(context.Background(), "destination", "request-id", []FinalUploadFile{{
 		UploadFile: UploadFile{FID: "client", Name: "file.ini"},
-	}}, nil)
+	}}, testUploadRules(), nil)
 	var uploadErr *UploadV2Error
 	if !errors.As(err, &uploadErr) || uploadErr.Code != "upload_denied" {
 		t.Fatalf("error = %#v", err)

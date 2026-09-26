@@ -109,20 +109,21 @@ func (d *Drive) UploadRules(ctx context.Context) (UploadRules, error) {
 	if d == nil || d.http == nil {
 		return UploadRules{}, errDriveHTTPUnconfigured
 	}
-	d.uploadRulesMu.Lock()
-	if d.uploadRules != nil {
-		rules := *d.uploadRules
-		d.uploadRulesMu.Unlock()
-		return rules, nil
-	}
-	d.uploadRulesMu.Unlock()
-
-	rules, _, err := d.fetchUploadRules(ctx)
+	rules, _, err := d.rulesFetcher()(ctx)
 	return rules, err
 }
 
-// fetchUploadRules asks the server for its upload rules, caches them, and
-// answers them with the answer as the server sent it.
+// rulesFetcher returns the configured upload-rules fetch, defaulting to the
+// server. Production always asks the server; tests inject fixed rules.
+func (d *Drive) rulesFetcher() func(context.Context) (UploadRules, any, error) {
+	if d.fetchRules != nil {
+		return d.fetchRules
+	}
+	return d.fetchUploadRules
+}
+
+// fetchUploadRules asks the server for its upload rules and answers them with
+// the answer as the server sent it.
 func (d *Drive) fetchUploadRules(ctx context.Context) (UploadRules, any, error) {
 	decoded, edenErr, err := d.doJSON(ctx, http.MethodGet, "/akasha/v2/upload-rules", nil, nil)
 	if err != nil {
@@ -135,18 +136,7 @@ func (d *Drive) fetchUploadRules(ctx context.Context) (UploadRules, any, error) 
 	if err != nil {
 		return UploadRules{}, nil, err
 	}
-	d.setUploadRules(rules)
 	return rules, decoded, nil
-}
-
-func (d *Drive) setUploadRules(rules UploadRules) {
-	if d == nil {
-		return
-	}
-	cloned := rules
-	d.uploadRulesMu.Lock()
-	d.uploadRules = &cloned
-	d.uploadRulesMu.Unlock()
 }
 
 func parseUploadRules(decoded any) (UploadRules, error) {

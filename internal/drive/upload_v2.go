@@ -159,14 +159,11 @@ func (d *Drive) planUploadV2(
 	ctx context.Context,
 	currentID, requestID string,
 	files []FinalUploadFile,
+	rules UploadRules,
 	onProgress func(UploadPlanProgress),
 ) (UploadPlan, error) {
 	if d == nil || d.http == nil {
 		return UploadPlan{}, errDriveHTTPUnconfigured
-	}
-	rules, err := d.UploadRules(ctx)
-	if err != nil {
-		return UploadPlan{}, err
 	}
 	for _, file := range files {
 		maxSize := rules.MaxFileSize

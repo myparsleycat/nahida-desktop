@@ -42,7 +42,27 @@ func testUploadRules() UploadRules {
 	}
 }
 
-func TestUploadRulesFetchesAndCaches(t *testing.T) {
+// withUploadRules injects fixed upload rules so a test drive never asks the
+// server for them.
+func withUploadRules(drive *Drive, rules UploadRules) *Drive {
+	if drive == nil {
+		return drive
+	}
+	drive.fetchRules = func(context.Context) (UploadRules, any, error) {
+		raw, err := json.Marshal(rules)
+		if err != nil {
+			return UploadRules{}, nil, err
+		}
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return UploadRules{}, nil, err
+		}
+		return rules, decoded, nil
+	}
+	return drive
+}
+
+func TestUploadRulesRefetchesEveryCall(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/akasha/v2/upload-rules" || request.Method != http.MethodGet {
@@ -50,7 +70,11 @@ func TestUploadRulesFetchesAndCaches(t *testing.T) {
 		}
 		calls++
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(testUploadRules()); err != nil {
+		encoded := testUploadRules()
+		if calls > 1 {
+			encoded.MaxPlanFiles = 700
+		}
+		if err := json.NewEncoder(w).Encode(encoded); err != nil {
 			t.Fatal(err)
 		}
 	}))
@@ -68,15 +92,36 @@ func TestUploadRulesFetchesAndCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 {
-		t.Fatalf("fetches = %d, want 1", calls)
+	if calls != 2 {
+		t.Fatalf("fetches = %d, want 2", calls)
 	}
-	if first.MaxPlanFiles != 500 || second.MaxFileSize != first.MaxFileSize || len(first.Extensions) == 0 {
-		t.Fatalf("rules = %#v", first)
+	if first.MaxPlanFiles != 500 || second.MaxPlanFiles != 700 || second.MaxFileSize != first.MaxFileSize ||
+		len(first.Extensions) == 0 {
+		t.Fatalf("rules = %#v, %#v", first, second)
 	}
 	if first.Compression.Algorithm != "zstd" || first.Compression.Level != 6 ||
 		first.Compression.SkipMaxBytes != 100 || len(first.Compression.SkipMimeTypes) == 0 {
 		t.Fatalf("compression rules = %#v", first.Compression)
+	}
+}
+
+// withUploadRules must answer BackupRules' version the same way the server
+// does, so an injected drive can be used without a rules endpoint.
+func TestBackupRulesVersionsInjectedRules(t *testing.T) {
+	drive := withUploadRules(NewWithOptions(Options{}), testUploadRules())
+	first, err := drive.BackupRules(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := drive.BackupRules(t.Context())
+	if err != nil || same.Version != first.Version {
+		t.Fatalf("unchanged rules = %q, %v, want %q", same.Version, err, first.Version)
+	}
+	changed := testUploadRules()
+	changed.MaxPlanFiles = 42
+	other, err := withUploadRules(drive, changed).BackupRules(t.Context())
+	if err != nil || other.Version == first.Version {
+		t.Fatalf("changed rules = %q, %v, want a new version", other.Version, err)
 	}
 }
 

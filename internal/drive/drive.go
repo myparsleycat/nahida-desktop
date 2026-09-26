@@ -44,6 +44,9 @@ type Options struct {
 	Sleep            func(context.Context, time.Duration) error
 	Now              func() time.Time
 	DirRetries       *int
+	// FetchUploadRules overrides the upload-rules fetch. Tests inject fixed
+	// rules; production leaves it nil and always asks the server.
+	FetchUploadRules func(context.Context) (UploadRules, any, error)
 }
 
 // Drive is the Wails service for Electron Drive CRUD, copy/import, and
@@ -65,10 +68,9 @@ type Drive struct {
 	now              func() time.Time
 	dirRetries       int
 
-	mu            sync.Mutex
-	ops           map[string]*copyOperation
-	uploadRulesMu sync.Mutex
-	uploadRules   *UploadRules
+	mu         sync.Mutex
+	ops        map[string]*copyOperation
+	fetchRules func(context.Context) (UploadRules, any, error)
 }
 
 func New() *Drive {
@@ -114,7 +116,7 @@ func NewWithOptions(opts Options) *Drive {
 	if dialog == nil {
 		dialog = platform.NewDialog()
 	}
-	return &Drive{
+	d := &Drive{
 		http:             opts.HTTP,
 		fs:               opts.FS,
 		log:              opts.Log,
@@ -131,6 +133,12 @@ func NewWithOptions(opts Options) *Drive {
 		dirRetries:       retries,
 		ops:              make(map[string]*copyOperation),
 	}
+	if opts.FetchUploadRules != nil {
+		d.fetchRules = opts.FetchUploadRules
+	} else {
+		d.fetchRules = d.fetchUploadRules
+	}
+	return d
 }
 
 type UploadSettings interface {
