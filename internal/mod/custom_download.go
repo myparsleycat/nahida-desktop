@@ -3,7 +3,6 @@ package mod
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -149,56 +148,6 @@ func (m *Mod) DownloadGameBananaFile(ctx context.Context, props GameBananaDownlo
 	return "started", nil
 }
 
-func (m *Mod) HuiDownload(ctx context.Context, title, fileURL string) (string, error) {
-	sanitized := m.sanitizeName(title)
-	result, err := m.paths.getSelectedPathWithModeModal(ctx, sanitized, nil, nil, "hui", nil, false)
-	if err != nil {
-		return "", err
-	}
-	if result.Path == nil {
-		return "canceled", nil
-	}
-	destination := *result.Path
-	head, err := m.headDownload(ctx, fileURL)
-	if err != nil {
-		return "", err
-	}
-	if err := validateHuiHead(head); err != nil {
-		return "", err
-	}
-	finalName := sanitized
-	if result.FileName != nil && *result.FileName != "" {
-		finalName = *result.FileName
-	}
-	stagingPath, stagedDownloadPath := getStagingPaths(finalName, m.sanitizeName)
-	size := int64(0)
-	if head.size != nil {
-		size = *head.size
-	}
-	pid := uuid.NewString()
-	if err := m.queueDownload(
-		pid,
-		finalName,
-		destination,
-		fileURL,
-		size,
-		func(runCtx context.Context, transfers *transfer.Transfer) error {
-			return m.runHuiCustomDownload(runCtx, transfers, downloadTarget{
-				pid:            pid,
-				head:           head,
-				downloadPath:   stagedDownloadPath,
-				stagingPath:    stagingPath,
-				destinationDir: destination,
-				suggestedName:  sanitized,
-				finalName:      finalName,
-			})
-		},
-	); err != nil {
-		return "", err
-	}
-	return "started", nil
-}
-
 func validateDownloadURL(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme == "" {
@@ -214,17 +163,6 @@ func validateDownloadURL(rawURL string) error {
 		return errors.New("UNSUPPORTED_DOWNLOAD_URL_PROTOCOL")
 	}
 }
-
-func validateHuiHead(head downloadHead) error {
-	if head.ok {
-		return nil
-	}
-	return huiHeadError(fmt.Sprintf("Failed to get real file URL: %s", orUnknown(head.statusText)))
-}
-
-type huiHeadError string
-
-func (e huiHeadError) Error() string { return string(e) }
 
 func (m *Mod) ResolveArchiveExtractPrompt(requestID string, mode *string) error {
 	m.extractMu.Lock()
@@ -497,51 +435,6 @@ func (m *Mod) runGameBananaDownload(
 		downloaded,
 		target.destinationDir,
 		target.finalName,
-		finalized.DestinationPaths,
-	)
-}
-
-func (m *Mod) runHuiCustomDownload(
-	ctx context.Context,
-	transfers *transfer.Transfer,
-	target downloadTarget,
-) error {
-	progress := transfer.StatusProgress
-	_ = transfers.Update(target.pid, transfer.Updates{Status: &progress})
-	m.reportDownloadStep(os.MkdirAll(target.stagingPath, 0o755), target.pid, "prepare-staging", target.stagingPath)
-	defer func() {
-		m.reportDownloadStep(os.RemoveAll(target.stagingPath), target.pid, "cleanup-staging", target.stagingPath)
-	}()
-	downloaded := int64(0)
-	if err := m.downloadFileTo(ctx, target.head, target.downloadPath, target.pid, "hui", func(bytes int64) {
-		downloaded += bytes
-		now := downloaded
-		_ = transfers.Update(target.pid, transfer.Updates{TransferredSize: &now})
-	}); err != nil {
-		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
-	}
-	name := parseDownloadFileName(target.head.finalURL, m.sanitizeName, target.head.header.Get("Content-Disposition"))
-	if isArchiveByResponseOrContent(ctx, target.head.header, name, target.downloadPath, m.archive) {
-		extracted, err := m.archive.Extract(
-			ctx, target.downloadPath, target.stagingPath, infra.ExtractOptions{}, nil,
-		)
-		if err != nil {
-			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
-		}
-		if _, err := applySelectedExtractedName(
-			extracted, target.stagingPath, target.finalName, target.suggestedName, m.sanitizeName,
-		); err != nil {
-			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
-		}
-		m.reportDownloadStep(os.Remove(target.downloadPath), target.pid, "cleanup-archive", target.downloadPath)
-	}
-	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
-	if err != nil {
-		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB")
-	}
-	m.reportDownloadStep(finalized.Commit(), target.pid, "commit-cleanup", target.destinationDir)
-	return m.finishDownloadOK(
-		transfers, target.pid, target.head, downloaded, target.destinationDir, target.finalName,
 		finalized.DestinationPaths,
 	)
 }

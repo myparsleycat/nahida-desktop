@@ -7,6 +7,8 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+
+	"nahida.live/desktop/internal/drive"
 )
 
 const maxJavaScriptSafeInteger = uint64(1<<53 - 1)
@@ -82,6 +84,76 @@ func validModID(value string) bool {
 	}
 	id, err := strconv.ParseUint(value, 10, 64)
 	return err == nil && id > 0 && id <= maxJavaScriptSafeInteger
+}
+
+const (
+	downloadDeepLinkVersion = "1"
+	maxDeepLinkValueLength  = 4096
+)
+
+// deepLinkDownload is a web "download with Nahida Desktop" request carried by
+// nahida://download?v=1&kind=<drive|link|mod>&id=<itemId>&dir=<0|1>&name=<name>
+// plus linkId/linkToken for a shared link, or token/sig for a mod.
+type deepLinkDownload struct {
+	Kind  string
+	ID    string
+	IsDir bool
+	Name  string
+	Link  *drive.DownloadLink
+	Mod   *drive.DownloadModAccess
+}
+
+func parseDownloadDeepLink(value string) *deepLinkDownload {
+	parsed, err := url.Parse(value)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "nahida") || !strings.EqualFold(parsed.Hostname(), "download") {
+		return nil
+	}
+	query := parsed.Query()
+	for _, values := range query {
+		for _, v := range values {
+			if len(v) > maxDeepLinkValueLength {
+				return nil
+			}
+		}
+	}
+	if query.Get("v") != downloadDeepLinkVersion {
+		return nil
+	}
+	id := strings.TrimSpace(query.Get("id"))
+	if id == "" {
+		return nil
+	}
+
+	download := &deepLinkDownload{
+		Kind:  query.Get("kind"),
+		ID:    id,
+		IsDir: query.Get("dir") != "0",
+		Name:  strings.TrimSpace(query.Get("name")),
+	}
+	switch download.Kind {
+	case "drive":
+	case "link":
+		linkID, token := query.Get("linkId"), query.Get("linkToken")
+		if linkID == "" || token == "" {
+			return nil
+		}
+		download.Link = &drive.DownloadLink{LinkID: linkID, Token: token}
+	case "mod":
+		download.IsDir = true
+		download.Mod = &drive.DownloadModAccess{Token: query.Get("token"), Sig: query.Get("sig")}
+	default:
+		return nil
+	}
+	return download
+}
+
+func nahidaDeepLinkDownload(args []string) *deepLinkDownload {
+	for _, arg := range args {
+		if download := parseDownloadDeepLink(arg); download != nil {
+			return download
+		}
+	}
+	return nil
 }
 
 func nahidaDeepLinkRoute(args []string) string {

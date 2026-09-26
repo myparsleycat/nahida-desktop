@@ -27,6 +27,13 @@ type DownloadLink struct {
 	Token  string `json:"token" cbor:"token"`
 }
 
+// DownloadModAccess carries the mod gate's credentials, sent as the x-token
+// and x-sig headers.
+type DownloadModAccess struct {
+	Token string `json:"token,omitempty"`
+	Sig   string `json:"sig,omitempty"`
+}
+
 type DownloadMetadata struct {
 	Root       transfer.Root           `json:"root" cbor:"root"`
 	TotalBytes int64                   `json:"totalBytes" cbor:"totalBytes"`
@@ -62,6 +69,47 @@ func (d *Drive) fetchDirectoryDownloadMetadata(
 		header.Set("nhd-link-token", link.Token)
 	}
 	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/dir/download?" + query.Encode()
+	return d.streamDownloadMetadata(ctx, rawURL, header)
+}
+
+// fetchModDownloadMetadata walks a single mod folder. The backend emits the
+// same frames as the drive folder walk, gated by the mod's access token and
+// signature instead of a share link.
+func (d *Drive) fetchModDownloadMetadata(
+	ctx context.Context,
+	items []DownloadItem,
+	access DownloadModAccess,
+) (DownloadMetadata, error) {
+	if len(items) != 1 || !items[0].IsDir {
+		return DownloadMetadata{}, errors.New("mod download requires a single folder")
+	}
+	if d == nil || d.http == nil {
+		return DownloadMetadata{}, errDriveHTTPUnconfigured
+	}
+	header := make(http.Header)
+	if access.Token != "" {
+		header.Set("x-token", access.Token)
+	}
+	if access.Sig != "" {
+		header.Set("x-sig", access.Sig)
+	}
+	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/mod/download/" + url.PathEscape(items[0].ID)
+	metadata, err := d.streamDownloadMetadata(ctx, rawURL, header)
+	if err != nil {
+		return DownloadMetadata{}, err
+	}
+	metadata.Dirs = append(
+		[]transfer.Directory{{ID: metadata.Root.ID, ParentID: metadata.Root.ParentID, Name: metadata.Root.Name}},
+		metadata.Dirs...,
+	)
+	return metadata, nil
+}
+
+func (d *Drive) streamDownloadMetadata(
+	ctx context.Context,
+	rawURL string,
+	header http.Header,
+) (DownloadMetadata, error) {
 	response, err := d.http.Fetch(
 		ctx,
 		rawURL,

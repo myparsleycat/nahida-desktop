@@ -54,7 +54,6 @@ type runtime struct {
 	elevatedLifecycle *elevatedLifecycle
 	screen            *platform.Screen
 	window            *Window
-	localHTTP         *infra.LocalHTTP
 	gameBananaLogin   *gameBananaLogin
 	notifications     *notifications.NotificationService
 }
@@ -221,12 +220,8 @@ func newRuntime() *runtime {
 		elevatedLifecycle: elevatedHelper,
 		screen:            screen,
 		window:            window,
-		localHTTP: infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{
-			Version: platform.AppVersion,
-			Log:     log,
-		}),
-		gameBananaLogin: login,
-		notifications:   notifier,
+		gameBananaLogin:   login,
+		notifications:     notifier,
 	}
 	rt.agent = agent.New(agent.Options{
 		HTTP:      httpClient.HTTPClient(),
@@ -250,7 +245,6 @@ func newRuntime() *runtime {
 		Log:       log,
 		EventEmit: eventEmit,
 	})
-	rt.localHTTP.UseHandler(rt.handleLocalHTTPMessage)
 	if rt.mod != nil {
 		rt.mod.UseFocus(rt.window.Focus)
 		rt.mod.UseWindowReady(rt.window.WaitReady)

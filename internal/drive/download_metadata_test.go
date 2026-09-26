@@ -79,6 +79,83 @@ func TestFetchDirectoryDownloadMetadataDecodesJSONAndZstdCBORChunks(t *testing.T
 	}
 }
 
+func TestFetchModDownloadMetadataSendsModCredentialsAndPrependsRoot(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/akasha/mod/download/item" || request.Header.Get("x-token") != "token" ||
+			request.Header.Get("x-sig") != "sig" {
+			t.Errorf("path = %q, x-token = %q, x-sig = %q",
+				request.URL.Path, request.Header.Get("x-token"), request.Header.Get("x-sig"))
+			http.NotFound(w, request)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(
+			w,
+			"event: metadata\ndata: {\"root\":{\"id\":\"item\",\"parentId\":null,\"name\":\"Mod\"},\"totalBytes\":0}\n\nevent: complete\ndata: {}\n\n",
+		)
+	}))
+	defer server.Close()
+	drive := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(
+				infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline},
+			),
+		},
+	)
+
+	metadata, err := drive.fetchModDownloadMetadata(
+		context.Background(),
+		[]DownloadItem{{ID: "item", IsDir: true, Name: "Mod"}},
+		DownloadModAccess{Token: "token", Sig: "sig"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Root.ID != "item" || len(metadata.Dirs) != 1 || metadata.Dirs[0].ID != "item" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+
+	if _, err := drive.fetchModDownloadMetadata(
+		context.Background(),
+		[]DownloadItem{{ID: "file", Name: "a.bin"}},
+		DownloadModAccess{},
+	); err == nil {
+		t.Fatal("mod file download was accepted")
+	}
+}
+
+func TestFetchPresignedDownloadURLUsesModRouteAndCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/akasha/mod/file/download" || request.URL.Query().Get("itemId") != "item" ||
+			request.URL.Query().Get("presign") != "true" || request.Header.Get("x-token") != "token" ||
+			request.Header.Get("x-sig") != "sig" {
+			t.Errorf("path = %q, query = %v, x-token = %q, x-sig = %q", request.URL.Path, request.URL.Query(),
+				request.Header.Get("x-token"), request.Header.Get("x-sig"))
+			http.NotFound(w, request)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"url":"https://download.invalid/fresh"}`)
+	}))
+	defer server.Close()
+	drive := NewWithOptions(
+		Options{
+			HTTP: infra.NewClientWithOptions(
+				infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline},
+			),
+		},
+	)
+
+	got, err := drive.fetchPresignedDownloadURL(
+		context.Background(),
+		"item",
+		downloadAccess{Mod: &DownloadModAccess{Token: "token", Sig: "sig"}},
+	)
+	if err != nil || got != "https://download.invalid/fresh" {
+		t.Fatalf("presigned URL = %q, %v", got, err)
+	}
+}
+
 func TestFetchDownloadMetadataBatchesFilesAndBuildsBatchRoot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/akasha/file/downloads" {

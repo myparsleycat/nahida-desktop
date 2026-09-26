@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,7 +208,6 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	cwd := t.TempDir()
 	var buf bytes.Buffer
 	rt := newRuntime()
-	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: "127.0.0.1:0"})
 	rt.log.Configure(infra.LogOptions{Writer: &buf})
 
 	ctx := context.Background()
@@ -300,7 +298,6 @@ func TestBootRuntimePackagedUsesAppDataWithoutLegacyMigration(t *testing.T) {
 	}
 
 	rt := newRuntime()
-	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: "127.0.0.1:0"})
 	paths, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir:  home,
 		Cwd:      t.TempDir(),
@@ -331,7 +328,6 @@ func TestBootRuntimeDBOverrideWinsInDevelopment(t *testing.T) {
 	cwd := t.TempDir()
 	override := filepath.Join(t.TempDir(), "override.db")
 	rt := newRuntime()
-	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: "127.0.0.1:0"})
 	paths, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: t.TempDir(), DBOverride: override, Cwd: cwd, Packaged: false,
 	}, nil)
@@ -375,7 +371,6 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 
 	var buf bytes.Buffer
 	rt := newRuntime()
-	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: "127.0.0.1:0"})
 
 	ctx := context.Background()
 	if _, err := bootRuntime(ctx, rt, runtimePathInput{
@@ -394,36 +389,6 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 	rt.log.Info("Starting model viewer load", "StaticGlb.loadForViewer")
 	if !strings.Contains(buf.String(), "[StaticGlb.loadForViewer] Starting model viewer load") {
 		t.Fatalf("dev console = %q", buf.String())
-	}
-}
-
-func TestBootRuntimeFailsWhenLocalHTTPCannotBind(t *testing.T) {
-	t.Parallel()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = listener.Close() }()
-
-	rt := newRuntime()
-	rt.localHTTP = infra.NewLocalHTTPWithOptions(infra.LocalHTTPOptions{Address: listener.Addr().String()})
-	_, err = bootRuntime(context.Background(), rt, runtimePathInput{
-		HomeDir:  t.TempDir(),
-		Cwd:      t.TempDir(),
-		Packaged: false,
-	}, nil)
-	if err == nil || !strings.Contains(err.Error(), "listen local HTTP bridge") {
-		t.Fatalf("bootRuntime error = %v", err)
-	}
-	if rt.store == nil || rt.store.DB == nil {
-		t.Fatal("failed local HTTP start did not reach an open store")
-	}
-	if err := rt.Close(); err != nil {
-		t.Fatalf("Close after failed local HTTP start: %v", err)
-	}
-	if rt.store.DB != nil || rt.proxyRelay != nil {
-		t.Fatal("Close left resources active after local HTTP failure")
 	}
 }
 

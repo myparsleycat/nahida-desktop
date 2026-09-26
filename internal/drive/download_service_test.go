@@ -173,7 +173,7 @@ func TestDownloadDriveFileKeepsSuccessfulProgress(t *testing.T) {
 	var progress int64
 	err := drive.downloadDriveFile(context.Background(), transfers, transfer.DownloadFile{
 		ID: "progress", Name: "progress.bin", Size: int64(len(content)), URL: server.URL,
-	}, destination, nil, func(bytes int64) { progress += bytes })
+	}, destination, downloadAccess{}, func(bytes int64) { progress += bytes })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestDownloadDriveFileRollsBackCompressedAttemptProgressBeforeRetry(t *testi
 	var progress int64
 	err := drive.downloadDriveFile(context.Background(), transfers, transfer.DownloadFile{
 		ID: "compressed", Name: "compressed.bin", Size: int64(len(valid)), URL: server.URL, CompAlg: &algorithm,
-	}, destination, nil, func(bytes int64) { progress += bytes })
+	}, destination, downloadAccess{}, func(bytes int64) { progress += bytes })
 	if err != nil {
 		t.Fatal(err)
 	}

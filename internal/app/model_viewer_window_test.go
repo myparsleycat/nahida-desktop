@@ -44,6 +44,7 @@ func TestLaunchDispatcherPreservesColdAndForwardedLaunches(t *testing.T) {
 		func(path string) { got = append(got, path) },
 		func() { got = append(got, "main") },
 		func([]string) { got = append(got, "arguments") },
+		func([]string) {},
 	)
 	d.Start(
 		application.SecondInstanceData{
@@ -78,10 +79,26 @@ func TestMissingModelViewerFolderOpensMain(t *testing.T) {
 		func(string) { t.Fatal("unexpected viewer") },
 		func() { main++ },
 		func([]string) { t.Fatal("unexpected forward") },
+		func([]string) {},
 	)
 	handler(application.SecondInstanceData{Args: []string{"app", "--model-viewer"}})
 	if main != 1 {
 		t.Fatalf("main windows = %d", main)
+	}
+}
+
+func TestLaunchHandlerDispatchesDownloadOnColdAndForwardedLaunches(t *testing.T) {
+	var got []string
+	handler := newLaunchHandler(
+		func(string) { t.Fatal("unexpected viewer") },
+		func() { got = append(got, "main") },
+		func([]string) { got = append(got, "arguments") },
+		func(args []string) { got = append(got, "download "+args[1]) },
+	)
+	handler(application.SecondInstanceData{Args: []string{"app", "cold"}})
+	handler(application.SecondInstanceData{Args: []string{"app", "forwarded"}})
+	if want := []string{"main", "download cold", "arguments", "download forwarded"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("launches = %v, want %v", got, want)
 	}
 }
 

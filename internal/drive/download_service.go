@@ -21,12 +21,13 @@ import (
 )
 
 type StartDownloadParams struct {
-	Items         []DownloadItem    `json:"items"`
-	TargetPath    string            `json:"targetPath,omitempty"`
-	Link          *DownloadLink     `json:"link,omitempty"`
-	Data          *DownloadMetadata `json:"data,omitempty"`
-	SuggestedName string            `json:"suggestedName,omitempty"`
-	Source        string            `json:"source,omitempty"`
+	Items         []DownloadItem     `json:"items"`
+	TargetPath    string             `json:"targetPath,omitempty"`
+	Link          *DownloadLink      `json:"link,omitempty"`
+	Mod           *DownloadModAccess `json:"mod,omitempty"`
+	Data          *DownloadMetadata  `json:"data,omitempty"`
+	SuggestedName string             `json:"suggestedName,omitempty"`
+	Source        string             `json:"source,omitempty"`
 }
 
 type StartDownloadResult struct {
@@ -72,13 +73,16 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 	}
 	params.TargetPath = filepath.Clean(targetPath)
 	var metadata DownloadMetadata
-	if params.Data == nil {
-		metadata, err = d.fetchDownloadMetadata(ctx, params.Items, params.Link)
-		if err != nil {
-			return StartDownloadResult{}, err
-		}
-	} else {
+	switch {
+	case params.Data != nil:
 		metadata = cloneDownloadMetadata(*params.Data)
+	case params.Mod != nil:
+		metadata, err = d.fetchModDownloadMetadata(ctx, params.Items, *params.Mod)
+	default:
+		metadata, err = d.fetchDownloadMetadata(ctx, params.Items, params.Link)
+	}
+	if err != nil {
+		return StartDownloadResult{}, err
 	}
 	prepared, err := d.prepareDownloadMetadata(ctx, nil, "", metadata, params)
 	if err != nil {
@@ -475,13 +479,20 @@ func (d *Drive) executeDownload(
 					_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow, TransferredFiles: &filesNow})
 					continue
 				}
-				downloadErr := d.downloadDriveFile(ctx, transfers, file, destination, params.Link, func(bytes int64) {
-					stateMu.Lock()
-					downloadedBytes += bytes
-					bytesNow := downloadedBytes
-					stateMu.Unlock()
-					_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow})
-				})
+				downloadErr := d.downloadDriveFile(
+					ctx,
+					transfers,
+					file,
+					destination,
+					downloadAccess{Link: params.Link, Mod: params.Mod},
+					func(bytes int64) {
+						stateMu.Lock()
+						downloadedBytes += bytes
+						bytesNow := downloadedBytes
+						stateMu.Unlock()
+						_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow})
+					},
+				)
 				if downloadErr != nil {
 					if errors.Is(downloadErr, context.Canceled) {
 						continue
@@ -673,14 +684,26 @@ func redistributeDownloadFiles(files []transfer.DownloadFile) []transfer.Downloa
 	return out
 }
 
-func (d *Drive) fetchPresignedDownloadURL(ctx context.Context, fileID string, link *DownloadLink) (string, error) {
+func (d *Drive) fetchPresignedDownloadURL(ctx context.Context, fileID string, access downloadAccess) (string, error) {
+	path := "/akasha/file/download"
 	query := url.Values{"uuid": []string{fileID}, "presign": []string{"true"}}
 	header := make(http.Header)
-	if link != nil {
-		query.Set("linkId", link.LinkID)
-		header.Set("nhd-link-token", link.Token)
+	switch {
+	case access.Mod != nil:
+		// A mod file is presigned by its own route, gated by the mod credentials.
+		path = "/akasha/mod/file/download"
+		query = url.Values{"itemId": []string{fileID}, "presign": []string{"true"}}
+		if access.Mod.Token != "" {
+			header.Set("x-token", access.Mod.Token)
+		}
+		if access.Mod.Sig != "" {
+			header.Set("x-sig", access.Mod.Sig)
+		}
+	case access.Link != nil:
+		query.Set("linkId", access.Link.LinkID)
+		header.Set("nhd-link-token", access.Link.Token)
 	}
-	data, _, edenErr, err := d.doJSONHeaders(ctx, http.MethodGet, "/akasha/file/download", query, header, nil)
+	data, _, edenErr, err := d.doJSONHeaders(ctx, http.MethodGet, path, query, header, nil)
 	if err != nil {
 		return "", err
 	}

@@ -68,11 +68,6 @@ func bootRuntime(
 	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
 		return paths, err
 	}
-	if rt.localHTTP != nil {
-		if err := rt.localHTTP.Start(); err != nil {
-			return paths, err
-		}
-	}
 	return paths, nil
 }
 
@@ -196,12 +191,6 @@ func (rt *runtime) Close() error {
 	if rt.proxyRelay != nil {
 		err = errors.Join(err, rt.proxyRelay.Close())
 		rt.proxyRelay = nil
-	}
-	if rt.localHTTP != nil {
-		err = errors.Join(
-			err,
-			infra.AnnotateError(rt.localHTTP.ServiceShutdown(), infra.Diagnostic{Stage: "localHTTP"}),
-		)
 	}
 	if rt.updater != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
