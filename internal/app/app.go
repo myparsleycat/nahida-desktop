@@ -47,9 +47,9 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	})
 	app.OnShutdown(rt.startup.stop)
 	// newLockedApplication waits for a relaunch parent, then application.New
-	// acquires Wails' single-instance lock. Keep all database,
-	// local HTTP, watcher, and cleanup startup work after it so a forwarding
-	// second instance exits without booting a second backend.
+	// acquires Wails' single-instance lock. Keep all database, watcher, and
+	// cleanup startup work after it so a forwarding second instance exits
+	// without booting a second backend.
 	in, err := livePathInput()
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if modelViewerArgument(os.Args, in.Cwd) == "" {
 		route = nahidaDeepLinkRoute(os.Args)
 	}
-	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "")
+	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "" && nahidaDeepLinkDownload(os.Args) == nil)
 	rt.window.SetInitialRoute(route)
 	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
@@ -183,7 +183,12 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		rt.startElevatedHelperIfEnabled()
 		rt.startup.start(rt.runStartupWork)
 		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
-			newLaunchHandler(viewers.Open, func() { newWindow(app, rt.window) }, rt.window.HandleArguments))
+			newLaunchHandler(
+				viewers.Open,
+				func() { newWindow(app, rt.window) },
+				rt.window.HandleArguments,
+				rt.dispatchDeepLinkDownload,
+			))
 	})
 	newTray(app, rt, icon)
 	registerDeepLink(app, rt.window)

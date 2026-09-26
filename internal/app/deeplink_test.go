@@ -1,6 +1,12 @@
 package app
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+
+	"nahida.live/desktop/internal/drive"
+)
 
 func TestParseNahidaDeepLink(t *testing.T) {
 	t.Parallel()
@@ -40,5 +46,48 @@ func TestNahidaDeepLinkRouteUsesFirstValidArgument(t *testing.T) {
 	)
 	if got != "/gamebanana?mod=42" {
 		t.Fatalf("nahidaDeepLinkRoute = %q", got)
+	}
+}
+
+func TestParseDownloadDeepLink(t *testing.T) {
+	t.Parallel()
+	valid := map[string]deepLinkDownload{
+		"nahida://download?v=1&kind=drive&id=abc&dir=0&name=a%20b.zip": {
+			Kind: "drive", ID: "abc", IsDir: false, Name: "a b.zip",
+		},
+		"nahida://download?v=1&kind=drive&id=abc": {Kind: "drive", ID: "abc", IsDir: true},
+		"nahida://download?v=1&kind=link&id=abc&dir=1&name=Folder&linkId=l&linkToken=t%2B%2F": {
+			Kind: "link", ID: "abc", IsDir: true, Name: "Folder",
+			Link: &drive.DownloadLink{LinkID: "l", Token: "t+/"},
+		},
+		"nahida://download?v=1&kind=mod&id=abc&dir=0&name=Mod&token=tok&sig=s": {
+			Kind: "mod", ID: "abc", IsDir: true, Name: "Mod",
+			Mod: &drive.DownloadModAccess{Token: "tok", Sig: "s"},
+		},
+	}
+	for input, want := range valid {
+		got := parseDownloadDeepLink(input)
+		if got == nil || !reflect.DeepEqual(*got, want) {
+			t.Errorf("parseDownloadDeepLink(%q) = %+v, want %+v", input, got, want)
+		}
+	}
+
+	invalid := []string{
+		"nahida://download?kind=drive&id=abc",
+		"nahida://download?v=2&kind=drive&id=abc",
+		"nahida://download?v=1&kind=drive",
+		"nahida://download?v=1&kind=unknown&id=abc",
+		"nahida://download?v=1&kind=link&id=abc&linkId=l",
+		"nahida://download?v=1&kind=drive&id=abc&name=" + strings.Repeat("a", maxDeepLinkValueLength+1),
+		"nahida://gamebanana/mods/1",
+		"https://download?v=1&kind=drive&id=abc",
+	}
+	for _, input := range invalid {
+		if got := parseDownloadDeepLink(input); got != nil {
+			t.Errorf("parseDownloadDeepLink(%q) = %+v, want nil", input, got)
+		}
+	}
+	if route := parseNahidaDeepLink("nahida://download?v=1&kind=drive&id=abc"); route != "" {
+		t.Errorf("download link produced route %q", route)
 	}
 }

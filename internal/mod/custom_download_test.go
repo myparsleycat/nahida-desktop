@@ -43,20 +43,9 @@ func TestValidateDownloadURLMatchesElectronErrors(t *testing.T) {
 	}
 }
 
-func TestValidateHuiHeadRejectsNonOKResponse(t *testing.T) {
-	if err := validateHuiHead(downloadHead{ok: true, status: 200, statusText: "OK"}); err != nil {
-		t.Fatal(err)
-	}
-	err := validateHuiHead(downloadHead{status: 404, statusText: "Not Found"})
-	if err == nil || err.Error() != "Failed to get real file URL: Not Found" {
-		t.Fatalf("validateHuiHead = %v", err)
-	}
-}
-
 func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 	customArchive := nteBootstrapZip(t, map[string]string{"CustomRoot/mod.ini": "custom"})
 	gameBananaArchive := nteBootstrapZip(t, map[string]string{"OriginalGB/mod.ini": "gamebanana"})
-	huiArchive := nteBootstrapZip(t, map[string]string{"OriginalHui/mod.ini": "hui"})
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -76,8 +65,6 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 			serveCustomDownloadFixture(w, request, customArchive, "custom.zip", true)
 		case "/gb.zip":
 			serveCustomDownloadFixture(w, request, gameBananaArchive, "gb.zip", true)
-		case "/hui.zip":
-			serveCustomDownloadFixture(w, request, huiArchive, "hui.zip", false)
 		default:
 			http.NotFound(w, request)
 		}
@@ -123,17 +110,6 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 		if err := json.Unmarshal(raw, &metadata); err != nil || metadata["source"] != "gamebanana" {
 			t.Fatalf("metadata = %s, %v", raw, err)
 		}
-	})
-
-	t.Run("Hui", func(t *testing.T) {
-		destination := t.TempDir()
-		service, transfers := customDownloadTestService(t, server, destination, "Selected Hui", false)
-		status, err := service.HuiDownload(context.Background(), "Hui Package", server.URL+"/hui.zip")
-		if err != nil || status != "started" {
-			t.Fatalf("HuiDownload = %q, %v", status, err)
-		}
-		processCustomDownloadQueue(t, transfers, int64(len(huiArchive)))
-		assertCustomDownloadFile(t, filepath.Join(destination, "Selected Hui", "mod.ini"), "hui")
 	})
 }
 

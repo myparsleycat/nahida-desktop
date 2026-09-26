@@ -36,6 +36,7 @@ func newLaunchHandler(
 	openViewer func(string),
 	openMain func(),
 	handleArguments func([]string),
+	download func([]string),
 ) func(application.SecondInstanceData) {
 	initial := true
 	return func(data application.SecondInstanceData) {
@@ -47,9 +48,10 @@ func newLaunchHandler(
 		}
 		if first {
 			openMain()
-			return
+		} else {
+			handleArguments(data.Args)
 		}
-		handleArguments(data.Args)
+		download(data.Args)
 	}
 }
 

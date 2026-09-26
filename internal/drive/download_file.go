@@ -22,7 +22,7 @@ func (d *Drive) downloadDriveFile(
 	transfers *transfer.Transfer,
 	file transfer.DownloadFile,
 	destination string,
-	link *DownloadLink,
+	access downloadAccess,
 	onProgress func(int64),
 ) error {
 	if file.Size == 0 {
@@ -35,7 +35,7 @@ func (d *Drive) downloadDriveFile(
 	partialPath := destination + ".ntmp"
 	partialSize := localFileSize(partialPath)
 	if file.CompAlg == nil && file.Size >= parallelDownloadThreshold && partialSize < parallelDownloadThreshold {
-		header := driveDownloadHeader(link, true)
+		header := driveDownloadHeader(access.Link, true)
 		supported, err := d.parallelDownload.CheckRangeSupportWithHeader(ctx, file.URL, header)
 		if err != nil && ctx.Err() != nil {
 			return ctx.Err()
@@ -87,7 +87,7 @@ func (d *Drive) downloadDriveFile(
 		}
 	}
 
-	return d.downloadDriveFileWithSlowRetry(ctx, transfers, file, destination, link, onProgress)
+	return d.downloadDriveFileWithSlowRetry(ctx, transfers, file, destination, access, onProgress)
 }
 
 func (d *Drive) downloadDriveFileWithSlowRetry(
@@ -95,7 +95,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 	transfers *transfer.Transfer,
 	file transfer.DownloadFile,
 	destination string,
-	link *DownloadLink,
+	access downloadAccess,
 	onProgress func(int64),
 ) error {
 	currentURL := file.URL
@@ -123,7 +123,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 		monitorKey := registered.Key
 		request := infra.DownloadRequest{
 			URL: currentURL, Destination: destination, Size: file.Size,
-			Compression: stringValue(file.CompAlg), Header: driveDownloadHeader(link, origin == "cdn"),
+			Compression: stringValue(file.CompAlg), Header: driveDownloadHeader(access.Link, origin == "cdn"),
 			Resume: file.CompAlg == nil, Retries: &zeroRetries,
 			OnWait: func() {
 				transfers.SlowChunks().SetPhase(monitorKey, transfer.SlowChunkPhaseBandwidthWait)
@@ -168,7 +168,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 
 		if monitored && snapshot.AbortedSlowChunk {
 			if origin == "cdn" && slowReconnects > 0 {
-				freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, link)
+				freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, access)
 				if freshErr == nil {
 					currentURL = freshURL
 					origin = "presign"
@@ -193,7 +193,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 		var httpErr *infra.DownloadHTTPError
 		if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden && origin == "presign" &&
 			!refreshedExpiredPresign {
-			freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, link)
+			freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, access)
 			if freshErr == nil {
 				currentURL = freshURL
 				refreshedExpiredPresign = true
@@ -214,7 +214,7 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 			continue
 		}
 		if origin == "cdn" {
-			freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, link)
+			freshURL, freshErr := d.fetchPresignedDownloadURL(ctx, file.ID, access)
 			if freshErr == nil {
 				currentURL = freshURL
 				origin = "presign"
@@ -228,6 +228,13 @@ func (d *Drive) downloadDriveFileWithSlowRetry(
 		}
 		return err
 	}
+}
+
+// downloadAccess is the credential a download's files are fetched under: a
+// shared link's token, or a mod's access token and signature.
+type downloadAccess struct {
+	Link *DownloadLink
+	Mod  *DownloadModAccess
 }
 
 func driveDownloadHeader(link *DownloadLink, attach bool) http.Header {
