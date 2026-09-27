@@ -32,6 +32,7 @@ type DownloadLink struct {
 type DownloadModAccess struct {
 	Token string `json:"token,omitempty"`
 	Sig   string `json:"sig,omitempty"`
+	Grant string `json:"grant,omitempty"`
 }
 
 type DownloadMetadata struct {
@@ -92,6 +93,9 @@ func (d *Drive) fetchModDownloadMetadata(
 	}
 	if access.Sig != "" {
 		header.Set("x-sig", access.Sig)
+	}
+	if access.Grant != "" {
+		header.Set("x-mod-download-grant", access.Grant)
 	}
 	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/mod/download/" + url.PathEscape(items[0].ID)
 	metadata, err := d.streamDownloadMetadata(ctx, rawURL, header)

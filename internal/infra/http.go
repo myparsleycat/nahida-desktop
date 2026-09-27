@@ -184,12 +184,27 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 			Transport: opts.Transport,
 		}
 	}
+	// Keep the caller's client untouched while applying the shared redirect policy.
+	securedClient := *httpClient
+	checkRedirect := securedClient.CheckRedirect
+	securedClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" {
+			return errors.New("redirect to non-HTTPS URL blocked")
+		}
+		if checkRedirect != nil {
+			return checkRedirect(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
 	return &Client{
 		version:        opts.Version,
 		token:          opts.Token,
 		refreshSession: opts.RefreshSession,
 		log:            opts.Log,
-		http:           httpClient,
+		http:           &securedClient,
 		retryLimit:     retryLimit,
 		retryWait:      retryWait,
 		backendURL:     backendURL,

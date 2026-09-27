@@ -32,17 +32,18 @@ var (
 	homeNeedles          []string
 	bearerPattern        = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
 	logURLPattern        = regexp.MustCompile(`https?://[^\s"<>]+`)
+	modTicketLinkPattern = regexp.MustCompile(`(?i)nahida://download\?[^\s"<>]+`)
 	logJSONStringPattern = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
 	urlUserInfoPattern   = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
 	jsonSecretPattern    = regexp.MustCompile(
-		`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`,
+		`(?i)("(?:authorization|proxy-authorization|cookie|set-cookie|rmc|token|ticket|grant|x-mod-download-grant|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)"[ \t]*:[ \t]*)("(?:\\.|[^"\\])*")`,
 	)
 	authHeaderPattern = regexp.MustCompile(
-		`(?im)^([ \t]*(?:authorization|proxy-authorization)[ \t]*:[ \t]*)([^\r\n]*)`,
+		`(?im)^([ \t]*(?:authorization|proxy-authorization|x-mod-download-grant)[ \t]*:[ \t]*)([^\r\n]*)`,
 	)
 	cookieHeaderPattern = regexp.MustCompile(`(?im)^([ \t]*(?:cookie|set-cookie)[ \t]*:[ \t]*)([^\r\n]*)`)
 	plainSecretPattern  = regexp.MustCompile(
-		`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`,
+		`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|rmc|token|ticket|grant|x-mod-download-grant|access[_-]?token|refresh[_-]?token|password|secret|credentials|api[_-]?key|signature|state|stateResponse|x-amz-signature|x-goog-signature)([ \t]*[=:][ \t]*)([^&\s,;}"']+)`,
 	)
 )
 
@@ -418,6 +419,7 @@ func redactSecrets(value string) string {
 	if value == "" {
 		return ""
 	}
+	value = modTicketLinkPattern.ReplaceAllString(value, "nahida://download?%REDACTED%")
 	value = redactLogURLs(value)
 	value = bearerPattern.ReplaceAllString(value, "Bearer %REDACTED%")
 	value = urlUserInfoPattern.ReplaceAllString(value, `${1}%REDACTED%@`)
