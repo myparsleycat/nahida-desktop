@@ -232,14 +232,14 @@ func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
 		return nil
 	}
 	name := filepath.Base(modPath)
-	preview := findScannerPreviewWalk(modPath, previewSearchDepth, reports...)
+	buckets, images := scanPreviewWalk(modPath, previewSearchDepth, scannerMediaExtensions, true, reports...)
 	info := &ModInfo{
 		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
 		IsEnabled: !isDisabled(name), Inis: []IniResult{},
 	}
-	if preview != nil {
-		info.Preview = lo.ToPtr(preview.path)
-	}
+	info.Preview = buckets.bestPath()
+	info.PreviewImages = sortedPreviewImages(images)
+	applyDefaultPreview(info, modPath, reports...)
 	return info
 }
 
@@ -252,6 +252,7 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 	iniPaths := []string{}
 	found := false
 	var buckets previewBuckets
+	var images []previewCandidate
 	_ = filepath.WalkDir(modPath, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			reportScanFailure(err, reports)
@@ -272,8 +273,9 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 		if strings.EqualFold(filepath.Ext(path), ".ini") &&
 			!strings.HasPrefix(strings.ToLower(entry.Name()), "disabled") {
 			iniPaths = append(iniPaths, path)
-		} else {
-			buckets.consider(modPath, path, entry.Name(), scannerMediaExtensions)
+		} else if candidate := buckets.consider(modPath, path, entry.Name(), scannerMediaExtensions); candidate != nil &&
+			previewImagePath(path) {
+			images = append(images, *candidate)
 		}
 		return nil
 	})
@@ -286,6 +288,8 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 		}
 	}
 	info.Preview = buckets.bestPath()
+	info.PreviewImages = sortedPreviewImages(images)
+	applyDefaultPreview(info, modPath, reports...)
 	return &walkedMod{info: info, iniPaths: iniPaths}
 }
 

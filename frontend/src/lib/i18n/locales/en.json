@@ -880,6 +880,8 @@
       },
       "empty_selection": "Please select a group or character folder from the sidebar.",
       "no-preview": "No Preview",
+      "previous-preview": "Previous preview image",
+      "next-preview": "Next preview image",
       "context-menu": {
         "open-model-viewer": "Open in model viewer",
         "paste-preview": "Paste",
@@ -899,6 +901,7 @@
         "trash-loading": "Moving to recycle bin...",
         "trash-success": "Deleted successfully",
         "trash-error": "Failed to delete",
+        "change-preview-error": "Failed to change the default preview image.",
         "value-required": "Please enter a value.",
         "rename-success": "Mod renamed successfully",
         "manual-subgroup-success": "Marked as subgroup",

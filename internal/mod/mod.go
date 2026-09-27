@@ -251,14 +251,15 @@ type IniResult struct {
 }
 
 type ModInfo struct {
-	ID        string      `json:"id"`
-	Name      string      `json:"name"`
-	Path      string      `json:"path"`
-	IsEnabled bool        `json:"isEnabled"`
-	Preview   *string     `json:"preview,omitempty"`
-	Mtime     float64     `json:"mtime"`
-	Size      float64     `json:"size"`
-	Inis      []IniResult `json:"inis"`
+	ID            string      `json:"id"`
+	Name          string      `json:"name"`
+	Path          string      `json:"path"`
+	IsEnabled     bool        `json:"isEnabled"`
+	Preview       *string     `json:"preview,omitempty"`
+	PreviewImages []string    `json:"previewImages,omitempty"`
+	Mtime         float64     `json:"mtime"`
+	Size          float64     `json:"size"`
+	Inis          []IniResult `json:"inis"`
 }
 
 type FolderGroup struct {

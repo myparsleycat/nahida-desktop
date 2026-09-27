@@ -864,6 +864,8 @@
       },
       "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
       "no-preview": "프리뷰 없음",
+      "previous-preview": "이전 프리뷰 이미지",
+      "next-preview": "다음 프리뷰 이미지",
       "context-menu": {
         "open-model-viewer": "모델 뷰어로 열기",
         "paste-preview": "붙여넣기",
@@ -883,6 +885,7 @@
         "trash-loading": "휴지통으로 이동 중...",
         "trash-success": "삭제 완료",
         "trash-error": "삭제 실패",
+        "change-preview-error": "기본 프리뷰 이미지를 변경하지 못했습니다.",
         "value-required": "값을 입력해주세요.",
         "rename-success": "모드 이름이 변경되었습니다",
         "manual-subgroup-success": "서브그룹으로 지정했습니다",

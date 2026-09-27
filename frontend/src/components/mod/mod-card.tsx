@@ -108,6 +108,7 @@ export const ModCard = memo(function ModCard({
             <div className="relative z-10 flex h-[calc(100%-2rem)] flex-row space-x-2">
               <ModPreviewContainer
                 mod={mod}
+                selectedGroupPath={selectedGroupPath}
                 modelPreviewEligible={
                   !actions.isNteGame &&
                   !isDownloading &&

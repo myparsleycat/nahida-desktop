@@ -99,6 +99,29 @@ func Update(modPath string, change func([]byte) ([]byte, error)) error {
 	return writeBatch([]WriteEntry{{Dir: modPath, Data: next}})
 }
 
+// Upsert reads and replaces nhd.json under one queue reservation, passing nil to change when absent.
+// The callback must not call metadata operations on the same directory.
+func Upsert(modPath string, change func([]byte) ([]byte, error)) error {
+	if change == nil {
+		return errors.New("mod metadata upsert callback is nil")
+	}
+	release, err := reserve(modPath)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	current, err := os.ReadFile(filepath.Join(modPath, fileName))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	next, err := change(current)
+	if err != nil {
+		return err
+	}
+	return writeBatch([]WriteEntry{{Dir: modPath, Data: next}})
+}
+
 // WriteBatch writes complete JSON documents to multiple mod directories and restores all files on failure.
 // Each directory must appear only once. Callers must validate paths at their service boundary.
 func WriteBatch(entries []WriteEntry) error {

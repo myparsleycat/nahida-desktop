@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/samber/lo"
-
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -245,6 +243,7 @@ func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
 	}
 	var buckets previewBuckets
+	var images []previewCandidate
 	_ = filepath.WalkDir(entry.path, func(path string, dirEntry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			reportScanFailure(walkErr, reports)
@@ -261,10 +260,15 @@ func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 				info.Mtime = mtime
 			}
 		}
-		buckets.consider(entry.path, path, dirEntry.Name(), mediaExtensions)
+		if candidate := buckets.consider(entry.path, path, dirEntry.Name(), mediaExtensions); candidate != nil &&
+			previewImagePath(path) {
+			images = append(images, *candidate)
+		}
 		return nil
 	})
 	info.Preview = buckets.bestPath()
+	info.PreviewImages = sortedPreviewImages(images)
+	applyDefaultPreview(&info, entry.path, reports...)
 	if info.Preview == nil && entry.previewFallback != "" {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
@@ -276,9 +280,10 @@ func nteModInfoLight(entry nteModEntry, reports ...func(error)) ModInfo {
 		ID: entry.path, Name: entry.name, Path: entry.path,
 		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
 	}
-	if preview := findPreviewWalk(entry.path, previewSearchDepth, reports...); preview != nil {
-		info.Preview = lo.ToPtr(preview.path)
-	}
+	buckets, images := scanPreviewWalk(entry.path, previewSearchDepth, mediaExtensions, true, reports...)
+	info.Preview = buckets.bestPath()
+	info.PreviewImages = sortedPreviewImages(images)
+	applyDefaultPreview(&info, entry.path, reports...)
 	if info.Preview == nil && entry.previewFallback != "" {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
@@ -440,7 +445,7 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 	}
 	var result string
 	if enabled {
-		result, err = m.enable(path)
+		result, err = m.enable(ctx, path)
 	} else {
 		result, err = m.disable(ctx, path)
 	}

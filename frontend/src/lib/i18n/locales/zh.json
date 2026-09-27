@@ -858,6 +858,8 @@
       },
       "empty_selection": "请从侧边栏选择群组或角色文件夹。",
       "no-preview": "无预览",
+      "previous-preview": "上一张预览图片",
+      "next-preview": "下一张预览图片",
       "context-menu": {
         "open-model-viewer": "在模型查看器中打开",
         "paste-preview": "粘贴",
@@ -877,6 +879,7 @@
         "trash-loading": "移动到回收站中...",
         "trash-success": "删除成功",
         "trash-error": "删除失败",
+        "change-preview-error": "无法更改默认预览图片。",
         "value-required": "请输入数值。",
         "rename-success": "模组重命名成功",
         "manual-subgroup-success": "已指定为子分组",

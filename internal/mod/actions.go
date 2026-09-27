@@ -334,16 +334,31 @@ func (m *Mod) logActionError(err error, where string) {
 	}
 }
 
-func (m *Mod) enable(path string) (string, error) {
+func (m *Mod) enable(ctx context.Context, path string) (string, error) {
 	name := stripDisabled(filepath.Base(path))
 	if name == filepath.Base(path) {
 		return filepath.Clean(path), nil
 	}
+	boundary := m.previewBoundary(ctx, path)
 	result, err := renameUnique(path, name)
 	if err != nil {
 		return "", m.lockedFolderError(err, path)
 	}
-	return result, nil
+	renamed, err := finishFolderRename(path, result, boundary)
+	if err != nil {
+		m.logActionError(err, "Mod:enable:preview")
+	}
+	return renamed, err
+}
+
+func finishFolderRename(oldPath, newPath, boundary string) (string, error) {
+	if err := relocateSelectedPreviews(oldPath, newPath, boundary); err != nil {
+		if undoErr := os.Rename(newPath, oldPath); undoErr != nil {
+			return "", errors.Join(err, fmt.Errorf("restore renamed folder: %w", undoErr))
+		}
+		return "", err
+	}
+	return newPath, nil
 }
 
 func (m *Mod) disable(ctx context.Context, path string) (string, error) {
@@ -362,11 +377,16 @@ func (m *Mod) disable(ctx context.Context, path string) (string, error) {
 	if style == "underscore" {
 		prefix = "DISABLED_"
 	}
+	boundary := m.previewBoundary(ctx, path)
 	result, err := renameUnique(path, prefix+filepath.Base(path))
 	if err != nil {
 		return "", m.lockedFolderError(err, path)
 	}
-	return result, nil
+	renamed, err := finishFolderRename(path, result, boundary)
+	if err != nil {
+		m.logActionError(err, "Mod:disable:preview")
+	}
+	return renamed, err
 }
 
 func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error) {
@@ -398,7 +418,7 @@ func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error
 		}
 		processed = copied
 	}
-	result, err := m.enable(path)
+	result, err := m.enable(ctx, path)
 	if err != nil {
 		if copyShaderFixes && m.shaders != nil {
 			if rollbackErr := m.shaders.RollbackEnabledShaders(path, processed); rollbackErr != nil {
