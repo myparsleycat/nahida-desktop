@@ -25,6 +25,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveDescendantSearch } from "@renderer/hooks/use-drive-descendant-search";
+import { useDriveFolderScroll } from "@renderer/hooks/use-drive-folder-scroll";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
 import { getSearchScore } from "@renderer/lib/sejong";
@@ -52,6 +53,7 @@ function RouteComponent() {
   const { session, backendStatus } = useAuth();
   const location = useLocation();
   const effectiveId = id === "root" ? (session?.drive.rootId ?? id) : id;
+  const contentPaneRef = useDriveFolderScroll(effectiveId);
 
   const {
     onDragEnter,
@@ -202,9 +204,10 @@ function RouteComponent() {
           </div>
 
           <div
+            ref={contentPaneRef}
             id={FileDropTargetID.driveContent}
             data-file-drop-target
-            className="relative flex flex-1 flex-col overflow-auto"
+            className="relative flex flex-1 flex-col overflow-auto [overflow-anchor:none]"
             onDragEnter={onDragEnter}
             onDragLeave={onDragLeave}
             onDragOver={onDragOver}
@@ -217,7 +220,10 @@ function RouteComponent() {
                 currentId={effectiveId}
               >
                 {displayContents.length > 0 ? (
-                  <ScrollArea className="flex h-full flex-1 flex-col">
+                  <ScrollArea
+                    className="flex h-full flex-1 flex-col"
+                    viewportClassName="[overflow-anchor:none]"
+                  >
                     <>
                       {layout === "list" ? (
                         <ContentMenuList
