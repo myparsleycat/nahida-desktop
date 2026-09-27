@@ -12,18 +12,15 @@ interface KeySettingRequest {
   label: string;
   sectionName: string;
   value: string;
-  otherKeys: string[];
 }
 
 interface ModToggleKeyItemProps {
   toggleKey: ToggleKey;
-  otherKeys: string[];
   onOpenKeySetting: (setting: KeySettingRequest) => void;
 }
 
 interface ModIniItemProps {
   ini: ModIni;
-  otherKeysById: Record<string, string[]>;
   onOpenKeySetting: (setting: KeySettingRequest) => void;
 }
 
@@ -95,7 +92,6 @@ function KeySettingTrigger({
 
 const ModToggleKeyItem = memo(function ModToggleKeyItem({
   toggleKey,
-  otherKeys,
   onOpenKeySetting,
 }: ModToggleKeyItemProps) {
   return (
@@ -117,7 +113,6 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
               label: "key",
               sectionName: toggleKey.sectionName,
               value: toggleKey.key ?? "",
-              otherKeys,
             })
           }
         />
@@ -131,7 +126,6 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
               label: "key",
               sectionName: toggleKey.sectionName,
               value: "",
-              otherKeys,
             })
           }
         >
@@ -156,7 +150,6 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
               label: "back",
               sectionName: toggleKey.sectionName,
               value: toggleKey.back ?? "",
-              otherKeys,
             })
           }
         />
@@ -170,7 +163,6 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
               label: "back",
               sectionName: toggleKey.sectionName,
               value: "",
-              otherKeys,
             })
           }
         >
@@ -192,11 +184,7 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
   );
 });
 
-export const ModIniItem = memo(function ModIniItem({
-  ini,
-  otherKeysById,
-  onOpenKeySetting,
-}: ModIniItemProps) {
+export const ModIniItem = memo(function ModIniItem({ ini, onOpenKeySetting }: ModIniItemProps) {
   return (
     <div className="space-y-1 text-[13px]">
       <div className="flex items-center justify-between gap-1">
@@ -222,9 +210,6 @@ export const ModIniItem = memo(function ModIniItem({
             <ModToggleKeyItem
               key={`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`}
               toggleKey={toggleKey}
-              otherKeys={
-                otherKeysById[`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`] ?? []
-              }
               onOpenKeySetting={onOpenKeySetting}
             />
           ))}
