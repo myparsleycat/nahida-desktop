@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/metadata"
 	"nahida.live/desktop/internal/transfer"
 )
 
@@ -322,8 +323,11 @@ func (m *Mod) runGroupDownload(
 	if err != nil {
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
-	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, map[string]any{
-		"source": "mod", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
+	downloadedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeDownloadMetadataToPaths(finalized.DestinationPaths, func() metadata.DirectDownload {
+		return metadata.DirectDownload{
+			ID: uuid.NewString(), Source: metadata.DirectSource, DownloadedAt: downloadedAt,
+		}
 	}); err != nil {
 		return m.finishDownloadError(
 			ctx,
@@ -412,13 +416,21 @@ func (m *Mod) runGameBananaDownload(
 	if err != nil {
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 	}
-	metadata := map[string]any{
-		"source": "gamebanana", "downloadedAt": time.Now().UTC().Format(time.RFC3339Nano),
-		"mod":    map[string]any{"id": payload.ModID, "pageUrl": payload.ModPageURL, "version": payload.Version},
-		"author": map[string]any{"name": payload.AuthorName, "url": payload.AuthorURL},
-		"file":   map[string]any{"downloadUrl": payload.FileURL, "md5": payload.FileMD5},
-	}
-	if err := writeModDownloadMetadataToDirectories(finalized.DestinationPaths, metadata); err != nil {
+	downloadedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeDownloadMetadataToPaths(finalized.DestinationPaths, func() metadata.GameBananaDownload {
+		return metadata.GameBananaDownload{
+			ID:           uuid.NewString(),
+			Source:       metadata.GameBananaSource,
+			DownloadedAt: downloadedAt,
+			Mod: &metadata.GameBananaMod{
+				ID: int64(payload.ModID), PageURL: payload.ModPageURL, Version: payload.Version,
+			},
+			Author: metadata.GameBananaAuthor{Name: payload.AuthorName, URL: payload.AuthorURL},
+			File: metadata.GameBananaFile{
+				DownloadURL: payload.FileURL, MD5: payload.FileMD5,
+			},
+		}
+	}); err != nil {
 		return m.finishDownloadError(
 			ctx,
 			transfers,
