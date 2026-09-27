@@ -95,12 +95,13 @@ const (
 // nahida://download?v=1&kind=<drive|link|mod>&id=<itemId>&dir=<0|1>&name=<name>
 // plus linkId/linkToken for a shared link, or token/sig for a mod.
 type deepLinkDownload struct {
-	Kind  string
-	ID    string
-	IsDir bool
-	Name  string
-	Link  *drive.DownloadLink
-	Mod   *drive.DownloadModAccess
+	Kind   string
+	ID     string
+	IsDir  bool
+	Name   string
+	Link   *drive.DownloadLink
+	Mod    *drive.DownloadModAccess
+	Ticket string
 }
 
 func parseDownloadDeepLink(value string) *deepLinkDownload {
@@ -115,6 +116,17 @@ func parseDownloadDeepLink(value string) *deepLinkDownload {
 				return nil
 			}
 		}
+	}
+	if query.Get("v") == "2" {
+		ticket := query.Get("ticket")
+		if len(query) != 2 || len(query["ticket"]) != 1 || len(query["v"]) != 1 || len(ticket) != 43 ||
+			parsed.Path != "" || parsed.Fragment != "" || parsed.User != nil || parsed.Port() != "" ||
+			strings.IndexFunc(ticket, func(r rune) bool {
+				return !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", r)
+			}) != -1 {
+			return nil
+		}
+		return &deepLinkDownload{Kind: "mod-ticket", Ticket: ticket, IsDir: true}
 	}
 	if query.Get("v") != downloadDeepLinkVersion {
 		return nil

@@ -25,6 +25,7 @@ type StartDownloadParams struct {
 	TargetPath    string             `json:"targetPath,omitempty"`
 	Link          *DownloadLink      `json:"link,omitempty"`
 	Mod           *DownloadModAccess `json:"mod,omitempty"`
+	ModTicket     string             `json:"-"`
 	Data          *DownloadMetadata  `json:"data,omitempty"`
 	SuggestedName string             `json:"suggestedName,omitempty"`
 	Source        string             `json:"source,omitempty"`
@@ -72,6 +73,19 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 		return StartDownloadResult{}, fmt.Errorf("path is not writable: %s", targetPath)
 	}
 	params.TargetPath = filepath.Clean(targetPath)
+	if params.ModTicket != "" {
+		redemption, err := d.redeemModDownloadTicket(ctx, params.ModTicket)
+		if err != nil {
+			return StartDownloadResult{}, err
+		}
+		params.Items = []DownloadItem{{ID: redemption.ItemID, IsDir: true, Name: redemption.Name}}
+		params.Mod = &DownloadModAccess{Grant: redemption.Grant}
+		params.Link = nil
+		params.ModTicket = ""
+		if params.SuggestedName == "" || params.SuggestedName == "Akasha Mod" {
+			params.SuggestedName = redemption.Name
+		}
+	}
 	var metadata DownloadMetadata
 	switch {
 	case params.Data != nil:
@@ -698,6 +712,9 @@ func (d *Drive) fetchPresignedDownloadURL(ctx context.Context, fileID string, ac
 		}
 		if access.Mod.Sig != "" {
 			header.Set("x-sig", access.Mod.Sig)
+		}
+		if access.Mod.Grant != "" {
+			header.Set("x-mod-download-grant", access.Mod.Grant)
 		}
 	case access.Link != nil:
 		query.Set("linkId", access.Link.LinkID)

@@ -28,6 +28,13 @@ func TestStartDeepLinkDownloadRequiresServices(t *testing.T) {
 		err.Error() != "drive service is not configured" {
 		t.Fatalf("link without drive = %v", err)
 	}
+	if _, err := rt.startDeepLinkDownload(
+		context.Background(),
+		deepLinkDownload{Kind: "mod-ticket", Ticket: "ticket"},
+	); err == nil ||
+		err.Error() != "drive service is not configured" {
+		t.Fatalf("ticket without login or drive = %v", err)
+	}
 	mod := &drive.DownloadModAccess{Token: "token", Sig: "sig"}
 	if _, err := rt.startDeepLinkDownload(
 		context.Background(),
@@ -95,6 +102,10 @@ func TestStartDeepLinkDownloadUsesPathSelectorInsteadOfNativeDialog(t *testing.T
 	}
 	if got := transfers.List(); len(got) != 0 {
 		t.Fatalf("transfers = %#v", got)
+	}
+	status, err = rt.startDeepLinkDownload(context.Background(), deepLinkDownload{Kind: "mod-ticket", Ticket: "ticket"})
+	if err != nil || status != "canceled" {
+		t.Fatalf("ticket canceled before redemption = %q, %v", status, err)
 	}
 }
 

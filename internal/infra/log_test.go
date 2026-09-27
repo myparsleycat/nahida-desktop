@@ -360,6 +360,16 @@ func TestRedactSecretsRedactsEntireCookieHeaders(t *testing.T) {
 	}
 }
 
+func TestRedactSecretsRedactsDownloadCapabilities(t *testing.T) {
+	input := `nahida://download?v=2&ticket=opaque X-Mod-Download-Grant: secret grant=abc {"ticket":"xyz"}`
+	redacted := redactSecrets(input)
+	for _, secret := range []string{"opaque", "secret", "abc", "xyz"} {
+		if strings.Contains(redacted, secret) {
+			t.Errorf("secret %q exposed: %s", secret, redacted)
+		}
+	}
+}
+
 func TestRedactSecretsRedactsEntireAuthorizationHeaders(t *testing.T) {
 	t.Parallel()
 

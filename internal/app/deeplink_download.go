@@ -35,6 +35,12 @@ func (rt *runtime) runDeepLinkDownload(ctx context.Context, download deepLinkDow
 			Operation: "deep-link-download",
 			Fields:    map[string]any{"kind": download.Kind, "id": download.ID, "name": download.Name},
 		})
+		if download.Ticket != "" {
+			emitAppEvent("fn:toast", "다운로드 티켓을 사용할 수 없습니다", map[string]any{
+				"description": "웹에서 다시 다운로드를 요청해 주세요",
+			})
+			return
+		}
 		emitAppEvent("fn:toast", "다운로드를 시작하지 못했습니다", map[string]any{"description": download.Name})
 	case status == "unauthorized":
 		emitAppEvent("fn:toast", "로그인이 필요합니다", map[string]any{"description": download.Name})
@@ -53,7 +59,7 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 	}
 	// Shared links and mods carry their own credentials; only the user's own
 	// drive needs a session.
-	if download.Link == nil && download.Mod == nil {
+	if download.Link == nil && download.Mod == nil && download.Ticket == "" {
 		if rt.auth == nil {
 			return "", errors.New("auth service is not configured")
 		}
@@ -73,10 +79,14 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 	if name == "" {
 		name = "item"
 	}
+	if download.Ticket != "" {
+		name = "Akasha Mod"
+	}
 	result, err := rt.drive.StartDownload(ctx, drive.StartDownloadParams{
-		Items: []drive.DownloadItem{{ID: download.ID, IsDir: download.IsDir, Name: name}},
-		Link:  download.Link,
-		Mod:   download.Mod,
+		Items:     []drive.DownloadItem{{ID: download.ID, IsDir: download.IsDir, Name: name}},
+		Link:      download.Link,
+		Mod:       download.Mod,
+		ModTicket: download.Ticket,
 	})
 	if err != nil {
 		return "", err
