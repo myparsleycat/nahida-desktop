@@ -172,7 +172,7 @@ func relocateSelectedPreviews(oldPath, newPath, boundary string) error {
 	newPath = filepath.Clean(newPath)
 	dir := filepath.Dir(oldPath)
 	bounded := boundary != "" && pathWithin(boundary, dir)
-	entries := make([]metadata.WriteEntry, 0)
+	dirs := make([]string, 0)
 	for steps := 0; ; steps++ {
 		if bounded {
 			if !pathWithin(boundary, dir) {
@@ -181,41 +181,23 @@ func relocateSelectedPreviews(oldPath, newPath, boundary string) error {
 		} else if steps >= previewSearchDepth {
 			break
 		}
-		updated, ok, err := rewrittenPreviewFile(dir, oldPath, newPath)
-		if err != nil {
-			return err
-		}
-		if ok {
-			entries = append(entries, metadata.WriteEntry{Dir: dir, Data: updated})
-		}
+		dirs = append(dirs, dir)
 		parent := filepath.Dir(dir)
 		if samePath(parent, dir) {
 			break
 		}
 		dir = parent
 	}
-	if len(entries) == 0 {
-		return nil
-	}
-	if err := metadata.WriteBatch(entries); err != nil {
+	if err := metadata.UpdateBatch(dirs, func(dir string, raw []byte) ([]byte, bool, error) {
+		updated, ok, err := rewrittenPreview(raw, dir, oldPath, newPath)
+		if err != nil {
+			return nil, false, fmt.Errorf("rewrite preview metadata in %s: %w", dir, err)
+		}
+		return updated, ok, nil
+	}); err != nil {
 		return fmt.Errorf("update preview after rename: %w", err)
 	}
 	return nil
-}
-
-func rewrittenPreviewFile(dir, oldPath, newPath string) ([]byte, bool, error) {
-	raw, err := metadata.Read(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, fmt.Errorf("read preview metadata: %w", err)
-	}
-	updated, ok, err := rewrittenPreview(raw, dir, oldPath, newPath)
-	if err != nil {
-		return nil, false, fmt.Errorf("rewrite preview metadata: %w", err)
-	}
-	return updated, ok, nil
 }
 
 func rewrittenPreview(raw []byte, ancestor, oldPath, newPath string) ([]byte, bool, error) {

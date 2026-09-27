@@ -130,6 +130,133 @@ func TestInitializeRemovesFileWhenHideFails(t *testing.T) {
 	}
 }
 
+func TestUpdateBatchKeepsReadAndWriteTogether(t *testing.T) {
+	dir := t.TempDir()
+	if err := Initialize(dir, []byte(`{"preview":"old"}`)); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	unblock := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-unblock:
+		default:
+			close(unblock)
+		}
+	})
+	updated := make(chan error, 1)
+	go func() {
+		updated <- UpdateBatch([]string{dir}, func(string, []byte) ([]byte, bool, error) {
+			close(entered)
+			<-unblock
+			return []byte(`{"preview":"new"}`), true, nil
+		})
+	}()
+	<-entered
+	written := make(chan error, 1)
+	go func() {
+		written <- Upsert(dir, func(raw []byte) ([]byte, error) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				return nil, err
+			}
+			fields["id"] = json.RawMessage(`"other"`)
+			return json.Marshal(fields)
+		})
+	}()
+	waitForQueueRefs(t, dir, 2)
+	close(unblock)
+	if err := <-updated; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-written; err != nil {
+		t.Fatal(err)
+	}
+	raw, err := Read(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || string(fields["preview"]) != `"new"` ||
+		string(fields["id"]) != `"other"` {
+		t.Fatalf("metadata after concurrent updates = %s, %v", raw, err)
+	}
+}
+
+func TestUpdateBatchSkipsMissingAndUnchangedFiles(t *testing.T) {
+	first := t.TempDir()
+	second := t.TempDir()
+	missing := t.TempDir()
+	for _, dir := range []string{first, second} {
+		if err := Initialize(dir, []byte(`{"id":"old"}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	called := 0
+	if err := UpdateBatch([]string{first, missing, second}, func(dir string, raw []byte) ([]byte, bool, error) {
+		called++
+		return []byte(`{"id":"new"}`), dir == second, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if called != 2 {
+		t.Fatalf("callbacks = %d, want 2", called)
+	}
+	for dir, want := range map[string]string{first: `{"id":"old"}`, second: `{"id":"new"}`} {
+		if raw, err := Read(dir); err != nil || string(raw) != want {
+			t.Fatalf("metadata in %s = %s, %v", dir, raw, err)
+		}
+	}
+	if _, err := Read(missing); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing metadata = %v", err)
+	}
+}
+
+func TestUpdateBatchCallbackErrorLeavesAllFilesUnchanged(t *testing.T) {
+	first := t.TempDir()
+	second := t.TempDir()
+	for _, dir := range []string{first, second} {
+		if err := Initialize(dir, []byte(`{"id":"old"}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failure := errors.New("change failed")
+	err := UpdateBatch([]string{first, second}, func(dir string, raw []byte) ([]byte, bool, error) {
+		if dir == second {
+			return nil, false, failure
+		}
+		return []byte(`{"id":"new"}`), true, nil
+	})
+	if !errors.Is(err, failure) {
+		t.Fatalf("batch update error = %v, want %v", err, failure)
+	}
+	for _, dir := range []string{first, second} {
+		if raw, err := Read(dir); err != nil || string(raw) != `{"id":"old"}` {
+			t.Fatalf("metadata after failed batch in %s = %s, %v", dir, raw, err)
+		}
+	}
+}
+
+func TestWriteBatchCleanupFailureDoesNotReportCommitFailure(t *testing.T) {
+	dir := t.TempDir()
+	if err := Initialize(dir, []byte(`{"id":"old"}`)); err != nil {
+		t.Fatal(err)
+	}
+	realRemove := removeBackup
+	t.Cleanup(func() { removeBackup = realRemove })
+	removeBackup = func(string) error { return errors.New("backup cleanup failed") }
+
+	if err := Write(dir, []byte(`{"id":"new"}`)); err != nil {
+		t.Fatalf("committed write reported failure: %v", err)
+	}
+	if raw, err := Read(dir); err != nil || string(raw) != `{"id":"new"}` {
+		t.Fatalf("metadata after cleanup failure = %s, %v", raw, err)
+	}
+	if matches, err := filepath.Glob(filepath.Join(dir, "nhd.json.backup-*")); err != nil || len(matches) != 1 {
+		t.Fatalf("unremoved backup = %v, %v", matches, err)
+	}
+}
+
 func TestWriteBatchRestoresEveryDirectoryWhenHideFails(t *testing.T) {
 	root := t.TempDir()
 	first := filepath.Join(root, "first")
