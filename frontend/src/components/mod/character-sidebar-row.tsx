@@ -1,14 +1,12 @@
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef } from "react";
+import { type CSSProperties, useCallback, useEffect, useRef } from "react";
 
 import type { CharacterSidebarContentProps } from "./character-sidebar-content";
 
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { useCharacterSidebarVisibleRows } from "./use-character-sidebar-visible-rows";
-
-const ROW_HEIGHT = 56;
 
 const containerStyle: CSSProperties = {
   gridTemplateColumns: "auto 1fr auto",
@@ -17,6 +15,7 @@ const containerStyle: CSSProperties = {
 const itemClassName =
   "relative grid h-14 items-center gap-3 overflow-hidden py-2 pr-4 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]";
 const selectedItemClassName = "bg-[#cecece] dark:bg-[#2a2a2a]";
+const rowHeight = 56;
 const itemStyles = new Map<number, CSSProperties>();
 
 function getItemStyle(depth: number): CSSProperties {
@@ -74,39 +73,32 @@ export function CharacterSidebarRow({
     sortDirection,
     hideEmptyGroups,
   );
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => viewport,
+    estimateSize: () => rowHeight,
+    getItemKey: (index) => rows[index]?.group.path ?? index,
+    overscan: 4,
+    initialRect: viewport
+      ? { width: viewport.clientWidth, height: viewport.clientHeight }
+      : undefined,
+  });
 
   useEffect(() => {
     onVisibleRowsChange?.(rows.map((row) => ({ path: row.group.path, group: row.group })));
   }, [onVisibleRowsChange, rows]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getItemKey: (index) => rows[index]?.group.path ?? index,
-    getScrollElement: () => viewport,
-    estimateSize: useCallback(() => ROW_HEIGHT, []),
-    overscan: 4,
-    directDomUpdates: true,
-  });
-
-  const pathToIndex = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const [index, row] of rows.entries()) {
-      map.set(row.group.path, index);
-    }
-    return map;
-  }, [rows]);
-
   const scrollToPath = useCallback(
     (path: string) => {
-      const index = pathToIndex.get(path);
-      if (index == null) {
+      const index = rows.findIndex((row) => row.group.path === path);
+      if (!viewport || index < 0) {
         return false;
       }
 
       rowVirtualizer.scrollToIndex(index, { align: "center" });
       return true;
     },
-    [pathToIndex, rowVirtualizer],
+    [rowVirtualizer, rows, viewport],
   );
 
   useEffect(() => {
@@ -138,7 +130,7 @@ export function CharacterSidebarRow({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [pathToIndex, scrollToPath, selectedGroupPath]);
+  }, [rows, scrollToPath, selectedGroupPath]);
 
   const handleItemClick = useCallback(
     (group: FolderGroup, e: React.MouseEvent, collapseGroupPath?: string) => {
@@ -168,13 +160,7 @@ export function CharacterSidebarRow({
   }
 
   return (
-    <div
-      ref={rowVirtualizer.containerRef}
-      style={{
-        width: "100%",
-        position: "relative",
-      }}
-    >
+    <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
       {rowVirtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index];
         if (!row) {
@@ -184,15 +170,9 @@ export function CharacterSidebarRow({
         return (
           <div
             key={virtualRow.key}
-            ref={rowVirtualizer.measureElement}
             data-index={virtualRow.index}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: `${virtualRow.size}px`,
-            }}
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
             <CharacterSidebarItem
               itemRefs={itemRefs}

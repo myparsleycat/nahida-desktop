@@ -9,7 +9,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Separator } from "@renderer/components/ui/separator";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { KeyRecorder } from "./key-recorder";
 import { ModIniItem } from "./mod-ini-item";
@@ -36,25 +36,6 @@ interface ActiveKeySetting {
 
 export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps) {
   const [activeKeySetting, setActiveKeySetting] = useState<ActiveKeySetting | null>(null);
-  const otherKeysById = useMemo(() => {
-    const entries = mod.inis.flatMap((ini) =>
-      ini.toggleKeys.map((toggleKey, idx) => ({
-        id: `${ini.path}:${toggleKey.sectionName}:${idx.toString()}`,
-        path: ini.path,
-        sectionName: toggleKey.sectionName,
-        key: toggleKey.key,
-        back: toggleKey.back,
-      })),
-    );
-
-    return entries.reduce<Record<string, string[]>>((acc, entry) => {
-      acc[entry.id] = entries
-        .filter((other) => other.sectionName !== entry.sectionName || other.path !== entry.path)
-        .flatMap((other) => [other.key, other.back])
-        .filter((key): key is string => !!key);
-      return acc;
-    }, {});
-  }, [mod.inis]);
 
   return (
     <>
@@ -101,11 +82,17 @@ export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps
             <div key={ini.path}>
               <ModIniItem
                 ini={ini}
-                otherKeysById={otherKeysById}
                 onOpenKeySetting={(setting) =>
                   setActiveKeySetting({
                     ...setting,
                     id: `${ini.path}:${setting.id}`,
+                    otherKeys: mod.inis.flatMap((otherIni) =>
+                      otherIni.toggleKeys.flatMap((toggleKey) =>
+                        otherIni.path === ini.path && toggleKey.sectionName === setting.sectionName
+                          ? []
+                          : [toggleKey.key, toggleKey.back].filter((key): key is string => !!key),
+                      ),
+                    ),
                     onSave: (newValue) =>
                       onToggleKeyUpdate(
                         mod.path,
