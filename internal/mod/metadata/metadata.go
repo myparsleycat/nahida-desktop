@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -15,6 +16,7 @@ import (
 const fileName = "nhd.json"
 
 var hideFile = platform.HideFile
+var removeBackup = os.Remove
 
 // WriteEntry is one mod directory and its complete nhd.json contents.
 type WriteEntry struct {
@@ -82,21 +84,7 @@ func Update(modPath string, change func([]byte) ([]byte, error)) error {
 	if change == nil {
 		return errors.New("mod metadata update callback is nil")
 	}
-	release, err := reserve(modPath)
-	if err != nil {
-		return err
-	}
-	defer release()
-
-	current, err := os.ReadFile(filepath.Join(modPath, fileName))
-	if err != nil {
-		return err
-	}
-	next, err := change(current)
-	if err != nil {
-		return err
-	}
-	return writeBatch([]WriteEntry{{Dir: modPath, Data: next}})
+	return update(modPath, change, false)
 }
 
 // Upsert reads and replaces nhd.json under one queue reservation, passing nil to change when absent.
@@ -105,6 +93,10 @@ func Upsert(modPath string, change func([]byte) ([]byte, error)) error {
 	if change == nil {
 		return errors.New("mod metadata upsert callback is nil")
 	}
+	return update(modPath, change, true)
+}
+
+func update(modPath string, change func([]byte) ([]byte, error), allowMissing bool) error {
 	release, err := reserve(modPath)
 	if err != nil {
 		return err
@@ -112,7 +104,7 @@ func Upsert(modPath string, change func([]byte) ([]byte, error)) error {
 	defer release()
 
 	current, err := os.ReadFile(filepath.Join(modPath, fileName))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil && (!allowMissing || !errors.Is(err, os.ErrNotExist)) {
 		return err
 	}
 	next, err := change(current)
@@ -135,6 +127,39 @@ func WriteBatch(entries []WriteEntry) error {
 	}
 	defer release()
 
+	return writeBatch(entries)
+}
+
+// UpdateBatch transforms existing nhd.json files while holding all directory reservations.
+// Missing files are skipped; returning changed=false leaves a file untouched. The callback must not
+// call metadata operations on any of the reserved directories.
+func UpdateBatch(dirs []string, change func(string, []byte) ([]byte, bool, error)) error {
+	if change == nil {
+		return errors.New("mod metadata batch update callback is nil")
+	}
+	release, err := reserve(dirs...)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	entries := make([]WriteEntry, 0, len(dirs))
+	for _, dir := range dirs {
+		current, err := os.ReadFile(filepath.Join(dir, fileName))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		next, changed, err := change(dir, current)
+		if err != nil {
+			return err
+		}
+		if changed {
+			entries = append(entries, WriteEntry{Dir: dir, Data: next})
+		}
+	}
 	return writeBatch(entries)
 }
 
@@ -165,16 +190,16 @@ func writeBatch(entries []WriteEntry) error {
 		}
 	}
 
-	var cleanupErr error
 	for _, file := range backups {
 		if file.backupPath == "" {
 			continue
 		}
-		if err := os.Remove(file.backupPath); err != nil && !os.IsNotExist(err) {
-			cleanupErr = errors.Join(cleanupErr, err)
+		if err := removeBackup(file.backupPath); err != nil && !os.IsNotExist(err) {
+			// The new metadata has committed; a cleanup failure must not trigger the caller's rollback.
+			slog.Warn("remove committed mod metadata backup", "path", file.backupPath, "error", err)
 		}
 	}
-	return cleanupErr
+	return nil
 }
 
 func requireDirectory(dir string) error {
