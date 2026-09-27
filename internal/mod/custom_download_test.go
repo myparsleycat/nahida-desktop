@@ -17,6 +17,7 @@ import (
 
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/metadata"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
 )
@@ -84,6 +85,15 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 		}
 		processCustomDownloadQueue(t, transfers, int64(len(customArchive)))
 		assertCustomDownloadFile(t, filepath.Join(destination, "CustomRoot", "mod.ini"), "custom")
+		raw, err := metadata.Read(filepath.Join(destination, "CustomRoot"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document metadata.DirectDownload
+		if err := json.Unmarshal(raw, &document); err != nil || document.Source != metadata.DirectSource ||
+			document.ID == "" || document.DownloadedAt == "" {
+			t.Fatalf("metadata = %s, %v", raw, err)
+		}
 		if len(inspectionPaths) != 1 || inspectionPaths[0] != filepath.Join(destination, "CustomRoot") {
 			t.Fatalf("queued inspection paths = %#v", inspectionPaths)
 		}
@@ -102,12 +112,15 @@ func TestCustomDownloadPublicRunnersEndToEnd(t *testing.T) {
 		processCustomDownloadQueue(t, transfers, int64(len(gameBananaArchive)))
 		modPath := filepath.Join(destination, "Selected GB")
 		assertCustomDownloadFile(t, filepath.Join(modPath, "mod.ini"), "gamebanana")
-		raw, err := os.ReadFile(filepath.Join(modPath, modDownloadMetadataFileName))
+		raw, err := metadata.Read(modPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var metadata map[string]any
-		if err := json.Unmarshal(raw, &metadata); err != nil || metadata["source"] != "gamebanana" {
+		var document metadata.GameBananaDownload
+		if err := json.Unmarshal(raw, &document); err != nil || document.Source != metadata.GameBananaSource ||
+			document.ID == "" || document.DownloadedAt == "" || document.Mod == nil || document.Mod.ID != 10 ||
+			document.Mod.Version == nil || *document.Mod.Version != "1.0" || document.File.MD5 == nil ||
+			*document.File.MD5 != "abc" {
 			t.Fatalf("metadata = %s, %v", raw, err)
 		}
 	})

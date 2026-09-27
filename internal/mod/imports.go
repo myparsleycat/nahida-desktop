@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/metadata"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -262,7 +263,7 @@ func (m *Mod) GetGameBananaModID(ctx context.Context, modPath string) (*int64, e
 	if _, err := m.ownedPath(ctx, modPath); err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(filepath.Join(modPath, "nhd.json"))
+	raw, err := metadata.Read(modPath)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -273,17 +274,17 @@ func (m *Mod) GetGameBananaModID(ctx context.Context, modPath string) (*int64, e
 }
 
 func decodeGameBananaModID(raw []byte) *int64 {
-	var metadata struct {
+	var document struct {
 		Source string `json:"source"`
 		Mod    *struct {
 			ID int64 `json:"id"`
 		} `json:"mod"`
 	}
-	if json.Unmarshal(raw, &metadata) != nil || metadata.Source != "gamebanana" ||
-		metadata.Mod == nil || metadata.Mod.ID <= 0 {
+	if json.Unmarshal(raw, &document) != nil || document.Source != metadata.GameBananaSource ||
+		document.Mod == nil || document.Mod.ID <= 0 {
 		return nil
 	}
-	return &metadata.Mod.ID
+	return &document.Mod.ID
 }
 
 func (m *Mod) previewContent(ctx context.Context, data, pasteType string) ([]byte, string, error) {
