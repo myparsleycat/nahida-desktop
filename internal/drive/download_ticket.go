@@ -6,6 +6,15 @@ import (
 	"net/http"
 )
 
+// ModTicketRedemptionError identifies failures before a ticket can be redeemed.
+type ModTicketRedemptionError struct {
+	err error
+}
+
+func (e *ModTicketRedemptionError) Error() string { return e.err.Error() }
+
+func (e *ModTicketRedemptionError) Unwrap() error { return e.err }
+
 type modTicketRedemption struct {
 	ItemID string
 	Name   string

@@ -37,7 +37,13 @@ type StartDownloadResult struct {
 }
 
 func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (result StartDownloadResult, err error) {
-	defer normalizeDriveBoundaryError(&err, "fn:startDownload")
+	redemptionFailed := false
+	defer func() {
+		normalizeDriveBoundaryError(&err, "fn:startDownload")
+		if redemptionFailed {
+			err = &ModTicketRedemptionError{err: err}
+		}
+	}()
 	if d == nil || d.transfer == nil || d.download == nil {
 		return StartDownloadResult{}, errors.New("download services are not configured")
 	}
@@ -76,6 +82,7 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 	if params.ModTicket != "" {
 		redemption, err := d.redeemModDownloadTicket(ctx, params.ModTicket)
 		if err != nil {
+			redemptionFailed = true
 			return StartDownloadResult{}, err
 		}
 		params.Items = []DownloadItem{{ID: redemption.ItemID, IsDir: true, Name: redemption.Name}}

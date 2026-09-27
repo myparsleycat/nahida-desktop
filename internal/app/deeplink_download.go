@@ -35,7 +35,8 @@ func (rt *runtime) runDeepLinkDownload(ctx context.Context, download deepLinkDow
 			Operation: "deep-link-download",
 			Fields:    map[string]any{"kind": download.Kind, "id": download.ID, "name": download.Name},
 		})
-		if download.Ticket != "" {
+		var redemptionErr *drive.ModTicketRedemptionError
+		if errors.As(err, &redemptionErr) {
 			emitAppEvent("fn:toast", "다운로드 티켓을 사용할 수 없습니다", map[string]any{
 				"description": "웹에서 다시 다운로드를 요청해 주세요",
 			})

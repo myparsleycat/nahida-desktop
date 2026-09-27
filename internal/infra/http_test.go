@@ -136,6 +136,75 @@ func TestUseTransportReplacesSharedClientTransport(t *testing.T) {
 	(&Client{}).UseTransport(blocked)
 }
 
+func TestFetchRejectsInsecureRedirectWithoutSendingCredentials(t *testing.T) {
+	for _, target := range []string{"http://example.com/redeem", "https://example.com/redeem"} {
+		t.Run(target, func(t *testing.T) {
+			calls := 0
+			client := testClient(
+				t,
+				ClientOptions{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls++
+					if req.Header.Get("x-ticket") != "secret" {
+						t.Errorf("redirect request lost ticket header: %v", req.Header)
+					}
+					if calls == 1 {
+						resp := textResp(req, http.StatusTemporaryRedirect, "")
+						resp.Header.Set("Location", target)
+						return resp, nil
+					}
+					return textResp(req, http.StatusOK, "ok"), nil
+				})},
+			)
+			header := make(http.Header)
+			header.Set("x-ticket", "secret")
+			resp, err := client.Fetch(context.Background(), "https://example.com/start", FetchOptions{
+				Method: http.MethodPost, Header: header, Body: strings.NewReader(`{"ticket":"secret"}`),
+			})
+			if strings.HasPrefix(target, "http:") {
+				if err == nil || !strings.Contains(err.Error(), "non-HTTPS") || calls != 1 {
+					t.Fatalf("insecure redirect = %v, calls = %d; want blocked before second request", err, calls)
+				}
+				return
+			}
+			if err != nil || calls != 2 {
+				t.Fatalf("HTTPS redirect = %v, calls = %d; want successful follow", err, calls)
+			}
+			closeBody(t, resp)
+		})
+	}
+}
+
+func TestFetchRedirectKeepsCustomPolicyAndDefaultLimit(t *testing.T) {
+	redirects := 0
+	upstream := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := textResp(req, http.StatusFound, "")
+			resp.Header.Set("Location", "https://example.com/again")
+			return resp, nil
+		}),
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			redirects++
+			return http.ErrUseLastResponse
+		},
+	}
+	client := testClient(t, ClientOptions{HTTPClient: upstream})
+	resp, err := client.Fetch(context.Background(), "https://example.com/start", FetchOptions{})
+	if err != nil || redirects != 1 || resp.StatusCode != http.StatusFound {
+		t.Fatalf("custom redirect policy = %v, calls = %d, response = %v", err, redirects, resp)
+	}
+	closeBody(t, resp)
+	if upstream.CheckRedirect == nil {
+		t.Fatal("caller client policy was modified")
+	}
+
+	client = testClient(t, ClientOptions{Transport: upstream.Transport})
+	resp, err = client.Fetch(context.Background(), "https://example.com/start", FetchOptions{})
+	closeBody(t, resp)
+	if err == nil || !strings.Contains(err.Error(), "stopped after 10 redirects") {
+		t.Fatalf("default redirect limit = %v", err)
+	}
+}
+
 func TestSetStatusNotifiesOnChangeOnly(t *testing.T) {
 	t.Parallel()
 
