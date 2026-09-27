@@ -445,7 +445,7 @@ func (m *Mod) setNteModEnabled(ctx context.Context, path string, enabled bool) (
 	}
 	var result string
 	if enabled {
-		result, err = m.enable(path)
+		result, err = m.enable(ctx, path)
 	} else {
 		result, err = m.disable(ctx, path)
 	}

@@ -238,3 +238,162 @@ func TestPreviewSelectionConcurrentUpdates(t *testing.T) {
 		t.Fatalf("concurrent update lost fields: %s, %v", raw, err)
 	}
 }
+
+func TestRelocatedPreviewPathUsesRenameResult(t *testing.T) {
+	t.Parallel()
+	ancestor := filepath.Join("mods", "Outfit")
+	oldPath := filepath.Join(ancestor, "DISABLED foo")
+	newPath := filepath.Join(ancestor, "foo (2)")
+	got, ok := relocatedPreviewPath("disabled foo/shot.jpg", ancestor, oldPath, newPath)
+	if !ok || got != "foo (2)/shot.jpg" {
+		t.Fatalf("relocated = %q, %v", got, ok)
+	}
+	if _, ok := relocatedPreviewPath("foo/shot.jpg", ancestor, oldPath, newPath); ok {
+		t.Fatal("rewrote enabled duplicate")
+	}
+	parent := filepath.Dir(ancestor)
+	got, ok = relocatedPreviewPath("Outfit/DISABLED foo/shot.jpg", parent, oldPath, newPath)
+	if !ok || got != "Outfit/foo (2)/shot.jpg" {
+		t.Fatalf("ancestor relocated = %q, %v", got, ok)
+	}
+}
+
+func TestToggleRewritesNestedPreviewToRenamedPath(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	modsRoot := filepath.Join(root, "mods")
+	character := filepath.Join(modsRoot, "Character")
+	outfit := filepath.Join(character, "Outfit")
+	disabled := filepath.Join(outfit, "DISABLED foo")
+	selected := writePreviewFile(t, disabled, "shot.jpg")
+	duplicate := writePreviewFile(t, filepath.Join(outfit, "foo"), "shot.jpg")
+	writePreviewFile(t, outfit, "cover.jpg")
+	if err := service.AddGame(ctx, "game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte(`{"id":"download","keep":true}`)
+	for _, dir := range []string{outfit, character} {
+		if err := metadata.Initialize(dir, original); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, modPath := range []string{outfit, character} {
+		if err := service.SetDefaultPreview(ctx, modPath, selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outside := filepath.Join(root, "nhd.json")
+	relative, err := filepath.Rel(root, selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsidePreview := []byte(`{"preview":"` + filepath.ToSlash(relative) + `","id":"outside"}`)
+	if err := os.WriteFile(outside, outsidePreview, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := service.Toggle(ctx, disabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(renamed) != "foo (2)" {
+		t.Fatalf("renamed = %q", renamed)
+	}
+	assertSavedPreview(t, outfit, "foo (2)/shot.jpg")
+	assertSavedPreview(t, character, "Outfit/foo (2)/shot.jpg")
+	previewEqual(t, scanMod(character, outfit).Preview, filepath.Join(renamed, "shot.jpg"))
+	previewEqual(t, scanModLight(modsRoot, character).Preview, filepath.Join(renamed, "shot.jpg"))
+	if _, err := os.Stat(duplicate); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(outside); err != nil || string(raw) != string(outsidePreview) {
+		t.Fatalf("outside preview = %s, %v", raw, err)
+	}
+
+	disabledAgain, err := service.Toggle(ctx, renamed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(disabledAgain) != "DISABLED foo (2)" {
+		t.Fatalf("disabled = %q", disabledAgain)
+	}
+	assertSavedPreview(t, outfit, "DISABLED foo (2)/shot.jpg")
+	assertSavedPreview(t, character, "Outfit/DISABLED foo (2)/shot.jpg")
+	previewEqual(t, scanMod(character, outfit).Preview, filepath.Join(disabledAgain, "shot.jpg"))
+}
+
+func TestToggleEnableLeavesDuplicatePreviewUntouched(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	modsRoot := filepath.Join(root, "mods")
+	character := filepath.Join(modsRoot, "Character")
+	outfit := filepath.Join(character, "Outfit")
+	writePreviewFile(t, filepath.Join(outfit, "DISABLED foo"), "shot.jpg")
+	selected := writePreviewFile(t, filepath.Join(outfit, "foo"), "shot.jpg")
+	if err := service.AddGame(ctx, "game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, modPath := range []string{outfit, character} {
+		if err := service.SetDefaultPreview(ctx, modPath, selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	renamed, err := service.Toggle(ctx, filepath.Join(outfit, "DISABLED foo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(renamed) != "foo (2)" {
+		t.Fatalf("renamed = %q", renamed)
+	}
+	assertSavedPreview(t, outfit, "foo/shot.jpg")
+	assertSavedPreview(t, character, "Outfit/foo/shot.jpg")
+	previewEqual(t, scanMod(character, outfit).Preview, selected)
+}
+
+func TestTogglePreservesPreviewInsideRenamedMod(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Character")
+	modPath := filepath.Join(group, "Outfit")
+	selected := writePreviewFile(t, modPath, "images/cover.jpg")
+	if err := service.AddGame(ctx, "game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetDefaultPreview(ctx, modPath, selected); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := service.Toggle(ctx, modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSavedPreview(t, renamed, "images/cover.jpg")
+	previewEqual(t, scanMod(group, renamed).Preview, filepath.Join(renamed, "images", "cover.jpg"))
+}
+
+func assertSavedPreview(t *testing.T, modPath, want string) {
+	t.Helper()
+	raw, err := metadata.Read(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	var preview string
+	if err := json.Unmarshal(fields["preview"], &preview); err != nil || preview != want {
+		t.Fatalf("preview = %q, want %q (%s)", preview, want, raw)
+	}
+	if id, ok := fields["id"]; ok && string(id) != `"download"` && string(id) != `"outside"` {
+		t.Fatalf("lost id: %s", raw)
+	}
+	if keep, ok := fields["keep"]; ok && string(keep) != `true` {
+		t.Fatalf("lost keep: %s", raw)
+	}
+}
