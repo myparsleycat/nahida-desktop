@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 export function resetDriveFolderScroll(pane: HTMLElement | null) {
     if (!pane) return;
@@ -13,8 +13,8 @@ export function resetDriveFolderScroll(pane: HTMLElement | null) {
 export function useDriveFolderScroll(folderId: string) {
     const paneRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        // Reveal scrolls in a later frame, so a pending id must not keep the previous offset.
+    useLayoutEffect(() => {
+        // Reset before paint. Reveal still scrolls in a later frame.
         resetDriveFolderScroll(paneRef.current);
     }, [folderId]);
 
