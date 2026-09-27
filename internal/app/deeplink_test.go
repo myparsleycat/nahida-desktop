@@ -55,6 +55,9 @@ func TestParseDownloadDeepLink(t *testing.T) {
 		"nahida://download?v=2&ticket=" + strings.Repeat("A", 43): {
 			Kind: "mod-ticket", Ticket: strings.Repeat("A", 43), IsDir: true,
 		},
+		"nahida://download/?v=2&ticket=" + strings.Repeat("A", 43): {
+			Kind: "mod-ticket", Ticket: strings.Repeat("A", 43), IsDir: true,
+		},
 		"nahida://download?v=1&kind=drive&id=abc&dir=0&name=a%20b.zip": {
 			Kind: "drive", ID: "abc", IsDir: false, Name: "a b.zip",
 		},
@@ -82,6 +85,9 @@ func TestParseDownloadDeepLink(t *testing.T) {
 		"nahida://download?v=2&ticket=" + strings.Repeat("A", 43) + "&id=abc",
 		"nahida://download?v=2&ticket=" + strings.Repeat("A", 43) + "&ticket=" + strings.Repeat("B", 43),
 		"nahida://download?v=2&ticket=" + strings.Repeat("/", 43),
+		"nahida://download/other?v=2&ticket=" + strings.Repeat("A", 43),
+		"nahida://download//?v=2&ticket=" + strings.Repeat("A", 43),
+		"nahida://download/?v=2&ticket=" + strings.Repeat("A", 43) + "#extra",
 		"nahida://download?v=1&kind=drive",
 		"nahida://download?v=1&kind=unknown&id=abc",
 		"nahida://download?v=1&kind=link&id=abc&linkId=l",

@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/drive"
@@ -82,8 +85,20 @@ func TestStartDeepLinkDownloadModCredentials(t *testing.T) {
 }
 
 func TestStartDeepLinkDownloadUsesPathSelectorInsteadOfNativeDialog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/akasha/mod/download-ticket/redeem" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"itemId":"root","name":"Real Mod Name","isDir":true,"grant":"` + strings.Repeat("x", 43) + `"}`))
+	}))
+	defer server.Close()
 	transfers := transfer.New()
 	service := drive.NewWithOptions(drive.Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
+		}),
 		FS:           platform.NewFS(),
 		Transfer:     transfers,
 		Download:     infra.NewDownload(),
@@ -105,7 +120,7 @@ func TestStartDeepLinkDownloadUsesPathSelectorInsteadOfNativeDialog(t *testing.T
 	}
 	status, err = rt.startDeepLinkDownload(context.Background(), deepLinkDownload{Kind: "mod-ticket", Ticket: "ticket"})
 	if err != nil || status != "canceled" {
-		t.Fatalf("ticket canceled before redemption = %q, %v", status, err)
+		t.Fatalf("ticket canceled after redemption = %q, %v", status, err)
 	}
 }
 

@@ -77,11 +77,8 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 	}
 
 	name := download.Name
-	if name == "" {
+	if name == "" && download.Ticket == "" {
 		name = "item"
-	}
-	if download.Ticket != "" {
-		name = "Akasha Mod"
 	}
 	result, err := rt.drive.StartDownload(ctx, drive.StartDownloadParams{
 		Items:     []drive.DownloadItem{{ID: download.ID, IsDir: download.IsDir, Name: name}},
