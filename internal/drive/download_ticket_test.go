@@ -86,6 +86,76 @@ func TestRedeemModDownloadTicketAndUseGrant(t *testing.T) {
 	}
 }
 
+func TestStartDownloadRedeemsTicketBeforePathSelection(t *testing.T) {
+	const grant = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	var redemptions, selections atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/akasha/mod/download-ticket/redeem" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		redemptions.Add(1)
+		_, _ = w.Write([]byte(`{"itemId":"root","name":"Real Mod Name","isDir":true,"grant":"` + grant + `"}`))
+	}))
+	defer server.Close()
+	d := NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
+		}),
+		FS: platform.NewFS(), Transfer: transfer.New(), Download: infra.NewDownload(),
+		PathSelector: ticketPathSelectorFunc(func(_ context.Context, name, _ string, names []string, selectFile bool) (*string, *string, error) {
+			selections.Add(1)
+			if name != "Real Mod Name" || len(names) != 1 || names[0] != name || selectFile {
+				t.Errorf("selector got name %q, names %q, selectFile %v", name, names, selectFile)
+			}
+			return nil, nil, nil
+		}),
+	})
+	result, err := d.StartDownload(context.Background(), StartDownloadParams{
+		Items: []DownloadItem{{Name: "Akasha Mod", IsDir: true}}, ModTicket: "ticket",
+	})
+	if err != nil || result.Status != "canceled" {
+		t.Fatalf("download = %+v, %v", result, err)
+	}
+	if redemptions.Load() != 1 || selections.Load() != 1 {
+		t.Fatalf("redemptions = %d, selections = %d", redemptions.Load(), selections.Load())
+	}
+}
+
+func TestStartDownloadRejectsInvalidTicketBeforePathSelection(t *testing.T) {
+	var selections atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "invalid_download_capability", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	d := NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
+		}),
+		FS: platform.NewFS(), Transfer: transfer.New(), Download: infra.NewDownload(),
+		PathSelector: ticketPathSelectorFunc(func(context.Context, string, string, []string, bool) (*string, *string, error) {
+			selections.Add(1)
+			return nil, nil, nil
+		}),
+	})
+	_, err := d.StartDownload(context.Background(), StartDownloadParams{
+		Items: []DownloadItem{{Name: "Akasha Mod", IsDir: true}}, ModTicket: "invalid",
+	})
+	var redemptionErr *ModTicketRedemptionError
+	if !errors.As(err, &redemptionErr) || selections.Load() != 0 {
+		t.Fatalf("error = %v, selections = %d", err, selections.Load())
+	}
+}
+
+type ticketPathSelectorFunc func(context.Context, string, string, []string, bool) (*string, *string, error)
+
+func (f ticketPathSelectorFunc) SelectDownloadPath(
+	ctx context.Context, name, source string, names []string, selectFile bool,
+) (*string, *string, error) {
+	return f(ctx, name, source, names, selectFile)
+}
+
 func TestStartDownloadMarksOnlyTicketRedemptionFailures(t *testing.T) {
 	var rejectTicket atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

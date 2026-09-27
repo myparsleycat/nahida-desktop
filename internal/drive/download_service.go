@@ -58,6 +58,20 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 	for index := range params.Items {
 		params.Items[index].Name = fs.SanitizeWindowsFilename(params.Items[index].Name, " ")
 	}
+	if params.ModTicket != "" {
+		redemption, err := d.redeemModDownloadTicket(ctx, params.ModTicket)
+		if err != nil {
+			redemptionFailed = true
+			return StartDownloadResult{}, err
+		}
+		params.Items = []DownloadItem{{ID: redemption.ItemID, IsDir: true, Name: fs.SanitizeWindowsFilename(redemption.Name, " ")}}
+		params.Mod = &DownloadModAccess{Grant: redemption.Grant}
+		params.Link = nil
+		params.ModTicket = ""
+		if params.SuggestedName == "" {
+			params.SuggestedName = params.Items[0].Name
+		}
+	}
 	selected, err := d.resolveDownloadTarget(ctx, params)
 	if err != nil {
 		return StartDownloadResult{}, err
@@ -79,20 +93,6 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 		return StartDownloadResult{}, fmt.Errorf("path is not writable: %s", targetPath)
 	}
 	params.TargetPath = filepath.Clean(targetPath)
-	if params.ModTicket != "" {
-		redemption, err := d.redeemModDownloadTicket(ctx, params.ModTicket)
-		if err != nil {
-			redemptionFailed = true
-			return StartDownloadResult{}, err
-		}
-		params.Items = []DownloadItem{{ID: redemption.ItemID, IsDir: true, Name: redemption.Name}}
-		params.Mod = &DownloadModAccess{Grant: redemption.Grant}
-		params.Link = nil
-		params.ModTicket = ""
-		if params.SuggestedName == "" || params.SuggestedName == "Akasha Mod" {
-			params.SuggestedName = redemption.Name
-		}
-	}
 	var metadata DownloadMetadata
 	switch {
 	case params.Data != nil:
