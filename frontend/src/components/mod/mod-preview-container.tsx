@@ -1,3 +1,4 @@
+import { Mod } from "@bindings/mod";
 import { Shell } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -10,9 +11,18 @@ import {
 import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { localFileSrc } from "@renderer/lib/local-file";
-import type { ModInfo } from "@renderer/types/mod";
-import { BoxIcon, ClipboardIcon, ImageIcon, TrashIcon, ZoomInIcon } from "lucide-react";
-import { type SyntheticEvent, useState } from "react";
+import type { FolderGroup, ModInfo } from "@renderer/types/mod";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  BoxIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardIcon,
+  ImageIcon,
+  TrashIcon,
+  ZoomInIcon,
+} from "lucide-react";
+import { type SyntheticEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -22,6 +32,7 @@ import { isPreviewMediaPath } from "./preview-media";
 
 interface ModPreviewContainerProps {
   mod: ModInfo;
+  selectedGroupPath?: string;
   modelPreviewEligible: boolean;
   onDeletePreview: () => void;
   onOpenModelViewer: () => void;
@@ -30,13 +41,18 @@ interface ModPreviewContainerProps {
 
 export function ModPreviewContainer({
   mod,
+  selectedGroupPath,
   modelPreviewEligible,
   onDeletePreview,
   onOpenModelViewer,
   onPaste,
 }: ModPreviewContainerProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [savingPreview, setSavingPreview] = useState(false);
+  const savingRef = useRef(false);
+  const images = mod.previewImages ?? [];
   const hasMediaPreview = Boolean(mod.preview && isPreviewMediaPath(mod.preview));
   const [observeModelPreview, modelPreviewEnabled, modelPreviewState] = useGridModelPreview(
     mod,
@@ -46,6 +62,44 @@ export function ModPreviewContainer({
   const handlePasteClick = (e?: SyntheticEvent) => {
     e?.stopPropagation();
     onPaste();
+  };
+
+  const changePreview = async (direction: -1 | 1) => {
+    if (savingRef.current || images.length < 2) return;
+
+    const currentIndex = images.findIndex((image) => image === mod.preview);
+    const nextIndex =
+      currentIndex === -1
+        ? direction === 1
+          ? 0
+          : images.length - 1
+        : (currentIndex + direction + images.length) % images.length;
+    const imagePath = images[nextIndex];
+    savingRef.current = true;
+    setSavingPreview(true);
+    try {
+      await Mod.SetDefaultPreview(mod.path, imagePath);
+      if (selectedGroupPath) {
+        for (const key of ["modGroup", "modGroupLight"]) {
+          queryClient.setQueryData<FolderGroup>([key, selectedGroupPath], (group) =>
+            group
+              ? {
+                  ...group,
+                  mods: group.mods.map((item) =>
+                    item.path === mod.path ? { ...item, preview: imagePath } : item,
+                  ),
+                }
+              : group,
+          );
+          void queryClient.invalidateQueries({ queryKey: [key, selectedGroupPath] });
+        }
+      }
+    } catch {
+      toast.error(t("page.mod.toast.change-preview-error"));
+    } finally {
+      savingRef.current = false;
+      setSavingPreview(false);
+    }
   };
 
   const fallback = (
@@ -148,6 +202,31 @@ export function ModPreviewContainer({
         </ContextMenu>
       ) : (
         previewContent
+      )}
+      {hasMediaPreview && images.length > 1 && (
+        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between">
+          {([-1, 1] as const).map((direction) => (
+            <Button
+              key={direction}
+              type="button"
+              variant="secondary"
+              size="icon"
+              aria-label={t(
+                direction === -1 ? "page.mod.previous-preview" : "page.mod.next-preview",
+              )}
+              className="pointer-events-auto size-8 rounded-full bg-background/70 shadow-sm"
+              disabled={savingPreview}
+              onClick={(event) => {
+                event.stopPropagation();
+                void changePreview(direction);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.stopPropagation()}
+            >
+              {direction === -1 ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+            </Button>
+          ))}
+        </div>
       )}
       {hasMediaPreview && mod.preview && (
         <PreviewLightbox

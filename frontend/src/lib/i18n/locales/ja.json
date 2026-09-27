@@ -859,6 +859,8 @@
       },
       "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
       "no-preview": "プレビューなし",
+      "previous-preview": "前のプレビュー画像",
+      "next-preview": "次のプレビュー画像",
       "context-menu": {
         "open-model-viewer": "モデルビューアーで開く",
         "paste-preview": "貼り付け",
@@ -878,6 +880,7 @@
         "trash-loading": "ゴミ箱に移動中...",
         "trash-success": "削除完了",
         "trash-error": "削除失敗",
+        "change-preview-error": "デフォルトのプレビュー画像を変更できませんでした。",
         "value-required": "値を入力してください。",
         "rename-success": "MOD名を変更しました",
         "manual-subgroup-success": "サブグループとして指定しました",

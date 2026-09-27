@@ -256,6 +256,11 @@ func (m *Mod) PastePreview(
 			return filePath, err
 		}
 	}
+	if err := refreshSelectedPreviewAfterPaste(modPath, filePath); err != nil {
+		return filePath, infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+			Operation: "paste-preview", Stage: "metadata", Fields: map[string]any{"modPath": modPath, "path": filePath},
+		})
+	}
 	return filePath, nil
 }
 

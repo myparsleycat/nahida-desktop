@@ -267,6 +267,7 @@ export interface ModInfo {
     path: string;
     isEnabled: boolean;
     preview?: string;
+    previewImages?: string[];
     mtime: number;
     size: number;
     isDownloading?: boolean;

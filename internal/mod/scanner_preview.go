@@ -27,25 +27,25 @@ type previewBuckets struct {
 	disabled *previewCandidate
 }
 
-func (b *previewBuckets) consider(root, path, fileName string, extensions map[string]bool) {
+func (b *previewBuckets) consider(root, path, fileName string, extensions map[string]bool) *previewCandidate {
 	activeName := stripDisabledFileSuffix(fileName)
 	ext := strings.ToLower(filepath.Ext(activeName))
 	if !extensions[ext] {
-		return
+		return nil
 	}
 	lower := strings.ToLower(activeName)
 	for _, fragment := range excludedPreviewFragments {
 		if strings.Contains(lower, fragment) {
-			return
+			return nil
 		}
 	}
 	rel, relErr := filepath.Rel(root, path)
 	if relErr != nil {
-		return
+		return nil
 	}
 	segments := strings.FieldsFunc(filepath.ToSlash(rel), func(r rune) bool { return r == '/' })
 	if len(segments) == 0 {
-		return
+		return nil
 	}
 	location := 1
 	if len(segments) == 1 {
@@ -82,6 +82,7 @@ func (b *previewBuckets) consider(root, path, fileName string, extensions map[st
 		chosen := candidate
 		*slot = &chosen
 	}
+	return &candidate
 }
 
 func (b *previewBuckets) best() *previewCandidate {
@@ -102,6 +103,38 @@ func (b *previewBuckets) bestPath() *string {
 	return nil
 }
 
+func previewImagePath(path string) bool {
+	if strings.HasSuffix(strings.ToLower(path), ".disabled") {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif", ".avifs":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortedPreviewImages(candidates []previewCandidate) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].location != candidates[j].location {
+			return candidates[i].location < candidates[j].location
+		}
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		return naturalLess(candidates[i].path, candidates[j].path)
+	})
+	images := make([]string, len(candidates))
+	for i, candidate := range candidates {
+		images[i] = candidate.path
+	}
+	return images
+}
+
 func betterPreviewCandidate(current *previewCandidate, next previewCandidate) bool {
 	if current == nil {
 		return true
@@ -120,10 +153,6 @@ func walkDepth(root, path string) int {
 	return strings.Count(filepath.ToSlash(rel), "/") + 1
 }
 
-func findPreviewWalk(root string, maxDepth int, reports ...func(error)) *previewCandidate {
-	return findPreviewWalkWithExtensions(root, maxDepth, mediaExtensions, reports...)
-}
-
 func findScannerPreviewWalk(root string, maxDepth int, reports ...func(error)) *previewCandidate {
 	return findPreviewWalkWithExtensions(root, maxDepth, scannerMediaExtensions, reports...)
 }
@@ -134,7 +163,19 @@ func findPreviewWalkWithExtensions(
 	extensions map[string]bool,
 	reports ...func(error),
 ) *previewCandidate {
+	buckets, _ := scanPreviewWalk(root, maxDepth, extensions, false, reports...)
+	return buckets.best()
+}
+
+func scanPreviewWalk(
+	root string,
+	maxDepth int,
+	extensions map[string]bool,
+	collectImages bool,
+	reports ...func(error),
+) (previewBuckets, []previewCandidate) {
 	var buckets previewBuckets
+	var images []previewCandidate
 	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			reportScanFailure(err, reports)
@@ -149,10 +190,13 @@ func findPreviewWalkWithExtensions(
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		buckets.consider(root, path, entry.Name(), extensions)
+		if candidate := buckets.consider(root, path, entry.Name(), extensions); collectImages && candidate != nil &&
+			previewImagePath(path) {
+			images = append(images, *candidate)
+		}
 		return nil
 	})
-	return buckets.best()
+	return buckets, images
 }
 
 func listChildFolders(root string, reports ...func(error)) []string {
