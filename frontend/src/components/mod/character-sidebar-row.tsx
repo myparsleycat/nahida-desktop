@@ -1,5 +1,6 @@
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { type CSSProperties, useCallback, useEffect, useRef } from "react";
 
 import type { CharacterSidebarContentProps } from "./character-sidebar-content";
@@ -14,6 +15,7 @@ const containerStyle: CSSProperties = {
 const itemClassName =
   "relative grid h-14 items-center gap-3 overflow-hidden py-2 pr-4 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]";
 const selectedItemClassName = "bg-[#cecece] dark:bg-[#2a2a2a]";
+const rowHeight = 56;
 const itemStyles = new Map<number, CSSProperties>();
 
 function getItemStyle(depth: number): CSSProperties {
@@ -71,6 +73,16 @@ export function CharacterSidebarRow({
     sortDirection,
     hideEmptyGroups,
   );
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => viewport,
+    estimateSize: () => rowHeight,
+    getItemKey: (index) => rows[index]?.group.path ?? index,
+    overscan: 4,
+    initialRect: viewport
+      ? { width: viewport.clientWidth, height: viewport.clientHeight }
+      : undefined,
+  });
 
   useEffect(() => {
     onVisibleRowsChange?.(rows.map((row) => ({ path: row.group.path, group: row.group })));
@@ -78,23 +90,15 @@ export function CharacterSidebarRow({
 
   const scrollToPath = useCallback(
     (path: string) => {
-      const element = itemRefs.current.get(path)?.element;
-      if (!viewport || !element) {
+      const index = rows.findIndex((row) => row.group.path === path);
+      if (!viewport || index < 0) {
         return false;
       }
 
-      const viewportRect = viewport.getBoundingClientRect();
-      const elementRect = element.getBoundingClientRect();
-      viewport.scrollTo({
-        top:
-          viewport.scrollTop +
-          elementRect.top -
-          viewportRect.top -
-          (viewport.clientHeight - elementRect.height) / 2,
-      });
+      rowVirtualizer.scrollToIndex(index, { align: "center" });
       return true;
     },
-    [itemRefs, viewport],
+    [rowVirtualizer, rows, viewport],
   );
 
   useEffect(() => {
@@ -156,31 +160,44 @@ export function CharacterSidebarRow({
   }
 
   return (
-    <div className="w-full">
-      {rows.map((row) => (
-        <CharacterSidebarItem
-          key={row.group.path}
-          itemRefs={itemRefs}
-          group={row.group}
-          onClick={handleItemClick}
-          collapseGroupPath={row.collapseGroupPath}
-          onDrop={onItemDrop}
-          onCreateFolder={onCreateFolder}
-          onDeleteFolder={onDeleteFolder}
-          onManualSubGroupChange={onManualSubGroupChange}
-          depth={row.depth}
-          previewCacheKey={previewCacheKey}
-          layout="row"
-          parentGroupName={row.parentGroupName}
-          itemClassName={itemClassName}
-          selectedItemClassName={selectedItemClassName}
-          itemStyle={getItemStyle(row.depth)}
-          modFixer={modFixer}
-          onOpenModFixer={onOpenModFixer}
-          forceSelectOnClick={isSearching}
-          autoScrollOnSelect={false}
-        />
-      ))}
+    <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+        const row = rows[virtualRow.index];
+        if (!row) {
+          return null;
+        }
+
+        return (
+          <div
+            key={virtualRow.key}
+            data-index={virtualRow.index}
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
+            <CharacterSidebarItem
+              itemRefs={itemRefs}
+              group={row.group}
+              onClick={handleItemClick}
+              collapseGroupPath={row.collapseGroupPath}
+              onDrop={onItemDrop}
+              onCreateFolder={onCreateFolder}
+              onDeleteFolder={onDeleteFolder}
+              onManualSubGroupChange={onManualSubGroupChange}
+              depth={row.depth}
+              previewCacheKey={previewCacheKey}
+              layout="row"
+              parentGroupName={row.parentGroupName}
+              itemClassName={itemClassName}
+              selectedItemClassName={selectedItemClassName}
+              itemStyle={getItemStyle(row.depth)}
+              modFixer={modFixer}
+              onOpenModFixer={onOpenModFixer}
+              forceSelectOnClick={isSearching}
+              autoScrollOnSelect={false}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { FolderGroup } from "@renderer/types/mod";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CharacterSidebarRow, type CharacterSidebarRowProps } from "./character-sidebar-row";
@@ -47,6 +47,13 @@ vi.mock("./character-sidebar-item", () => ({
   CharacterSidebarItemSkeleton: () => <div>Loading</div>,
 }));
 
+class ResizeObserverMock {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
 const groups: FolderGroup[] = Array.from({ length: 40 }, (_, index) => ({
   name: `Group ${index}`,
   path: `group-${index}`,
@@ -54,9 +61,15 @@ const groups: FolderGroup[] = Array.from({ length: 40 }, (_, index) => ({
 }));
 
 function createProps(): CharacterSidebarRowProps {
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, {
+    clientHeight: { value: 112 },
+    offsetHeight: { value: 112 },
+    scrollHeight: { value: groups.length * 56 },
+  });
   return {
     groups,
-    viewport: document.createElement("div"),
+    viewport,
     itemRefs: { current: new Map() },
     onItemClick: vi.fn(),
     onItemDrop: vi.fn(),
@@ -74,6 +87,7 @@ function createProps(): CharacterSidebarRowProps {
 
 beforeEach(() => {
   store.selectedGroup = null;
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 });
 
 afterEach(() => {
@@ -83,36 +97,50 @@ afterEach(() => {
 });
 
 describe("CharacterSidebarRow", () => {
-  it("renders every visible row without a virtualized window", () => {
+  it("renders only viewport rows with four-row overscan and updates after scrolling", async () => {
     const props = createProps();
-    render(<CharacterSidebarRow {...props} />);
+    props.onVisibleRowsChange = vi.fn();
+    const viewport = props.viewport!;
+    document.body.appendChild(viewport);
+    const view = render(<CharacterSidebarRow {...props} />, { container: viewport });
 
-    expect(screen.getAllByRole("button")).toHaveLength(groups.length);
-    expect(screen.getByText("Group 39")).toBeTruthy();
+    expect(props.onVisibleRowsChange).toHaveBeenCalledWith(
+      groups.map((group) => ({ path: group.path, group })),
+    );
+
+    expect(screen.getByText("Group 0")).toBeTruthy();
+    expect(screen.queryByText("Group 39")).toBeNull();
+    expect(view.container.querySelectorAll("[data-index]").length).toBeLessThanOrEqual(6);
+
+    viewport.scrollTop = 35 * 56;
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => expect(screen.getByText("Group 35")).toBeTruthy());
+    expect(screen.queryByText("Group 0")).toBeNull();
+    const mountedIndexes = Array.from(view.container.querySelectorAll("[data-index]"), (element) =>
+      Number(element.getAttribute("data-index")),
+    );
+    expect(mountedIndexes).toEqual(mountedIndexes.toSorted((a, b) => a - b));
+    expect(mountedIndexes.length).toBeLessThanOrEqual(10);
+    expect(view.container.querySelector("[data-index='35']")?.textContent).toBe("Group 35");
   });
 
-  it("centers the selected row inside the sidebar viewport", () => {
+  it("centers a selected row even when it is outside the mounted window", () => {
     const props = createProps();
     const viewport = props.viewport!;
     store.selectedGroup = groups[35];
-    viewport.scrollTop = 24;
-    Object.defineProperty(viewport, "clientHeight", { value: 112 });
     viewport.scrollTo = vi.fn();
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
-      return {
-        top: this === viewport ? 20 : this.dataset.path === "group-35" ? 244 : 0,
-        height: 56,
-      } as DOMRect;
-    });
-    let frame: FrameRequestCallback | undefined;
+    const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      frame = callback;
+      frames.push(callback);
       return 1;
     });
 
-    render(<CharacterSidebarRow {...props} />);
-    act(() => frame?.(0));
+    document.body.appendChild(viewport);
+    render(<CharacterSidebarRow {...props} />, { container: viewport });
+    expect(screen.queryByText("Group 35")).toBeNull();
+    act(() => frames.forEach((frame) => frame(0)));
 
-    expect(viewport.scrollTo).toHaveBeenCalledWith({ top: 220 });
+    expect(viewport.scrollTo).toHaveBeenCalledWith({ top: 1932, behavior: "auto" });
   });
 });
