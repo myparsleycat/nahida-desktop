@@ -1,7 +1,9 @@
 import { Auth } from "@bindings/auth";
+import type { UpdateStatus } from "@bindings/xxmi";
 import { Logger } from "@renderer/lib/logger";
 import type { BackendStatus } from "@shared/backend";
 import type { DownloadSource } from "@shared/mod";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Events } from "@wailsio/runtime";
 import { useEffect } from "react";
@@ -21,6 +23,7 @@ export function useGlobalEvents(
     }) => void,
 ) {
     const navi = useNavigate();
+    const queryClient = useQueryClient();
     const setSession = useGlobalStore((state) => state.setSession);
     const setHasToken = useGlobalStore((state) => state.setHasToken);
     const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
@@ -107,6 +110,16 @@ export function useGlobalEvents(
             void i18n.changeLanguage(event.data as string);
         });
 
+        const removeXXMIUpdatesListener = Events.On("xxmi:updates", (event) => {
+            const payload =
+                Array.isArray(event.data) && event.data.length === 1 && Array.isArray(event.data[0])
+                    ? event.data[0]
+                    : event.data;
+            if (Array.isArray(payload)) {
+                queryClient.setQueryData<UpdateStatus[]>(["xxmi:updates"], payload);
+            }
+        });
+
         const removeXXMILaunchListener = Events.On("xxmi:launch-progress", (event) => {
             const payload = Array.isArray(event.data) ? event.data[0] : event.data;
             if (!payload || typeof payload !== "object") return;
@@ -163,10 +176,11 @@ export function useGlobalEvents(
             removeAuthListener();
             removeBackendStatusListener();
             removeLanguageListener();
+            removeXXMIUpdatesListener();
             removeXXMILaunchListener();
             removeXXMIPackageListener();
         };
-    }, [onPathSelectorModeSelect, i18n]);
+    }, [onPathSelectorModeSelect, i18n, queryClient]);
 }
 
 function whenSessionInitialized() {
