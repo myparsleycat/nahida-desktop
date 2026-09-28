@@ -1,0 +1,103 @@
+package xxmi
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"strings"
+)
+
+func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return nil, errors.New("XXMI settings store is not configured")
+	}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EnabledImporter, 0, len(rows))
+	for _, row := range rows {
+		var cfg ImporterConfig
+		if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
+			return nil, err
+		}
+		if !cfg.Enabled {
+			continue
+		}
+		var installed *string
+		if spec, ok := lookupImporterPackage(row.Key); ok {
+			installed = readImporterVersion(cfg.ImporterFolder, spec)
+		}
+		pkg, err := client.XXMIPackages.Get(ctx, "importer:"+row.Key)
+		if err != nil {
+			return nil, err
+		}
+		info := PackageInfo{}
+		if pkg != nil {
+			if pkg.LatestVersion != nil {
+				info.LatestVersion = *pkg.LatestVersion
+			}
+			if pkg.LatestReleaseNotes != nil {
+				info.LatestReleaseNotes = *pkg.LatestReleaseNotes
+			}
+			if pkg.SkippedVersion != nil {
+				info.SkippedVersion = *pkg.SkippedVersion
+			}
+			info.UpdateCheckTime = float64(pkg.UpdateCheckTime)
+		}
+		if installed != nil {
+			info.DeployedVersion = *installed
+		}
+		out = append(out, EnabledImporter{Key: row.Key, ImporterFolder: cfg.ImporterFolder,
+			InstalledVersion: installed, PackageInfo: info})
+	}
+	return out, nil
+}
+
+type Overview struct {
+	Configured       bool              `json:"configured"`
+	Root             string            `json:"root"`
+	Importers        []EnabledImporter `json:"importers"`
+	ExternalLauncher *ExternalLauncher `json:"externalLauncher,omitempty"`
+}
+
+func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return Overview{}, errors.New("XXMI settings store is not configured")
+	}
+	root, err := client.Settings.GetValue(ctx, "xxmi_root")
+	if err != nil {
+		return Overview{}, err
+	}
+	rootPath := ""
+	if root != nil {
+		rootPath = *root
+	}
+	if rootPath == "" {
+		rootPath, err = xxmiCacheRoot()
+		if err != nil {
+			return Overview{}, err
+		}
+	}
+	importers, err := x.builtinEnabledImporters(ctx)
+	if err != nil {
+		return Overview{}, err
+	}
+	overview := Overview{Configured: len(importers) > 0, Root: filepath.Clean(rootPath), Importers: importers}
+	if !overview.Configured {
+		external, err := x.DetectExternalLauncher(ctx)
+		if err == nil {
+			overview.ExternalLauncher = external
+		} else if !strings.Contains(err.Error(), "not found") {
+			return Overview{}, err
+		}
+	}
+	return overview, nil
+}

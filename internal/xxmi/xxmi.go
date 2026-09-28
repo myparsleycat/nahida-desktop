@@ -132,6 +132,28 @@ func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
 }
 
 func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
+	enabled, err := x.builtinEnabledImporters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(enabled) > 0 {
+		x.mu.RLock()
+		client := x.client
+		x.mu.RUnlock()
+		root, err := client.Settings.GetValue(ctx, "xxmi_root")
+		if err != nil {
+			return nil, err
+		}
+		if root != nil && *root != "" {
+			return root, nil
+		}
+		fallback, err := xxmiCacheRoot()
+		return &fallback, err
+	}
+	return x.externalLauncherPath(ctx)
+}
+
+func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
@@ -218,6 +240,17 @@ func (x *XXMI) GetXXMIConfig(ctx context.Context) (map[string]any, error) {
 }
 
 func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
+	builtin, err := x.builtinEnabledImporters(ctx)
+	if err != nil {
+		return Data{}, err
+	}
+	if len(builtin) > 0 {
+		root, err := x.GetXXMIPath(ctx)
+		if err != nil {
+			return Data{}, err
+		}
+		return Data{XXMIPath: root, EnabledImporters: builtin, XXMIConfig: map[string]any{}}, nil
+	}
 	if err := x.load(ctx); err != nil {
 		return Data{}, err
 	}
@@ -230,6 +263,10 @@ func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
 }
 
 func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
+	builtin, err := x.builtinEnabledImporters(ctx)
+	if err != nil || len(builtin) > 0 {
+		return builtin, err
+	}
 	if err := x.load(ctx); err != nil {
 		return nil, err
 	}
@@ -243,6 +280,25 @@ func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, erro
 //
 //wails:ignore
 func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
+	builtin, err := x.builtinEnabledImporters(ctx)
+	if err != nil {
+		return HuntingRuntime{}, err
+	}
+	for _, importer := range builtin {
+		if !strings.EqualFold(importer.Key, importerKey) {
+			continue
+		}
+		spec, ok := lookupImporterPackage(importer.Key)
+		if !ok {
+			return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
+		}
+		names := spec.processNames
+		if len(names) == 0 {
+			names = spec.gameExeNames
+		}
+		return HuntingRuntime{ImporterKey: importer.Key, ImporterFolder: importer.ImporterFolder,
+			INIPath: filepath.Join(importer.ImporterFolder, "d3dx.ini"), GameEXENames: slices.Clone(names)}, nil
+	}
 	if err := x.load(ctx); err != nil {
 		return HuntingRuntime{}, err
 	}

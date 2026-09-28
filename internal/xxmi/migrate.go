@@ -23,7 +23,7 @@ type ImportExternalLauncherInput struct {
 }
 
 func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, error) {
-	path, err := x.GetXXMIPath(ctx)
+	path, err := x.externalLauncherPath(ctx)
 	if err != nil {
 		return nil, err
 	}
