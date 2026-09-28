@@ -35,7 +35,7 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	if _, err := os.Stat(filepath.Join(destination, "Manifest.json")); err == nil {
 		return verifyXXMILibsCache(destination, version)
 	}
-	releases, err := x.github.Releases(ctx, libsRepo)
+	releases, err := x.github.AllReleases(ctx, libsRepo)
 	if err != nil {
 		return err
 	}
@@ -73,12 +73,16 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	); err != nil {
 		return fmt.Errorf("download XXMI libraries %s: %w", version, err)
 	}
-	zipBytes, err := os.ReadFile(zipPath)
+	zipInfo, err := os.Stat(zipPath)
 	if err != nil {
 		return err
 	}
-	if len(zipBytes) > 256<<20 {
-		return errors.New("XXMI libraries archive exceeds size limit")
+	if !zipInfo.Mode().IsRegular() || zipInfo.Size() > 256<<20 {
+		return errors.New("XXMI libraries archive is not a regular file or exceeds size limit")
+	}
+	zipBytes, err := os.ReadFile(zipPath)
+	if err != nil {
+		return err
 	}
 	if err := verifyPackageSignature(spectrumPublicKey, signature, zipBytes); err != nil {
 		return fmt.Errorf("XXMI libraries %s: %w", version, err)

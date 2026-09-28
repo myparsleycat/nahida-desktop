@@ -69,7 +69,7 @@ func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, err
 		}
 		repo = spec.repo
 	}
-	releases, err := x.github.Releases(ctx, repo)
+	releases, err := x.github.AllReleases(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
