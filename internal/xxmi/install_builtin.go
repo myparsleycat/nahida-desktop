@@ -77,8 +77,9 @@ func (x *XXMI) installBuiltinImporterPackage(
 	}
 	defer func() { x.reportCleanup(os.RemoveAll(workDir), "InstallImporterPackage") }()
 	zipPath := filepath.Join(workDir, "package.zip")
-	if err := x.github.DownloadFile(
+	if err := x.downloadPackageFile(
 		ctx,
+		"importer:"+spec.key, version,
 		github.FileRequest{Repo: spec.repo, URL: assetURL, Destination: zipPath},
 	); err != nil {
 		return err

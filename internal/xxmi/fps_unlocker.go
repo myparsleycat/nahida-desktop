@@ -69,7 +69,7 @@ func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) err
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	zipPath := filepath.Join(staging, "package.zip")
-	if err := x.github.DownloadFile(ctx, github.FileRequest{
+	if err := x.downloadPackageFile(ctx, "gi-fps-unlocker", version, github.FileRequest{
 		Repo: fpsUnlockerRepo, URL: zipURL, Destination: zipPath,
 	}); err != nil {
 		return fmt.Errorf("download GI FPS Unlocker %s: %w", version, err)

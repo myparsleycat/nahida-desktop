@@ -36,8 +36,9 @@ func (x *XXMI) UpdateLegacyRuntime(ctx context.Context) (string, error) {
 	_ = file.Close()
 	defer func() { _ = os.Remove(zipPath) }()
 	repo := github.Repo{Owner: "SilentNightSound", Name: "GI-Model-Importer"}
-	if err := x.github.DownloadFile(
+	if err := x.downloadPackageFile(
 		ctx,
+		"legacy-3dmigoto", "",
 		github.FileRequest{Repo: repo, URL: legacyRuntimeURL, Destination: zipPath},
 	); err != nil {
 		return "", fmt.Errorf("download legacy runtime: %w", err)

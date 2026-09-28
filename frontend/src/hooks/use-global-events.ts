@@ -128,6 +128,34 @@ export function useGlobalEvents(
             toast.loading(`${importer} · ${i18n.t(`page.setting.xxmi.builtin.${status}`)}`, { id });
         });
 
+        const removeXXMIPackageListener = Events.On("xxmi:package-progress", (event) => {
+            const payload = Array.isArray(event.data) ? event.data[0] : event.data;
+            if (!payload || typeof payload !== "object") return;
+            const {
+                package: pkg,
+                version,
+                stage,
+                downloaded,
+                total,
+            } = payload as Record<string, unknown>;
+            if (typeof pkg !== "string" || typeof stage !== "string") return;
+            const id = `xxmi-package-${pkg}`;
+            if (stage === "downloaded" || stage === "failed") {
+                toast.dismiss(id);
+                return;
+            }
+            if (stage !== "download" || typeof downloaded !== "number") return;
+            const progress =
+                typeof total === "number" && total > 0
+                    ? `${Math.min(100, Math.round((downloaded / total) * 100))}%`
+                    : `${Math.round(downloaded / (1024 * 1024))} MiB`;
+            const label = typeof version === "string" && version ? `${pkg} ${version}` : pkg;
+            toast.loading(
+                `${label} · ${i18n.t("page.setting.xxmi.builtin.downloadingPackage")} ${progress}`,
+                { id },
+            );
+        });
+
         return () => {
             removeToastListener();
             removeNaviListener();
@@ -136,6 +164,7 @@ export function useGlobalEvents(
             removeBackendStatusListener();
             removeLanguageListener();
             removeXXMILaunchListener();
+            removeXXMIPackageListener();
         };
     }, [onPathSelectorModeSelect, i18n]);
 }

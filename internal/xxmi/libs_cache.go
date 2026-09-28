@@ -67,8 +67,9 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	zipPath := filepath.Join(staging, "package.zip")
-	if err := x.github.DownloadFile(
+	if err := x.downloadPackageFile(
 		ctx,
+		"xxmi-libs", version,
 		github.FileRequest{Repo: libsRepo, URL: zipURL, Destination: zipPath},
 	); err != nil {
 		return fmt.Errorf("download XXMI libraries %s: %w", version, err)
