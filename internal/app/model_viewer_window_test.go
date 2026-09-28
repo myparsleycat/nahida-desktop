@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"reflect"
 	"testing"
@@ -45,6 +46,7 @@ func TestLaunchDispatcherPreservesColdAndForwardedLaunches(t *testing.T) {
 		func() { got = append(got, "main") },
 		func([]string) { got = append(got, "arguments") },
 		func([]string) {},
+		func(string, bool) {},
 	)
 	d.Start(
 		application.SecondInstanceData{
@@ -80,6 +82,7 @@ func TestMissingModelViewerFolderOpensMain(t *testing.T) {
 		func() { main++ },
 		func([]string) { t.Fatal("unexpected forward") },
 		func([]string) {},
+		func(string, bool) {},
 	)
 	handler(application.SecondInstanceData{Args: []string{"app", "--model-viewer"}})
 	if main != 1 {
@@ -94,11 +97,31 @@ func TestLaunchHandlerDispatchesDownloadOnColdAndForwardedLaunches(t *testing.T)
 		func() { got = append(got, "main") },
 		func([]string) { got = append(got, "arguments") },
 		func(args []string) { got = append(got, "download "+args[1]) },
+		func(string, bool) {},
 	)
 	handler(application.SecondInstanceData{Args: []string{"app", "cold"}})
 	handler(application.SecondInstanceData{Args: []string{"app", "forwarded"}})
 	if want := []string{"main", "download cold", "arguments", "download forwarded"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("launches = %v, want %v", got, want)
+	}
+}
+
+func TestLaunchHandlerDispatchesQuickStartWithoutOpeningMain(t *testing.T) {
+	var got []string
+	handler := newLaunchHandler(
+		func(string) { t.Fatal("unexpected viewer") },
+		func() { t.Fatal("unexpected main window") },
+		func([]string) { t.Fatal("unexpected argument handler") },
+		func([]string) { t.Fatal("unexpected download") },
+		func(key string, first bool) { got = append(got, fmt.Sprintf("%s:%t", key, first)) },
+	)
+	handler(application.SecondInstanceData{Args: []string{"app", "--xxmi-launch", "GIMI"}})
+	handler(application.SecondInstanceData{Args: []string{"app", "--xxmi-launch", "WWMI"}})
+	if want := []string{"GIMI:true", "WWMI:false"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("quick starts = %v, want %v", got, want)
+	}
+	if key := xxmiLaunchArgument([]string{"app", "--xxmi-launch", "unknown"}); key != "" {
+		t.Fatalf("accepted unknown importer %q", key)
 	}
 }
 

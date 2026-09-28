@@ -1963,7 +1963,7 @@
       },
       "xxmi": {
         "builtin": {
-          "detectGame": "ゲームフォルダーを検出", "noGameFolders": "ゲームフォルダーが見つかりませんでした。手動で入力してください。", "maintenance": "メンテナンス", "repairRuntime": "ランタイムを修復", "runtimeRepaired": "ランタイムを修復しました", "openImporterFolder": "インポーターフォルダーを開く", "iniOptimizer": "INI 最適化", "optimizeAtLaunch": "ゲーム起動時に自動最適化", "resetOptimizerCache": "最適化キャッシュをリセット", "previewOptimization": "変更をプレビュー", "applyOptimization": "変更を適用", "noOptimizationChanges": "変更するファイルはありません", "optimized": "INI の変更を {{count}} 件適用しました",
+          "detectGame": "ゲームフォルダーを検出", "noGameFolders": "ゲームフォルダーが見つかりませんでした。手動で入力してください。", "maintenance": "メンテナンス", "repairRuntime": "ランタイムを修復", "runtimeRepaired": "ランタイムを修復しました", "openImporterFolder": "インポーターフォルダーを開く", "createShortcut": "Quick Start ショートカットを作成", "shortcutCreated": "デスクトップにショートカットを作成しました", "iniOptimizer": "INI 最適化", "optimizeAtLaunch": "ゲーム起動時に自動最適化", "resetOptimizerCache": "最適化キャッシュをリセット", "previewOptimization": "変更をプレビュー", "applyOptimization": "変更を適用", "noOptimizationChanges": "変更するファイルはありません", "optimized": "INI の変更を {{count}} 件適用しました",
           "gameTweaks": "ゲーム設定", "configureGame": "ゲーム設定を調整", "unlockFPS": "FPS制限を解除", "fpsTarget": "目標FPS", "enableHDR": "HDRを有効化", "disableDCR": "動的キャラクター解像度を無効化",
           "forceMaxLODBias": "最高のテクスチャ品質を強制", "applyPerfTweaks": "パフォーマンス調整を適用", "disableWoundedFX": "負傷エフェクトを無効化",
           "checkUpdates": "更新を確認", "installUpdates": "更新をインストール", "updatesInstalled": "更新をインストールしました",

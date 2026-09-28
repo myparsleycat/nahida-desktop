@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -58,7 +59,8 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if modelViewerArgument(os.Args, in.Cwd) == "" {
 		route = nahidaDeepLinkRoute(os.Args)
 	}
-	rt.window.SetStartHidden(shouldStartHidden(os.Args) && route == "" && nahidaDeepLinkDownload(os.Args) == nil)
+	rt.window.SetStartHidden((shouldStartHidden(os.Args) || xxmiLaunchArgument(os.Args) != "") &&
+		route == "" && nahidaDeepLinkDownload(os.Args) == nil)
 	rt.window.SetInitialRoute(route)
 	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
 		return err
@@ -187,6 +189,32 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 				func() { newWindow(app, rt.window) },
 				rt.window.HandleArguments,
 				rt.dispatchDeepLinkDownload,
+				func(key string, first bool) {
+					if first {
+						newWindow(app, rt.window)
+					}
+					go func() {
+						if err := rt.xxmi.StartGame(context.Background(), key); err != nil {
+							rt.window.FocusAndNavigate("/setting/xxmi")
+							readyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+							alreadyReady, readyErr := rt.window.WaitReady(readyCtx)
+							cancel()
+							if readyErr == nil {
+								if !alreadyReady {
+									time.Sleep(250 * time.Millisecond)
+								}
+								emitAppEvent("fn:toast", err.Error())
+							}
+							return
+						}
+						if first {
+							background, err := rt.setting.GetRunInBackground(context.Background())
+							if err == nil && !background {
+								app.Quit()
+							}
+						}
+					}()
+				},
 			))
 	})
 	newTray(app, rt, icon)

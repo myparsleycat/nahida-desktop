@@ -739,6 +739,20 @@ function RouteComponent() {
           >
             {t("page.setting.xxmi.builtin.openImporterFolder")}
           </Button>
+          <Button
+            variant="outline"
+            onClickPromise={async () => {
+              try {
+                await XXMI.CreateShortcut(importer);
+                refresh();
+                toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
+              } catch (error) {
+                toast.error(toErrorMessage(error));
+              }
+            }}
+          >
+            {t("page.setting.xxmi.builtin.createShortcut")}
+          </Button>
         </CardContent>
       </Card>
       {launchGuardDialog}
