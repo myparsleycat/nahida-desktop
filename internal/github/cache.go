@@ -46,6 +46,13 @@ func (c *Client) ReleaseTags(ctx context.Context, repo Repo, refresh bool) ([]st
 	// fail every waiter; each caller still stops waiting on its own context.
 	fetchCtx := context.WithoutCancel(ctx)
 	flight := c.tags.group.DoChan(repo.String(), func() (any, error) {
+		c.tags.mu.Lock()
+		entry, found := c.tags.entries[repo]
+		fresh := found && (!refresh || c.tags.now().Sub(entry.fetched) < tagRefreshCooldown)
+		c.tags.mu.Unlock()
+		if fresh {
+			return entry.tags, nil
+		}
 		releases, err := c.Releases(fetchCtx, repo)
 		if err != nil {
 			return nil, err
