@@ -1,3 +1,4 @@
+import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
@@ -146,20 +147,43 @@ function XXMIDashboard() {
             <span>
               {t("page.setting.xxmi.builtin.legacy")}: {legacy?.length ?? 0}
             </span>
-            <Button
-              variant="outline"
-              onClickPromise={async () => {
-                try {
-                  await XXMI.UpdateLegacyRuntime();
-                  refresh();
-                  toast.success(t("page.setting.xxmi.builtin.downloaded"));
-                } catch (error) {
-                  toast.error(toErrorMessage(error));
-                }
-              }}
-            >
-              {t("page.setting.xxmi.builtin.downloadLegacy")}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClickPromise={async () => {
+                  try {
+                    const selected = await Dialog.ShowOpenDialog({
+                      title: t("page.setting.xxmi.builtin.importLegacy"),
+                      defaultPath: "",
+                      filters: [{ name: "ZIP", extensions: ["zip"] }],
+                      properties: ["openFile"],
+                    });
+                    if (selected.canceled || !selected.filePaths?.[0]) return;
+                    await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);
+                    refresh();
+                    toast.success(t("page.setting.xxmi.builtin.importedLegacy"));
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.importLegacy")}
+              </Button>
+              <Button
+                variant="outline"
+                onClickPromise={async () => {
+                  try {
+                    await XXMI.UpdateLegacyRuntime();
+                    refresh();
+                    toast.success(t("page.setting.xxmi.builtin.downloaded"));
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.downloadLegacy")}
+              </Button>
+            </div>
           </div>
           {legacy?.map((entry) => (
             <p key={entry.id} className="text-muted-foreground">
