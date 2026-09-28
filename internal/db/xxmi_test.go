@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -43,5 +44,39 @@ func TestXXMIStores(t *testing.T) {
 	}
 	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row != nil {
 		t.Fatalf("deleted importer = %+v, err = %v", row, err)
+	}
+}
+
+func TestXXMILaunchCountUpdatePreservesConcurrentSettings(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIImporters.Upsert(
+		ctx,
+		"GIMI",
+		`{"mode":"xxmi","launchCount":4,"gameFolder":"new"}`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIImporters.IncrementLaunchCount(ctx, "GIMI"); err != nil {
+		t.Fatal(err)
+	}
+	row, err := client.XXMIImporters.Get(ctx, "GIMI")
+	if err != nil || row == nil {
+		t.Fatalf("updated importer = %+v, err = %v", row, err)
+	}
+	var settings struct {
+		Mode        string `json:"mode"`
+		LaunchCount int    `json:"launchCount"`
+		GameFolder  string `json:"gameFolder"`
+	}
+	if err := json.Unmarshal([]byte(row.Config), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings.Mode != "xxmi" || settings.LaunchCount != 5 || settings.GameFolder != "new" {
+		t.Fatalf("updated settings = %+v", settings)
 	}
 }

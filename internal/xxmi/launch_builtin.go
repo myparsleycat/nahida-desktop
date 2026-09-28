@@ -123,7 +123,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	progress("deploy-runtime")
-	warnings, err := x.DeployRuntime(ctx, key)
+	warnings, err := x.deployRuntime(ctx, key, cfg)
 	if err != nil {
 		return err
 	}
@@ -188,8 +188,13 @@ func (x *XXMI) launchBuiltinGameLocked(
 		return err
 	}
 	progress("finish")
-	cfg.LaunchCount++
-	if err := x.SaveImporterConfig(ctx, key, cfg); err != nil {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return errors.New("XXMI settings store is not configured")
+	}
+	if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
 		return err
 	}
 	if x.log != nil {

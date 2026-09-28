@@ -47,6 +47,13 @@ ON CONFLICT("key") DO UPDATE SET "config" = excluded."config", "updated_at" = ex
 		key, config, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
+func (s XXMIImportersStore) IncrementLaunchCount(ctx context.Context, key string) error {
+	return s.c.exec(ctx, `UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.launchCount', COALESCE(json_extract("config", '$.launchCount'), -1) + 1),
+    "updated_at" = ?
+WHERE "key" = ?`, time.Now().UTC().Format(time.RFC3339Nano), key)
+}
+
 func (s XXMIImportersStore) Delete(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `DELETE FROM "xxmi_importers" WHERE "key" = ?`, key)
 }
