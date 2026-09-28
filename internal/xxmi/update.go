@@ -223,7 +223,7 @@ func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, 
 		case status.Package == "xxmi-libs":
 			err = x.EnsureLibsVersion(ctx, status.LatestVersion)
 		case status.Package == "gi-fps-unlocker":
-			err = errors.New("GI FPS Unlocker package installation is not implemented")
+			err = x.EnsureFPSUnlockerVersion(ctx, status.LatestVersion)
 		default:
 			err = fmt.Errorf("unknown XXMI package %q", status.Package)
 		}
@@ -258,8 +258,7 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
 	}
 	targets := []string{}
 	for _, status := range statuses {
-		if status.Importer == importer && status.Available && !status.Pinned &&
-			status.Package != "gi-fps-unlocker" {
+		if status.Importer == importer && status.Available && !status.Pinned {
 			targets = append(targets, status.Package)
 		}
 	}

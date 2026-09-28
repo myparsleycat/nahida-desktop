@@ -211,23 +211,13 @@ function XXMIDashboard() {
               </Button>
               <Button
                 variant="outline"
-                disabled={
-                  !updates?.some(
-                    (entry) =>
-                      entry.available && !entry.pinned && entry.package !== "gi-fps-unlocker",
-                  )
-                }
+                disabled={!updates?.some((entry) => entry.available && !entry.pinned)}
                 onClickPromise={async () => {
                   try {
                     const targets = [
                       ...new Set(
                         updates
-                          ?.filter(
-                            (entry) =>
-                              entry.available &&
-                              !entry.pinned &&
-                              entry.package !== "gi-fps-unlocker",
-                          )
+                          ?.filter((entry) => entry.available && !entry.pinned)
                           .map((entry) => entry.package) ?? [],
                       ),
                     ];

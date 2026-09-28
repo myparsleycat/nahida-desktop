@@ -127,6 +127,11 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	if err := initializeGameLaunch(ctx, key, cfg); err != nil {
 		return err
 	}
+	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
+		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
+			return err
+		}
+	}
 	progress("pre-launch")
 	if err := runLaunchHook(ctx, cfg.RunPreLaunch, filepath.Dir(gameExe)); err != nil {
 		return err
@@ -257,6 +262,15 @@ func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string
 	}
 	if strings.EqualFold(processName, "Endfield.exe") {
 		spec.StartArgs = append([]string{"-force-d3d11"}, spec.StartArgs...)
+	}
+	if cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
+		folder, err := fpsUnlockerFolder()
+		if err != nil {
+			return inject.LaunchSpec{}, err
+		}
+		spec.StartExe = filepath.Join(folder, "unlockfps_nc.exe")
+		spec.WorkDir = folder
+		spec.StartArgs = nil
 	}
 	if cfg.CustomLaunch.Enabled {
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command

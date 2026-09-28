@@ -128,6 +128,9 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	if err := os.WriteFile(filepath.Join(staging, "Manifest.json"), manifestBytes, 0o600); err != nil {
 		return err
 	}
+	if err := reader.Close(); err != nil {
+		return err
+	}
 	if err := os.Remove(zipPath); err != nil {
 		return err
 	}
