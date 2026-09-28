@@ -5,7 +5,18 @@ import (
 	"strings"
 )
 
-var buildErrorLineRE = regexp.MustCompile(`(?i)\berror\s+[A-Z]+\d+:`)
+var (
+	buildErrorLineRE = regexp.MustCompile(`(?i)\berror\s+[A-Z]+\d+:`)
+	// Header names are matched without quotes because localized MSVC output uses other quote characters,
+	// such as “windows.h” encoded in the console code page. MSB8036 is msbuild's missing-SDK-version error.
+	sdkHeaderErrorRE = regexp.MustCompile(
+		`(?im)\berror C1083:.*\b(?:crtdbg|windows|sdkddkver)\.h\b|\berror MSB8036:`,
+	)
+)
+
+func isMissingSDKHeaderError(err error) bool {
+	return err != nil && sdkHeaderErrorRE.MatchString(err.Error())
+}
 
 func tailBuildOutput(output string, maxLines int) string {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
