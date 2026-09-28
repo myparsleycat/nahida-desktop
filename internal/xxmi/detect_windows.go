@@ -106,7 +106,7 @@ func (x *XXMI) DetectGameFolders(ctx context.Context, importer string) ([]GameFo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidate, err := validateGameFolder(importer, path, spec)
+		candidate, err := validateGameFolder(ctx, importer, path, spec)
 		if err != nil {
 			continue
 		}
@@ -129,15 +129,23 @@ func (x *XXMI) ValidateGameFolder(ctx context.Context, importer, path string) (G
 	if !ok {
 		return GameFolderCandidate{}, errors.New("unknown XXMI importer")
 	}
-	return validateGameFolder(importer, path, spec)
+	return validateGameFolder(ctx, importer, path, spec)
 }
 
-func validateGameFolder(importer, path string, spec importerPackageSpec) (GameFolderCandidate, error) {
+func validateGameFolder(
+	ctx context.Context,
+	importer, path string,
+	spec importerPackageSpec,
+) (GameFolderCandidate, error) {
 	if err := validateLocalFolder("game folder", path, true); err != nil {
 		return GameFolderCandidate{}, err
 	}
 	if importer == "WWMI" {
-		path = normalizeWWGameFolder(path)
+		var err error
+		path, err = normalizeWWGameFolder(ctx, path)
+		if err != nil {
+			return GameFolderCandidate{}, err
+		}
 		for _, name := range []string{"Client", "Engine"} {
 			info, err := os.Stat(filepath.Join(path, name))
 			if err != nil || !info.IsDir() {
@@ -164,7 +172,7 @@ func validateGameFolder(importer, path string, spec importerPackageSpec) (GameFo
 	if err != nil || !info.Mode().IsRegular() {
 		return GameFolderCandidate{}, fmt.Errorf("game executable for %s was not found", importer)
 	}
-	return GameFolderCandidate{Path: filepath.Dir(executable), ExePath: executable, ModTime: info.ModTime().Unix()}, nil
+	return GameFolderCandidate{Path: path, ExePath: executable, ModTime: info.ModTime().Unix()}, nil
 }
 
 func gameDetectionLogs(importer string) []string {
@@ -227,14 +235,38 @@ func readGamePathHints(path, importer string, add func(string)) {
 	}
 }
 
-func normalizeWWGameFolder(path string) string {
-	for current := filepath.Clean(path); filepath.IsAbs(current); current = filepath.Dir(current) {
-		if _, err := os.Stat(filepath.Join(current, "Wuthering Waves.exe")); err == nil {
-			return current
+func normalizeWWGameFolder(ctx context.Context, path string) (string, error) {
+	path = filepath.Clean(path)
+	if fileExists(filepath.Join(path, "Wuthering Waves.exe")) {
+		return path, nil
+	}
+	found := ""
+	err := filepath.WalkDir(path, func(candidate string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.EqualFold(entry.Name(), "Wuthering Waves.exe") {
+			return nil
+		}
+		found = filepath.Dir(candidate)
+		return fs.SkipAll
+	})
+	if err != nil || found != "" {
+		return found, err
+	}
+	for current := filepath.Dir(path); filepath.IsAbs(current); current = filepath.Dir(current) {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if fileExists(filepath.Join(current, "Wuthering Waves.exe")) {
+			return current, nil
 		}
 		if parent := filepath.Dir(current); parent == current {
 			break
 		}
 	}
-	return path
+	return path, nil
 }

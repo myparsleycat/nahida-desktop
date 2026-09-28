@@ -92,7 +92,9 @@ function RouteComponent() {
   const save = async (next = config) => {
     if (!next) return;
     try {
-      if (next.gameFolder) await XXMI.ValidateGameFolder(importer, next.gameFolder);
+      const resolved = next.gameFolder
+        ? { ...next, gameFolder: (await XXMI.ValidateGameFolder(importer, next.gameFolder)).path }
+        : next;
       const previous = saved?.importerFolder
         .replaceAll("/", "\\")
         .replace(/\\+$/, "")
@@ -105,11 +107,11 @@ function RouteComponent() {
             game.modFolderPath.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase() === oldMods,
         );
         if (games.length) {
-          setPendingFolderChange({ next, games });
+          setPendingFolderChange({ next: resolved, games });
           return;
         }
       }
-      await persist(next);
+      await persist(resolved);
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
@@ -328,10 +330,14 @@ function RouteComponent() {
               <Button
                 onClickPromise={async () => {
                   try {
-                    if (config.gameFolder) {
-                      await XXMI.ValidateGameFolder(importer, config.gameFolder);
-                    }
-                    await XXMI.SaveImporterConfig(importer, config);
+                    const resolved = config.gameFolder
+                      ? {
+                          ...config,
+                          gameFolder: (await XXMI.ValidateGameFolder(importer, config.gameFolder))
+                            .path,
+                        }
+                      : config;
+                    await XXMI.SaveImporterConfig(importer, resolved);
                     await XXMI.InstallImporterPackage({
                       importer,
                       version: selectedPackage,

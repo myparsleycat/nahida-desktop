@@ -67,13 +67,15 @@ func (x *XXMI) launchBuiltinGameLocked(
 		return fmt.Errorf("unknown importer %q", key)
 	}
 	progress("resolve-game")
-	gameExe := configuredGameExecutable(cfg.GameFolder, packageSpec.gameExeNames)
-	if gameExe == "" || !filepath.IsAbs(gameExe) {
-		return errors.New("XXMI_GAME_FOLDER_NOT_CONFIGURED")
+	game, err := validateGameFolder(ctx, key, cfg.GameFolder, packageSpec)
+	if err != nil {
+		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
 	}
-	if info, err := os.Stat(gameExe); err != nil || !info.Mode().IsRegular() {
-		return errors.New("XXMI_GAME_FOLDER_NOT_CONFIGURED")
+	cfg.GameFolder = game.Path
+	if err := ValidateImporterSettings(key, cfg); err != nil {
+		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
 	}
+	gameExe := game.ExePath
 	processName := filepath.Base(gameExe)
 	if len(packageSpec.processNames) > 0 {
 		processName = packageSpec.processNames[0]

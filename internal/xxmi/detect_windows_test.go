@@ -28,6 +28,28 @@ func TestValidateGameFolder(t *testing.T) {
 	}
 }
 
+func TestValidateWWMIGameFolderNormalizesChildAndAncestor(t *testing.T) {
+	root := t.TempDir()
+	game := filepath.Join(root, "Wuthering Waves Game")
+	for _, folder := range []string{"Client", "Engine", filepath.Join("Client", "Binaries", "Win64"), "Saved", filepath.Join("Saved", "Nested")} {
+		if err := os.MkdirAll(filepath.Join(game, folder), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executable := filepath.Join(game, "Wuthering Waves.exe")
+	for _, path := range []string{executable, filepath.Join(game, "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe")} {
+		if err := os.WriteFile(path, []byte("game"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, selected := range []string{root, filepath.Join(game, "Saved", "Nested")} {
+		candidate, err := New().ValidateGameFolder(context.Background(), "WWMI", selected)
+		if err != nil || candidate.Path != game || candidate.ExePath != executable {
+			t.Fatalf("selected %s: candidate = %+v, err = %v", selected, candidate, err)
+		}
+	}
+}
+
 func TestReadGamePathHints(t *testing.T) {
 	root := t.TempDir()
 	game := filepath.Join(root, "Genshin Impact game")
