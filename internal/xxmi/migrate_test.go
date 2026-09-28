@@ -59,3 +59,29 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		t.Fatalf("source config changed: %v", err)
 	}
 }
+
+func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapExternalImporterSettings(&cfg, map[string]any{
+		"mesh_lod_distance_lod_base_fov":    180.0,
+		"mesh_lod_distance_scale":           0.75,
+		"mesh_lod_distance_offset":          -8.5,
+		"texture_streaming_boost":           12.5,
+		"texture_streaming_min_boost":       1.25,
+		"texture_streaming_use_all_mips":    false,
+		"texture_streaming_pool_size":       1024.0,
+		"texture_streaming_limit_to_vram":   false,
+		"texture_streaming_fixed_pool_size": false,
+	}, nil)
+	got := cfg.WWMI
+	if got.MeshLODDistanceBaseFOV != 180 || got.MeshLODDistanceScale != 0.75 ||
+		got.MeshLODDistanceOffset != -8.5 || got.TextureStreamingBoost != 12.5 ||
+		got.TextureStreamingMinBoost != 1.25 || got.TextureStreamingUseAll ||
+		got.TextureStreamingPoolSize != 1024 || got.TextureStreamingLimitVRAM || got.TextureStreamingFixedPool {
+		t.Fatalf("imported WWMI settings = %+v", got)
+	}
+}

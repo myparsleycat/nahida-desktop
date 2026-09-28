@@ -191,6 +191,13 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		}
 		return int(value)
 	}
+	getFloat := func(key string, fallback float64) float64 {
+		value, ok := importer[key].(float64)
+		if !ok {
+			return fallback
+		}
+		return value
+	}
 	if value := getString("process_start_method"); value != "" {
 		cfg.ProcessStartMethod = value
 	}
@@ -259,6 +266,21 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		cfg.WWMI.ForceMaxLODBias = getBool("force_max_lod_bias", cfg.WWMI.ForceMaxLODBias)
 		cfg.WWMI.DisableWoundedFX = getBool("disable_wounded_fx", cfg.WWMI.DisableWoundedFX)
 		cfg.WoundedFXDecided = getBool("disable_wounded_fx_warned", cfg.WoundedFXDecided)
+		cfg.WWMI.MeshLODDistanceBaseFOV = getInt("mesh_lod_distance_lod_base_fov", cfg.WWMI.MeshLODDistanceBaseFOV)
+		cfg.WWMI.MeshLODDistanceScale = getFloat("mesh_lod_distance_scale", cfg.WWMI.MeshLODDistanceScale)
+		cfg.WWMI.MeshLODDistanceOffset = getFloat("mesh_lod_distance_offset", cfg.WWMI.MeshLODDistanceOffset)
+		cfg.WWMI.TextureStreamingBoost = getFloat("texture_streaming_boost", cfg.WWMI.TextureStreamingBoost)
+		cfg.WWMI.TextureStreamingMinBoost = getFloat("texture_streaming_min_boost", cfg.WWMI.TextureStreamingMinBoost)
+		cfg.WWMI.TextureStreamingUseAll = getBool("texture_streaming_use_all_mips", cfg.WWMI.TextureStreamingUseAll)
+		cfg.WWMI.TextureStreamingPoolSize = getInt("texture_streaming_pool_size", cfg.WWMI.TextureStreamingPoolSize)
+		cfg.WWMI.TextureStreamingLimitVRAM = getBool(
+			"texture_streaming_limit_to_vram",
+			cfg.WWMI.TextureStreamingLimitVRAM,
+		)
+		cfg.WWMI.TextureStreamingFixedPool = getBool(
+			"texture_streaming_fixed_pool_size",
+			cfg.WWMI.TextureStreamingFixedPool,
+		)
 	}
 }
 
