@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,31 @@ var fpsUnlockerFiles = []string{
 	"unlockfps_nc.exe", "unlockfps_nc.dll", "unlockfps_nc.deps.json", "unlockfps_nc.runtimeconfig.json",
 	"Microsoft.Extensions.DependencyInjection.Abstractions.dll", "Microsoft.Extensions.DependencyInjection.dll",
 	"Newtonsoft.Json.dll", "fps_config_template.json",
+}
+
+func (x *XXMI) ListCachedFPSUnlocker(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "packages", "gi-fps-unlocker"))
+	if errors.Is(err, os.ErrNotExist) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	versions := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.Contains(entry.Name(), ".tmp-") {
+			versions = append(versions, entry.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(versions)))
+	return versions, nil
 }
 
 func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) error {

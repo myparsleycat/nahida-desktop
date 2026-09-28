@@ -39,6 +39,15 @@ function XXMIDashboard() {
     queryKey: ["xxmi:legacy-cache"],
     queryFn: XXMI.GetLegacyRuntimes,
   });
+  const { data: fpsVersions } = useQuery({
+    queryKey: ["xxmi:fps-cache"],
+    queryFn: XXMI.ListCachedFPSUnlocker,
+  });
+  const { data: fpsReleases } = useQuery({
+    queryKey: ["xxmi:fps-releases"],
+    queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
+    staleTime: 60 * 60 * 1000,
+  });
   const { data: updates } = useQuery({
     queryKey: ["xxmi:updates"],
     queryFn: () => XXMI.CheckUpdates(false),
@@ -188,6 +197,30 @@ function XXMIDashboard() {
               {entry.id}
             </p>
           ))}
+          <Separator />
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              {t("page.setting.xxmi.builtin.fpsUnlocker")}:{" "}
+              {fpsVersions?.join(", ") || t("page.setting.xxmi.builtin.notInstalled")}
+            </span>
+            <Button
+              variant="outline"
+              disabled={!fpsReleases?.[0]}
+              onClickPromise={async () => {
+                const latest = fpsReleases?.[0];
+                if (!latest) return;
+                try {
+                  await XXMI.EnsureFPSUnlockerVersion(latest.version);
+                  refresh();
+                  toast.success(t("page.setting.xxmi.builtin.downloaded"));
+                } catch (error) {
+                  toast.error(toErrorMessage(error));
+                }
+              }}
+            >
+              {t("page.setting.xxmi.builtin.downloadFPS")}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

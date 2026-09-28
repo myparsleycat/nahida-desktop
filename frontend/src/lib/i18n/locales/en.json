@@ -2117,6 +2117,8 @@
           "inUse": "In use",
           "legacy": "Legacy 3DMigoto",
           "downloadLegacy": "Download legacy runtime",
+          "fpsUnlocker": "GI FPS Unlocker",
+          "downloadFPS": "Download latest",
           "downloaded": "Legacy runtime downloaded",
           "importLegacy": "Import legacy ZIP",
           "importedLegacy": "Legacy runtime imported",

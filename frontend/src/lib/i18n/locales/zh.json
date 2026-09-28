@@ -2032,6 +2032,8 @@
           "inUse": "使用中",
           "legacy": "旧版 3DMigoto",
           "downloadLegacy": "下载旧版运行时",
+          "fpsUnlocker": "GI FPS Unlocker",
+          "downloadFPS": "下载最新版",
           "downloaded": "已下载旧版运行时",
           "importLegacy": "导入旧版 ZIP",
           "importedLegacy": "已导入旧版运行时",

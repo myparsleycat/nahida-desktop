@@ -2051,6 +2051,8 @@
           "inUse": "사용 중",
           "legacy": "레거시 3DMigoto",
           "downloadLegacy": "레거시 런타임 다운로드",
+          "fpsUnlocker": "GI FPS Unlocker",
+          "downloadFPS": "최신 버전 다운로드",
           "downloaded": "레거시 런타임을 받았습니다",
           "importLegacy": "레거시 ZIP 가져오기",
           "importedLegacy": "레거시 런타임을 가져왔습니다",
