@@ -35,12 +35,19 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 
 	stage := "validate"
 	defer func() {
-		if returnErr != nil && x.log != nil {
-			_ = infra.ReportError(x.log, returnErr, "XXMI.StartGame", infra.Diagnostic{
-				Operation: "launch-game", Stage: stage,
-				Fields: map[string]any{"importer": key, "mode": cfg.Mode, "importerFolder": cfg.ImporterFolder,
-					"gameFolder": cfg.GameFolder},
-			})
+		if returnErr != nil {
+			if x.eventEmit != nil {
+				x.eventEmit("xxmi:launch-progress", map[string]any{
+					"importer": key, "stage": "failed", "detail": stage,
+				})
+			}
+			if x.log != nil {
+				_ = infra.ReportError(x.log, returnErr, "XXMI.StartGame", infra.Diagnostic{
+					Operation: "launch-game", Stage: stage,
+					Fields: map[string]any{"importer": key, "mode": cfg.Mode, "importerFolder": cfg.ImporterFolder,
+						"gameFolder": cfg.GameFolder},
+				})
+			}
 		}
 	}()
 	progress := func(next string) {

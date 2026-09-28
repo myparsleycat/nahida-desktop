@@ -107,6 +107,27 @@ export function useGlobalEvents(
             void i18n.changeLanguage(event.data as string);
         });
 
+        const removeXXMILaunchListener = Events.On("xxmi:launch-progress", (event) => {
+            const payload = Array.isArray(event.data) ? event.data[0] : event.data;
+            if (!payload || typeof payload !== "object") return;
+            const { importer, stage } = payload as Record<string, unknown>;
+            if (typeof importer !== "string" || typeof stage !== "string") return;
+            const id = `xxmi-launch-${importer}`;
+            if (stage === "finish" || stage === "failed") {
+                toast.dismiss(id);
+                return;
+            }
+            const status =
+                stage === "ensure-runtime"
+                    ? "launchDownloading"
+                    : ["update-ini", "game-tweaks", "ini-optimizer", "pre-launch"].includes(stage)
+                      ? "launchConfiguring"
+                      : ["elevate", "inject-launch", "post-load"].includes(stage)
+                        ? "launchStarting"
+                        : "launchPreparing";
+            toast.loading(`${importer} · ${i18n.t(`page.setting.xxmi.builtin.${status}`)}`, { id });
+        });
+
         return () => {
             removeToastListener();
             removeNaviListener();
@@ -114,6 +135,7 @@ export function useGlobalEvents(
             removeAuthListener();
             removeBackendStatusListener();
             removeLanguageListener();
+            removeXXMILaunchListener();
         };
     }, [onPathSelectorModeSelect, i18n]);
 }
