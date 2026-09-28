@@ -303,7 +303,7 @@ func (x *XXMI) prepareFPSUnlocker(ctx context.Context, cfg ImporterConfig, gameE
 	priority := map[string]int{"Realtime": 0, "High": 1, "AboveNormal": 2, "Normal": 3, "BelowNormal": 4, "Low": 5}
 	windowModes := map[string][3]bool{
 		"Windowed": {false, false, false}, "Borderless": {true, false, false},
-		"Fullscreen": {false, true, false}, "ExclusiveFullscreen": {false, true, true},
+		"Fullscreen": {false, true, false}, "Exclusive Fullscreen": {false, true, true},
 	}
 	window, ok := windowModes[cfg.WindowMode]
 	if !ok {

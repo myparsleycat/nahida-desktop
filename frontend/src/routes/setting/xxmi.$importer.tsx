@@ -328,7 +328,7 @@ function RouteComponent() {
           <div className="space-y-2">
             <span>{t("page.setting.xxmi.builtin.windowMode")}</span>
             <div className="flex flex-wrap gap-2">
-              {["Windowed", "Borderless", "Fullscreen", "ExclusiveFullscreen"].map((mode) => (
+              {["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"].map((mode) => (
                 <Button
                   key={mode}
                   variant={config.windowMode === mode ? "default" : "outline"}
