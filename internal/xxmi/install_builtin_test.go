@@ -71,13 +71,11 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	download.UseClient(infraClient)
 	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
 	service.UseClient(client)
-	if err := service.EnableImporter(ctx, "GIMI", importerFolder); err != nil {
-		t.Fatal(err)
-	}
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.ImporterFolder = importerFolder
 	cfg.OverwriteINI = false
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)

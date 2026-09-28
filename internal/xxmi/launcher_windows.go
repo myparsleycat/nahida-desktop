@@ -25,17 +25,6 @@ func ensureLauncherClosed(ctx context.Context) error {
 	)
 }
 
-func ensureLauncherClosedAt(ctx context.Context, executable string) error {
-	return ensureLauncherClosedWith(
-		ctx,
-		executable,
-		5*time.Second,
-		100*time.Millisecond,
-		findProcessPID,
-		killProcessForExecutable(executable),
-	)
-}
-
 func ensureLauncherClosedWith(
 	ctx context.Context,
 	executable string,

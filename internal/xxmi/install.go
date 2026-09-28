@@ -138,255 +138,31 @@ type InstallImporterPackageInput struct {
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) (returnErr error) {
 	stage := "validate-input"
-	rollbackState := "not-started"
-	cleanupState := "not-started"
-	fields := map[string]any{
-		"service": "XXMI", "action": "InstallImporterPackage",
-		"importer": installDiagnosticValue(input.Importer),
-		"version":  installDiagnosticValue(input.Version),
-	}
 	defer func() {
-		if returnErr == nil {
-			return
+		if returnErr != nil {
+			returnErr = infra.ReportError(x.log, returnErr, "XXMI.installImporterPackage", infra.Diagnostic{
+				Operation: "install-importer-package", Stage: stage,
+				Fields: map[string]any{
+					"importer": installDiagnosticValue(input.Importer),
+					"version":  installDiagnosticValue(input.Version), "rollback": "not-started",
+				},
+			})
 		}
-		fields["rollback"] = rollbackState
-		fields["cleanup"] = cleanupState
-		returnErr = infra.ReportError(
-			x.log,
-			returnErr,
-			"XXMI.installImporterPackage",
-			infra.Diagnostic{Operation: "install-importer-package", Stage: stage, Fields: fields},
-		)
 	}()
-
 	version := strings.TrimSpace(input.Version)
-	if version == "" {
-		return errors.New("invalid version: must be a non-empty string")
-	}
-	if strings.ContainsAny(version, "\r\n\x00") {
-		return errors.New("invalid version")
+	if version == "" || strings.ContainsAny(version, "\r\n\x00") {
+		return errors.New("invalid importer package version")
 	}
 	spec, ok := lookupImporterPackage(input.Importer)
 	if !ok {
 		return errors.New("unknown importer")
 	}
-	fileVersion := normalizeVersion(version)
-	if fileVersion == "" {
-		return errors.New("invalid version")
-	}
-	fields["importer"] = spec.key
-	fields["version"] = version
-
-	stage = "load-config"
-	if err := x.load(ctx); err != nil {
-		return err
-	}
 	cfg, err := x.GetImporterConfig(ctx, spec.key)
 	if err != nil {
 		return err
 	}
-	if cfg.Enabled {
-		return x.installBuiltinImporterPackage(ctx, spec, cfg, input)
-	}
-	x.mu.Lock()
-	if x.busy {
-		x.mu.Unlock()
-		return errors.New("XXMI is busy")
-	}
-	if x.path == nil {
-		x.mu.Unlock()
-		return errors.New("XXMI is not configured")
-	}
-	if _, exists := x.parsed.Importers[spec.key]; !exists {
-		x.mu.Unlock()
-		return fmt.Errorf("importer %s not found", spec.key)
-	}
-	x.busy = true
-	xxmiPath := *x.path
-	importerFolder := x.importerFolderLocked(spec.key)
-	overwriteINI := x.parsed.Importers[spec.key].Importer.OverwriteINI
-	archive := x.archive
-	x.mu.Unlock()
-	xxmiPath, err = filepath.Abs(xxmiPath)
-	if err != nil {
-		return err
-	}
-	importerFolder, err = filepath.Abs(importerFolder)
-	if err != nil {
-		return err
-	}
-	xxmiPath = filepath.Clean(xxmiPath)
-	importerFolder = filepath.Clean(importerFolder)
-	configPath := filepath.Join(xxmiPath, xxmiConfigName)
-	fields["xxmi_path"] = xxmiPath
-	fields["importer_path"] = importerFolder
-	fields["config_path"] = configPath
-	defer func() {
-		x.mu.Lock()
-		x.busy = false
-		x.mu.Unlock()
-	}()
-	if archive == nil || !x.github.Configured() {
-		return errors.New("XXMI install services are not configured")
-	}
-	if strings.TrimSpace(importerFolder) == "" || filepath.Clean(importerFolder) == filepath.Clean(xxmiPath) {
-		return errors.New("importer folder is not configured")
-	}
-
-	stage = "close-launcher"
-	if err := ensureLauncherClosedAt(ctx, filepath.Join(xxmiPath, launcherImageName)); err != nil {
-		return err
-	}
-
-	stage = "create-work-directory"
-	workDir, err := os.MkdirTemp("", "nahida-xxmi-importer-")
-	if err != nil {
-		return err
-	}
-	fields["work_path"] = workDir
-	cleanupState = "pending"
-	defer func() {
-		cleanupErr := os.RemoveAll(workDir)
-		if cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
-			cleanupState = "failed"
-		} else {
-			cleanupState = "complete"
-		}
-		x.reportCleanup(cleanupErr, "InstallImporterPackage")
-	}()
-	zipPath := filepath.Join(workDir, "package.zip")
-	packageURL := github.ReleaseFileURL(spec.repo, version, fmt.Sprintf(spec.assetFormat, fileVersion))
-	fields["package_url"] = infra.SanitizeLogURL(packageURL)
-	stage = "download-package"
-	if err := x.github.DownloadFile(
-		ctx,
-		github.FileRequest{Repo: spec.repo, URL: packageURL, Destination: zipPath},
-	); err != nil {
-		return fmt.Errorf("failed to download %s package: %w", spec.key, err)
-	}
-	stage = "extract-package"
-	extractedPath, err := archive.Extract(
-		ctx,
-		zipPath,
-		filepath.Join(workDir, "extracted"),
-		infra.ExtractOptions{},
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("extract %s package: %w", spec.key, err)
-	}
-	stagingDir := filepath.Join(workDir, "staging")
-	stage = "stage-package"
-	if err := copyTreeContext(ctx, extractedPath, stagingDir); err != nil {
-		return fmt.Errorf("stage %s package: %w", spec.key, err)
-	}
-	stage = "validate-package"
-	stagedVersion := readImporterVersion(stagingDir, spec)
-	if stagedVersion == nil || normalizeVersion(*stagedVersion) != fileVersion {
-		got := ""
-		if stagedVersion != nil {
-			got = *stagedVersion
-		}
-		return fmt.Errorf("package version mismatch: expected %s, got %s", version, got)
-	}
-
-	stage = "recover-installation"
-	transaction, err := beginImporterInstallTransaction(ctx, importerFolder, configPath, spec.key)
-	if err != nil {
-		return err
-	}
-	defer func() { x.reportCleanup(transaction.Close(), "InstallImporterPackage") }()
-
-	config, _, err := parseAndValidateConfig(transaction.configRaw)
-	if err != nil {
-		return err
-	}
-	if err := setImporterDeployedVersion(config, spec.key, fileVersion); err != nil {
-		return err
-	}
-	configJSON, err := marshalXXMIConfig(config)
-	if err != nil {
-		return err
-	}
-
-	stage = "prepare-transaction"
-	prepared := false
-	committed := false
-	defer func() {
-		if !prepared || committed {
-			return
-		}
-		rollbackState = "rolling-back"
-		if rollbackErr := transaction.rollback(); rollbackErr != nil {
-			rollbackState = "rollback-failed"
-			returnErr = infra.WithCause(returnErr, rollbackErr)
-			return
-		}
-		rollbackState = "rolled-back"
-	}()
-	stageRoot, err := transaction.prepare(ctx)
-	if err != nil {
-		prepared = transaction.state != ""
-		return err
-	}
-	prepared = true
-
-	var iniBackup []byte
-	if !overwriteINI {
-		iniBackup, _, err = stageRoot.readFile("d3dx.ini")
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			_ = stageRoot.Close()
-			return err
-		}
-	}
-
-	stage = "pre-install"
-	if err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
-		_ = stageRoot.Close()
-		return fmt.Errorf("pre-install %s package: %w", spec.key, err)
-	}
-	stage = "copy-package"
-	if err := copyTreeFilterToRoot(ctx, stagingDir, stageRoot, shouldSkipImporterMods); err != nil {
-		_ = stageRoot.Close()
-		return fmt.Errorf("install %s package: %w", spec.key, err)
-	}
-	stage = "post-install"
-	if err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
-		_ = stageRoot.Close()
-		return fmt.Errorf("post-install %s package: %w", spec.key, err)
-	}
-	if !overwriteINI && iniBackup != nil {
-		if err := stageRoot.writeFileAtomic(
-			ctx, "d3dx.ini", bytes.NewReader(iniBackup), 0o644, nil,
-		); err != nil {
-			_ = stageRoot.Close()
-			return err
-		}
-	}
-	if err := stageRoot.Close(); err != nil {
-		return err
-	}
-
-	stage = "commit"
-	rollbackState = "backup-retained"
-	loaded, parsed, err := transaction.commit(ctx, configJSON)
-	if err != nil {
-		return err
-	}
-	committed = true
-	rollbackState = "committed"
-	x.reportCleanup(transaction.finish(), "InstallImporterPackage")
-	x.mu.Lock()
-	x.config = loaded
-	x.parsed = parsed
-	x.mu.Unlock()
-	if x.log != nil {
-		x.log.Info(
-			"Installed "+spec.key+" package version "+version+" to "+importerFolder,
-			"XXMI.installImporterPackage",
-		)
-	}
-	return nil
+	stage = "install-package"
+	return x.installBuiltinImporterPackage(ctx, spec, cfg, input)
 }
 
 func installDiagnosticValue(value string) string {
@@ -401,33 +177,6 @@ func installDiagnosticValue(value string) string {
 		return value[:maximumLength]
 	}
 	return value
-}
-
-func setImporterDeployedVersion(config map[string]any, key, version string) error {
-	launcher, ok := config["Launcher"].(map[string]any)
-	if !ok {
-		return errors.New("XXMI Launcher config is missing Launcher section")
-	}
-	launcher["auto_update"] = false
-	packagesSection, ok := config["Packages"].(map[string]any)
-	if !ok {
-		return errors.New("XXMI Launcher config is missing Packages section")
-	}
-	packages, ok := packagesSection["packages"].(map[string]any)
-	if !ok {
-		return errors.New("XXMI Launcher config is missing Packages.packages")
-	}
-	entry, _ := packages[key].(map[string]any)
-	if entry == nil {
-		entry = map[string]any{
-			"latest_version": "", "skipped_version": "", "deployed_version": version,
-			"update_check_time": 0, "latest_release_notes": "", "deployed_release_notes": "",
-		}
-		packages[key] = entry
-		return nil
-	}
-	entry["deployed_version"] = version
-	return nil
 }
 
 func writeXXMIConfig(path string, config map[string]any) error {
