@@ -216,10 +216,18 @@ func deployRuntimeFiles(
 			return nil, err
 		}
 	}
-	backupFolder := filepath.Join(cacheRoot, "backups", key+" "+time.Now().Format("2006-01-02 15-04-05"))
+	backupFolder := ""
 	backup := func(name string, data []byte) error {
-		if err := os.MkdirAll(backupFolder, 0o700); err != nil {
-			return err
+		if backupFolder == "" {
+			backupRoot := filepath.Join(cacheRoot, "backups")
+			if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+				return err
+			}
+			folder, err := os.MkdirTemp(backupRoot, key+" "+time.Now().Format("2006-01-02 15-04-05")+"-")
+			if err != nil {
+				return err
+			}
+			backupFolder = folder
 		}
 		return os.WriteFile(filepath.Join(backupFolder, name), data, 0o600)
 	}
@@ -243,6 +251,28 @@ func deployRuntimeFiles(
 		if err := root.removeAll(name); err != nil {
 			return nil, err
 		}
+	}
+	for name := range previous.UserManaged {
+		if _, tracked := previous.Files[name]; tracked {
+			continue
+		}
+		if _, keep := desired[name]; keep {
+			continue
+		}
+		current, _, err := root.readFile(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := backup(name, current); err != nil {
+			return nil, err
+		}
+		if err := root.removeAll(name); err != nil {
+			return nil, err
+		}
+		warnings = append(warnings, "Backed up modified runtime file "+name)
 	}
 	if cfg.Mode == RuntimeXXMI {
 		if current, _, err := root.readFile("nvapi64.dll"); err == nil {
@@ -270,7 +300,7 @@ func deployRuntimeFiles(
 			manifest.Files[name] = wantedHash
 			continue
 		}
-		if err == nil && cfg.Migoto.UnsafeMode &&
+		if err == nil && cfg.Migoto.UnsafeMode && (previous.Mode == "" || previous.Mode == cfg.Mode) &&
 			(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
 			warnings = append(warnings, "Preserved third-party runtime file "+name)
 			manifest.UserManaged[name] = hashBytes(current)
@@ -317,6 +347,16 @@ func runtimeFilesNeedDeployment(
 			return false, err
 		}
 	}
+	for name := range previous.UserManaged {
+		if _, keep := desired[name]; keep {
+			continue
+		}
+		if _, _, err := root.readFile(name); err == nil {
+			return true, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
 	if cfg.Mode == RuntimeXXMI {
 		if _, _, err := root.readFile("nvapi64.dll"); err == nil {
 			return true, nil
@@ -332,8 +372,9 @@ func runtimeFilesNeedDeployment(
 		if err != nil {
 			return false, err
 		}
-		if hashBytes(current) == hashBytes(wanted) || cfg.Migoto.UnsafeMode &&
-			(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
+		if hashBytes(current) == hashBytes(wanted) ||
+			cfg.Migoto.UnsafeMode && (previous.Mode == "" || previous.Mode == cfg.Mode) &&
+				(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
 			continue
 		}
 		return true, nil
