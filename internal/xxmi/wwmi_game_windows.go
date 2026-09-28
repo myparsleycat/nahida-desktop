@@ -25,5 +25,8 @@ func configureWWMIGame(ctx context.Context, cfg ImporterConfig) error {
 			return err
 		}
 	}
+	if err := configureWWMIINIFiles(ctx, game, *cfg.WWMI); err != nil {
+		return err
+	}
 	return nil
 }

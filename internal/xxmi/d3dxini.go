@@ -96,6 +96,26 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 	d.changed = true
 }
 
+func (d *iniDocument) SetOptionUnique(section, key, value string, spaced bool) {
+	start, end := d.sectionBounds(section)
+	if start >= 0 {
+		found := false
+		for index := end - 1; index > start; index-- {
+			match := iniOptionPattern.FindStringSubmatch(d.lines[index])
+			if len(match) == 0 || !strings.EqualFold(match[2], key) {
+				continue
+			}
+			if !found {
+				found = true
+				continue
+			}
+			d.lines = append(d.lines[:index], d.lines[index+1:]...)
+			d.changed = true
+		}
+	}
+	d.SetOption(section, key, value, spaced)
+}
+
 func (d *iniDocument) RemoveOption(section, key string) {
 	start, end := d.sectionBounds(section)
 	if start < 0 {
