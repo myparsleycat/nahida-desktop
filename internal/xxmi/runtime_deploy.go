@@ -16,6 +16,8 @@ import (
 
 const runtimeManifestName = ".nahida-runtime.json"
 
+var errNoCachedLegacyRuntime = errors.New("no legacy runtime is cached")
+
 type runtimeManifest struct {
 	Mode        RuntimeMode       `json:"mode"`
 	Source      string            `json:"source"`
@@ -57,6 +59,9 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 		parent := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto")
 		if id == "" {
 			id, err = newestLegacyRuntime(parent)
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, errNoCachedLegacyRuntime) {
+				id, err = x.UpdateLegacyRuntime(ctx)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -123,7 +128,7 @@ func newestLegacyRuntime(parent string) (string, error) {
 		}
 	}
 	if newest == "" {
-		return "", errors.New("no legacy runtime is cached")
+		return "", errNoCachedLegacyRuntime
 	}
 	return newest, nil
 }

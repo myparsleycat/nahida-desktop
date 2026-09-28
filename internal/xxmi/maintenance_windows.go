@@ -4,6 +4,7 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -35,7 +36,8 @@ func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) 
 		return nil, err
 	}
 	warnings := []string{}
-	if cfg.Mode == RuntimeXXMI {
+	switch cfg.Mode {
+	case RuntimeXXMI:
 		version, err := x.resolveLibsVersion(ctx, cfg)
 		if err != nil {
 			return nil, err
@@ -44,10 +46,71 @@ func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) 
 		if err != nil {
 			return nil, err
 		}
+	case RuntimeLegacy:
+		cfg, warnings, err = x.repairLegacyCache(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	cfg.Migoto.UnsafeMode = false
 	deployedWarnings, err := x.deployRuntime(ctx, key, cfg)
 	return append(warnings, deployedWarnings...), err
+}
+
+func (x *XXMI) repairLegacyCache(ctx context.Context, cfg ImporterConfig) (ImporterConfig, []string, error) {
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		return cfg, nil, err
+	}
+	parent := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto")
+	id := cfg.LegacyRuntime
+	if id == "" {
+		id, err = newestLegacyRuntime(parent)
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, errNoCachedLegacyRuntime) {
+			id, err = x.UpdateLegacyRuntime(ctx)
+		}
+		if err != nil {
+			return cfg, nil, err
+		}
+	}
+	if len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
+		return cfg, nil, errors.New("invalid legacy runtime ID")
+	}
+	folder := filepath.Join(parent, id)
+	data, err := os.ReadFile(filepath.Join(folder, "source.json"))
+	if err != nil {
+		return cfg, nil, fmt.Errorf("re-import the legacy runtime ZIP to repair its cache: %w", err)
+	}
+	var source LegacyRuntimeSource
+	if err := json.Unmarshal(data, &source); err != nil {
+		return cfg, nil, fmt.Errorf("re-import the legacy runtime ZIP to repair its cache: %w", err)
+	}
+	if err := verifyLegacyRuntimeCache(folder, source.ZipSHA256); err == nil {
+		return cfg, []string{}, nil
+	}
+	if source.URL != legacyRuntimeURL {
+		return cfg, nil, errors.New("re-import the local legacy runtime ZIP to repair its cache")
+	}
+	backupRoot := filepath.Join(cacheRoot, "backups")
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		return cfg, nil, err
+	}
+	backup := filepath.Join(backupRoot, fmt.Sprintf("legacy-%s-corrupt-%d", id, time.Now().UnixNano()))
+	if err := os.Rename(folder, backup); err != nil {
+		return cfg, nil, fmt.Errorf("back up corrupt legacy runtime: %w", err)
+	}
+	newID, err := x.UpdateLegacyRuntime(ctx)
+	if err != nil {
+		return cfg, nil, errors.Join(err, os.Rename(backup, folder))
+	}
+	if cfg.LegacyRuntime != "" && newID != id {
+		return cfg, nil, errors.Join(
+			errors.New("pinned legacy runtime changed upstream; select the new runtime or re-import the original ZIP"),
+			os.Rename(backup, folder),
+		)
+	}
+	cfg.LegacyRuntime = newID
+	return cfg, []string{"Backed up corrupt legacy runtime to " + backup}, nil
 }
 
 func (x *XXMI) repairLibsCache(ctx context.Context, version string) ([]string, error) {
