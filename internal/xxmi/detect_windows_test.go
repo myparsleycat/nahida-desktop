@@ -3,11 +3,30 @@
 package xxmi
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestValidateGameFolder(t *testing.T) {
+	game := t.TempDir()
+	executable := filepath.Join(game, "GenshinImpact.exe")
+	if err := os.WriteFile(executable, []byte("game"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := New().ValidateGameFolder(context.Background(), "GIMI", game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Path != game || candidate.ExePath != executable {
+		t.Fatalf("candidate = %+v", candidate)
+	}
+	if _, err := New().ValidateGameFolder(context.Background(), "SRMI", game); err == nil {
+		t.Fatal("accepted Genshin folder for SRMI")
+	}
+}
 
 func TestReadGamePathHints(t *testing.T) {
 	root := t.TempDir()

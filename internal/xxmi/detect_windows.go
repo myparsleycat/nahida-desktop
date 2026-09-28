@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -105,27 +106,65 @@ func (x *XXMI) DetectGameFolders(ctx context.Context, importer string) ([]GameFo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if importer == "WWMI" {
-			path = normalizeWWGameFolder(path)
-		}
-		executable := configuredGameExecutable(path, spec.gameExeNames)
-		if executable == "" {
+		candidate, err := validateGameFolder(importer, path, spec)
+		if err != nil {
 			continue
 		}
-		info, err := os.Stat(executable)
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		path = filepath.Dir(executable)
-		id := strings.ToLower(path)
+		id := strings.ToLower(candidate.Path)
 		if _, ok := seen[id]; ok {
 			continue
 		}
 		seen[id] = struct{}{}
-		results = append(results, GameFolderCandidate{Path: path, ExePath: executable, ModTime: info.ModTime().Unix()})
+		results = append(results, candidate)
 	}
 	slices.SortFunc(results, func(a, b GameFolderCandidate) int { return int(b.ModTime - a.ModTime) })
 	return results, nil
+}
+
+func (x *XXMI) ValidateGameFolder(ctx context.Context, importer, path string) (GameFolderCandidate, error) {
+	if err := ctx.Err(); err != nil {
+		return GameFolderCandidate{}, err
+	}
+	spec, ok := lookupImporterPackage(importer)
+	if !ok {
+		return GameFolderCandidate{}, errors.New("unknown XXMI importer")
+	}
+	return validateGameFolder(importer, path, spec)
+}
+
+func validateGameFolder(importer, path string, spec importerPackageSpec) (GameFolderCandidate, error) {
+	if err := validateLocalFolder("game folder", path, true); err != nil {
+		return GameFolderCandidate{}, err
+	}
+	if importer == "WWMI" {
+		path = normalizeWWGameFolder(path)
+		for _, name := range []string{"Client", "Engine"} {
+			info, err := os.Stat(filepath.Join(path, name))
+			if err != nil || !info.IsDir() {
+				return GameFolderCandidate{}, fmt.Errorf("WWMI game folder is missing %s", name)
+			}
+		}
+		if !fileExists(filepath.Join(path, "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe")) {
+			return GameFolderCandidate{}, errors.New("WWMI game folder is missing Client-Win64-Shipping.exe")
+		}
+		for parent := filepath.Dir(path); parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
+			if strings.EqualFold(filepath.Base(parent), "steamapps") {
+				if !strings.EqualFold(filepath.Base(filepath.Dir(path)), "common") ||
+					!strings.EqualFold(filepath.Base(filepath.Dir(filepath.Dir(path))), "steamapps") {
+					return GameFolderCandidate{}, errors.New(
+						"WWMI Steam game folder must be directly inside steamapps/common",
+					)
+				}
+				break
+			}
+		}
+	}
+	executable := configuredGameExecutable(path, spec.gameExeNames)
+	info, err := os.Stat(executable)
+	if err != nil || !info.Mode().IsRegular() {
+		return GameFolderCandidate{}, fmt.Errorf("game executable for %s was not found", importer)
+	}
+	return GameFolderCandidate{Path: filepath.Dir(executable), ExePath: executable, ModTime: info.ModTime().Unix()}, nil
 }
 
 func gameDetectionLogs(importer string) []string {

@@ -49,6 +49,7 @@ function RouteComponent() {
   const save = async (next = config) => {
     if (!next) return;
     try {
+      if (next.gameFolder) await XXMI.ValidateGameFolder(importer, next.gameFolder);
       if (next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
         await XXMI.SetImporterVersions(importer, { xxmi: next.xxmiVersion });
       }
@@ -218,6 +219,9 @@ function RouteComponent() {
               <Button
                 onClickPromise={async () => {
                   try {
+                    if (config.gameFolder) {
+                      await XXMI.ValidateGameFolder(importer, config.gameFolder);
+                    }
                     await XXMI.SaveImporterConfig(importer, config);
                     await XXMI.InstallImporterPackage({
                       importer,
