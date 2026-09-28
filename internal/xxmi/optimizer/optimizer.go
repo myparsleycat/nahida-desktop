@@ -83,7 +83,12 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 			return Report{}, err
 		}
 	}
-	report := Report{Changes: []Change{}}
+	type pendingINI struct {
+		file    iniFile
+		changes []Change
+	}
+	pending := []pendingINI{}
+	modDisables := map[string]Change{}
 	for _, folder := range []string{mods, shaderFixes} {
 		if err := walkINI(ctx, folder, options.Exclude, func(path string, info fs.FileInfo) error {
 			if !options.DryRun && cache[path] == info.ModTime().UnixNano() {
@@ -93,23 +98,50 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 			if err != nil {
 				return err
 			}
-			changes := inspect(file, options.Importer, folder == shaderFixes, packagedNamespaces)
-			report.Changes = append(report.Changes, changes...)
-			if !options.DryRun {
-				if err := apply(file, changes, options.Prefix); err != nil {
-					return err
-				}
-				if updated, err := os.Stat(path); err == nil {
-					cache[path] = updated.ModTime().UnixNano()
-				} else if errors.Is(err, os.ErrNotExist) {
-					delete(cache, path)
-				} else {
-					return err
-				}
+			changes := inspect(file, options.Importer, folder, packagedNamespaces)
+			if len(changes) == 1 && changes[0].Action == "disable-mod" {
+				modDisables[changes[0].Path] = changes[0]
+				changes = nil
 			}
+			pending = append(pending, pendingINI{file: file, changes: changes})
 			return nil
 		}); err != nil {
 			return Report{}, err
+		}
+	}
+	report := Report{Changes: []Change{}}
+	for _, item := range pending {
+		skipped := false
+		for path := range modDisables {
+			if strings.HasPrefix(strings.ToLower(item.file.path), strings.ToLower(path+string(filepath.Separator))) {
+				skipped = true
+				break
+			}
+		}
+		if skipped {
+			continue
+		}
+		report.Changes = append(report.Changes, item.changes...)
+		if options.DryRun {
+			continue
+		}
+		if err := apply(item.file, item.changes, options.Prefix); err != nil {
+			return Report{}, err
+		}
+		if updated, err := os.Stat(item.file.path); err == nil {
+			cache[item.file.path] = updated.ModTime().UnixNano()
+		} else if errors.Is(err, os.ErrNotExist) {
+			delete(cache, item.file.path)
+		} else {
+			return Report{}, err
+		}
+	}
+	for _, change := range modDisables {
+		report.Changes = append(report.Changes, change)
+		if !options.DryRun {
+			if err := disablePath(change.Path, options.Prefix); err != nil {
+				return Report{}, err
+			}
 		}
 	}
 	for _, change := range report.Changes {
@@ -240,7 +272,8 @@ type section struct {
 	runs     []string
 }
 
-func inspect(file iniFile, importer string, shaderFixes bool, packagedNamespaces map[string]bool) []Change {
+func inspect(file iniFile, importer, folder string, packagedNamespaces map[string]bool) []Change {
+	shaderFixes := strings.EqualFold(filepath.Base(folder), "ShaderFixes")
 	add := func(action, reason string, line int) []Change {
 		return []Change{{Path: file.path, Action: action, Reason: reason, Line: line}}
 	}
@@ -308,31 +341,33 @@ func inspect(file iniFile, importer string, shaderFixes bool, packagedNamespaces
 		}
 	}
 	if !shaderFixes {
+		globalTrigger := false
 		for name, section := range sections {
 			if !strings.HasPrefix(name, "shaderregex") || sections[name+".pattern"] != nil {
 				continue
 			}
-			for _, line := range section.triggers {
-				changes = append(
-					changes,
-					Change{Path: file.path, Action: "edit-line", Reason: "global ShaderRegex trigger", Line: line + 1},
-				)
-			}
+			globalTrigger = globalTrigger || len(section.triggers) > 0
 			for _, run := range section.runs {
 				if called := sections[run]; called != nil {
-					for _, line := range called.triggers {
-						changes = append(
-							changes,
-							Change{
-								Path:   file.path,
-								Action: "edit-line",
-								Reason: "global ShaderRegex trigger",
-								Line:   line + 1,
-							},
-						)
+					globalTrigger = globalTrigger || len(called.triggers) > 0
+				}
+			}
+		}
+		if globalTrigger {
+			relative, err := filepath.Rel(folder, file.path)
+			if err == nil {
+				parts := strings.Split(relative, string(filepath.Separator))
+				if len(parts) > 1 {
+					return []Change{
+						{
+							Path:   filepath.Join(folder, parts[0]),
+							Action: "disable-mod",
+							Reason: "global ShaderRegex trigger",
+						},
 					}
 				}
 			}
+			return add("disable-file", "global ShaderRegex trigger", 0)
 		}
 	}
 	slices.SortFunc(changes, func(a, b Change) int { return a.Line - b.Line })
@@ -344,22 +379,7 @@ func apply(file iniFile, changes []Change, prefix string) error {
 		return nil
 	}
 	if changes[0].Action == "disable-file" {
-		name := filepath.Base(file.path)
-		if strings.HasPrefix(strings.ToUpper(name), "DISABLED ") ||
-			strings.HasPrefix(strings.ToUpper(name), "DISABLED_") {
-			return nil
-		}
-		for index := 0; ; index++ {
-			target := filepath.Join(filepath.Dir(file.path), prefix+name)
-			if index > 0 {
-				target = fmt.Sprintf("%s.%d", target, index)
-			}
-			if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
-				return os.Rename(file.path, target)
-			} else if err != nil {
-				return err
-			}
-		}
+		return disablePath(file.path, prefix)
 	}
 	for _, change := range changes {
 		index := change.Line - 1
@@ -396,4 +416,22 @@ func apply(file iniFile, changes []Change, prefix string) error {
 		result = "\xef\xbb\xbf" + result
 	}
 	return os.WriteFile(file.path, []byte(result), 0o600)
+}
+
+func disablePath(path, prefix string) error {
+	name := filepath.Base(path)
+	if strings.HasPrefix(strings.ToUpper(name), "DISABLED ") || strings.HasPrefix(strings.ToUpper(name), "DISABLED_") {
+		return nil
+	}
+	for index := 0; ; index++ {
+		target := filepath.Join(filepath.Dir(path), prefix+name)
+		if index > 0 {
+			target = fmt.Sprintf("%s.%d", target, index)
+		}
+		if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
+			return os.Rename(path, target)
+		} else if err != nil {
+			return err
+		}
+	}
 }

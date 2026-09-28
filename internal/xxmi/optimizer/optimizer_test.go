@@ -77,3 +77,35 @@ func TestOptimizeDisablesRogueAndSkipsExcluded(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOptimizeDisablesModWithGlobalShaderRegexTrigger(t *testing.T) {
+	root := t.TempDir()
+	mod := filepath.Join(root, "Mods", "Example")
+	if err := os.MkdirAll(mod, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ini := filepath.Join(mod, "example.ini")
+	if err := os.WriteFile(
+		ini,
+		[]byte("[ShaderRegexExample]\nrun = CommandListGlobal\n[CommandListGlobal]\nchecktextureoverride = ps-t0\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	options := Options{Importer: "GIMI", ImporterFolder: root,
+		CachePath: filepath.Join(root, "cache.json"), Prefix: "DISABLED ", DryRun: true}
+	preview, err := Optimize(context.Background(), options)
+	if err != nil || preview.DisabledMods != 1 || len(preview.Changes) != 1 {
+		t.Fatalf("preview = %+v, %v", preview, err)
+	}
+	if _, err := os.Stat(mod); err != nil {
+		t.Fatal(err)
+	}
+	options.DryRun = false
+	if _, err := Optimize(context.Background(), options); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Mods", "DISABLED Example", "example.ini")); err != nil {
+		t.Fatal(err)
+	}
+}
