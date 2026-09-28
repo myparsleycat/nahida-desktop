@@ -235,6 +235,28 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if client == nil {
 		return errors.New("XXMI settings store is not configured")
 	}
+	previous, err := client.XXMIImporters.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+	if previous != nil {
+		var old ImporterConfig
+		if err := json.Unmarshal([]byte(previous.Config), &old); err != nil {
+			return err
+		}
+		if old.Mode != cfg.Mode {
+			spec, _ := lookupImporterPackage(key)
+			for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
+				pid, err := findProcessPID(ctx, name)
+				if err != nil {
+					return err
+				}
+				if pid != 0 {
+					return errors.New("XXMI_GAME_RUNNING")
+				}
+			}
+		}
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return err

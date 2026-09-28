@@ -53,6 +53,7 @@ type PackageInfo struct {
 
 type EnabledImporter struct {
 	Key              string      `json:"key"`
+	Mode             RuntimeMode `json:"mode"`
 	ImporterFolder   string      `json:"importerFolder"`
 	InstalledVersion *string     `json:"installedVersion"`
 	PackageInfo      PackageInfo `json:"packageInfo"`
@@ -413,7 +414,7 @@ func (x *XXMI) enabledImportersLocked() []EnabledImporter {
 			installed = readImporterVersion(folder, spec)
 		}
 		out = append(out, EnabledImporter{
-			Key: key, ImporterFolder: folder, InstalledVersion: installed, PackageInfo: packageInfo,
+			Key: key, Mode: RuntimeXXMI, ImporterFolder: folder, InstalledVersion: installed, PackageInfo: packageInfo,
 		})
 	}
 	return out

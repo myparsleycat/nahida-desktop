@@ -52,7 +52,7 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 		if installed != nil {
 			info.DeployedVersion = *installed
 		}
-		out = append(out, EnabledImporter{Key: row.Key, ImporterFolder: cfg.ImporterFolder,
+		out = append(out, EnabledImporter{Key: row.Key, Mode: cfg.Mode, ImporterFolder: cfg.ImporterFolder,
 			InstalledVersion: installed, PackageInfo: info})
 	}
 	return out, nil
