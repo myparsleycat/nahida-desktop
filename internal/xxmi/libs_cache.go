@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"nahida.live/desktop/internal/github"
 )
@@ -35,8 +36,15 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	}
 	parent := filepath.Join(root, "packages", "xxmi-libs")
 	destination := filepath.Join(parent, version)
-	if _, err := os.Stat(filepath.Join(destination, "Manifest.json")); err == nil {
-		return verifyXXMILibsCache(destination, version)
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("XXMI libraries cache is not a regular directory")
+		}
+		if verifyXXMILibsCache(destination, version) == nil {
+			return nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	releases, err := x.github.AllReleases(ctx, libsRepo)
 	if err != nil {
@@ -141,9 +149,35 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	if err := verifyXXMILibsCache(staging, version); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return replaceCorruptLibsCache(root, staging, destination, version)
+}
+
+func replaceCorruptLibsCache(root, staging, destination, version string) error {
+	backup := ""
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("XXMI libraries cache is not a regular directory")
+		}
+		if verifyXXMILibsCache(destination, version) == nil {
+			return nil
+		}
+		backupRoot := filepath.Join(root, "backups")
+		if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+			return err
+		}
+		backup = filepath.Join(backupRoot, fmt.Sprintf("xxmi-libs-%s-corrupt-%d", version, time.Now().UnixNano()))
+		if err := os.Rename(destination, backup); err != nil {
+			return fmt.Errorf("back up corrupt XXMI libraries cache: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if err := os.Rename(staging, destination); err != nil {
-		if _, statErr := os.Stat(destination); statErr == nil {
-			return verifyXXMILibsCache(destination, version)
+		if backup != "" {
+			return errors.Join(err, os.Rename(backup, destination))
 		}
 		return err
 	}
