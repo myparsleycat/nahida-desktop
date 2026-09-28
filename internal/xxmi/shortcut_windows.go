@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -46,7 +47,43 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	return path, nil
 }
 
+func (x *XXMI) DeleteShortcut(ctx context.Context, key string) error {
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return err
+	}
+	if cfg.ShortcutPath == "" {
+		return nil
+	}
+	expected, err := desktopShortcutPath(key)
+	if err != nil {
+		return err
+	}
+	if err := removeSavedShortcut(cfg.ShortcutPath, expected); err != nil {
+		return err
+	}
+	cfg.ShortcutPath = ""
+	return x.SaveImporterConfig(ctx, key, cfg)
+}
+
 func createShortcutOnDesktop(ctx context.Context, key, executable string) (string, error) {
+	path, err := desktopShortcutPath(key)
+	if err != nil {
+		return "", err
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if _, err := win.CoInitializeEx(co.COINIT_APARTMENTTHREADED | co.COINIT_DISABLE_OLE1DDE); err != nil {
+		return "", fmt.Errorf("initialize COM for shortcut: %w", err)
+	}
+	defer win.CoUninitialize()
+	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func desktopShortcutPath(key string) (string, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if _, err := win.CoInitializeEx(co.COINIT_APARTMENTTHREADED | co.COINIT_DISABLE_OLE1DDE); err != nil {
@@ -64,10 +101,17 @@ func createShortcutOnDesktop(ctx context.Context, key, executable string) (strin
 		return "", err
 	}
 	path := filepath.Join(desktopPath, key+" Quick Start.lnk")
-	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key); err != nil {
-		return "", err
-	}
 	return path, nil
+}
+
+func removeSavedShortcut(saved, expected string) error {
+	if !strings.EqualFold(filepath.Clean(saved), filepath.Clean(expected)) {
+		return fmt.Errorf("quick start shortcut path is outside the current desktop: %s", saved)
+	}
+	if err := os.Remove(saved); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func createWindowsShortcut(ctx context.Context, path, executable, args string) error {

@@ -2060,6 +2060,8 @@
           "openImporterFolder": "Open importer folder",
           "createShortcut": "Create Quick Start shortcut",
           "shortcutCreated": "Desktop shortcut created",
+          "deleteShortcut": "Delete Quick Start shortcut",
+          "shortcutDeleted": "Desktop shortcut deleted",
           "iniOptimizer": "INI optimizer",
           "optimizeAtLaunch": "Optimize when launching",
           "resetOptimizerCache": "Reset optimizer cache",

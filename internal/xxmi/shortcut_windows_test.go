@@ -33,3 +33,30 @@ func TestCreateWindowsShortcut(t *testing.T) {
 		t.Fatalf("shortcut = %v, %v", info, err)
 	}
 }
+
+func TestRemoveSavedShortcutOnlyDeletesExpectedPath(t *testing.T) {
+	root := t.TempDir()
+	expected := filepath.Join(root, "GIMI Quick Start.lnk")
+	other := filepath.Join(root, "other.lnk")
+	if err := os.WriteFile(expected, []byte("shortcut"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(other, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeSavedShortcut(other, expected); err == nil {
+		t.Fatal("unrelated shortcut was accepted")
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Fatal("unrelated shortcut was removed:", err)
+	}
+	if err := removeSavedShortcut(expected, expected); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(expected); !os.IsNotExist(err) {
+		t.Fatalf("expected shortcut remains: %v", err)
+	}
+	if err := removeSavedShortcut(expected, expected); err != nil {
+		t.Fatal("repeated deletion should succeed:", err)
+	}
+}

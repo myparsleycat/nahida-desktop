@@ -881,6 +881,22 @@ function RouteComponent() {
           >
             {t("page.setting.xxmi.builtin.createShortcut")}
           </Button>
+          {saved?.shortcutPath && (
+            <Button
+              variant="outline"
+              onClickPromise={async () => {
+                try {
+                  await XXMI.DeleteShortcut(importer);
+                  refresh();
+                  toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
+                } catch (error) {
+                  toast.error(toErrorMessage(error));
+                }
+              }}
+            >
+              {t("page.setting.xxmi.builtin.deleteShortcut")}
+            </Button>
+          )}
         </CardContent>
       </Card>
       {launchGuardDialog}

@@ -1989,6 +1989,8 @@
           "openImporterFolder": "임포터 폴더 열기",
           "createShortcut": "Quick Start 바로가기 만들기",
           "shortcutCreated": "바탕화면 바로가기를 만들었습니다",
+          "deleteShortcut": "Quick Start 바로가기 삭제",
+          "shortcutDeleted": "바탕화면 바로가기를 삭제했습니다",
           "iniOptimizer": "INI 최적화",
           "optimizeAtLaunch": "게임 실행 시 자동 최적화",
           "resetOptimizerCache": "최적화 캐시 초기화",

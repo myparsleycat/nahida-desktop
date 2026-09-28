@@ -1971,6 +1971,8 @@
           "openImporterFolder": "インポーターフォルダーを開く",
           "createShortcut": "Quick Start ショートカットを作成",
           "shortcutCreated": "デスクトップにショートカットを作成しました",
+          "deleteShortcut": "Quick Start ショートカットを削除",
+          "shortcutDeleted": "デスクトップのショートカットを削除しました",
           "iniOptimizer": "INI 最適化",
           "optimizeAtLaunch": "ゲーム起動時に自動最適化",
           "resetOptimizerCache": "最適化キャッシュをリセット",

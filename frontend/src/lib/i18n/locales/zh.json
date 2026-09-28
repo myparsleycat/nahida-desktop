@@ -1970,6 +1970,8 @@
           "openImporterFolder": "打开导入器文件夹",
           "createShortcut": "创建 Quick Start 快捷方式",
           "shortcutCreated": "已创建桌面快捷方式",
+          "deleteShortcut": "删除 Quick Start 快捷方式",
+          "shortcutDeleted": "已删除桌面快捷方式",
           "iniOptimizer": "INI 优化",
           "optimizeAtLaunch": "启动游戏时自动优化",
           "resetOptimizerCache": "重置优化缓存",
