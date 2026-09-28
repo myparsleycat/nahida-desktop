@@ -21,6 +21,7 @@ func TestExtractLegacyRuntimeUsesOnlyRuntimeFiles(t *testing.T) {
 	for name, content := range map[string]string{
 		"3dmigoto/3DMigoto Loader.exe": "loader",
 		"3dmigoto/d3d11.dll":           "module",
+		"3dmigoto/d3dcompiler_46.dll":  "compiler",
 		"3dmigoto/nvapi64.dll":         "nvapi",
 		"3dmigoto/d3dx.ini":            "must not deploy",
 		"3dmigoto/Mods/example.ini":    "must not deploy",
@@ -58,6 +59,9 @@ func TestExtractLegacyRuntimeUsesOnlyRuntimeFiles(t *testing.T) {
 	folder := filepath.Join(root, "packages", "legacy-3dmigoto", id)
 	if err := verifyLegacyRuntimeCache(folder, zipHash); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(folder, "d3dcompiler_46.dll")); err != nil {
+		t.Fatalf("legacy compiler DLL was not extracted: %v", err)
 	}
 	for _, name := range []string{"d3dx.ini", "Mods"} {
 		if _, err := os.Stat(filepath.Join(folder, name)); !os.IsNotExist(err) {

@@ -17,6 +17,11 @@ const (
 )
 
 func verifyPackageSignature(publicKey, signature string, data []byte) error {
+	digest := sha256.Sum256(data)
+	return verifyPackageDigestSignature(publicKey, signature, digest)
+}
+
+func verifyPackageDigestSignature(publicKey, signature string, digest [sha256.Size]byte) error {
 	der, err := base64.StdEncoding.DecodeString(publicKey)
 	if err != nil {
 		return fmt.Errorf("decode package public key: %w", err)
@@ -33,7 +38,6 @@ func verifyPackageSignature(publicKey, signature string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("decode package signature: %w", err)
 	}
-	digest := sha256.Sum256(data)
 	if !ecdsa.VerifyASN1(key, digest[:], sig) {
 		return errors.New("package signature verification failed")
 	}
