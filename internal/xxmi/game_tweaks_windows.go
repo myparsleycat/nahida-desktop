@@ -54,6 +54,8 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig) e
 					return nil
 				})
 		}
+	case "ZZMI":
+		return configureZZMIGame(ctx, cfg.GameFolder)
 	}
 	return nil
 }
