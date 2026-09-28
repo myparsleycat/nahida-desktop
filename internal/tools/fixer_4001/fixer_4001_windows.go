@@ -33,13 +33,16 @@ func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath string) error 
 func d3dBuildCommand(vcvarsPath, projectPath string) (string, error) {
 	vcvars, err := cmdQuotedLocalPath(vcvarsPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("quote vcvars path %q: %w", vcvarsPath, err)
 	}
 	project, err := cmdQuotedLocalPath(projectPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("quote project path %q: %w", projectPath, err)
 	}
-	return vcvars + ` && cd /d ` + project + ` && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`, nil
+
+	// vcvars64.bat can exit non-zero for non-fatal SDK detection errors while msbuild still resolves the SDK
+	// through its own props, so its exit code must not gate the build.
+	return vcvars + ` & cd /d ` + project + ` && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`, nil
 }
 
 func cmdQuotedLocalPath(path string) (string, error) {

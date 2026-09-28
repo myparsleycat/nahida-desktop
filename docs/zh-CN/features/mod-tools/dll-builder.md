@@ -40,7 +40,7 @@
   选择要使用该 DLL 的 Importer。
   由于 `4001` 错误目前只出现在《原神》中，请选择 **GIMI**。
 
-完成全部选项设置后，点击 **Start Build** 按钮即可开始构建 DLL。
+完成全部选项设置后，点击 **Start Build** 按钮即可开始构建 DLL。如果因找不到 Windows SDK/UCRT 头文件（`crtdbg.h`、`windows.h`、`SDKDDKVer.h`）或所需的 Windows SDK 版本而导致构建失败，将显示安装或修复指引。如果已安装 SDK 仍出现此错误，请在 Visual Studio Installer 中修复对应的安装，或在 **Visual Studio 路径** 中指定可正常使用的 Build Tools 2022 的 `vcvars64.bat`。
 
 ## 非安全模式
 

@@ -491,7 +491,11 @@ func (t *Service) failed4001Install(err error, target, fallbackCode string) Fixe
 func (t *Service) failed4001Build(err error) Fixer4001Result {
 	t.logError(err, "4001Fixer")
 	message := extractBuildErrorMessage(err)
-	t.update4001Progress("XXMI_ERR_BUILD_FAILED", message)
+	code := "XXMI_ERR_BUILD_FAILED"
+	if isMissingSDKHeaderError(err) {
+		code = "XXMI_ERR_SDK_NOT_FOUND"
+	}
+	t.update4001Progress(code, message)
 	return Fixer4001Result{ErrorMessage: lo.ToPtr(message)}
 }
 

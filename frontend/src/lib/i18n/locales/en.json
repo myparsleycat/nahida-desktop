@@ -1110,6 +1110,7 @@
           "XXMI_ERR_GIMI_NOT_FOUND": "Could not find the importer.",
           "XXMI_FIND_VS": "Locating Visual Studio build tools...",
           "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Please make sure the C++ build tools are installed.",
+          "XXMI_ERR_SDK_NOT_FOUND": "Windows SDK/UCRT headers are unavailable in the selected Visual Studio environment. Install or repair Desktop development with C++ and a Windows 10/11 SDK in Visual Studio Installer, or select another build tools path above.",
           "XXMI_BUILDING": "Building D3D11 DLL...",
           "XXMI_OBFUSCATING": "Diversifying D3D11 DLL padding...",
           "XXMI_RESTORING": "Restoring D3D11 DLL from backup...",

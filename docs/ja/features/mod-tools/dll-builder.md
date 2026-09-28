@@ -40,7 +40,7 @@
   ビルドした DLL を使用する Importer を選択します。
   `4001` エラーは現在 原神 でのみ発生しているため、**GIMI** を選択してください。
 
-すべてのオプションを選択したら、**Start Build** ボタンを押して DLL ビルドを開始します。
+すべてのオプションを選択したら、**Start Build** ボタンを押して DLL ビルドを開始します。 Windows SDK/UCRT のヘッダー（`crtdbg.h`、`windows.h`、`SDKDDKVer.h`）または必要な Windows SDK バージョンが見つからずにビルドが失敗した場合は、インストールまたは修復の案内が表示されます。SDK がインストール済みなのにこのエラーが発生する場合は、Visual Studio Installer で該当するインストールを修復するか、**Visual Studio のパス** に正常にインストールされた Build Tools 2022 の `vcvars64.bat` を指定してください。
 
 ## 非セキュアモード
 

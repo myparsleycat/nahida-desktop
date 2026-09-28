@@ -134,6 +134,20 @@ func TestFourThousandOneFixerReleaseCacheDeduplicatesInFlightFetch(t *testing.T)
 	}
 }
 
+func TestFourThousandOneFixerBuildErrorClassification(t *testing.T) {
+	service := New()
+	result := service.failed4001Build(errors.New(`pch.h(1,10): error C1083: 'windows.h'`))
+	if !strings.Contains(*result.ErrorMessage, "windows.h") ||
+		service.FourThousandOneFixerGetState().Progress != "XXMI_ERR_SDK_NOT_FOUND" {
+		t.Fatalf("SDK error result = %#v, state = %#v", result, service.FourThousandOneFixerGetState())
+	}
+
+	service.failed4001Build(errors.New(`pch.h(1,10): error C1083: 'project.h'`))
+	if got := service.FourThousandOneFixerGetState().Progress; got != "XXMI_ERR_BUILD_FAILED" {
+		t.Fatalf("project error code = %q", got)
+	}
+}
+
 func TestFourThousandOneFixerInstallErrorClassification(t *testing.T) {
 	service := New()
 	service.failed4001Install(syscall.Errno(32), filepath.Join(t.TempDir(), targetD3D11DLL), "XXMI_ERR_BUILD_FAILED")

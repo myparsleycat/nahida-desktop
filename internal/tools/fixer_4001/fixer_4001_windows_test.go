@@ -51,9 +51,38 @@ func TestD3DBuildCommandQuotesVSAndProjectPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `"C:\Program Files (x86)\vcvars64.bat" && cd /d "C:\Temp\XXMI Libs" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`
+	want := `"C:\Program Files (x86)\vcvars64.bat" & cd /d "C:\Temp\XXMI Libs" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`
 	if got != want {
 		t.Fatalf("d3dBuildCommand() = %q, want %q", got, want)
+	}
+}
+
+func TestExecuteD3DBuildIgnoresVCVarsExitCode(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "XXMI Libs")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	vcvarsPath := filepath.Join(root, "vcvars64.bat")
+	if err := os.WriteFile(vcvarsPath, []byte("@echo off\r\nexit /b 1\r\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	msbuild := "@echo off\r\necho ran> msbuild-ran.txt\r\n"
+	if err := os.WriteFile(filepath.Join(binDir, "msbuild.cmd"), []byte(msbuild), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := executeD3DBuild(context.Background(), vcvarsPath, projectDir); err != nil {
+		t.Fatalf("executeD3DBuild() = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, "msbuild-ran.txt")); err != nil {
+		t.Fatalf("msbuild did not run after vcvars failed: %v", err)
 	}
 }
 

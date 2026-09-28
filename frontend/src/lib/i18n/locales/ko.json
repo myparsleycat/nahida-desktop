@@ -1094,6 +1094,7 @@
           "XXMI_ERR_GIMI_NOT_FOUND": "Importer를 찾을 수 없습니다.",
           "XXMI_FIND_VS": "Visual Studio 빌드 도구 찾는 중...",
           "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 환경(vcvars64.bat)을 찾을 수 없습니다. C++ 빌드 도구가 설치되어 있는지 확인하세요.",
+          "XXMI_ERR_SDK_NOT_FOUND": "선택된 Visual Studio 환경에서 Windows SDK/UCRT 헤더를 찾을 수 없습니다. Visual Studio Installer에서 C++ 데스크톱 개발 도구와 Windows 10/11 SDK를 설치하거나 복구하세요. 다른 빌드 도구를 사용하려면 위의 경로를 직접 지정하세요.",
           "XXMI_BUILDING": "D3D11 DLL 빌드 중...",
           "XXMI_OBFUSCATING": "D3D11 DLL 패딩 다양화 중...",
           "XXMI_RESTORING": "백업에서 D3D11 DLL 복원 중...",

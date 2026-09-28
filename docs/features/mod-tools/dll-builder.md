@@ -40,7 +40,7 @@ On the build screen, you can configure the following options:
   Select the importer that will use the built DLL.
   Since the `4001` error currently occurs only in Genshin Impact, choose **GIMI**.
 
-After selecting all options, click **Start Build** to begin building the DLL.
+After selecting all options, click **Start Build** to begin building the DLL. If the build fails because Windows SDK/UCRT headers (`crtdbg.h`, `windows.h`, `SDKDDKVer.h`) or the required Windows SDK version cannot be found, installation or repair guidance is shown. If the SDK is already installed, repair that Visual Studio installation or set the **build tools path** to `vcvars64.bat` from a working Build Tools 2022 installation.
 
 ## Diversify DLL Padding
 

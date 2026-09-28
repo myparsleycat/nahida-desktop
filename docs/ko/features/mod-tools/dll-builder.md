@@ -40,7 +40,7 @@
   빌드된 DLL을 사용할 Importer를 선택합니다.
   `4001` 오류는 현재 원신에서만 발생하므로 **GIMI**를 선택하세요.
 
-옵션을 모두 선택한 뒤 **빌드 시작** 버튼을 누르면 DLL 빌드가 진행됩니다.
+옵션을 모두 선택한 뒤 **빌드 시작** 버튼을 누르면 DLL 빌드가 진행됩니다. Windows SDK/UCRT 헤더(`crtdbg.h`, `windows.h`, `SDKDDKVer.h`)나 필요한 Windows SDK 버전을 찾지 못해 빌드가 실패하면 설치 또는 복구 안내가 표시됩니다. SDK가 설치되어 있는데도 이 오류가 발생하면 Visual Studio Installer에서 해당 설치를 복구하거나, **빌드 도구 경로**에 정상 설치된 Build Tools 2022의 `vcvars64.bat`를 지정하세요.
 
 ## DLL 패딩 다양화
 
