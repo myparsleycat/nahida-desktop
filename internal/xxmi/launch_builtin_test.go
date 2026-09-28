@@ -136,6 +136,94 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	}
 }
 
+func TestApplyMigotoINIUsesImporterRenderingProfile(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		want    []string
+		missing []string
+	}{
+		{
+			name: "GIMI",
+			want: []string{
+				"texture_hash = 0",
+				"track_texture_updates = 0",
+				"track_region_hashes = 0",
+				"allow_buffer_resize = 1",
+			},
+			missing: []string{"track_implicit_index_buffers"},
+		},
+		{
+			name: "SRMI",
+			want: []string{
+				"texture_hash = 0",
+				"track_texture_updates = 0",
+				"track_region_hashes = 0",
+				"track_implicit_index_buffers = 1",
+				"allow_buffer_resize = 1",
+			},
+		},
+		{
+			name: "ZZMI",
+			want: []string{
+				"texture_hash = 0",
+				"track_texture_updates = 0",
+				"track_region_hashes = 0",
+				"allow_buffer_resize = 1",
+			},
+			missing: []string{"track_implicit_index_buffers"},
+		},
+		{
+			name: "HIMI",
+			want: []string{
+				"texture_hash = 0",
+				"track_texture_updates = 0",
+				"track_region_hashes = 0",
+				"allow_buffer_resize = 1",
+			},
+			missing: []string{"track_implicit_index_buffers"},
+		},
+		{
+			name: "WWMI",
+			want: []string{
+				"texture_hash = 1",
+				"track_texture_updates = 1",
+				"track_region_hashes = 0",
+				"allow_buffer_resize = 1",
+			},
+			missing: []string{"track_implicit_index_buffers"},
+		},
+		{
+			name: "EFMI",
+			want: []string{
+				"texture_hash = 0",
+				"track_texture_updates = 0",
+				"track_region_hashes = 1",
+				"track_implicit_index_buffers = 1",
+				"allow_buffer_resize = 0",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := parseINI(nil)
+			applyMigotoINI(doc, tc.name, MigotoOptions{EnforceRendering: true})
+			data := string(doc.Bytes())
+			for _, option := range tc.want {
+				if !strings.Contains(data, option) {
+					t.Errorf("%s INI is missing %q: %q", tc.name, option, data)
+				}
+			}
+			for _, option := range tc.missing {
+				if strings.Contains(data, option) {
+					t.Errorf("%s INI unexpectedly contains %q: %q", tc.name, option, data)
+				}
+			}
+		})
+	}
+}
+
 func TestSplitLaunchOptionsKeepsQuotedArgument(t *testing.T) {
 	t.Parallel()
 	args, err := splitLaunchOptions(`-screen-width 1920 -data "folder with spaces"`)
