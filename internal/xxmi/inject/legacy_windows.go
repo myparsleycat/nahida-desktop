@@ -214,19 +214,23 @@ func processHasModule(pid int, modulePath string) (bool, error) {
 	defer func() { _ = windows.CloseHandle(process) }()
 	modules := make([]windows.Handle, 256)
 	var needed uint32
-	if err := windows.EnumProcessModulesEx(
-		process,
-		&modules[0],
-		uint32(len(modules))*uint32(unsafe.Sizeof(modules[0])),
-		&needed,
-		windows.LIST_MODULES_ALL,
-	); err != nil {
-		return false, err
+	handleSize := uint32(unsafe.Sizeof(modules[0]))
+	for {
+		if err := windows.EnumProcessModulesEx(
+			process, &modules[0], uint32(len(modules))*handleSize, &needed, windows.LIST_MODULES_ALL,
+		); err != nil {
+			return false, err
+		}
+		if needed <= uint32(len(modules))*handleSize {
+			break
+		}
+		count := int(needed/handleSize) + 16
+		if count > 4096 {
+			return false, errors.New("process module list exceeds limit")
+		}
+		modules = make([]windows.Handle, count)
 	}
-	count := int(needed / uint32(unsafe.Sizeof(modules[0])))
-	if count > len(modules) {
-		count = len(modules)
-	}
+	count := int(needed / handleSize)
 	for _, module := range modules[:count] {
 		buffer := make([]uint16, windows.MAX_LONG_PATH)
 		if err := windows.GetModuleFileNameEx(process, module, &buffer[0], uint32(len(buffer))); err != nil {

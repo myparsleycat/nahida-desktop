@@ -43,3 +43,14 @@ func TestLegacyLoaderExitTimeoutUsesLoaderDelay(t *testing.T) {
 		t.Fatalf("timeout = %s, want 25s", got)
 	}
 }
+
+func TestProcessHasModuleFindsCurrentExecutable(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, err := processHasModule(os.Getpid(), executable)
+	if err != nil || !found {
+		t.Fatalf("current executable module found = %t, err = %v", found, err)
+	}
+}
