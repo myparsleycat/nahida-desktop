@@ -21,17 +21,12 @@ import (
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
-func (x *XXMI) startBuiltinGame(
+func (x *XXMI) launchBuiltinGameLocked(
 	ctx context.Context,
 	key string,
 	cfg ImporterConfig,
 	allowOldLibs bool,
 ) (returnErr error) {
-	if !x.acquireImporter(key) {
-		return errors.New("XXMI_BUSY")
-	}
-	defer x.releaseImporter(key)
-
 	stage := "validate"
 	defer func() {
 		if returnErr != nil {

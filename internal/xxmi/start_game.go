@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,11 +13,15 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 }
 
 func (x *XXMI) StartGameWithCompatibility(ctx context.Context, importer string, allowOldLibs bool) error {
+	if !x.acquireImporter(importer) {
+		return errors.New("XXMI_BUSY")
+	}
+	defer x.releaseImporter(importer)
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
 	}
-	return x.startBuiltinGame(ctx, importer, cfg, allowOldLibs)
+	return x.launchBuiltinGameLocked(ctx, importer, cfg, allowOldLibs)
 }
 
 func configuredGameExecutable(folder string, configured []string) string {

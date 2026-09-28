@@ -1,8 +1,12 @@
 package xxmi
 
 import (
+	"context"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/db"
 )
 
 func TestDefaultImporterSettings(t *testing.T) {
@@ -37,5 +41,42 @@ func TestImporterSettingsRejectNestedGameFolderAndInvalidPin(t *testing.T) {
 	cfg.XXMIVersion = VersionPin{Follow: "latest", Pinned: "1.7.6"}
 	if err := ValidateImporterSettings("GIMI", cfg); err == nil {
 		t.Fatal("ambiguous version pin accepted")
+	}
+}
+
+func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	cfg, err := DefaultImporterConfig("EFMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SaveImporterConfig(ctx, "EFMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !service.acquireImporter("EFMI") {
+		t.Fatal("failed to start importer launch")
+	}
+	err = service.SetImporterMode(ctx, "EFMI", RuntimeLegacy)
+	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_RUNNING") {
+		t.Fatalf("mode change during launch = %v", err)
+	}
+	service.releaseImporter("EFMI")
+	stored, err := service.GetImporterConfig(ctx, "EFMI")
+	if err != nil || stored.Mode != RuntimeXXMI {
+		t.Fatalf("saved mode after rejected change = %q, err = %v", stored.Mode, err)
+	}
+	if err := service.SetImporterMode(ctx, "EFMI", RuntimeLegacy); err != nil {
+		t.Fatal(err)
 	}
 }

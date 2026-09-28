@@ -245,6 +245,10 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 			return err
 		}
 		if old.Mode != cfg.Mode {
+			if !x.acquireImporter(key) {
+				return errors.New("XXMI_GAME_RUNNING")
+			}
+			defer x.releaseImporter(key)
 			spec, _ := lookupImporterPackage(key)
 			for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
 				pid, err := findProcessPID(ctx, name)

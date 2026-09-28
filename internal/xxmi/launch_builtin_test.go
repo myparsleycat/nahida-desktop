@@ -30,6 +30,13 @@ func TestImporterLaunchLockAllowsOtherImporters(t *testing.T) {
 	if service.acquireImporter("GIMI") {
 		t.Fatal("second GIMI launch was accepted")
 	}
+	if err := service.StartGame(
+		context.Background(),
+		"GIMI",
+	); err == nil ||
+		!strings.Contains(err.Error(), "XXMI_BUSY") {
+		t.Fatalf("public GIMI launch did not respect the importer lock: %v", err)
+	}
 	if !service.acquireImporter("SRMI") {
 		t.Fatal("SRMI launch was blocked by GIMI")
 	}
@@ -94,7 +101,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
 	}})
-	err = service.startBuiltinGame(context.Background(), "GIMI", cfg, false)
+	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg, false)
 	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
 		t.Fatalf("launch error = %v", err)
 	}
