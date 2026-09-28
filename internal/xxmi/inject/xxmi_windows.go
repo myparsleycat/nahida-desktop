@@ -1,0 +1,185 @@
+//go:build windows
+
+package inject
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+	if err := ValidateLaunchSpec(spec); err != nil {
+		return LaunchResult{}, err
+	}
+	if spec.Mode == ModeLegacy {
+		return launchLegacy(ctx, spec)
+	}
+	result := make(chan struct {
+		value LaunchResult
+		err   error
+	}, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		value, err := launchXXMI(ctx, spec)
+		result <- struct {
+			value LaunchResult
+			err   error
+		}{value, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return LaunchResult{}, ctx.Err()
+	case outcome := <-result:
+		return outcome.value, outcome.err
+	}
+}
+
+func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+	library, err := windows.LoadDLL(spec.LoaderDLL.Path)
+	if err != nil {
+		return LaunchResult{}, fmt.Errorf("load XXMI injector DLL: %w", err)
+	}
+	defer func() { _ = library.Release() }()
+	hookProc, hookErr := library.FindProc("HookLibrary")
+	waitProc, waitErr := library.FindProc("WaitForInjection")
+	unhookProc, unhookErr := library.FindProc("UnhookLibrary")
+	injectProc, injectErr := library.FindProc("Inject")
+	if injectErr != nil {
+		return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
+	}
+	useHook := spec.UseHook && spec.InjectMode == "Hook"
+	if useHook && (hookErr != nil || waitErr != nil || unhookErr != nil) {
+		return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
+	}
+	module, err := windows.UTF16PtrFromString(spec.ModuleDLL)
+	if err != nil {
+		return LaunchResult{}, err
+	}
+	process, err := windows.UTF16PtrFromString(spec.ProcessName)
+	if err != nil {
+		return LaunchResult{}, err
+	}
+	var hook, mutex windows.Handle
+	if useHook {
+		code, _, _ := hookProc.Call(
+			uintptr(unsafe.Pointer(module)),
+			uintptr(unsafe.Pointer(&hook)),
+			uintptr(unsafe.Pointer(&mutex)),
+		)
+		if code != 0 || hook == 0 {
+			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: HookLibrary returned %d", code)
+		}
+		defer func() { _, _, _ = unhookProc.Call(uintptr(unsafe.Pointer(&hook)), uintptr(unsafe.Pointer(&mutex))) }()
+	}
+	if err := startGameProcess(spec); err != nil {
+		return LaunchResult{}, err
+	}
+	pid, err := waitForProcess(ctx, spec.ProcessName, time.Duration(spec.TimeoutSeconds)*time.Second)
+	if err != nil {
+		return LaunchResult{}, err
+	}
+	for _, dll := range spec.ExtraDLLs {
+		pointer, err := windows.UTF16PtrFromString(dll)
+		if err != nil {
+			return LaunchResult{}, err
+		}
+		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(pointer)), uintptr(spec.TimeoutSeconds))
+		if code != 0 {
+			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: extra DLL Inject returned %d", code)
+		}
+	}
+	if spec.InjectMode == "Bypass" {
+		return LaunchResult{PID: pid, InjectionVerified: false}, nil
+	}
+	if !useHook {
+		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(module)), uintptr(spec.TimeoutSeconds))
+		if code != 0 {
+			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: Inject returned %d", code)
+		}
+		return LaunchResult{PID: pid, InjectionVerified: true}, nil
+	}
+	code, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
+	if code != 0 {
+		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d", code)
+	}
+	return LaunchResult{PID: pid, InjectionVerified: true}, nil
+}
+
+func startGameProcess(spec LaunchSpec) error {
+	if spec.StartMethod == "Manual" {
+		return nil
+	}
+	if spec.StartMethod == "Shell" {
+		verb, _ := windows.UTF16PtrFromString("open")
+		file, _ := windows.UTF16PtrFromString(spec.StartExe)
+		escaped := make([]string, len(spec.StartArgs))
+		for i, arg := range spec.StartArgs {
+			escaped[i] = windows.EscapeArg(arg)
+		}
+		args, _ := windows.UTF16PtrFromString(strings.Join(escaped, " "))
+		workDir, _ := windows.UTF16PtrFromString(spec.WorkDir)
+		return windows.ShellExecute(0, verb, file, args, workDir, 1)
+	}
+	command := exec.Command(spec.StartExe, spec.StartArgs...)
+	command.Dir = spec.WorkDir
+	command.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_CONSOLE | windows.CREATE_DEFAULT_ERROR_MODE,
+	}
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
+}
+
+func waitForProcess(ctx context.Context, name string, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		pid, err := findProcessPID(name)
+		if err != nil {
+			return 0, err
+		}
+		if pid != 0 {
+			return pid, nil
+		}
+		if time.Now().After(deadline) {
+			return 0, errors.New("XXMI_GAME_START_TIMEOUT")
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return 0, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func findProcessPID(name string) (int, error) {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = windows.CloseHandle(snapshot) }()
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
+		if strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), filepath.Base(name)) {
+			return int(entry.ProcessID), nil
+		}
+	}
+	if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+		return 0, nil
+	}
+	return 0, err
+}

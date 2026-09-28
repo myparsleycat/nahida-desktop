@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 var (
@@ -361,6 +362,43 @@ func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (pla
 		return platform.KeyResult{}, fmt.Errorf("decode elevated input result: %w", err)
 	}
 	return result, nil
+}
+
+func (c *Client) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
+	if err := ctx.Err(); err != nil {
+		return inject.LaunchResult{}, err
+	}
+	callCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutSeconds+60)*time.Second)
+	defer cancel()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == nil {
+		return inject.LaunchResult{}, fmt.Errorf(
+			"%w: elevated helper is not running",
+			platform.ErrElevatedHelperRequired,
+		)
+	}
+	payload, err := json.Marshal(spec)
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+	response, err := c.callLocked(callCtx, operationXXMILaunch, payload)
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+	var result inject.LaunchResult
+	if err := json.Unmarshal(response, &result); err != nil {
+		return inject.LaunchResult{}, fmt.Errorf("decode XXMI launch result: %w", err)
+	}
+	return result, nil
+}
+
+func (c *Client) HelperImageName() string {
+	data, err := bundledHelper()
+	if err != nil {
+		return ""
+	}
+	return helperFileName(data)
 }
 
 func (c *Client) Close() error {
