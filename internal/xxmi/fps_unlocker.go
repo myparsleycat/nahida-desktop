@@ -41,7 +41,11 @@ func (x *XXMI) ListCachedFPSUnlocker(ctx context.Context) ([]string, error) {
 	}
 	versions := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() && !strings.Contains(entry.Name(), ".tmp-") {
+		if entry.IsDir() && !strings.Contains(entry.Name(), ".tmp-") &&
+			verifyFPSUnlockerCache(
+				filepath.Join(root, "packages", "gi-fps-unlocker", entry.Name()),
+				entry.Name(),
+			) == nil {
 			versions = append(versions, entry.Name())
 		}
 	}
@@ -63,8 +67,15 @@ func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) err
 	}
 	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
 	destination := filepath.Join(parent, version)
-	if _, err := os.Stat(filepath.Join(destination, "Manifest.json")); err == nil {
-		return verifyFPSUnlockerCache(destination, version)
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("GI FPS Unlocker cache is not a regular directory")
+		}
+		if verifyFPSUnlockerCache(destination, version) == nil {
+			return nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	releases, err := x.github.AllReleases(ctx, fpsUnlockerRepo)
 	if err != nil {
@@ -154,9 +165,35 @@ func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) err
 	if err := verifyFPSUnlockerCache(staging, version); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return replaceCorruptFPSCache(root, staging, destination, version)
+}
+
+func replaceCorruptFPSCache(root, staging, destination, version string) error {
+	backup := ""
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("GI FPS Unlocker cache is not a regular directory")
+		}
+		if verifyFPSUnlockerCache(destination, version) == nil {
+			return nil
+		}
+		backupRoot := filepath.Join(root, "backups")
+		if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+			return err
+		}
+		backup = filepath.Join(backupRoot, fmt.Sprintf("gi-fps-unlocker-%s-corrupt-%d", version, time.Now().UnixNano()))
+		if err := os.Rename(destination, backup); err != nil {
+			return fmt.Errorf("back up corrupt GI FPS Unlocker cache: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if err := os.Rename(staging, destination); err != nil {
-		if _, statErr := os.Stat(destination); statErr == nil {
-			return verifyFPSUnlockerCache(destination, version)
+		if backup != "" {
+			return errors.Join(err, os.Rename(backup, destination))
 		}
 		return err
 	}
