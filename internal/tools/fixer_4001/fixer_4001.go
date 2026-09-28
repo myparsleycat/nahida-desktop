@@ -207,7 +207,8 @@ func (t *Service) get4001ProviderReleases(ctx context.Context, provider string, 
 		return finish(nil, fmt.Errorf("failed to fetch XXMI libs releases for %s: %s", provider, response.Status))
 	}
 	var releases []struct {
-		TagName string `json:"tag_name"`
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
 		return finish(nil, err)
@@ -215,9 +216,10 @@ func (t *Service) get4001ProviderReleases(ctx context.Context, provider string, 
 	versions := make([]string, 0, len(releases))
 	for _, release := range releases {
 		name := strings.TrimSpace(release.TagName)
-		if name != "" && !strings.EqualFold(name, "main") && !strings.EqualFold(name, "master") {
-			versions = append(versions, name)
+		if name == "" || release.Prerelease || strings.EqualFold(name, "main") || strings.EqualFold(name, "master") {
+			continue
 		}
+		versions = append(versions, name)
 	}
 	return finish(versions, nil)
 }

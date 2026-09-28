@@ -63,7 +63,9 @@ func TestFourThousandOneFixerReleaseCacheUsesProcessLifetimeAndRefreshCooldown(t
 			Status:     "200 OK",
 			Header:     make(http.Header),
 			Body: io.NopCloser(
-				strings.NewReader(`[{"tag_name":"v2"},{"tag_name":"main"},{"tag_name":"v1"}]`),
+				strings.NewReader(
+					`[{"tag_name":"v2"},{"tag_name":"v3-rc.1","prerelease":true},{"tag_name":"main"},{"tag_name":"v1"}]`,
+				),
 			),
 			Request: request,
 		}, nil
