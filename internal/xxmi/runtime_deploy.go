@@ -202,6 +202,20 @@ func deployRuntimeFiles(
 		UserManaged: map[string]string{},
 		DeployedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
+	changing, err := runtimeFilesNeedDeployment(root, previous, desired, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if changing {
+		spec, ok := lookupImporterPackage(key)
+		if !ok {
+			return nil, fmt.Errorf("unknown importer %q", key)
+		}
+		if err := waitForGameProcesses(ctx, append(append([]string{}, spec.gameExeNames...), spec.processNames...),
+			5*time.Second, findProcessPID); err != nil {
+			return nil, err
+		}
+	}
 	backupFolder := filepath.Join(cacheRoot, "backups", key+" "+time.Now().Format("2006-01-02 15-04-05"))
 	backup := func(name string, data []byte) error {
 		if err := os.MkdirAll(backupFolder, 0o700); err != nil {
@@ -285,6 +299,84 @@ func deployRuntimeFiles(
 		return nil, err
 	}
 	return warnings, nil
+}
+
+func runtimeFilesNeedDeployment(
+	root *installRoot,
+	previous runtimeManifest,
+	desired map[string][]byte,
+	cfg ImporterConfig,
+) (bool, error) {
+	for name := range previous.Files {
+		if _, keep := desired[name]; keep {
+			continue
+		}
+		if _, _, err := root.readFile(name); err == nil {
+			return true, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
+	if cfg.Mode == RuntimeXXMI {
+		if _, _, err := root.readFile("nvapi64.dll"); err == nil {
+			return true, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
+	for name, wanted := range desired {
+		current, _, err := root.readFile(name)
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if hashBytes(current) == hashBytes(wanted) || cfg.Migoto.UnsafeMode &&
+			(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func waitForGameProcesses(
+	ctx context.Context,
+	names []string,
+	deadline time.Duration,
+	probe func(context.Context, string) (int, error),
+) error {
+	limit := time.NewTimer(deadline)
+	defer limit.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		running := false
+		for _, name := range names {
+			pid, err := probe(ctx, name)
+			if err != nil {
+				return err
+			}
+			if pid != 0 {
+				running = true
+				break
+			}
+		}
+		if !running {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-limit.C:
+			return errors.New("XXMI_GAME_RUNNING")
+		case <-ticker.C:
+		}
+	}
 }
 
 func validateDeployedRuntime(folder string, mode RuntimeMode) error {

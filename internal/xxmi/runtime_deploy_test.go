@@ -3,12 +3,14 @@ package xxmi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -89,6 +91,39 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(importer, "nvapi64.dll")); !os.IsNotExist(err) {
 		t.Fatalf("deprecated nvapi still deployed: %v", err)
 	}
+}
+
+func TestWaitForGameProcesses(t *testing.T) {
+	t.Run("exits before deadline", func(t *testing.T) {
+		calls := 0
+		err := waitForGameProcesses(context.Background(), []string{"Game.exe"}, time.Second,
+			func(context.Context, string) (int, error) {
+				calls++
+				if calls == 1 {
+					return 42, nil
+				}
+				return 0, nil
+			})
+		if err != nil || calls < 2 {
+			t.Fatalf("wait result = %v after %d probes", err, calls)
+		}
+	})
+	t.Run("still running", func(t *testing.T) {
+		err := waitForGameProcesses(context.Background(), []string{"Game.exe"}, time.Millisecond,
+			func(context.Context, string) (int, error) { return 42, nil })
+		if err == nil || err.Error() != "XXMI_GAME_RUNNING" {
+			t.Fatalf("wait result = %v", err)
+		}
+	})
+	t.Run("cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := waitForGameProcesses(ctx, []string{"Game.exe"}, time.Second,
+			func(ctx context.Context, _ string) (int, error) { return 0, ctx.Err() })
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("wait result = %v", err)
+		}
+	})
 }
 
 func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {
