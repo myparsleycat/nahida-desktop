@@ -61,9 +61,7 @@ type EnabledImporter struct {
 
 type Data struct {
 	XXMIPath         *string           `json:"xxmiPath"`
-	DLLVersion       *string           `json:"dllVersion"`
 	EnabledImporters []EnabledImporter `json:"enabledImporters"`
-	XXMIConfig       map[string]any    `json:"xxmiConfig"`
 }
 
 // HuntingRuntime is the resolved on-disk and process metadata a high-level
@@ -173,7 +171,7 @@ func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
 	if err != nil {
 		return Data{}, err
 	}
-	return Data{XXMIPath: root, EnabledImporters: builtin, XXMIConfig: map[string]any{}}, nil
+	return Data{XXMIPath: root, EnabledImporters: builtin}, nil
 }
 
 func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
