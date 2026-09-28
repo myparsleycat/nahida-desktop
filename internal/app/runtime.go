@@ -14,6 +14,7 @@ import (
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
@@ -139,8 +140,9 @@ func newRuntime() *runtime {
 	githubRate := infra.NewGitHubRateCoordinator()
 	githubRate.UseHTTP(httpClient)
 	githubRate.UseLog(log)
+	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
 	xxmiService := xxmi.NewWithOptions(xxmi.Options{
-		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit,
+		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit, GitHub: githubClient,
 	})
 	dialog := platform.NewDialog()
 	login := newGameBananaLogin()
@@ -206,6 +208,7 @@ func newRuntime() *runtime {
 			Archive:                archive,
 			Protocol:               protocolService,
 			GitHubRate:             githubRate,
+			GitHub:                 githubClient,
 			Mod:                    modService,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{

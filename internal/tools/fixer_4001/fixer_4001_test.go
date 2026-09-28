@@ -48,7 +48,7 @@ func TestPEDiversifierInProcessContract(t *testing.T) {
 	}
 }
 
-func TestFourThousandOneFixerReleaseCacheUsesProcessLifetimeAndRefreshCooldown(t *testing.T) {
+func TestFourThousandOneFixerReleaseCacheFiltersAndCaches(t *testing.T) {
 	var requests atomic.Int32
 	httpClient := &http.Client{Transport: toolsRoundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests.Add(1)
@@ -81,28 +81,16 @@ func TestFourThousandOneFixerReleaseCacheUsesProcessLifetimeAndRefreshCooldown(t
 			t.Fatalf("releases = %v, %v", got, err)
 		}
 	}
-	service.fixerMu.Lock()
-	entry := service.releaseCache["SpectrumQT"]
-	entry.fetched = time.Now().Add(-2 * time.Minute)
-	service.releaseCache["SpectrumQT"] = entry
-	service.fixerMu.Unlock()
-	if _, err := service.FourThousandOneFixerGetProviderReleases(context.Background(), "SpectrumQT"); err != nil {
+	// The refresh cooldown itself is covered by the github package.
+	if err := service.FourThousandOneFixerUpdateReleases(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if requests.Load() != 1 {
-		t.Fatalf("get refetched process cache: %d", requests.Load())
+		t.Fatalf("refresh inside cooldown refetched: %d", requests.Load())
 	}
-	if err := service.FourThousandOneFixerUpdateReleases(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 2 {
-		t.Fatalf("refresh after cooldown requests = %d, want 2", requests.Load())
-	}
-	if err := service.FourThousandOneFixerUpdateReleases(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 2 {
-		t.Fatalf("refresh ignored cooldown: %d", requests.Load())
+	if _, err := service.FourThousandOneFixerGetProviderReleases(context.Background(), "../evil"); err == nil ||
+		err.Error() != "invalid GitHub provider" {
+		t.Fatalf("invalid provider err = %v", err)
 	}
 }
 

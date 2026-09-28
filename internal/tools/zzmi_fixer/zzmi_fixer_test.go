@@ -581,7 +581,7 @@ func zzmiRemoteReleaseHandler(tag, commit string, onHit func()) func(*http.Reque
 			onHit()
 		}
 		switch request.URL.String() {
-		case zzmiLatestReleaseURL:
+		case "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/releases/latest":
 			return http.StatusOK, fmt.Sprintf(
 				`{"tag_name":%q,"zipball_url":%q,"published_at":"2026-09-03T12:00:00Z"}`,
 				tag,

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -333,20 +332,12 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 	if strings.Join(first, ",") != "v2,v1" || strings.Join(second, ",") != "v2,v1" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
 	}
-	service.mu.Lock()
-	service.releaseCaches["SpectrumQT/XXMI-Libs-Package"].fetched = time.Now().Add(-2 * releaseCacheTimeout)
-	service.mu.Unlock()
-	if _, err := service.GetLibsReleases(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("process cache refetched after cooldown: %d", requests.Load())
-	}
+	// The refresh cooldown itself is covered by the github package.
 	if err := service.UpdateLibsReleases(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != 2 {
-		t.Fatalf("explicit refresh requests = %d, want 2", requests.Load())
+	if requests.Load() != 1 {
+		t.Fatalf("refresh inside cooldown refetched: %d", requests.Load())
 	}
 }
 

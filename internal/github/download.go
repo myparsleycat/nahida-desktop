@@ -1,0 +1,63 @@
+package github
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"nahida.live/desktop/internal/infra"
+)
+
+const fileUserAgent = "nahida-desktop"
+
+// FileRequest downloads a release file or tag archive of Repo to Destination.
+type FileRequest struct {
+	Repo        Repo
+	URL         string
+	Destination string
+}
+
+// DownloadFile streams a file to disk through the shared download policy.
+func (c *Client) DownloadFile(ctx context.Context, request FileRequest) error {
+	if err := request.Repo.Validate(); err != nil {
+		return err
+	}
+	if c == nil || c.download == nil {
+		return errors.New("GitHub download client is not configured")
+	}
+	return c.download.File(ctx, infra.DownloadRequest{
+		URL:         request.URL,
+		Destination: request.Destination,
+		Header:      fileHeader(request.Repo),
+	})
+}
+
+// FetchFile reads a release file or raw repository file of at most limit bytes into memory.
+func (c *Client) FetchFile(ctx context.Context, repo Repo, rawURL string, limit int64) ([]byte, error) {
+	if err := repo.Validate(); err != nil {
+		return nil, err
+	}
+	if c == nil || c.http == nil {
+		return nil, errHTTPNotConfigured
+	}
+	response, err := c.http.Fetch(
+		ctx,
+		rawURL,
+		infra.FetchOptions{Method: http.MethodGet, Header: fileHeader(repo), DisableHTTPErrors: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if response.Body == nil {
+		return nil, errors.New("empty GitHub file response")
+	}
+	defer func() { _ = response.Body.Close() }()
+	return readResponse(response, rawURL, limit)
+}
+
+func fileHeader(repo Repo) http.Header {
+	header := make(http.Header)
+	header.Set("User-Agent", fileUserAgent)
+	header.Set("Referer", repo.webURL())
+	return header
+}
