@@ -2,6 +2,7 @@ import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type ImporterConfig } from "@bindings/xxmi/models";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { Switch } from "@renderer/components/ui/switch";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
@@ -36,6 +37,9 @@ function RouteComponent() {
   const config = draft ?? saved ?? null;
   const [selectedPackage, setSelectedPackage] = useState("");
   const [allowUnsigned, setAllowUnsigned] = useState(false);
+  const [detectedFolders, setDetectedFolders] = useState<
+    Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
+  >();
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
@@ -89,13 +93,27 @@ function RouteComponent() {
               onChange={(event) => setConfig({ ...config, importerFolder: event.target.value })}
             />
           </label>
-          <label className="block space-y-1">
+          <div className="space-y-1">
             <span>{t("page.setting.xxmi.builtin.gameFolder")}</span>
-            <Input
-              value={config.gameFolder}
-              onChange={(event) => setConfig({ ...config, gameFolder: event.target.value })}
-            />
-          </label>
+            <div className="flex gap-2">
+              <Input
+                value={config.gameFolder}
+                onChange={(event) => setConfig({ ...config, gameFolder: event.target.value })}
+              />
+              <Button
+                variant="outline"
+                onClickPromise={async () => {
+                  try {
+                    setDetectedFolders(await XXMI.DetectGameFolders(importer));
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.detectGame")}
+              </Button>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <span>{t("page.setting.xxmi.builtin.mode")}</span>
             <Button
@@ -128,6 +146,36 @@ function RouteComponent() {
           </Button>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={detectedFolders !== undefined}
+        onOpenChange={(open) => !open && setDetectedFolders(undefined)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("page.setting.xxmi.builtin.detectGame")}</DialogTitle>
+          </DialogHeader>
+          {detectedFolders?.length ? (
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {detectedFolders.map((candidate) => (
+                <Button
+                  key={candidate.exePath}
+                  variant="outline"
+                  className="h-auto w-full justify-start text-left break-all whitespace-normal"
+                  onClick={() => {
+                    setConfig({ ...config, gameFolder: candidate.path });
+                    setDetectedFolders(undefined);
+                  }}
+                >
+                  {candidate.path}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">{t("page.setting.xxmi.builtin.noGameFolders")}</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
