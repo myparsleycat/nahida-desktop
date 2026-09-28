@@ -193,7 +193,56 @@ function XXMIDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("page.setting.xxmi.builtin.importers")}</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>{t("page.setting.xxmi.builtin.importers")}</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClickPromise={async () => {
+                  try {
+                    await XXMI.CheckUpdates(true);
+                    refresh();
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.checkUpdates")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={
+                  !updates?.some(
+                    (entry) =>
+                      entry.available && !entry.pinned && entry.package !== "gi-fps-unlocker",
+                  )
+                }
+                onClickPromise={async () => {
+                  try {
+                    const targets = [
+                      ...new Set(
+                        updates
+                          ?.filter(
+                            (entry) =>
+                              entry.available &&
+                              !entry.pinned &&
+                              entry.package !== "gi-fps-unlocker",
+                          )
+                          .map((entry) => entry.package) ?? [],
+                      ),
+                    ];
+                    await XXMI.InstallUpdates(targets);
+                    refresh();
+                    toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.installUpdates")}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {importerKeys.map((key) => {

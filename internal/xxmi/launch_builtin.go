@@ -76,6 +76,20 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	if len(packageSpec.processNames) > 0 {
 		processName = packageSpec.processNames[0]
 	}
+	progress("auto-update")
+	if err := x.autoUpdateForLaunch(ctx, key); err != nil {
+		if x.log != nil {
+			_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
+				Fields: map[string]any{"importer": key},
+			})
+		}
+		if x.eventEmit != nil {
+			x.eventEmit("xxmi:launch-progress", map[string]any{
+				"importer": key, "stage": stage, "detail": err.Error(),
+			})
+		}
+	}
 
 	progress("launch-guard")
 	if key == "GIMI" && cfg.ConfigureGame && cfg.GIMI != nil && cfg.GIMI.DisableDCR {

@@ -197,3 +197,75 @@ func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
 	state.SkippedVersion = &version
 	return client.XXMIPackages.Upsert(ctx, *state)
 }
+
+func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, error) {
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	requested := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		requested[target] = true
+	}
+	installed := []string{}
+	for _, status := range statuses {
+		if err := ctx.Err(); err != nil {
+			return installed, err
+		}
+		if !requested[status.Package] || !status.Available || status.Pinned {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(status.Package, "importer:"):
+			err = x.InstallImporterPackage(ctx, InstallImporterPackageInput{
+				Importer: status.Importer, Version: status.LatestVersion,
+			})
+		case status.Package == "xxmi-libs":
+			err = x.EnsureLibsVersion(ctx, status.LatestVersion)
+		case status.Package == "gi-fps-unlocker":
+			err = errors.New("GI FPS Unlocker package installation is not implemented")
+		default:
+			err = fmt.Errorf("unknown XXMI package %q", status.Package)
+		}
+		if err != nil {
+			return installed, fmt.Errorf("install %s update: %w", status.Package, err)
+		}
+		installed = append(installed, status.Package)
+		delete(requested, status.Package)
+	}
+	for pkg := range requested {
+		if pkg != "" {
+			return installed, fmt.Errorf("update target %s is not available", pkg)
+		}
+	}
+	return installed, nil
+}
+
+func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return errors.New("XXMI settings store is not configured")
+	}
+	enabled, err := client.Settings.GetValue(ctx, "xxmi_auto_update")
+	if err != nil || enabled == nil || *enabled != "true" {
+		return err
+	}
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil {
+		return err
+	}
+	targets := []string{}
+	for _, status := range statuses {
+		if status.Importer == importer && status.Available && !status.Pinned &&
+			status.Package != "gi-fps-unlocker" {
+			targets = append(targets, status.Package)
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	_, err = x.InstallUpdates(ctx, targets)
+	return err
+}
