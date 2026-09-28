@@ -14,6 +14,9 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig) e
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if key == "WWMI" && cfg.WWMI != nil {
+		return configureWWMIGame(ctx, cfg)
+	}
 	if !cfg.ConfigureGame {
 		return nil
 	}
