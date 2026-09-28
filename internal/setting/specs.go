@@ -3,9 +3,13 @@ package setting
 import (
 	"context"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/samber/lo"
+
+	"nahida.live/desktop/internal/appdata"
 )
 
 type spec struct {
@@ -520,6 +524,20 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
+		KeyXXMIRoot: {
+			def: definitionsByKey[KeyXXMIRoot],
+			getDefault: func(*Setting) any {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return ""
+				}
+				return filepath.Join(home, appdata.RootDirName, "xxmi")
+			},
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
+		KeyXXMIAutoUpdate:         boolSpec(definitionsByKey[KeyXXMIAutoUpdate], true),
+		KeyXXMIIncludePrereleases: boolSpec(definitionsByKey[KeyXXMIIncludePrereleases], false),
 	}
 	return specs
 }

@@ -74,6 +74,9 @@ export interface AppSettings {
     "modelViewer.toonShadows": boolean;
 
     "xxmi.persistToggles": boolean;
+    "xxmi.root": string;
+    "xxmi.autoUpdate": boolean;
+    "xxmi.includePrereleases": boolean;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -378,5 +381,20 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.persistToggles",
         scope: "xxmi",
         storageKey: "xxmi_persist_toggles",
+    },
+    "xxmi.root": {
+        publicKey: "xxmi.root",
+        scope: "xxmi",
+        storageKey: "xxmi_root",
+    },
+    "xxmi.autoUpdate": {
+        publicKey: "xxmi.autoUpdate",
+        scope: "xxmi",
+        storageKey: "xxmi_auto_update",
+    },
+    "xxmi.includePrereleases": {
+        publicKey: "xxmi.includePrereleases",
+        scope: "xxmi",
+        storageKey: "xxmi_include_prereleases",
     },
 } as const satisfies Record<SettingKey, SettingDefinition>;
