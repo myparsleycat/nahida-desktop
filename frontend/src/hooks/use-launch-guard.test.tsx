@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const xxmi = vi.hoisted(() => ({
   StartGame: vi.fn(),
+  StartGameWithCompatibility: vi.fn(),
   ClearLaunchBlockers: vi.fn(),
   GetImporterConfig: vi.fn(),
   SaveImporterConfig: vi.fn(),
@@ -26,6 +27,7 @@ const toastError = vi.mocked(toast.error);
 afterEach(() => {
   cleanup();
   xxmi.StartGame.mockReset();
+  xxmi.StartGameWithCompatibility.mockReset();
   xxmi.ClearLaunchBlockers.mockReset();
   xxmi.GetImporterConfig.mockReset();
   xxmi.SaveImporterConfig.mockReset();
@@ -42,7 +44,22 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
+  expect(launchDialog("XXMI_LIBS_TOO_OLD")).toBe("old-libs");
   expect(launchDialog("XXMI is not configured")).toBeNull();
+});
+
+it("launches EFMI with old libraries only after confirmation", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_LIBS_TOO_OLD"));
+  xxmi.StartGameWithCompatibility.mockResolvedValueOnce(undefined);
+
+  render(<Harness importer="EFMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  expect(xxmi.StartGameWithCompatibility).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.launchAnyway" }));
+
+  await waitFor(() => expect(xxmi.StartGameWithCompatibility).toHaveBeenCalledWith("EFMI", true));
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
 });
 
 it("repairs a damaged runtime before retrying launch", async () => {

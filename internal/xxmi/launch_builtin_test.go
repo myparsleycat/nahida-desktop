@@ -40,6 +40,24 @@ func TestImporterLaunchLockAllowsOtherImporters(t *testing.T) {
 	service.releaseImporter("SRMI")
 }
 
+func TestEFMIMinimumLibrariesVersion(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		version string
+		old     bool
+	}{
+		{"1.1.7", true},
+		{"1.7.4", true},
+		{"1.7.5", false},
+		{"1.8.0", false},
+		{"invalid", false},
+	} {
+		if got := efmiNeedsNewerLibs(tc.version); got != tc.old {
+			t.Errorf("version %s: old = %t, want %t", tc.version, got, tc.old)
+		}
+	}
+}
+
 func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	folder := t.TempDir()
 	path := filepath.Join(folder, "d3dx.ini")

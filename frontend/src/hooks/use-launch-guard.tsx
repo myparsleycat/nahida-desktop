@@ -22,6 +22,7 @@ const LAUNCH_BLOCKER_SMOOTH_MOTION = "NVIDIA_SMOOTH_MOTION_ENABLED";
 const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
+const LAUNCH_BLOCKER_OLD_LIBS = "XXMI_LIBS_TOO_OLD";
 
 type LaunchDialog =
   | "gimi-dcr"
@@ -29,7 +30,8 @@ type LaunchDialog =
   | "launch-blockers"
   | "wwmi-wounded"
   | "game-folder"
-  | "runtime-repair";
+  | "runtime-repair"
+  | "old-libs";
 
 export type LaunchGuardResult = { status: "started" } | { status: "blocked"; kind: LaunchDialog };
 
@@ -39,6 +41,9 @@ export function launchDialog(message: string): LaunchDialog | null {
   }
   if (message.includes(LAUNCH_BLOCKER_RUNTIME)) {
     return "runtime-repair";
+  }
+  if (message.includes(LAUNCH_BLOCKER_OLD_LIBS)) {
+    return "old-libs";
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
     return "wwmi-wounded";
@@ -117,7 +122,7 @@ export function useLaunchGuard() {
           woundedFXDecided: true,
           wwmi: { ...config.wwmi, disableWoundedFX: true },
         });
-      } else {
+      } else if (dialog !== "old-libs") {
         await XXMI.ClearLaunchBlockers(importer);
       }
     } catch (error) {
@@ -146,7 +151,11 @@ export function useLaunchGuard() {
     // The blockers were just cleared for this importer, so a rejection here means the fix did
     // not take effect. Surface it instead of reopening the dialog and looping forever.
     try {
-      await XXMI.StartGame(importer);
+      if (dialog === "old-libs") {
+        await XXMI.StartGameWithCompatibility(importer, true);
+      } else {
+        await XXMI.StartGame(importer);
+      }
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
@@ -191,17 +200,21 @@ export function useLaunchGuard() {
               {t(
                 dialog === "game-folder"
                   ? "page.setting.xxmi.builtin.gameFolder"
-                  : dialog === "runtime-repair"
-                    ? "page.setting.xxmi.builtin.repairRuntime"
-                    : `page.mod.dialog.${dialog}.title`,
+                  : dialog === "old-libs"
+                    ? "page.setting.xxmi.builtin.oldLibsTitle"
+                    : dialog === "runtime-repair"
+                      ? "page.setting.xxmi.builtin.repairRuntime"
+                      : `page.mod.dialog.${dialog}.title`,
               )}
             </AlertDialogTitle>
             {dialog !== "game-folder" && (
               <AlertDialogDescription>
                 {t(
-                  dialog === "runtime-repair"
-                    ? "page.setting.xxmi.builtin.runtimeRepairPrompt"
-                    : `page.mod.dialog.${dialog}.description`,
+                  dialog === "old-libs"
+                    ? "page.setting.xxmi.builtin.oldLibsPrompt"
+                    : dialog === "runtime-repair"
+                      ? "page.setting.xxmi.builtin.runtimeRepairPrompt"
+                      : `page.mod.dialog.${dialog}.description`,
                 )}
               </AlertDialogDescription>
             )}
@@ -268,9 +281,11 @@ export function useLaunchGuard() {
               {t(
                 dialog === "game-folder"
                   ? "g.save"
-                  : dialog === "runtime-repair"
-                    ? "page.setting.xxmi.builtin.repairRuntime"
-                    : `page.mod.dialog.${dialog}.confirm`,
+                  : dialog === "old-libs"
+                    ? "page.setting.xxmi.builtin.launchAnyway"
+                    : dialog === "runtime-repair"
+                      ? "page.setting.xxmi.builtin.repairRuntime"
+                      : `page.mod.dialog.${dialog}.confirm`,
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -8,11 +8,15 @@ import (
 )
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
+	return x.StartGameWithCompatibility(ctx, importer, false)
+}
+
+func (x *XXMI) StartGameWithCompatibility(ctx context.Context, importer string, allowOldLibs bool) error {
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
 	}
-	return x.startBuiltinGame(ctx, importer, cfg)
+	return x.startBuiltinGame(ctx, importer, cfg, allowOldLibs)
 }
 
 func configuredGameExecutable(folder string, configured []string) string {

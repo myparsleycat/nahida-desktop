@@ -15,11 +15,18 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/mod/semver"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
-func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterConfig) (returnErr error) {
+func (x *XXMI) startBuiltinGame(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	allowOldLibs bool,
+) (returnErr error) {
 	if !x.acquireImporter(key) {
 		return errors.New("XXMI_BUSY")
 	}
@@ -110,6 +117,15 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 		return err
 	}
 	progress("ensure-runtime")
+	if key == "EFMI" && cfg.Mode == RuntimeXXMI && !allowOldLibs {
+		version, err := x.resolveLibsVersion(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		if efmiNeedsNewerLibs(version) {
+			return fmt.Errorf("XXMI_LIBS_TOO_OLD: EFMI requires XXMI libraries 1.7.5; selected %s", version)
+		}
+	}
 	warnings, err := x.DeployRuntime(ctx, key)
 	if err != nil {
 		return err
@@ -176,6 +192,10 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 			"XXMI.StartGame")
 	}
 	return nil
+}
+
+func efmiNeedsNewerLibs(version string) bool {
+	return semver.IsValid("v"+version) && semver.Compare("v"+version, "v1.7.5") < 0
 }
 
 func (x *XXMI) acquireImporter(key string) bool {
