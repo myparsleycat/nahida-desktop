@@ -57,8 +57,14 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
 		t.Fatal(err)
 	}
+	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
+		t.Fatal(err)
+	}
 	cfg.Mode = RuntimeLegacy
 	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, legacy, "legacy@abc", base); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDeployedRuntime(importer, RuntimeLegacy); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "legacy")
@@ -70,9 +76,43 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
 		t.Fatal(err)
 	}
+	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
+		t.Fatal(err)
+	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
 	if _, err := os.Stat(filepath.Join(importer, "nvapi64.dll")); !os.IsNotExist(err) {
 		t.Fatalf("deprecated nvapi still deployed: %v", err)
+	}
+}
+
+func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	importer := filepath.Join(base, "GIMI")
+	libs := filepath.Join(base, "libs")
+	for _, folder := range []string{importer, libs} {
+		if err := os.MkdirAll(folder, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, content := range map[string]string{
+		filepath.Join(importer, "d3dx.ini"):       "[Loader]",
+		filepath.Join(libs, "d3d11.dll"):          "xxmi",
+		filepath.Join(libs, "d3dcompiler_47.dll"): "compiler",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(importer, "d3d11.dll"), []byte("changed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDeployedRuntime(importer, RuntimeXXMI); err == nil {
+		t.Fatal("changed DLL passed runtime validation")
 	}
 }
 
@@ -101,6 +141,9 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 	}
 	if len(warnings) == 0 {
 		t.Fatal("missing third-party preservation warning")
+	}
+	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
+		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base)

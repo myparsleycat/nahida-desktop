@@ -277,6 +277,41 @@ func deployRuntimeFiles(
 	return warnings, nil
 }
 
+func validateDeployedRuntime(folder string, mode RuntimeMode) error {
+	root, err := openInstallRoot(folder)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	data, _, err := root.readFile(runtimeManifestName)
+	if err != nil {
+		return err
+	}
+	if len(data) > 1<<20 {
+		return errors.New("runtime manifest exceeds size limit")
+	}
+	var manifest runtimeManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return err
+	}
+	if manifest.Mode != mode || manifest.Source == "" || len(manifest.Files)+len(manifest.UserManaged) == 0 {
+		return errors.New("runtime manifest does not match the selected mode")
+	}
+	for name, expected := range manifest.Files {
+		if filepath.Base(name) != name || expected == "" {
+			return fmt.Errorf("invalid runtime manifest entry %q", name)
+		}
+		data, _, err := root.readFile(name)
+		if err != nil {
+			return fmt.Errorf("read deployed %s: %w", name, err)
+		}
+		if hashBytes(data) != expected {
+			return fmt.Errorf("deployed %s hash mismatch", name)
+		}
+	}
+	return nil
+}
+
 func hashBytes(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])

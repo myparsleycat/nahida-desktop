@@ -126,11 +126,20 @@ func (x *XXMI) startBuiltinGame(
 			return fmt.Errorf("XXMI_LIBS_TOO_OLD: EFMI requires XXMI libraries 1.7.5; selected %s", version)
 		}
 	}
+	progress("deploy-runtime")
 	warnings, err := x.DeployRuntime(ctx, key)
 	if err != nil {
 		return err
 	}
-	_ = warnings
+	for _, warning := range warnings {
+		if x.log != nil {
+			x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
+		}
+	}
+	progress("validate-runtime")
+	if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
+		return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+	}
 	if x.elevated == nil {
 		return errors.New("XXMI_ELEVATION_DENIED: elevated helper is unavailable")
 	}
