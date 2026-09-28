@@ -55,6 +55,9 @@ type EnabledImporter struct {
 	Key              string      `json:"key"`
 	Mode             RuntimeMode `json:"mode"`
 	ImporterFolder   string      `json:"importerFolder"`
+	GameFolder       string      `json:"gameFolder"`
+	Running          bool        `json:"running"`
+	UpdateAvailable  bool        `json:"updateAvailable"`
 	InstalledVersion *string     `json:"installedVersion"`
 	PackageInfo      PackageInfo `json:"packageInfo"`
 }

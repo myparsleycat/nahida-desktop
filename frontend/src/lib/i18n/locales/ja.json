@@ -2043,6 +2043,7 @@
           "prereleases": "プレリリースを含める",
           "importers": "インポーター",
           "updateAvailable": "更新あり",
+          "running": "実行中",
           "notInstalled": "未インストール",
           "launch": "起動",
           "configure": "設定",

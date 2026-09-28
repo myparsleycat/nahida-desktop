@@ -53,7 +53,8 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 			info.DeployedVersion = *installed
 		}
 		out = append(out, EnabledImporter{Key: row.Key, Mode: cfg.Mode, ImporterFolder: cfg.ImporterFolder,
-			InstalledVersion: installed, PackageInfo: info})
+			GameFolder: cfg.GameFolder, InstalledVersion: installed, PackageInfo: info,
+			UpdateAvailable: updateAvailable(info.LatestVersion, info.DeployedVersion, info.SkippedVersion)})
 	}
 	return out, nil
 }
@@ -89,6 +90,25 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	importers, err := x.builtinEnabledImporters(ctx)
 	if err != nil {
 		return Overview{}, err
+	}
+	for i := range importers {
+		x.mu.RLock()
+		importers[i].Running = x.busy[importers[i].Key]
+		x.mu.RUnlock()
+		if importers[i].Running {
+			continue
+		}
+		spec, _ := lookupImporterPackage(importers[i].Key)
+		for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
+			pid, err := findProcessPID(ctx, name)
+			if err != nil {
+				return Overview{}, err
+			}
+			if pid != 0 {
+				importers[i].Running = true
+				break
+			}
+		}
 	}
 	overview := Overview{Configured: len(importers) > 0, Root: filepath.Clean(rootPath), Importers: importers}
 	if !overview.Configured {

@@ -40,6 +40,12 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	if err := service.EnableImporter(ctx, "GIMI", importerFolder); err != nil {
 		t.Fatal(err)
 	}
+	latest := "1.2.4"
+	if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+		Package: "importer:GIMI", LatestVersion: &latest,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	importers, err := service.GetEnabledImporters(ctx)
 	if err != nil || len(importers) != 1 || importers[0].InstalledVersion == nil ||
 		*importers[0].InstalledVersion != "1.2.3" {
@@ -52,6 +58,15 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	state, err := service.GetXXMIData(ctx)
 	if err != nil || state.XXMIPath == nil || *state.XXMIPath != root || len(state.EnabledImporters) != 1 {
 		t.Fatalf("XXMI data = %+v, err = %v", state, err)
+	}
+	if !service.acquireImporter("GIMI") {
+		t.Fatal("GIMI launch lock is unavailable")
+	}
+	defer service.releaseImporter("GIMI")
+	overview, err := service.GetOverview(ctx)
+	if err != nil || len(overview.Importers) != 1 || !overview.Importers[0].Running ||
+		!overview.Importers[0].UpdateAvailable || overview.Importers[0].PackageInfo.DeployedVersion != "1.2.3" {
+		t.Fatalf("XXMI overview = %+v, err = %v", overview, err)
 	}
 	hunting, err := service.ResolveHuntingRuntime(ctx, "GIMI")
 	if err != nil || hunting.ImporterFolder != importerFolder || len(hunting.GameEXENames) == 0 {

@@ -128,6 +128,7 @@ export function useGlobalEvents(
             const id = `xxmi-launch-${importer}`;
             if (stage === "finish" || stage === "failed") {
                 toast.dismiss(id);
+                void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
                 return;
             }
             const status =

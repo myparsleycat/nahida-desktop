@@ -2127,6 +2127,7 @@
           "prereleases": "Include prereleases",
           "importers": "Importers",
           "updateAvailable": "Update available",
+          "running": "Running",
           "notInstalled": "Not installed",
           "launch": "Launch",
           "configure": "Configure",

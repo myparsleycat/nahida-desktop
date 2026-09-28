@@ -2061,6 +2061,7 @@
           "prereleases": "시험판 포함",
           "importers": "임포터",
           "updateAvailable": "업데이트 있음",
+          "running": "실행 중",
           "notInstalled": "설치되지 않음",
           "launch": "실행",
           "configure": "설정",

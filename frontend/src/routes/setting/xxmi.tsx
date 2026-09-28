@@ -324,7 +324,9 @@ function XXMIDashboard() {
             ))}
           {importerKeys.map((key) => {
             const importer = overview?.importers?.find((entry) => entry.key === key);
-            const available = updates?.some((entry) => entry.importer === key && entry.available);
+            const available =
+              updates?.some((entry) => entry.importer === key && entry.available) ||
+              importer?.updateAvailable;
             return (
               <div
                 key={key}
@@ -334,6 +336,7 @@ function XXMIDashboard() {
                   <p className="font-medium">
                     {key} {importer && `· ${importer.mode === "legacy" ? "3DMigoto" : "XXMI"}`}
                     {available && ` · ${t("page.setting.xxmi.builtin.updateAvailable")}`}
+                    {importer?.running && ` · ${t("page.setting.xxmi.builtin.running")}`}
                   </p>
                   <p className="truncate text-muted-foreground">
                     {importer?.packageInfo.deployed_version ||
@@ -344,6 +347,7 @@ function XXMIDashboard() {
                   {importer && (
                     <Button
                       variant="outline"
+                      disabled={importer.running}
                       onClickPromise={async () => {
                         try {
                           await startImporter(key);

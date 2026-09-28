@@ -2042,6 +2042,7 @@
           "prereleases": "包含预发布版本",
           "importers": "导入器",
           "updateAvailable": "有可用更新",
+          "running": "运行中",
           "notInstalled": "未安装",
           "launch": "启动",
           "configure": "设置",
