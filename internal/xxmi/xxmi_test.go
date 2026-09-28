@@ -375,67 +375,6 @@ func TestGetLibsReleasesDeduplicatesInitialInFlightRequest(t *testing.T) {
 	}
 }
 
-func TestInstallDLLVersionStagesAndValidatesBeforeCopy(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	var archive bytes.Buffer
-	writer := zip.NewWriter(&archive)
-	entry, err := writer.Create("package/d3d11.dll")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := entry.Write([]byte("dll")); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		body := []byte(`{"version":"v1.2.3"}`)
-		if strings.HasSuffix(request.URL.Path, ".zip") {
-			body = archive.Bytes()
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Status:     "200 OK",
-			Header:     make(http.Header),
-			Body:       io.NopCloser(bytes.NewReader(body)),
-			Request:    request,
-		}, nil
-	})}
-	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
-	download := infra.NewDownload()
-	download.UseClient(infraClient)
-	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.InstallDLLVersion(context.Background(), InstallDLLVersionInput{Version: "v1.2.3"}); err != nil {
-		t.Fatal(err)
-	}
-	installed, err := os.ReadFile(filepath.Join(root, "Resources", "Packages", "XXMI", "d3d11.dll"))
-	if err != nil || string(installed) != "dll" {
-		t.Fatalf("installed = %q, error = %v", installed, err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(root, "Resources", "Packages", "XXMI", "Manifest.json"))
-	if err != nil || !bytes.Contains(manifest, []byte("v1.2.3")) {
-		t.Fatalf("manifest = %q, error = %v", manifest, err)
-	}
-	rawConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
-	if err != nil || !bytes.Contains(rawConfig, []byte(`"auto_update": false`)) {
-		t.Fatalf("config = %q, error = %v", rawConfig, err)
-	}
-}
-
 func TestGetImporterReleasesRejectsUnknownImporter(t *testing.T) {
 	_, err := New().GetImporterReleases(context.Background(), "NOPE")
 	if err == nil || !strings.Contains(err.Error(), "unknown importer") {

@@ -1,9 +1,7 @@
 package xxmi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,124 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
-
-type InstallDLLVersionInput struct {
-	Version string `json:"version"`
-}
-
-func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInput) error {
-	version := strings.TrimSpace(input.Version)
-	if version == "" {
-		return errors.New("invalid version: must be a non-empty string")
-	}
-	if strings.ContainsAny(version, "\r\n\x00") {
-		return errors.New("invalid version")
-	}
-	if err := x.load(ctx); err != nil {
-		return err
-	}
-	x.mu.Lock()
-	if x.busy {
-		x.mu.Unlock()
-		return errors.New("XXMI is busy")
-	}
-	if x.path == nil {
-		x.mu.Unlock()
-		return errors.New("XXMI is not configured")
-	}
-	x.busy = true
-	xxmiPath := *x.path
-	archive := x.archive
-	x.mu.Unlock()
-	defer func() {
-		x.mu.Lock()
-		x.busy = false
-		x.mu.Unlock()
-	}()
-	if archive == nil || !x.github.Configured() {
-		return errors.New("XXMI install services are not configured")
-	}
-	if err := ensureLauncherClosed(ctx); err != nil {
-		return err
-	}
-	workDir, err := os.MkdirTemp("", "nahida-xxmi-dll-")
-	if err != nil {
-		return err
-	}
-	defer func() { x.reportCleanup(os.RemoveAll(workDir), "InstallDLLVersion") }()
-	zipPath := filepath.Join(workDir, "package.zip")
-	if err := x.github.DownloadFile(ctx, github.FileRequest{
-		Repo:        libsRepo,
-		URL:         github.ReleaseFileURL(libsRepo, version, "XXMI-PACKAGE-"+version+".zip"),
-		Destination: zipPath,
-	}); err != nil {
-		return fmt.Errorf("failed to download XXMI package: %w", err)
-	}
-	extractedPath, err := archive.Extract(
-		ctx,
-		zipPath,
-		filepath.Join(workDir, "extracted"),
-		infra.ExtractOptions{},
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("extract XXMI package: %w", err)
-	}
-	stagingDir := filepath.Join(workDir, "staging")
-	if err := copyTree(extractedPath, stagingDir); err != nil {
-		return fmt.Errorf("stage XXMI package: %w", err)
-	}
-	manifest, err := x.github.FetchFile(
-		ctx, libsRepo, github.ReleaseFileURL(libsRepo, version, "Manifest.json"), 1024*1024,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to download XXMI manifest: %w", err)
-	}
-	var manifestData struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(manifest, &manifestData); err != nil {
-		return fmt.Errorf("decode XXMI manifest: %w", err)
-	}
-	if normalizeVersion(manifestData.Version) != normalizeVersion(version) || normalizeVersion(version) == "" {
-		return fmt.Errorf("manifest version mismatch: expected %s, got %s", version, manifestData.Version)
-	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "Manifest.json"), manifest, 0o644); err != nil {
-		return err
-	}
-	configPath := filepath.Join(xxmiPath, xxmiConfigName)
-	config, _, err := readAndValidateConfig(configPath)
-	if err != nil {
-		return err
-	}
-	launcher, ok := config["Launcher"].(map[string]any)
-	if !ok {
-		return errors.New("XXMI Launcher config is missing Launcher section")
-	}
-	launcher["auto_update"] = false
-	if err := writeXXMIConfig(configPath, config); err != nil {
-		return err
-	}
-	destination := filepath.Join(xxmiPath, "Resources", "Packages", "XXMI")
-	if err := copyTree(stagingDir, destination); err != nil {
-		return fmt.Errorf("install XXMI package: %w", err)
-	}
-	loaded, parsed, err := readAndValidateConfig(configPath)
-	if err != nil {
-		return err
-	}
-	x.mu.Lock()
-	x.config = loaded
-	x.parsed = parsed
-	x.mu.Unlock()
-	if x.log != nil {
-		x.log.Info("Installed XXMI DLL version "+version+" to "+destination, "XXMI.installDllVersion")
-	}
-	return nil
-}
 
 type InstallImporterPackageInput struct {
 	Importer      string `json:"importer"`
@@ -177,33 +59,6 @@ func installDiagnosticValue(value string) string {
 		return value[:maximumLength]
 	}
 	return value
-}
-
-func writeXXMIConfig(path string, config map[string]any) error {
-	configJSON, err := marshalXXMIConfig(config)
-	if err != nil {
-		return err
-	}
-	root, err := openInstallRoot(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer func() { _ = root.Close() }()
-	_, info, err := root.readFile(filepath.Base(path))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return root.writeFileAtomic(
-		context.Background(), filepath.Base(path), bytes.NewReader(configJSON), 0o644, info,
-	)
-}
-
-func marshalXXMIConfig(config map[string]any) ([]byte, error) {
-	configJSON, err := json.MarshalIndent(config, "", "    ")
-	if err != nil {
-		return nil, err
-	}
-	return append(configJSON, '\n'), nil
 }
 
 func executeXcmdDeletes(commandRoot, importerFolder, section string) error {
@@ -318,10 +173,6 @@ func shouldSkipImporterMods(relative string) bool {
 
 func normalizeVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(version), "v"), "V")
-}
-
-func copyTree(source, destination string) error {
-	return copyTreeContext(context.Background(), source, destination)
 }
 
 func copyTreeContext(ctx context.Context, source, destination string) error {
