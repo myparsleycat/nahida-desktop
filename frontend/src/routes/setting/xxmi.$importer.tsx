@@ -1,3 +1,5 @@
+import { Mod } from "@bindings/mod";
+import type { GameConfig } from "@bindings/mod/models";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type ImporterConfig } from "@bindings/xxmi/models";
 import { Button } from "@renderer/components/ui/button";
@@ -44,23 +46,60 @@ function RouteComponent() {
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
+  const [pendingFolderChange, setPendingFolderChange] = useState<{
+    next: ImporterConfig;
+    games: GameConfig[];
+  } | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
-  const save = async (next = config) => {
-    if (!next) return;
+  const persist = async (next: ImporterConfig, games: GameConfig[] = []) => {
     try {
-      if (next.gameFolder) await XXMI.ValidateGameFolder(importer, next.gameFolder);
       if (next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
         await XXMI.SetImporterVersions(importer, { xxmi: next.xxmiVersion });
       }
       await XXMI.SaveImporterConfig(importer, next);
+      for (const game of games) {
+        await Mod.UpdateGame(game.game, {
+          modFolderPath: `${next.importerFolder}\\Mods`,
+          importer: game.importer,
+          linkedModFolderPath: game.linkedModFolderPath,
+          gameInstallPath: game.gameInstallPath,
+          gameExecutablePath: game.gameExecutablePath,
+        });
+      }
+      setPendingFolderChange(null);
       setConfig(null);
       refresh();
       toast.success(t("page.setting.xxmi.builtin.saved"));
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  };
+  const save = async (next = config) => {
+    if (!next) return;
+    try {
+      if (next.gameFolder) await XXMI.ValidateGameFolder(importer, next.gameFolder);
+      const previous = saved?.importerFolder
+        .replaceAll("/", "\\")
+        .replace(/\\+$/, "")
+        .toLowerCase();
+      const changed = next.importerFolder.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+      if (previous && previous !== changed) {
+        const oldMods = `${previous}\\mods`;
+        const games = ((await Mod.GetGames()) ?? []).filter(
+          (game) =>
+            game.modFolderPath.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase() === oldMods,
+        );
+        if (games.length) {
+          setPendingFolderChange({ next, games });
+          return;
+        }
+      }
+      await persist(next);
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
@@ -179,6 +218,32 @@ function RouteComponent() {
           ) : (
             <p className="text-muted-foreground">{t("page.setting.xxmi.builtin.noGameFolders")}</p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingFolderChange !== null}
+        onOpenChange={(open) => !open && setPendingFolderChange(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("page.setting.xxmi.builtin.updateModPaths")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm">
+            {t("page.setting.xxmi.builtin.updateModPathsDescription", {
+              count: pendingFolderChange?.games.length ?? 0,
+            })}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClickPromise={() => persist(pendingFolderChange!.next)}>
+              {t("page.setting.xxmi.builtin.keepModPaths")}
+            </Button>
+            <Button
+              onClickPromise={() => persist(pendingFolderChange!.next, pendingFolderChange!.games)}
+            >
+              {t("page.setting.xxmi.builtin.updateModPaths")}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

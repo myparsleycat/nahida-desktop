@@ -1970,6 +1970,7 @@
           "root": "导入器根目录", "saved": "已保存 XXMI 设置", "externalDetected": "发现外部 XXMI Launcher", "externalWarning": "使用导入的文件夹前请关闭外部启动器。两个启动器可能相互覆盖运行时文件。", "import": "导入设置", "imported": "已导入启动器设置",
           "packages": "共享软件包", "libs": "XXMI 库", "prune": "清理未使用的缓存", "pruned": "已清理 {{count}} 个未使用的缓存", "inUse": "使用中", "legacy": "旧版 3DMigoto", "downloadLegacy": "下载旧版运行时", "downloaded": "已下载旧版运行时", "importLegacy": "导入旧版 ZIP", "importedLegacy": "已导入旧版运行时",
           "options": "全局选项", "autoUpdate": "自动更新软件包", "prereleases": "包含预发布版本", "importers": "导入器", "updateAvailable": "有可用更新", "notInstalled": "未安装", "launch": "启动", "configure": "设置", "back": "返回 XXMI", "general": "常规", "enabled": "启用", "importerFolder": "导入器文件夹", "gameFolder": "游戏文件夹", "mode": "运行时模式", "legacyWarning": "较新的导入器软件包可能与旧版 DLL 不兼容。必要时请固定较旧的软件包版本。",
+          "updateModPaths": "更新关联的模组文件夹", "updateModPathsDescription": "是否更新指向旧 Mods 文件夹的 {{count}} 个游戏条目？", "keepModPaths": "保留现有路径",
           "packageVersion": "软件包版本", "currentPin": "选定的软件包", "latest": "跟随最新版本", "allowUnsigned": "允许未签名的发布", "install": "安装软件包", "installed": "软件包已安装", "launchOptions": "启动选项", "useLaunchOptions": "使用启动参数", "timeout": "游戏启动超时（秒）"
         },
         "xxmiPath": "XXMI路径",
