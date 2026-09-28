@@ -1983,6 +1983,7 @@
           "launchDownloading": "ランタイムファイルを確認中",
           "launchConfiguring": "ゲーム設定を適用中",
           "launchStarting": "ゲームを起動中",
+          "autoUpdateFailed": "{{importer}} の自動更新に失敗しました。現在のファイルで起動を試みます",
           "runtimeRepairPrompt": "ランタイムファイルが破損している可能性があります。キャッシュを再確認して配置済みファイルを置き換えますか？変更されたファイルはバックアップします。",
           "oldLibsTitle": "古いXXMIライブラリ",
           "oldLibsPrompt": "EFMIにはXXMIライブラリ1.7.5以降が必要ですが、選択したバージョンはそれより古いものです。一部のModが動作しない可能性があります。続行しますか？",

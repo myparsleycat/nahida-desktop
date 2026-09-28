@@ -2072,6 +2072,7 @@
           "launchDownloading": "Checking runtime files",
           "launchConfiguring": "Applying game settings",
           "launchStarting": "Starting game",
+          "autoUpdateFailed": "{{importer}} automatic update failed; trying to launch with the current files",
           "runtimeRepairPrompt": "The runtime files may be damaged. Recheck the cache and replace the deployed files? Modified files will be backed up.",
           "oldLibsTitle": "Older XXMI libraries",
           "oldLibsPrompt": "EFMI requires XXMI libraries 1.7.5 or newer, but the selected version is older. Launch anyway? Some mods may not work.",
