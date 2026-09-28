@@ -77,6 +77,7 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	mapExternalImporterSettings(&cfg, map[string]any{
+		"deployed_migoto_signatures":        map[string]any{"d3d11.dll": "signed-by-external-launcher"},
 		"mesh_lod_distance_lod_base_fov":    180.0,
 		"mesh_lod_distance_scale":           0.75,
 		"mesh_lod_distance_offset":          -8.5,
@@ -97,7 +98,8 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 		got.TextureStreamingMinBoost != 1.25 || got.TextureStreamingUseAll ||
 		got.TextureStreamingPoolSize != 1024 || got.TextureStreamingLimitVRAM || got.TextureStreamingFixedPool ||
 		len(got.PerfTweaks) != 2 || got.PerfTweaks["r.Streaming.HLODStrategy"] != 3 ||
-		got.PerfTweaks["wp.Runtime.KuroRuntimeStreamingRangeOverallScale"] != 0.75 {
+		got.PerfTweaks["wp.Runtime.KuroRuntimeStreamingRangeOverallScale"] != 0.75 ||
+		cfg.DeployedSignatures["d3d11.dll"] != "signed-by-external-launcher" {
 		t.Fatalf("imported WWMI settings = %+v", got)
 	}
 }

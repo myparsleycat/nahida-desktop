@@ -96,6 +96,7 @@ type ImporterConfig struct {
 	PackageVersion     VersionPin          `json:"packageVersion"`
 	XXMIVersion        VersionPin          `json:"xxmiVersion"`
 	LegacyRuntime      string              `json:"legacyRuntime"`
+	DeployedSignatures map[string]string   `json:"deployedSignatures,omitempty"`
 	ImporterFolder     string              `json:"importerFolder"`
 	GameFolder         string              `json:"gameFolder"`
 	UseLaunchOptions   bool                `json:"useLaunchOptions"`

@@ -2,6 +2,12 @@ package xxmi
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,6 +21,53 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
+
+func TestBootstrapExternalRuntimeUsesVerifiedSignatures(t *testing.T) {
+	t.Parallel()
+	folder := t.TempDir()
+	for name, content := range map[string]string{
+		"d3d11.dll": "externally deployed", "d3dcompiler_47.dll": "third-party",
+	} {
+		if err := os.WriteFile(filepath.Join(folder, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sign := func(data []byte) string {
+		t.Helper()
+		digest := sha256.Sum256(data)
+		signature, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return base64.StdEncoding.EncodeToString(signature)
+	}
+	root, err := openInstallRoot(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	manifest := runtimeManifest{Files: map[string]string{}}
+	if err := bootstrapExternalRuntime(root, &manifest, map[string]string{
+		"d3d11.dll":          sign([]byte("externally deployed")),
+		"d3dcompiler_47.dll": sign([]byte("original compiler")),
+	}, base64.StdEncoding.EncodeToString(der)); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Files["d3d11.dll"] != hashBytes([]byte("externally deployed")) {
+		t.Fatalf("signed external DLL was not recognized: %+v", manifest.Files)
+	}
+	if _, ok := manifest.Files["d3dcompiler_47.dll"]; ok {
+		t.Fatal("third-party DLL was marked as externally deployed")
+	}
+}
 
 func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	t.Parallel()

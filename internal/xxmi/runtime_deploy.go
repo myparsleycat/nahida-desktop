@@ -158,10 +158,12 @@ func deployRuntimeFiles(
 		return nil, fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
 	}
 	previous := runtimeManifest{Files: map[string]string{}}
+	manifestPresent := false
 	if data, _, err := root.readFile(runtimeManifestName); err == nil {
 		if err := json.Unmarshal(data, &previous); err != nil {
 			return nil, fmt.Errorf("decode runtime manifest: %w", err)
 		}
+		manifestPresent = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -192,6 +194,11 @@ func deployRuntimeFiles(
 				return nil, err
 			}
 			desired[name] = data
+		}
+	}
+	if !manifestPresent && cfg.Mode == RuntimeXXMI {
+		if err := bootstrapExternalRuntime(root, &previous, cfg.DeployedSignatures, spectrumPublicKey); err != nil {
+			return nil, err
 		}
 	}
 	warnings := []string{}
@@ -329,6 +336,31 @@ func deployRuntimeFiles(
 		return nil, err
 	}
 	return warnings, nil
+}
+
+func bootstrapExternalRuntime(
+	root *installRoot,
+	manifest *runtimeManifest,
+	signatures map[string]string,
+	publicKey string,
+) error {
+	for _, name := range []string{"d3d11.dll", "d3dcompiler_47.dll"} {
+		signature := signatures[name]
+		if signature == "" {
+			continue
+		}
+		current, _, err := root.readFile(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if verifyPackageSignature(publicKey, signature, current) == nil {
+			manifest.Files[name] = hashBytes(current)
+		}
+	}
+	return nil
 }
 
 func runtimeFilesNeedDeployment(

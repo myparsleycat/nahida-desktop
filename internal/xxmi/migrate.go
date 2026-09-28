@@ -239,6 +239,14 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		cfg.CustomLaunch.InjectMode = "Hook"
 	}
 	cfg.ExtraLibraries.Enabled = getBool("extra_libraries_enabled", false)
+	if signatures, ok := importer["deployed_migoto_signatures"].(map[string]any); ok {
+		cfg.DeployedSignatures = make(map[string]string, len(signatures))
+		for name, value := range signatures {
+			if signature, ok := value.(string); ok {
+				cfg.DeployedSignatures[name] = signature
+			}
+		}
+	}
 	for _, line := range strings.Split(getString("extra_libraries"), "\n") {
 		if path := strings.TrimSpace(line); path != "" {
 			cfg.ExtraLibraries.Paths = append(cfg.ExtraLibraries.Paths, path)
