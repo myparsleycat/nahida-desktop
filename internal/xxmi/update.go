@@ -249,8 +249,11 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
 		return errors.New("XXMI settings store is not configured")
 	}
 	enabled, err := client.Settings.GetValue(ctx, "xxmi_auto_update")
-	if err != nil || enabled == nil || *enabled != "true" {
+	if err != nil {
 		return err
+	}
+	if enabled != nil && *enabled != "true" {
+		return nil
 	}
 	statuses, err := x.CheckUpdates(ctx, false)
 	if err != nil {

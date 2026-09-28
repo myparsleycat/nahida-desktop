@@ -89,3 +89,48 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 		t.Fatal("force update check did not attempt a release refresh")
 	}
 }
+
+func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	checks := 0
+	x := NewWithOptions(Options{EventEmit: func(name string, _ ...any) {
+		if name == "xxmi:updates" {
+			checks++
+		}
+	}})
+	x.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range []string{"importer:GIMI", "xxmi-libs"} {
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			Package: pkg, UpdateCheckTime: time.Now().Unix(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil || checks != 1 {
+		t.Fatalf("default auto-update: checks = %d, err = %v", checks, err)
+	}
+	disabled := "false"
+	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
+		t.Fatal(err)
+	}
+	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil || checks != 1 {
+		t.Fatalf("disabled auto-update: checks = %d, err = %v", checks, err)
+	}
+}
