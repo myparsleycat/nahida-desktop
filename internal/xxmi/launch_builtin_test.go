@@ -28,8 +28,9 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
-	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI}
-	if err := service.updateLaunchINI(context.Background(), cfg, "Game.exe"); err != nil {
+	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
+		Migoto: MigotoOptions{EnforceRendering: true, EnableHunting: true, MuteWarnings: true}}
+	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -37,7 +38,8 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"; user comment\r\n", "target = Game.exe\r\n", "custom = keep\r\n",
-		"loader = nahida-elevated-helper-test.exe\r\n", "launch = \r\n"} {
+		"loader = nahida-elevated-helper-test.exe\r\n", "launch = \r\n",
+		"texture_hash = 0\r\n", "hunting = 2\r\n", "show_warnings = 0\r\n"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("updated INI is missing %q: %q", want, data)
 		}

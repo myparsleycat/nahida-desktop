@@ -11,7 +11,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
@@ -50,6 +52,9 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	if !cfg.Enabled {
 		return errors.New("XXMI_NOT_CONFIGURED")
 	}
+	if err := ValidateImporterSettings(key, cfg); err != nil {
+		return err
+	}
 	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
 		return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
 	}
@@ -73,7 +78,22 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	}
 
 	progress("launch-guard")
+	if key == "GIMI" && cfg.ConfigureGame && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
+		enabled, err := x.gimiDCREnabled(ctx)
+		if err != nil {
+			return err
+		}
+		if enabled {
+			if err := x.disableGIMIDCR(ctx); err != nil {
+				return err
+			}
+		}
+	}
 	if err := x.rejectLaunchBlockers(ctx, key, gameExe); err != nil {
+		return err
+	}
+	progress("xcmd-prelaunch")
+	if err := executeXcmdDeletes(cfg.ImporterFolder, cfg.ImporterFolder, "PreLaunch"); err != nil {
 		return err
 	}
 	progress("ensure-runtime")
@@ -86,7 +106,11 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 		return errors.New("XXMI_ELEVATION_DENIED: elevated helper is unavailable")
 	}
 	progress("update-ini")
-	if err := x.updateLaunchINI(ctx, cfg, processName); err != nil {
+	if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
+		return err
+	}
+	progress("pre-launch")
+	if err := runLaunchHook(ctx, cfg.RunPreLaunch, filepath.Dir(gameExe)); err != nil {
 		return err
 	}
 	progress("elevate")
@@ -104,6 +128,10 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	if err != nil {
 		return err
 	}
+	progress("post-load")
+	if err := runLaunchHook(ctx, cfg.RunPostLoad, filepath.Dir(gameExe)); err != nil {
+		return err
+	}
 	progress("finish")
 	cfg.LaunchCount++
 	if err := x.SaveImporterConfig(ctx, key, cfg); err != nil {
@@ -116,7 +144,7 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	return nil
 }
 
-func (x *XXMI) updateLaunchINI(ctx context.Context, cfg ImporterConfig, processName string) error {
+func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConfig, processName string) error {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
 		return err
@@ -132,11 +160,57 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, cfg ImporterConfig, processN
 	doc.SetOption("Loader", "launch", "", true)
 	if cfg.Mode == RuntimeXXMI {
 		doc.SetOption("Loader", "loader", x.elevated.HelperImageName(), true)
+	} else {
+		doc.RemoveOption("Loader", "loader")
 	}
+	doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
+	user32 := syscall.NewLazyDLL("user32.dll")
+	metric := user32.NewProc("GetSystemMetrics")
+	width, _, _ := metric.Call(0)
+	height, _, _ := metric.Call(1)
+	doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
+	doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
+	applyMigotoINI(doc, key, cfg.Migoto)
 	if !doc.Changed() {
 		return nil
 	}
 	return root.writeFileAtomic(ctx, "d3dx.ini", bytes.NewReader(doc.Bytes()), 0o600, info)
+}
+
+func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
+	if options.EnforceRendering {
+		values := map[string]string{
+			"texture_hash": "0", "track_texture_updates": "0", "track_region_hashes": "0",
+			"allow_buffer_resize": "1",
+		}
+		switch key {
+		case "WWMI":
+			values["texture_hash"], values["track_texture_updates"] = "1", "1"
+		case "SRMI":
+			values["track_implicit_index_buffers"] = "1"
+		case "EFMI":
+			values["track_region_hashes"], values["track_implicit_index_buffers"] = "1", "1"
+			values["allow_buffer_resize"] = "0"
+		}
+		for _, option := range []string{"texture_hash", "track_texture_updates", "track_region_hashes",
+			"track_implicit_index_buffers", "allow_buffer_resize"} {
+			if value, ok := values[option]; ok {
+				doc.SetOption("Rendering", option, value, true)
+			}
+		}
+	}
+	boolean := func(section, option string, enabled bool, on, off string) {
+		value := off
+		if enabled {
+			value = on
+		}
+		doc.SetOption(section, option, value, true)
+	}
+	boolean("Logging", "calls", options.CallsLogging, "1", "0")
+	boolean("Logging", "debug", options.DebugLogging, "1", "0")
+	boolean("Logging", "show_warnings", options.MuteWarnings, "0", "1")
+	boolean("Hunting", "hunting", options.EnableHunting, "2", "0")
+	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
 }
 
 func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string) (inject.LaunchSpec, error) {
