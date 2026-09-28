@@ -328,7 +328,7 @@ function RouteComponent() {
           <div className="space-y-2">
             <span>{t("page.setting.xxmi.builtin.windowMode")}</span>
             <div className="flex flex-wrap gap-2">
-              {["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"].map((mode) => (
+              {["Windowed", "Borderless", "Fullscreen", "ExclusiveFullscreen"].map((mode) => (
                 <Button
                   key={mode}
                   variant={config.windowMode === mode ? "default" : "outline"}
@@ -341,6 +341,110 @@ function RouteComponent() {
           </div>
         </CardContent>
       </Card>
+
+      {(config.gimi || config.srmi || config.himi) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("page.setting.xxmi.builtin.gameTweaks")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <label className="flex items-center justify-between">
+              <span>{t("page.setting.xxmi.builtin.configureGame")}</span>
+              <Switch
+                checked={config.configureGame}
+                onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
+              />
+            </label>
+            {config.gimi && (
+              <>
+                <label className="flex items-center justify-between">
+                  <span>{t("page.setting.xxmi.builtin.unlockFPS")}</span>
+                  <Switch
+                    checked={config.gimi.unlockFPS}
+                    onCheckedChange={(unlockFPS) =>
+                      setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
+                    }
+                  />
+                </label>
+                {config.gimi.unlockFPS && (
+                  <label className="block space-y-1">
+                    <span>{t("page.setting.xxmi.builtin.fpsTarget")}</span>
+                    <Input
+                      type="number"
+                      min={30}
+                      max={1000}
+                      value={config.gimi.unlockFPSValue}
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          gimi: { ...config.gimi!, unlockFPSValue: Number(event.target.value) },
+                        })
+                      }
+                    />
+                  </label>
+                )}
+                {(
+                  [
+                    ["enableHDR", "enableHDR"],
+                    ["disableDCR", "disableDCR"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <label key={field} className="flex items-center justify-between">
+                    <span>{t(`page.setting.xxmi.builtin.${label}`)}</span>
+                    <Switch
+                      checked={config.gimi![field]}
+                      onCheckedChange={(value) =>
+                        setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
+                      }
+                    />
+                  </label>
+                ))}
+              </>
+            )}
+            {config.srmi && (
+              <label className="flex items-center justify-between">
+                <span>{t("page.setting.xxmi.builtin.unlockFPS")}</span>
+                <Switch
+                  checked={config.srmi.unlockFPS}
+                  onCheckedChange={(unlockFPS) =>
+                    setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
+                  }
+                />
+              </label>
+            )}
+            {config.himi && (
+              <>
+                <label className="flex items-center justify-between">
+                  <span>{t("page.setting.xxmi.builtin.unlockFPS")}</span>
+                  <Switch
+                    checked={config.himi.unlockFPS}
+                    onCheckedChange={(unlockFPS) =>
+                      setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
+                    }
+                  />
+                </label>
+                {config.himi.unlockFPS && (
+                  <label className="block space-y-1">
+                    <span>{t("page.setting.xxmi.builtin.fpsTarget")}</span>
+                    <Input
+                      type="number"
+                      min={30}
+                      max={1000}
+                      value={config.himi.unlockFPSValue}
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          himi: { ...config.himi!, unlockFPSValue: Number(event.target.value) },
+                        })
+                      }
+                    />
+                  </label>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
