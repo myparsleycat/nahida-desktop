@@ -3,9 +3,15 @@ package xxmi
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
@@ -176,5 +182,39 @@ func TestNewestLegacyRuntimeIgnoresStagingDirectory(t *testing.T) {
 	got, err := newestLegacyRuntime(parent)
 	if err != nil || got != "abcdef123456" {
 		t.Fatalf("latest cache = %q, err = %v", got, err)
+	}
+}
+
+func TestResolveLibsVersionFetchesLatestBeforeUpdateCheck(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if !strings.Contains(request.URL.Path, "XXMI-Libs-Package") {
+			t.Errorf("unexpected release request %s", request.URL)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
+			Body: io.NopCloser(strings.NewReader(`[{"tag_name":"v1.2.3"}]`)),
+		}, nil
+	})}
+	x := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: httpClient, Status: infra.BackendOnline,
+	})})
+	x.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := x.resolveLibsVersion(ctx, cfg)
+	if err != nil || version != "1.2.3" {
+		t.Fatalf("resolved version = %q, err = %v", version, err)
 	}
 }

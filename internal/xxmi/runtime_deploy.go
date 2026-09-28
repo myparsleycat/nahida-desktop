@@ -102,7 +102,17 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if err != nil {
 		return "", err
 	}
-	if pkg == nil || pkg.LatestVersion == nil {
+	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
+		releases, err := x.ListReleases(ctx, "xxmi-libs")
+		if err == nil && len(releases) > 0 {
+			return releases[0].Version, nil
+		}
+		if cached := newestCachedPackageVersion("xxmi-libs"); cached != "" {
+			return cached, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("resolve latest XXMI libraries: %w", err)
+		}
 		return "", errors.New("XXMI libraries latest version is unknown")
 	}
 	return normalizeVersion(*pkg.LatestVersion), nil
