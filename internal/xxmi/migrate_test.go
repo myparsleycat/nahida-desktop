@@ -23,6 +23,7 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	}
 	external := t.TempDir()
 	config := xxmiTestConfig()
+	config["Launcher"].(map[string]any)["pre_release"] = true
 	importers := config["Importers"].(map[string]any)
 	gimi := importers["GIMI"].(map[string]any)["Importer"].(map[string]any)
 	gimi["process_start_method"] = "Native"
@@ -53,6 +54,14 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	}
 	if cfg.PackageVersion.Follow != "latest" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)
+	}
+	for key, want := range map[string]string{
+		"xxmi_root": external, "xxmi_auto_update": "false", "xxmi_include_prereleases": "true",
+	} {
+		value, err := client.Settings.GetValue(ctx, key)
+		if err != nil || value == nil || *value != want {
+			t.Fatalf("imported %s = %v, err = %v; want %q", key, value, err, want)
+		}
 	}
 	got, err := os.ReadFile(configPath)
 	if err != nil || string(got) != string(data) {

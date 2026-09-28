@@ -99,6 +99,7 @@ export function XXMIDashboard() {
                       root: root || overview.root,
                     });
                     refresh();
+                    void queryClient.invalidateQueries({ queryKey: ["settings"] });
                     toast.success(t("page.setting.xxmi.builtin.imported"));
                   } catch (error) {
                     toast.error(toErrorMessage(error));

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"nahida.live/desktop/internal/db"
@@ -105,6 +106,7 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 	}
 	launcher, _ := config["Launcher"].(map[string]any)
 	autoUpdate, _ := launcher["auto_update"].(bool)
+	includePrereleases, _ := launcher["pre_release"].(bool)
 	libsVersion := dllVersion(&path)
 	if libsVersion != nil {
 		if err := importExternalLibs(path, *libsVersion); err != nil {
@@ -172,7 +174,14 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 			}
 		}
 	}
-	return x.SetRoot(ctx, root)
+	rootValue := root
+	autoUpdateValue := strconv.FormatBool(autoUpdate)
+	prereleasesValue := strconv.FormatBool(includePrereleases)
+	return client.Settings.UpsertMany(ctx, map[string]*string{
+		"xxmi_root":                &rootValue,
+		"xxmi_auto_update":         &autoUpdateValue,
+		"xxmi_include_prereleases": &prereleasesValue,
+	})
 }
 
 func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[string]any) {
