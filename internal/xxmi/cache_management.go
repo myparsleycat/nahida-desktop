@@ -111,18 +111,12 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]bool
 		if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
 			return "", nil, err
 		}
-		if cfg.Mode == RuntimeXXMI {
-			if cfg.XXMIVersion.Pinned != "" {
-				referenced[normalizeVersion(cfg.XXMIVersion.Pinned)] = true
-			} else if pkg != nil && pkg.LatestVersion != nil {
-				referenced[normalizeVersion(*pkg.LatestVersion)] = true
-			}
+		if cfg.XXMIVersion.Pinned != "" {
+			referenced[normalizeVersion(cfg.XXMIVersion.Pinned)] = true
+		} else if cfg.Mode == RuntimeXXMI && pkg != nil && pkg.LatestVersion != nil {
+			referenced[normalizeVersion(*pkg.LatestVersion)] = true
 		} else if cfg.Mode == RuntimeLegacy && cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0 {
-			version := normalizeVersion(cfg.XXMIVersion.Pinned)
-			if version == "" {
-				version = newestCachedPackageVersion("xxmi-libs")
-			}
-			if version != "" {
+			if version := newestCachedPackageVersion("xxmi-libs"); version != "" {
 				referenced[version] = true
 			}
 		}
