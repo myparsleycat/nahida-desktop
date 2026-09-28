@@ -16,6 +16,7 @@ type importerPackageSpec struct {
 	assetFormat    string
 	versionFile    string
 	versionPattern *regexp.Regexp
+	publicKey      string
 }
 
 var (
@@ -28,32 +29,38 @@ var importerPackages = map[string]importerPackageSpec{
 		key: "GIMI", repo: github.Repo{Owner: "SilentNightSound", Name: "GIMI-Package"},
 		assetFormat: "GIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "GIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
+		publicKey:      gimiPublicKey,
 	},
 	"SRMI": {
 		key: "SRMI", repo: github.Repo{Owner: "SpectrumQT", Name: "SRMI-Package"},
 		assetFormat: "SRMI-TEST-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "SRMI", "main.ini"),
 		versionPattern: importerVersionPattern,
+		publicKey:      spectrumPublicKey,
 	},
 	"WWMI": {
 		key: "WWMI", repo: github.Repo{Owner: "SpectrumQT", Name: "WWMI-Package"},
 		assetFormat:    "WWMI-PACKAGE-v%s.zip",
 		versionFile:    filepath.Join("Core", "WWMI", "WuWa-Model-Importer.ini"),
 		versionPattern: wwmiVersionPattern,
+		publicKey:      spectrumPublicKey,
 	},
 	"ZZMI": {
 		key: "ZZMI", repo: github.Repo{Owner: "leotorrez", Name: "ZZMI-Package"},
 		assetFormat: "ZZMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "ZZMI", "main.ini"),
 		versionPattern: importerVersionPattern,
+		publicKey:      zzmiPublicKey,
 	},
 	"HIMI": {
 		key: "HIMI", repo: github.Repo{Owner: "leotorrez", Name: "HIMI-Package"},
 		assetFormat: "HIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "HIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
+		publicKey:      himiPublicKey,
 	},
 	"EFMI": {
 		key: "EFMI", repo: github.Repo{Owner: "SpectrumQT", Name: "EFMI-Package"},
 		assetFormat: "EFMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "EFMI", "main.ini"),
 		versionPattern: importerVersionPattern,
+		publicKey:      spectrumPublicKey,
 	},
 }
 
