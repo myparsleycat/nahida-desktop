@@ -2045,6 +2045,7 @@
           "import": "설정 가져오기",
           "imported": "런처 설정을 가져왔습니다",
           "packages": "공용 패키지",
+          "cacheIssue": "캐시 문제",
           "libs": "XXMI 라이브러리",
           "prune": "미사용 캐시 정리",
           "pruned": "미사용 캐시 {{count}}개를 정리했습니다",

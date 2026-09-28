@@ -2111,6 +2111,7 @@
           "import": "Import settings",
           "imported": "Launcher settings imported",
           "packages": "Shared packages",
+          "cacheIssue": "Cache issue",
           "libs": "XXMI libraries",
           "prune": "Clean unused caches",
           "pruned": "Removed {{count}} unused caches",

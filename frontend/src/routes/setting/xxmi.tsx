@@ -27,22 +27,16 @@ function RouteComponent() {
   return location.pathname.startsWith("/setting/xxmi/") ? <Outlet /> : <XXMIDashboard />;
 }
 
-function XXMIDashboard() {
+export function XXMIDashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { settings, update } = useSettings(settingsConfig);
   const { startImporter, launchGuardDialog } = useLaunchGuard();
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
-  const { data: libs } = useQuery({ queryKey: ["xxmi:libs-cache"], queryFn: XXMI.ListCachedLibs });
-  const { data: legacy } = useQuery({
-    queryKey: ["xxmi:legacy-cache"],
-    queryFn: XXMI.GetLegacyRuntimes,
-  });
-  const { data: fpsVersions } = useQuery({
-    queryKey: ["xxmi:fps-cache"],
-    queryFn: XXMI.ListCachedFPSUnlocker,
-  });
+  const libs = overview?.libsCache;
+  const legacy = overview?.legacyRuntimes;
+  const fpsVersions = overview?.fpsVersions;
   const { data: fpsReleases } = useQuery({
     queryKey: ["xxmi:fps-releases"],
     queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
@@ -123,6 +117,11 @@ function XXMIDashboard() {
           <CardTitle>{t("page.setting.xxmi.builtin.packages")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          {overview?.cacheIssues?.map((issue) => (
+            <p key={issue} role="alert" className="text-destructive">
+              {t("page.setting.xxmi.builtin.cacheIssue")}: {issue}
+            </p>
+          ))}
           <div className="flex items-center justify-between gap-3">
             <span>
               {t("page.setting.xxmi.builtin.libs")}: {libs?.length ?? 0}

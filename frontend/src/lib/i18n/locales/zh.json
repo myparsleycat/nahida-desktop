@@ -2026,6 +2026,7 @@
           "import": "导入设置",
           "imported": "已导入启动器设置",
           "packages": "共享软件包",
+          "cacheIssue": "缓存问题",
           "libs": "XXMI 库",
           "prune": "清理未使用的缓存",
           "pruned": "已清理 {{count}} 个未使用的缓存",

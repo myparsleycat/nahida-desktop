@@ -60,10 +60,14 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 }
 
 type Overview struct {
-	Configured       bool              `json:"configured"`
-	Root             string            `json:"root"`
-	Importers        []EnabledImporter `json:"importers"`
-	ExternalLauncher *ExternalLauncher `json:"externalLauncher,omitempty"`
+	Configured       bool                `json:"configured"`
+	Root             string              `json:"root"`
+	Importers        []EnabledImporter   `json:"importers"`
+	LibsCache        []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions      []string            `json:"fpsVersions"`
+	CacheIssues      []string            `json:"cacheIssues,omitempty"`
+	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -111,6 +115,18 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		}
 	}
 	overview := Overview{Configured: len(importers) > 0, Root: filepath.Clean(rootPath), Importers: importers}
+	if overview.LibsCache, err = x.ListCachedLibs(ctx); err != nil {
+		overview.CacheIssues = append(overview.CacheIssues, "XXMI libraries: "+err.Error())
+	}
+	if overview.LegacyRuntimes, err = x.GetLegacyRuntimes(ctx); err != nil {
+		overview.CacheIssues = append(overview.CacheIssues, "legacy 3DMigoto: "+err.Error())
+	}
+	if overview.FPSVersions, err = x.ListCachedFPSUnlocker(ctx); err != nil {
+		overview.CacheIssues = append(overview.CacheIssues, "GI FPS Unlocker: "+err.Error())
+	}
+	if err := ctx.Err(); err != nil {
+		return Overview{}, err
+	}
 	if !overview.Configured {
 		external, err := x.DetectExternalLauncher(ctx)
 		if err == nil {

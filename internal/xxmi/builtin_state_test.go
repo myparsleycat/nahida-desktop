@@ -111,3 +111,33 @@ func TestBuiltinConsumersIgnoreUnimportedExternalLauncher(t *testing.T) {
 		t.Fatal("unimported external importer used for hunting")
 	}
 }
+
+func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", "abcdef123456"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	if err := service.EnableImporter(ctx, "GIMI", filepath.Join(t.TempDir(), "GIMI")); err != nil {
+		t.Fatal(err)
+	}
+	overview, err := service.GetOverview(ctx)
+	if err != nil || !overview.Configured || len(overview.CacheIssues) == 0 {
+		t.Fatalf("overview = %+v, err = %v", overview, err)
+	}
+}
