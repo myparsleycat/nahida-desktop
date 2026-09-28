@@ -309,14 +309,25 @@ func fileExists(path string) bool {
 }
 
 func importExternalLibs(externalRoot, version string) error {
+	version = normalizeVersion(strings.TrimSpace(version))
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
+		return errors.New("invalid external XXMI libraries version")
+	}
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return err
 	}
 	parent := filepath.Join(cacheRoot, "packages", "xxmi-libs")
 	destination := filepath.Join(parent, version)
-	if _, err := os.Stat(destination); err == nil {
-		return verifyXXMILibsCache(destination, version)
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("XXMI libraries cache is not a regular directory")
+		}
+		if verifyXXMILibsCache(destination, version) == nil {
+			return nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
@@ -339,5 +350,5 @@ func importExternalLibs(externalRoot, version string) error {
 	if err := verifyXXMILibsCache(staging, version); err != nil {
 		return err
 	}
-	return os.Rename(staging, destination)
+	return replaceCorruptLibsCache(cacheRoot, staging, destination, version)
 }

@@ -58,7 +58,7 @@ func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) err
 	defer x.packageMu.Unlock()
 
 	version = normalizeVersion(strings.TrimSpace(version))
-	if version == "" || strings.ContainsAny(version, `\/:*?"<>|`) {
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid GI FPS Unlocker version")
 	}
 	root, err := xxmiCacheRoot()
@@ -243,7 +243,7 @@ func importExternalFPSUnlocker(externalRoot string) error {
 		return err
 	}
 	version := normalizeVersion(manifest.Version)
-	if version == "" || strings.ContainsAny(version, `\/:*?"<>|`) {
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid external GI FPS Unlocker version")
 	}
 	root, err := xxmiCacheRoot()
@@ -252,8 +252,15 @@ func importExternalFPSUnlocker(externalRoot string) error {
 	}
 	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
 	destination := filepath.Join(parent, version)
-	if _, err := os.Stat(destination); err == nil {
-		return verifyFPSUnlockerCache(destination, version)
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("GI FPS Unlocker cache is not a regular directory")
+		}
+		if verifyFPSUnlockerCache(destination, version) == nil {
+			return nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
@@ -281,7 +288,7 @@ func importExternalFPSUnlocker(externalRoot string) error {
 	if err := verifyFPSUnlockerCache(staging, version); err != nil {
 		return err
 	}
-	return os.Rename(staging, destination)
+	return replaceCorruptFPSCache(root, staging, destination, version)
 }
 
 func fpsUnlockerFolder() (string, error) {

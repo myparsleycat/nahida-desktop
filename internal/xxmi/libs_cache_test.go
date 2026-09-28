@@ -1,10 +1,29 @@
 package xxmi
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestPackageCacheRejectsDotVersions(t *testing.T) {
+	t.Parallel()
+	for _, version := range []string{".", "..", "v.."} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			if err := New().EnsureLibsVersion(context.Background(), version); err == nil {
+				t.Fatal("XXMI libraries accepted a dot version")
+			}
+			if err := New().EnsureFPSUnlockerVersion(context.Background(), version); err == nil {
+				t.Fatal("GI FPS Unlocker accepted a dot version")
+			}
+			if err := importExternalLibs(t.TempDir(), version); err == nil {
+				t.Fatal("external XXMI libraries accepted a dot version")
+			}
+		})
+	}
+}
 
 func TestReplaceCorruptLibsCacheBacksUpAndRestores(t *testing.T) {
 	t.Parallel()

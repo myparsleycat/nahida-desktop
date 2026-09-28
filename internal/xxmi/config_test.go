@@ -42,6 +42,12 @@ func TestImporterSettingsRejectNestedGameFolderAndInvalidPin(t *testing.T) {
 	if err := ValidateImporterSettings("GIMI", cfg); err == nil {
 		t.Fatal("ambiguous version pin accepted")
 	}
+	for _, version := range []string{".", "..", "v..", " "} {
+		cfg.XXMIVersion = VersionPin{Pinned: version}
+		if err := ValidateImporterSettings("GIMI", cfg); err == nil {
+			t.Fatalf("dot version pin %q accepted", version)
+		}
+	}
 }
 
 func TestModeChangeRejectsLaunchInProgress(t *testing.T) {

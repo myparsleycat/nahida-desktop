@@ -18,7 +18,10 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 		return fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
 	for name, pin := range map[string]VersionPin{"packageVersion": cfg.PackageVersion, "xxmiVersion": cfg.XXMIVersion} {
-		if (pin.Follow == "latest") == (pin.Pinned != "") || strings.ContainsAny(pin.Pinned, `\/:*?"<>|`) {
+		normalized := normalizeVersion(pin.Pinned)
+		if (pin.Follow == "latest") == (pin.Pinned != "") ||
+			pin.Pinned != "" && (normalized == "" || normalized == "." || normalized == "..") ||
+			strings.ContainsAny(pin.Pinned, `\/:*?"<>|`) {
 			return fmt.Errorf("invalid %s", name)
 		}
 	}

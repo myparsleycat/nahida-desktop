@@ -27,7 +27,7 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	defer x.packageMu.Unlock()
 
 	version = normalizeVersion(strings.TrimSpace(version))
-	if version == "" || strings.ContainsAny(version, `\/:*?"<>|`) {
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid XXMI libraries version")
 	}
 	root, err := xxmiCacheRoot()
