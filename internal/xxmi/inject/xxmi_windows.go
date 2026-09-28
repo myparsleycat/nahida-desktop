@@ -99,15 +99,8 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
-	for _, dll := range spec.ExtraDLLs {
-		pointer, err := windows.UTF16PtrFromString(dll)
-		if err != nil {
-			return LaunchResult{}, err
-		}
-		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(pointer)), uintptr(spec.TimeoutSeconds))
-		if code != 0 {
-			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: extra DLL Inject returned %d", code)
-		}
+	if err := injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds); err != nil {
+		return LaunchResult{}, err
 	}
 	if spec.InjectMode == "Bypass" {
 		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
@@ -137,6 +130,20 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d after game window", code)
 	}
 	return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
+}
+
+func injectExtraDLLs(proc *windows.Proc, pid int, dlls []string, timeoutSeconds int) error {
+	for _, dll := range dlls {
+		pointer, err := windows.UTF16PtrFromString(dll)
+		if err != nil {
+			return err
+		}
+		code, _, _ := proc.Call(uintptr(pid), uintptr(unsafe.Pointer(pointer)), uintptr(timeoutSeconds))
+		if code != 0 {
+			return fmt.Errorf("XXMI_INJECT_FAILED: extra DLL Inject returned %d", code)
+		}
+	}
+	return nil
 }
 
 func startGameProcess(spec LaunchSpec) error {

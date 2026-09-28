@@ -35,6 +35,10 @@ function RouteComponent() {
     queryKey: ["xxmi:libs-releases"],
     queryFn: () => XXMI.ListReleases("xxmi-libs"),
   });
+  const { data: cachedLibs } = useQuery({
+    queryKey: ["xxmi:libs-cache"],
+    queryFn: XXMI.ListCachedLibs,
+  });
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const [selectedPackage, setSelectedPackage] = useState("");
@@ -676,11 +680,23 @@ function RouteComponent() {
             <span>{t("page.setting.xxmi.builtin.extraLibraries")}</span>
             <Switch
               checked={config.extraLibraries.enabled}
+              disabled={
+                config.mode === RuntimeMode.RuntimeLegacy &&
+                !cachedLibs?.some(
+                  (entry) =>
+                    !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,
+                )
+              }
               onCheckedChange={(enabled) =>
                 setConfig({ ...config, extraLibraries: { ...config.extraLibraries, enabled } })
               }
             />
           </label>
+          {config.mode === RuntimeMode.RuntimeLegacy && !cachedLibs?.length && (
+            <p className="text-muted-foreground">
+              {t("page.setting.xxmi.builtin.libs")}: {t("page.setting.xxmi.builtin.notInstalled")}
+            </p>
+          )}
           <Input
             value={config.extraLibraries.paths?.join(";") ?? ""}
             onChange={(event) =>

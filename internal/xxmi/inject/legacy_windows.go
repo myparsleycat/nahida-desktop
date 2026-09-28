@@ -72,6 +72,25 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
+	if len(spec.ExtraDLLs) > 0 {
+		library, err := windows.LoadDLL(spec.LoaderDLL.Path)
+		if err != nil {
+			_ = loader.Process.Kill()
+			return LaunchResult{}, fmt.Errorf("load XXMI extra DLL injector: %w", err)
+		}
+		injectProc, err := library.FindProc("Inject")
+		if err != nil {
+			_ = library.Release()
+			_ = loader.Process.Kill()
+			return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
+		}
+		err = injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds)
+		_ = library.Release()
+		if err != nil {
+			_ = loader.Process.Kill()
+			return LaunchResult{}, err
+		}
+	}
 	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err

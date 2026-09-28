@@ -89,8 +89,15 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI loader DLL: %w", err)
 		}
-	} else if err := verifyFile(spec.LegacyLoader); err != nil {
-		return fmt.Errorf("legacy loader: %w", err)
+	} else {
+		if err := verifyFile(spec.LegacyLoader); err != nil {
+			return fmt.Errorf("legacy loader: %w", err)
+		}
+		if len(spec.ExtraDLLs) > 0 {
+			if err := verifyFile(spec.LoaderDLL); err != nil {
+				return fmt.Errorf("XXMI extra DLL injector: %w", err)
+			}
+		}
 	}
 	for _, dll := range spec.ExtraDLLs {
 		if err := validateRegularLocalFile(dll); err != nil {

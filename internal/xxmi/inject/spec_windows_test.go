@@ -13,7 +13,7 @@ import (
 func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	for _, name := range []string{"game.exe", "d3d11.dll", "3dmloader.dll"} {
+	for _, name := range []string{"game.exe", "d3d11.dll", "3dmloader.dll", "3DMigoto Loader.exe", "extra.dll"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(name), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -40,4 +40,29 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 			t.Fatalf("unsafe path %q accepted", path)
 		}
 	}
+	legacy := spec
+	legacy.Mode = ModeLegacy
+	legacy.LegacyLoader = VerifiedFile{
+		Path:   filepath.Join(root, "3DMigoto Loader.exe"),
+		SHA256: fileHash(t, filepath.Join(root, "3DMigoto Loader.exe")),
+	}
+	legacy.ExtraDLLs = []string{filepath.Join(root, "extra.dll")}
+	legacy.LoaderDLL = VerifiedFile{}
+	if err := ValidateLaunchSpec(legacy); err == nil {
+		t.Fatal("legacy extra DLLs were accepted without a verified injector")
+	}
+	legacy.LoaderDLL = spec.LoaderDLL
+	if err := ValidateLaunchSpec(legacy); err != nil {
+		t.Fatalf("verified legacy extra DLL injector was rejected: %v", err)
+	}
+}
+
+func fileHash(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }

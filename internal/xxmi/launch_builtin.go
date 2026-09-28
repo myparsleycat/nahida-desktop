@@ -315,6 +315,31 @@ func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
+		if len(spec.ExtraDLLs) > 0 {
+			version := cfg.XXMIVersion.Pinned
+			if version == "" {
+				version = newestCachedPackageVersion("xxmi-libs")
+			}
+			if version == "" {
+				return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
+			}
+			cacheRoot, err := xxmiCacheRoot()
+			if err != nil {
+				return inject.LaunchSpec{}, err
+			}
+			if err := verifyXXMILibsCache(
+				filepath.Join(cacheRoot, "packages", "xxmi-libs", version),
+				version,
+			); err != nil {
+				return inject.LaunchSpec{}, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+			}
+			spec.LoaderDLL, err = verifiedLaunchFile(
+				filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
+			)
+			if err != nil {
+				return inject.LaunchSpec{}, err
+			}
+		}
 	}
 	return spec, nil
 }
