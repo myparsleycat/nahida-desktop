@@ -16,12 +16,10 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 		func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
 			return deps.XXMI.GetXXMIPath(ctx)
 		}))
-	registry.add(
-		simpleAction("xxmi.get_config", "Get the local XXMI configuration.", "xxmi", RiskRead, objectSchema(nil),
-			func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
-				return deps.XXMI.GetXXMIConfig(ctx)
-			}),
-	)
+	registry.add(simpleAction("xxmi.get_overview", "Get built-in XXMI importers and runtime status.", "xxmi",
+		RiskRead, objectSchema(nil), func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
+			return deps.XXMI.GetOverview(ctx)
+		}))
 	registry.add(simpleAction("xxmi.get_data", "Get locally cached XXMI data.", "xxmi", RiskRead, objectSchema(nil),
 		func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
 			return deps.XXMI.GetXXMIData(ctx)
@@ -41,21 +39,45 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 			}
 			return actionOK(deps.XXMI.StartGame(ctx, input.Importer))
 		}))
-	registry.add(simpleAction("xxmi.install_dll", "Download and install a selected XXMI DLL package.", "xxmi",
-		RiskConfirm, objectSchema(map[string]any{"version": stringSchema()}, "version"),
+	registry.add(
+		simpleAction("xxmi.set_xxmi_version", "Pin an importer's XXMI libraries version or follow latest.", "xxmi",
+			RiskConfirm, objectSchema(map[string]any{"importer": stringSchema(), "version": stringSchema()},
+				"importer", "version"),
+			func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+				var input struct {
+					Importer string `json:"importer"`
+					Version  string `json:"version"`
+				}
+				if err := decodeActionArguments(raw, &input); err != nil {
+					return nil, err
+				}
+				pin := xxmi.VersionPin{Pinned: input.Version}
+				if input.Version == "latest" {
+					pin = xxmi.VersionPin{Follow: "latest"}
+				}
+				return actionOK(deps.XXMI.SetImporterVersions(ctx, input.Importer, xxmi.ImporterVersions{XXMI: &pin}))
+			}),
+	)
+	registry.add(simpleAction("xxmi.set_mode", "Select XXMI or legacy 3DMigoto runtime for an importer.", "xxmi",
+		RiskConfirm, objectSchema(map[string]any{"importer": stringSchema(), "mode": enumSchema("xxmi", "legacy")},
+			"importer", "mode"),
 		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
-			var input xxmi.InstallDLLVersionInput
+			var input struct {
+				Importer string           `json:"importer"`
+				Mode     xxmi.RuntimeMode `json:"mode"`
+			}
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return actionOK(deps.XXMI.InstallDLLVersion(ctx, input))
+			return actionOK(deps.XXMI.SetImporterMode(ctx, input.Importer, input.Mode))
 		}))
 	registry.add(simpleAction(
 		"xxmi.install_importer_package",
 		"Download and install a selected XXMI importer package version.",
 		"xxmi",
 		RiskConfirm,
-		objectSchema(map[string]any{"importer": stringSchema(), "version": stringSchema()}, "importer", "version"),
+		objectSchema(map[string]any{"importer": stringSchema(), "version": stringSchema(),
+			"allowUnsigned": booleanSchema()}, "importer", "version"),
 		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
 			var input xxmi.InstallImporterPackageInput
 			if err := decodeActionArguments(raw, &input); err != nil {

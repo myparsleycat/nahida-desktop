@@ -96,14 +96,14 @@ function AddGameDialogContent({
   const [selectedImporter, setSelectedImporter] = useState(NO_IMPORTER_VALUE);
   const isNteSelected = isNteImporter(selectedImporter);
 
-  const { data: xxmiData } = useQuery({
-    queryKey: ["xxmi:getXXMIData"],
-    queryFn: () => XXMI.GetXXMIData(),
+  const { data: xxmiOverview } = useQuery({
+    queryKey: ["xxmi:overview"],
+    queryFn: () => XXMI.GetOverview(),
   });
 
-  const enabledImporters = xxmiData?.enabledImporters ?? [];
+  const enabledImporters = xxmiOverview?.importers ?? [];
   const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
-  const isXXMIConfigured = !!xxmiData?.xxmiPath;
+  const isXXMIConfigured = xxmiOverview?.configured ?? false;
 
   const form = useForm({
     defaultValues: {

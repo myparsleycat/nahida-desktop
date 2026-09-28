@@ -82,9 +82,9 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const { data: presets = [] } = usePresets(selectedGame);
   const { data: enabledImporters = [] } = useEnabledImporters();
   const { startImporter, launchGuardDialog } = useLaunchGuard();
-  const { data: xxmiData } = useQuery({
-    queryKey: ["xxmi:getXXMIData"],
-    queryFn: () => XXMI.GetXXMIData(),
+  const { data: xxmiOverview } = useQuery({
+    queryKey: ["xxmi:overview"],
+    queryFn: () => XXMI.GetOverview(),
   });
   const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const selectedImporter = selectedGameConfig?.importer ?? null;
@@ -131,7 +131,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       return;
     }
 
-    if (!xxmiData?.xxmiPath) {
+    if (!xxmiOverview?.configured) {
       toast.info(t("page.mod.dialog.add-game.xxmi_path_required"));
       void navi({ to: "/setting/xxmi" });
       return;
