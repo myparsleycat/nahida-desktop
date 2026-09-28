@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/db"
@@ -98,5 +99,43 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 		len(got.PerfTweaks) != 2 || got.PerfTweaks["r.Streaming.HLODStrategy"] != 3 ||
 		got.PerfTweaks["wp.Runtime.KuroRuntimeStreamingRangeOverallScale"] != 0.75 {
 		t.Fatalf("imported WWMI settings = %+v", got)
+	}
+}
+
+func TestImportExternalLauncherValidatesAllImportersBeforeSaving(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	config := xxmiTestConfig()
+	importers := config["Importers"].(map[string]any)
+	importers["GIMI"].(map[string]any)["Importer"].(map[string]any)["process_start_method"] = "Native"
+	importers["SRMI"].(map[string]any)["Importer"].(map[string]any)["process_start_method"] = "invalid"
+	config["Packages"].(map[string]any)["packages"].(map[string]any)["SRMI"] = xxmiTestPackage("v1")
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, xxmiConfigName), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	if err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{Path: external}); err == nil ||
+		!strings.Contains(err.Error(), "import SRMI config") {
+		t.Fatalf("invalid later importer result = %v", err)
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row != nil {
+		t.Fatalf("earlier importer was partially saved: row = %+v, err = %v", row, err)
+	}
+	if value, err := client.Settings.GetValue(ctx, "xxmi_root"); err != nil || value != nil {
+		t.Fatalf("root was partially saved: value = %v, err = %v", value, err)
 	}
 }

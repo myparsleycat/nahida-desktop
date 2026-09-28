@@ -80,3 +80,36 @@ func TestXXMILaunchCountUpdatePreservesConcurrentSettings(t *testing.T) {
 		t.Fatalf("updated settings = %+v", settings)
 	}
 }
+
+func TestXXMIImportRollsBackAllStores(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.SQL().ExecContext(ctx, `CREATE TRIGGER fail_xxmi_import
+BEFORE INSERT ON setting WHEN NEW.key = 'xxmi_root'
+BEGIN SELECT RAISE(ABORT, 'import failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	root := "C:\\XXMI"
+	latest := "1.2.3"
+	err := client.XXMIImporters.ApplyImport(ctx,
+		[]XXMIImporterRow{{Key: "GIMI", Config: `{}`}},
+		[]XXMIPackageRow{{Package: "importer:GIMI", LatestVersion: &latest}},
+		map[string]*string{"xxmi_root": &root},
+	)
+	if err == nil {
+		t.Fatal("expected import failure")
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row != nil {
+		t.Fatalf("importer survived rollback: row = %+v, err = %v", row, err)
+	}
+	if row, err := client.XXMIPackages.Get(ctx, "importer:GIMI"); err != nil || row != nil {
+		t.Fatalf("package survived rollback: row = %+v, err = %v", row, err)
+	}
+	if value, err := client.Settings.GetValue(ctx, "xxmi_root"); err != nil || value != nil {
+		t.Fatalf("setting survived rollback: value = %v, err = %v", value, err)
+	}
+}

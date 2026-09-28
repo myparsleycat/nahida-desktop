@@ -47,6 +47,53 @@ ON CONFLICT("key") DO UPDATE SET "config" = excluded."config", "updated_at" = ex
 		key, config, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
+func (s XXMIImportersStore) ApplyImport(
+	ctx context.Context,
+	importers []XXMIImporterRow,
+	packages []XXMIPackageRow,
+	settings map[string]*string,
+) error {
+	return s.c.withImmediate(ctx, func(q queryExec) error {
+		updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		for _, row := range importers {
+			if _, err := q.ExecContext(
+				ctx,
+				`INSERT INTO "xxmi_importers" ("key", "config", "updated_at") VALUES (?, ?, ?)
+ON CONFLICT("key") DO UPDATE SET "config" = excluded."config", "updated_at" = excluded."updated_at"`,
+				row.Key,
+				row.Config,
+				updatedAt,
+			); err != nil {
+				return err
+			}
+		}
+		for _, row := range packages {
+			if _, err := q.ExecContext(
+				ctx,
+				`INSERT INTO "xxmi_packages" ("package", "latest_version", "latest_release_notes", "update_check_time", "skipped_version", "updated_at")
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT("package") DO UPDATE SET "latest_version" = excluded."latest_version", "latest_release_notes" = excluded."latest_release_notes",
+"update_check_time" = excluded."update_check_time", "skipped_version" = excluded."skipped_version", "updated_at" = excluded."updated_at"`,
+				row.Package,
+				argString(row.LatestVersion),
+				argString(row.LatestReleaseNotes),
+				row.UpdateCheckTime,
+				argString(row.SkippedVersion),
+				updatedAt,
+			); err != nil {
+				return err
+			}
+		}
+		for key, value := range settings {
+			if _, err := q.ExecContext(ctx, `INSERT INTO "setting" ("key", "value") VALUES (?, ?)
+ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(value)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (s XXMIImportersStore) IncrementLaunchCount(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `UPDATE "xxmi_importers"
 SET "config" = json_set("config", '$.launchCount', COALESCE(json_extract("config", '$.launchCount'), -1) + 1),

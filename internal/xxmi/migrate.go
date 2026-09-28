@@ -118,6 +118,8 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 			return fmt.Errorf("import GI FPS Unlocker: %w", err)
 		}
 	}
+	importRows := []db.XXMIImporterRow{}
+	packageRows := []db.XXMIPackageRow{}
 	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI"} {
 		info := parsed.Importers[key]
 		folder := info.Importer.ImporterFolder
@@ -160,24 +162,20 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 		if err != nil {
 			return err
 		}
-		if err := client.XXMIImporters.Upsert(ctx, key, string(data)); err != nil {
-			return err
-		}
+		importRows = append(importRows, db.XXMIImporterRow{Key: key, Config: string(data)})
 		pkg := parsed.Packages.Packages[key]
 		if pkg.LatestVersion != "" {
 			latest := normalizeVersion(pkg.LatestVersion)
-			if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			packageRows = append(packageRows, db.XXMIPackageRow{
 				Package: "importer:" + key, LatestVersion: &latest,
 				LatestReleaseNotes: &pkg.LatestReleaseNotes, UpdateCheckTime: int64(pkg.UpdateCheckTime),
-			}); err != nil {
-				return err
-			}
+			})
 		}
 	}
 	rootValue := root
 	autoUpdateValue := strconv.FormatBool(autoUpdate)
 	prereleasesValue := strconv.FormatBool(includePrereleases)
-	return client.Settings.UpsertMany(ctx, map[string]*string{
+	return client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, map[string]*string{
 		"xxmi_root":                &rootValue,
 		"xxmi_auto_update":         &autoUpdateValue,
 		"xxmi_include_prereleases": &prereleasesValue,
