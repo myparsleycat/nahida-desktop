@@ -123,6 +123,10 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 	if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
 		return err
 	}
+	progress("game-tweaks")
+	if err := initializeGameLaunch(ctx, key, cfg); err != nil {
+		return err
+	}
 	progress("pre-launch")
 	if err := runLaunchHook(ctx, cfg.RunPreLaunch, filepath.Dir(gameExe)); err != nil {
 		return err
