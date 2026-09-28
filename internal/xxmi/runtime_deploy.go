@@ -17,10 +17,11 @@ import (
 const runtimeManifestName = ".nahida-runtime.json"
 
 type runtimeManifest struct {
-	Mode       RuntimeMode       `json:"mode"`
-	Source     string            `json:"source"`
-	Files      map[string]string `json:"files"`
-	DeployedAt string            `json:"deployedAt"`
+	Mode        RuntimeMode       `json:"mode"`
+	Source      string            `json:"source"`
+	Files       map[string]string `json:"files"`
+	UserManaged map[string]string `json:"userManaged,omitempty"`
+	DeployedAt  string            `json:"deployedAt"`
 }
 
 func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) {
@@ -163,10 +164,11 @@ func deployRuntimeFiles(
 	}
 	warnings := []string{}
 	manifest := runtimeManifest{
-		Mode:       cfg.Mode,
-		Source:     sourceID,
-		Files:      map[string]string{},
-		DeployedAt: time.Now().UTC().Format(time.RFC3339),
+		Mode:        cfg.Mode,
+		Source:      sourceID,
+		Files:       map[string]string{},
+		UserManaged: map[string]string{},
+		DeployedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	backupFolder := filepath.Join(cacheRoot, "backups", key+" "+time.Now().Format("2006-01-02 15-04-05"))
 	backup := func(name string, data []byte) error {
@@ -222,8 +224,10 @@ func deployRuntimeFiles(
 			manifest.Files[name] = wantedHash
 			continue
 		}
-		if err == nil && cfg.Migoto.UnsafeMode && hashBytes(current) != previous.Files[name] {
+		if err == nil && cfg.Migoto.UnsafeMode &&
+			(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
 			warnings = append(warnings, "Preserved third-party runtime file "+name)
+			manifest.UserManaged[name] = hashBytes(current)
 			continue
 		}
 		if err == nil && hashBytes(current) != previous.Files[name] {

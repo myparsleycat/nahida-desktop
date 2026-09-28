@@ -1,0 +1,54 @@
+package xxmi
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"nahida.live/desktop/internal/db"
+)
+
+func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(t.TempDir(), "GIMI")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dll := []byte("user modified")
+	if err := os.WriteFile(filepath.Join(folder, "d3d11.dll"), dll, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AdoptUserRuntime(ctx, "GIMI"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || !cfg.Migoto.UnsafeMode {
+		t.Fatalf("unsafe mode = %t, %v", cfg.Migoto.UnsafeMode, err)
+	}
+	data, err := os.ReadFile(filepath.Join(folder, runtimeManifestName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest runtimeManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.UserManaged["d3d11.dll"] != hashBytes(dll) {
+		t.Fatalf("user managed hash = %q", manifest.UserManaged["d3d11.dll"])
+	}
+}

@@ -103,6 +103,11 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		t.Fatal("missing third-party preservation warning")
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
+	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base)
+	if err != nil || len(warnings) == 0 {
+		t.Fatalf("repeat deployment warnings = %v, error = %v", warnings, err)
+	}
+	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 }
 
 func assertFileContent(t *testing.T, path, want string) {

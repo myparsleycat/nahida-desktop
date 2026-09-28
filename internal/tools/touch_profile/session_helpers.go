@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -133,17 +134,23 @@ func writeTouchDraft(dir string, draft TouchDraft) error {
 	return writeTouchFileAtomic(filepath.Join(dir, "draft.json"), raw, 0600)
 }
 
-func (t *Service) touchUseFrameGuard(ctx context.Context) bool {
+func (t *Service) touchUseFrameGuard(ctx context.Context, sourceRoot string) bool {
 	if t.xxmi == nil {
 		return false
 	}
-	config, err := t.xxmi.GetXXMIConfig(ctx)
+	importers, err := t.xxmi.GetEnabledImporters(ctx)
 	if err != nil {
 		return false
 	}
-	packages, _ := config["Packages"].(map[string]any)
-	packageEntries, _ := packages["packages"].(map[string]any)
-	xxmiPackage, _ := packageEntries["XXMI"].(map[string]any)
-	version, _ := xxmiPackage["deployed_version"].(string)
-	return supportsTouchFrameNumberGuard(version)
+	for _, importer := range importers {
+		mods := filepath.Join(importer.ImporterFolder, "Mods")
+		relative, err := filepath.Rel(mods, sourceRoot)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+			filepath.IsAbs(relative) {
+			continue
+		}
+		version, ok := t.xxmi.DeployedLibsVersion(ctx, importer.Key)
+		return ok && supportsTouchFrameNumberGuard(version)
+	}
+	return false
 }

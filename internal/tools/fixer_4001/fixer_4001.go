@@ -2,19 +2,12 @@ package fixer4001
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -222,7 +215,7 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		t.update4001Progress("XXMI_ERR_GIMI_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMILauncherClosed(ctx); err != nil {
+	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
 		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
 	}
 	finalDestination := filepath.Join(importerPath, targetD3D11DLL)
@@ -277,7 +270,9 @@ func (t *Service) FourThousandOneFixerBuildDll(
 	if err := installFileCopies([]fileCopy{{Source: builtDLL, Target: finalDestination}}, useElevated); err != nil {
 		return t.failed4001Install(err, finalDestination, "XXMI_ERR_BUILD_FAILED")
 	}
-	t.enableUnsafeMode(ctx, input.ImporterKey)
+	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
+		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
+	}
 	t.removeDiversifierBackups(importerPath, useElevated)
 	t.update4001Progress("XXMI_BUILD_SUCCESS", "")
 	return Fixer4001Result{Success: true}
@@ -310,7 +305,7 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		t.update4001Progress("XXMI_ERR_DLL_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMILauncherClosed(ctx); err != nil {
+	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
 		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
 	}
 	access := t.fs.GetFileWriteAccess(target, importerPath)
@@ -383,7 +378,9 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		_ = removeFilePaths([]string{backupPath}, useElevated)
 		return t.failed4001Install(err, target, "XXMI_ERR_OBFUSCATE_FAILED")
 	}
-	t.enableUnsafeMode(ctx, input.ImporterKey)
+	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
+		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", err)
+	}
 	t.update4001Progress("XXMI_OBFUSCATE_SUCCESS", "")
 	if t.log != nil {
 		t.log.Info(
@@ -424,7 +421,7 @@ func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
 		t.update4001Progress("XXMI_ERR_RESTORE_BACKUP_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMILauncherClosed(ctx); err != nil {
+	if err := t.ensureXXMIMode(ctx, "", importerPath); err != nil {
 		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
 	}
 	target := filepath.Join(importerPath, targetD3D11DLL)
@@ -500,11 +497,33 @@ func (t *Service) failed4001Build(err error) Fixer4001Result {
 	return Fixer4001Result{ErrorMessage: lo.ToPtr(message)}
 }
 
-func (t *Service) ensureXXMILauncherClosed(ctx context.Context) error {
+func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath string) error {
 	if t.xxmi == nil {
 		return nil
 	}
-	return t.xxmi.EnsureLauncherClosed(ctx)
+	if importerKey == "" {
+		importers, err := t.xxmi.GetEnabledImporters(ctx)
+		if err != nil {
+			return err
+		}
+		for _, importer := range importers {
+			if strings.EqualFold(filepath.Clean(importer.ImporterFolder), filepath.Clean(importerPath)) {
+				importerKey = importer.Key
+				break
+			}
+		}
+	}
+	if importerKey == "" {
+		return nil
+	}
+	cfg, err := t.xxmi.GetImporterConfig(ctx, importerKey)
+	if err != nil {
+		return err
+	}
+	if cfg.Enabled && cfg.Mode == "legacy" {
+		return errors.New("XXMI_LEGACY_RUNTIME_UNSUPPORTED")
+	}
+	return nil
 }
 
 func existingImporterPath(input *string) (string, bool) {
@@ -770,81 +789,10 @@ func hashFile(path string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-func (t *Service) enableUnsafeMode(ctx context.Context, importerKey string) {
+func (t *Service) adoptUserRuntime(ctx context.Context, importerKey string) error {
 	if t.xxmi == nil || strings.TrimSpace(importerKey) == "" {
-		return
-	}
-	xxmiPath, err := t.xxmi.GetXXMIPath(ctx)
-	if err != nil || xxmiPath == nil {
-		return
-	}
-	configPath := filepath.Join(*xxmiPath, "XXMI Launcher Config.json")
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		return
-	}
-	var config map[string]any
-	if err := json.Unmarshal(raw, &config); err != nil {
-		t.logError(err, "4001Fixer:enableUnsafeMode")
-		return
-	}
-	importers, _ := config["Importers"].(map[string]any)
-	importer, _ := importers[importerKey].(map[string]any)
-	migoto, _ := importer["Migoto"].(map[string]any)
-	unsafeMode, exists := migoto["unsafe_mode"].(bool)
-	if !exists || unsafeMode {
-		return
+		return nil
 	}
 	t.update4001Progress("XXMI_ENABLE_UNSAFE_MODE", "")
-	signature, err := unsafeModeSignature(*xxmiPath)
-	if err != nil {
-		t.logError(err, "4001Fixer:enableUnsafeMode")
-		return
-	}
-	migoto["unsafe_mode"] = true
-	migoto["unsafe_mode_signature"] = signature
-	encoded, err := json.MarshalIndent(config, "", "    ")
-	if err == nil {
-		err = os.WriteFile(configPath, append(encoded, '\n'), 0o600)
-	}
-	if err != nil {
-		t.logError(err, "4001Fixer:enableUnsafeMode")
-	}
-}
-
-func unsafeModeSignature(xxmiPath string) (string, error) {
-	raw, err := os.ReadFile(filepath.Join(xxmiPath, "Resources", "Security", "private_key.der"))
-	if err != nil {
-		return "", err
-	}
-	der, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-	if err != nil {
-		return "", err
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(der)
-	if err != nil {
-		return "", err
-	}
-	current, err := user.Current()
-	if err != nil {
-		return "", err
-	}
-	username := current.Username
-	if index := strings.LastIndexAny(username, `\\/`); index >= 0 {
-		username = username[index+1:]
-	}
-	digest := sha256.Sum256([]byte(username))
-	var signature []byte
-	switch key := parsed.(type) {
-	case *rsa.PrivateKey:
-		signature, err = rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
-	case *ecdsa.PrivateKey:
-		signature, err = ecdsa.SignASN1(rand.Reader, key, digest[:])
-	default:
-		return "", fmt.Errorf("unsupported XXMI private key type %T", parsed)
-	}
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(signature), nil
+	return t.xxmi.AdoptUserRuntime(ctx, importerKey)
 }
