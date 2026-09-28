@@ -281,6 +281,16 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 			"texture_streaming_fixed_pool_size",
 			cfg.WWMI.TextureStreamingFixedPool,
 		)
+		if perf, ok := importer["perf_tweaks"].(map[string]any); ok {
+			if settings, ok := perf["SystemSettings"].(map[string]any); ok {
+				cfg.WWMI.PerfTweaks = make(map[string]float64, len(settings))
+				for name, value := range settings {
+					if number, ok := value.(float64); ok {
+						cfg.WWMI.PerfTweaks[name] = number
+					}
+				}
+			}
+		}
 	}
 }
 

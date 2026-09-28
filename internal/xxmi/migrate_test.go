@@ -76,12 +76,18 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 		"texture_streaming_pool_size":       1024.0,
 		"texture_streaming_limit_to_vram":   false,
 		"texture_streaming_fixed_pool_size": false,
+		"perf_tweaks": map[string]any{"SystemSettings": map[string]any{
+			"r.Streaming.HLODStrategy":                         3.0,
+			"wp.Runtime.KuroRuntimeStreamingRangeOverallScale": 0.75,
+		}},
 	}, nil)
 	got := cfg.WWMI
 	if got.MeshLODDistanceBaseFOV != 180 || got.MeshLODDistanceScale != 0.75 ||
 		got.MeshLODDistanceOffset != -8.5 || got.TextureStreamingBoost != 12.5 ||
 		got.TextureStreamingMinBoost != 1.25 || got.TextureStreamingUseAll ||
-		got.TextureStreamingPoolSize != 1024 || got.TextureStreamingLimitVRAM || got.TextureStreamingFixedPool {
+		got.TextureStreamingPoolSize != 1024 || got.TextureStreamingLimitVRAM || got.TextureStreamingFixedPool ||
+		len(got.PerfTweaks) != 2 || got.PerfTweaks["r.Streaming.HLODStrategy"] != 3 ||
+		got.PerfTweaks["wp.Runtime.KuroRuntimeStreamingRangeOverallScale"] != 0.75 {
 		t.Fatalf("imported WWMI settings = %+v", got)
 	}
 }
