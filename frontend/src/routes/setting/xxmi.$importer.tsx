@@ -624,6 +624,39 @@ function RouteComponent() {
           />
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("page.setting.xxmi.builtin.maintenance")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClickPromise={async () => {
+              try {
+                const warnings = await XXMI.RepairRuntime(importer);
+                toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
+                warnings?.forEach((warning) => toast.warning(warning));
+              } catch (error) {
+                toast.error(toErrorMessage(error));
+              }
+            }}
+          >
+            {t("page.setting.xxmi.builtin.repairRuntime")}
+          </Button>
+          <Button
+            variant="outline"
+            onClickPromise={async () => {
+              try {
+                await XXMI.OpenImporterFolder(importer);
+              } catch (error) {
+                toast.error(toErrorMessage(error));
+              }
+            }}
+          >
+            {t("page.setting.xxmi.builtin.openImporterFolder")}
+          </Button>
+        </CardContent>
+      </Card>
       {launchGuardDialog}
     </main>
   );

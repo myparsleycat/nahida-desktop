@@ -1981,7 +1981,7 @@
       },
       "xxmi": {
         "builtin": {
-          "detectGame": "게임 폴더 감지", "noGameFolders": "게임 폴더를 찾지 못했습니다. 경로를 직접 입력하세요.",
+          "detectGame": "게임 폴더 감지", "noGameFolders": "게임 폴더를 찾지 못했습니다. 경로를 직접 입력하세요.", "maintenance": "유지보수", "repairRuntime": "런타임 복구", "runtimeRepaired": "런타임을 복구했습니다", "openImporterFolder": "임포터 폴더 열기",
           "gameTweaks": "게임 설정", "configureGame": "게임 설정 조정", "unlockFPS": "FPS 제한 해제", "fpsTarget": "목표 FPS", "enableHDR": "HDR 활성화", "disableDCR": "동적 캐릭터 해상도 비활성화",
           "forceMaxLODBias": "최고 텍스처 품질 강제", "applyPerfTweaks": "성능 조정 적용", "disableWoundedFX": "부상 효과 비활성화",
           "checkUpdates": "업데이트 확인", "installUpdates": "업데이트 설치", "updatesInstalled": "업데이트를 설치했습니다",
