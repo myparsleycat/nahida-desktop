@@ -64,7 +64,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if !force && state != nil && time.Since(time.Unix(state.UpdateCheckTime, 0)) < updateCheckInterval {
 			continue
 		}
-		releases, err := x.ListReleases(ctx, pkg)
+		releases, err := x.listReleases(ctx, pkg, true)
 		if err != nil {
 			if errors.Is(err, github.ErrRateLimited) {
 				break

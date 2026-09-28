@@ -52,6 +52,10 @@ func releaseInfo(release github.Release) ReleaseInfo {
 }
 
 func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, error) {
+	return x.listReleases(ctx, pkg, false)
+}
+
+func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]ReleaseInfo, error) {
 	var repo github.Repo
 	switch pkg {
 	case "xxmi-libs":
@@ -69,7 +73,7 @@ func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, err
 		}
 		repo = spec.repo
 	}
-	releases, err := x.github.CachedReleases(ctx, repo, false)
+	releases, err := x.github.CachedReleases(ctx, repo, refresh)
 	if err != nil {
 		return nil, err
 	}
