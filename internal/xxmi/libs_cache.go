@@ -22,6 +22,9 @@ type xxmiLibraryManifest struct {
 }
 
 func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid XXMI libraries version")

@@ -19,6 +19,9 @@ type InstallImporterPackageInput struct {
 }
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) (returnErr error) {
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+
 	stage := "validate-input"
 	defer func() {
 		if returnErr != nil {

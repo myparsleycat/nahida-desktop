@@ -93,6 +93,7 @@ type parsedConfig struct {
 
 type XXMI struct {
 	mu          sync.RWMutex
+	packageMu   sync.Mutex
 	client      *db.Client
 	log         *infra.Log
 	github      *github.Client

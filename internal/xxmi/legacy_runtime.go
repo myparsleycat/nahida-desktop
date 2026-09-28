@@ -28,6 +28,9 @@ type LegacyRuntimeSource struct {
 }
 
 func (x *XXMI) UpdateLegacyRuntime(ctx context.Context) (string, error) {
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+
 	file, err := os.CreateTemp("", "nahida-legacy-*.zip")
 	if err != nil {
 		return "", err
@@ -47,6 +50,9 @@ func (x *XXMI) UpdateLegacyRuntime(ctx context.Context) (string, error) {
 }
 
 func (x *XXMI) ImportLegacyRuntimeZip(ctx context.Context, zipPath string) (string, error) {
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+
 	return importLegacyRuntimeZip(ctx, zipPath, "")
 }
 
