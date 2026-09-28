@@ -24,74 +24,6 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 	return f(request)
 }
 
-func TestSavePathLoadsConfigManifestAndEnabledImporters(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	manifestDir := filepath.Join(root, "Resources", "Packages", "XXMI")
-	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(manifestDir, "Manifest.json"),
-		[]byte(`{"version":"v1.2.3"}`),
-		0o644,
-	); err != nil {
-		t.Fatal(err)
-	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data.XXMIPath == nil || *data.XXMIPath != root || data.DLLVersion == nil || *data.DLLVersion != "v1.2.3" {
-		t.Fatalf("data = %+v", data)
-	}
-	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].Key != "GIMI" ||
-		data.EnabledImporters[0].ImporterFolder != filepath.Join(root, "GIMI") {
-		t.Fatalf("enabled importers = %+v", data.EnabledImporters)
-	}
-}
-
-func TestSavePathEmitsRendererReloadAfterStateUpdate(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	var events []string
-	service := NewWithOptions(Options{EventEmit: func(name string, _ ...any) {
-		events = append(events, name)
-	}})
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 || events[0] != "renderer:reload" {
-		t.Fatalf("events = %v", events)
-	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil || data.XXMIPath == nil || *data.XXMIPath != root {
-		t.Fatalf("data = %+v, err=%v", data, err)
-	}
-}
-
 func TestFindXXMIPathPrefersValidAppDataCandidate(t *testing.T) {
 	appData := t.TempDir()
 	t.Setenv("APPDATA", appData)
@@ -165,40 +97,6 @@ func TestSavePathRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
-func TestLoadTreatsCorruptSavedConfigAsUnconfigured(t *testing.T) {
-	ctx := context.Background()
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(ctx); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(ctx, root); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), []byte(`{"Launcher":`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := service.GetXXMIData(ctx)
-	if err != nil {
-		t.Fatalf("GetXXMIData returned corrupt-config error: %v", err)
-	}
-	if data.XXMIPath == nil || *data.XXMIPath != root || data.XXMIConfig != nil || len(data.EnabledImporters) != 0 {
-		t.Fatalf("data after corrupt config = %#v", data)
-	}
-	config, err := service.GetXXMIConfig(ctx)
-	if err != nil || config != nil {
-		t.Fatalf("GetXXMIConfig = %#v, %v; want nil, nil", config, err)
-	}
-}
-
 func TestValidateXXMIConfigMatchesRequiredElectronFields(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -254,41 +152,6 @@ func TestValidateXXMIConfigMatchesRequiredElectronFields(t *testing.T) {
 				t.Fatal("invalid config was accepted")
 			}
 		})
-	}
-}
-
-func TestSavePathAcceptsEmptyImporterFolderAndResolvesItToRoot(t *testing.T) {
-	ctx := context.Background()
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(ctx); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	config := xxmiTestConfig()
-	gimi := config["Importers"].(map[string]any)["GIMI"].(map[string]any)
-	gimi["Importer"].(map[string]any)["importer_folder"] = ""
-	raw, err := json.Marshal(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(ctx, root); err != nil {
-		t.Fatal(err)
-	}
-	data, err := service.GetXXMIData(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].ImporterFolder != root {
-		t.Fatalf("enabled importers = %#v, want GIMI rooted at %q", data.EnabledImporters, root)
 	}
 }
 

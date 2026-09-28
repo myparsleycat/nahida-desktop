@@ -58,3 +58,41 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 		t.Fatalf("hunting runtime = %+v, err = %v", hunting, err)
 	}
 }
+
+func TestBuiltinConsumersIgnoreUnimportedExternalLauncher(t *testing.T) {
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	writeXXMITestConfig(t, external)
+	if err := client.Settings.Upsert(ctx, xxmiPathKey, &external); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	service := New()
+	service.UseClient(client)
+	if err := service.SetRoot(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+	path, err := service.GetXXMIPath(ctx)
+	if err != nil || path == nil || *path != root {
+		t.Fatalf("built-in root = %v, %v", path, err)
+	}
+	importers, err := service.GetEnabledImporters(ctx)
+	if err != nil || len(importers) != 0 {
+		t.Fatalf("unimported external importers = %+v, %v", importers, err)
+	}
+	data, err := service.GetXXMIData(ctx)
+	if err != nil || data.XXMIPath == nil || *data.XXMIPath != root || len(data.EnabledImporters) != 0 {
+		t.Fatalf("built-in data = %+v, %v", data, err)
+	}
+	if _, err := service.ResolveHuntingRuntime(ctx, "GIMI"); err == nil {
+		t.Fatal("unimported external importer used for hunting")
+	}
+}

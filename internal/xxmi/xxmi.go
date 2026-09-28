@@ -142,25 +142,21 @@ func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
 }
 
 func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
-	enabled, err := x.builtinEnabledImporters(ctx)
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return nil, errors.New("XXMI settings store is not configured")
+	}
+	root, err := client.Settings.GetValue(ctx, "xxmi_root")
 	if err != nil {
 		return nil, err
 	}
-	if len(enabled) > 0 {
-		x.mu.RLock()
-		client := x.client
-		x.mu.RUnlock()
-		root, err := client.Settings.GetValue(ctx, "xxmi_root")
-		if err != nil {
-			return nil, err
-		}
-		if root != nil && *root != "" {
-			return root, nil
-		}
-		fallback, err := xxmiCacheRoot()
-		return &fallback, err
+	if root != nil && *root != "" {
+		return root, nil
 	}
-	return x.externalLauncherPath(ctx)
+	fallback, err := xxmiCacheRoot()
+	return &fallback, err
 }
 
 func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
@@ -254,36 +250,15 @@ func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
 	if err != nil {
 		return Data{}, err
 	}
-	if len(builtin) > 0 {
-		root, err := x.GetXXMIPath(ctx)
-		if err != nil {
-			return Data{}, err
-		}
-		return Data{XXMIPath: root, EnabledImporters: builtin, XXMIConfig: map[string]any{}}, nil
-	}
-	if err := x.load(ctx); err != nil {
+	root, err := x.GetXXMIPath(ctx)
+	if err != nil {
 		return Data{}, err
 	}
-	x.mu.RLock()
-	path := cloneString(x.path)
-	config := cloneMap(x.config)
-	enabled := x.enabledImportersLocked()
-	x.mu.RUnlock()
-	return Data{XXMIPath: path, DLLVersion: dllVersion(path), EnabledImporters: enabled, XXMIConfig: config}, nil
+	return Data{XXMIPath: root, EnabledImporters: builtin, XXMIConfig: map[string]any{}}, nil
 }
 
 func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
-	builtin, err := x.builtinEnabledImporters(ctx)
-	if err != nil || len(builtin) > 0 {
-		return builtin, err
-	}
-	if err := x.load(ctx); err != nil {
-		return nil, err
-	}
-	x.mu.RLock()
-	out := x.enabledImportersLocked()
-	x.mu.RUnlock()
-	return out, nil
+	return x.builtinEnabledImporters(ctx)
 }
 
 // ResolveHuntingRuntime returns the active importer's game and INI metadata.
@@ -308,27 +283,6 @@ func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (H
 		}
 		return HuntingRuntime{ImporterKey: importer.Key, ImporterFolder: importer.ImporterFolder,
 			INIPath: filepath.Join(importer.ImporterFolder, "d3dx.ini"), GameEXENames: slices.Clone(names)}, nil
-	}
-	if err := x.load(ctx); err != nil {
-		return HuntingRuntime{}, err
-	}
-
-	wanted := strings.TrimSpace(importerKey)
-	x.mu.RLock()
-	defer x.mu.RUnlock()
-	for key, importer := range x.parsed.Importers {
-		if !strings.EqualFold(key, wanted) {
-			continue
-		}
-		packageInfo, enabled := x.parsed.Packages.Packages[key]
-		if !enabled || strings.TrimSpace(packageInfo.LatestVersion) == "" {
-			return HuntingRuntime{}, fmt.Errorf("importer %q is not enabled", key)
-		}
-		folder := x.importerFolderLocked(key)
-		return HuntingRuntime{
-			ImporterKey: key, ImporterFolder: folder, INIPath: filepath.Join(folder, "d3dx.ini"),
-			GameEXENames: slices.Clone(importer.Importer.GameEXENames),
-		}, nil
 	}
 	return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
 }
@@ -394,38 +348,6 @@ func (x *XXMI) load(ctx context.Context) error {
 	x.parsed = parsed
 	x.mu.Unlock()
 	return nil
-}
-
-func (x *XXMI) enabledImportersLocked() []EnabledImporter {
-	out := make([]EnabledImporter, 0, len(x.parsed.Importers))
-	keys := make([]string, 0, len(x.parsed.Importers))
-	for key := range x.parsed.Importers {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	for _, key := range keys {
-		packageInfo, ok := x.parsed.Packages.Packages[key]
-		if !ok || strings.TrimSpace(packageInfo.LatestVersion) == "" {
-			continue
-		}
-		folder := x.importerFolderLocked(key)
-		var installed *string
-		if spec, ok := lookupImporterPackage(key); ok {
-			installed = readImporterVersion(folder, spec)
-		}
-		out = append(out, EnabledImporter{
-			Key: key, Mode: RuntimeXXMI, ImporterFolder: folder, InstalledVersion: installed, PackageInfo: packageInfo,
-		})
-	}
-	return out
-}
-
-func (x *XXMI) importerFolderLocked(key string) string {
-	folder := x.parsed.Importers[key].Importer.ImporterFolder
-	if !filepath.IsAbs(folder) && x.path != nil {
-		folder = filepath.Join(*x.path, folder)
-	}
-	return folder
 }
 
 func readAndValidateConfig(path string) (map[string]any, parsedConfig, error) {
