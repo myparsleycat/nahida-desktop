@@ -112,11 +112,18 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 	if err != nil {
 		return err
 	}
-	game, err := x.ValidateGameFolder(ctx, importer, cfg.GameFolder)
-	if err != nil {
-		return x.reportLaunchGuard(err, "clear-launch-blockers", importer, cfg.GameFolder)
+	spec, ok := lookupImporterPackage(importer)
+	if !ok {
+		return errors.New("unknown XXMI importer")
 	}
-	gameExecutable := game.ExePath
+	gameExecutable := configuredGameExecutable(cfg.GameFolder, spec.gameExeNames)
+	if importer == "WWMI" && cfg.GameFolder != "" {
+		game, err := x.ValidateGameFolder(ctx, importer, cfg.GameFolder)
+		if err != nil {
+			return x.reportLaunchGuard(err, "clear-launch-blockers", importer, cfg.GameFolder)
+		}
+		gameExecutable = game.ExePath
+	}
 	if err := applyLaunchFixes(ctx, importer, gameExecutable, x); err != nil {
 		if infra.IsReportedError(err) {
 			return err
