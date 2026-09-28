@@ -16,8 +16,6 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/setting/xxmi")({ component: RouteComponent });
 
-export type XXMIData = Awaited<ReturnType<typeof XXMI.GetXXMIData>>;
-
 const importerKeys = ["GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI"] as const;
 const settingsConfig = {
   autoUpdate: "xxmi.autoUpdate",
