@@ -12,19 +12,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -41,21 +39,10 @@ const (
 
 var (
 	d3dBuildIDRE     = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-	providerRE       = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 	backupHashRE     = regexp.MustCompile(`^d3d11\.dll\.pepd-backup-([a-f0-9]{7})-\d+\.bak$`)
 	vsDevCmdEditions = []string{"Community", "Professional", "Enterprise", "Insiders", "BuildTools"}
 	vsDevCmdVersions = []string{"2025", "2022", "18", "17"}
 )
-
-type releaseCacheEntry struct {
-	versions []string
-	fetched  time.Time
-}
-
-type releaseFetchCall struct {
-	done chan struct{}
-	err  error
-}
 
 type Fixer4001State struct {
 	IsBuilding   bool    `json:"isBuilding"`
@@ -135,93 +122,20 @@ func (t *Service) FourThousandOneFixerGetProviderReleases(ctx context.Context, p
 }
 
 func (t *Service) get4001ProviderReleases(ctx context.Context, provider string, refresh bool) ([]string, error) {
-	provider = strings.TrimSpace(provider)
-	if !providerRE.MatchString(provider) {
+	repo := libsRepo(provider)
+	if repo.Validate() != nil {
 		return nil, errors.New("invalid GitHub provider")
 	}
-	t.fixerMu.Lock()
-	entry, found := t.releaseCache[provider]
-	if found && (!refresh || time.Since(entry.fetched) < time.Minute) {
-		versions := slices.Clone(entry.versions)
-		t.fixerMu.Unlock()
-		return versions, nil
-	}
-	if call := t.releaseCalls[provider]; call != nil {
-		t.fixerMu.Unlock()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-call.done:
-		}
-		t.fixerMu.Lock()
-		entry, found = t.releaseCache[provider]
-		versions := slices.Clone(entry.versions)
-		t.fixerMu.Unlock()
-		if !found {
-			return nil, call.err
-		}
-		return versions, call.err
-	}
-	call := &releaseFetchCall{done: make(chan struct{})}
-	t.releaseCalls[provider] = call
-	t.fixerMu.Unlock()
-	finish := func(versions []string, fetchErr error) ([]string, error) {
-		t.fixerMu.Lock()
-		if fetchErr == nil {
-			t.releaseCache[provider] = releaseCacheEntry{versions: slices.Clone(versions), fetched: time.Now()}
-		}
-		call.err = fetchErr
-		if t.releaseCalls[provider] == call {
-			delete(t.releaseCalls, provider)
-		}
-		close(call.done)
-		cached := slices.Clone(t.releaseCache[provider].versions)
-		t.fixerMu.Unlock()
-		if fetchErr != nil {
-			return nil, fetchErr
-		}
-		return cached, nil
-	}
-	if t.http == nil {
-		return finish(nil, errors.New("4001 fixer HTTP client is not configured"))
-	}
-	rawURL := fmt.Sprintf("https://api.github.com/repos/%s/XXMI-Libs-Package/releases", provider)
-	header := make(http.Header)
-	header.Set("Accept", "application/vnd.github+json")
-	header.Set("X-GitHub-Api-Version", "2026-03-10")
-	header.Set(
-		"User-Agent",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-	)
-	response, err := t.http.Fetch(
-		ctx,
-		rawURL,
-		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
-	)
+	versions, err := t.github.ReleaseTags(ctx, repo, refresh)
 	if err != nil {
-		return finish(nil, err)
+		return nil, fmt.Errorf("failed to fetch XXMI libs releases for %s: %w", repo.Owner, err)
 	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, response.Body)
-		return finish(nil, fmt.Errorf("failed to fetch XXMI libs releases for %s: %s", provider, response.Status))
-	}
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
-		return finish(nil, err)
-	}
-	versions := make([]string, 0, len(releases))
-	for _, release := range releases {
-		name := strings.TrimSpace(release.TagName)
-		if name == "" || release.Prerelease || strings.EqualFold(name, "main") || strings.EqualFold(name, "master") {
-			continue
-		}
-		versions = append(versions, name)
-	}
-	return finish(versions, nil)
+	return versions, nil
+}
+
+// libsRepo is the XXMI-Libs-Package fork published by provider.
+func libsRepo(provider string) github.Repo {
+	return github.Repo{Owner: strings.TrimSpace(provider), Name: "XXMI-Libs-Package"}
 }
 
 func (t *Service) FourThousandOneFixerUpdateReleases(ctx context.Context) error {
@@ -326,7 +240,7 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		t.update4001Progress("XXMI_ERR_VS_NOT_FOUND", "")
 		return result
 	}
-	if !providerRE.MatchString(strings.TrimSpace(input.Provider)) || strings.TrimSpace(input.Version) == "" {
+	if libsRepo(input.Provider).Validate() != nil || strings.TrimSpace(input.Version) == "" {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", errors.New("invalid provider or version"))
 	}
 	buildID, err := newID()
@@ -601,20 +515,17 @@ func existingImporterPath(input *string) (string, bool) {
 }
 
 func (t *Service) prepareD3DSource(ctx context.Context, tempDir, provider, version string) (string, error) {
-	if t.download == nil || t.archive == nil {
+	if t.archive == nil || !t.github.Configured() {
 		return "", errors.New("4001 fixer download/archive dependencies are not configured")
 	}
 	t.update4001Progress("XXMI_DOWNLOAD_REPO", "")
-	rawURL := fmt.Sprintf("https://github.com/%s/XXMI-Libs-Package/archive/refs/tags/%s.zip",
-		provider, url.PathEscape(strings.TrimSpace(version)))
+	repo := libsRepo(provider)
 	zipPath := filepath.Join(tempDir, "repo.zip")
-	header := make(http.Header)
-	header.Set("User-Agent", "nahida-desktop")
-	header.Set("Referer", fmt.Sprintf("https://github.com/%s/XXMI-Libs-Package", provider))
-	if err := t.download.File(
-		ctx,
-		infra.DownloadRequest{URL: rawURL, Destination: zipPath, Header: header},
-	); err != nil {
+	if err := t.github.DownloadFile(ctx, github.FileRequest{
+		Repo:        repo,
+		URL:         github.TagArchiveURL(repo, strings.TrimSpace(version)),
+		Destination: zipPath,
+	}); err != nil {
 		return "", err
 	}
 	t.update4001Progress("XXMI_EXTRACT_REPO", "")

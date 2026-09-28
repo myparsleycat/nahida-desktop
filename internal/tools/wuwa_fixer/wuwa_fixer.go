@@ -3,12 +3,12 @@ package wuwafixer
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,39 +22,34 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
 
 const (
-	wuwaReleasesLatestURL = "https://api.github.com/repos/Moonholder/Wuwa_Mod_Fixer/releases/latest"
-	wuwaConfigURL         = "https://raw.githubusercontent.com/Moonholder/Wuwa_Mod_Fixer/refs/heads/main/config.json"
-	wuwaFixerDirName      = "wuwa-mod-fixer"
-	wuwaCheckCooldown     = 2 * time.Minute
-	wuwaAutoUpdateEvery   = time.Hour
+	wuwaConfigURL       = "https://raw.githubusercontent.com/Moonholder/Wuwa_Mod_Fixer/refs/heads/main/config.json"
+	wuwaFixerDirName    = "wuwa-mod-fixer"
+	wuwaCheckCooldown   = 2 * time.Minute
+	wuwaAutoUpdateEvery = time.Hour
 
 	wuwaLastCheckKey        = "github:wuwa-mod-fixer:last-check"
 	wuwaInstalledVersionKey = "mod_tools:wuwa-mod-fixer:installed-version"
 	wuwaBinaryPathKey       = "mod_tools:wuwa-mod-fixer:binary-path"
 	wuwaLatestReleaseKey    = "mod_tools:wuwa-mod-fixer:latest-release"
-	githubCoreRateKey       = "github:core-rate"
 	wuwaMaxDownloadSize     = 512 << 20
+	wuwaMaxConfigSize       = 8 << 20
 )
 
 var (
 	wuwaBackupRE        = regexp.MustCompile(`(?i)^(.*)_(\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}(?:\.\d{3})?)\.BAK$`)
 	wuwaBinaryRE        = regexp.MustCompile(`(?i)^Wuwa_Mod_Fixer_v.+\.exe$`)
 	wuwaBinaryVersionRE = regexp.MustCompile(`(?i)^Wuwa_Mod_Fixer_(v[\d.]+)\.exe$`)
+
+	wuwaRepo = github.Repo{Owner: "Moonholder", Name: "Wuwa_Mod_Fixer"}
 )
 
-type GitHubRateState struct {
-	Limit     int64  `json:"limit"`
-	Remaining int64  `json:"remaining"`
-	Reset     int64  `json:"reset"`
-	Used      int64  `json:"used"`
-	Resource  string `json:"resource"`
-	UpdatedAt string `json:"updatedAt"`
-}
+type GitHubRateState = infra.GitHubRateState
 
 type WuwaFixerOptions struct {
 	DerivedHashes bool   `json:"derivedHashes"`
@@ -118,15 +113,6 @@ type wuwaLatestReleaseCache struct {
 	CheckedAt string          `json:"checkedAt"`
 }
 
-type wuwaReleaseResponse struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
-		Name               string  `json:"name"`
-		BrowserDownloadURL string  `json:"browser_download_url"`
-		Digest             *string `json:"digest"`
-	} `json:"assets"`
-}
-
 type wuwaRefreshResult struct {
 	LatestRelease   *wuwaLatestReleaseCache
 	RateState       *GitHubRateState
@@ -142,7 +128,7 @@ type wuwaInstalledInfo struct {
 }
 
 func (t *Service) WuwaFixerGetRateStatus(ctx context.Context) (*GitHubRateState, error) {
-	return t.wuwaGetRateState(ctx)
+	return t.github.RateState(ctx)
 }
 
 func (t *Service) WuwaFixerGetStatus(ctx context.Context, importer *string) (WuwaFixerStatus, error) {
@@ -150,7 +136,7 @@ func (t *Service) WuwaFixerGetStatus(ctx context.Context, importer *string) (Wuw
 	if err != nil {
 		return WuwaFixerStatus{}, err
 	}
-	rate, err := t.wuwaGetRateState(ctx)
+	rate, err := t.github.RateState(ctx)
 	if err != nil {
 		return WuwaFixerStatus{}, err
 	}
@@ -161,7 +147,7 @@ func (t *Service) WuwaFixerGetStatus(ctx context.Context, importer *string) (Wuw
 	status := WuwaFixerStatus{
 		Supported: t.wuwaSupportedImporter(importer), Installed: installed.Exists,
 		InstalledVersion: installed.Version, ConfigVersion: t.wuwaLocalConfigVersion(),
-		BinaryPath: installed.BinaryPath, RateState: rate, RateLimited: wuwaRateLimited(rate),
+		BinaryPath: installed.BinaryPath, RateState: rate, RateLimited: t.github.IsRateLimited(rate),
 	}
 	if latest != nil {
 		status.LatestVersion = &latest.Version
@@ -225,20 +211,17 @@ func (t *Service) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus
 	finalPath := filepath.Join(toolDir, release.Asset.Name)
 	defer func() { t.reportCleanup(os.Remove(tempPath), "WuwaFixerInstallOrUpdate") }()
 
-	body, responseHeader, err := t.wuwaFetchBytes(ctx, release.Asset.BrowserDownloadURL, nil, wuwaMaxDownloadSize)
-	if responseHeader != nil {
-		_, rateErr := t.wuwaCaptureRate(ctx, responseHeader)
-		t.reportWuwaRecovery(rateErr, "save-rate")
+	expected, err := parseWuwaDigest(release.Asset.Digest)
+	if err != nil {
+		return WuwaFixerStatus{}, err
 	}
+	body, err := t.github.FetchFile(ctx, wuwaRepo, release.Asset.BrowserDownloadURL, wuwaMaxDownloadSize)
 	if err != nil {
 		//nolint:staticcheck // Electron contract text.
-		return WuwaFixerStatus{}, fmt.Errorf(
-			"Failed to download Wuwa Mod Fixer: %w",
-			err,
-		)
+		return WuwaFixerStatus{}, fmt.Errorf("Failed to download Wuwa Mod Fixer: %w", err)
 	}
-	if err := verifyWuwaDigest(body, release.Asset.Digest); err != nil {
-		return WuwaFixerStatus{}, err
+	if sum := sha256.Sum256(body); expected != nil && subtle.ConstantTimeCompare(sum[:], expected) != 1 {
+		return WuwaFixerStatus{}, infra.ContractError("Wuwa Mod Fixer download digest mismatch")
 	}
 	if err := os.WriteFile(tempPath, body, 0o700); err != nil {
 		return WuwaFixerStatus{}, fmt.Errorf("write Wuwa Mod Fixer: %w", err)
@@ -500,7 +483,7 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
-	rate, err := t.wuwaGetRateState(ctx)
+	rate, err := t.github.RateState(ctx)
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
@@ -509,24 +492,21 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 		return wuwaRefreshResult{
 			LatestRelease: cached,
 			RateState:     rate,
-			RateLimited:   wuwaRateLimited(rate),
+			RateLimited:   t.github.IsRateLimited(rate),
 			NextCheckAt:   &next,
 		}, nil
 	}
-	if rate == nil {
-		rate = t.wuwaRefreshRateState(ctx)
-	}
-	if wuwaRateLimited(rate) {
-		next := time.Unix(rate.Reset, 0).UTC().Format(time.RFC3339Nano)
-		return wuwaRefreshResult{LatestRelease: cached, RateState: rate, RateLimited: true, NextCheckAt: &next}, nil
-	}
-	header := make(http.Header)
-	header.Set("Accept", "application/vnd.github+json")
-	body, responseHeader, err := t.wuwaFetchBytes(ctx, wuwaReleasesLatestURL, header, 8<<20)
-	if responseHeader != nil {
-		var rateErr error
-		rate, rateErr = t.wuwaCaptureRate(ctx, responseHeader)
-		t.reportWuwaRecovery(rateErr, "save-rate")
+
+	release, err := t.github.LatestRelease(ctx, wuwaRepo)
+	var rateErr *github.RateLimitError
+	if errors.As(err, &rateErr) {
+		next := mustRFC3339(rateErr.ResetAt())
+		return wuwaRefreshResult{
+			LatestRelease: cached,
+			RateState:     rateErr.State,
+			RateLimited:   true,
+			NextCheckAt:   &next,
+		}, nil
 	}
 	if err != nil {
 		//nolint:staticcheck // Electron contract text.
@@ -535,14 +515,13 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 			err,
 		)
 	}
-	var payload wuwaReleaseResponse
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return wuwaRefreshResult{}, fmt.Errorf("decode Wuwa Mod Fixer release: %w", err)
-	}
-	latest, err := parseWuwaLatestRelease(payload)
+	latest, err := parseWuwaLatestRelease(release)
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
+	rate, err = t.github.RateState(ctx)
+	t.reportWuwaRecovery(err, "read-rate")
+
 	now := time.Now().UTC()
 	latest.CheckedAt = now.Format(time.RFC3339Nano)
 	raw, _ := json.Marshal(latest)
@@ -556,10 +535,24 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 	return wuwaRefreshResult{
 		LatestRelease:   &latest,
 		RateState:       rate,
-		RateLimited:     wuwaRateLimited(rate),
+		RateLimited:     t.github.IsRateLimited(rate),
 		CheckedRemotely: true,
 		NextCheckAt:     &next,
 	}, nil
+}
+
+// parseWuwaDigest decodes the asset's optional GitHub "sha256:<hex>" digest
+// before the download starts, so an unsupported digest fails fast.
+func parseWuwaDigest(digest *string) ([]byte, error) {
+	if digest == nil || *digest == "" {
+		return nil, nil
+	}
+	algorithm, value, _ := strings.Cut(*digest, ":")
+	expected, err := hex.DecodeString(value)
+	if !strings.EqualFold(algorithm, "sha256") || err != nil || len(expected) != sha256.Size {
+		return nil, infra.ContractError("Unsupported Wuwa Mod Fixer digest format")
+	}
+	return expected, nil
 }
 
 func (t *Service) wuwaLatestReleaseForInstall(ctx context.Context) (*wuwaLatestReleaseCache, error) {
@@ -588,7 +581,7 @@ func (t *Service) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		return "", err
 	}
-	body, _, err := t.wuwaFetchBytes(ctx, wuwaConfigURL, nil, 8<<20)
+	body, err := t.github.FetchFile(ctx, wuwaRepo, wuwaConfigURL, wuwaMaxConfigSize)
 	if err != nil {
 		//nolint:staticcheck // Electron contract text.
 		return "", fmt.Errorf(
@@ -761,126 +754,7 @@ func (t *Service) wuwaGetCachedLatestRelease(ctx context.Context) (*wuwaLatestRe
 	return &release, nil
 }
 
-func (t *Service) wuwaGetRateState(ctx context.Context) (*GitHubRateState, error) {
-	raw, err := t.getAppState(ctx, githubCoreRateKey)
-	if err != nil || raw == nil {
-		return nil, err
-	}
-	var state GitHubRateState
-	t.reportWuwaRecovery(json.Unmarshal([]byte(*raw), &state), "decode-rate-cache")
-	if state.Limit == 0 && state.Remaining == 0 && state.Reset == 0 && state.Used == 0 && state.Resource == "" {
-		return nil, nil
-	}
-	return &state, nil
-}
-
-func (t *Service) wuwaRefreshRateState(ctx context.Context) *GitHubRateState {
-	body, responseHeader, err := t.wuwaFetchBytes(
-		ctx,
-		"https://api.github.com/rate_limit",
-		http.Header{"Accept": []string{"application/vnd.github+json"}},
-		2<<20,
-	)
-	if responseHeader != nil {
-		if state, captureErr := t.wuwaCaptureRate(ctx, responseHeader); captureErr == nil && state != nil {
-			return state
-		}
-	}
-	if err != nil {
-		t.reportWuwaRecovery(err, "refresh-rate")
-		return nil
-	}
-	var payload struct {
-		Rate *GitHubRateState `json:"rate"`
-	}
-	if decodeErr := json.Unmarshal(body, &payload); decodeErr != nil || payload.Rate == nil {
-		if decodeErr == nil {
-			decodeErr = errors.New("missing GitHub rate response fields")
-		}
-		t.reportWuwaRecovery(decodeErr, "decode-rate-response")
-		return nil
-	}
-	payload.Rate.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if payload.Rate.Resource == "" {
-		payload.Rate.Resource = "core"
-	}
-	raw, _ := json.Marshal(payload.Rate)
-	t.reportWuwaRecovery(t.setAppState(ctx, githubCoreRateKey, string(raw)), "save-rate-cache")
-	return payload.Rate
-}
-
-func (t *Service) wuwaCaptureRate(ctx context.Context, header http.Header) (*GitHubRateState, error) {
-	parse := func(name string) (int64, bool) {
-		value := header.Get(name)
-		if value == "" {
-			return 0, false
-		}
-		number, err := strconv.ParseInt(value, 10, 64)
-		return number, err == nil
-	}
-	limit, okLimit := parse("X-RateLimit-Limit")
-	remaining, okRemaining := parse("X-RateLimit-Remaining")
-	reset, okReset := parse("X-RateLimit-Reset")
-	used, okUsed := parse("X-RateLimit-Used")
-	if !okLimit || !okRemaining || !okReset || !okUsed {
-		return nil, nil
-	}
-	resource := header.Get("X-RateLimit-Resource")
-	if resource == "" {
-		resource = "core"
-	}
-	state := &GitHubRateState{
-		Limit:     limit,
-		Remaining: remaining,
-		Reset:     reset,
-		Used:      used,
-		Resource:  resource,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	raw, _ := json.Marshal(state)
-	if err := t.setAppState(ctx, githubCoreRateKey, string(raw)); err != nil {
-		return nil, err
-	}
-	return state, nil
-}
-
-func (t *Service) wuwaFetchBytes(
-	ctx context.Context,
-	rawURL string,
-	header http.Header,
-	maxSize int64,
-) ([]byte, http.Header, error) {
-	if t.http == nil {
-		return nil, nil, errors.New("tools HTTP client is not configured")
-	}
-	response, err := t.http.Fetch(
-		ctx,
-		rawURL,
-		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	responseHeader := response.Header.Clone()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		return nil, responseHeader, fmt.Errorf(
-			"HTTP %d",
-			response.StatusCode,
-		)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxSize+1))
-	if err != nil {
-		return nil, responseHeader, err
-	}
-	if int64(len(data)) > maxSize {
-		return nil, responseHeader, fmt.Errorf("response exceeds %d bytes", maxSize)
-	}
-	return data, responseHeader, nil
-}
-
-func parseWuwaLatestRelease(payload wuwaReleaseResponse) (wuwaLatestReleaseCache, error) {
+func parseWuwaLatestRelease(payload github.Release) (wuwaLatestReleaseCache, error) {
 	if payload.TagName == "" {
 		return wuwaLatestReleaseCache{}, infra.ContractError("Latest Wuwa Mod Fixer release is missing tag_name")
 	}
@@ -891,7 +765,7 @@ func parseWuwaLatestRelease(payload wuwaReleaseResponse) (wuwaLatestReleaseCache
 				Asset: wuwaLatestAsset{
 					Name:               asset.Name,
 					BrowserDownloadURL: asset.BrowserDownloadURL,
-					Digest:             asset.Digest,
+					Digest:             lo.EmptyableToPtr(asset.Digest),
 				},
 			}, nil
 		}
@@ -1005,21 +879,6 @@ func copyRegularFile(source, target string) (returnErr error) {
 	return platform.ReplaceAtomic(tempPath, target)
 }
 
-func verifyWuwaDigest(data []byte, digest *string) error {
-	if digest == nil || *digest == "" {
-		return nil
-	}
-	algorithm, expected, ok := strings.Cut(*digest, ":")
-	if !ok || !strings.EqualFold(algorithm, "sha256") || expected == "" {
-		return infra.ContractError("Unsupported Wuwa Mod Fixer digest format")
-	}
-	sum := sha256.Sum256(data)
-	if !strings.EqualFold(hex.EncodeToString(sum[:]), expected) {
-		return infra.ContractError("Wuwa Mod Fixer download digest mismatch")
-	}
-	return nil
-}
-
 func parseWuwaConfigVersion(data []byte) *string {
 	var meta wuwaConfigMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
@@ -1067,10 +926,6 @@ func compareToolVersions(left, right string) int {
 		}
 	}
 	return 0
-}
-
-func wuwaRateLimited(state *GitHubRateState) bool {
-	return state != nil && state.Remaining <= 0 && time.Unix(state.Reset, 0).After(time.Now())
 }
 
 func parseRFC3339(value string) time.Time {

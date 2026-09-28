@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	zzmiengine "nahida.live/desktop/internal/tools/zzmi"
@@ -27,7 +26,6 @@ import (
 
 const (
 	zzmiFixerDirName      = "zzmi-mod-fixer"
-	zzmiLatestReleaseURL  = "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/releases/latest"
 	zzmiRulesFileName     = "rules.json.zst"
 	zzmiRulesManifestName = "rules.manifest.json"
 	zzmiRulesCacheDirName = "rules"
@@ -36,6 +34,8 @@ const (
 	zzmiCheckCooldown     = 1 * time.Hour
 	zzmiLatestReleaseKey  = "mod_tools:zzmi-mod-fixer:latest-release"
 )
+
+var zzmiRepo = github.Repo{Owner: "Vonksdesu", Name: "ZZZ-Mod-Fixer"}
 
 type ZZMIFixerRuleStatus struct {
 	ActiveSource          string  `json:"activeSource"`
@@ -129,31 +129,6 @@ type zzmiLatestRelease struct {
 	CheckedAt string            `json:"checkedAt"`
 }
 
-type zzmiReleaseResponse struct {
-	TagName     string `json:"tag_name"`
-	ZipballURL  string `json:"zipball_url"`
-	PublishedAt string `json:"published_at"`
-}
-
-type zzmiGitObject struct {
-	Object struct {
-		Type string `json:"type"`
-		SHA  string `json:"sha"`
-		URL  string `json:"url"`
-	} `json:"object"`
-	Type string `json:"type"`
-	SHA  string `json:"sha"`
-}
-
-type zzmiTreeResponse struct {
-	Truncated bool `json:"truncated"`
-	Tree      []struct {
-		Path string `json:"path"`
-		Type string `json:"type"`
-		SHA  string `json:"sha"`
-	} `json:"tree"`
-}
-
 func (t *Service) ZZMIFixerPrepare(
 	ctx context.Context,
 	targetPath string,
@@ -178,11 +153,9 @@ func (t *Service) ZZMIFixerPrepare(
 		reason := checkErr.Error()
 		status.IncompatibilityReason = &reason
 	}
-	if t.githubRate != nil {
-		rate, rateErr := t.githubRate.GetRateState(ctx)
-		t.logError(rateErr, "zzmi-read-rate")
-		status.RateLimited = t.githubRate.IsRateLimited(rate)
-	}
+	rate, rateErr := t.github.RateState(ctx)
+	t.logError(rateErr, "zzmi-read-rate")
+	status.RateLimited = t.github.IsRateLimited(rate)
 	sessions, err := t.zzmiListBackups(target)
 	if err != nil {
 		return ZZMIFixerPrepareResult{}, err
@@ -205,7 +178,7 @@ func (t *Service) ZZMIFixerActivateLatestRules(ctx context.Context) (ZZMIFixerRu
 	if err := validateZZMIZipballURL(latest.Zipball); err != nil {
 		return ZZMIFixerRuleStatus{}, err
 	}
-	data, _, err := t.zzmiFetch(ctx, latest.Zipball, zzmiMaxDownload)
+	data, err := t.github.GetBytes(ctx, latest.Zipball, zzmiMaxDownload)
 	if err != nil {
 		return ZZMIFixerRuleStatus{}, fmt.Errorf("download ZZMI rules: %w", err)
 	}
@@ -632,57 +605,24 @@ func (t *Service) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestR
 }
 
 func (t *Service) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool, error) {
-	if t.githubRate != nil {
-		allowed, _, err := t.githubRate.CanUseGitHubAPI(ctx, infra.GitHubRateCheckOptions{RefreshIfMissing: true})
-		if err != nil {
-			return nil, false, err
-		}
-		if !allowed {
-			return nil, false, errors.New("GitHub API rate limit is exhausted")
-		}
-	}
-	var release zzmiReleaseResponse
-	if err := t.zzmiFetchJSON(ctx, zzmiLatestReleaseURL, &release); err != nil {
+	release, err := t.github.LatestRelease(ctx, zzmiRepo)
+	if err != nil {
 		return nil, false, err
 	}
 	if release.TagName == "" || release.ZipballURL == "" {
 		return nil, true, errors.New("latest ZZMI release is incomplete")
 	}
-	refURL := "https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/git/ref/tags/" + url.PathEscape(release.TagName)
-	var object zzmiGitObject
-	if err := t.zzmiFetchJSON(ctx, refURL, &object); err != nil {
+	commit, err := t.github.ResolveTagCommit(ctx, zzmiRepo, release.TagName)
+	if err != nil {
 		return nil, true, err
 	}
-	commit := object.Object.SHA
-	if object.Object.Type == "tag" {
-		if !isGitHubAPIURL(object.Object.URL) {
-			return nil, true, errors.New("unsafe annotated tag URL")
-		}
-		var tag zzmiGitObject
-		if err := t.zzmiFetchJSON(ctx, object.Object.URL, &tag); err != nil {
-			return nil, true, err
-		}
-		commit = tag.Object.SHA
-		if commit == "" {
-			commit = tag.SHA
-		}
-	}
-	if !validHex(commit, 40) {
-		return nil, true, errors.New("latest ZZMI release has an invalid commit")
-	}
-	var tree zzmiTreeResponse
-	if err := t.zzmiFetchJSON(
-		ctx,
-		"https://api.github.com/repos/Vonksdesu/ZZZ-Mod-Fixer/git/trees/"+commit+"?recursive=1",
-		&tree,
-	); err != nil {
+	tree, err := t.github.Tree(ctx, zzmiRepo, commit)
+	if err != nil {
 		return nil, true, err
 	}
-	if tree.Truncated {
-		return nil, true, errors.New("latest ZZMI Git tree is truncated")
-	}
+
 	blobs := map[string]string{}
-	for _, entry := range tree.Tree {
+	for _, entry := range tree.Entries {
 		if entry.Type == "blob" && isZZMIRemapperEntry(entry.Path) {
 			blobs[entry.Path] = entry.SHA
 		}
@@ -696,53 +636,6 @@ func (t *Service) zzmiFetchLatest(ctx context.Context) (*zzmiLatestRelease, bool
 	}, true, nil
 }
 
-func (t *Service) zzmiFetchJSON(ctx context.Context, rawURL string, target any) error {
-	data, _, err := t.zzmiFetch(ctx, rawURL, 4<<20)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(data, target); err != nil {
-		return fmt.Errorf("decode GitHub response: %w", err)
-	}
-	return nil
-}
-
-func (t *Service) zzmiFetch(ctx context.Context, rawURL string, max int64) ([]byte, http.Header, error) {
-	if t.http == nil {
-		return nil, nil, errors.New("tools HTTP client is not configured")
-	}
-	response, err := t.http.Fetch(
-		ctx,
-		rawURL,
-		infra.FetchOptions{
-			Method:            http.MethodGet,
-			Header:            http.Header{"Accept": []string{"application/vnd.github+json"}},
-			DisableHTTPErrors: true,
-		},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	header := response.Header.Clone()
-	if t.githubRate != nil {
-		_, rateErr := t.githubRate.CaptureResponse(ctx, header)
-		t.logError(rateErr, "zzmi-save-rate")
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		return nil, header, fmt.Errorf("HTTP %d", response.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, max+1))
-	if err != nil {
-		return nil, header, err
-	}
-	if int64(len(data)) > max {
-		return nil, header, errors.New("ZZMI response exceeds the size limit")
-	}
-	return data, header, nil
-}
-
 func validateZZMIZipballURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") ||
@@ -750,12 +643,6 @@ func validateZZMIZipballURL(raw string) error {
 		return infra.WithCause(errors.New("unsafe ZZMI zipball URL"), err)
 	}
 	return nil
-}
-
-func isGitHubAPIURL(raw string) bool {
-	parsed, err := url.Parse(raw)
-	return err == nil && parsed.Scheme == "https" && strings.EqualFold(parsed.Host, "api.github.com") &&
-		strings.HasPrefix(parsed.Path, "/repos/Vonksdesu/ZZZ-Mod-Fixer/git/")
 }
 
 func (t *Service) zzmiBackupBase() (string, error) {

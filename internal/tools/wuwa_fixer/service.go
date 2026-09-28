@@ -11,31 +11,32 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 )
 
 type Options struct {
-	Log        *infra.Log
-	EventEmit  func(string, ...any)
-	Notify     func(title, body string) error
-	Settings   any
-	HTTP       *infra.Client
-	GitHubRate *infra.GitHubRateCoordinator
+	Log       *infra.Log
+	EventEmit func(string, ...any)
+	Notify    func(title, body string) error
+	Settings  any
+	HTTP      *infra.Client
 	// Runner gates the fixer binary so it never runs next to another fix tool.
 	Runner *fixtool.Service
+	// GitHub serves the fixer releases; nil builds one from HTTP without rate gating.
+	GitHub *github.Client
 }
 
 type Service struct {
-	log        *infra.Log
-	emit       func(string, ...any)
-	notify     func(title, body string) error
-	settings   any
-	http       *infra.Client
-	githubRate *infra.GitHubRateCoordinator
-	runner     *fixtool.Service
-	appData    *appdata.Store
-	client     *db.Client
+	log      *infra.Log
+	emit     func(string, ...any)
+	notify   func(title, body string) error
+	settings any
+	github   *github.Client
+	runner   *fixtool.Service
+	appData  *appdata.Store
+	client   *db.Client
 
 	wuwaDiagnostic infra.DiagnosticThrottle
 	wuwaMu         sync.Mutex
@@ -50,14 +51,16 @@ func NewWithOptions(opts Options) *Service {
 	if opts.Runner == nil {
 		opts.Runner = fixtool.New()
 	}
+	if opts.GitHub == nil {
+		opts.GitHub = github.New(github.Options{HTTP: opts.HTTP, Log: opts.Log})
+	}
 	return &Service{
-		log:        opts.Log,
-		emit:       opts.EventEmit,
-		notify:     opts.Notify,
-		settings:   opts.Settings,
-		http:       opts.HTTP,
-		githubRate: opts.GitHubRate,
-		runner:     opts.Runner,
+		log:      opts.Log,
+		emit:     opts.EventEmit,
+		notify:   opts.Notify,
+		settings: opts.Settings,
+		github:   opts.GitHub,
+		runner:   opts.Runner,
 	}
 }
 

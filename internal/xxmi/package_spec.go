@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"nahida.live/desktop/internal/github"
 )
 
 type importerPackageSpec struct {
 	key            string
-	owner          string
-	repo           string
+	repo           github.Repo
 	assetFormat    string
 	versionFile    string
 	versionPattern *regexp.Regexp
@@ -24,33 +25,33 @@ var (
 
 var importerPackages = map[string]importerPackageSpec{
 	"GIMI": {
-		key: "GIMI", owner: "SilentNightSound", repo: "GIMI-Package",
+		key: "GIMI", repo: github.Repo{Owner: "SilentNightSound", Name: "GIMI-Package"},
 		assetFormat: "GIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "GIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 	},
 	"SRMI": {
-		key: "SRMI", owner: "SpectrumQT", repo: "SRMI-Package",
+		key: "SRMI", repo: github.Repo{Owner: "SpectrumQT", Name: "SRMI-Package"},
 		assetFormat: "SRMI-TEST-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "SRMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 	},
 	"WWMI": {
-		key: "WWMI", owner: "SpectrumQT", repo: "WWMI-Package",
+		key: "WWMI", repo: github.Repo{Owner: "SpectrumQT", Name: "WWMI-Package"},
 		assetFormat:    "WWMI-PACKAGE-v%s.zip",
 		versionFile:    filepath.Join("Core", "WWMI", "WuWa-Model-Importer.ini"),
 		versionPattern: wwmiVersionPattern,
 	},
 	"ZZMI": {
-		key: "ZZMI", owner: "leotorrez", repo: "ZZMI-Package",
+		key: "ZZMI", repo: github.Repo{Owner: "leotorrez", Name: "ZZMI-Package"},
 		assetFormat: "ZZMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "ZZMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 	},
 	"HIMI": {
-		key: "HIMI", owner: "leotorrez", repo: "HIMI-Package",
+		key: "HIMI", repo: github.Repo{Owner: "leotorrez", Name: "HIMI-Package"},
 		assetFormat: "HIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "HIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 	},
 	"EFMI": {
-		key: "EFMI", owner: "SpectrumQT", repo: "EFMI-Package",
+		key: "EFMI", repo: github.Repo{Owner: "SpectrumQT", Name: "EFMI-Package"},
 		assetFormat: "EFMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "EFMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 	},

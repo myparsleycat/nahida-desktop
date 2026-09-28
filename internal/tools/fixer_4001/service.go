@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi"
@@ -30,14 +31,15 @@ type Options struct {
 	Archive       *infra.Archive
 	XXMI          *xxmi.XXMI
 	PEDiversifier PEDiversifier
+	// GitHub serves release lists and source archives; nil builds one from HTTP and Download.
+	GitHub *github.Client
 }
 
 type Service struct {
 	log           *infra.Log
 	emit          func(string, ...any)
 	fs            *platform.FS
-	http          *infra.Client
-	download      *infra.Download
+	github        *github.Client
 	archive       *infra.Archive
 	xxmi          *xxmi.XXMI
 	peDiversifier PEDiversifier
@@ -47,8 +49,6 @@ type Service struct {
 	fixerTask     *string
 	fixerProgress string
 	fixerError    string
-	releaseCache  map[string]releaseCacheEntry
-	releaseCalls  map[string]*releaseFetchCall
 }
 
 func New() *Service { return NewWithOptions(Options{}) }
@@ -57,17 +57,17 @@ func NewWithOptions(opts Options) *Service {
 	if opts.FS == nil {
 		opts.FS = platform.NewFS()
 	}
+	if opts.GitHub == nil {
+		opts.GitHub = github.New(github.Options{HTTP: opts.HTTP, Download: opts.Download, Log: opts.Log})
+	}
 	return &Service{
 		log:           opts.Log,
 		emit:          opts.EventEmit,
 		fs:            opts.FS,
-		http:          opts.HTTP,
-		download:      opts.Download,
+		github:        opts.GitHub,
 		archive:       opts.Archive,
 		xxmi:          opts.XXMI,
 		peDiversifier: opts.PEDiversifier,
-		releaseCache:  make(map[string]releaseCacheEntry),
-		releaseCalls:  make(map[string]*releaseFetchCall),
 	}
 }
 

@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -43,16 +41,14 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	}
 	x.busy = true
 	xxmiPath := *x.path
-	download := x.download
 	archive := x.archive
-	httpClient := x.http
 	x.mu.Unlock()
 	defer func() {
 		x.mu.Lock()
 		x.busy = false
 		x.mu.Unlock()
 	}()
-	if download == nil || archive == nil || httpClient == nil {
+	if archive == nil || !x.github.Configured() {
 		return errors.New("XXMI install services are not configured")
 	}
 	if err := ensureLauncherClosed(ctx); err != nil {
@@ -63,20 +59,12 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 		return err
 	}
 	defer func() { x.reportCleanup(os.RemoveAll(workDir), "InstallDLLVersion") }()
-	escaped := url.PathEscape(version)
-	header := make(http.Header)
-	header.Set("User-Agent", "nahida-desktop")
-	header.Set("Referer", "https://github.com/SpectrumQT/XXMI-Libs-Package")
 	zipPath := filepath.Join(workDir, "package.zip")
-	packageURL := fmt.Sprintf(
-		"https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/XXMI-PACKAGE-%s.zip",
-		escaped,
-		escaped,
-	)
-	if err := download.File(
-		ctx,
-		infra.DownloadRequest{URL: packageURL, Destination: zipPath, Header: header},
-	); err != nil {
+	if err := x.github.DownloadFile(ctx, github.FileRequest{
+		Repo:        libsRepo,
+		URL:         github.ReleaseFileURL(libsRepo, version, "XXMI-PACKAGE-"+version+".zip"),
+		Destination: zipPath,
+	}); err != nil {
 		return fmt.Errorf("failed to download XXMI package: %w", err)
 	}
 	extractedPath, err := archive.Extract(
@@ -93,32 +81,11 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	if err := copyTree(extractedPath, stagingDir); err != nil {
 		return fmt.Errorf("stage XXMI package: %w", err)
 	}
-	manifestURL := fmt.Sprintf(
-		"https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/%s/Manifest.json",
-		escaped,
-	)
-	response, err := httpClient.Fetch(
-		ctx,
-		manifestURL,
-		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+	manifest, err := x.github.FetchFile(
+		ctx, libsRepo, github.ReleaseFileURL(libsRepo, version, "Manifest.json"), 1024*1024,
 	)
 	if err != nil {
-		return err
-	}
-	if response.Body == nil {
-		return errors.New("failed to download XXMI manifest: empty response")
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, response.Body)
-		return fmt.Errorf("failed to download XXMI manifest: %s", response.Status)
-	}
-	manifest, err := io.ReadAll(io.LimitReader(response.Body, 1024*1024+1))
-	if err != nil {
-		return err
-	}
-	if len(manifest) > 1024*1024 {
-		return errors.New("XXMI manifest is too large")
+		return fmt.Errorf("failed to download XXMI manifest: %w", err)
 	}
 	var manifestData struct {
 		Version string `json:"version"`
@@ -230,7 +197,6 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	xxmiPath := *x.path
 	importerFolder := x.importerFolderLocked(spec.key)
 	overwriteINI := x.parsed.Importers[spec.key].Importer.OverwriteINI
-	download := x.download
 	archive := x.archive
 	x.mu.Unlock()
 	xxmiPath, err := filepath.Abs(xxmiPath)
@@ -252,7 +218,7 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 		x.busy = false
 		x.mu.Unlock()
 	}()
-	if download == nil || archive == nil {
+	if archive == nil || !x.github.Configured() {
 		return errors.New("XXMI install services are not configured")
 	}
 	if strings.TrimSpace(importerFolder) == "" || filepath.Clean(importerFolder) == filepath.Clean(xxmiPath) {
@@ -280,21 +246,13 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 		}
 		x.reportCleanup(cleanupErr, "InstallImporterPackage")
 	}()
-	escapedTag := url.PathEscape(version)
-	assetName := fmt.Sprintf(spec.assetFormat, fileVersion)
-	header := make(http.Header)
-	header.Set("User-Agent", "nahida-desktop")
-	header.Set("Referer", fmt.Sprintf("https://github.com/%s/%s", spec.owner, spec.repo))
 	zipPath := filepath.Join(workDir, "package.zip")
-	packageURL := fmt.Sprintf(
-		"https://github.com/%s/%s/releases/download/%s/%s",
-		spec.owner, spec.repo, escapedTag, url.PathEscape(assetName),
-	)
+	packageURL := github.ReleaseFileURL(spec.repo, version, fmt.Sprintf(spec.assetFormat, fileVersion))
 	fields["package_url"] = infra.SanitizeLogURL(packageURL)
 	stage = "download-package"
-	if err := download.File(
+	if err := x.github.DownloadFile(
 		ctx,
-		infra.DownloadRequest{URL: packageURL, Destination: zipPath, Header: header},
+		github.FileRequest{Repo: spec.repo, URL: packageURL, Destination: zipPath},
 	); err != nil {
 		return fmt.Errorf("failed to download %s package: %w", spec.key, err)
 	}

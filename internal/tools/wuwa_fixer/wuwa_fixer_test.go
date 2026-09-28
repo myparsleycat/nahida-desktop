@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 )
@@ -64,38 +66,37 @@ func TestBuildWuwaCLIArgs(t *testing.T) {
 }
 
 func TestParseWuwaLatestReleaseAndDigest(t *testing.T) {
-	digest := "sha256:00"
-	payload := wuwaReleaseResponse{TagName: "v1.2.3"}
-	payload.Assets = append(payload.Assets, struct {
-		Name               string  `json:"name"`
-		BrowserDownloadURL string  `json:"browser_download_url"`
-		Digest             *string `json:"digest"`
-	}{Name: "Wuwa_Mod_Fixer_v1.2.3.exe", BrowserDownloadURL: "https://example.test/fixer.exe", Digest: &digest})
+	payload := github.Release{TagName: "v1.2.3", Assets: []github.Asset{{
+		Name: "Wuwa_Mod_Fixer_v1.2.3.exe", BrowserDownloadURL: "https://example.test/fixer.exe", Digest: "sha256:00",
+	}}}
 	release, err := parseWuwaLatestRelease(payload)
-	if err != nil || release.Version != "v1.2.3" || release.Asset.Name != "Wuwa_Mod_Fixer_v1.2.3.exe" {
+	if err != nil || release.Version != "v1.2.3" || release.Asset.Name != "Wuwa_Mod_Fixer_v1.2.3.exe" ||
+		release.Asset.Digest == nil || *release.Asset.Digest != "sha256:00" {
 		t.Fatalf("release = %#v, %v", release, err)
 	}
-	data := []byte("verified executable")
-	sum := sha256.Sum256(data)
-	valid := "sha256:" + hex.EncodeToString(sum[:])
-	if err := verifyWuwaDigest(data, &valid); err != nil {
-		t.Fatalf("valid digest rejected: %v", err)
+
+	sum := sha256.Sum256([]byte("fixer"))
+	for _, digest := range []string{"sha256:" + hex.EncodeToString(sum[:]), "SHA256:" + strings.ToUpper(hex.EncodeToString(sum[:]))} {
+		if expected, err := parseWuwaDigest(&digest); err != nil || !bytes.Equal(expected, sum[:]) {
+			t.Fatalf("parseWuwaDigest(%q) = %x, %v", digest, expected, err)
+		}
 	}
-	invalid := "sha256:" + hex.EncodeToString(make([]byte, sha256.Size))
-	if err := verifyWuwaDigest(data, &invalid); err == nil {
-		t.Fatal("digest mismatch was accepted")
+	for _, digest := range []string{"sha512:00", "sha256:00", "sha256:zz", "no-separator"} {
+		if _, err := parseWuwaDigest(&digest); err == nil || err.Error() != "Unsupported Wuwa Mod Fixer digest format" {
+			t.Fatalf("parseWuwaDigest(%q) error = %v", digest, err)
+		}
+	}
+	if expected, err := parseWuwaDigest(nil); expected != nil || err != nil {
+		t.Fatalf("parseWuwaDigest(nil) = %x, %v", expected, err)
 	}
 }
 
 func TestParseWuwaLatestReleaseAcceptsElectronAssetPattern(t *testing.T) {
-	payload := wuwaReleaseResponse{TagName: "v1.2-beta"}
-	payload.Assets = append(payload.Assets, struct {
-		Name               string  `json:"name"`
-		BrowserDownloadURL string  `json:"browser_download_url"`
-		Digest             *string `json:"digest"`
-	}{Name: "Wuwa_Mod_Fixer_v1.2-beta.exe", BrowserDownloadURL: "https://example.test/fixer.exe"})
+	payload := github.Release{TagName: "v1.2-beta", Assets: []github.Asset{{
+		Name: "Wuwa_Mod_Fixer_v1.2-beta.exe", BrowserDownloadURL: "https://example.test/fixer.exe",
+	}}}
 	release, err := parseWuwaLatestRelease(payload)
-	if err != nil || release.Asset.Name != "Wuwa_Mod_Fixer_v1.2-beta.exe" {
+	if err != nil || release.Asset.Name != "Wuwa_Mod_Fixer_v1.2-beta.exe" || release.Asset.Digest != nil {
 		t.Fatalf("release = %#v, %v", release, err)
 	}
 	if version := extractWuwaVersion(release.Asset.Name); version != nil {
@@ -544,7 +545,7 @@ func TestWuwaInstallVerifiesAndPersistsRelease(t *testing.T) {
 				[]byte(`{"rate":{"limit":60,"remaining":59,"reset":2000000000,"used":1,"resource":"core"}}`),
 				true,
 			), nil
-		case wuwaReleasesLatestURL:
+		case "https://api.github.com/repos/Moonholder/Wuwa_Mod_Fixer/releases/latest":
 			payload := fmt.Sprintf(
 				`{"tag_name":"v1.2.3","assets":[{"name":"Wuwa_Mod_Fixer_v1.2.3.exe","browser_download_url":%q,"digest":%q}]}`,
 				assetURL,
@@ -589,5 +590,40 @@ func TestWuwaInstallVerifiesAndPersistsRelease(t *testing.T) {
 	storedPath, err := client.AppState.GetValue(ctx, wuwaBinaryPathKey)
 	if err != nil || storedPath == nil || *storedPath != *status.BinaryPath {
 		t.Fatalf("stored path = %v, %v", storedPath, err)
+	}
+}
+
+func TestWuwaRefreshReturnsCachedReleaseWhileRateLimited(t *testing.T) {
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	reset := time.Now().Add(time.Hour).Unix()
+	exhausted, _ := json.Marshal(GitHubRateState{Limit: 60, Remaining: 0, Reset: reset, Resource: "core"})
+	cached, _ := json.Marshal(wuwaLatestReleaseCache{
+		Version: "v1.0.0",
+		Asset:   wuwaLatestAsset{Name: "Wuwa_Mod_Fixer_v1.0.0.exe", BrowserDownloadURL: "https://example.test/a.exe"},
+	})
+	for key, value := range map[string]string{"github:core-rate": string(exhausted), wuwaLatestReleaseKey: string(cached)} {
+		if err := client.AppState.Upsert(ctx, key, value, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rate := infra.NewGitHubRateCoordinator()
+	rate.UseAppState(client.AppState)
+	httpClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: &http.Client{
+		Transport: wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("unexpected request while rate-limited: %s", request.URL)
+		}),
+	}})
+	service := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
+	service.UseClient(client)
+
+	refresh, err := service.wuwaRefreshLatestRelease(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !refresh.RateLimited || refresh.CheckedRemotely || refresh.LatestRelease == nil ||
+		refresh.LatestRelease.Version != "v1.0.0" || refresh.NextCheckAt == nil ||
+		!parseRFC3339(*refresh.NextCheckAt).Equal(time.Unix(reset, 0)) {
+		t.Fatalf("refresh = %+v", refresh)
 	}
 }

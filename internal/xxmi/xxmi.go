@@ -5,24 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
 const (
-	xxmiPathKey         = "xxmi.path"
-	xxmiConfigName      = "XXMI Launcher Config.json"
-	releaseCacheTimeout = time.Minute
+	xxmiPathKey    = "xxmi.path"
+	xxmiConfigName = "XXMI Launcher Config.json"
 )
+
+var libsRepo = github.Repo{Owner: "SpectrumQT", Name: "XXMI-Libs-Package"}
 
 type Options struct {
 	HTTP        *infra.Client
@@ -31,6 +30,8 @@ type Options struct {
 	Archive     *infra.Archive
 	EventEmit   func(name string, data ...any)
 	SearchRoots func() ([]string, error)
+	// GitHub serves release lists and files; nil builds one from HTTP and Download.
+	GitHub *github.Client
 }
 
 type PackageInfo struct {
@@ -84,31 +85,17 @@ type parsedConfig struct {
 }
 
 type XXMI struct {
-	mu            sync.RWMutex
-	client        *db.Client
-	http          *infra.Client
-	log           *infra.Log
-	download      *infra.Download
-	archive       *infra.Archive
-	eventEmit     func(string, ...any)
-	searchRoots   func() ([]string, error)
-	path          *string
-	config        map[string]any
-	parsed        parsedConfig
-	busy          bool
-	releaseCaches map[string]*githubReleaseCache
-}
-
-type githubReleaseCache struct {
-	tags    []string
-	ready   bool
-	fetched time.Time
-	call    *releaseFetchCall
-}
-
-type releaseFetchCall struct {
-	done chan struct{}
-	err  error
+	mu          sync.RWMutex
+	client      *db.Client
+	log         *infra.Log
+	github      *github.Client
+	archive     *infra.Archive
+	eventEmit   func(string, ...any)
+	searchRoots func() ([]string, error)
+	path        *string
+	config      map[string]any
+	parsed      parsedConfig
+	busy        bool
 }
 
 func New() *XXMI {
@@ -120,10 +107,13 @@ func NewWithOptions(opts Options) *XXMI {
 	if searchRoots == nil {
 		searchRoots = xxmiSearchRoots
 	}
+	githubClient := opts.GitHub
+	if githubClient == nil {
+		githubClient = github.New(github.Options{HTTP: opts.HTTP, Download: opts.Download, Log: opts.Log})
+	}
 	return &XXMI{
-		http: opts.HTTP, log: opts.Log, download: opts.Download, archive: opts.Archive,
+		log: opts.Log, github: githubClient, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots,
-		releaseCaches: make(map[string]*githubReleaseCache),
 	}
 }
 
@@ -278,11 +268,11 @@ func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (H
 }
 
 func (x *XXMI) GetLibsReleases(ctx context.Context) ([]string, error) {
-	return x.getGitHubReleases(ctx, "SpectrumQT", "XXMI-Libs-Package", false)
+	return x.releaseTags(ctx, libsRepo, false)
 }
 
 func (x *XXMI) UpdateLibsReleases(ctx context.Context) error {
-	_, err := x.getGitHubReleases(ctx, "SpectrumQT", "XXMI-Libs-Package", true)
+	_, err := x.releaseTags(ctx, libsRepo, true)
 	return err
 }
 
@@ -291,114 +281,15 @@ func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]stri
 	if !ok {
 		return nil, errors.New("unknown importer")
 	}
-	return x.getGitHubReleases(ctx, spec.owner, spec.repo, false)
+	return x.releaseTags(ctx, spec.repo, false)
 }
 
-func (x *XXMI) getGitHubReleases(ctx context.Context, owner, repo string, refresh bool) ([]string, error) {
-	key := owner + "/" + repo
-	x.mu.Lock()
-	cache := x.releaseCacheLocked(key)
-	if cache.ready && (!refresh || time.Since(cache.fetched) < releaseCacheTimeout) {
-		cached := slices.Clone(cache.tags)
-		x.mu.Unlock()
-		return cached, nil
-	}
-	if cache.call != nil {
-		call := cache.call
-		x.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-call.done:
-		}
-		x.mu.RLock()
-		var cached []string
-		if ready := x.releaseCaches[key]; ready != nil {
-			cached = slices.Clone(ready.tags)
-		}
-		x.mu.RUnlock()
-		return cached, call.err
-	}
-	httpClient := x.http
-	if httpClient == nil {
-		x.mu.Unlock()
-		return nil, errors.New("XXMI HTTP client is not configured")
-	}
-	call := &releaseFetchCall{done: make(chan struct{})}
-	cache.call = call
-	x.mu.Unlock()
-
-	rawURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
-	header := make(http.Header)
-	header.Set("Accept", "application/vnd.github+json")
-	header.Set("X-GitHub-Api-Version", "2026-03-10")
-	header.Set(
-		"User-Agent",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-	)
-	response, err := httpClient.Fetch(
-		ctx,
-		rawURL,
-		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
-	)
+func (x *XXMI) releaseTags(ctx context.Context, repo github.Repo, refresh bool) ([]string, error) {
+	tags, err := x.github.ReleaseTags(ctx, repo, refresh)
 	if err != nil {
-		return x.finishGitHubReleaseFetch(key, call, nil, err)
+		return nil, fmt.Errorf("failed to fetch %s releases: %w", repo, err)
 	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, response.Body)
-		return x.finishGitHubReleaseFetch(
-			key, call, nil, fmt.Errorf("failed to fetch %s/%s releases: %s", owner, repo, response.Status),
-		)
-	}
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
-		return x.finishGitHubReleaseFetch(key, call, nil, err)
-	}
-	out := make([]string, 0, len(releases))
-	for _, release := range releases {
-		tag := strings.TrimSpace(release.TagName)
-		if tag == "" || release.Prerelease || strings.EqualFold(tag, "main") || strings.EqualFold(tag, "master") {
-			continue
-		}
-		out = append(out, tag)
-	}
-	return x.finishGitHubReleaseFetch(key, call, out, nil)
-}
-
-func (x *XXMI) finishGitHubReleaseFetch(
-	key string, call *releaseFetchCall, releases []string, err error,
-) ([]string, error) {
-	x.mu.Lock()
-	cache := x.releaseCacheLocked(key)
-	if err == nil {
-		cache.tags = slices.Clone(releases)
-		cache.ready = true
-		cache.fetched = time.Now()
-	}
-	call.err = err
-	if cache.call == call {
-		cache.call = nil
-	}
-	close(call.done)
-	cached := slices.Clone(cache.tags)
-	x.mu.Unlock()
-	return cached, err
-}
-
-func (x *XXMI) releaseCacheLocked(key string) *githubReleaseCache {
-	if x.releaseCaches == nil {
-		x.releaseCaches = make(map[string]*githubReleaseCache)
-	}
-	cache, ok := x.releaseCaches[key]
-	if !ok {
-		cache = &githubReleaseCache{}
-		x.releaseCaches[key] = cache
-	}
-	return cache
+	return tags, nil
 }
 
 func (x *XXMI) load(ctx context.Context) error {

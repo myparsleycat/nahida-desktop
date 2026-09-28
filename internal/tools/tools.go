@@ -6,6 +6,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	bodyshape "nahida.live/desktop/internal/tools/body_shape"
@@ -53,6 +54,8 @@ type Options struct {
 	FindModelViewerPreview func(string) *string
 	// PEDiversifier diversifies packed executable content.
 	PEDiversifier PEDiversifier
+	// GitHub serves GitHub releases; nil builds one from HTTP, Download and GitHubRate.
+	GitHub *github.Client
 }
 
 // Tools is the Wails service the renderer calls. Feature behavior lives in the
@@ -83,6 +86,11 @@ func NewWithOptions(opts Options) *Tools {
 	if opts.Protocol == nil {
 		opts.Protocol = infra.NewProtocol()
 	}
+	if opts.GitHub == nil {
+		opts.GitHub = github.New(github.Options{
+			HTTP: opts.HTTP, Download: opts.Download, Rate: opts.GitHubRate, Log: opts.Log,
+		})
+	}
 	fixInspection := fixinspection.NewWithOptions(fixinspection.Options{
 		Log:       opts.Log,
 		EventEmit: opts.EventEmit,
@@ -93,11 +101,10 @@ func NewWithOptions(opts Options) *Tools {
 		EventEmit: opts.EventEmit,
 	})
 	zzmi := zzmifixer.NewWithOptions(zzmifixer.Options{
-		Log:        opts.Log,
-		EventEmit:  opts.EventEmit,
-		HTTP:       opts.HTTP,
-		GitHubRate: opts.GitHubRate,
-		Runner:     fixTool,
+		Log:       opts.Log,
+		EventEmit: opts.EventEmit,
+		GitHub:    opts.GitHub,
+		Runner:    fixTool,
 	})
 	fixInspection.Register(zzmifixer.NewInspector(zzmi))
 	return &Tools{
@@ -125,6 +132,7 @@ func NewWithOptions(opts Options) *Tools {
 			Archive:       opts.Archive,
 			XXMI:          opts.XXMI,
 			PEDiversifier: opts.PEDiversifier,
+			GitHub:        opts.GitHub,
 		}),
 		menuMaker: menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
 		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{
@@ -153,13 +161,12 @@ func NewWithOptions(opts Options) *Tools {
 			XXMI:      opts.XXMI,
 		}),
 		wuwa: wuwafixer.NewWithOptions(wuwafixer.Options{
-			Log:        opts.Log,
-			EventEmit:  opts.EventEmit,
-			Notify:     opts.Notify,
-			Settings:   opts.Settings,
-			HTTP:       opts.HTTP,
-			GitHubRate: opts.GitHubRate,
-			Runner:     fixTool,
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			Notify:    opts.Notify,
+			Settings:  opts.Settings,
+			GitHub:    opts.GitHub,
+			Runner:    fixTool,
 		}),
 		zzmi: zzmi,
 	}
