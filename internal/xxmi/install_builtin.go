@@ -163,8 +163,13 @@ func (x *XXMI) installBuiltinImporterPackage(
 			_ = stageRoot.Close()
 			return err
 		}
-		backupFolder := filepath.Join(root, "backups", spec.key+" "+time.Now().Format("2006-01-02 15-04-05"))
-		if err := os.MkdirAll(backupFolder, 0o700); err != nil {
+		backupRoot := filepath.Join(root, "backups")
+		if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+			_ = stageRoot.Close()
+			return err
+		}
+		backupFolder, err := os.MkdirTemp(backupRoot, spec.key+" "+time.Now().Format("2006-01-02 15-04-05")+"-")
+		if err != nil {
 			_ = stageRoot.Close()
 			return err
 		}

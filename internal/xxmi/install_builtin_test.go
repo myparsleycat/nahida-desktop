@@ -18,6 +18,7 @@ import (
 )
 
 func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -97,6 +98,22 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	assertFile(t, filepath.Join(importerFolder, "ShaderFixes", "new.hlsl"), "shader")
 	if _, err := os.Stat(filepath.Join(importerFolder, "Mods", "package.ini")); !os.IsNotExist(err) {
 		t.Fatalf("package mod copied: %v", err)
+	}
+	if err := service.InstallImporterPackage(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
+	assertFile(t, filepath.Join(importerFolder, "d3dx.ini"), "user ini")
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	backups, err := filepath.Glob(filepath.Join(cacheRoot, "backups", "GIMI *", "d3dx.ini"))
+	if err != nil || len(backups) != 2 {
+		t.Fatalf("consecutive INI backups = %v, err = %v", backups, err)
+	}
+	for _, backup := range backups {
+		assertFile(t, backup, "user ini")
 	}
 	gotConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
 	if err != nil || !bytes.Equal(gotConfig, externalConfig) {
