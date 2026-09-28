@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"nahida.live/desktop/internal/appdata"
 )
@@ -129,6 +130,20 @@ func xxmiCacheRoot() (string, error) {
 	return filepath.Join(home, appdata.RootDirName, "xxmi"), nil
 }
 
+func (x *XXMI) SetRoot(ctx context.Context, path string) error {
+	path = strings.TrimSpace(path)
+	if err := validateLocalFolder("xxmi root", path, true); err != nil {
+		return err
+	}
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return errors.New("XXMI settings store is not configured")
+	}
+	return client.Settings.Upsert(ctx, "xxmi_root", &path)
+}
+
 func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	if _, ok := lookupImporterPackage(key); !ok {
 		return ImporterConfig{}, fmt.Errorf("unknown importer %q", key)
@@ -225,4 +240,58 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 		return err
 	}
 	return client.XXMIImporters.Upsert(ctx, key, string(data))
+}
+
+func (x *XXMI) EnableImporter(ctx context.Context, key, folder string) error {
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return err
+	}
+	if folder != "" {
+		cfg.ImporterFolder = folder
+	}
+	cfg.Enabled = true
+	return x.SaveImporterConfig(ctx, key, cfg)
+}
+
+func (x *XXMI) DisableImporter(ctx context.Context, key string) error {
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return err
+	}
+	cfg.Enabled = false
+	return x.SaveImporterConfig(ctx, key, cfg)
+}
+
+func (x *XXMI) SetImporterMode(ctx context.Context, key string, mode RuntimeMode) error {
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return err
+	}
+	cfg.Mode = mode
+	return x.SaveImporterConfig(ctx, key, cfg)
+}
+
+type ImporterVersions struct {
+	Package *VersionPin `json:"package,omitempty"`
+	XXMI    *VersionPin `json:"xxmi,omitempty"`
+}
+
+func (x *XXMI) SetImporterVersions(ctx context.Context, key string, versions ImporterVersions) error {
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return err
+	}
+	if versions.XXMI != nil {
+		if versions.XXMI.Pinned != "" {
+			if err := x.EnsureLibsVersion(ctx, versions.XXMI.Pinned); err != nil {
+				return err
+			}
+		}
+		cfg.XXMIVersion = *versions.XXMI
+	}
+	if versions.Package != nil {
+		cfg.PackageVersion = *versions.Package
+	}
+	return x.SaveImporterConfig(ctx, key, cfg)
 }

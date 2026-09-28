@@ -131,8 +131,9 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 }
 
 type InstallImporterPackageInput struct {
-	Importer string `json:"importer"`
-	Version  string `json:"version"`
+	Importer      string `json:"importer"`
+	Version       string `json:"version"`
+	AllowUnsigned bool   `json:"allowUnsigned"`
 }
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) (returnErr error) {
@@ -180,6 +181,13 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	if err := x.load(ctx); err != nil {
 		return err
 	}
+	cfg, err := x.GetImporterConfig(ctx, spec.key)
+	if err != nil {
+		return err
+	}
+	if cfg.Enabled {
+		return x.installBuiltinImporterPackage(ctx, spec, cfg, input)
+	}
 	x.mu.Lock()
 	if x.busy {
 		x.mu.Unlock()
@@ -199,7 +207,7 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	overwriteINI := x.parsed.Importers[spec.key].Importer.OverwriteINI
 	archive := x.archive
 	x.mu.Unlock()
-	xxmiPath, err := filepath.Abs(xxmiPath)
+	xxmiPath, err = filepath.Abs(xxmiPath)
 	if err != nil {
 		return err
 	}

@@ -63,16 +63,20 @@ func beginImporterInstallTransaction(
 		return nil, err
 	}
 
-	configAbsolute, err := filepath.Abs(configPath)
-	if err != nil {
-		_ = parent.Close()
-		return nil, err
-	}
-	configAbsolute = filepath.Clean(configAbsolute)
-	configRoot, err := openInstallRoot(filepath.Dir(configAbsolute))
-	if err != nil {
-		_ = parent.Close()
-		return nil, err
+	var configRoot *installRoot
+	configAbsolute := ""
+	if configPath != "" {
+		configAbsolute, err = filepath.Abs(configPath)
+		if err != nil {
+			_ = parent.Close()
+			return nil, err
+		}
+		configAbsolute = filepath.Clean(configAbsolute)
+		configRoot, err = openInstallRoot(filepath.Dir(configAbsolute))
+		if err != nil {
+			_ = parent.Close()
+			return nil, err
+		}
 	}
 
 	prefix := ".nahida-" + strings.ToLower(importerKey) + "-install"
@@ -91,13 +95,15 @@ func beginImporterInstallTransaction(
 		return nil, fmt.Errorf("recover interrupted importer installation: %w", err)
 	}
 
-	configRaw, configInfo, err := transaction.configRoot.readFile(transaction.configName)
-	if err != nil {
-		_ = transaction.Close()
-		return nil, err
+	if configRoot != nil {
+		configRaw, configInfo, err := transaction.configRoot.readFile(transaction.configName)
+		if err != nil {
+			_ = transaction.Close()
+			return nil, err
+		}
+		transaction.configRaw = configRaw
+		transaction.configInfo = configInfo
 	}
-	transaction.configRaw = configRaw
-	transaction.configInfo = configInfo
 
 	liveInfo, err := transaction.parent.childInfo(transaction.liveName)
 	switch {
@@ -117,6 +123,9 @@ func beginImporterInstallTransaction(
 }
 
 func (t *importerInstallTransaction) Close() error {
+	if t.configRoot == nil {
+		return t.parent.Close()
+	}
 	return errors.Join(t.configRoot.Close(), t.parent.Close())
 }
 
@@ -124,10 +133,12 @@ func (t *importerInstallTransaction) prepare(ctx context.Context) (*installRoot,
 	if err := t.writeJournal(ctx, installStatePrepared); err != nil {
 		return nil, err
 	}
-	if err := t.parent.writeFileAtomic(
-		ctx, t.configBackup, bytes.NewReader(t.configRaw), 0o600, nil,
-	); err != nil {
-		return nil, err
+	if t.configRoot != nil {
+		if err := t.parent.writeFileAtomic(
+			ctx, t.configBackup, bytes.NewReader(t.configRaw), 0o600, nil,
+		); err != nil {
+			return nil, err
+		}
 	}
 	if err := t.parent.root.Mkdir(t.stageName, 0o755); err != nil {
 		return nil, err
@@ -165,12 +176,14 @@ func (t *importerInstallTransaction) commit(
 	ctx context.Context,
 	configJSON []byte,
 ) (map[string]any, parsedConfig, error) {
-	currentConfig, currentInfo, err := t.configRoot.readFile(t.configName)
-	if err != nil {
-		return nil, parsedConfig{}, err
-	}
-	if !os.SameFile(t.configInfo, currentInfo) || !bytes.Equal(t.configRaw, currentConfig) {
-		return nil, parsedConfig{}, errors.New("XXMI configuration changed during installation")
+	if t.configRoot != nil {
+		currentConfig, currentInfo, err := t.configRoot.readFile(t.configName)
+		if err != nil {
+			return nil, parsedConfig{}, err
+		}
+		if !os.SameFile(t.configInfo, currentInfo) || !bytes.Equal(t.configRaw, currentConfig) {
+			return nil, parsedConfig{}, errors.New("XXMI configuration changed during installation")
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, parsedConfig{}, err
@@ -201,18 +214,22 @@ func (t *importerInstallTransaction) commit(
 		return nil, parsedConfig{}, err
 	}
 
-	if err := t.configRoot.writeFileAtomic(
-		context.Background(), t.configName, bytes.NewReader(configJSON), 0o644, t.configInfo,
-	); err != nil {
-		return nil, parsedConfig{}, err
-	}
-	written, _, err := t.configRoot.readFile(t.configName)
-	if err != nil {
-		return nil, parsedConfig{}, err
-	}
-	loaded, parsed, err := parseAndValidateConfig(written)
-	if err != nil {
-		return nil, parsedConfig{}, err
+	var loaded map[string]any
+	var parsed parsedConfig
+	if t.configRoot != nil {
+		if err := t.configRoot.writeFileAtomic(
+			context.Background(), t.configName, bytes.NewReader(configJSON), 0o644, t.configInfo,
+		); err != nil {
+			return nil, parsedConfig{}, err
+		}
+		written, _, err := t.configRoot.readFile(t.configName)
+		if err != nil {
+			return nil, parsedConfig{}, err
+		}
+		loaded, parsed, err = parseAndValidateConfig(written)
+		if err != nil {
+			return nil, parsedConfig{}, err
+		}
 	}
 	if err := t.writeJournal(context.Background(), installStateCommitted); err != nil {
 		return nil, parsedConfig{}, err
@@ -283,7 +300,7 @@ func (t *importerInstallTransaction) rollbackJournal(ctx context.Context, journa
 		result = errors.Join(result, t.parent.removeAll(t.liveName))
 	}
 
-	if journal.State != installStatePrepared {
+	if journal.State != installStatePrepared && t.configRoot != nil {
 		backupConfig, _, configErr := t.parent.readFile(t.configBackup)
 		if configErr == nil {
 			result = errors.Join(

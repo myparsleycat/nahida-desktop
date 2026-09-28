@@ -156,6 +156,53 @@ func TestImporterInstallTransactionRecoversInterruptedConfigFailure(t *testing.T
 	}
 }
 
+func TestImporterInstallTransactionWithoutExternalConfig(t *testing.T) {
+	root := t.TempDir()
+	importerRoot := filepath.Join(root, "GIMI")
+	if err := os.MkdirAll(importerRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(importerRoot, "marker.txt"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage, err := transaction.prepare(context.Background())
+	if err != nil {
+		_ = transaction.Close()
+		t.Fatal(err)
+	}
+	if err := stage.writeFileAtomic(
+		context.Background(),
+		"marker.txt",
+		strings.NewReader("new"),
+		0o644,
+		nil,
+	); err != nil {
+		_ = stage.Close()
+		_ = transaction.Close()
+		t.Fatal(err)
+	}
+	if err := stage.Close(); err != nil {
+		_ = transaction.Close()
+		t.Fatal(err)
+	}
+	if _, _, err := transaction.commit(context.Background(), nil); err != nil {
+		_ = transaction.Close()
+		t.Fatal(err)
+	}
+	if err := transaction.finish(); err != nil {
+		_ = transaction.Close()
+		t.Fatal(err)
+	}
+	if err := transaction.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(importerRoot, "marker.txt"), "new")
+}
+
 func createXXMIJunction(t *testing.T, target, link string) {
 	t.Helper()
 	output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
