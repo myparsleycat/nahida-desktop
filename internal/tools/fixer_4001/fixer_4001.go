@@ -3,6 +3,7 @@ package fixer4001
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -824,10 +825,6 @@ func unsafeModeSignature(xxmiPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	privateKey, ok := parsed.(*rsa.PrivateKey)
-	if !ok {
-		return "", errors.New("XXMI private key is not RSA")
-	}
 	current, err := user.Current()
 	if err != nil {
 		return "", err
@@ -837,7 +834,15 @@ func unsafeModeSignature(xxmiPath string) (string, error) {
 		username = username[index+1:]
 	}
 	digest := sha256.Sum256([]byte(username))
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
+	var signature []byte
+	switch key := parsed.(type) {
+	case *rsa.PrivateKey:
+		signature, err = rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	case *ecdsa.PrivateKey:
+		signature, err = ecdsa.SignASN1(rand.Reader, key, digest[:])
+	default:
+		return "", fmt.Errorf("unsupported XXMI private key type %T", parsed)
+	}
 	if err != nil {
 		return "", err
 	}

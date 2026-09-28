@@ -2,10 +2,19 @@ package fixer4001
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,6 +34,69 @@ type toolsRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f toolsRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+func TestUnsafeModeSignatureSupportsXXMIKeyTypes(t *testing.T) {
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	username := current.Username
+	if index := strings.LastIndexAny(username, `\\/`); index >= 0 {
+		username = username[index+1:]
+	}
+	digest := sha256.Sum256([]byte(username))
+
+	for _, test := range []struct {
+		name string
+		key  crypto.Signer
+	}{
+		{name: "RSA", key: rsaKey},
+		{name: "ECDSA P-384", key: ecdsaKey},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			security := filepath.Join(root, "Resources", "Security")
+			if err := os.MkdirAll(security, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			der, err := x509.MarshalPKCS8PrivateKey(test.key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(security, "private_key.der"),
+				[]byte(base64.StdEncoding.EncodeToString(der)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			encoded, err := unsafeModeSignature(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signature, err := base64.StdEncoding.DecodeString(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch key := test.key.Public().(type) {
+			case *rsa.PublicKey:
+				if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature); err != nil {
+					t.Fatal(err)
+				}
+			case *ecdsa.PublicKey:
+				if !ecdsa.VerifyASN1(key, digest[:], signature) {
+					t.Fatal("invalid ECDSA SHA-256 signature")
+				}
+			}
+		})
+	}
 }
 
 func TestPEDiversifierInProcessContract(t *testing.T) {
