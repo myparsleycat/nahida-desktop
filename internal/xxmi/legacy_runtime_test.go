@@ -74,4 +74,17 @@ func TestExtractLegacyRuntimeUsesOnlyRuntimeFiles(t *testing.T) {
 	if err := verifyLegacyRuntimeCache(folder, zipHash); err == nil {
 		t.Fatal("modified cache passed verification")
 	}
+	if _, err := extractLegacyRuntime(context.Background(), zipFile, int64(len(data)), zipHash, "", root); err != nil {
+		t.Fatalf("re-import corrupted cache: %v", err)
+	}
+	if err := verifyLegacyRuntimeCache(folder, zipHash); err != nil {
+		t.Fatalf("re-imported cache was not repaired: %v", err)
+	}
+	backups, err := filepath.Glob(filepath.Join(root, "backups", "legacy-"+id+"-corrupt-*"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("corrupt runtime backup = %v, err = %v", backups, err)
+	}
+	if cached, err := os.ReadFile(filepath.Join(backups[0], "d3d11.dll")); err != nil || string(cached) != "modified" {
+		t.Fatalf("corrupt runtime was not preserved: data = %q, err = %v", cached, err)
+	}
 }

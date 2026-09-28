@@ -93,11 +93,15 @@ func extractLegacyRuntime(
 	id := zipHash[:12]
 	parent := filepath.Join(root, "packages", "legacy-3dmigoto")
 	destination := filepath.Join(parent, id)
-	if _, err := os.Stat(filepath.Join(destination, "source.json")); err == nil {
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", errors.New("legacy runtime cache is not a regular directory")
+		}
 		if err := verifyLegacyRuntimeCache(destination, zipHash); err == nil {
 			return id, nil
 		}
-		return "", fmt.Errorf("cached legacy runtime %s is corrupted", id)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
 	}
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return "", err
@@ -172,13 +176,45 @@ func extractLegacyRuntime(
 	if err := os.WriteFile(filepath.Join(staging, "source.json"), data, 0o600); err != nil {
 		return "", err
 	}
-	if err := os.Rename(staging, destination); err != nil {
-		if _, statErr := os.Stat(destination); statErr == nil {
-			return id, nil
-		}
+	if err := verifyLegacyRuntimeCache(staging, zipHash); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := replaceCorruptLegacyRuntimeCache(root, staging, destination, id, zipHash); err != nil {
 		return "", err
 	}
 	return id, nil
+}
+
+func replaceCorruptLegacyRuntimeCache(root, staging, destination, id, zipHash string) error {
+	backup := ""
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("legacy runtime cache is not a regular directory")
+		}
+		if verifyLegacyRuntimeCache(destination, zipHash) == nil {
+			return nil
+		}
+		backupRoot := filepath.Join(root, "backups")
+		if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+			return err
+		}
+		backup = filepath.Join(backupRoot, fmt.Sprintf("legacy-%s-corrupt-%d", id, time.Now().UnixNano()))
+		if err := os.Rename(destination, backup); err != nil {
+			return fmt.Errorf("back up corrupt legacy runtime cache: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(staging, destination); err != nil {
+		if backup != "" {
+			return errors.Join(err, os.Rename(backup, destination))
+		}
+		return err
+	}
+	return nil
 }
 
 func verifyLegacyRuntimeCache(folder, zipHash string) error {
