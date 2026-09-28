@@ -116,7 +116,7 @@ func newestLegacyRuntime(parent string) (string, error) {
 	newest := ""
 	var newestTime time.Time
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || strings.Contains(entry.Name(), ".tmp-") || strings.Contains(entry.Name(), ".corrupt-") {
 			continue
 		}
 		info, err := entry.Info()

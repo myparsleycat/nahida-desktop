@@ -122,3 +122,16 @@ func assertFileContent(t *testing.T, path, want string) {
 		t.Fatalf("%s = %q, err = %v, want %q", path, data, err, want)
 	}
 }
+
+func TestNewestLegacyRuntimeIgnoresStagingDirectory(t *testing.T) {
+	parent := t.TempDir()
+	for _, name := range []string{"abcdef123456", "abcdef123456.tmp-in-progress"} {
+		if err := os.Mkdir(filepath.Join(parent, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := newestLegacyRuntime(parent)
+	if err != nil || got != "abcdef123456" {
+		t.Fatalf("latest cache = %q, err = %v", got, err)
+	}
+}

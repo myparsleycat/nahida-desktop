@@ -114,6 +114,14 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]bool
 			} else if pkg != nil && pkg.LatestVersion != nil {
 				referenced[normalizeVersion(*pkg.LatestVersion)] = true
 			}
+		} else if cfg.Mode == RuntimeLegacy && cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0 {
+			version := normalizeVersion(cfg.XXMIVersion.Pinned)
+			if version == "" {
+				version = newestCachedPackageVersion("xxmi-libs")
+			}
+			if version != "" {
+				referenced[version] = true
+			}
 		}
 		data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
 		if err == nil {
