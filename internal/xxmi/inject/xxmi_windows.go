@@ -46,6 +46,11 @@ func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 }
 
 func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+	if pid, err := findProcessPID(spec.ProcessName); err != nil {
+		return LaunchResult{}, err
+	} else if pid != 0 {
+		return LaunchResult{}, errors.New("XXMI_GAME_RUNNING")
+	}
 	library, err := windows.LoadDLL(spec.LoaderDLL.Path)
 	if err != nil {
 		return LaunchResult{}, fmt.Errorf("load XXMI injector DLL: %w", err)
@@ -82,12 +87,17 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		}
 		defer func() { _, _, _ = unhookProc.Call(uintptr(unsafe.Pointer(&hook)), uintptr(unsafe.Pointer(&mutex))) }()
 	}
+	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
 	if err := startGameProcess(spec); err != nil {
 		return LaunchResult{}, err
 	}
-	pid, err := waitForProcess(ctx, spec.ProcessName, time.Duration(spec.TimeoutSeconds)*time.Second)
+	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
 	if err != nil {
 		return LaunchResult{}, err
+	}
+	var warnings []string
+	if err := setProcessPriority(pid, spec.Priority); err != nil {
+		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
 	for _, dll := range spec.ExtraDLLs {
 		pointer, err := windows.UTF16PtrFromString(dll)
@@ -100,25 +110,51 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		}
 	}
 	if spec.InjectMode == "Bypass" {
-		return LaunchResult{PID: pid, InjectionVerified: false}, nil
+		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+			return LaunchResult{}, err
+		}
+		return LaunchResult{PID: pid, InjectionVerified: false, Warnings: warnings}, nil
 	}
 	if !useHook {
 		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(module)), uintptr(spec.TimeoutSeconds))
 		if code != 0 {
 			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: Inject returned %d", code)
 		}
-		return LaunchResult{PID: pid, InjectionVerified: true}, nil
+		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+			return LaunchResult{}, err
+		}
+		return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
 	}
 	code, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
 	if code != 0 {
 		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d", code)
 	}
-	return LaunchResult{PID: pid, InjectionVerified: true}, nil
+	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+		return LaunchResult{}, err
+	}
+	code, _, _ = waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
+	if code != 0 {
+		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d after game window", code)
+	}
+	return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
 }
 
 func startGameProcess(spec LaunchSpec) error {
 	if spec.StartMethod == "Manual" {
 		return nil
+	}
+	if spec.CustomLaunchCmd != "" {
+		systemDir, err := windows.GetSystemDirectory()
+		if err != nil {
+			return err
+		}
+		command := exec.Command(filepath.Join(systemDir, "cmd.exe"), "/C", spec.CustomLaunchCmd)
+		command.Dir = spec.WorkDir
+		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+		if err := command.Start(); err != nil {
+			return err
+		}
+		return command.Process.Release()
 	}
 	if spec.StartMethod == "Shell" {
 		verb, _ := windows.UTF16PtrFromString("open")
@@ -133,13 +169,30 @@ func startGameProcess(spec LaunchSpec) error {
 	}
 	command := exec.Command(spec.StartExe, spec.StartArgs...)
 	command.Dir = spec.WorkDir
+	priority, err := priorityClass(spec.Priority)
+	if err != nil {
+		return err
+	}
 	command.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NEW_CONSOLE | windows.CREATE_DEFAULT_ERROR_MODE,
+		CreationFlags: windows.CREATE_NEW_CONSOLE | windows.CREATE_DEFAULT_ERROR_MODE | priority,
 	}
 	if err := command.Start(); err != nil {
 		return err
 	}
 	return command.Process.Release()
+}
+
+func setProcessPriority(pid int, priority string) error {
+	class, err := priorityClass(priority)
+	if err != nil {
+		return err
+	}
+	process, err := windows.OpenProcess(windows.PROCESS_SET_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(process) }()
+	return windows.SetPriorityClass(process, class)
 }
 
 func waitForProcess(ctx context.Context, name string, timeout time.Duration) (int, error) {

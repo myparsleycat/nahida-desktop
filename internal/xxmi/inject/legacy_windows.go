@@ -17,6 +17,11 @@ import (
 )
 
 func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+	if pid, err := findProcessPID(spec.ProcessName); err != nil {
+		return LaunchResult{}, err
+	} else if pid != 0 {
+		return LaunchResult{}, errors.New("XXMI_GAME_RUNNING")
+	}
 	mutexName, _ := windows.UTF16PtrFromString(`Local\3DMigotoLoader`)
 	mutex, err := windows.OpenMutex(windows.SYNCHRONIZE, false, mutexName)
 	if err == nil {
@@ -50,17 +55,25 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		return LaunchResult{}, ctx.Err()
 	case <-timer.C:
 	}
+	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
 	if err := startGameProcess(spec); err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
 	}
-	pid, err := waitForProcess(ctx, spec.ProcessName, time.Duration(spec.TimeoutSeconds)*time.Second)
+	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
 	if err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
 	}
+	var warnings []string
+	if err := setProcessPriority(pid, spec.Priority); err != nil {
+		warnings = append(warnings, "Could not set game process priority: "+err.Error())
+	}
+	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+		return LaunchResult{}, err
+	}
 	verified, err := processHasModule(pid, spec.ModuleDLL)
-	result := LaunchResult{PID: pid, InjectionVerified: verified}
+	result := LaunchResult{PID: pid, InjectionVerified: verified, Warnings: warnings}
 	if err != nil {
 		result.Warnings = append(result.Warnings, "Could not verify legacy DLL in game process: "+err.Error())
 	}

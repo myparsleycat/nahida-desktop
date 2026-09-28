@@ -19,6 +19,18 @@ type preparedLaunch struct {
 }
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client != nil {
+		cfg, err := x.GetImporterConfig(ctx, importer)
+		if err != nil {
+			return err
+		}
+		if cfg.Enabled {
+			return x.startBuiltinGame(ctx, importer, cfg)
+		}
+	}
 	ready, err := x.prepareGameLaunch(ctx, importer)
 	if err != nil {
 		return err

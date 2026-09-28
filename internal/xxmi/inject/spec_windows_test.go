@@ -21,7 +21,7 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	digest := sha256.Sum256([]byte("3dmloader.dll"))
 	spec := LaunchSpec{
 		Mode: ModeXXMI, ProcessName: "game.exe", StartExe: filepath.Join(root, "game.exe"),
-		WorkDir: root, StartMethod: "Native", InjectMode: "Hook", TimeoutSeconds: 30,
+		WorkDir: root, StartMethod: "Native", Priority: "Normal", InjectMode: "Hook", TimeoutSeconds: 30,
 		ModuleDLL: filepath.Join(root, "d3d11.dll"),
 		LoaderDLL: VerifiedFile{Path: filepath.Join(root, "3dmloader.dll"), SHA256: hex.EncodeToString(digest[:])},
 	}

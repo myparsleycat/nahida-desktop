@@ -73,6 +73,26 @@ func TestElevatedLifecycleStartSuccessReportsRunning(t *testing.T) {
 	}
 }
 
+func TestElevatedLifecycleAcquireClosesTemporaryHelper(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubElevatedClient{}
+	lifecycle := newElevatedLifecycle(stub, nil, nil)
+	defer lifecycle.shutdown()
+
+	release, err := lifecycle.acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stub.Connected() {
+		t.Fatal("temporary helper did not start")
+	}
+	release()
+	if stub.Connected() {
+		t.Fatal("temporary helper remained connected")
+	}
+}
+
 func TestElevatedLifecycleDisableCancelsInFlightStart(t *testing.T) {
 	t.Parallel()
 

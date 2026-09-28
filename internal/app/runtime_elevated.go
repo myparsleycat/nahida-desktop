@@ -10,6 +10,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 const (
@@ -56,6 +57,7 @@ type elevatedLifecycle struct {
 	// startCancel cancels the in-flight client.Start so disable can unblock
 	// the worker without cancelling l.ctx. Guarded by mu.
 	startCancel context.CancelFunc
+	leases      int
 }
 
 // elevatedStartup tracks the single startup goroutine that reads the setting.
@@ -288,7 +290,47 @@ func (l *elevatedLifecycle) stopClient() error {
 	if l.client == nil {
 		return nil
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.leases > 0 {
+		return nil
+	}
 	return l.client.Close()
+}
+
+func (l *elevatedLifecycle) acquire(ctx context.Context) (func(), error) {
+	if l == nil || l.client == nil {
+		return nil, errors.New("elevated helper is not configured")
+	}
+	l.mu.Lock()
+	if l.workerStop {
+		l.mu.Unlock()
+		return nil, context.Canceled
+	}
+	l.leases++
+	l.mu.Unlock()
+
+	startCtx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(l.ctx, cancel)
+	err := l.client.Start(startCtx)
+	stop()
+	cancel()
+	if err != nil {
+		l.release()
+		return nil, err
+	}
+	l.publishStatus()
+	return l.release, nil
+}
+
+func (l *elevatedLifecycle) release() {
+	l.mu.Lock()
+	l.leases--
+	if l.leases == 0 && !l.desired && l.client != nil {
+		_ = l.client.Close()
+	}
+	l.mu.Unlock()
+	l.publishStatus()
 }
 
 func (l *elevatedLifecycle) watchHealth() {
@@ -329,7 +371,7 @@ func (l *elevatedLifecycle) status() platform.ElevatedHelperStatus {
 		return platform.ElevatedHelperStatus{}
 	}
 	l.mu.Lock()
-	enabled := l.desired && !l.workerStop
+	enabled := (l.desired || l.leases > 0) && !l.workerStop
 	l.mu.Unlock()
 	if !enabled {
 		return platform.ElevatedHelperStatus{}
@@ -391,3 +433,20 @@ func reportElevatedHelperError(log *infra.Log, err error, stage string) {
 }
 
 var _ elevatedHelperClient = (*elevated.Client)(nil)
+
+type xxmiElevatedLauncher struct {
+	lifecycle *elevatedLifecycle
+	client    *elevated.Client
+}
+
+func (l xxmiElevatedLauncher) Acquire(ctx context.Context) (func(), error) {
+	return l.lifecycle.acquire(ctx)
+}
+
+func (l xxmiElevatedLauncher) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
+	return l.client.LaunchXXMI(ctx, spec)
+}
+
+func (l xxmiElevatedLauncher) HelperImageName() string {
+	return l.client.HelperImageName()
+}

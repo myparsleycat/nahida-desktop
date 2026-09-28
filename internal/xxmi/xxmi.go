@@ -14,6 +14,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 const (
@@ -31,7 +32,14 @@ type Options struct {
 	EventEmit   func(name string, data ...any)
 	SearchRoots func() ([]string, error)
 	// GitHub serves release lists and files; nil builds one from HTTP and Download.
-	GitHub *github.Client
+	GitHub   *github.Client
+	Elevated elevatedLauncher
+}
+
+type elevatedLauncher interface {
+	Acquire(context.Context) (func(), error)
+	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	HelperImageName() string
 }
 
 type PackageInfo struct {
@@ -90,6 +98,7 @@ type XXMI struct {
 	log         *infra.Log
 	github      *github.Client
 	archive     *infra.Archive
+	elevated    elevatedLauncher
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
 	path        *string
@@ -113,7 +122,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	return &XXMI{
 		log: opts.Log, github: githubClient, archive: opts.Archive,
-		eventEmit: opts.EventEmit, searchRoots: searchRoots,
+		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
 	}
 }
 

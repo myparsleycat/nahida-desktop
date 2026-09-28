@@ -68,6 +68,12 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if spec.InjectMode != "Hook" && spec.InjectMode != "Inject" && spec.InjectMode != "Bypass" {
 		return errors.New("invalid injection mode")
 	}
+	if _, err := priorityClass(spec.Priority); err != nil {
+		return err
+	}
+	if spec.CustomLaunchCmd != "" && spec.StartMethod == "Manual" {
+		return errors.New("custom launch cannot use manual start")
+	}
 	if spec.StartMethod != "Manual" {
 		if err := validateRegularLocalFile(spec.StartExe); err != nil {
 			return fmt.Errorf("start executable: %w", err)
@@ -92,6 +98,25 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 		}
 	}
 	return nil
+}
+
+func priorityClass(priority string) (uint32, error) {
+	switch priority {
+	case "Low":
+		return windows.IDLE_PRIORITY_CLASS, nil
+	case "BelowNormal":
+		return windows.BELOW_NORMAL_PRIORITY_CLASS, nil
+	case "Normal":
+		return windows.NORMAL_PRIORITY_CLASS, nil
+	case "AboveNormal":
+		return windows.ABOVE_NORMAL_PRIORITY_CLASS, nil
+	case "High":
+		return windows.HIGH_PRIORITY_CLASS, nil
+	case "Realtime":
+		return windows.REALTIME_PRIORITY_CLASS, nil
+	default:
+		return 0, errors.New("invalid process priority")
+	}
 }
 
 func verifyFile(file VerifiedFile) error {
