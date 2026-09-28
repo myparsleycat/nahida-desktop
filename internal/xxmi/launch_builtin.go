@@ -169,7 +169,7 @@ func (x *XXMI) startBuiltinGame(
 		return fmt.Errorf("XXMI_ELEVATION_DENIED: %w", err)
 	}
 	defer release()
-	launchSpec, err := x.builtinLaunchSpec(cfg, gameExe, processName)
+	launchSpec, err := x.builtinLaunchSpec(key, cfg, gameExe, processName)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,15 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
 	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
 }
 
-func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string) (inject.LaunchSpec, error) {
+func (x *XXMI) builtinLaunchSpec(
+	key string,
+	cfg ImporterConfig,
+	gameExe, processName string,
+) (inject.LaunchSpec, error) {
+	packageSpec, ok := lookupImporterPackage(key)
+	if !ok {
+		return inject.LaunchSpec{}, fmt.Errorf("unknown importer %q", key)
+	}
 	data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
 	if err != nil {
 		return inject.LaunchSpec{}, err
@@ -295,10 +303,14 @@ func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string
 	if err := json.Unmarshal(data, &deployed); err != nil {
 		return inject.LaunchSpec{}, err
 	}
+	injectMode := "Inject"
+	if packageSpec.useHook {
+		injectMode = "Hook"
+	}
 	spec := inject.LaunchSpec{
 		Mode: inject.RuntimeMode(cfg.Mode), ProcessName: processName, StartExe: gameExe,
 		WorkDir: filepath.Dir(gameExe), StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
-		InjectMode: "Hook", UseHook: true, TimeoutSeconds: cfg.ProcessTimeout,
+		InjectMode: injectMode, UseHook: packageSpec.useHook, TimeoutSeconds: cfg.ProcessTimeout,
 		ModuleDLL: filepath.Join(cfg.ImporterFolder, "d3d11.dll"),
 	}
 	if cfg.UseLaunchOptions {

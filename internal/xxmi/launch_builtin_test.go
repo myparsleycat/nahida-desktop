@@ -58,6 +58,22 @@ func TestEFMIMinimumLibrariesVersion(t *testing.T) {
 	}
 }
 
+func TestImporterInjectionDefaults(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		key  string
+		hook bool
+	}{
+		{"GIMI", true}, {"SRMI", true}, {"HIMI", true}, {"ZZMI", true},
+		{"WWMI", false}, {"EFMI", false},
+	} {
+		spec, ok := lookupImporterPackage(tc.key)
+		if !ok || spec.useHook != tc.hook {
+			t.Errorf("%s: useHook = %t, found = %t", tc.key, spec.useHook, ok)
+		}
+	}
+}
+
 func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	folder := t.TempDir()
 	path := filepath.Join(folder, "d3dx.ini")
@@ -119,7 +135,7 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 	}
 	for _, direct := range []bool{false, true} {
 		cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct}
-		spec, err := New().builtinLaunchSpec(cfg, wrapper, "Client-Win64-Shipping.exe")
+		spec, err := New().builtinLaunchSpec("WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -128,7 +144,7 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 			want = client
 		}
 		if spec.StartExe != want || spec.WorkDir != filepath.Dir(want) || len(spec.StartArgs) != 1 ||
-			spec.StartArgs[0] != "-dx11" {
+			spec.StartArgs[0] != "-dx11" || spec.UseHook || spec.InjectMode != "Inject" {
 			t.Fatalf("direct=%t, spec=%+v", direct, spec)
 		}
 	}

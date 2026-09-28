@@ -19,6 +19,7 @@ type importerPackageSpec struct {
 	publicKey      string
 	gameExeNames   []string
 	processNames   []string
+	useHook        bool
 }
 
 var (
@@ -29,6 +30,7 @@ var (
 var importerPackages = map[string]importerPackageSpec{
 	"GIMI": {
 		key: "GIMI", repo: github.Repo{Owner: "SilentNightSound", Name: "GIMI-Package"},
+		useHook:     true,
 		assetFormat: "GIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "GIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 		publicKey:      gimiPublicKey,
@@ -36,6 +38,7 @@ var importerPackages = map[string]importerPackageSpec{
 	},
 	"SRMI": {
 		key: "SRMI", repo: github.Repo{Owner: "SpectrumQT", Name: "SRMI-Package"},
+		useHook:     true,
 		assetFormat: "SRMI-TEST-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "SRMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 		publicKey:      spectrumPublicKey,
@@ -52,6 +55,7 @@ var importerPackages = map[string]importerPackageSpec{
 	},
 	"ZZMI": {
 		key: "ZZMI", repo: github.Repo{Owner: "leotorrez", Name: "ZZMI-Package"},
+		useHook:     true,
 		assetFormat: "ZZMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "ZZMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 		publicKey:      zzmiPublicKey,
@@ -59,6 +63,7 @@ var importerPackages = map[string]importerPackageSpec{
 	},
 	"HIMI": {
 		key: "HIMI", repo: github.Repo{Owner: "leotorrez", Name: "HIMI-Package"},
+		useHook:     true,
 		assetFormat: "HIMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "HIMI", "main.ini"),
 		versionPattern: importerVersionPattern,
 		publicKey:      himiPublicKey,
