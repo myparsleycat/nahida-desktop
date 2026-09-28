@@ -2032,6 +2032,7 @@
           "pruned": "已清理 {{count}} 个未使用的缓存",
           "inUse": "使用中",
           "legacy": "旧版 3DMigoto",
+          "newestCached": "最新缓存运行时",
           "downloadLegacy": "下载旧版运行时",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "下载最新版",

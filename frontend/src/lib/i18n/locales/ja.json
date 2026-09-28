@@ -2033,6 +2033,7 @@
           "pruned": "未使用キャッシュを {{count}} 件削除しました",
           "inUse": "使用中",
           "legacy": "従来の 3DMigoto",
+          "newestCached": "最新のキャッシュ済みランタイム",
           "downloadLegacy": "従来のランタイムをダウンロード",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "最新版をダウンロード",

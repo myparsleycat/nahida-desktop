@@ -41,6 +41,11 @@ function RouteComponent() {
   });
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
+  const { data: legacyRuntimes } = useQuery({
+    queryKey: ["xxmi:legacy-cache"],
+    queryFn: XXMI.GetLegacyRuntimes,
+    enabled: config?.mode === RuntimeMode.RuntimeLegacy,
+  });
   const [selectedPackage, setSelectedPackage] = useState("");
   const selectedRelease = releases?.find((release) => release.version === selectedPackage);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
@@ -178,7 +183,32 @@ function RouteComponent() {
             </Button>
           </div>
           {config.mode === RuntimeMode.RuntimeLegacy && (
-            <p className="text-muted-foreground">{t("page.setting.xxmi.builtin.legacyWarning")}</p>
+            <div className="space-y-2">
+              <p className="text-muted-foreground">
+                {t("page.setting.xxmi.builtin.legacyWarning")}
+              </p>
+              <p>
+                {t("page.setting.xxmi.builtin.legacy")}:{" "}
+                {config.legacyRuntime || t("page.setting.xxmi.builtin.newestCached")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={!config.legacyRuntime ? "default" : "outline"}
+                  onClick={() => setConfig({ ...config, legacyRuntime: "" })}
+                >
+                  {t("page.setting.xxmi.builtin.newestCached")}
+                </Button>
+                {legacyRuntimes?.map((runtime) => (
+                  <Button
+                    key={runtime.id}
+                    variant={config.legacyRuntime === runtime.id ? "default" : "outline"}
+                    onClick={() => setConfig({ ...config, legacyRuntime: runtime.id })}
+                  >
+                    {runtime.id}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
           <Button
             variant="outline"

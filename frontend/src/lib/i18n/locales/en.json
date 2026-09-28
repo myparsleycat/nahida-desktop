@@ -2117,6 +2117,7 @@
           "pruned": "Removed {{count}} unused caches",
           "inUse": "In use",
           "legacy": "Legacy 3DMigoto",
+          "newestCached": "Newest cached runtime",
           "downloadLegacy": "Download legacy runtime",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "Download latest",

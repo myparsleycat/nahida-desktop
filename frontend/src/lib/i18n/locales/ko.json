@@ -2051,6 +2051,7 @@
           "pruned": "미사용 캐시 {{count}}개를 정리했습니다",
           "inUse": "사용 중",
           "legacy": "레거시 3DMigoto",
+          "newestCached": "최신 캐시 런타임",
           "downloadLegacy": "레거시 런타임 다운로드",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "최신 버전 다운로드",
