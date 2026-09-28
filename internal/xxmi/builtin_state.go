@@ -131,6 +131,9 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		external, err := x.DetectExternalLauncher(ctx)
 		if err == nil {
 			overview.ExternalLauncher = external
+			if external != nil && (root == nil || *root == "") {
+				overview.Root = external.Path
+			}
 		} else if !strings.Contains(err.Error(), "not found") {
 			return Overview{}, err
 		}

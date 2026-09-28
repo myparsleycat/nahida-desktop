@@ -141,3 +141,35 @@ func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
 		t.Fatalf("overview = %+v, err = %v", overview, err)
 	}
 }
+
+func TestOverviewSuggestsExternalRootUntilUserChoosesOne(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	writeXXMITestConfig(t, external)
+	if err := client.Settings.Upsert(ctx, xxmiPathKey, &external); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	overview, err := service.GetOverview(ctx)
+	if err != nil || overview.ExternalLauncher == nil || overview.Root != external {
+		t.Fatalf("external root suggestion = %+v, err = %v", overview, err)
+	}
+	chosen := t.TempDir()
+	if err := service.SetRoot(ctx, chosen); err != nil {
+		t.Fatal(err)
+	}
+	overview, err = service.GetOverview(ctx)
+	if err != nil || overview.Root != chosen {
+		t.Fatalf("user root selection = %+v, err = %v", overview, err)
+	}
+}
