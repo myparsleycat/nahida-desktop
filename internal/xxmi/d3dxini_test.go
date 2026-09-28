@@ -40,3 +40,28 @@ func TestINIEditorRemoveDuplicateOptions(t *testing.T) {
 		t.Fatalf("INI = %q", got)
 	}
 }
+
+func TestINIEditorEditsDuplicateSections(t *testing.T) {
+	t.Parallel()
+	doc := parseINI(
+		[]byte(
+			"[Loader]\r\ntarget = old.exe\r\n[System]\r\nkeep=1\r\n[loader]\r\nTARGET=stale.exe\r\nloader=old.exe\r\n",
+		),
+	)
+	doc.SetOption("Loader", "target", "game.exe", true)
+	doc.RemoveOption("Loader", "loader")
+	want := "[Loader]\r\ntarget = game.exe\r\n[System]\r\nkeep=1\r\n[loader]\r\n"
+	if got := string(doc.Bytes()); got != want {
+		t.Fatalf("INI = %q; want %q", got, want)
+	}
+}
+
+func TestINIEditorCreatesMissingSection(t *testing.T) {
+	t.Parallel()
+	doc := parseINI([]byte("[System]\nkeep=1\n"))
+	doc.SetOption("Loader", "target", "game.exe", true)
+	want := "[System]\nkeep=1\n\n[Loader]\ntarget = game.exe\n"
+	if got := string(doc.Bytes()); got != want {
+		t.Fatalf("INI = %q; want %q", got, want)
+	}
+}

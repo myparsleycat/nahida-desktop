@@ -63,6 +63,23 @@ func (d *iniDocument) sectionBounds(section string) (int, int) {
 }
 
 func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
+	indexes := d.optionIndexes(section, key)
+	if len(indexes) > 0 {
+		first := indexes[0]
+		match := iniOptionPattern.FindStringSubmatch(d.lines[first])
+		replacement := match[1] + match[2] + match[3] + value
+		if d.lines[first] != replacement {
+			d.lines[first] = replacement
+			d.changed = true
+		}
+		for index := len(indexes) - 1; index > 0; index-- {
+			duplicate := indexes[index]
+			d.lines = append(d.lines[:duplicate], d.lines[duplicate+1:]...)
+			d.changed = true
+		}
+		return
+	}
+
 	start, end := d.sectionBounds(section)
 	if start < 0 {
 		if len(d.lines) > 0 && strings.TrimSpace(d.lines[len(d.lines)-1]) != "" {
@@ -71,18 +88,6 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 		d.lines = append(d.lines, "["+section+"]")
 		start, end = len(d.lines)-1, len(d.lines)
 		d.changed = true
-	}
-	for index := start + 1; index < end; index++ {
-		match := iniOptionPattern.FindStringSubmatch(d.lines[index])
-		if len(match) == 0 || !strings.EqualFold(match[2], key) {
-			continue
-		}
-		replacement := match[1] + match[2] + match[3] + value
-		if d.lines[index] != replacement {
-			d.lines[index] = replacement
-			d.changed = true
-		}
-		return
 	}
 	separator := "="
 	if spaced {
@@ -97,36 +102,34 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 }
 
 func (d *iniDocument) SetOptionUnique(section, key, value string, spaced bool) {
-	start, end := d.sectionBounds(section)
-	if start >= 0 {
-		found := false
-		for index := end - 1; index > start; index-- {
-			match := iniOptionPattern.FindStringSubmatch(d.lines[index])
-			if len(match) == 0 || !strings.EqualFold(match[2], key) {
-				continue
-			}
-			if !found {
-				found = true
-				continue
-			}
-			d.lines = append(d.lines[:index], d.lines[index+1:]...)
-			d.changed = true
-		}
-	}
 	d.SetOption(section, key, value, spaced)
 }
 
 func (d *iniDocument) RemoveOption(section, key string) {
-	start, end := d.sectionBounds(section)
-	if start < 0 {
-		return
-	}
-	for index := end - 1; index > start; index-- {
-		match := iniOptionPattern.FindStringSubmatch(d.lines[index])
-		if len(match) == 0 || !strings.EqualFold(match[2], key) {
-			continue
-		}
-		d.lines = append(d.lines[:index], d.lines[index+1:]...)
+	indexes := d.optionIndexes(section, key)
+	for index := len(indexes) - 1; index >= 0; index-- {
+		match := indexes[index]
+		d.lines = append(d.lines[:match], d.lines[match+1:]...)
 		d.changed = true
 	}
+}
+
+func (d *iniDocument) optionIndexes(section, key string) []int {
+	indexes := []int{}
+	inSection := false
+	for index, line := range d.lines {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) >= 3 && trimmed[0] == '[' && trimmed[len(trimmed)-1] == ']' {
+			inSection = strings.EqualFold(strings.TrimSpace(trimmed[1:len(trimmed)-1]), section)
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		match := iniOptionPattern.FindStringSubmatch(line)
+		if len(match) != 0 && strings.EqualFold(match[2], key) {
+			indexes = append(indexes, index)
+		}
+	}
+	return indexes
 }
