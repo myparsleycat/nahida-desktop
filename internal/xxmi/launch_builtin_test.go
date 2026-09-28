@@ -20,6 +20,26 @@ func (stubLaunchHelper) LaunchXXMI(context.Context, inject.LaunchSpec) (inject.L
 
 func (stubLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
 
+func TestImporterLaunchLockAllowsOtherImporters(t *testing.T) {
+	t.Parallel()
+	service := New()
+	if !service.acquireImporter("GIMI") {
+		t.Fatal("first GIMI launch was rejected")
+	}
+	if service.acquireImporter("GIMI") {
+		t.Fatal("second GIMI launch was accepted")
+	}
+	if !service.acquireImporter("SRMI") {
+		t.Fatal("SRMI launch was blocked by GIMI")
+	}
+	service.releaseImporter("GIMI")
+	if !service.acquireImporter("GIMI") {
+		t.Fatal("GIMI remained locked after release")
+	}
+	service.releaseImporter("GIMI")
+	service.releaseImporter("SRMI")
+}
+
 func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	folder := t.TempDir()
 	path := filepath.Join(folder, "d3dx.ini")

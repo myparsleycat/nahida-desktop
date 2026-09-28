@@ -20,18 +20,10 @@ import (
 )
 
 func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterConfig) (returnErr error) {
-	x.mu.Lock()
-	if x.busy {
-		x.mu.Unlock()
+	if !x.acquireImporter(key) {
 		return errors.New("XXMI_BUSY")
 	}
-	x.busy = true
-	x.mu.Unlock()
-	defer func() {
-		x.mu.Lock()
-		x.busy = false
-		x.mu.Unlock()
-	}()
+	defer x.releaseImporter(key)
 
 	stage := "validate"
 	defer func() {
@@ -184,6 +176,25 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 			"XXMI.StartGame")
 	}
 	return nil
+}
+
+func (x *XXMI) acquireImporter(key string) bool {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if x.busy[key] {
+		return false
+	}
+	if x.busy == nil {
+		x.busy = make(map[string]bool)
+	}
+	x.busy[key] = true
+	return true
+}
+
+func (x *XXMI) releaseImporter(key string) {
+	x.mu.Lock()
+	delete(x.busy, key)
+	x.mu.Unlock()
 }
 
 func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConfig, processName string) error {

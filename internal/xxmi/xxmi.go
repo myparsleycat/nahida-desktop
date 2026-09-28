@@ -100,7 +100,7 @@ type XXMI struct {
 	elevated    elevatedLauncher
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
-	busy        bool
+	busy        map[string]bool
 }
 
 func New() *XXMI {
