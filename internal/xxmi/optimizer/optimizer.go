@@ -321,7 +321,8 @@ func inspect(file iniFile, importer, folder string, packagedNamespaces map[strin
 			continue
 		}
 		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-		if !shaderFixes && current.name == "include" && key == "include_recursive" && value == "mods" {
+		if !shaderFixes && current.name == "include" &&
+			(key == "include_recursive" && value == "mods" || key == "exclude_recursive" && value == "disabled*") {
 			return add("disable-file", "rogue d3dx.ini include", 0)
 		}
 		if key == "run" && value != "" {

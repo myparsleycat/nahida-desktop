@@ -78,6 +78,40 @@ func TestOptimizeDisablesRogueAndSkipsExcluded(t *testing.T) {
 	}
 }
 
+func TestOptimizeDisablesRogueD3DXIncludeOptions(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		line string
+	}{
+		{name: "recursive mods", line: "include_recursive = Mods"},
+		{name: "disabled exclusion", line: "exclude_recursive = DISABLED*"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			mods := filepath.Join(root, "Mods")
+			if err := os.MkdirAll(mods, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ini := filepath.Join(mods, "shipped.ini")
+			if err := os.WriteFile(ini, []byte("[Include]\n"+tc.line+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			report, err := Optimize(context.Background(), Options{
+				Importer: "GIMI", ImporterFolder: root,
+				CachePath: filepath.Join(root, "cache.json"), Prefix: "DISABLED_",
+			})
+			if err != nil || report.DisabledFiles != 1 {
+				t.Fatalf("report = %+v, err = %v", report, err)
+			}
+			if _, err := os.Stat(filepath.Join(mods, "DISABLED_shipped.ini")); err != nil {
+				t.Fatalf("rogue INI was not disabled: %v", err)
+			}
+		})
+	}
+}
+
 func TestOptimizeDisablesModWithGlobalShaderRegexTrigger(t *testing.T) {
 	root := t.TempDir()
 	mod := filepath.Join(root, "Mods", "Example")
