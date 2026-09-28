@@ -8,6 +8,8 @@ const xxmi = vi.hoisted(() => ({
   ClearLaunchBlockers: vi.fn(),
   GetImporterConfig: vi.fn(),
   SaveImporterConfig: vi.fn(),
+  DetectGameFolders: vi.fn(),
+  ValidateGameFolder: vi.fn(),
 }));
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
@@ -26,6 +28,8 @@ afterEach(() => {
   xxmi.ClearLaunchBlockers.mockReset();
   xxmi.GetImporterConfig.mockReset();
   xxmi.SaveImporterConfig.mockReset();
+  xxmi.DetectGameFolders.mockReset();
+  xxmi.ValidateGameFolder.mockReset();
   toastError.mockClear();
 });
 
@@ -34,7 +38,33 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("NVIDIA_SMOOTH_MOTION_ENABLED")).toBe("smooth-motion");
   expect(launchDialog("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED")).toBe("launch-blockers");
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
+  expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI is not configured")).toBeNull();
+});
+
+it("saves a detected game folder and retries launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_GAME_FOLDER_NOT_CONFIGURED"));
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+  xxmi.DetectGameFolders.mockResolvedValue([
+    { path: "C:\\Games\\Genshin Impact", exePath: "C:\\Games\\Genshin Impact\\GenshinImpact.exe" },
+  ]);
+  xxmi.ValidateGameFolder.mockResolvedValue(undefined);
+  xxmi.GetImporterConfig.mockResolvedValue({ gameFolder: "" });
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.detectGame" }));
+  fireEvent.click(await screen.findByRole("button", { name: "C:\\Games\\Genshin Impact" }));
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.ValidateGameFolder).toHaveBeenCalledWith("GIMI", "C:\\Games\\Genshin Impact");
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "GIMI",
+    expect.objectContaining({ gameFolder: "C:\\Games\\Genshin Impact" }),
+  );
 });
 
 it("saves the wounded effect choice before retrying launch", async () => {
