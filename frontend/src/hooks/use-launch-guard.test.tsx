@@ -6,6 +6,8 @@ import { afterEach, expect, it, vi } from "vitest";
 const xxmi = vi.hoisted(() => ({
   StartGame: vi.fn(),
   ClearLaunchBlockers: vi.fn(),
+  GetImporterConfig: vi.fn(),
+  SaveImporterConfig: vi.fn(),
 }));
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
@@ -22,6 +24,8 @@ afterEach(() => {
   cleanup();
   xxmi.StartGame.mockReset();
   xxmi.ClearLaunchBlockers.mockReset();
+  xxmi.GetImporterConfig.mockReset();
+  xxmi.SaveImporterConfig.mockReset();
   toastError.mockClear();
 });
 
@@ -29,14 +33,49 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("GIMI_DCR_ENABLED")).toBe("gimi-dcr");
   expect(launchDialog("NVIDIA_SMOOTH_MOTION_ENABLED")).toBe("smooth-motion");
   expect(launchDialog("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED")).toBe("launch-blockers");
+  expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
   expect(launchDialog("XXMI is not configured")).toBeNull();
 });
 
-function Harness() {
+it("saves the wounded effect choice before retrying launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("WWMI_WOUNDED_FX_DECISION_REQUIRED"));
+  xxmi.GetImporterConfig.mockResolvedValue({ wwmi: { disableWoundedFX: false } });
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+
+  render(<Harness importer="WWMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.mod.dialog.wwmi-wounded.confirm" }));
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "WWMI",
+    expect.objectContaining({ woundedFXDecided: true, wwmi: { disableWoundedFX: true } }),
+  );
+});
+
+it("can keep the wounded effect when retrying launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("WWMI_WOUNDED_FX_DECISION_REQUIRED"));
+  xxmi.GetImporterConfig.mockResolvedValue({ wwmi: { disableWoundedFX: true } });
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+
+  render(<Harness importer="WWMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.mod.dialog.wwmi-wounded.keep" }));
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "WWMI",
+    expect.objectContaining({ woundedFXDecided: true, wwmi: { disableWoundedFX: false } }),
+  );
+});
+
+function Harness({ importer = "GIMI" }: { importer?: string }) {
   const { startImporter, launchGuardDialog } = useLaunchGuard();
   return (
     <div>
-      <button type="button" onClick={() => void startImporter("GIMI")}>
+      <button type="button" onClick={() => void startImporter(importer)}>
         play
       </button>
       {launchGuardDialog}

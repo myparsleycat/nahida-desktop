@@ -592,6 +592,12 @@
           "description": "キャラクター動的解像度とスムーズモーションがオンです。MODを正常に適用するには、両方をオフにする必要があります。オフにしてゲームを起動しますか？",
           "confirm": "オフにして起動"
         },
+        "wwmi-wounded": {
+          "title": "負傷エフェクトが有効です",
+          "description": "負傷エフェクトによりMODのテクスチャが崩れる場合があります。無効化するか、そのまま起動してください。",
+          "confirm": "無効化して起動",
+          "keep": "有効のまま起動"
+        },
         "preset-management": {
           "description": "このプリセットには {{length}} 個のMODが保存されています。",
           "legacy-badge": "旧形式",
@@ -1959,6 +1965,7 @@
         "builtin": {
           "detectGame": "ゲームフォルダーを検出", "noGameFolders": "ゲームフォルダーが見つかりませんでした。手動で入力してください。",
           "gameTweaks": "ゲーム設定", "configureGame": "ゲーム設定を調整", "unlockFPS": "FPS制限を解除", "fpsTarget": "目標FPS", "enableHDR": "HDRを有効化", "disableDCR": "動的キャラクター解像度を無効化",
+          "forceMaxLODBias": "最高のテクスチャ品質を強制", "applyPerfTweaks": "パフォーマンス調整を適用", "disableWoundedFX": "負傷エフェクトを無効化",
           "checkUpdates": "更新を確認", "installUpdates": "更新をインストール", "updatesInstalled": "更新をインストールしました",
           "startMethod": "起動方法", "priority": "プロセスの優先度", "initDelay": "DLL 初期化の遅延（ミリ秒）", "windowMode": "ウィンドウモード", "enforceRendering": "描画設定を強制", "enableHunting": "ハンティングを有効化", "dumpShaders": "シェーダーを出力", "muteWarnings": "警告を非表示", "callsLogging": "呼び出しを記録", "debugLogging": "デバッグログ", "unsafeMode": "安全でないモード", "unsafeWarning": "このモードではサードパーティのランタイム DLL の変更を保持します。", "advanced": "詳細設定", "preLaunch": "起動前のコマンド", "postLoad": "ロード後のコマンド", "waitForCommand": "コマンドの完了を待つ", "customLaunch": "カスタム起動コマンド", "elevatedCommandWarning": "このコマンドは管理者権限で実行されます。", "extraLibraries": "追加 DLL のパス（セミコロン区切り）",
           "root": "インポーターのルートフォルダー", "saved": "XXMI の設定を保存しました", "externalDetected": "外部 XXMI Launcher が見つかりました", "externalWarning": "インポートしたフォルダーを使う前に外部ランチャーを閉じてください。ランタイムファイルが上書きされる場合があります。", "import": "設定をインポート", "imported": "ランチャー設定をインポートしました",

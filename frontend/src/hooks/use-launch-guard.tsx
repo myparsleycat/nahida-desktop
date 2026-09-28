@@ -17,12 +17,16 @@ import { toast } from "sonner";
 // Keep in sync with errGimiDCREnabled and errSmoothMotionEnabled in internal/xxmi/launch_guard.go.
 const LAUNCH_BLOCKER_DCR = "GIMI_DCR_ENABLED";
 const LAUNCH_BLOCKER_SMOOTH_MOTION = "NVIDIA_SMOOTH_MOTION_ENABLED";
+const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 
-type LaunchDialog = "gimi-dcr" | "smooth-motion" | "launch-blockers";
+type LaunchDialog = "gimi-dcr" | "smooth-motion" | "launch-blockers" | "wwmi-wounded";
 
 export type LaunchGuardResult = { status: "started" } | { status: "blocked"; kind: LaunchDialog };
 
 export function launchDialog(message: string): LaunchDialog | null {
+  if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
+    return "wwmi-wounded";
+  }
   const dcr = message.includes(LAUNCH_BLOCKER_DCR);
   const smoothMotion = message.includes(LAUNCH_BLOCKER_SMOOTH_MOTION);
   if (dcr && smoothMotion) {
@@ -76,7 +80,17 @@ export function useLaunchGuard() {
     setIsConfirming(true);
 
     try {
-      await XXMI.ClearLaunchBlockers(importer);
+      if (dialog === "wwmi-wounded") {
+        const config = await XXMI.GetImporterConfig(importer);
+        if (!config.wwmi) throw new Error("WWMI settings are unavailable");
+        await XXMI.SaveImporterConfig(importer, {
+          ...config,
+          woundedFXDecided: true,
+          wwmi: { ...config.wwmi, disableWoundedFX: true },
+        });
+      } else {
+        await XXMI.ClearLaunchBlockers(importer);
+      }
     } catch (error) {
       if (confirmGeneration.current !== generation) {
         return;
@@ -107,6 +121,29 @@ export function useLaunchGuard() {
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
+  }, [dialog, pendingImporter]);
+
+  const handleKeepWounded = useCallback(async () => {
+    if (!pendingImporter) return;
+    const importer = pendingImporter;
+    const generation = (confirmGeneration.current += 1);
+    setIsConfirming(true);
+    try {
+      const config = await XXMI.GetImporterConfig(importer);
+      if (!config.wwmi) throw new Error("WWMI settings are unavailable");
+      await XXMI.SaveImporterConfig(importer, {
+        ...config,
+        woundedFXDecided: true,
+        wwmi: { ...config.wwmi, disableWoundedFX: false },
+      });
+      if (confirmGeneration.current !== generation) return;
+      setPendingImporter(null);
+      await XXMI.StartGame(importer);
+    } catch (error) {
+      if (confirmGeneration.current === generation) toast.error(toErrorMessage(error));
+    } finally {
+      if (confirmGeneration.current === generation) setIsConfirming(false);
+    }
   }, [pendingImporter]);
 
   const alert = useMemo(
@@ -127,7 +164,17 @@ export function useLaunchGuard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isConfirming}>{t("g.cancel")}</AlertDialogCancel>
+            {dialog === "wwmi-wounded" ? (
+              <AlertDialogAction
+                variant="outline"
+                disabled={isConfirming}
+                onClickPromise={handleKeepWounded}
+              >
+                {t("page.mod.dialog.wwmi-wounded.keep")}
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogCancel disabled={isConfirming}>{t("g.cancel")}</AlertDialogCancel>
+            )}
             <AlertDialogAction disabled={isConfirming} onClickPromise={handleConfirm}>
               {t(`page.mod.dialog.${dialog}.confirm`)}
             </AlertDialogAction>
@@ -135,7 +182,7 @@ export function useLaunchGuard() {
         </AlertDialogContent>
       </AlertDialog>
     ),
-    [closeDialog, dialog, handleConfirm, isConfirming, pendingImporter, t],
+    [closeDialog, dialog, handleConfirm, handleKeepWounded, isConfirming, pendingImporter, t],
   );
 
   return { startImporter, launchGuardDialog: alert };

@@ -594,6 +594,12 @@
           "description": "캐릭터 동적 해상도와 부드러운 모션이 켜져 있습니다. 모드가 정상적으로 적용되려면 둘 다 꺼져 있어야 합니다. 끄고 게임을 실행할까요?",
           "confirm": "끄고 실행"
         },
+        "wwmi-wounded": {
+          "title": "부상 효과가 활성화되어 있습니다",
+          "description": "명조의 부상 효과로 모드 텍스처가 깨질 수 있습니다. 효과를 끄거나 유지한 채 실행하세요.",
+          "confirm": "끄고 실행",
+          "keep": "유지하고 실행"
+        },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
           "legacy-badge": "레거시",
@@ -1977,6 +1983,7 @@
         "builtin": {
           "detectGame": "게임 폴더 감지", "noGameFolders": "게임 폴더를 찾지 못했습니다. 경로를 직접 입력하세요.",
           "gameTweaks": "게임 설정", "configureGame": "게임 설정 조정", "unlockFPS": "FPS 제한 해제", "fpsTarget": "목표 FPS", "enableHDR": "HDR 활성화", "disableDCR": "동적 캐릭터 해상도 비활성화",
+          "forceMaxLODBias": "최고 텍스처 품질 강제", "applyPerfTweaks": "성능 조정 적용", "disableWoundedFX": "부상 효과 비활성화",
           "checkUpdates": "업데이트 확인", "installUpdates": "업데이트 설치", "updatesInstalled": "업데이트를 설치했습니다",
           "startMethod": "시작 방식", "priority": "프로세스 우선순위", "initDelay": "DLL 초기화 지연(ms)", "windowMode": "창 모드", "enforceRendering": "렌더링 강제", "enableHunting": "헌팅 활성화", "dumpShaders": "셰이더 덤프", "muteWarnings": "경고 숨기기", "callsLogging": "호출 로그", "debugLogging": "디버그 로그", "unsafeMode": "안전하지 않은 모드", "unsafeWarning": "이 모드에서는 타사 런타임 DLL 변경을 보존합니다.", "advanced": "고급", "preLaunch": "실행 전 명령", "postLoad": "로드 후 명령", "waitForCommand": "명령 완료 기다리기", "customLaunch": "사용자 지정 실행 명령", "elevatedCommandWarning": "이 명령은 관리자 권한으로 실행됩니다.", "extraLibraries": "추가 DLL 경로(세미콜론으로 구분)",
           "root": "임포터 루트 폴더", "saved": "XXMI 설정을 저장했습니다", "externalDetected": "외부 XXMI Launcher를 찾았습니다", "externalWarning": "가져온 폴더를 사용하기 전에 외부 런처를 닫으세요. 두 런처가 런타임 파일을 서로 덮어쓸 수 있습니다.", "import": "설정 가져오기", "imported": "런처 설정을 가져왔습니다",

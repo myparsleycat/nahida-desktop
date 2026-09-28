@@ -611,6 +611,12 @@
           "description": "Dynamic Character Resolution and Smooth Motion are on. Mods will not apply correctly unless both are off. Turn them off and start the game?",
           "confirm": "Turn off and start"
         },
+        "wwmi-wounded": {
+          "title": "Wounded effect detected",
+          "description": "Wounded effect can break modded textures in Wuthering Waves. Disable it before starting, or keep it enabled?",
+          "confirm": "Disable and start",
+          "keep": "Keep enabled and start"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
@@ -2044,6 +2050,7 @@
           "checkUpdates": "Check updates", "installUpdates": "Install updates", "updatesInstalled": "Updates installed",
           "detectGame": "Detect game folder", "noGameFolders": "No game folders were found. Enter the folder manually.",
           "gameTweaks": "Game settings", "configureGame": "Configure game settings", "unlockFPS": "Unlock FPS", "fpsTarget": "FPS target", "enableHDR": "Enable HDR", "disableDCR": "Disable dynamic character resolution",
+          "forceMaxLODBias": "Force highest texture detail", "applyPerfTweaks": "Apply performance tweaks", "disableWoundedFX": "Disable wounded effect",
           "startMethod": "Start method", "priority": "Process priority", "initDelay": "DLL initialization delay (ms)", "windowMode": "Window mode", "enforceRendering": "Enforce rendering", "enableHunting": "Enable hunting", "dumpShaders": "Dump shaders", "muteWarnings": "Mute warnings", "callsLogging": "Log calls", "debugLogging": "Debug logging", "unsafeMode": "Unsafe mode", "unsafeWarning": "Third-party runtime DLL changes will be preserved in unsafe mode.", "advanced": "Advanced", "preLaunch": "Pre-launch command", "postLoad": "Post-load command", "waitForCommand": "Wait for command", "customLaunch": "Custom launch command", "elevatedCommandWarning": "This command runs with administrator rights.", "extraLibraries": "Extra DLL paths (separated by semicolons)",
           "root": "Importer root folder", "saved": "XXMI settings saved", "externalDetected": "An external XXMI Launcher was found", "externalWarning": "Close the external launcher before using imported folders. Both launchers can overwrite runtime files.", "import": "Import settings", "imported": "Launcher settings imported",
           "packages": "Shared packages", "libs": "XXMI libraries", "prune": "Clean unused caches", "pruned": "Removed {{count}} unused caches", "inUse": "In use", "legacy": "Legacy 3DMigoto", "downloadLegacy": "Download legacy runtime", "downloaded": "Legacy runtime downloaded",

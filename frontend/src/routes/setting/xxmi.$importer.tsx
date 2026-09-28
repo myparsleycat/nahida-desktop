@@ -342,7 +342,7 @@ function RouteComponent() {
         </CardContent>
       </Card>
 
-      {(config.gimi || config.srmi || config.himi) && (
+      {(config.gimi || config.srmi || config.himi || config.wwmi) && (
         <Card>
           <CardHeader>
             <CardTitle>{t("page.setting.xxmi.builtin.gameTweaks")}</CardTitle>
@@ -440,6 +440,33 @@ function RouteComponent() {
                     />
                   </label>
                 )}
+              </>
+            )}
+            {config.wwmi && (
+              <>
+                {(
+                  [
+                    ["unlockFPS", "unlockFPS"],
+                    ["forceMaxLODBias", "forceMaxLODBias"],
+                    ["applyPerfTweaks", "applyPerfTweaks"],
+                    ["disableWoundedFX", "disableWoundedFX"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <label key={field} className="flex items-center justify-between">
+                    <span>{t(`page.setting.xxmi.builtin.${label}`)}</span>
+                    <Switch
+                      checked={config.wwmi![field]}
+                      onCheckedChange={(value) =>
+                        setConfig({
+                          ...config,
+                          woundedFXDecided:
+                            field === "disableWoundedFX" ? true : config.woundedFXDecided,
+                          wwmi: { ...config.wwmi!, [field]: value },
+                        })
+                      }
+                    />
+                  </label>
+                ))}
               </>
             )}
           </CardContent>
