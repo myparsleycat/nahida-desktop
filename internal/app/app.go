@@ -217,7 +217,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 						}
 						if first {
 							background, err := rt.setting.GetRunInBackground(context.Background())
-							if err == nil && !background {
+							if err == nil && !background && !rt.window.hasShown() {
 								app.Quit()
 							}
 						}

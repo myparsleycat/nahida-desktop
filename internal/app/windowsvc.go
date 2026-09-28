@@ -34,6 +34,7 @@ type Window struct {
 	log          *infra.Log
 	ready        bool
 	startHidden  bool
+	everShown    bool
 	consoleOpen  bool
 	currentRoute string
 	pendingRoute string
@@ -212,6 +213,9 @@ func (w *Window) registerEvents(window application.Window) {
 		w.pendingRoute = ""
 		w.mu.Unlock()
 		if !startHidden {
+			w.mu.Lock()
+			w.everShown = true
+			w.mu.Unlock()
 			window.Show()
 		}
 		w.syncTaskbarProgress(window)
@@ -605,6 +609,9 @@ func (w *Window) bringToForeground(window application.Window) {
 	if window == nil {
 		return
 	}
+	w.mu.Lock()
+	w.everShown = true
+	w.mu.Unlock()
 	application.InvokeSync(func() {
 		window.Show()
 		if hwnd := webviewHWND(window); hwnd != 0 {
@@ -612,6 +619,12 @@ func (w *Window) bringToForeground(window application.Window) {
 		}
 		window.Focus()
 	})
+}
+
+func (w *Window) hasShown() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.everShown
 }
 
 func webviewHWND(window application.Window) uintptr {
