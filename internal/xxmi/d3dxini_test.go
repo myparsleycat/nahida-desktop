@@ -32,6 +32,35 @@ func TestINIEditorPreservesFormatting(t *testing.T) {
 	}
 }
 
+func TestINIEditorPreservesInlineComments(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		line    string
+		value   string
+		want    string
+		changed bool
+	}{
+		{"semicolon", "target = old.exe ; keep this", "game.exe", "target = game.exe ; keep this", true},
+		{"hash", "target = old.exe\t# keep this", "game.exe", "target = game.exe\t# keep this", true},
+		{"quoted separator", `target = "old ; value" ; keep this`, `"new ; value"`,
+			`target = "new ; value" ; keep this`, true},
+		{"unchanged", "target = game.exe ; keep this", "game.exe", "target = game.exe ; keep this", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := parseINI([]byte("[Loader]\r\n" + tc.line + "\r\n"))
+			doc.SetOption("Loader", "target", tc.value, true)
+			if got := string(doc.Bytes()); got != "[Loader]\r\n"+tc.want+"\r\n" {
+				t.Fatalf("INI = %q; want %q", got, tc.want)
+			}
+			if doc.Changed() != tc.changed {
+				t.Fatalf("changed = %t; want %t", doc.Changed(), tc.changed)
+			}
+		})
+	}
+}
+
 func TestINIEditorRemoveDuplicateOptions(t *testing.T) {
 	t.Parallel()
 	doc := parseINI([]byte("[ConsoleVariables]\nkey=1\n;key=comment\nKEY=2\n"))

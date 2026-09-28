@@ -67,7 +67,7 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 	if len(indexes) > 0 {
 		first := indexes[0]
 		match := iniOptionPattern.FindStringSubmatch(d.lines[first])
-		replacement := match[1] + match[2] + match[3] + value
+		replacement := match[1] + match[2] + match[3] + value + iniCommentSuffix(match[4])
 		if d.lines[first] != replacement {
 			d.lines[first] = replacement
 			d.changed = true
@@ -99,6 +99,32 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 	}
 	d.lines = append(d.lines[:insert], append([]string{key + separator + value}, d.lines[insert:]...)...)
 	d.changed = true
+}
+
+func iniCommentSuffix(value string) string {
+	quote := byte(0)
+	for index := range len(value) {
+		char := value[index]
+		if quote != 0 {
+			if char == quote && (index == 0 || value[index-1] != '\\') {
+				quote = 0
+			}
+			continue
+		}
+		if char == '\'' || char == '"' {
+			quote = char
+			continue
+		}
+		if (char != ';' && char != '#') || index == 0 || value[index-1] != ' ' && value[index-1] != '\t' {
+			continue
+		}
+		start := index - 1
+		for start > 0 && (value[start-1] == ' ' || value[start-1] == '\t') {
+			start--
+		}
+		return value[start:]
+	}
+	return ""
 }
 
 func (d *iniDocument) SetOptionUnique(section, key, value string, spaced bool) {
