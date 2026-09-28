@@ -36,6 +36,7 @@ function RouteComponent() {
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const [selectedPackage, setSelectedPackage] = useState("");
+  const selectedRelease = releases?.find((release) => release.version === selectedPackage);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
     Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
@@ -215,6 +216,11 @@ function RouteComponent() {
           </div>
           {selectedPackage && (
             <>
+              {selectedRelease?.notes && (
+                <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-muted-foreground">
+                  {selectedRelease.notes}
+                </p>
+              )}
               <label className="flex items-center gap-2">
                 <Switch checked={allowUnsigned} onCheckedChange={setAllowUnsigned} />
                 {t("page.setting.xxmi.builtin.allowUnsigned")}

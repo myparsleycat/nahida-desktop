@@ -259,6 +259,38 @@ function XXMIDashboard() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {updates
+            ?.filter(
+              (entry, index, list) =>
+                entry.available &&
+                !entry.pinned &&
+                list.findIndex((item) => item.package === entry.package) === index,
+            )
+            .map((entry) => (
+              <div
+                key={entry.package}
+                className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+              >
+                <span className="min-w-0 break-all">
+                  {entry.package}: {entry.installed || t("page.setting.xxmi.builtin.notInstalled")}{" "}
+                  → {entry.latestVersion}
+                </span>
+                <Button
+                  variant="outline"
+                  onClickPromise={async () => {
+                    try {
+                      await XXMI.SkipVersion(entry.package, entry.latestVersion);
+                      refresh();
+                      toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
+                    } catch (error) {
+                      toast.error(toErrorMessage(error));
+                    }
+                  }}
+                >
+                  {t("page.setting.xxmi.builtin.skipVersion")}
+                </Button>
+              </div>
+            ))}
           {importerKeys.map((key) => {
             const importer = overview?.importers?.find((entry) => entry.key === key);
             const available = updates?.some((entry) => entry.importer === key && entry.available);
