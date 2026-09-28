@@ -62,3 +62,36 @@ func TestSplitLaunchOptionsKeepsQuotedArgument(t *testing.T) {
 		}
 	}
 }
+
+func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
+	folder := t.TempDir()
+	game := filepath.Join(folder, "Wuthering Waves")
+	wrapper := filepath.Join(game, "Wuthering Waves.exe")
+	client := filepath.Join(game, "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe")
+	if err := os.MkdirAll(filepath.Dir(client), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{wrapper, client, filepath.Join(folder, "3DMigoto Loader.exe")} {
+		if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(folder, runtimeManifestName), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, direct := range []bool{false, true} {
+		cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct}
+		spec, err := New().builtinLaunchSpec(cfg, wrapper, "Client-Win64-Shipping.exe")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := wrapper
+		if direct {
+			want = client
+		}
+		if spec.StartExe != want || spec.WorkDir != filepath.Dir(want) || len(spec.StartArgs) != 1 ||
+			spec.StartArgs[0] != "-dx11" {
+			t.Fatalf("direct=%t, spec=%+v", direct, spec)
+		}
+	}
+}

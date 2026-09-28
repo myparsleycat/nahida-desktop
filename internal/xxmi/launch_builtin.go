@@ -258,6 +258,10 @@ func (x *XXMI) builtinLaunchSpec(cfg ImporterConfig, gameExe, processName string
 		}
 	}
 	if strings.EqualFold(processName, "Client-Win64-Shipping.exe") {
+		if cfg.UseLaunchOptions {
+			spec.StartExe = filepath.Join(filepath.Dir(gameExe), "Client", "Binaries", "Win64", processName)
+			spec.WorkDir = filepath.Dir(spec.StartExe)
+		}
 		spec.StartArgs = append([]string{"-dx11"}, spec.StartArgs...)
 	}
 	if strings.EqualFold(processName, "Endfield.exe") {
