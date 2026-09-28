@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -71,6 +72,34 @@ func TestImporterInjectionDefaults(t *testing.T) {
 		if !ok || spec.useHook != tc.hook {
 			t.Errorf("%s: useHook = %t, found = %t", tc.key, spec.useHook, ok)
 		}
+	}
+}
+
+func TestLaunchReportsGameResolutionFailure(t *testing.T) {
+	root := t.TempDir()
+	cfg, err := DefaultImporterConfig("GIMI", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Loader]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stages []string
+	service := NewWithOptions(Options{EventEmit: func(name string, data ...any) {
+		if name == "xxmi:launch-progress" {
+			stages = append(stages, data[0].(map[string]any)["stage"].(string))
+		}
+	}})
+	err = service.startBuiltinGame(context.Background(), "GIMI", cfg, false)
+	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
+		t.Fatalf("launch error = %v", err)
+	}
+	if !slices.Equal(stages, []string{"resolve-game", "failed"}) {
+		t.Fatalf("launch stages = %v", stages)
 	}
 }
 

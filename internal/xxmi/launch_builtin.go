@@ -71,6 +71,7 @@ func (x *XXMI) startBuiltinGame(
 	if !ok {
 		return fmt.Errorf("unknown importer %q", key)
 	}
+	progress("resolve-game")
 	gameExe := configuredGameExecutable(cfg.GameFolder, packageSpec.gameExeNames)
 	if gameExe == "" || !filepath.IsAbs(gameExe) {
 		return errors.New("XXMI_GAME_FOLDER_NOT_CONFIGURED")
