@@ -2,6 +2,7 @@ import { Mod } from "@bindings/mod";
 import type { GameConfig } from "@bindings/mod/models";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type ImporterConfig } from "@bindings/xxmi/models";
+import { WWMIGraphicsSettings } from "@renderer/components/setting/wwmi-graphics-settings";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
@@ -579,78 +580,10 @@ function RouteComponent() {
                     />
                   </label>
                 ))}
-                {(
-                  [
-                    "meshLODDistanceBaseFOV",
-                    "meshLODDistanceOffset",
-                    "textureStreamingBoost",
-                    "textureStreamingMinBoost",
-                    "textureStreamingPoolSize",
-                  ] as const
-                ).map((field) => (
-                  <label key={field} className="block space-y-1">
-                    <span>{t(`page.setting.xxmi.builtin.${field}`)}</span>
-                    <Input
-                      type="number"
-                      step={
-                        field === "meshLODDistanceBaseFOV" || field === "textureStreamingPoolSize"
-                          ? 1
-                          : "any"
-                      }
-                      value={config.wwmi![field]}
-                      onChange={(event) =>
-                        setConfig({
-                          ...config,
-                          wwmi: { ...config.wwmi!, [field]: Number(event.target.value) },
-                        })
-                      }
-                    />
-                  </label>
-                ))}
-                {(
-                  [
-                    "textureStreamingUseAllMips",
-                    "textureStreamingLimitToVRAM",
-                    "textureStreamingFixedPoolSize",
-                  ] as const
-                ).map((field) => (
-                  <label key={field} className="flex items-center justify-between">
-                    <span>{t(`page.setting.xxmi.builtin.${field}`)}</span>
-                    <Switch
-                      checked={config.wwmi![field]}
-                      onCheckedChange={(value) =>
-                        setConfig({ ...config, wwmi: { ...config.wwmi!, [field]: value } })
-                      }
-                    />
-                  </label>
-                ))}
-                {config.wwmi.applyPerfTweaks && (
-                  <div className="space-y-2">
-                    <p>{t("page.setting.xxmi.builtin.perfTweakValues")}</p>
-                    {Object.entries(config.wwmi.perfTweaks ?? {}).map(([name, value]) => (
-                      <label key={name} className="block space-y-1">
-                        <span className="break-all">{name}</span>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={value ?? ""}
-                          onChange={(event) =>
-                            setConfig({
-                              ...config,
-                              wwmi: {
-                                ...config.wwmi!,
-                                perfTweaks: {
-                                  ...config.wwmi!.perfTweaks,
-                                  [name]: Number(event.target.value),
-                                },
-                              },
-                            })
-                          }
-                        />
-                      </label>
-                    ))}
-                  </div>
-                )}
+                <WWMIGraphicsSettings
+                  options={config.wwmi}
+                  onChange={(wwmi) => setConfig({ ...config, wwmi })}
+                />
               </>
             )}
           </CardContent>
