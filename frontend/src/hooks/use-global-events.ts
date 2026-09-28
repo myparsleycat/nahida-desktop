@@ -123,9 +123,12 @@ export function useGlobalEvents(
         const removeXXMILaunchListener = Events.On("xxmi:launch-progress", (event) => {
             const payload = Array.isArray(event.data) ? event.data[0] : event.data;
             if (!payload || typeof payload !== "object") return;
-            const { importer, stage } = payload as Record<string, unknown>;
+            const { importer, stage, optimized } = payload as Record<string, unknown>;
             if (typeof importer !== "string" || typeof stage !== "string") return;
             const id = `xxmi-launch-${importer}`;
+            if (stage === "ini-optimizer" && typeof optimized === "number") {
+                toast.success(i18n.t("page.setting.xxmi.builtin.optimized", { count: optimized }));
+            }
             if (stage === "finish" || stage === "failed") {
                 toast.dismiss(id);
                 void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
