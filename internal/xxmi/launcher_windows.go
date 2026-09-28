@@ -9,68 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-
-	"nahida.live/desktop/internal/infra"
 )
-
-const launcherImageName = "XXMI Launcher.exe"
-
-func ensureLauncherClosed(ctx context.Context) error {
-	return ensureLauncherClosedWith(
-		ctx, launcherImageName, 5*time.Second, 100*time.Millisecond, findProcessPID, killProcess,
-	)
-}
-
-func ensureLauncherClosedWith(
-	ctx context.Context,
-	executable string,
-	timeout time.Duration,
-	pollInterval time.Duration,
-	find func(context.Context, string) (int, error),
-	kill func(int) error,
-) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		pid, err := find(ctx, executable)
-		if err != nil {
-			return err
-		}
-		if pid == 0 {
-			return nil
-		}
-		if err := kill(pid); err != nil {
-			return infra.AnnotateError(
-				infra.WithCause(errors.New("failed to close XXMI Launcher"), err),
-				infra.Diagnostic{
-					Operation: "close-launcher",
-					Stage:     "terminate",
-					Fields:    map[string]any{"pid": pid, "executable": executable},
-				},
-			)
-		}
-		if time.Now().After(deadline) {
-			return infra.AnnotateError(
-				errors.New("XXMI Launcher is still running"),
-				infra.Diagnostic{
-					Operation: "close-launcher",
-					Stage:     "wait",
-					Fields:    map[string]any{"pid": pid, "executable": executable},
-				},
-			)
-		}
-		timer := time.NewTimer(pollInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
-}
 
 func killProcess(pid int) error {
 	if pid <= 0 {

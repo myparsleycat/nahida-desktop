@@ -36,7 +36,7 @@ func TestFindXXMIPathPrefersValidAppDataCandidate(t *testing.T) {
 		searchCalled = true
 		return nil, nil
 	}})
-	result, err := service.FindXXMIPath(context.Background())
+	result, err := service.findExternalLauncherPath(context.Background())
 	if err != nil || result == nil || *result != candidate {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
@@ -61,7 +61,7 @@ func TestFindXXMIPathScansRootsAndExcludesBackups(t *testing.T) {
 	service := NewWithOptions(Options{SearchRoots: func() ([]string, error) {
 		return []string{root}, nil
 	}})
-	result, err := service.FindXXMIPath(context.Background())
+	result, err := service.findExternalLauncherPath(context.Background())
 	if err != nil || result == nil || *result != wanted {
 		t.Fatalf("result=%v err=%v", result, err)
 	}

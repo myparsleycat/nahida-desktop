@@ -131,13 +131,6 @@ func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Unlock()
 }
 
-// EnsureLauncherClosed closes the launcher before DLL replacement operations.
-//
-//wails:ignore
-func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
-	return ensureLauncherClosed(ctx)
-}
-
 func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
 	x.mu.RLock()
 	client := x.client
@@ -169,37 +162,6 @@ func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
 	}
 	cleaned := filepath.Clean(*value)
 	return &cleaned, nil
-}
-
-//wails:ignore
-func (x *XXMI) FindXXMIPath(ctx context.Context) (*string, error) {
-	appData := strings.TrimSpace(os.Getenv("APPDATA"))
-	if appData != "" {
-		candidate := filepath.Join(appData, "XXMI Launcher")
-		if isValidConfig(filepath.Join(candidate, xxmiConfigName)) {
-			return &candidate, nil
-		}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	roots, err := x.searchRoots()
-	if err != nil {
-		return nil, err
-	}
-	var diagnostics infra.DiagnosticBatch
-	defer diagnostics.Report(x.log, "XXMI", "find-config")
-	result, err := findFileAcrossRoots(ctx, roots, xxmiConfigName, map[string]struct{}{"Backups": {}}, diagnostics.Add)
-	if err != nil || result == nil {
-		return nil, err
-	}
-	directory := filepath.Dir(*result)
-	return &directory, nil
-}
-
-func isValidConfig(path string) bool {
-	_, _, err := readAndValidateConfig(path)
-	return err == nil
 }
 
 func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {

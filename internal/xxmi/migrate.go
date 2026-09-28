@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
 )
 
 type ExternalLauncher struct {
@@ -28,7 +29,7 @@ func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, e
 		return nil, err
 	}
 	if path == nil || !isValidConfig(filepath.Join(*path, xxmiConfigName)) {
-		path, err = x.FindXXMIPath(ctx)
+		path, err = x.findExternalLauncherPath(ctx)
 		if err != nil || path == nil {
 			return nil, err
 		}
@@ -48,6 +49,36 @@ func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, e
 		}
 	}
 	return out, nil
+}
+
+func (x *XXMI) findExternalLauncherPath(ctx context.Context) (*string, error) {
+	appData := strings.TrimSpace(os.Getenv("APPDATA"))
+	if appData != "" {
+		candidate := filepath.Join(appData, "XXMI Launcher")
+		if isValidConfig(filepath.Join(candidate, xxmiConfigName)) {
+			return &candidate, nil
+		}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	roots, err := x.searchRoots()
+	if err != nil {
+		return nil, err
+	}
+	var diagnostics infra.DiagnosticBatch
+	defer diagnostics.Report(x.log, "XXMI", "find-config")
+	result, err := findFileAcrossRoots(ctx, roots, xxmiConfigName, map[string]struct{}{"Backups": {}}, diagnostics.Add)
+	if err != nil || result == nil {
+		return nil, err
+	}
+	directory := filepath.Dir(*result)
+	return &directory, nil
+}
+
+func isValidConfig(path string) bool {
+	_, _, err := readAndValidateConfig(path)
+	return err == nil
 }
 
 func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalLauncherInput) error {
