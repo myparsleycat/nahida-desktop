@@ -1,0 +1,399 @@
+package optimizer
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+)
+
+type Options struct {
+	Importer       string
+	ImporterFolder string
+	CachePath      string
+	Exclude        []string
+	Prefix         string
+	DryRun         bool
+	ResetCache     bool
+}
+
+type Change struct {
+	Path   string `json:"path"`
+	Action string `json:"action"`
+	Reason string `json:"reason"`
+	Line   int    `json:"line,omitempty"`
+}
+
+type Report struct {
+	Changes       []Change `json:"changes"`
+	DisabledFiles int      `json:"disabledFiles"`
+	DisabledMods  int      `json:"disabledMods"`
+	EditedFiles   int      `json:"editedFiles"`
+	EditedLines   int      `json:"editedLines"`
+}
+
+type iniFile struct {
+	path    string
+	data    []byte
+	lines   []string
+	newline string
+	bom     bool
+	final   bool
+}
+
+func Optimize(ctx context.Context, options Options) (Report, error) {
+	if options.Prefix != "DISABLED " && options.Prefix != "DISABLED_" {
+		return Report{}, errors.New("invalid disabled prefix")
+	}
+	if options.ImporterFolder == "" || !filepath.IsAbs(options.ImporterFolder) {
+		return Report{}, errors.New("invalid importer folder")
+	}
+	if len(options.Exclude) == 0 {
+		options.Exclude = []string{"DISABLED*"}
+	}
+	cache := map[string]int64{}
+	if !options.ResetCache {
+		if data, err := os.ReadFile(options.CachePath); err == nil {
+			_ = json.Unmarshal(data, &cache)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return Report{}, err
+		}
+	}
+	mods := filepath.Join(options.ImporterFolder, "Mods")
+	shaderFixes := filepath.Join(options.ImporterFolder, "ShaderFixes")
+	packagedNamespaces := map[string]bool{}
+	if options.Importer == "GIMI" {
+		library := filepath.Join(options.ImporterFolder, "Core", "GIMI", "Libraries")
+		if err := walkINI(ctx, library, options.Exclude, func(path string, info fs.FileInfo) error {
+			file, err := readINI(path)
+			if err != nil {
+				return err
+			}
+			if namespace := iniNamespace(file); namespace != "" {
+				packagedNamespaces[namespace] = true
+			}
+			return nil
+		}); err != nil {
+			return Report{}, err
+		}
+	}
+	report := Report{Changes: []Change{}}
+	for _, folder := range []string{mods, shaderFixes} {
+		if err := walkINI(ctx, folder, options.Exclude, func(path string, info fs.FileInfo) error {
+			if !options.DryRun && cache[path] == info.ModTime().UnixNano() {
+				return nil
+			}
+			file, err := readINI(path)
+			if err != nil {
+				return err
+			}
+			changes := inspect(file, options.Importer, folder == shaderFixes, packagedNamespaces)
+			report.Changes = append(report.Changes, changes...)
+			if !options.DryRun {
+				if err := apply(file, changes, options.Prefix); err != nil {
+					return err
+				}
+				if updated, err := os.Stat(path); err == nil {
+					cache[path] = updated.ModTime().UnixNano()
+				} else if errors.Is(err, os.ErrNotExist) {
+					delete(cache, path)
+				} else {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return Report{}, err
+		}
+	}
+	for _, change := range report.Changes {
+		switch change.Action {
+		case "disable-file":
+			report.DisabledFiles++
+		case "disable-mod":
+			report.DisabledMods++
+		case "edit-line":
+			report.EditedLines++
+		}
+	}
+	seen := map[string]bool{}
+	for _, change := range report.Changes {
+		if change.Action == "edit-line" && !seen[change.Path] {
+			report.EditedFiles++
+			seen[change.Path] = true
+		}
+	}
+	slices.SortFunc(report.Changes, func(a, b Change) int {
+		if order := strings.Compare(a.Path, b.Path); order != 0 {
+			return order
+		}
+		return a.Line - b.Line
+	})
+	if !options.DryRun {
+		if err := os.MkdirAll(filepath.Dir(options.CachePath), 0o700); err != nil {
+			return Report{}, err
+		}
+		data, err := json.MarshalIndent(cache, "", "  ")
+		if err != nil {
+			return Report{}, err
+		}
+		if err := os.WriteFile(options.CachePath, data, 0o600); err != nil {
+			return Report{}, err
+		}
+	}
+	return report, nil
+}
+
+func walkINI(ctx context.Context, folder string, exclude []string, visit func(string, fs.FileInfo) error) error {
+	if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if path != folder {
+			relative, err := filepath.Rel(folder, path)
+			if err != nil {
+				return err
+			}
+			for _, part := range strings.Split(relative, string(filepath.Separator)) {
+				for _, pattern := range exclude {
+					matched, _ := filepath.Match(strings.ToLower(pattern), strings.ToLower(part))
+					if matched {
+						if entry.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
+				}
+			}
+		}
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(path), ".ini") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		return visit(path, info)
+	})
+}
+
+func readINI(path string) (iniFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return iniFile{}, err
+	}
+	if len(data) > 16<<20 {
+		return iniFile{}, fmt.Errorf("INI %q exceeds 16 MiB", path)
+	}
+	file := iniFile{path: path, data: data, newline: "\n", final: bytes.HasSuffix(data, []byte("\n"))}
+	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
+		file.bom = true
+		data = data[3:]
+	}
+	if bytes.Contains(data, []byte("\r\n")) {
+		file.newline = "\r\n"
+	}
+	text := strings.TrimSuffix(string(data), "\n")
+	text = strings.TrimSuffix(text, "\r")
+	if text != "" {
+		file.lines = strings.Split(text, file.newline)
+	}
+	return file, nil
+}
+
+func iniNamespace(file iniFile) string {
+	for _, line := range file.lines {
+		line = strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if name, value, ok := strings.Cut(line, "="); ok && strings.TrimSpace(name) == "namespace" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+type section struct {
+	name     string
+	triggers []int
+	runs     []string
+}
+
+func inspect(file iniFile, importer string, shaderFixes bool, packagedNamespaces map[string]bool) []Change {
+	add := func(action, reason string, line int) []Change {
+		return []Change{{Path: file.path, Action: action, Reason: reason, Line: line}}
+	}
+	name := strings.ToLower(filepath.Base(file.path))
+	if name == "3dvision2sbs.ini" || name == "help.ini" || name == "mouse.ini" || name == "upscale.ini" {
+		if shaderFixes || strings.EqualFold(filepath.Base(filepath.Dir(file.path)), "ShaderFixes") {
+			return add("disable-file", "unwanted ShaderFixes file", 0)
+		}
+	}
+	if !shaderFixes && importer == "EFMI" && name == "vscheck.ini" {
+		return add("disable-file", "unwanted VSCheck file", 0)
+	}
+	if !shaderFixes && packagedNamespaces[iniNamespace(file)] && iniNamespace(file) != "" {
+		return add("disable-file", "duplicate packaged library namespace", 0)
+	}
+	sections := map[string]*section{}
+	var current *section
+	changes := []Change{}
+	for index, raw := range file.lines {
+		line := strings.ToLower(strings.TrimSpace(raw))
+		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			if !shaderFixes {
+				for _, prefix := range []string{"[loader", "[system", "[stereo", "[commandlistunbindallrendertargets"} {
+					if strings.HasPrefix(line, prefix) {
+						return add("disable-file", "rogue d3dx.ini section", 0)
+					}
+				}
+			}
+			name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+			current = sections[name]
+			if current == nil {
+				current = &section{name: name}
+				sections[name] = current
+			}
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+		if !shaderFixes && current.name == "include" && key == "include_recursive" && value == "mods" {
+			return add("disable-file", "rogue d3dx.ini include", 0)
+		}
+		if key == "run" && value != "" {
+			current.runs = append(current.runs, value)
+		}
+		if key != "checktextureoverride" || value == "" {
+			continue
+		}
+		current.triggers = append(current.triggers, index)
+		if !shaderFixes && (importer == "EFMI" && value == "ib" ||
+			importer == "WWMI" && (value == "ib" || value == "vb0")) {
+			reason := value
+			if importer == "WWMI" && value == "ib" {
+				reason = "wwmi ib"
+			}
+			changes = append(changes, Change{Path: file.path, Action: "edit-line", Reason: reason, Line: index + 1})
+		}
+	}
+	if !shaderFixes {
+		for name, section := range sections {
+			if !strings.HasPrefix(name, "shaderregex") || sections[name+".pattern"] != nil {
+				continue
+			}
+			for _, line := range section.triggers {
+				changes = append(
+					changes,
+					Change{Path: file.path, Action: "edit-line", Reason: "global ShaderRegex trigger", Line: line + 1},
+				)
+			}
+			for _, run := range section.runs {
+				if called := sections[run]; called != nil {
+					for _, line := range called.triggers {
+						changes = append(
+							changes,
+							Change{
+								Path:   file.path,
+								Action: "edit-line",
+								Reason: "global ShaderRegex trigger",
+								Line:   line + 1,
+							},
+						)
+					}
+				}
+			}
+		}
+	}
+	slices.SortFunc(changes, func(a, b Change) int { return a.Line - b.Line })
+	return slices.CompactFunc(changes, func(a, b Change) bool { return a.Line == b.Line })
+}
+
+func apply(file iniFile, changes []Change, prefix string) error {
+	if len(changes) == 0 {
+		return nil
+	}
+	if changes[0].Action == "disable-file" {
+		name := filepath.Base(file.path)
+		if strings.HasPrefix(strings.ToUpper(name), "DISABLED ") ||
+			strings.HasPrefix(strings.ToUpper(name), "DISABLED_") {
+			return nil
+		}
+		for index := 0; ; index++ {
+			target := filepath.Join(filepath.Dir(file.path), prefix+name)
+			if index > 0 {
+				target = fmt.Sprintf("%s.%d", target, index)
+			}
+			if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
+				return os.Rename(file.path, target)
+			} else if err != nil {
+				return err
+			}
+		}
+	}
+	for _, change := range changes {
+		index := change.Line - 1
+		if index < 0 || index >= len(file.lines) {
+			return fmt.Errorf("invalid INI line %d", change.Line)
+		}
+		line := file.lines[index]
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		if change.Reason == "wwmi ib" {
+			file.lines[index] = indent + `$\WWMIv1\enable_ib_callbacks = 1`
+		} else {
+			file.lines[index] = indent + ";" + strings.TrimSpace(line)
+		}
+	}
+	for index := 0; ; index++ {
+		backup := file.path + ".xxmi_bak"
+		if index > 0 {
+			backup = fmt.Sprintf("%s.%d", backup, index)
+		}
+		if _, err := os.Lstat(backup); errors.Is(err, os.ErrNotExist) {
+			if err := os.WriteFile(backup, file.data, 0o600); err != nil {
+				return err
+			}
+			break
+		} else if err != nil {
+			return err
+		}
+	}
+	result := strings.Join(file.lines, file.newline)
+	if file.final {
+		result += file.newline
+	}
+	if file.bom {
+		result = "\xef\xbb\xbf" + result
+	}
+	return os.WriteFile(file.path, []byte(result), 0o600)
+}

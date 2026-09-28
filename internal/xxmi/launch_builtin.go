@@ -132,6 +132,18 @@ func (x *XXMI) startBuiltinGame(ctx context.Context, key string, cfg ImporterCon
 			return err
 		}
 	}
+	if cfg.IniOptimizer.Enabled {
+		progress("ini-optimizer")
+		report, err := x.OptimizeMods(ctx, OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache})
+		if err != nil {
+			return fmt.Errorf("optimize %s INI files: %w", key, err)
+		}
+		if x.eventEmit != nil {
+			x.eventEmit("xxmi:launch-progress", map[string]any{
+				"importer": key, "stage": stage, "optimized": len(report.Changes),
+			})
+		}
+	}
 	progress("pre-launch")
 	if err := runLaunchHook(ctx, cfg.RunPreLaunch, filepath.Dir(gameExe)); err != nil {
 		return err

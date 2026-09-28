@@ -37,6 +37,9 @@ function RouteComponent() {
   const config = draft ?? saved ?? null;
   const [selectedPackage, setSelectedPackage] = useState("");
   const [allowUnsigned, setAllowUnsigned] = useState(false);
+  const [optimizationPreview, setOptimizationPreview] = useState<
+    Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
+  >();
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
@@ -622,6 +625,87 @@ function RouteComponent() {
               })
             }
           />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <label className="flex items-center justify-between">
+            <span>{t("page.setting.xxmi.builtin.optimizeAtLaunch")}</span>
+            <Switch
+              checked={config.iniOptimizer.enabled}
+              onCheckedChange={(enabled) =>
+                setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t("page.setting.xxmi.builtin.resetOptimizerCache")}</span>
+            <Switch
+              checked={config.iniOptimizer.resetCache}
+              onCheckedChange={(resetCache) =>
+                setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, resetCache } })
+              }
+            />
+          </label>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClickPromise={async () => {
+                try {
+                  setOptimizationPreview(
+                    await XXMI.OptimizeMods({
+                      importer,
+                      dryRun: true,
+                      resetCache: config.iniOptimizer.resetCache,
+                    }),
+                  );
+                } catch (error) {
+                  toast.error(toErrorMessage(error));
+                }
+              }}
+            >
+              {t("page.setting.xxmi.builtin.previewOptimization")}
+            </Button>
+            <Button
+              disabled={!optimizationPreview?.changes?.length}
+              onClickPromise={async () => {
+                try {
+                  const report = await XXMI.OptimizeMods({
+                    importer,
+                    dryRun: false,
+                    resetCache: config.iniOptimizer.resetCache,
+                  });
+                  setOptimizationPreview(undefined);
+                  toast.success(
+                    t("page.setting.xxmi.builtin.optimized", {
+                      count: report?.changes?.length ?? 0,
+                    }),
+                  );
+                } catch (error) {
+                  toast.error(toErrorMessage(error));
+                }
+              }}
+            >
+              {t("page.setting.xxmi.builtin.applyOptimization")}
+            </Button>
+          </div>
+          {optimizationPreview && (
+            <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
+              {optimizationPreview.changes?.length ? (
+                optimizationPreview.changes.map((change, index) => (
+                  <p key={`${change.path}:${change.line}:${index}`} className="break-all">
+                    {change.action}: {change.path}
+                    {change.line ? `:${change.line}` : ""} · {change.reason}
+                  </p>
+                ))
+              ) : (
+                <p>{t("page.setting.xxmi.builtin.noOptimizationChanges")}</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
