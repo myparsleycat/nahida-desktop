@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -77,22 +76,12 @@ func TestFindFileAcrossRootsHonorsCancellation(t *testing.T) {
 	}
 }
 
-func TestSavePathRejectsInvalidConfig(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+func TestReadAndValidateConfigRejectsInvalidConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), []byte(`{"Launcher":{}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err == nil {
+	if _, _, err := readAndValidateConfig(filepath.Join(root, xxmiConfigName)); err == nil {
 		t.Fatal("expected invalid config error")
 	}
 }
@@ -192,15 +181,9 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(first, ",") != "v2,v1" || strings.Join(second, ",") != "v2,v1" || requests.Load() != 1 {
+	if len(first) != 2 || first[0].Tag != "v2" || first[1].Tag != "v1" ||
+		len(second) != 2 || second[0].Tag != "v2" || second[1].Tag != "v1" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
-	}
-	// The refresh cooldown itself is covered by the github package.
-	if err := service.UpdateLibsReleases(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("refresh inside cooldown refetched: %d", requests.Load())
 	}
 }
 
@@ -271,7 +254,8 @@ func TestGetImporterReleasesUsesImporterRepoAndCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(first, ",") != "v8.9.0" || strings.Join(second, ",") != "v8.9.0" || requests.Load() != 1 {
+	if len(first) != 1 || first[0].Tag != "v8.9.0" ||
+		len(second) != 1 || second[0].Tag != "v8.9.0" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
 	}
 }

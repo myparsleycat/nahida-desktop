@@ -69,7 +69,7 @@ func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, err
 		}
 		repo = spec.repo
 	}
-	releases, err := x.github.AllReleases(ctx, repo)
+	releases, err := x.github.CachedReleases(ctx, repo, false)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,8 @@ func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, err
 	}
 	out := make([]ReleaseInfo, 0, len(releases))
 	for _, release := range releases {
-		if release.Draft || (release.Prerelease && !includePrereleases) {
+		if release.Draft || strings.EqualFold(release.TagName, "main") ||
+			strings.EqualFold(release.TagName, "master") || (release.Prerelease && !includePrereleases) {
 			continue
 		}
 		info := releaseInfo(release)

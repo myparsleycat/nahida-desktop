@@ -102,9 +102,6 @@ type XXMI struct {
 	elevated    elevatedLauncher
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
-	path        *string
-	config      map[string]any
-	parsed      parsedConfig
 	busy        bool
 }
 
@@ -174,38 +171,7 @@ func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
 	return &cleaned, nil
 }
 
-func (x *XXMI) SaveXXMIPath(ctx context.Context, inputPath string) error {
-	absolute, err := filepath.Abs(strings.TrimSpace(inputPath))
-	if err != nil {
-		return err
-	}
-	config, parsed, err := readAndValidateConfig(filepath.Join(absolute, xxmiConfigName))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return infra.WithCause(errors.New("XXMI Launcher Config.json not found"), err)
-		}
-		return fmt.Errorf("XXMI Launcher Config.json is invalid: %w", err)
-	}
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return errors.New("XXMI settings store is not configured")
-	}
-	if err := client.Settings.Upsert(ctx, xxmiPathKey, &absolute); err != nil {
-		return err
-	}
-	x.mu.Lock()
-	x.path = &absolute
-	x.config = config
-	x.parsed = parsed
-	x.mu.Unlock()
-	if x.eventEmit != nil {
-		x.eventEmit("renderer:reload")
-	}
-	return nil
-}
-
+//wails:ignore
 func (x *XXMI) FindXXMIPath(ctx context.Context) (*string, error) {
 	appData := strings.TrimSpace(os.Getenv("APPDATA"))
 	if appData != "" {
@@ -234,15 +200,6 @@ func (x *XXMI) FindXXMIPath(ctx context.Context) (*string, error) {
 func isValidConfig(path string) bool {
 	_, _, err := readAndValidateConfig(path)
 	return err == nil
-}
-
-func (x *XXMI) GetXXMIConfig(ctx context.Context) (map[string]any, error) {
-	if err := x.load(ctx); err != nil {
-		return nil, err
-	}
-	x.mu.RLock()
-	defer x.mu.RUnlock()
-	return cloneMap(x.config), nil
 }
 
 func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
@@ -287,67 +244,16 @@ func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (H
 	return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
 }
 
-func (x *XXMI) GetLibsReleases(ctx context.Context) ([]string, error) {
-	return x.releaseTags(ctx, libsRepo, false)
+func (x *XXMI) GetLibsReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	return x.ListReleases(ctx, "xxmi-libs")
 }
 
-func (x *XXMI) UpdateLibsReleases(ctx context.Context) error {
-	_, err := x.releaseTags(ctx, libsRepo, true)
-	return err
-}
-
-func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]string, error) {
+func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]ReleaseInfo, error) {
 	spec, ok := lookupImporterPackage(importer)
 	if !ok {
 		return nil, errors.New("unknown importer")
 	}
-	return x.releaseTags(ctx, spec.repo, false)
-}
-
-func (x *XXMI) releaseTags(ctx context.Context, repo github.Repo, refresh bool) ([]string, error) {
-	tags, err := x.github.ReleaseTags(ctx, repo, refresh)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch %s releases: %w", repo, err)
-	}
-	return tags, nil
-}
-
-func (x *XXMI) load(ctx context.Context) error {
-	path, err := x.GetXXMIPath(ctx)
-	if err != nil {
-		return err
-	}
-	if path == nil {
-		x.mu.Lock()
-		x.path = nil
-		x.config = nil
-		x.parsed = parsedConfig{}
-		x.mu.Unlock()
-		return nil
-	}
-	config, parsed, err := readAndValidateConfig(filepath.Join(*path, xxmiConfigName))
-	if err != nil {
-		if x.log != nil {
-			_ = infra.ReportError(
-				x.log,
-				err,
-				"XXMI.initialize",
-				infra.Diagnostic{Operation: "initialize", Stage: "background"},
-			)
-		}
-		x.mu.Lock()
-		x.path = cloneString(path)
-		x.config = nil
-		x.parsed = parsedConfig{}
-		x.mu.Unlock()
-		return nil
-	}
-	x.mu.Lock()
-	x.path = cloneString(path)
-	x.config = config
-	x.parsed = parsed
-	x.mu.Unlock()
-	return nil
+	return x.ListReleases(ctx, "importer:"+spec.key)
 }
 
 func readAndValidateConfig(path string) (map[string]any, parsedConfig, error) {
@@ -388,24 +294,6 @@ func dllVersion(path *string) *string {
 		return nil
 	}
 	return &manifest.Version
-}
-
-func cloneMap(value map[string]any) map[string]any {
-	if value == nil {
-		return nil
-	}
-	raw, _ := json.Marshal(value)
-	var cloned map[string]any
-	_ = json.Unmarshal(raw, &cloned)
-	return cloned
-}
-
-func cloneString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
 }
 
 func (x *XXMI) reportCleanup(err error, operation string) {

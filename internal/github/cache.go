@@ -13,8 +13,8 @@ import (
 const tagRefreshCooldown = time.Minute
 
 type tagEntry struct {
-	tags    []string
-	fetched time.Time
+	releases []Release
+	fetched  time.Time
 }
 
 type tagCache struct {
@@ -28,6 +28,22 @@ type tagCache struct {
 // the process lifetime. A refresh refetches only once the cached list is older
 // than one minute, and concurrent fetches of the same list share one request.
 func (c *Client) ReleaseTags(ctx context.Context, repo Repo, refresh bool) ([]string, error) {
+	releases, err := c.CachedReleases(ctx, repo, refresh)
+	if err != nil {
+		return nil, err
+	}
+	stable := releases[:0]
+	for _, release := range releases {
+		if !release.Prerelease {
+			stable = append(stable, release)
+		}
+	}
+	return VersionTags(stable), nil
+}
+
+// CachedReleases returns published release metadata. Ordinary reads use the
+// process cache; an explicit refresh observes a one-minute cooldown.
+func (c *Client) CachedReleases(ctx context.Context, repo Repo, refresh bool) ([]Release, error) {
 	if err := repo.Validate(); err != nil {
 		return nil, err
 	}
@@ -39,7 +55,7 @@ func (c *Client) ReleaseTags(ctx context.Context, repo Repo, refresh bool) ([]st
 	now := c.tags.now()
 	c.tags.mu.Unlock()
 	if found && (!refresh || now.Sub(entry.fetched) < tagRefreshCooldown) {
-		return slices.Clone(entry.tags), nil
+		return cloneReleases(entry.releases), nil
 	}
 
 	// The shared fetch outlives any single caller so one cancellation does not
@@ -51,17 +67,16 @@ func (c *Client) ReleaseTags(ctx context.Context, repo Repo, refresh bool) ([]st
 		fresh := found && (!refresh || c.tags.now().Sub(entry.fetched) < tagRefreshCooldown)
 		c.tags.mu.Unlock()
 		if fresh {
-			return entry.tags, nil
+			return entry.releases, nil
 		}
-		releases, err := c.Releases(fetchCtx, repo)
+		releases, err := c.AllReleases(fetchCtx, repo)
 		if err != nil {
 			return nil, err
 		}
-		tags := VersionTags(releases)
 		c.tags.mu.Lock()
-		c.tags.entries[repo] = tagEntry{tags: tags, fetched: c.tags.now()}
+		c.tags.entries[repo] = tagEntry{releases: releases, fetched: c.tags.now()}
 		c.tags.mu.Unlock()
-		return tags, nil
+		return releases, nil
 	})
 	select {
 	case <-ctx.Done():
@@ -70,7 +85,15 @@ func (c *Client) ReleaseTags(ctx context.Context, repo Repo, refresh bool) ([]st
 		if result.Err != nil {
 			return nil, result.Err
 		}
-		tags, _ := result.Val.([]string)
-		return slices.Clone(tags), nil
+		releases, _ := result.Val.([]Release)
+		return cloneReleases(releases), nil
 	}
+}
+
+func cloneReleases(releases []Release) []Release {
+	cloned := slices.Clone(releases)
+	for index := range cloned {
+		cloned[index].Assets = slices.Clone(cloned[index].Assets)
+	}
+	return cloned
 }
