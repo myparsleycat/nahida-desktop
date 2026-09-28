@@ -158,6 +158,66 @@ func verifyFPSUnlockerCache(folder, version string) error {
 	return nil
 }
 
+func importExternalFPSUnlocker(externalRoot string) error {
+	source := filepath.Join(externalRoot, "Resources", "Packages", "GI-FPS-Unlocker")
+	sourceRoot, err := openInstallRoot(source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sourceRoot.Close() }()
+	manifestData, _, err := sourceRoot.readFile("Manifest.json")
+	if err != nil {
+		return err
+	}
+	if len(manifestData) > 1<<20 {
+		return errors.New("GI FPS Unlocker manifest exceeds size limit")
+	}
+	var manifest xxmiLibraryManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return err
+	}
+	version := normalizeVersion(manifest.Version)
+	if version == "" || strings.ContainsAny(version, `\/:*?"<>|`) {
+		return errors.New("invalid external GI FPS Unlocker version")
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		return err
+	}
+	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
+	destination := filepath.Join(parent, version)
+	if _, err := os.Stat(destination); err == nil {
+		return verifyFPSUnlockerCache(destination, version)
+	}
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp(parent, version+".tmp-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	for _, name := range append([]string{"Manifest.json", "fps_config.json"}, fpsUnlockerFiles...) {
+		data, _, err := sourceRoot.readFile(name)
+		if name == "fps_config.json" && errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if len(data) > 16<<20 || name == "fps_config.json" && len(data) > 1<<20 {
+			return fmt.Errorf("external GI FPS Unlocker file %s exceeds size limit", name)
+		}
+		if err := os.WriteFile(filepath.Join(staging, name), data, 0o600); err != nil {
+			return err
+		}
+	}
+	if err := verifyFPSUnlockerCache(staging, version); err != nil {
+		return err
+	}
+	return os.Rename(staging, destination)
+}
+
 func fpsUnlockerFolder() (string, error) {
 	root, err := xxmiCacheRoot()
 	if err != nil {

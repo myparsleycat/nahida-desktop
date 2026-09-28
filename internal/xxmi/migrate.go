@@ -80,6 +80,11 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 			return fmt.Errorf("import XXMI libraries: %w", err)
 		}
 	}
+	if fileExists(filepath.Join(path, "Resources", "Packages", "GI-FPS-Unlocker", "Manifest.json")) {
+		if err := importExternalFPSUnlocker(path); err != nil {
+			return fmt.Errorf("import GI FPS Unlocker: %w", err)
+		}
+	}
 	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI"} {
 		info := parsed.Importers[key]
 		folder := info.Importer.ImporterFolder
