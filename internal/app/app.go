@@ -194,6 +194,14 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 						newWindow(app, rt.window)
 					}
 					go func() {
+						if err := rt.startup.wait(context.Background()); err != nil {
+							if !errors.Is(err, context.Canceled) {
+								_ = infra.ReportError(rt.log, err, "XXMI.QuickStart", infra.Diagnostic{
+									Operation: "launch-game", Stage: "startup", Fields: map[string]any{"importer": key},
+								})
+							}
+							return
+						}
 						if err := rt.xxmi.StartGame(context.Background(), key); err != nil {
 							rt.window.FocusAndNavigate("/setting/xxmi")
 							readyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
