@@ -29,6 +29,10 @@ func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	return x.deployRuntime(ctx, key, cfg)
+}
+
+func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig) ([]string, error) {
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return nil, err
@@ -36,25 +40,18 @@ func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) 
 	var sourceFolder, sourceID string
 	switch cfg.Mode {
 	case RuntimeXXMI:
-		version := normalizeVersion(cfg.XXMIVersion.Pinned)
-		if version == "" {
-			x.mu.RLock()
-			client := x.client
-			x.mu.RUnlock()
-			pkg, err := client.XXMIPackages.Get(ctx, "xxmi-libs")
-			if err != nil {
-				return nil, err
-			}
-			if pkg == nil || pkg.LatestVersion == nil {
-				return nil, errors.New("XXMI libraries latest version is unknown")
-			}
-			version = normalizeVersion(*pkg.LatestVersion)
+		version, err := x.resolveLibsVersion(ctx, cfg)
+		if err != nil {
+			return nil, err
 		}
+		sourceFolder = filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
 		if err := x.EnsureLibsVersion(ctx, version); err != nil {
+			if info, statErr := os.Stat(sourceFolder); statErr == nil && info.IsDir() {
+				return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+			}
 			return nil, err
 		}
 		sourceID = "xxmi-libs@" + version
-		sourceFolder = filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
 	case RuntimeLegacy:
 		id := cfg.LegacyRuntime
 		parent := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto")
@@ -71,19 +68,39 @@ func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) 
 		sourceFolder = filepath.Join(parent, id)
 		data, err := os.ReadFile(filepath.Join(sourceFolder, "source.json"))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 		}
 		var source LegacyRuntimeSource
 		if err := json.Unmarshal(data, &source); err != nil {
 			return nil, err
 		}
 		if err := verifyLegacyRuntimeCache(sourceFolder, source.ZipSHA256); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
 	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot)
+}
+
+func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
+	if version := normalizeVersion(cfg.XXMIVersion.Pinned); version != "" {
+		return version, nil
+	}
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return "", errors.New("XXMI settings store is not configured")
+	}
+	pkg, err := client.XXMIPackages.Get(ctx, "xxmi-libs")
+	if err != nil {
+		return "", err
+	}
+	if pkg == nil || pkg.LatestVersion == nil {
+		return "", errors.New("XXMI libraries latest version is unknown")
+	}
+	return normalizeVersion(*pkg.LatestVersion), nil
 }
 
 func newestLegacyRuntime(parent string) (string, error) {

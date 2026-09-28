@@ -10,11 +10,12 @@ const xxmi = vi.hoisted(() => ({
   SaveImporterConfig: vi.fn(),
   DetectGameFolders: vi.fn(),
   ValidateGameFolder: vi.fn(),
+  RepairRuntime: vi.fn(),
 }));
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), warning: vi.fn() } }));
 
 import { toast } from "sonner";
 
@@ -30,6 +31,7 @@ afterEach(() => {
   xxmi.SaveImporterConfig.mockReset();
   xxmi.DetectGameFolders.mockReset();
   xxmi.ValidateGameFolder.mockReset();
+  xxmi.RepairRuntime.mockReset();
   toastError.mockClear();
 });
 
@@ -39,7 +41,22 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED")).toBe("launch-blockers");
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
+  expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI is not configured")).toBeNull();
+});
+
+it("repairs a damaged runtime before retrying launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_RUNTIME_CORRUPTED"));
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+  xxmi.RepairRuntime.mockResolvedValue([]);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.repairRuntime" }));
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.RepairRuntime).toHaveBeenCalledWith("GIMI");
 });
 
 it("saves a detected game folder and retries launch", async () => {

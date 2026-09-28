@@ -21,19 +21,24 @@ const LAUNCH_BLOCKER_DCR = "GIMI_DCR_ENABLED";
 const LAUNCH_BLOCKER_SMOOTH_MOTION = "NVIDIA_SMOOTH_MOTION_ENABLED";
 const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
+const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
 
 type LaunchDialog =
   | "gimi-dcr"
   | "smooth-motion"
   | "launch-blockers"
   | "wwmi-wounded"
-  | "game-folder";
+  | "game-folder"
+  | "runtime-repair";
 
 export type LaunchGuardResult = { status: "started" } | { status: "blocked"; kind: LaunchDialog };
 
 export function launchDialog(message: string): LaunchDialog | null {
   if (message.includes(LAUNCH_BLOCKER_GAME_FOLDER)) {
     return "game-folder";
+  }
+  if (message.includes(LAUNCH_BLOCKER_RUNTIME)) {
+    return "runtime-repair";
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
     return "wwmi-wounded";
@@ -97,7 +102,10 @@ export function useLaunchGuard() {
     setIsConfirming(true);
 
     try {
-      if (dialog === "game-folder") {
+      if (dialog === "runtime-repair") {
+        const warnings = await XXMI.RepairRuntime(importer);
+        warnings?.forEach((warning) => toast.warning(warning));
+      } else if (dialog === "game-folder") {
         await XXMI.ValidateGameFolder(importer, gameFolder);
         const config = await XXMI.GetImporterConfig(importer);
         await XXMI.SaveImporterConfig(importer, { ...config, gameFolder });
@@ -183,12 +191,18 @@ export function useLaunchGuard() {
               {t(
                 dialog === "game-folder"
                   ? "page.setting.xxmi.builtin.gameFolder"
-                  : `page.mod.dialog.${dialog}.title`,
+                  : dialog === "runtime-repair"
+                    ? "page.setting.xxmi.builtin.repairRuntime"
+                    : `page.mod.dialog.${dialog}.title`,
               )}
             </AlertDialogTitle>
             {dialog !== "game-folder" && (
               <AlertDialogDescription>
-                {t(`page.mod.dialog.${dialog}.description`)}
+                {t(
+                  dialog === "runtime-repair"
+                    ? "page.setting.xxmi.builtin.runtimeRepairPrompt"
+                    : `page.mod.dialog.${dialog}.description`,
+                )}
               </AlertDialogDescription>
             )}
           </AlertDialogHeader>
@@ -251,7 +265,13 @@ export function useLaunchGuard() {
               disabled={isConfirming || (dialog === "game-folder" && !gameFolder.trim())}
               onClickPromise={handleConfirm}
             >
-              {t(dialog === "game-folder" ? "g.save" : `page.mod.dialog.${dialog}.confirm`)}
+              {t(
+                dialog === "game-folder"
+                  ? "g.save"
+                  : dialog === "runtime-repair"
+                    ? "page.setting.xxmi.builtin.repairRuntime"
+                    : `page.mod.dialog.${dialog}.confirm`,
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

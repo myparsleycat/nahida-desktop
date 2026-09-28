@@ -108,6 +108,11 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		t.Fatalf("repeat deployment warnings = %v, error = %v", warnings, err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
+	cfg.Migoto.UnsafeMode = false
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base); err != nil {
+		t.Fatal(err)
+	}
+	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
 }
 
 func assertFileContent(t *testing.T, path, want string) {
