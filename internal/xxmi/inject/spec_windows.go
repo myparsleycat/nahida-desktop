@@ -179,16 +179,21 @@ func validateLocalPath(path string) error {
 }
 
 func rejectReparsePoint(path string) error {
-	windowsPath, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	attributes, err := windows.GetFileAttributes(windowsPath)
-	if err != nil {
-		return err
-	}
-	if attributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-		return errors.New("reparse point is not allowed")
+	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
+		windowsPath, err := windows.UTF16PtrFromString(current)
+		if err != nil {
+			return err
+		}
+		attributes, err := windows.GetFileAttributes(windowsPath)
+		if err != nil {
+			return err
+		}
+		if attributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return errors.New("reparse point is not allowed")
+		}
+		if filepath.Dir(current) == current {
+			break
+		}
 	}
 	return nil
 }
