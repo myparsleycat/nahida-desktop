@@ -145,15 +145,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
 		return err
 	}
-	progress("game-tweaks")
-	if err := initializeGameLaunch(ctx, key, cfg); err != nil {
-		return err
-	}
-	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
-		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
-			return err
-		}
-	}
 	if cfg.IniOptimizer.Enabled {
 		progress("ini-optimizer")
 		report, err := x.OptimizeMods(ctx, OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache})
@@ -164,6 +155,15 @@ func (x *XXMI) launchBuiltinGameLocked(
 			x.eventEmit("xxmi:launch-progress", map[string]any{
 				"importer": key, "stage": stage, "optimized": len(report.Changes),
 			})
+		}
+	}
+	progress("game-tweaks")
+	if err := initializeGameLaunch(ctx, key, cfg); err != nil {
+		return err
+	}
+	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
+		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
+			return err
 		}
 	}
 	progress("pre-launch")

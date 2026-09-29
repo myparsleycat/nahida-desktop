@@ -49,6 +49,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	cfg.LegacyRuntime = "abcdef123456"
 	cfg.GameFolder = filepath.Join(root, "game")
 	cfg.ConfigureGame = false
+	cfg.IniOptimizer.Enabled = true
 	for _, folder := range []string{cfg.ImporterFolder, cfg.GameFolder} {
 		if err := os.MkdirAll(folder, 0o700); err != nil {
 			t.Fatal(err)
@@ -103,7 +104,8 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch", "ensure-runtime",
-		"deploy-runtime", "validate-runtime", "update-ini", "game-tweaks", "pre-launch", "elevate",
+		"deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer", "game-tweaks",
+		"pre-launch", "elevate",
 		"inject-launch", "post-load", "finish"}
 	if !slices.Equal(stages, want) {
 		t.Fatalf("launch stages = %v; want %v", stages, want)
