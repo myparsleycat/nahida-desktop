@@ -34,10 +34,13 @@ func releaseNotes(body string) string {
 	body = strings.ReplaceAll(body, "## Warning", "")
 	start := strings.Index(body, "##")
 	if start < 0 {
-		return ""
+		return strings.TrimSpace(body)
 	}
 	end := strings.Index(body, "## Signature")
-	if end < 0 || end <= start {
+	if end < 0 {
+		end = len(body)
+	}
+	if end <= start {
 		return ""
 	}
 	return strings.TrimSpace(body[start:end])

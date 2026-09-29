@@ -49,6 +49,15 @@ func TestReleaseSignatureAndNotes(t *testing.T) {
 	if got := releaseSignature("## Signature\n- invalid!"); got != "" {
 		t.Fatalf("invalid signature = %q", got)
 	}
+	for _, test := range []struct{ body, want string }{
+		{"## Changes\nOlder package support", "## Changes\nOlder package support"},
+		{"Older package support", "Older package support"},
+		{"## Signature\n- YWJjZA==", ""},
+	} {
+		if got := releaseNotes(test.body); got != test.want {
+			t.Fatalf("notes for %q = %q, want %q", test.body, got, test.want)
+		}
+	}
 }
 
 func TestVerifyOfficialXXMILibsReleaseSignature(t *testing.T) {
