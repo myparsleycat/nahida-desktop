@@ -142,6 +142,37 @@ func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
 	}
 }
 
+func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	writeXXMITestConfig(t, external)
+	if err := client.Settings.Upsert(ctx, xxmiPathKey, &external); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	overview, err := service.GetOverview(ctx)
+	if err != nil || !overview.Configured || len(overview.Importers) != 0 || overview.ExternalLauncher != nil {
+		t.Fatalf("disabled importer overview = %+v, err = %v", overview, err)
+	}
+}
+
 func TestOverviewSuggestsExternalRootUntilUserChoosesOne(t *testing.T) {
 	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()

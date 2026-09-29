@@ -95,6 +95,10 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return Overview{}, err
+	}
 	for i := range importers {
 		x.mu.RLock()
 		importers[i].Running = x.busy[importers[i].Key]
@@ -114,7 +118,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 			}
 		}
 	}
-	overview := Overview{Configured: len(importers) > 0, Root: filepath.Clean(rootPath), Importers: importers}
+	overview := Overview{Configured: len(rows) > 0, Root: filepath.Clean(rootPath), Importers: importers}
 	if overview.LibsCache, err = x.ListCachedLibs(ctx); err != nil {
 		overview.CacheIssues = append(overview.CacheIssues, "XXMI libraries: "+err.Error())
 	}
