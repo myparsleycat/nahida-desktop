@@ -78,6 +78,7 @@ type compressionCoordinator struct {
 	selfChangeDeadline   time.Time
 	selfChangeGeneration uint64
 	wofOwnership         compressionFileOwnership
+	xpressDeclined       compressionDeclinedFiles
 	lastProgressEmit     time.Time
 	stopped              atomic.Bool
 }
@@ -489,6 +490,7 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 				c.addCompressTotals,
 				c.progress,
 				&c.wofOwnership,
+				&c.xpressDeclined,
 				c.markSelfChanges,
 				logFileError("compress-file"),
 			)
@@ -994,8 +996,75 @@ func isCompressionDirectoryWrite(event watcher.Event) bool {
 }
 
 type compressionFile struct {
-	path string
-	size int64
+	path     string
+	size     int64
+	modified time.Time
+}
+
+// Partial downloads and editor saves are still being written; compressing one
+// competes with its writer, and the final rename raises a watcher event anyway.
+var compressionInProgressExtensions = map[string]struct{}{
+	".ntmp": {}, ".tmp": {}, ".part": {}, ".partial": {}, ".crdownload": {}, ".download": {},
+}
+
+func isCompressionInProgressPath(path string) bool {
+	_, ok := compressionInProgressExtensions[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+// compressionDeclinedFiles remembers files WOF found not worth compressing.
+// Every attempt raises a watcher event but keeps the size and write time, so a
+// file is retried only after one of them changes.
+type compressionDeclinedFiles struct {
+	mu    sync.Mutex
+	files map[string]compressionFile
+}
+
+func (d *compressionDeclinedFiles) add(file compressionFile) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.files == nil {
+		d.files = map[string]compressionFile{}
+	}
+	d.files[compressionPathKey(file.path)] = file
+}
+
+func (d *compressionDeclinedFiles) contains(file compressionFile) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	key := compressionPathKey(file.path)
+	declined, ok := d.files[key]
+	if ok && (declined.size != file.size || !declined.modified.Equal(file.modified)) {
+		delete(d.files, key)
+		return false
+	}
+	return ok
+}
+
+// retain forgets files under roots that a complete scan of roots no longer
+// found, so deleted or moved mods do not stay remembered for the session.
+func (d *compressionDeclinedFiles) retain(roots []string, scanned []compressionFile) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.files) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(scanned))
+	for _, file := range scanned {
+		seen[compressionPathKey(file.path)] = struct{}{}
+	}
+	for key := range d.files {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if slices.ContainsFunc(roots, func(root string) bool { return pathContains(root, key) }) {
+			delete(d.files, key)
+		}
+	}
+}
+
+func compressionPathKey(path string) string {
+	return strings.ToLower(filepath.Clean(path))
 }
 
 type compressionFileOwnership struct {
@@ -1054,6 +1123,12 @@ func walkCompressionFiles(roots []string, accept func(string, fs.FileInfo) bool)
 				}
 				return nil
 			}
+			if path != root && platform.IsUnaddressableName(entry.Name()) {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			info, err := entry.Info()
 			if err != nil {
 				errs = append(errs, fmt.Errorf("stat %q: %w", path, err))
@@ -1066,7 +1141,7 @@ func walkCompressionFiles(roots []string, accept func(string, fs.FileInfo) bool)
 				return nil
 			}
 			if info.Mode().IsRegular() && accept(path, info) {
-				files = append(files, compressionFile{path: path, size: info.Size()})
+				files = append(files, compressionFile{path: path, size: info.Size(), modified: info.ModTime()})
 			}
 			return nil
 		})

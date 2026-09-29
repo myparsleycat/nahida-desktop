@@ -16,6 +16,7 @@ func applyXpress4K(
 	func(int, int64),
 	func(string, int64, bool),
 	*compressionFileOwnership,
+	*compressionDeclinedFiles,
 	compressionMutationMarker,
 	func(string, error),
 ) error {

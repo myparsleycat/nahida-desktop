@@ -111,6 +111,13 @@ func (f *FS) IsValidWindowsFilename(name string) bool {
 	return true
 }
 
+// IsUnaddressableName reports whether Win32 path normalization strips trailing
+// dots or spaces from name. Other tools can create such entries, but a normal
+// path cannot open them, so the game and Explorer cannot use them either.
+func IsUnaddressableName(name string) bool {
+	return name != "." && name != ".." && strings.TrimRight(name, ". ") != name
+}
+
 func (f *FS) AssertValidWindowsFilename(name string) error {
 	if !f.IsValidWindowsFilename(name) {
 		return ErrInvalidWindowsFilename

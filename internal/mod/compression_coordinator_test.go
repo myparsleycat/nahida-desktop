@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -680,6 +681,24 @@ func TestCompressionScopesMergeAndFullWorkDominates(t *testing.T) {
 	work := c.takePendingLocked()
 	if !work.full || len(work.scopes) != 2 || c.pendingFull || len(c.pendingScopes) != 0 {
 		t.Fatalf("work=%+v pendingFull=%v pendingScopes=%v", work, c.pendingFull, c.pendingScopes)
+	}
+}
+
+func TestCompressionDeclinedFilesForgetOnlyFilesMissingFromScannedRoots(t *testing.T) {
+	base := t.TempDir()
+	scanned := filepath.Join(base, "Mods", "Character")
+	kept := compressionFile{path: filepath.Join(scanned, "Mod", "README.txt"), size: 9000}
+	removed := compressionFile{path: filepath.Join(scanned, "Deleted", "README.txt"), size: 9000}
+	outside := compressionFile{path: filepath.Join(base, "Mods", "Other", "README.txt"), size: 9000}
+	declined := compressionDeclinedFiles{}
+	for _, file := range []compressionFile{kept, removed, outside} {
+		declined.add(file)
+	}
+
+	declined.retain([]string{strings.ToUpper(scanned)}, []compressionFile{kept})
+
+	if !declined.contains(kept) || declined.contains(removed) || !declined.contains(outside) {
+		t.Fatalf("declined = %v", slices.Collect(maps.Keys(declined.files)))
 	}
 }
 

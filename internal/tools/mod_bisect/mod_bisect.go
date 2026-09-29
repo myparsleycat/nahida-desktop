@@ -16,6 +16,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -785,6 +786,14 @@ func listBisectOrphans(ctx context.Context, root string) ([]string, error) {
 		}
 		if err != nil {
 			return err
+		}
+		// The game cannot load entries whose names end in a dot or space, and
+		// reading such a folder fails, so bisect cannot have renamed files there.
+		if path != root && platform.IsUnaddressableName(entry.Name()) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), "."+bisectDisabledSuffix) {
 			paths = append(paths, path[:len(path)-len(bisectDisabledSuffix)-1])

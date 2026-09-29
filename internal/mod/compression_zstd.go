@@ -15,6 +15,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -38,7 +39,7 @@ func compressDisabledZstd(
 	var files []compressionFile
 	for _, folder := range folders {
 		found, err := collectZstdFiles([]string{folder}, func(path string, info fs.FileInfo) bool {
-			return info.Size() >= threshold && !isZstdArchivePath(path)
+			return info.Size() >= threshold && !isZstdArchivePath(path) && !isCompressionInProgressPath(path)
 		}, mark, onError)
 		files = append(files, found...)
 		if err != nil {
@@ -235,6 +236,9 @@ func disabledModFolders(roots []string) ([]string, error) {
 			}
 			if !entry.IsDir() {
 				return nil
+			}
+			if path != root && platform.IsUnaddressableName(entry.Name()) {
+				return filepath.SkipDir
 			}
 			info, err := entry.Info()
 			if err != nil {
