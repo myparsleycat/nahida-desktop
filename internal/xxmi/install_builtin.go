@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -96,12 +97,20 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if err != nil {
 		return err
 	}
+	verification := PackageVerification{Version: version, Method: "ecdsa"}
 	if signature != "" {
 		if err := verifyPackageSignature(spec.publicKey, signature, zipBytes); err != nil {
 			return err
 		}
-	} else if err := verifyReleaseDigest(*release, assetName, zipBytes); err != nil {
-		return err
+	} else {
+		verifiedDigest, err := verifyReleaseDigest(*release, assetName, zipBytes)
+		if err != nil {
+			return err
+		}
+		verification.Method = "none"
+		if verifiedDigest {
+			verification.Method = "digest"
+		}
 	}
 	stage = "extract"
 	extractedPath, err := x.archive.Extract(
@@ -199,6 +208,21 @@ func (x *XXMI) installBuiltinImporterPackage(
 			return err
 		}
 	}
+	verificationData, err := json.Marshal(verification)
+	if err != nil {
+		_ = stageRoot.Close()
+		return err
+	}
+	if err := stageRoot.writeFileAtomic(
+		ctx,
+		packageVerificationName,
+		bytes.NewReader(verificationData),
+		0o600,
+		nil,
+	); err != nil {
+		_ = stageRoot.Close()
+		return err
+	}
 	if _, err := stageRoot.root.Stat("Mods"); errors.Is(err, os.ErrNotExist) {
 		if err := stageRoot.root.Mkdir("Mods", 0o755); err != nil {
 			_ = stageRoot.Close()
@@ -221,19 +245,20 @@ func (x *XXMI) installBuiltinImporterPackage(
 	return nil
 }
 
-func verifyReleaseDigest(release github.Release, assetName string, data []byte) error {
+func verifyReleaseDigest(release github.Release, assetName string, data []byte) (bool, error) {
 	for _, asset := range release.Assets {
 		if asset.Name != assetName || asset.Digest == "" {
 			continue
 		}
 		want, ok := strings.CutPrefix(asset.Digest, "sha256:")
 		if !ok {
-			return errors.New("unsupported release asset digest")
+			return false, errors.New("unsupported release asset digest")
 		}
 		digest := sha256.Sum256(data)
 		if !strings.EqualFold(want, hex.EncodeToString(digest[:])) {
-			return errors.New("release asset digest mismatch")
+			return false, errors.New("release asset digest mismatch")
 		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }

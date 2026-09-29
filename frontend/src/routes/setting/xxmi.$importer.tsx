@@ -32,6 +32,11 @@ function RouteComponent() {
     queryKey: ["xxmi:releases", importer],
     queryFn: () => XXMI.ListReleases(`importer:${importer}`),
   });
+  const { data: packageVerification } = useQuery({
+    queryKey: ["xxmi:package-verification", importer],
+    queryFn: () => XXMI.GetImporterPackageVerification(importer),
+    enabled: !!saved,
+  });
   const { data: libsReleases } = useQuery({
     queryKey: ["xxmi:libs-releases"],
     queryFn: () => XXMI.ListReleases("xxmi-libs"),
@@ -63,6 +68,7 @@ function RouteComponent() {
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
+    void queryClient.invalidateQueries({ queryKey: ["xxmi:package-verification", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
@@ -293,6 +299,19 @@ function RouteComponent() {
             {t("page.setting.xxmi.builtin.currentPin")}:{" "}
             {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
           </p>
+          {packageVerification && (
+            <p>
+              {t("page.setting.xxmi.builtin.installedVerification", {
+                version: packageVerification.version,
+                method:
+                  packageVerification.method === "ecdsa"
+                    ? t("page.setting.xxmi.builtin.verificationECDSA")
+                    : packageVerification.method === "digest"
+                      ? t("page.setting.xxmi.builtin.verificationDigest")
+                      : t("page.setting.xxmi.builtin.verificationNone"),
+              })}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               variant={!config.packageVersion.pinned ? "default" : "outline"}
