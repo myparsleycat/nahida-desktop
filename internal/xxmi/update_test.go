@@ -209,6 +209,25 @@ func TestSelectedLegacyInjectorVersionNormalizesPin(t *testing.T) {
 	}
 }
 
+func TestNewestCachedPackageVersionUsesVersionOrder(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range []string{"xxmi-libs", "gi-fps-unlocker"} {
+		parent := filepath.Join(root, "packages", pkg)
+		for _, version := range []string{"1.7.6", "1.7.5", "1.7.7.tmp-abcd"} {
+			if err := os.MkdirAll(filepath.Join(parent, version), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := newestCachedPackageVersion(pkg); got != "1.7.6" {
+			t.Fatalf("%s newest cached version = %q", pkg, got)
+		}
+	}
+}
+
 func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

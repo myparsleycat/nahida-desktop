@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/semver"
+
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 )
@@ -172,11 +174,21 @@ func newestCachedPackageVersion(pkg string) string {
 	if err != nil {
 		return ""
 	}
-	version, err := newestLegacyRuntime(filepath.Join(root, "packages", pkg))
+	entries, err := os.ReadDir(filepath.Join(root, "packages", pkg))
 	if err != nil {
 		return ""
 	}
-	return version
+	latest := ""
+	for _, entry := range entries {
+		version := entry.Name()
+		if !entry.IsDir() || !semver.IsValid("v"+version) {
+			continue
+		}
+		if latest == "" || semver.Compare("v"+version, "v"+latest) > 0 {
+			latest = version
+		}
+	}
+	return latest
 }
 
 func selectedLegacyInjectorVersion(cfg ImporterConfig) string {

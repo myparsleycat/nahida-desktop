@@ -297,9 +297,9 @@ func fpsUnlockerFolder() (string, error) {
 		return "", err
 	}
 	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
-	version, err := newestLegacyRuntime(parent)
-	if err != nil {
-		return "", err
+	version := newestCachedPackageVersion("gi-fps-unlocker")
+	if version == "" {
+		return "", errNoCachedLegacyRuntime
 	}
 	folder := filepath.Join(parent, version)
 	if err := verifyFPSUnlockerCache(folder, version); err != nil {
