@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 type CachedLibs struct {
@@ -39,7 +41,13 @@ func (x *XXMI) ListCachedLibs(ctx context.Context) ([]CachedLibs, error) {
 			result = append(result, CachedLibs{Version: entry.Name(), Referenced: referenced[entry.Name()]})
 		}
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Version > result[j].Version })
+	sort.Slice(result, func(i, j int) bool {
+		order := semver.Compare("v"+result[i].Version, "v"+result[j].Version)
+		if order != 0 {
+			return order > 0
+		}
+		return result[i].Version > result[j].Version
+	})
 	return result, nil
 }
 

@@ -90,3 +90,40 @@ func TestLibsCacheReferencesLegacyExtraDLLInjector(t *testing.T) {
 		t.Fatalf("references = %v, err = %v", referenced, err)
 	}
 }
+
+func TestListCachedLibsUsesVersionOrder(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []string{"1.7.9", "1.7.10", "1.7.10-rc.1"} {
+		if err := os.MkdirAll(filepath.Join(root, "packages", "xxmi-libs", version), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New()
+	service.UseClient(client)
+	versions, err := service.ListCachedLibs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1.7.10", "1.7.10-rc.1", "1.7.9"}
+	if len(versions) != len(want) {
+		t.Fatalf("cached library versions = %+v", versions)
+	}
+	for i, version := range versions {
+		if version.Version != want[i] {
+			t.Fatalf("cached library versions = %+v, want %v", versions, want)
+		}
+	}
+}
