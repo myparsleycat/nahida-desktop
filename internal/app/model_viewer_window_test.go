@@ -125,6 +125,22 @@ func TestLaunchHandlerDispatchesQuickStartWithoutOpeningMain(t *testing.T) {
 	}
 }
 
+func TestLaunchDispatcherQueuesQuickStartDuringStartup(t *testing.T) {
+	d := &launchDispatcher{}
+	d.Enqueue(application.SecondInstanceData{Args: []string{"app", "--xxmi-launch", "WWMI"}})
+	var got []string
+	d.Start(application.SecondInstanceData{Args: []string{"app", "--xxmi-launch", "GIMI"}}, newLaunchHandler(
+		func(string) { t.Fatal("unexpected viewer") },
+		func() { t.Fatal("unexpected main window") },
+		func([]string) { t.Fatal("unexpected argument handler") },
+		func([]string) { t.Fatal("unexpected download") },
+		func(key string, first bool) { got = append(got, fmt.Sprintf("%s:%t", key, first)) },
+	))
+	if want := []string{"GIMI:true", "WWMI:false"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("queued quick starts = %v, want %v", got, want)
+	}
+}
+
 type viewerTestWindow struct {
 	application.Window
 	options application.WebviewWindowOptions

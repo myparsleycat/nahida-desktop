@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
+	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
@@ -31,6 +33,38 @@ func TestCreateWindowsShortcut(t *testing.T) {
 	info, err := os.Stat(path)
 	if err != nil || info.Size() == 0 {
 		t.Fatalf("shortcut = %v, %v", info, err)
+	}
+	releaser := win.NewOleReleaser()
+	defer releaser.Release()
+	var link *win.IShellLink
+	if err := win.CoCreateInstance(releaser, &co.CLSID_ShellLink, nil, co.CLSCTX_INPROC_SERVER, &link); err != nil {
+		t.Fatal(err)
+	}
+	var persist *shortcutPersistFile
+	if err := link.QueryInterface(releaser, &persist); err != nil {
+		t.Fatal(err)
+	}
+	filePath, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vtable := *(**[9]uintptr)(unsafe.Pointer(persist.Ppvt()))
+	result, _, _ := syscall.SyscallN(vtable[5], uintptr(unsafe.Pointer(persist.Ppvt())),
+		uintptr(unsafe.Pointer(filePath)), 0)
+	if result != uintptr(co.HRESULT_S_OK) {
+		t.Fatal(co.HRESULT(result))
+	}
+	target, err := link.GetPath(nil, co.SLGP_RAWPATH)
+	if err != nil || !filepath.IsAbs(target) || filepath.Clean(target) != filepath.Clean(executable) {
+		t.Fatalf("shortcut target = %q, error = %v", target, err)
+	}
+	args, err := link.GetArguments()
+	if err != nil || args != "--xxmi-launch GIMI" {
+		t.Fatalf("shortcut arguments = %q, error = %v", args, err)
+	}
+	icon, index, err := link.GetIconLocation()
+	if err != nil || filepath.Clean(icon) != filepath.Clean(executable) || index != 0 {
+		t.Fatalf("shortcut icon = %q, index = %d, error = %v", icon, index, err)
 	}
 }
 
