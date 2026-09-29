@@ -120,6 +120,24 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 	}
 	importRows := []db.XXMIImporterRow{}
 	packageRows := []db.XXMIPackageRow{}
+	importPackageState := func(id string, pkg PackageInfo) {
+		if pkg.LatestVersion == "" && pkg.SkippedVersion == "" {
+			return
+		}
+		row := db.XXMIPackageRow{
+			Package: id, LatestReleaseNotes: &pkg.LatestReleaseNotes,
+			UpdateCheckTime: int64(pkg.UpdateCheckTime),
+		}
+		if pkg.LatestVersion != "" {
+			latest := normalizeVersion(pkg.LatestVersion)
+			row.LatestVersion = &latest
+		}
+		if pkg.SkippedVersion != "" {
+			skipped := normalizeVersion(pkg.SkippedVersion)
+			row.SkippedVersion = &skipped
+		}
+		packageRows = append(packageRows, row)
+	}
 	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI"} {
 		info := parsed.Importers[key]
 		folder := info.Importer.ImporterFolder
@@ -168,15 +186,10 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 			return err
 		}
 		importRows = append(importRows, db.XXMIImporterRow{Key: key, Config: string(data)})
-		pkg := parsed.Packages.Packages[key]
-		if pkg.LatestVersion != "" {
-			latest := normalizeVersion(pkg.LatestVersion)
-			packageRows = append(packageRows, db.XXMIPackageRow{
-				Package: "importer:" + key, LatestVersion: &latest,
-				LatestReleaseNotes: &pkg.LatestReleaseNotes, UpdateCheckTime: int64(pkg.UpdateCheckTime),
-			})
-		}
+		importPackageState("importer:"+key, parsed.Packages.Packages[key])
 	}
+	importPackageState("xxmi-libs", parsed.Packages.Packages["XXMI"])
+	importPackageState("gi-fps-unlocker", parsed.Packages.Packages["GI-FPS-Unlocker"])
 	rootValue := root
 	autoUpdateValue := strconv.FormatBool(autoUpdate)
 	prereleasesValue := strconv.FormatBool(includePrereleases)

@@ -33,6 +33,11 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	}
 	config := xxmiTestConfig()
 	config["Launcher"].(map[string]any)["pre_release"] = true
+	packages := config["Packages"].(map[string]any)["packages"].(map[string]any)
+	packages["GIMI"].(map[string]any)["skipped_version"] = "v1.3.0"
+	packages["XXMI"] = xxmiTestPackage("v1.7.6")
+	packages["XXMI"].(map[string]any)["skipped_version"] = "v1.7.6"
+	packages["GI-FPS-Unlocker"] = xxmiTestPackage("v2.0.0")
 	importers := config["Importers"].(map[string]any)
 	gimi := importers["GIMI"].(map[string]any)["Importer"].(map[string]any)
 	gimi["process_start_method"] = "Native"
@@ -40,6 +45,7 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	gimi["game_folder"] = ""
 	gimi["unlock_fps"] = true
 	gimi["unlock_fps_value"] = 144
+	gimi["overwrite_ini"] = false
 	gimi["extra_libraries_enabled"] = true
 	gimi["extra_libraries"] = filepath.Join("extensions", "sample.dll")
 	data, err := json.Marshal(config)
@@ -66,12 +72,35 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	if cfg.WindowMode != "Windowed" {
 		t.Fatalf("imported window mode = %q", cfg.WindowMode)
 	}
+	if cfg.OverwriteINI {
+		t.Fatal("imported overwrite_ini=false was not preserved")
+	}
 	if len(cfg.ExtraLibraries.Paths) != 1 ||
 		cfg.ExtraLibraries.Paths[0] != filepath.Join(external, "extensions", "sample.dll") {
 		t.Fatalf("imported extra libraries = %q", cfg.ExtraLibraries.Paths)
 	}
 	if cfg.PackageVersion.Pinned != "1.2.3" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)
+	}
+	for id, want := range map[string]struct{ latest, skipped string }{
+		"importer:GIMI":   {"1", "1.3.0"},
+		"xxmi-libs":       {"1.7.6", "1.7.6"},
+		"gi-fps-unlocker": {"2.0.0", ""},
+	} {
+		state, err := client.XXMIPackages.Get(ctx, id)
+		if err != nil || state == nil {
+			t.Fatalf("imported %s state = %+v, err = %v", id, state, err)
+		}
+		latest, skipped := "", ""
+		if state.LatestVersion != nil {
+			latest = *state.LatestVersion
+		}
+		if state.SkippedVersion != nil {
+			skipped = *state.SkippedVersion
+		}
+		if latest != want.latest || skipped != want.skipped {
+			t.Fatalf("imported %s versions = %q, %q; want %+v", id, latest, skipped, want)
+		}
 	}
 	for key, want := range map[string]string{
 		"xxmi_root": external, "xxmi_auto_update": "false", "xxmi_include_prereleases": "true",
