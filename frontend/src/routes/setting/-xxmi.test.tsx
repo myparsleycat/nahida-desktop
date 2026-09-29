@@ -96,7 +96,8 @@ it("keeps the package controls visible when a cache is damaged and disables a ru
   render(<XXMIDashboard />);
 
   expect(screen.getByRole("alert").textContent).toContain("missing source.json");
-  expect(screen.getByText(/GIMI.*updateAvailable.*running/)).toBeTruthy();
+  expect(screen.getByText("page.setting.xxmi.builtin.updateAvailable")).toBeTruthy();
+  expect(screen.getByText("page.setting.xxmi.builtin.running")).toBeTruthy();
   expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.launch" })).toHaveProperty(
     "disabled",
     true,

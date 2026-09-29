@@ -1,24 +1,47 @@
 import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
 import { LauncherMode } from "@bindings/xxmi/models";
+import { GameIcon } from "@renderer/components/game-icon";
 import { XXMIExternalLauncher } from "@renderer/components/setting/xxmi/xxmi-external-launcher";
+import { PathField, ToggleRow } from "@renderer/components/setting/xxmi/xxmi-fields";
+import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
+import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
-import { Input } from "@renderer/components/ui/input";
+import { ButtonGroup } from "@renderer/components/ui/button-group";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@renderer/components/ui/card";
 import { Separator } from "@renderer/components/ui/separator";
-import { Switch } from "@renderer/components/ui/switch";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { uniqBy } from "es-toolkit";
+import {
+  DownloadIcon,
+  FileArchiveIcon,
+  InfoIcon,
+  PlayIcon,
+  RefreshCwIcon,
+  SlidersHorizontalIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/setting/xxmi")({ component: RouteComponent });
 
 export type XXMIData = Awaited<ReturnType<typeof XXMI.GetXXMIData>>;
+
+type UpdateStatus = NonNullable<Awaited<ReturnType<typeof XXMI.CheckUpdates>>>[number];
 
 const importerKeys = ["GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI"] as const;
 const settingsConfig = {
@@ -55,6 +78,8 @@ export function XXMIDashboard() {
   });
   const [editedRoot, setEditedRoot] = useState<string | null>(null);
   const root = editedRoot ?? overview?.root ?? "";
+  const pendingUpdates = installableUpdates(updates);
+  const latestFPS = fpsReleases?.[0];
 
   const refresh = () => {
     void queryClient.invalidateQueries({
@@ -78,39 +103,194 @@ export function XXMIDashboard() {
       <Card>
         <CardHeader>
           <CardTitle>{t("page.setting.xxmi.launcherMode.title")}</CardTitle>
+          <CardDescription>{t("page.setting.xxmi.launcherMode.description")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p className="text-muted-foreground">{t("page.setting.xxmi.launcherMode.description")}</p>
-          <div className="flex gap-2">
+        <CardContent>
+          <ButtonGroup className="w-full">
             <Button
+              className="flex-1"
               variant={overview && !external ? "default" : "outline"}
+              aria-pressed={!!overview && !external}
               disabled={!overview || !external}
               onClickPromise={() => switchLauncher(LauncherMode.LauncherBuiltin)}
             >
               {t("page.setting.xxmi.launcherMode.builtin")}
             </Button>
             <Button
+              className="flex-1"
               variant={external ? "default" : "outline"}
+              aria-pressed={external}
               disabled={!overview || external}
               onClickPromise={() => switchLauncher(LauncherMode.LauncherExternal)}
             >
               {t("page.setting.xxmi.launcherMode.external")}
             </Button>
-          </div>
+          </ButtonGroup>
         </CardContent>
       </Card>
 
       {external ? (
-        <XXMIExternalLauncher />
+        <Card>
+          <CardContent className="space-y-6">
+            <XXMIExternalLauncher />
+          </CardContent>
+        </Card>
       ) : (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.root")}</CardTitle>
+              <CardTitle>{t("page.setting.xxmi.builtin.importers")}</CardTitle>
+              <CardAction>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClickPromise={async () => {
+                    try {
+                      const result = await XXMI.CheckUpdates(true);
+                      refresh();
+                      if (installableUpdates(result).length === 0) {
+                        toast.success(t("page.setting.xxmi.builtin.noUpdates"));
+                      }
+                    } catch (error) {
+                      toast.error(toErrorMessage(error));
+                    }
+                  }}
+                >
+                  <RefreshCwIcon />
+                  {t("page.setting.xxmi.builtin.checkUpdates")}
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Input value={root} onChange={(event) => setEditedRoot(event.target.value)} />
+              {pendingUpdates.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">
+                      {t("page.setting.xxmi.builtin.updatesPending", {
+                        count: pendingUpdates.length,
+                      })}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.InstallUpdates(pendingUpdates.map((entry) => entry.package));
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      <DownloadIcon />
+                      {t("page.setting.xxmi.builtin.installUpdates")}
+                    </Button>
+                  </div>
+                  {pendingUpdates.map((entry) => (
+                    <div key={entry.package} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 font-mono text-xs break-all text-muted-foreground">
+                        {entry.package}:{" "}
+                        {entry.installed || t("page.setting.xxmi.builtin.notInstalled")} →{" "}
+                        {entry.latestVersion}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.SkipVersion(entry.package, entry.latestVersion);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.skipVersion")}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <ul className="divide-y rounded-lg border">
+                {importerKeys.map((key) => {
+                  const importer = overview?.importers?.find((entry) => entry.key === key);
+                  const available =
+                    updates?.some((entry) => entry.importer === key && entry.available) ||
+                    importer?.updateAvailable;
+                  return (
+                    <li key={key} className="flex items-center gap-3 p-3">
+                      <GameIcon gameName={key} className="size-9 shrink-0 rounded-md" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-medium">{key}</span>
+                          {importer && (
+                            <Badge variant="secondary">
+                              {importer.mode === "legacy" ? "3DMigoto" : "XXMI"}
+                            </Badge>
+                          )}
+                          {available && (
+                            <Badge>{t("page.setting.xxmi.builtin.updateAvailable")}</Badge>
+                          )}
+                          {importer?.running && (
+                            <Badge variant="outline">
+                              {t("page.setting.xxmi.builtin.running")}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {importer?.packageInfo.deployed_version ||
+                            t("page.setting.xxmi.builtin.notInstalled")}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("page.setting.xxmi.builtin.configure")}
+                          title={t("page.setting.xxmi.builtin.configure")}
+                          onClick={() =>
+                            navigate({
+                              to: "/setting/xxmi/$importer",
+                              params: { importer: key },
+                            })
+                          }
+                        >
+                          <SlidersHorizontalIcon />
+                        </Button>
+                        {importer && (
+                          <Button
+                            disabled={importer.running}
+                            onClickPromise={async () => {
+                              try {
+                                await startImporter(key);
+                              } catch (error) {
+                                toast.error(toErrorMessage(error));
+                              }
+                            }}
+                          >
+                            <PlayIcon />
+                            {t("page.setting.xxmi.builtin.launch")}
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("page.setting.xxmi.builtin.options")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <PathField
+                label={t("page.setting.xxmi.builtin.root")}
+                value={root}
+                onValueChange={setEditedRoot}
+              >
                 <Button
                   disabled={!root || root === overview?.root}
                   onClickPromise={async () => {
@@ -126,36 +306,47 @@ export function XXMIDashboard() {
                 >
                   {t("g.save")}
                 </Button>
-              </div>
+              </PathField>
               {overview?.externalLauncher && (
-                <div className="space-y-2 rounded-md border p-3 text-sm">
-                  <p>{t("page.setting.xxmi.builtin.externalDetected")}</p>
-                  <p className="break-all text-muted-foreground">
-                    {overview.externalLauncher.path}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {t("page.setting.xxmi.builtin.externalWarning")}
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.ImportExternalLauncher({
-                          path: overview.externalLauncher!.path,
-                          root: root || overview.root,
-                        });
-                        refresh();
-                        void queryClient.invalidateQueries({ queryKey: ["settings"] });
-                        toast.success(t("page.setting.xxmi.builtin.imported"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.import")}
-                  </Button>
-                </div>
+                <Alert>
+                  <InfoIcon />
+                  <AlertTitle>{t("page.setting.xxmi.builtin.externalDetected")}</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p className="font-mono text-xs break-all">{overview.externalLauncher.path}</p>
+                    <p>{t("page.setting.xxmi.builtin.externalWarning")}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.ImportExternalLauncher({
+                            path: overview.externalLauncher!.path,
+                            root: root || overview.root,
+                          });
+                          refresh();
+                          void queryClient.invalidateQueries({ queryKey: ["settings"] });
+                          toast.success(t("page.setting.xxmi.builtin.imported"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.import")}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
               )}
+              <Separator />
+              <ToggleRow
+                label={t("page.setting.xxmi.builtin.autoUpdate")}
+                checked={settings?.autoUpdate ?? false}
+                onCheckedChange={(value) => update("autoUpdate", value)}
+              />
+              <ToggleRow
+                label={t("page.setting.xxmi.builtin.prereleases")}
+                checked={settings?.includePrereleases ?? false}
+                onCheckedChange={(value) => update("includePrereleases", value)}
+              />
             </CardContent>
           </Card>
 
@@ -165,16 +356,26 @@ export function XXMIDashboard() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               {overview?.cacheIssues?.map((issue) => (
-                <p key={issue} role="alert" className="text-destructive">
-                  {t("page.setting.xxmi.builtin.cacheIssue")}: {issue}
-                </p>
+                <Alert key={issue} variant="destructive">
+                  <TriangleAlertIcon />
+                  <AlertTitle>{t("page.setting.xxmi.builtin.cacheIssue")}</AlertTitle>
+                  <AlertDescription className="break-all">{issue}</AlertDescription>
+                </Alert>
               ))}
-              <div className="flex items-center justify-between gap-3">
-                <span>
-                  {t("page.setting.xxmi.builtin.libs")}: {libs?.length ?? 0}
-                </span>
+              <PackageRow
+                title={t("page.setting.xxmi.builtin.libs")}
+                versions={libs?.map((entry) => ({
+                  key: entry.version,
+                  label: entry.referenced
+                    ? `${entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
+                    : entry.version,
+                  active: entry.referenced,
+                }))}
+              >
                 <Button
                   variant="outline"
+                  size="sm"
+                  disabled={!libs?.some((entry) => !entry.referenced)}
                   onClickPromise={async () => {
                     try {
                       const removed = await XXMI.PruneLibsCache();
@@ -187,76 +388,44 @@ export function XXMIDashboard() {
                     }
                   }}
                 >
+                  <Trash2Icon />
                   {t("page.setting.xxmi.builtin.prune")}
                 </Button>
-              </div>
-              {libs?.map((entry) => (
-                <p key={entry.version} className="text-muted-foreground">
-                  {entry.version} {entry.referenced && `· ${t("page.setting.xxmi.builtin.inUse")}`}
-                </p>
-              ))}
+              </PackageRow>
               <Separator />
-              <div className="flex items-center justify-between gap-3">
-                <span>
-                  {t("page.setting.xxmi.builtin.legacy")}: {legacy?.length ?? 0}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        const selected = await Dialog.ShowOpenDialog({
-                          title: t("page.setting.xxmi.builtin.importLegacy"),
-                          defaultPath: "",
-                          filters: [{ name: "ZIP", extensions: ["zip"] }],
-                          properties: ["openFile"],
-                        });
-                        if (selected.canceled || !selected.filePaths?.[0]) return;
-                        await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.importedLegacy"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.importLegacy")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.UpdateLegacyRuntime();
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.downloaded"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.downloadLegacy")}
-                  </Button>
-                </div>
-              </div>
-              {legacy?.map((entry) => (
-                <p key={entry.id} className="text-muted-foreground">
-                  {entry.id}
-                </p>
-              ))}
-              <Separator />
-              <div className="flex items-center justify-between gap-3">
-                <span>
-                  {t("page.setting.xxmi.builtin.fpsUnlocker")}:{" "}
-                  {fpsVersions?.join(", ") || t("page.setting.xxmi.builtin.notInstalled")}
-                </span>
+              <PackageRow
+                title={t("page.setting.xxmi.builtin.legacy")}
+                versions={legacy?.map((entry) => ({ key: entry.id, label: entry.id }))}
+              >
                 <Button
                   variant="outline"
-                  disabled={!fpsReleases?.[0]}
+                  size="sm"
                   onClickPromise={async () => {
-                    const latest = fpsReleases?.[0];
-                    if (!latest) return;
                     try {
-                      await XXMI.EnsureFPSUnlockerVersion(latest.version);
+                      const selected = await Dialog.ShowOpenDialog({
+                        title: t("page.setting.xxmi.builtin.importLegacy"),
+                        defaultPath: "",
+                        filters: [{ name: "ZIP", extensions: ["zip"] }],
+                        properties: ["openFile"],
+                      });
+                      if (selected.canceled || !selected.filePaths?.[0]) return;
+                      await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);
+                      refresh();
+                      toast.success(t("page.setting.xxmi.builtin.importedLegacy"));
+                    } catch (error) {
+                      toast.error(toErrorMessage(error));
+                    }
+                  }}
+                >
+                  <FileArchiveIcon />
+                  {t("page.setting.xxmi.builtin.importLegacy")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClickPromise={async () => {
+                    try {
+                      await XXMI.UpdateLegacyRuntime();
                       refresh();
                       toast.success(t("page.setting.xxmi.builtin.downloaded"));
                     } catch (error) {
@@ -264,170 +433,85 @@ export function XXMIDashboard() {
                     }
                   }}
                 >
+                  <DownloadIcon />
+                  {t("page.setting.xxmi.builtin.downloadLegacy")}
+                </Button>
+              </PackageRow>
+              <Separator />
+              <PackageRow
+                title={t("page.setting.xxmi.builtin.fpsUnlocker")}
+                versions={fpsVersions?.map((version) => ({ key: version, label: version }))}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!latestFPS || fpsVersions?.includes(latestFPS.version)}
+                  onClickPromise={async () => {
+                    if (!latestFPS) return;
+                    try {
+                      await XXMI.EnsureFPSUnlockerVersion(latestFPS.version);
+                      refresh();
+                      toast.success(t("page.setting.xxmi.builtin.downloaded"));
+                    } catch (error) {
+                      toast.error(toErrorMessage(error));
+                    }
+                  }}
+                >
+                  <DownloadIcon />
                   {t("page.setting.xxmi.builtin.downloadFPS")}
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.options")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{t("page.setting.xxmi.builtin.autoUpdate")}</span>
-                <Switch
-                  checked={settings?.autoUpdate ?? false}
-                  onCheckedChange={(value) => update("autoUpdate", value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{t("page.setting.xxmi.builtin.prereleases")}</span>
-                <Switch
-                  checked={settings?.includePrereleases ?? false}
-                  onCheckedChange={(value) => update("includePrereleases", value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>{t("page.setting.xxmi.builtin.importers")}</CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.CheckUpdates(true);
-                        refresh();
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.checkUpdates")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={!updates?.some((entry) => entry.available && !entry.pinned)}
-                    onClickPromise={async () => {
-                      try {
-                        const targets = [
-                          ...new Set(
-                            updates
-                              ?.filter((entry) => entry.available && !entry.pinned)
-                              .map((entry) => entry.package) ?? [],
-                          ),
-                        ];
-                        await XXMI.InstallUpdates(targets);
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.installUpdates")}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {updates
-                ?.filter(
-                  (entry, index, list) =>
-                    entry.available &&
-                    !entry.pinned &&
-                    list.findIndex(
-                      (item) => item.package === entry.package && item.available && !item.pinned,
-                    ) === index,
-                )
-                .map((entry) => (
-                  <div
-                    key={entry.package}
-                    className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
-                  >
-                    <span className="min-w-0 break-all">
-                      {entry.package}:{" "}
-                      {entry.installed || t("page.setting.xxmi.builtin.notInstalled")} →{" "}
-                      {entry.latestVersion}
-                    </span>
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.SkipVersion(entry.package, entry.latestVersion);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.skipVersion")}
-                    </Button>
-                  </div>
-                ))}
-              {importerKeys.map((key) => {
-                const importer = overview?.importers?.find((entry) => entry.key === key);
-                const available =
-                  updates?.some((entry) => entry.importer === key && entry.available) ||
-                  importer?.updateAvailable;
-                return (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-3 rounded-md border p-3"
-                  >
-                    <div className="min-w-0 text-sm">
-                      <p className="font-medium">
-                        {key} {importer && `· ${importer.mode === "legacy" ? "3DMigoto" : "XXMI"}`}
-                        {available && ` · ${t("page.setting.xxmi.builtin.updateAvailable")}`}
-                        {importer?.running && ` · ${t("page.setting.xxmi.builtin.running")}`}
-                      </p>
-                      <p className="truncate text-muted-foreground">
-                        {importer?.packageInfo.deployed_version ||
-                          t("page.setting.xxmi.builtin.notInstalled")}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      {importer && (
-                        <Button
-                          variant="outline"
-                          disabled={importer.running}
-                          onClickPromise={async () => {
-                            try {
-                              await startImporter(key);
-                            } catch (error) {
-                              toast.error(toErrorMessage(error));
-                            }
-                          }}
-                        >
-                          {t("page.setting.xxmi.builtin.launch")}
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          navigate({
-                            to: "/setting/xxmi/$importer",
-                            params: { importer: key },
-                          })
-                        }
-                      >
-                        {t("page.setting.xxmi.builtin.configure")}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+              </PackageRow>
             </CardContent>
           </Card>
         </>
       )}
       {launchGuardDialog}
     </main>
+  );
+}
+
+// A shared package appears once per importer; only unpinned ones can be installed in bulk.
+function installableUpdates(updates: UpdateStatus[] | null | undefined) {
+  return uniqBy(
+    updates?.filter((entry) => entry.available && !entry.pinned) ?? [],
+    (entry) => entry.package,
+  );
+}
+
+function PackageRow({
+  title,
+  versions,
+  children,
+}: {
+  title: string;
+  versions?: { key: string; label: string; active?: boolean }[];
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{title}</span>
+        <div className="flex flex-wrap justify-end gap-2">{children}</div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {versions?.length ? (
+          versions.map((version) => (
+            <Badge
+              key={version.key}
+              variant={version.active ? "secondary" : "outline"}
+              className="font-mono"
+            >
+              {version.label}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {t("page.setting.xxmi.builtin.notInstalled")}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

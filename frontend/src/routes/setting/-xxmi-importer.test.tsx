@@ -48,6 +48,8 @@ const config = {
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("@bindings/mod", () => ({ Mod: {} }));
+vi.mock("@bindings/platform", () => ({ Dialog: {} }));
+vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
   useLaunchGuard: () => ({ startImporter: vi.fn(), launchGuardDialog: null }),
 }));
@@ -91,18 +93,19 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.InstallImporterPackage.mockResolvedValue(undefined);
   render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
-  fireEvent.click(screen.getByRole("button", { name: "1.0.0 !" }));
+  fireEvent.click(screen.getByRole("button", { name: /^1\.0\.0/ }));
   const install = screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" });
   expect(install).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }));
   expect(install).toHaveProperty("disabled", false);
 
-  fireEvent.click(screen.getByRole("button", { name: "2.0.0 ✓" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
   expect(
     screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }),
   ).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "1.0.0 !" }));
+  fireEvent.click(screen.getByRole("button", { name: /^1\.0\.0/ }));
   expect(install).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }));
   fireEvent.click(install);
@@ -115,7 +118,7 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
     }),
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "2.0.0 ✓" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
   fireEvent.click(install);
   await waitFor(() =>
     expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
