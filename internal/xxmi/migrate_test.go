@@ -40,6 +40,8 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	gimi["game_folder"] = ""
 	gimi["unlock_fps"] = true
 	gimi["unlock_fps_value"] = 144
+	gimi["extra_libraries_enabled"] = true
+	gimi["extra_libraries"] = filepath.Join("extensions", "sample.dll")
 	data, err := json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +62,10 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	if !cfg.Enabled || cfg.ImporterFolder != filepath.Join(external, "GIMI") || cfg.GIMI == nil ||
 		!cfg.GIMI.UnlockFPS || cfg.GIMI.UnlockFPSValue != 144 {
 		t.Fatalf("imported config = %+v", cfg)
+	}
+	if len(cfg.ExtraLibraries.Paths) != 1 ||
+		cfg.ExtraLibraries.Paths[0] != filepath.Join(external, "extensions", "sample.dll") {
+		t.Fatalf("imported extra libraries = %q", cfg.ExtraLibraries.Paths)
 	}
 	if cfg.PackageVersion.Pinned != "1.2.3" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)

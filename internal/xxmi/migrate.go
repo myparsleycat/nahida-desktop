@@ -155,6 +155,11 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 		importer, _ := wrapper["Importer"].(map[string]any)
 		migoto, _ := wrapper["Migoto"].(map[string]any)
 		mapExternalImporterSettings(&cfg, importer, migoto)
+		for i, library := range cfg.ExtraLibraries.Paths {
+			if !filepath.IsAbs(library) {
+				cfg.ExtraLibraries.Paths[i] = filepath.Join(path, library)
+			}
+		}
 		if err := ValidateImporterSettings(key, cfg); err != nil {
 			return fmt.Errorf("import %s config: %w", key, err)
 		}
