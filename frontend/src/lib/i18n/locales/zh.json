@@ -2071,6 +2071,7 @@
           "updateModPathsDescription": "是否更新指向旧 Mods 文件夹的 {{count}} 个游戏条目？",
           "keepModPaths": "保留现有路径",
           "packageVersion": "软件包版本",
+          "overwriteINI": "安装软件包时覆盖 d3dx.ini",
           "currentPin": "选定的软件包",
           "installedVerification": "安装 {{version}} 时的验证方式：{{method}}",
           "verificationECDSA": "ECDSA 签名",

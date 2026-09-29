@@ -2072,6 +2072,7 @@
           "updateModPathsDescription": "古い Mods フォルダーを参照するゲーム {{count}} 件のパスも更新しますか？",
           "keepModPaths": "現在のパスを維持",
           "packageVersion": "パッケージのバージョン",
+          "overwriteINI": "パッケージのインストール時に d3dx.ini を上書きする",
           "currentPin": "選択中のパッケージ",
           "installedVerification": "{{version}} インストール時の検証: {{method}}",
           "verificationECDSA": "ECDSA 署名",

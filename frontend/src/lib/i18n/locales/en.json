@@ -2156,6 +2156,7 @@
           "updateModPathsDescription": "Update {{count}} game entries that point to the old Mods folder?",
           "keepModPaths": "Keep existing paths",
           "packageVersion": "Package versions",
+          "overwriteINI": "Replace d3dx.ini when installing a package",
           "currentPin": "Selected package",
           "installedVerification": "Verification when {{version}} was installed: {{method}}",
           "verificationECDSA": "ECDSA signature",

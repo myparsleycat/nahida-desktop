@@ -295,6 +295,13 @@ function RouteComponent() {
           <CardTitle>{t("page.setting.xxmi.builtin.packageVersion")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          <label className="flex items-center justify-between">
+            <span>{t("page.setting.xxmi.builtin.overwriteINI")}</span>
+            <Switch
+              checked={config.overwriteINI}
+              onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
+            />
+          </label>
           <p>
             {t("page.setting.xxmi.builtin.currentPin")}:{" "}
             {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
@@ -736,6 +743,15 @@ function RouteComponent() {
               })
             }
           />
+          <label className="flex items-center justify-between">
+            <span>{t("page.setting.xxmi.builtin.waitForCommand")}</span>
+            <Switch
+              checked={config.runPostLoad.wait}
+              onCheckedChange={(wait) =>
+                setConfig({ ...config, runPostLoad: { ...config.runPostLoad, wait } })
+              }
+            />
+          </label>
           <label className="flex items-center justify-between">
             <span>{t("page.setting.xxmi.builtin.extraLibraries")}</span>
             <Switch
