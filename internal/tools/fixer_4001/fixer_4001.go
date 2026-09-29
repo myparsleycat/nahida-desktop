@@ -217,7 +217,7 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		return result
 	}
 	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
-		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_BUILD_FAILED"), err)
 	}
 	finalDestination := filepath.Join(importerPath, targetD3D11DLL)
 	access := t.fs.GetFileWriteAccess(finalDestination, importerPath)
@@ -307,7 +307,7 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		return result
 	}
 	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
-		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_OBFUSCATE_FAILED"), err)
 	}
 	access := t.fs.GetFileWriteAccess(target, importerPath)
 	if access.Locked {
@@ -423,7 +423,7 @@ func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
 		return result
 	}
 	if err := t.ensureXXMIMode(ctx, "", importerPath); err != nil {
-		return t.failed4001("XXMI_ERR_LAUNCHER_CLOSE_FAILED", err)
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_RESTORE_FAILED"), err)
 	}
 	target := filepath.Join(importerPath, targetD3D11DLL)
 	access := t.fs.GetFileWriteAccess(target, importerPath)
@@ -507,7 +507,10 @@ func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath 
 		return err
 	}
 	if mode == xxmi.LauncherExternal {
-		return t.xxmi.EnsureLauncherClosed(ctx)
+		if err := t.xxmi.EnsureLauncherClosed(ctx); err != nil {
+			return fmt.Errorf("%w: %w", errLauncherNotClosed, err)
+		}
+		return nil
 	}
 
 	if importerKey == "" {
@@ -529,10 +532,35 @@ func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath 
 	if err != nil {
 		return err
 	}
-	if cfg.Enabled && cfg.Mode == "legacy" {
-		return errors.New("XXMI_LEGACY_RUNTIME_UNSUPPORTED")
+
+	// The DLL is adopted into the importer's runtime manifest after it is written, so reject targets the
+	// built-in runtime does not manage before touching the file.
+	if !cfg.Enabled || !strings.EqualFold(filepath.Clean(cfg.ImporterFolder), filepath.Clean(importerPath)) {
+		return fmt.Errorf("%w: %s at %s", errImporterNotConfigured, importerKey, importerPath)
+	}
+	if cfg.Mode == xxmi.RuntimeLegacy {
+		return fmt.Errorf("%w: %s", errLegacyRuntime, importerKey)
 	}
 	return nil
+}
+
+var (
+	errLauncherNotClosed     = errors.New("close XXMI Launcher")
+	errImporterNotConfigured = errors.New("importer is not enabled in the built-in XXMI runtime")
+	errLegacyRuntime         = errors.New("importer uses the legacy 3DMigoto runtime")
+)
+
+func xxmiModeFailureCode(err error, fallback string) string {
+	switch {
+	case errors.Is(err, errLauncherNotClosed):
+		return "XXMI_ERR_LAUNCHER_CLOSE_FAILED"
+	case errors.Is(err, errImporterNotConfigured):
+		return "XXMI_ERR_IMPORTER_NOT_CONFIGURED"
+	case errors.Is(err, errLegacyRuntime):
+		return "XXMI_ERR_LEGACY_RUNTIME"
+	default:
+		return fallback
+	}
 }
 
 func existingImporterPath(input *string) (string, bool) {

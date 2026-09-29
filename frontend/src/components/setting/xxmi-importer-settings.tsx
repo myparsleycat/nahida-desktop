@@ -78,6 +78,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     queryKey: ["xxmi:libs-cache"],
     queryFn: XXMI.ListCachedLibs,
   });
+  const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
+  const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
@@ -466,9 +468,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </Card>
 
           <Card>
-            <CardContent className="text-sm">
+            <CardContent className="space-y-4 text-sm">
               <SelectRow
-                label={t("page.setting.xxmi.builtin.libs")}
+                label={
+                  <span className="flex items-center gap-1.5">
+                    {t("page.setting.xxmi.builtin.libs")}
+                    {customDll && (
+                      <Badge variant="outline">{t("page.setting.xxmi.builtin.customDll")}</Badge>
+                    )}
+                  </span>
+                }
                 value={config.xxmiVersion.pinned || FOLLOW_LATEST}
                 options={[
                   { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
@@ -481,6 +490,34 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   })
                 }
               />
+              {customDll && (
+                <Alert>
+                  <ShieldAlertIcon />
+                  <AlertDescription className="flex items-center justify-between gap-4">
+                    <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
+                    {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={dirty}
+                      title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
+                      onClickPromise={async () => {
+                        try {
+                          const warnings = await XXMI.RestoreOfficialDLL(importer);
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
+                          warnings?.forEach((warning) => toast.warning(warning));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

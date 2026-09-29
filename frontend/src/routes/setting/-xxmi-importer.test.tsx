@@ -6,6 +6,10 @@ import { afterEach, expect, it, vi } from "vitest";
 const xxmi = vi.hoisted(() => ({
   SaveImporterConfig: vi.fn(),
   InstallImporterPackage: vi.fn(),
+  RestoreOfficialDLL: vi.fn(),
+}));
+const overview = vi.hoisted(() => ({
+  importers: [] as Array<{ key: string; customDll: boolean }>,
 }));
 
 const config = {
@@ -61,12 +65,14 @@ vi.mock("@tanstack/react-query", () => ({
     data:
       queryKey[0] === "xxmi:config"
         ? config
-        : queryKey[0] === "xxmi:releases"
-          ? [
-              { version: "1.0.0", signed: false, notes: "Old unsigned release" },
-              { version: "2.0.0", signed: true, notes: "Signed release" },
-            ]
-          : [],
+        : queryKey[0] === "xxmi:overview"
+          ? overview
+          : queryKey[0] === "xxmi:releases"
+            ? [
+                { version: "1.0.0", signed: false, notes: "Old unsigned release" },
+                { version: "2.0.0", signed: true, notes: "Signed release" },
+              ]
+            : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -79,7 +85,7 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
 import { XXMIImporterSettings } from "@renderer/components/setting/xxmi-importer-settings";
 
@@ -87,6 +93,8 @@ afterEach(() => {
   cleanup();
   xxmi.SaveImporterConfig.mockReset();
   xxmi.InstallImporterPackage.mockReset();
+  xxmi.RestoreOfficialDLL.mockReset();
+  overview.importers = [];
 });
 
 it("requires a fresh unsigned confirmation for each selected release", async () => {
@@ -127,4 +135,26 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
       allowUnsigned: false,
     }),
   );
+});
+
+it("offers restoring the official DLL when the importer uses a custom DLL", async () => {
+  overview.importers = [{ key: "GIMI", customDll: true }];
+  xxmi.RestoreOfficialDLL.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  expect(screen.getByText("page.setting.xxmi.builtin.customDll")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.setting.xxmi.builtin.restoreOfficialDll" }),
+  );
+  await waitFor(() => expect(xxmi.RestoreOfficialDLL).toHaveBeenCalledWith("GIMI"));
+});
+
+it("hides the official DLL restore without a custom DLL", () => {
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  expect(
+    screen.queryByRole("button", { name: "page.setting.xxmi.builtin.restoreOfficialDll" }),
+  ).toBeNull();
 });

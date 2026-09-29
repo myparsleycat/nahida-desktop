@@ -1,10 +1,20 @@
+import { Mod } from "@bindings/mod";
 import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
-import { LauncherMode } from "@bindings/xxmi/models";
+import { ImportUserDataMode, LauncherMode } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
 import { XXMIExternalLauncher } from "@renderer/components/setting/xxmi/xxmi-external-launcher";
 import { PathField, ToggleRow } from "@renderer/components/setting/xxmi/xxmi-fields";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { ButtonGroup } from "@renderer/components/ui/button-group";
@@ -29,6 +39,7 @@ import {
   InfoIcon,
   PlayIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SlidersHorizontalIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -44,6 +55,13 @@ export type XXMIData = Awaited<ReturnType<typeof XXMI.GetXXMIData>>;
 type UpdateStatus = NonNullable<Awaited<ReturnType<typeof XXMI.CheckUpdates>>>[number];
 
 const importerKeys = ["GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI"] as const;
+// Keep in sync with the import errors in internal/xxmi/migrate_user_data.go.
+const importErrorCodes = [
+  "XXMI_IMPORT_FOLDER_CONFLICT",
+  "XXMI_IMPORT_TARGET_NOT_EMPTY",
+  "XXMI_IMPORT_MOVE_CROSS_VOLUME",
+  "XXMI_GAME_RUNNING",
+] as const;
 const settingsConfig = {
   autoUpdate: "xxmi.autoUpdate",
   includePrereleases: "xxmi.includePrereleases",
@@ -77,6 +95,8 @@ export function XXMIDashboard() {
     staleTime: 60 * 60 * 1000,
   });
   const [editedRoot, setEditedRoot] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const root = editedRoot ?? overview?.root ?? "";
   const pendingUpdates = installableUpdates(updates);
   const latestFPS = fpsReleases?.[0];
@@ -86,6 +106,60 @@ export function XXMIDashboard() {
       predicate: (query) =>
         typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("xxmi:"),
     });
+  };
+
+  const importExternal = async (userData: ImportUserDataMode) => {
+    if (!overview?.externalLauncher) return;
+    try {
+      const imported = await XXMI.ImportExternalLauncher({
+        path: overview.externalLauncher.path,
+        root,
+        userData,
+      });
+      // Moved Mods folders no longer exist at the old path, so games that used them follow the move.
+      if (userData === ImportUserDataMode.ImportUserDataMove) {
+        const normalize = (path: string) =>
+          path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+        const games = (await Mod.GetGames()) ?? [];
+        for (const importer of imported ?? []) {
+          const oldMods = normalize(`${importer.previousFolder}\\Mods`);
+          for (const game of games.filter((game) => normalize(game.modFolderPath) === oldMods)) {
+            await Mod.UpdateGame(game.game, {
+              modFolderPath: `${importer.importerFolder}\\Mods`,
+              importer: game.importer,
+              linkedModFolderPath: game.linkedModFolderPath,
+              gameInstallPath: game.gameInstallPath,
+              gameExecutablePath: game.gameExecutablePath,
+            });
+          }
+        }
+        void queryClient.invalidateQueries({ queryKey: ["games"] });
+      }
+      setImportOpen(false);
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success(t("page.setting.xxmi.builtin.imported"));
+    } catch (error) {
+      const message = toErrorMessage(error);
+      const code = importErrorCodes.find((code) => message.includes(code));
+      toast.error(code ? t(`page.setting.xxmi.builtin.importErrors.${code}`) : message);
+    }
+  };
+
+  const resetBuiltin = async () => {
+    try {
+      await XXMI.ResetBuiltinRuntime();
+      setResetOpen(false);
+      setEditedRoot(null);
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success(t("page.setting.xxmi.builtin.resetDone"));
+    } catch (error) {
+      const message = toErrorMessage(error);
+      toast.error(
+        message.includes("XXMI_BUSY") ? t("page.setting.xxmi.builtin.resetBusy") : message,
+      );
+    }
   };
 
   const switchLauncher = async (mode: LauncherMode) => {
@@ -229,6 +303,14 @@ export function XXMIDashboard() {
                               {importer.mode === "legacy" ? "3DMigoto" : "XXMI"}
                             </Badge>
                           )}
+                          {importer?.customDll && (
+                            <Badge
+                              variant="outline"
+                              title={t("page.setting.xxmi.builtin.customDllDescription")}
+                            >
+                              {t("page.setting.xxmi.builtin.customDll")}
+                            </Badge>
+                          )}
                           {available && (
                             <Badge>{t("page.setting.xxmi.builtin.updateAvailable")}</Badge>
                           )}
@@ -314,23 +396,7 @@ export function XXMIDashboard() {
                   <AlertDescription className="space-y-2">
                     <p className="font-mono text-xs break-all">{overview.externalLauncher.path}</p>
                     <p>{t("page.setting.xxmi.builtin.externalWarning")}</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.ImportExternalLauncher({
-                            path: overview.externalLauncher!.path,
-                            root: root || overview.root,
-                          });
-                          refresh();
-                          void queryClient.invalidateQueries({ queryKey: ["settings"] });
-                          toast.success(t("page.setting.xxmi.builtin.imported"));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                       {t("page.setting.xxmi.builtin.import")}
                     </Button>
                   </AlertDescription>
@@ -463,9 +529,70 @@ export function XXMIDashboard() {
               </PackageRow>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("page.setting.xxmi.builtin.reset")}</CardTitle>
+              <CardDescription>{t("page.setting.xxmi.builtin.resetDescription")}</CardDescription>
+              <CardAction>
+                <Button
+                  variant="destructive"
+                  disabled={!overview}
+                  onClick={() => setResetOpen(true)}
+                >
+                  <RotateCcwIcon />
+                  {t("page.setting.xxmi.builtin.resetConfirm")}
+                </Button>
+              </CardAction>
+            </CardHeader>
+          </Card>
         </>
       )}
       {launchGuardDialog}
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.setting.xxmi.builtin.resetTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.setting.xxmi.builtin.resetConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <Button variant="destructive" onClickPromise={resetBuiltin}>
+              {t("page.setting.xxmi.builtin.resetConfirm")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={importOpen} onOpenChange={setImportOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.setting.xxmi.builtin.importUserDataTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.setting.xxmi.builtin.importUserDataDescription", { root })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>{t("page.setting.xxmi.builtin.importUserDataKeepHint")}</li>
+            <li>{t("page.setting.xxmi.builtin.importUserDataMoveHint")}</li>
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataKeep)}
+            >
+              {t("page.setting.xxmi.builtin.importUserDataKeep")}
+            </Button>
+            <Button onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataMove)}>
+              {t("page.setting.xxmi.builtin.importUserDataMove")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

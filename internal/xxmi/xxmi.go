@@ -60,6 +60,8 @@ type EnabledImporter struct {
 	UpdateAvailable  bool        `json:"updateAvailable"`
 	InstalledVersion *string     `json:"installedVersion"`
 	PackageInfo      PackageInfo `json:"packageInfo"`
+	// CustomDLL reports that the built-in runtime preserves a user-provided d3d11.dll instead of the signed one.
+	CustomDLL bool `json:"customDll"`
 }
 
 type Data struct {
@@ -107,6 +109,8 @@ type XXMI struct {
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
 	busy        map[string]bool
+	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
+	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 }
 
 func New() *XXMI {
@@ -122,10 +126,12 @@ func NewWithOptions(opts Options) *XXMI {
 	if githubClient == nil {
 		githubClient = github.New(github.Options{HTTP: opts.HTTP, Download: opts.Download, Log: opts.Log})
 	}
-	return &XXMI{
+	x := &XXMI{
 		log: opts.Log, github: githubClient, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
 	}
+	x.installImporter = x.installBuiltinImporterPackage
+	return x
 }
 
 //wails:ignore

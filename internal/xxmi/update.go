@@ -3,7 +3,6 @@ package xxmi
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -120,22 +119,15 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
 			libs := updateStatus(row.Key, "xxmi-libs", states["xxmi-libs"])
 			libs.Pinned = cfg.XXMIVersion.Pinned != ""
-			if legacyUsesXXMIInjector(cfg) {
-				version := selectedLegacyInjectorVersion(cfg)
-				if cacheRoot, err := xxmiCacheRoot(); err == nil && version != "" {
-					if verifyXXMILibsCache(filepath.Join(cacheRoot, "packages", "xxmi-libs", version), version) == nil {
-						libs.Installed = version
-					}
-				}
-			}
 			if cfg.Mode == RuntimeXXMI {
-				if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
-					var deployed runtimeManifest
-					if json.Unmarshal(data, &deployed) == nil {
-						if version, ok := strings.CutPrefix(deployed.Source, "xxmi-libs@"); ok {
-							libs.Installed = version
-						}
-					}
+				libs.Installed, _ = deployedLibsVersion(cfg.ImporterFolder)
+			}
+
+			// A runtime not deployed since migration, or an adopted custom DLL whose manifest has no source,
+			// reports no version; the next launch deploys the selected cached libraries without downloading.
+			if libs.Installed == "" && (cfg.Mode == RuntimeXXMI || legacyUsesXXMIInjector(cfg)) {
+				if version := selectedLegacyInjectorVersion(cfg); version != "" && verifiedCachedLibsVersion(version) {
+					libs.Installed = version
 				}
 			}
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)

@@ -350,6 +350,9 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
+	if !usesCustomDLL(importer) {
+		t.Fatal("preserved third-party DLL is not reported as custom")
+	}
 	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base)
 	if err != nil || len(warnings) == 0 {
 		t.Fatalf("repeat deployment warnings = %v, error = %v", warnings, err)
@@ -360,6 +363,9 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
+	if usesCustomDLL(importer) {
+		t.Fatal("signed DLL is still reported as custom")
+	}
 }
 
 func TestDeployRuntimeModeSwitchBacksUpUserManagedDLLs(t *testing.T) {

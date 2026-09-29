@@ -335,7 +335,8 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConf
 	doc := parseINI(data)
 	doc.SetOption("Loader", "target", processName, true)
 	doc.SetOption("Loader", "module", "d3d11.dll", true)
-	doc.SetOption("Loader", "launch", "", true)
+	// 3DMigoto warns about an empty `launch =` line, and the helper starts the game itself.
+	doc.RemoveOption("Loader", "launch")
 	if cfg.Mode == RuntimeXXMI {
 		doc.SetOption("Loader", "loader", x.elevated.HelperImageName(), true)
 	} else {

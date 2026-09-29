@@ -107,6 +107,24 @@ func (s XXMIImportersStore) Delete(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `DELETE FROM "xxmi_importers" WHERE "key" = ?`, key)
 }
 
+// Reset deletes every importer config and package state together with settingKeys in one transaction.
+func (s XXMIImportersStore) Reset(ctx context.Context, settingKeys []string) error {
+	return s.c.withImmediate(ctx, func(q queryExec) error {
+		if _, err := q.ExecContext(ctx, `DELETE FROM "xxmi_importers"`); err != nil {
+			return err
+		}
+		if _, err := q.ExecContext(ctx, `DELETE FROM "xxmi_packages"`); err != nil {
+			return err
+		}
+		for _, key := range settingKeys {
+			if _, err := q.ExecContext(ctx, `DELETE FROM "setting" WHERE "key" = ?`, key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 type XXMIPackageRow struct {
 	Package            string
 	LatestVersion      *string

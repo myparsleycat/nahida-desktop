@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -20,8 +21,23 @@ type ExternalLauncher struct {
 }
 
 type ImportExternalLauncherInput struct {
-	Path string `json:"path"`
-	Root string `json:"root"`
+	Path     string             `json:"path"`
+	Root     string             `json:"root"`
+	UserData ImportUserDataMode `json:"userData"`
+}
+
+// ImportedImporter maps an imported importer's external launcher folder to its new built-in folder.
+type ImportedImporter struct {
+	Key            string `json:"key"`
+	PreviousFolder string `json:"previousFolder"`
+	ImporterFolder string `json:"importerFolder"`
+}
+
+type importerImportPlan struct {
+	spec      importerPackageSpec
+	source    string
+	cfg       ImporterConfig
+	installed *string
 }
 
 func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, error) {
@@ -82,43 +98,56 @@ func isValidConfig(path string) bool {
 	return err == nil
 }
 
-func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalLauncherInput) error {
+// ImportExternalLauncher imports an external XXMI Launcher into the built-in runtime. Each importer gets its own
+// folder under root with a freshly installed package, and its user data is linked or moved there per
+// input.UserData. Every filesystem change is undone when the import fails.
+func (x *XXMI) ImportExternalLauncher(
+	ctx context.Context, input ImportExternalLauncherInput,
+) (imported []ImportedImporter, returnErr error) {
 	path := strings.TrimSpace(input.Path)
+	root := strings.TrimSpace(input.Root)
+	stage := "validate-input"
+	rollbackState := "not-started"
+	defer func() {
+		if returnErr != nil {
+			returnErr = infra.ReportError(x.log, returnErr, "XXMI.importExternalLauncher", infra.Diagnostic{
+				Operation: "import-external-launcher", Stage: stage,
+				Fields: map[string]any{
+					"external_path": path, "root": root, "user_data": string(input.UserData),
+					"rollback": rollbackState,
+				},
+			})
+		}
+	}()
+	if input.UserData != ImportUserDataKeep && input.UserData != ImportUserDataMove {
+		return nil, fmt.Errorf("invalid user data mode %q", input.UserData)
+	}
 	if err := validateLocalFolder("external launcher", path, true); err != nil {
-		return err
+		return nil, err
 	}
 	config, parsed, err := readAndValidateConfig(filepath.Join(path, xxmiConfigName))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	root := strings.TrimSpace(input.Root)
 	if root == "" {
-		root = path
+		if root, err = xxmiCacheRoot(); err != nil {
+			return nil, err
+		}
 	}
 	if err := validateLocalFolder("xxmi root", root, true); err != nil {
-		return err
+		return nil, err
 	}
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
 	if client == nil {
-		return errors.New("XXMI settings store is not configured")
+		return nil, errors.New("XXMI settings store is not configured")
 	}
+
 	launcher, _ := config["Launcher"].(map[string]any)
 	autoUpdate, _ := launcher["auto_update"].(bool)
 	includePrereleases, _ := launcher["pre_release"].(bool)
 	libsVersion := dllVersion(&path)
-	if libsVersion != nil {
-		if err := importExternalLibs(path, *libsVersion); err != nil {
-			return fmt.Errorf("import XXMI libraries: %w", err)
-		}
-	}
-	if fileExists(filepath.Join(path, "Resources", "Packages", "GI-FPS-Unlocker", "Manifest.json")) {
-		if err := importExternalFPSUnlocker(path); err != nil {
-			return fmt.Errorf("import GI FPS Unlocker: %w", err)
-		}
-	}
-	importRows := []db.XXMIImporterRow{}
 	packageRows := []db.XXMIPackageRow{}
 	importPackageState := func(id string, pkg PackageInfo) {
 		if pkg.LatestVersion == "" && pkg.SkippedVersion == "" {
@@ -138,6 +167,7 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 		}
 		packageRows = append(packageRows, row)
 	}
+	plans := []importerImportPlan{}
 	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI"} {
 		info := parsed.Importers[key]
 		folder := info.Importer.ImporterFolder
@@ -147,24 +177,21 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 		if parsed.Packages.Packages[key].LatestVersion == "" && !fileExists(filepath.Join(folder, "d3dx.ini")) {
 			continue
 		}
+		spec, _ := lookupImporterPackage(key)
 		cfg, err := DefaultImporterConfig(key, root)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		cfg.Enabled = true
-		cfg.ImporterFolder = filepath.Clean(folder)
 		cfg.GameFolder = info.Importer.GameFolder
 		if cfg.GameFolder != "" && !filepath.IsAbs(cfg.GameFolder) {
 			cfg.GameFolder = filepath.Join(path, cfg.GameFolder)
 		}
 		cfg.OverwriteINI = info.Importer.OverwriteINI
 		cfg.Mode = RuntimeXXMI
-		if !autoUpdate {
-			if spec, ok := lookupImporterPackage(key); ok {
-				if installed := readImporterVersion(cfg.ImporterFolder, spec); installed != nil {
-					cfg.PackageVersion = VersionPin{Pinned: *installed}
-				}
-			}
+		installed := readImporterVersion(folder, spec)
+		if !autoUpdate && installed != nil {
+			cfg.PackageVersion = VersionPin{Pinned: *installed}
 		}
 		if libsVersion != nil {
 			cfg.XXMIVersion = VersionPin{Pinned: *libsVersion}
@@ -179,25 +206,99 @@ func (x *XXMI) ImportExternalLauncher(ctx context.Context, input ImportExternalL
 			}
 		}
 		if err := ValidateImporterSettings(key, cfg); err != nil {
-			return fmt.Errorf("import %s config: %w", key, err)
+			return nil, fmt.Errorf("import %s config: %w", key, err)
 		}
-		data, err := json.Marshal(cfg)
-		if err != nil {
-			return err
-		}
-		importRows = append(importRows, db.XXMIImporterRow{Key: key, Config: string(data)})
+		plans = append(plans, importerImportPlan{
+			spec: spec, source: filepath.Clean(folder), cfg: cfg, installed: installed,
+		})
 		importPackageState("importer:"+key, parsed.Packages.Packages[key])
 	}
 	importPackageState("xxmi-libs", parsed.Packages.Packages["XXMI"])
 	importPackageState("gi-fps-unlocker", parsed.Packages.Packages["GI-FPS-Unlocker"])
+
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+	stage = "check-importer-folders"
+	for _, plan := range plans {
+		if err := checkImporterFolderMigration(
+			input.UserData, plan.spec.key, plan.source, plan.cfg.ImporterFolder,
+		); err != nil {
+			return nil, err
+		}
+		for _, name := range append(slices.Clone(plan.spec.gameExeNames), plan.spec.processNames...) {
+			pid, err := findProcessPID(ctx, name)
+			if err != nil {
+				return nil, err
+			}
+			if pid != 0 {
+				return nil, errors.New("XXMI_GAME_RUNNING")
+			}
+		}
+	}
+
+	stage = "import-shared-packages"
+	if libsVersion != nil {
+		if err := importExternalLibs(path, *libsVersion); err != nil {
+			return nil, fmt.Errorf("import XXMI libraries: %w", err)
+		}
+	}
+	if fileExists(filepath.Join(path, "Resources", "Packages", "GI-FPS-Unlocker", "Manifest.json")) {
+		if err := importExternalFPSUnlocker(path); err != nil {
+			return nil, fmt.Errorf("import GI FPS Unlocker: %w", err)
+		}
+	}
+
+	migration := &importerFolderMigration{mode: input.UserData}
+	defer func() {
+		if returnErr == nil || rollbackState == "not-started" {
+			return
+		}
+		rollbackState = "rolling-back"
+		if err := migration.rollback(); err != nil {
+			rollbackState = "rollback-failed"
+			returnErr = errors.Join(returnErr, err)
+			return
+		}
+		rollbackState = "rolled-back"
+	}()
+	importRows := make([]db.XXMIImporterRow, 0, len(plans))
+	for _, plan := range plans {
+		rollbackState = "pending"
+		stage = "prepare-" + plan.spec.key
+		if err := migration.prepare(plan.source, plan.cfg.ImporterFolder, plan.cfg.OverwriteINI); err != nil {
+			return nil, err
+		}
+		if plan.installed != nil {
+			stage = "install-" + plan.spec.key
+			if err := x.installImporter(ctx, plan.spec, plan.cfg, InstallImporterPackageInput{
+				Importer: plan.spec.key, Version: *plan.installed,
+			}); err != nil {
+				return nil, fmt.Errorf("install %s %s: %w", plan.spec.key, *plan.installed, err)
+			}
+		}
+		data, err := json.Marshal(plan.cfg)
+		if err != nil {
+			return nil, err
+		}
+		importRows = append(importRows, db.XXMIImporterRow{Key: plan.spec.key, Config: string(data)})
+		imported = append(imported, ImportedImporter{
+			Key: plan.spec.key, PreviousFolder: plan.source, ImporterFolder: plan.cfg.ImporterFolder,
+		})
+	}
+
+	stage = "save"
 	rootValue := root
 	autoUpdateValue := strconv.FormatBool(autoUpdate)
 	prereleasesValue := strconv.FormatBool(includePrereleases)
-	return client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, map[string]*string{
+	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, map[string]*string{
 		"xxmi_root":                &rootValue,
 		"xxmi_auto_update":         &autoUpdateValue,
 		"xxmi_include_prereleases": &prereleasesValue,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	rollbackState = "committed"
+	return imported, nil
 }
 
 func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[string]any) {

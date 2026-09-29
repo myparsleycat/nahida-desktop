@@ -12,7 +12,7 @@ import (
 	"nahida.live/desktop/internal/db"
 )
 
-func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) {
+func TestImportExternalLauncherInstallsImporterIntoBuiltinRoot(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
@@ -24,13 +24,8 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		t.Fatal(err)
 	}
 	external := t.TempDir()
-	versionFile := filepath.Join(external, "GIMI", "Core", "GIMI", "main.ini")
-	if err := os.MkdirAll(filepath.Dir(versionFile), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(versionFile, []byte("global $version = 1.23\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	source := filepath.Join(external, "GIMI")
+	writeImportSourceFiles(t, source)
 	config := xxmiTestConfig()
 	config["Launcher"].(map[string]any)["pre_release"] = true
 	packages := config["Packages"].(map[string]any)["packages"].(map[string]any)
@@ -56,16 +51,30 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	root := t.TempDir()
+	target := filepath.Join(root, "GIMI")
 	service := New()
 	service.UseClient(client)
-	if err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{Path: external}); err != nil {
+	installs := fakeImportInstaller(t, service, nil)
+
+	imported, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: root, UserData: ImportUserDataKeep,
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	want := []ImportedImporter{{Key: "GIMI", PreviousFolder: source, ImporterFolder: target}}
+	if !reflect.DeepEqual(imported, want) {
+		t.Fatalf("imported = %+v, want %+v", imported, want)
+	}
+	if !reflect.DeepEqual(*installs, []string{"GIMI@1.2.3"}) {
+		t.Fatalf("installs = %q", *installs)
 	}
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Enabled || cfg.ImporterFolder != filepath.Join(external, "GIMI") || cfg.GIMI == nil ||
+	if !cfg.Enabled || cfg.ImporterFolder != target || cfg.GIMI == nil ||
 		!cfg.GIMI.UnlockFPS || cfg.GIMI.UnlockFPSValue != 144 {
 		t.Fatalf("imported config = %+v", cfg)
 	}
@@ -82,6 +91,23 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	if cfg.PackageVersion.Pinned != "1.2.3" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)
 	}
+
+	// Kept user data stays in the external folder and is reached through junctions.
+	for _, name := range []string{"Mods", "ShaderFixes"} {
+		info, err := os.Lstat(filepath.Join(target, name))
+		if err != nil || !isInstallReparsePoint(info) {
+			t.Fatalf("%s is not linked: info = %v, err = %v", name, info, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(target, "Mods", "new.ini"), []byte("new mod"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(source, "Mods", "new.ini"), "new mod")
+	assertFile(t, filepath.Join(target, "ShaderFixes", "fix.hlsl"), "user shader")
+	assertFile(t, filepath.Join(target, "d3dx.ini"), "user ini")
+	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
+	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")
+
 	for id, want := range map[string]struct{ latest, skipped string }{
 		"importer:GIMI":   {"1", "1.3.0"},
 		"xxmi-libs":       {"1.7.6", "1.7.6"},
@@ -103,7 +129,7 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		}
 	}
 	for key, want := range map[string]string{
-		"xxmi_root": external, "xxmi_auto_update": "false", "xxmi_include_prereleases": "true",
+		"xxmi_root": root, "xxmi_auto_update": "false", "xxmi_include_prereleases": "true",
 	} {
 		value, err := client.Settings.GetValue(ctx, key)
 		if err != nil || value == nil || *value != want {
@@ -217,7 +243,9 @@ func TestImportExternalLauncherValidatesAllImportersBeforeSaving(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
-	if err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{Path: external}); err == nil ||
+	if _, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: t.TempDir(), UserData: ImportUserDataKeep,
+	}); err == nil ||
 		!strings.Contains(err.Error(), "import SRMI config") {
 		t.Fatalf("invalid later importer result = %v", err)
 	}

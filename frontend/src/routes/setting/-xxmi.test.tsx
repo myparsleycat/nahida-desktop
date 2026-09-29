@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
         mode: "xxmi",
         running: true,
         updateAvailable: true,
+        customDll: true,
         packageInfo: { deployed_version: "1.2.3" },
       },
     ],
@@ -98,6 +99,7 @@ it("keeps the package controls visible when a cache is damaged and disables a ru
   expect(screen.getByRole("alert").textContent).toContain("missing source.json");
   expect(screen.getByText("page.setting.xxmi.builtin.updateAvailable")).toBeTruthy();
   expect(screen.getByText("page.setting.xxmi.builtin.running")).toBeTruthy();
+  expect(screen.getByText("page.setting.xxmi.builtin.customDll")).toBeTruthy();
   expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.launch" })).toHaveProperty(
     "disabled",
     true,

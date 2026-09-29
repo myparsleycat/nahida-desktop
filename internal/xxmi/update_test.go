@@ -204,6 +204,91 @@ func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
 	t.Fatalf("XXMI libraries status missing: %+v", statuses)
 }
 
+func TestCheckUpdatesResolvesXXMILibrariesWithoutDeployedSource(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		manifest  *runtimeManifest
+		installed string
+		available bool
+	}{
+		{"not deployed with unverified cache", nil, "", true},
+		{"adopted DLL with unverified cache", &runtimeManifest{Mode: RuntimeXXMI}, "", true},
+		{"deployed source", &runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.7.6"}, "1.7.6", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("USERPROFILE", t.TempDir())
+			ctx := context.Background()
+			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatal(err)
+			}
+			x := New()
+			x.UseClient(client)
+			useBuiltinLauncher(t, x)
+			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Enabled = true
+			cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+			if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+				t.Fatal(err)
+			}
+
+			// An unsigned cache folder must not count as installed libraries.
+			cacheRoot, err := xxmiCacheRoot()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(cacheRoot, "packages", "xxmi-libs", "1.7.6"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if tc.manifest != nil {
+				data, err := json.Marshal(tc.manifest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(
+					filepath.Join(cfg.ImporterFolder, runtimeManifestName),
+					data,
+					0o600,
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, pkg := range []string{"importer:GIMI", "xxmi-libs"} {
+				latest := "1.7.6"
+				if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+					Package: pkg, LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			statuses, err := x.CheckUpdates(ctx, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, status := range statuses {
+				if status.Package == "xxmi-libs" {
+					if status.Installed != tc.installed || status.Available != tc.available {
+						t.Fatalf("XXMI libraries status = %+v", status)
+					}
+					return
+				}
+			}
+			t.Fatalf("XXMI libraries status missing: %+v", statuses)
+		})
+	}
+}
+
 func TestSelectedLegacyInjectorVersionNormalizesPin(t *testing.T) {
 	t.Parallel()
 	cfg := ImporterConfig{XXMIVersion: VersionPin{Pinned: "v1.7.6"}}

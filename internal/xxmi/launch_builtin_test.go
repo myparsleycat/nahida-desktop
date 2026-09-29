@@ -126,7 +126,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	folder := t.TempDir()
 	path := filepath.Join(folder, "d3dx.ini")
-	original := []byte("\xef\xbb\xbf; user comment\r\n[Loader]\r\ntarget = old.exe\r\ncustom = keep\r\n")
+	original := []byte("\xef\xbb\xbf; user comment\r\n[Loader]\r\ntarget = old.exe\r\nlaunch = \r\ncustom = keep\r\n")
 	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -141,11 +141,14 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"; user comment\r\n", "target = Game.exe\r\n", "custom = keep\r\n",
-		"loader = nahida-elevated-helper-test.exe\r\n", "launch = \r\n",
+		"loader = nahida-elevated-helper-test.exe\r\n",
 		"texture_hash = 0\r\n", "hunting = 2\r\n", "show_warnings = 0\r\n"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("updated INI is missing %q: %q", want, data)
 		}
+	}
+	if strings.Contains(string(data), "launch =") {
+		t.Errorf("updated INI keeps an empty launch option: %q", data)
 	}
 }
 
