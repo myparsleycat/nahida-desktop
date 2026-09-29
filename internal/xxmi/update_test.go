@@ -148,6 +148,67 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 	t.Fatalf("XXMI libraries status missing: %+v", statuses)
 }
 
+func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := New()
+	x.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	cfg.Mode = RuntimeLegacy
+	cfg.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{`C:\Mods\extra.dll`}}
+	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(cacheRoot, "packages", "xxmi-libs", "1.7.6"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range []string{"importer:GIMI", "xxmi-libs"} {
+		latest := "1.7.6"
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			Package: pkg, LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range statuses {
+		if status.Package == "xxmi-libs" {
+			if status.Installed != "" || !status.Available || status.Pinned {
+				t.Fatalf("legacy extra DLL injector update = %+v", status)
+			}
+			return
+		}
+	}
+	t.Fatalf("XXMI libraries status missing: %+v", statuses)
+}
+
+func TestSelectedLegacyInjectorVersionNormalizesPin(t *testing.T) {
+	t.Parallel()
+	cfg := ImporterConfig{XXMIVersion: VersionPin{Pinned: "v1.7.6"}}
+	if got := selectedLegacyInjectorVersion(cfg); got != "1.7.6" {
+		t.Fatalf("selected legacy injector version = %q", got)
+	}
+}
+
 func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

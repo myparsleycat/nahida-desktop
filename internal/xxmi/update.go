@@ -49,7 +49,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			continue
 		}
 		packages["importer:"+row.Key] = struct{}{}
-		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" {
+		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
 			packages["xxmi-libs"] = struct{}{}
 		}
 		if row.Key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
@@ -111,14 +111,24 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		status.Available = updateAvailable(status.LatestVersion, status.Installed, status.SkippedVersion)
 		statuses = append(statuses, status)
 
-		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" {
+		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
 			libs := updateStatus(row.Key, "xxmi-libs", states["xxmi-libs"])
 			libs.Pinned = cfg.XXMIVersion.Pinned != ""
-			if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
-				var deployed runtimeManifest
-				if json.Unmarshal(data, &deployed) == nil {
-					if version, ok := strings.CutPrefix(deployed.Source, "xxmi-libs@"); ok {
+			if legacyUsesXXMIInjector(cfg) {
+				version := selectedLegacyInjectorVersion(cfg)
+				if cacheRoot, err := xxmiCacheRoot(); err == nil && version != "" {
+					if verifyXXMILibsCache(filepath.Join(cacheRoot, "packages", "xxmi-libs", version), version) == nil {
 						libs.Installed = version
+					}
+				}
+			}
+			if cfg.Mode == RuntimeXXMI {
+				if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
+					var deployed runtimeManifest
+					if json.Unmarshal(data, &deployed) == nil {
+						if version, ok := strings.CutPrefix(deployed.Source, "xxmi-libs@"); ok {
+							libs.Installed = version
+						}
 					}
 				}
 			}
@@ -169,8 +179,19 @@ func newestCachedPackageVersion(pkg string) string {
 	return version
 }
 
+func selectedLegacyInjectorVersion(cfg ImporterConfig) string {
+	if version := normalizeVersion(cfg.XXMIVersion.Pinned); version != "" {
+		return version
+	}
+	return newestCachedPackageVersion("xxmi-libs")
+}
+
 func updateAvailable(latest, installed, skipped string) bool {
 	return latest != "" && latest != installed && latest != skipped
+}
+
+func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
+	return cfg.Mode == RuntimeLegacy && cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0
 }
 
 func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {

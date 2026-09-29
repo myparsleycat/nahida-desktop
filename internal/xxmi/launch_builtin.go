@@ -416,10 +416,7 @@ func (x *XXMI) builtinLaunchSpec(
 			}
 		}
 		if len(spec.ExtraDLLs) > 0 {
-			version := cfg.XXMIVersion.Pinned
-			if version == "" {
-				version = newestCachedPackageVersion("xxmi-libs")
-			}
+			version := selectedLegacyInjectorVersion(cfg)
 			if version == "" {
 				return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
 			}
