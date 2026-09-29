@@ -2046,6 +2046,13 @@
         }
       },
       "xxmi": {
+        "launcherMode": {
+          "title": "Game launcher",
+          "description": "Choose whether games start through an installed XXMI Launcher or the built-in runtime. Settings for both are kept when you switch.",
+          "external": "XXMI Launcher",
+          "builtin": "Built-in",
+          "changed": "Game launcher has been changed"
+        },
         "builtin": {
           "checkUpdates": "Check updates",
           "installUpdates": "Install updates",

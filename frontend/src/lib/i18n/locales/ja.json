@@ -1962,6 +1962,13 @@
         }
       },
       "xxmi": {
+        "launcherMode": {
+          "title": "ゲームランチャー",
+          "description": "インストール済みの XXMI Launcher と内蔵ランタイムのどちらでゲームを起動するか選択します。切り替えても両方の設定は保持されます。",
+          "external": "XXMI Launcher",
+          "builtin": "内蔵",
+          "changed": "ゲームランチャーを変更しました"
+        },
         "builtin": {
           "detectGame": "ゲームフォルダーを検出",
           "noGameFolders": "ゲームフォルダーが見つかりませんでした。手動で入力してください。",

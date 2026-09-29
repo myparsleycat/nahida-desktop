@@ -4,6 +4,13 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  launcherMode: undefined as string | undefined,
+  xxmiData: {
+    mode: "external",
+    xxmiPath: "C:\XXMI Launcher",
+    dllVersion: "v1.7.6",
+    enabledImporters: [{ key: "GIMI", installedVersion: "1.2.3" }],
+  },
   overview: {
     configured: true,
     root: "C:\\XXMI",
@@ -44,7 +51,12 @@ vi.mock("@renderer/hooks/use-settings", () => ({
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: string[] }) => ({
-    data: queryKey[0] === "xxmi:overview" ? state.overview : state.updates,
+    data:
+      queryKey[0] === "xxmi:overview"
+        ? { ...state.overview, launcherMode: state.launcherMode }
+        : queryKey[0] === "xxmi:getXXMIData"
+          ? state.xxmiData
+          : state.updates,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -55,6 +67,7 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
   Outlet: () => null,
 }));
+vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -63,6 +76,20 @@ import { XXMIDashboard } from "./xxmi";
 afterEach(() => {
   cleanup();
   state.updates = [];
+  state.launcherMode = undefined;
+});
+
+it("shows the external launcher settings instead of the built-in runtime in external mode", () => {
+  state.launcherMode = "external";
+
+  render(<XXMIDashboard />);
+
+  expect(screen.getByDisplayValue("C:\XXMI Launcher")).toBeTruthy();
+  expect(screen.getByText("page.setting.xxmi.activeImporter")).toBeTruthy();
+  expect(screen.queryByText("page.setting.xxmi.builtin.root")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "page.setting.xxmi.launcherMode.external" }),
+  ).toHaveProperty("disabled", true);
 });
 
 it("keeps the package controls visible when a cache is damaged and disables a running importer", () => {
