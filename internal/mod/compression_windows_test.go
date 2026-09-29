@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/setting"
 )
 
 func TestWofCompressUsesXpress4KProviderStructure(t *testing.T) {
@@ -63,6 +65,7 @@ func TestXpressCompressionFilesScansOnceAndCachesClusterSize(t *testing.T) {
 	large := writeCompressionTestFileAt(t, root, "large.bin", bytes.Repeat([]byte{'a'}, 8192))
 	writeCompressionTestFileAt(t, root, "small.bin", bytes.Repeat([]byte{'b'}, 4096))
 	writeCompressionTestFileAt(t, root, "skipped.zip", bytes.Repeat([]byte{'c'}, 8192))
+	writeCompressionTestFileAt(t, root, "download.dds.ntmp", bytes.Repeat([]byte{'d'}, 8192))
 
 	previous := volumeClusterSizeCall
 	t.Cleanup(func() { volumeClusterSizeCall = previous })
@@ -72,7 +75,7 @@ func TestXpressCompressionFilesScansOnceAndCachesClusterSize(t *testing.T) {
 		return 4096, nil
 	}
 
-	files, err := xpressCompressionFiles([]string{root})
+	files, err := xpressCompressionFiles(t.Context(), []string{root}, &compressionDeclinedFiles{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +84,197 @@ func TestXpressCompressionFilesScansOnceAndCachesClusterSize(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("cluster size calls = %d, want 1", calls.Load())
+	}
+}
+
+func TestXpressCompressionFilesSkipUnaddressableNames(t *testing.T) {
+	root := t.TempDir()
+	kept := writeCompressionTestFileAt(t, root, "kept.bin", bytes.Repeat([]byte{'a'}, 8192))
+	extended := `\\?\` + root
+	if err := os.Mkdir(extended+`\Loading...`, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{`Loading...\inner.bin`, `trailing.`, `space `} {
+		if err := os.WriteFile(extended+`\`+name, bytes.Repeat([]byte{'b'}, 8192), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(extended) })
+	previous := volumeClusterSizeCall
+	t.Cleanup(func() { volumeClusterSizeCall = previous })
+	volumeClusterSizeCall = func(string) (uint32, error) { return 4096, nil }
+
+	files, err := xpressCompressionFiles(t.Context(), []string{root}, &compressionDeclinedFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].path != kept {
+		t.Fatalf("files = %+v", files)
+	}
+}
+
+func TestApplyXpress4KSkipsWofBackedFilesBeforeTotals(t *testing.T) {
+	root := t.TempDir()
+	backed := writeCompressionTestFileAt(t, root, "backed.dds", bytes.Repeat([]byte{'x'}, 8192))
+	plain := writeCompressionTestFileAt(t, root, "plain.dds", bytes.Repeat([]byte{'y'}, 8192))
+	stubXpressCalls(t, func(path string) bool { return path == backed })
+	var calls atomic.Int32
+	wofSetFileDataLocationCall = func(windows.Handle, uint32, *wofCompressionInfoV1) uintptr {
+		calls.Add(1)
+		return 0
+	}
+	var total atomic.Int32
+	var mu sync.Mutex
+	var marked []string
+
+	err := applyXpress4K(t.Context(), []string{root}, func(files int, _ int64) {
+		total.Store(int32(files))
+	}, func(string, int64, bool) {}, &compressionFileOwnership{}, &compressionDeclinedFiles{}, func(paths ...string) {
+		mu.Lock()
+		marked = append(marked, paths...)
+		mu.Unlock()
+	}, func(_ string, err error) { t.Error(err) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total.Load() != 1 || calls.Load() != 1 {
+		t.Fatalf("total=%d calls=%d, want 1 each", total.Load(), calls.Load())
+	}
+	if !slices.Equal(marked, []string{plain, plain}) {
+		t.Fatalf("marked = %v, want the compressed file before and after WOF", marked)
+	}
+}
+
+func TestApplyXpress4KRemembersNotBeneficialFilesUntilTheyChange(t *testing.T) {
+	root := t.TempDir()
+	path := writeCompressionTestFileAt(t, root, "README.txt", bytes.Repeat([]byte{'x'}, 8192))
+	stubXpressCalls(t, func(string) bool { return false })
+	var calls atomic.Int32
+	wofSetFileDataLocationCall = func(windows.Handle, uint32, *wofCompressionInfoV1) uintptr {
+		calls.Add(1)
+		return hresultCompressionNotBeneficial
+	}
+	declined := compressionDeclinedFiles{}
+	run := func() {
+		t.Helper()
+		if err := applyXpress4K(
+			t.Context(), []string{root}, func(int, int64) {}, func(string, int64, bool) {},
+			&compressionFileOwnership{}, &declined, ignoreCompressionMutations,
+			func(_ string, err error) { t.Errorf("file error: %v", err) },
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run()
+	run()
+	if calls.Load() != 1 {
+		t.Fatalf("WOF calls = %d, want 1 while the file is unchanged", calls.Load())
+	}
+
+	modified := time.Now().Add(time.Minute)
+	if err := os.Chtimes(path, modified, modified); err != nil {
+		t.Fatal(err)
+	}
+	run()
+	if calls.Load() != 2 {
+		t.Fatalf("WOF calls = %d, want a retry after the file changed", calls.Load())
+	}
+}
+
+func TestApplyXpress4KSkipsFilesOpenForWriting(t *testing.T) {
+	root := t.TempDir()
+	path := writeCompressionTestFileAt(t, root, "BODY.dds", bytes.Repeat([]byte{'x'}, 8192))
+	writer, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	stubXpressCalls(t, func(string) bool { return false })
+	wofSetFileDataLocationCall = func(windows.Handle, uint32, *wofCompressionInfoV1) uintptr {
+		t.Error("a file open for writing must not be compressed")
+		return 0
+	}
+
+	if err := applyXpress4K(
+		t.Context(), []string{root}, func(int, int64) {}, func(string, int64, bool) {},
+		&compressionFileOwnership{}, &compressionDeclinedFiles{}, ignoreCompressionMutations,
+		func(_ string, err error) { t.Errorf("file error: %v", err) },
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A texture whose WOF call outlives the self-change window used to raise a
+// watcher event that started another pass over the same folder, forever.
+func TestXpressSlowCompressionDoesNotRetriggerItself(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	importer := filepath.Join(base, "Importer")
+	path := writeCompressionTestFileAt(
+		t, filepath.Join(importer, "Mods", "Character", "Mod"), "BODY.dds", bytes.Repeat([]byte("texture"), 256*1024),
+	)
+	previous := wofSetFileDataLocationCall
+	t.Cleanup(func() { wofSetFileDataLocationCall = previous })
+	var calls atomic.Int32
+	wofSetFileDataLocationCall = func(handle windows.Handle, provider uint32, info *wofCompressionInfoV1) uintptr {
+		calls.Add(1)
+		time.Sleep(compressionSelfChangeTTL + 500*time.Millisecond)
+		return nativeWofSetFileDataLocation(handle, provider, info)
+	}
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(ctx, "xpress4k", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = wofDecompress(path)
+		_ = settings.Close()
+	})
+
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.WaitCompressionPass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if external, _, _, err := nativeWofState(path); err != nil || !external {
+		t.Skipf("WOF compression is unavailable on this test volume: external=%v err=%v", external, err)
+	}
+	time.Sleep(compressionWatchDebounce + time.Second)
+	waitForCompression(t, m.compression)
+
+	if calls.Load() != 1 {
+		t.Fatalf("WOF calls = %d, want 1", calls.Load())
+	}
+}
+
+// stubXpressCalls fakes the cluster size and WOF state; the caller replaces
+// wofSetFileDataLocationCall, which is restored with the others.
+func stubXpressCalls(t *testing.T, backed func(string) bool) {
+	t.Helper()
+	previousCluster := volumeClusterSizeCall
+	previousWof := wofSetFileDataLocationCall
+	previousState := wofStateCall
+	t.Cleanup(func() {
+		volumeClusterSizeCall = previousCluster
+		wofSetFileDataLocationCall = previousWof
+		wofStateCall = previousState
+	})
+	volumeClusterSizeCall = func(string) (uint32, error) { return 4096, nil }
+	wofStateCall = func(path string) (bool, uint32, uint32, error) {
+		return backed(path), wofProviderFile, fileProviderCompressionXpress4K, nil
 	}
 }
 
@@ -102,19 +296,23 @@ func TestApplyXpress4KCallsEveryEligibleFileOnceAndContinuesAfterFailure(t *test
 	wofStateCall = func(string) (bool, uint32, uint32, error) { return false, 0, 0, nil }
 	var calls atomic.Int32
 	wofSetFileDataLocationCall = func(windows.Handle, uint32, *wofCompressionInfoV1) uintptr {
-		if calls.Add(1) == 1 {
+		switch calls.Add(1) {
+		case 1:
 			return hresultCompressionNotBeneficial
+		case 2:
+			return 0x80070005
 		}
 		return 0
 	}
 	var total, processed atomic.Int32
 	var fileErrors atomic.Int32
 	ownership := compressionFileOwnership{}
+	declined := compressionDeclinedFiles{}
 	err := applyXpress4K(context.Background(), []string{root}, func(files int, _ int64) {
 		total.Store(int32(files))
 	}, func(string, int64, bool) {
 		processed.Add(1)
-	}, &ownership, ignoreCompressionMutations, func(string, error) {
+	}, &ownership, &declined, ignoreCompressionMutations, func(string, error) {
 		fileErrors.Add(1)
 	})
 	if err != nil {
@@ -123,8 +321,8 @@ func TestApplyXpress4KCallsEveryEligibleFileOnceAndContinuesAfterFailure(t *test
 	if calls.Load() != count || processed.Load() != count || total.Load() != count {
 		t.Fatalf("calls=%d processed=%d total=%d", calls.Load(), processed.Load(), total.Load())
 	}
-	if fileErrors.Load() != 1 {
-		t.Fatalf("file errors = %d, want 1", fileErrors.Load())
+	if fileErrors.Load() != 1 || len(declined.files) != 1 {
+		t.Fatalf("file errors = %d declined = %d, want 1 each", fileErrors.Load(), len(declined.files))
 	}
 }
 
@@ -153,8 +351,14 @@ func TestWofOwnershipPersistsAcrossReconciliation(t *testing.T) {
 	ownership := compressionFileOwnership{}
 	for range 2 {
 		if err := applyXpress4K(
-			context.Background(), []string{root}, func(int, int64) {}, func(string, int64, bool) {},
-			&ownership, ignoreCompressionMutations, func(_ string, err error) { t.Error(err) },
+			context.Background(),
+			[]string{root},
+			func(int, int64) {},
+			func(string, int64, bool) {},
+			&ownership,
+			&compressionDeclinedFiles{},
+			ignoreCompressionMutations,
+			func(_ string, err error) { t.Error(err) },
 		); err != nil {
 			t.Fatal(err)
 		}

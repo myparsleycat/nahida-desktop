@@ -59,16 +59,22 @@ func applyXpress4K(
 	setTotals func(int, int64),
 	progress func(string, int64, bool),
 	ownership *compressionFileOwnership,
+	declined *compressionDeclinedFiles,
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
-	files, err := xpressCompressionFiles(roots)
+	files, err := xpressCompressionFiles(ctx, roots, declined)
 	if err != nil {
 		return err
 	}
 	setCompressionTotals(files, setTotals)
 	return runXpressWorkers(ctx, files, progress, onError, func(file compressionFile) error {
 		handle, err := openXpressFile(file.path)
+		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+			// Another program holds the file for writing; its writes raise
+			// watcher events that bring the file back.
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("open: %w", err)
 		}
@@ -77,12 +83,24 @@ func applyXpress4K(
 		if err != nil {
 			return fmt.Errorf("identify: %w", err)
 		}
-		external, _, _, err := wofStateCall(file.path)
+		external, provider, _, err := wofStateCall(file.path)
 		if err != nil {
 			return fmt.Errorf("inspect WOF state: %w", err)
 		}
+		if external && provider == wofProviderFile {
+			return nil
+		}
+
+		// The change event arrives when WOF finishes, which can be long after
+		// the call starts for a large texture, so the file is marked again then.
 		mark(file.path)
-		if err := wofCompressHandle(handle); err != nil {
+		err = wofCompressHandle(handle)
+		mark(file.path)
+		if errors.Is(err, errCompressionNotBeneficial) {
+			declined.add(file)
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 		if !external {
@@ -187,7 +205,9 @@ func restoreOwnedWofFile(
 		return fmt.Errorf("identify: identity changed")
 	}
 	mark(work.file.path)
-	if err := deleteExternalBackingCall(handle); err != nil {
+	err = deleteExternalBackingCall(handle)
+	mark(work.file.path)
+	if err != nil {
 		return fmt.Errorf("remove WOF backing: %w", err)
 	}
 	ownership.remove(work.id)
@@ -214,10 +234,14 @@ func isOwnedWofRestoreFile(path string, ownership *compressionFileOwnership) (st
 	return id, ownership.contains(id), nil
 }
 
-func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
+func xpressCompressionFiles(
+	ctx context.Context,
+	roots []string,
+	declined *compressionDeclinedFiles,
+) ([]compressionFile, error) {
 	files, scanErr := walkCompressionFiles(roots, func(path string, _ fs.FileInfo) bool {
 		_, skipped := xpressSkippedExtensions[strings.ToLower(filepath.Ext(path))]
-		return !skipped
+		return !skipped && !isCompressionInProgressPath(path)
 	})
 	clusters := make(map[string]uint32)
 	badVolumes := make(map[string]struct{})
@@ -244,13 +268,31 @@ func xpressCompressionFiles(roots []string) ([]compressionFile, error) {
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
-	result := make([]compressionFile, 0, len(files))
+	declined.retain(roots, files)
+	candidates := make([]compressionFile, 0, len(files))
 	for _, file := range files {
-		if file.size > int64(clusters[strings.ToLower(filepath.VolumeName(file.path))]) {
-			result = append(result, file)
+		if file.size > int64(clusters[strings.ToLower(filepath.VolumeName(file.path))]) && !declined.contains(file) {
+			candidates = append(candidates, file)
 		}
 	}
-	return result, nil
+
+	// Files WOF already backs are left out before totals are published, so a
+	// watcher pass over a compressed mod neither reports work nor rewrites data.
+	// A file whose state cannot be read stays in; the worker inspects it again
+	// and reports the failure instead of this scan dropping it silently.
+	var mu sync.Mutex
+	result := make([]compressionFile, 0, len(candidates))
+	err := runXpressJobs(ctx, candidates, func(file compressionFile) {
+		external, provider, _, err := wofStateCall(file.path)
+		if err == nil && external && provider == wofProviderFile {
+			return
+		}
+		mu.Lock()
+		result = append(result, file)
+		mu.Unlock()
+	})
+	slices.SortFunc(result, func(a, b compressionFile) int { return strings.Compare(a.path, b.path) })
+	return result, err
 }
 
 func runXpressWorkers(
