@@ -185,6 +185,16 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err != nil {
 		return err
 	}
+	for _, warning := range result.Warnings {
+		if x.log != nil {
+			x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
+		}
+		if x.eventEmit != nil {
+			x.eventEmit("xxmi:launch-progress", map[string]any{
+				"importer": key, "stage": stage, "warning": warning,
+			})
+		}
+	}
 	progress("post-load")
 	if err := runLaunchHook(ctx, cfg.RunPostLoad, filepath.Dir(gameExe)); err != nil {
 		return err

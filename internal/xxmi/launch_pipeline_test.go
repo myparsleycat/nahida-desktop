@@ -13,8 +13,9 @@ import (
 )
 
 type recordingLaunchHelper struct {
-	spec  inject.LaunchSpec
-	calls int
+	spec     inject.LaunchSpec
+	calls    int
+	warnings []string
 }
 
 func (*recordingLaunchHelper) Acquire(context.Context) (func(), error) { return func() {}, nil }
@@ -22,7 +23,7 @@ func (*recordingLaunchHelper) Acquire(context.Context) (func(), error) { return 
 func (h *recordingLaunchHelper) LaunchXXMI(_ context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
 	h.spec = spec
 	h.calls++
-	return inject.LaunchResult{PID: 42, InjectionVerified: true}, nil
+	return inject.LaunchResult{PID: 42, InjectionVerified: true, Warnings: h.warnings}, nil
 }
 
 func (*recordingLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
@@ -85,11 +86,16 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(legacy, "source.json"), sourceData, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	helper := &recordingLaunchHelper{}
+	helper := &recordingLaunchHelper{warnings: []string{"Could not verify legacy DLL in game process"}}
 	var stages []string
+	var warnings []string
 	service := NewWithOptions(Options{Elevated: helper, EventEmit: func(name string, data ...any) {
 		if name == "xxmi:launch-progress" {
-			stages = append(stages, data[0].(map[string]any)["stage"].(string))
+			payload := data[0].(map[string]any)
+			stages = append(stages, payload["stage"].(string))
+			if warning, ok := payload["warning"].(string); ok {
+				warnings = append(warnings, warning)
+			}
 		}
 	}})
 	service.UseClient(client)
@@ -106,9 +112,12 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	want := []string{"resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch", "ensure-runtime",
 		"deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer", "game-tweaks",
 		"pre-launch", "elevate",
-		"inject-launch", "post-load", "finish"}
+		"inject-launch", "inject-launch", "post-load", "finish"}
 	if !slices.Equal(stages, want) {
 		t.Fatalf("launch stages = %v; want %v", stages, want)
+	}
+	if !slices.Equal(warnings, helper.warnings) {
+		t.Fatalf("launch warnings = %v; want %v", warnings, helper.warnings)
 	}
 	if helper.calls != 1 || helper.spec.Mode != inject.ModeLegacy || helper.spec.StartExe != gameExe ||
 		helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
