@@ -8,6 +8,10 @@ const xxmi = vi.hoisted(() => ({
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
 }));
+const mod = vi.hoisted(() => ({
+  GetGames: vi.fn(),
+  UpdateGame: vi.fn(),
+}));
 const overview = vi.hoisted(() => ({
   importers: [] as Array<{ key: string; customDll: boolean }>,
 }));
@@ -51,7 +55,7 @@ const config = {
 };
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
-vi.mock("@bindings/mod", () => ({ Mod: {} }));
+vi.mock("@bindings/mod", () => ({ Mod: mod }));
 vi.mock("@bindings/platform", () => ({ Dialog: {} }));
 vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
@@ -94,6 +98,8 @@ afterEach(() => {
   xxmi.SaveImporterConfig.mockReset();
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
+  mod.GetGames.mockReset();
+  mod.UpdateGame.mockReset();
   overview.importers = [];
 });
 
@@ -135,6 +141,96 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
       allowUnsigned: false,
     }),
   );
+  expect(mod.GetGames).not.toHaveBeenCalled();
+});
+
+const linkedGame = {
+  game: "Genshin",
+  modFolderPath: "C:\\XXMI\\GIMI\\Mods",
+  importer: "GIMI",
+  linkedModFolderPath: "C:\\XXMI\\GIMI\\Mods",
+  gameInstallPath: "D:\\Genshin Impact",
+  gameExecutablePath: "D:\\Genshin Impact\\GenshinImpact.exe",
+};
+
+async function installAfterFolderMove() {
+  fireEvent.change(screen.getByLabelText("page.setting.xxmi.builtin.importerFolder"), {
+    target: { value: "D:\\New\\GIMI" },
+  });
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^1\.0\.0/ }));
+  fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }));
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
+  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" });
+}
+
+it("confirms a linked mod folder before installing into a new importer folder", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.InstallImporterPackage.mockResolvedValue(undefined);
+  mod.UpdateGame.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([
+    linkedGame,
+    { ...linkedGame, game: "Other", modFolderPath: "C:\\Other\\Mods" },
+  ]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  await installAfterFolderMove();
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
+  expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  await waitFor(() =>
+    expect(screen.queryByText("page.setting.xxmi.builtin.updateModPathsDescription")).toBeNull(),
+  );
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
+  expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
+  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" });
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" }));
+  await waitFor(() =>
+    expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
+      importer: "GIMI",
+      version: "1.0.0",
+      allowUnsigned: true,
+    }),
+  );
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "GIMI",
+    expect.objectContaining({
+      importerFolder: "D:\\New\\GIMI",
+      packageVersion: { pinned: "1.0.0" },
+    }),
+  );
+  expect(mod.UpdateGame).toHaveBeenCalledTimes(1);
+  expect(mod.UpdateGame).toHaveBeenCalledWith("Genshin", {
+    modFolderPath: "D:\\New\\GIMI\\Mods",
+    importer: "GIMI",
+    linkedModFolderPath: linkedGame.linkedModFolderPath,
+    gameInstallPath: linkedGame.gameInstallPath,
+    gameExecutablePath: linkedGame.gameExecutablePath,
+  });
+});
+
+it("installs without moving mod folders when that choice is confirmed", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.InstallImporterPackage.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([linkedGame]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  await installAfterFolderMove();
+
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.keepModPaths" }));
+  await waitFor(() =>
+    expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
+      importer: "GIMI",
+      version: "1.0.0",
+      allowUnsigned: true,
+    }),
+  );
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "GIMI",
+    expect.objectContaining({ importerFolder: "D:\\New\\GIMI" }),
+  );
+  expect(mod.UpdateGame).not.toHaveBeenCalled();
 });
 
 it("offers restoring the official DLL when the importer uses a custom DLL", async () => {

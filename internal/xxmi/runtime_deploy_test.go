@@ -1,6 +1,7 @@
 package xxmi
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -116,14 +117,14 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
 	ctx := context.Background()
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
 		t.Fatal(err)
 	}
 	cfg.Mode = RuntimeLegacy
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, legacy, "legacy@abc", base); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, legacy, "legacy@abc", base, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeLegacy); err != nil {
@@ -135,7 +136,7 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 		t.Fatalf("old compiler still deployed: %v", err)
 	}
 	cfg.Mode = RuntimeXXMI
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
@@ -213,7 +214,7 @@ func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {
 		}
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(importer, "d3d11.dll"), []byte("changed"), 0o600); err != nil {
@@ -339,7 +340,7 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		}
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
-	warnings, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base)
+	warnings, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,13 +354,13 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 	if !usesCustomDLL(importer) {
 		t.Fatal("preserved third-party DLL is not reported as custom")
 	}
-	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base)
+	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false)
 	if err != nil || len(warnings) == 0 {
 		t.Fatalf("repeat deployment warnings = %v, error = %v", warnings, err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 	cfg.Migoto.UnsafeMode = false
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base); err != nil {
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
@@ -402,12 +403,12 @@ func TestDeployRuntimeModeSwitchBacksUpUserManagedDLLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 	cfg.Mode = RuntimeLegacy
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, legacy, "legacy@abc", base); err != nil {
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, legacy, "legacy@abc", base, false); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "legacy")
@@ -428,7 +429,7 @@ func TestDeployRuntimeModeSwitchBacksUpUserManagedDLLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Mode = RuntimeXXMI
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base); err != nil {
+	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
@@ -581,4 +582,104 @@ func TestSelectLibsVersionRespectsSkippedAndVerifiedUpdates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeployRuntimeFilesRejectsCorruptManifest(t *testing.T) {
+	t.Parallel()
+	base, importer, legacy, corrupt := corruptLegacyRuntime(t)
+	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeLegacy}
+	_, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, false)
+	if err == nil || !strings.HasPrefix(err.Error(), "XXMI_RUNTIME_CORRUPTED:") {
+		t.Fatalf("deploy = %v, want XXMI_RUNTIME_CORRUPTED first", err)
+	}
+	got, readErr := os.ReadFile(filepath.Join(importer, runtimeManifestName))
+	if readErr != nil || !bytes.Equal(got, corrupt) {
+		t.Fatalf("manifest = %q, err = %v, want the corrupt bytes left in place", got, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(importer, "d3d11.dll")); !os.IsNotExist(statErr) {
+		t.Fatalf("dll deployed despite a corrupt manifest: %v", statErr)
+	}
+	backups, globErr := filepath.Glob(filepath.Join(base, "backups", "GIMI *", runtimeManifestName))
+	if globErr != nil || len(backups) != 0 {
+		t.Fatalf("strict deploy backups = %v, err = %v", backups, globErr)
+	}
+}
+
+func TestDeployRuntimeFilesRepairsCorruptManifest(t *testing.T) {
+	t.Parallel()
+	base, importer, legacy, corrupt := corruptLegacyRuntime(t)
+	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeLegacy}
+	warnings, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backedUp := false
+	for _, warning := range warnings {
+		if warning == "Backed up corrupt runtime manifest" {
+			backedUp = true
+		}
+	}
+	if !backedUp {
+		t.Fatalf("warnings = %v, want the corrupt manifest backup", warnings)
+	}
+	backups, err := filepath.Glob(filepath.Join(base, "backups", "GIMI *", runtimeManifestName))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("corrupt manifest backups = %v, err = %v", backups, err)
+	}
+	assertFileContent(t, backups[0], string(corrupt))
+	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "legacy")
+	assertFileContent(t, filepath.Join(importer, "3DMigoto Loader.exe"), "loader")
+
+	data, err := os.ReadFile(filepath.Join(importer, runtimeManifestName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest runtimeManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("rebuilt manifest: %v", err)
+	}
+	if manifest.Mode != RuntimeLegacy || manifest.Source != "legacy@abcdef123456" {
+		t.Fatalf("manifest = %+v, want legacy@abcdef123456", manifest)
+	}
+	if manifest.Files["d3d11.dll"] != hashBytes([]byte("legacy")) {
+		t.Fatalf("manifest files = %+v", manifest.Files)
+	}
+}
+
+func corruptLegacyRuntime(t *testing.T) (base, importer, legacy string, corrupt []byte) {
+	t.Helper()
+	base = t.TempDir()
+	importer = filepath.Join(base, "GIMI")
+	legacy = filepath.Join(base, "legacy")
+	for _, folder := range []string{importer, legacy} {
+		if err := os.MkdirAll(folder, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(importer, "d3dx.ini"), []byte("[Loader]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	corrupt = []byte("{not-json")
+	if err := os.WriteFile(filepath.Join(importer, runtimeManifestName), corrupt, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"3DMigoto Loader.exe": "loader", "d3d11.dll": "legacy"} {
+		if err := os.WriteFile(filepath.Join(legacy, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source := LegacyRuntimeSource{Files: map[string]string{
+		"3DMigoto Loader.exe": hashBytes([]byte("loader")),
+		"d3d11.dll":           hashBytes([]byte("legacy")),
+	}}
+	data, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, "source.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return base, importer, legacy, corrupt
 }

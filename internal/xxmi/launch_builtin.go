@@ -168,7 +168,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	progress("deploy-runtime")
 	rollbackState = "not-attempted"
-	warnings, err := x.deployRuntime(ctx, key, cfg)
+	warnings, err := x.deployRuntime(ctx, key, cfg, false)
 	if err != nil {
 		return err
 	}

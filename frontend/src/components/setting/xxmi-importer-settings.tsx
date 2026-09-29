@@ -52,6 +52,34 @@ import { toast } from "sonner";
 // Base UI selects cannot represent an empty string as a regular option value.
 const FOLLOW_LATEST = "__latest__";
 
+type PendingImporterFolderChange = {
+  next: ImporterConfig;
+  games: GameConfig[];
+  install?: { version: string; allowUnsigned: boolean };
+};
+
+function normalizedFolder(folder: string) {
+  return folder.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+}
+
+async function linkedGamesForImporterMove(previousFolder: string | undefined, nextFolder: string) {
+  const previous = previousFolder ? normalizedFolder(previousFolder) : "";
+  const changed = normalizedFolder(nextFolder);
+  if (!previous || previous === changed) return [];
+  const oldMods = `${previous}\\mods`;
+  return ((await Mod.GetGames()) ?? []).filter(
+    (game) => normalizedFolder(game.modFolderPath) === oldMods,
+  );
+}
+
+async function resolveImporterGameFolder(importer: string, next: ImporterConfig) {
+  if (!next.gameFolder) return next;
+  return {
+    ...next,
+    gameFolder: (await XXMI.ValidateGameFolder(importer, next.gameFolder)).path,
+  };
+}
+
 export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -99,10 +127,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
-  const [pendingFolderChange, setPendingFolderChange] = useState<{
-    next: ImporterConfig;
-    games: GameConfig[];
-  } | null>(null);
+  const [pendingFolderChange, setPendingFolderChange] =
+    useState<PendingImporterFolderChange | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
@@ -129,33 +155,38 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       setConfig(null);
       refresh();
       toast.success(t("page.setting.xxmi.builtin.saved"));
+      return true;
     } catch (error) {
       toast.error(toErrorMessage(error));
+      return false;
     }
+  };
+  const finishInstall = async (version: string, allowUnsigned: boolean) => {
+    await XXMI.InstallImporterPackage({ importer, version, allowUnsigned });
+    refresh();
+    toast.success(t("page.setting.xxmi.builtin.installed"));
   };
   const save = async (next = config) => {
     if (!next) return;
     try {
-      const resolved = next.gameFolder
-        ? { ...next, gameFolder: (await XXMI.ValidateGameFolder(importer, next.gameFolder)).path }
-        : next;
-      const previous = saved?.importerFolder
-        .replaceAll("/", "\\")
-        .replace(/\\+$/, "")
-        .toLowerCase();
-      const changed = next.importerFolder.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
-      if (previous && previous !== changed) {
-        const oldMods = `${previous}\\mods`;
-        const games = ((await Mod.GetGames()) ?? []).filter(
-          (game) =>
-            game.modFolderPath.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase() === oldMods,
-        );
-        if (games.length) {
-          setPendingFolderChange({ next: resolved, games });
-          return;
-        }
+      const resolved = await resolveImporterGameFolder(importer, next);
+      const games = await linkedGamesForImporterMove(saved?.importerFolder, next.importerFolder);
+      if (games.length) {
+        setPendingFolderChange({ next: resolved, games });
+        return;
       }
       await persist(resolved);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  };
+  const confirmPendingFolderChange = async (updateGames: boolean) => {
+    if (!pendingFolderChange) return;
+    const pending = pendingFolderChange;
+    const savedOk = await persist(pending.next, updateGames ? pending.games : []);
+    if (!savedOk || !pending.install) return;
+    try {
+      await finishInstall(pending.install.version, pending.install.allowUnsigned);
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
@@ -433,23 +464,23 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
                     onClickPromise={async () => {
                       if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned)) return;
+                      const allowPackage = !selectedRelease.signed && allowUnsigned;
                       try {
-                        const resolved = config.gameFolder
-                          ? {
-                              ...config,
-                              gameFolder: (
-                                await XXMI.ValidateGameFolder(importer, config.gameFolder)
-                              ).path,
-                            }
-                          : config;
+                        const resolved = await resolveImporterGameFolder(importer, config);
+                        const games = await linkedGamesForImporterMove(
+                          saved?.importerFolder,
+                          config.importerFolder,
+                        );
+                        if (games.length) {
+                          setPendingFolderChange({
+                            next: resolved,
+                            games,
+                            install: { version: selectedPackage, allowUnsigned: allowPackage },
+                          });
+                          return;
+                        }
                         await XXMI.SaveImporterConfig(importer, resolved);
-                        await XXMI.InstallImporterPackage({
-                          importer,
-                          version: selectedPackage,
-                          allowUnsigned: !selectedRelease.signed && allowUnsigned,
-                        });
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.installed"));
+                        await finishInstall(selectedPackage, allowPackage);
                       } catch (error) {
                         toast.error(toErrorMessage(error));
                       }
@@ -966,12 +997,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
             })}
           </p>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClickPromise={() => persist(pendingFolderChange!.next)}>
+            <Button variant="outline" onClickPromise={() => confirmPendingFolderChange(false)}>
               {t("page.setting.xxmi.builtin.keepModPaths")}
             </Button>
-            <Button
-              onClickPromise={() => persist(pendingFolderChange!.next, pendingFolderChange!.games)}
-            >
+            <Button onClickPromise={() => confirmPendingFolderChange(true)}>
               {t("page.setting.xxmi.builtin.updateModPaths")}
             </Button>
           </div>

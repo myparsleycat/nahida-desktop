@@ -434,9 +434,17 @@ func reportElevatedHelperError(log *infra.Log, err error, stage string) {
 
 var _ elevatedHelperClient = (*elevated.Client)(nil)
 
+// xxmiLaunchClient is the helper surface used while a game launch is in flight.
+type xxmiLaunchClient interface {
+	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	HelperImageName() string
+}
+
+var _ xxmiLaunchClient = (*elevated.Client)(nil)
+
 type xxmiElevatedLauncher struct {
 	lifecycle *elevatedLifecycle
-	client    *elevated.Client
+	client    xxmiLaunchClient
 }
 
 func (l xxmiElevatedLauncher) Acquire(ctx context.Context) (func(), error) {
@@ -444,6 +452,16 @@ func (l xxmiElevatedLauncher) Acquire(ctx context.Context) (func(), error) {
 }
 
 func (l xxmiElevatedLauncher) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
+	if l.lifecycle != nil {
+		// Manual launch waits inside the helper for the whole process timeout.
+		// Bind that wait to shutdown before the client blocks, so quitting
+		// cancels the read instead of leaving Close and status queries behind it.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(l.lifecycle.ctx, cancel)
+		defer stop()
+	}
 	return l.client.LaunchXXMI(ctx, spec)
 }
 

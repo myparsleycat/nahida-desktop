@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 func TestElevatedLifecycleRequestRejectsInvalidatedRead(t *testing.T) {
@@ -336,6 +337,47 @@ func (s *stubElevatedClient) startCount() int {
 	defer s.mu.Unlock()
 	return s.starts
 }
+
+func TestXXMILauncherShutdownCancelsLaunch(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := newElevatedLifecycle(nil, nil, nil)
+	defer lifecycle.shutdown()
+	client := &blockingLaunchClient{started: make(chan struct{})}
+	launcher := xxmiElevatedLauncher{lifecycle: lifecycle, client: client}
+	launchErr := make(chan error, 1)
+	go func() {
+		_, err := launcher.LaunchXXMI(context.Background(), inject.LaunchSpec{TimeoutSeconds: 600})
+		launchErr <- err
+	}()
+	select {
+	case <-client.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("launch did not start")
+	}
+
+	lifecycle.shutdown()
+	select {
+	case err := <-launchErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("LaunchXXMI = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown left the launch running")
+	}
+}
+
+type blockingLaunchClient struct {
+	started chan struct{}
+}
+
+func (b *blockingLaunchClient) LaunchXXMI(ctx context.Context, _ inject.LaunchSpec) (inject.LaunchResult, error) {
+	close(b.started)
+	<-ctx.Done()
+	return inject.LaunchResult{}, ctx.Err()
+}
+
+func (b *blockingLaunchClient) HelperImageName() string { return "" }
 
 func statusEmitter(statuses chan<- platform.ElevatedHelperStatus) func(string, ...any) {
 	return func(name string, data ...any) {

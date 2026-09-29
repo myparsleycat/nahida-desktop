@@ -53,7 +53,7 @@ func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) 
 		}
 	}
 	cfg.Migoto.UnsafeMode = false
-	deployedWarnings, err := x.deployRuntime(ctx, key, cfg)
+	deployedWarnings, err := x.deployRuntime(ctx, key, cfg, true)
 	return append(warnings, deployedWarnings...), err
 }
 

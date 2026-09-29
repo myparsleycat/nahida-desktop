@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 type failingConn struct{}
@@ -182,5 +183,116 @@ func TestCallLockedPreservesStableErrorCode(t *testing.T) {
 	}
 	if !strings.HasPrefix(err.Error(), platform.ErrWindowNotFound.Error()) {
 		t.Fatalf("callLocked error = %q, want the stable code first", err)
+	}
+}
+
+func TestLaunchXXMICancelUnblocksReadAndStatus(t *testing.T) {
+	t.Parallel()
+
+	client, received := stalledXXMILaunch(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	launchErr := startStalledLaunch(client, ctx)
+	waitForLaunchRequest(t, received)
+
+	connected := make(chan bool, 1)
+	go func() { connected <- client.Connected() }()
+	cancel()
+
+	select {
+	case err := <-launchErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("LaunchXXMI = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("LaunchXXMI did not return after cancel")
+	}
+	select {
+	case got := <-connected:
+		if got {
+			t.Fatal("Connected still reported a helper after the cancelled launch closed it")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Connected stayed blocked after cancel")
+	}
+}
+
+func TestCloseUnblocksLaunchXXMI(t *testing.T) {
+	t.Parallel()
+
+	client, received := stalledXXMILaunch(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	launchErr := startStalledLaunch(client, ctx)
+	waitForLaunchRequest(t, received)
+
+	connected := make(chan bool, 1)
+	go func() { connected <- client.Connected() }()
+	closeErr := make(chan error, 1)
+	go func() { closeErr <- client.Close() }()
+
+	select {
+	case err := <-closeErr:
+		if err != nil {
+			t.Fatalf("Close = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close blocked on the launch")
+	}
+	select {
+	case err := <-launchErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("LaunchXXMI = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("LaunchXXMI did not return after Close")
+	}
+	select {
+	case got := <-connected:
+		if got {
+			t.Fatal("Connected still reported a helper after Close")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Connected stayed blocked after Close")
+	}
+}
+
+func stalledXXMILaunch(t *testing.T) (*Client, <-chan struct{}) {
+	t.Helper()
+	clientConn, serverConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+		_ = serverConn.Close()
+	})
+	client := NewClient()
+	client.conn = clientConn
+	client.secret = "secret"
+
+	received := make(chan struct{})
+	go func() {
+		request, err := readMessage(serverConn)
+		if err != nil || request.Operation != operationXXMILaunch {
+			return
+		}
+		close(received)
+	}()
+	return client, received
+}
+
+func startStalledLaunch(client *Client, ctx context.Context) <-chan error {
+	launchErr := make(chan error, 1)
+	go func() {
+		_, err := client.LaunchXXMI(ctx, inject.LaunchSpec{TimeoutSeconds: 600})
+		launchErr <- err
+	}()
+	return launchErr
+}
+
+func waitForLaunchRequest(t *testing.T, received <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-received:
+	case <-time.After(2 * time.Second):
+		t.Fatal("helper did not receive the launch request")
 	}
 }

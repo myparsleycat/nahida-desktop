@@ -33,10 +33,12 @@ func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	return x.deployRuntime(ctx, key, cfg)
+	return x.deployRuntime(ctx, key, cfg, false)
 }
 
-func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig) ([]string, error) {
+// deployRuntime copies the selected runtime into the importer folder.
+// repair backs up a corrupt manifest and rebuilds it from the verified cache.
+func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig, repair bool) ([]string, error) {
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return nil, err
@@ -87,7 +89,7 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
-	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot)
+	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair)
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
@@ -176,6 +178,7 @@ func deployRuntimeFiles(
 	key string,
 	cfg ImporterConfig,
 	sourceFolder, sourceID, cacheRoot string,
+	repair bool,
 ) ([]string, error) {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
@@ -187,11 +190,19 @@ func deployRuntimeFiles(
 	}
 	previous := runtimeManifest{Files: map[string]string{}}
 	manifestPresent := false
+	var corruptManifest []byte
 	if data, _, err := root.readFile(runtimeManifestName); err == nil {
 		if err := json.Unmarshal(data, &previous); err != nil {
-			return nil, fmt.Errorf("decode runtime manifest: %w", err)
+			if !repair {
+				return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: decode runtime manifest: %w", err)
+			}
+			// Keep the bytes. The verified cache supplies the replacement manifest
+			// after this copy is stored with the other runtime backups.
+			corruptManifest = data
+			previous = runtimeManifest{Files: map[string]string{}}
+		} else {
+			manifestPresent = true
 		}
-		manifestPresent = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -265,6 +276,12 @@ func deployRuntimeFiles(
 			backupFolder = folder
 		}
 		return os.WriteFile(filepath.Join(backupFolder, name), data, 0o600)
+	}
+	if corruptManifest != nil {
+		if err := backup(runtimeManifestName, corruptManifest); err != nil {
+			return nil, fmt.Errorf("back up corrupt runtime manifest: %w", err)
+		}
+		warnings = append(warnings, "Backed up corrupt runtime manifest")
 	}
 	for name, previousHash := range previous.Files {
 		if _, keep := desired[name]; keep {

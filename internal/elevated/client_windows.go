@@ -60,6 +60,13 @@ type shellExecuteInfoW struct {
 	hProcess     windows.Handle
 }
 
+// helperSession is the lifetime Close cancels to unblock an in-flight pipe read.
+// Its fields stay immutable after publish.
+type helperSession struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // Client owns one authenticated connection to the elevated helper.
 type Client struct {
 	mu         sync.Mutex
@@ -75,6 +82,13 @@ type Client struct {
 	// take mu; the client invokes it after releasing the state lock.
 	onDisconnect func()
 
+	// session is cancelled by Close without taking mu. Pipe reads watch it and
+	// expire the connection, so a manual game launch or a stalled helper
+	// response cannot hold shutdown or status queries until the TimeoutSeconds
+	// budget runs out. The pipe is half-duplex, so mu still covers a whole
+	// exchange; cancellation must not wait for that lock.
+	session atomic.Pointer[helperSession]
+
 	// startMu serializes launch attempts. It is separate from mu because it is
 	// held across launch, and Close must stay reachable while ShellExecuteExW
 	// waits on a UAC prompt.
@@ -82,7 +96,16 @@ type Client struct {
 }
 
 func NewClient() *Client {
-	return &Client{}
+	client := &Client{}
+	client.replaceSession()
+	return client
+}
+
+func (c *Client) replaceSession() *helperSession {
+	ctx, cancel := context.WithCancel(context.Background())
+	session := &helperSession{ctx: ctx, cancel: cancel}
+	c.session.Store(session)
+	return session
 }
 
 // UseDisconnect registers fn to run after the helper connection drops while it
@@ -402,8 +425,16 @@ func (c *Client) HelperImageName() string {
 }
 
 func (c *Client) Close() error {
+	// Cancel before taking mu. LaunchXXMI holds mu for the whole helper read,
+	// and that read only ends when this session is cancelled or the deadline
+	// fires. Waiting for the lock first would stall shutdown for the launch.
+	if session := c.session.Load(); session != nil {
+		session.cancel()
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.replaceSession()
 	c.wanted = false
 	c.generation++
 	c.signalWatchLocked()
@@ -418,21 +449,61 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) callLocked(ctx context.Context, operation string, payload json.RawMessage) (json.RawMessage, error) {
-	deadline, ok := ctx.Deadline()
+	if c.conn == nil {
+		return nil, errors.New("elevated helper connection is closed")
+	}
+	// Parent cancellation and Close both have to unblock a read that already
+	// holds mu. SetDeadline is safe beside Read, so the watcher does not take
+	// the state lock. A fresh session is installed by Close before session.stop,
+	// so this exchange is not aborted by the session it replaces.
+	callCtx, cancelCall := context.WithCancel(ctx)
+	defer cancelCall()
+	session := c.session.Load()
+	if session != nil {
+		stopSession := context.AfterFunc(session.ctx, cancelCall)
+		defer stopSession()
+	}
+	conn := c.conn
+	stopDeadline := context.AfterFunc(callCtx, func() {
+		_ = conn.SetDeadline(time.Now())
+	})
+	defer stopDeadline()
+	if err := callCtx.Err(); err != nil {
+		return nil, err
+	}
+	if session != nil && session.ctx.Err() != nil {
+		return nil, context.Canceled
+	}
+
+	failIO := func(err error) (json.RawMessage, error) {
+		closeErr := c.closeLocked()
+		if ctxErr := callCtx.Err(); ctxErr != nil {
+			return nil, errors.Join(ctxErr, err, closeErr)
+		}
+		return nil, errors.Join(err, closeErr)
+	}
+	deadline, ok := callCtx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(10 * time.Second)
 	}
-	if err := c.conn.SetDeadline(deadline); err != nil {
-		return nil, errors.Join(fmt.Errorf("set elevated helper deadline: %w", err), c.closeLocked())
+	if err := conn.SetDeadline(deadline); err != nil {
+		return failIO(fmt.Errorf("set elevated helper deadline: %w", err))
+	}
+	// AfterFunc may already have expired the deadline if cancellation won the
+	// race. Putting the call deadline on afterwards would hide that and leave
+	// the read blocked, so a cancelled call bails before any byte is written.
+	if err := callCtx.Err(); err != nil {
+		_ = conn.SetDeadline(time.Now())
+		return nil, err
 	}
 	id := c.nextID.Add(1)
 	request := message{Version: protocolVersion, ID: id, Operation: operation, Secret: c.secret, Payload: payload}
-	if err := writeMessage(c.conn, request); err != nil {
-		return nil, errors.Join(fmt.Errorf("write elevated helper request: %w", err), c.closeLocked())
+	if err := writeMessage(conn, request); err != nil {
+		return failIO(fmt.Errorf("write elevated helper request: %w", err))
 	}
-	response, err := readMessage(c.conn)
+	response, err := readMessage(conn)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("read elevated helper response: %w", err), c.closeLocked())
+		return failIO(fmt.Errorf("read elevated helper response: %w", err))
 	}
 	if response.Version != protocolVersion || response.ID != id {
 		return nil, errors.Join(errors.New("invalid elevated helper response"), c.closeLocked())
