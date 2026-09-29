@@ -527,6 +527,60 @@ func validateDeployedRuntime(folder string, mode RuntimeMode) error {
 	return nil
 }
 
+func validateXXMIRuntimeFiles(importerFolder, cacheFolder string, unsafeMode bool) error {
+	if unsafeMode {
+		return nil
+	}
+	root, err := openInstallRoot(importerFolder)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	for _, name := range []string{"d3d11.dll", "d3dcompiler_47.dll"} {
+		deployed, _, err := root.readFile(name)
+		if err != nil {
+			return fmt.Errorf("read deployed %s: %w", name, err)
+		}
+		signed, err := os.ReadFile(filepath.Join(cacheFolder, name))
+		if err != nil {
+			return fmt.Errorf("read signed %s: %w", name, err)
+		}
+		if hashBytes(deployed) != hashBytes(signed) {
+			return fmt.Errorf("deployed %s differs from signed XXMI libraries", name)
+		}
+	}
+	return nil
+}
+
+func validateLegacyRuntimeFiles(importerFolder, cacheFolder string) error {
+	data, err := os.ReadFile(filepath.Join(cacheFolder, "source.json"))
+	if err != nil {
+		return err
+	}
+	var source LegacyRuntimeSource
+	if err := json.Unmarshal(data, &source); err != nil {
+		return err
+	}
+	if err := verifyLegacyRuntimeCache(cacheFolder, source.ZipSHA256); err != nil {
+		return err
+	}
+	root, err := openInstallRoot(importerFolder)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	for name, expected := range source.Files {
+		deployed, _, err := root.readFile(name)
+		if err != nil {
+			return fmt.Errorf("read deployed %s: %w", name, err)
+		}
+		if hashBytes(deployed) != expected {
+			return fmt.Errorf("deployed %s differs from legacy runtime source", name)
+		}
+	}
+	return nil
+}
+
 func hashBytes(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])

@@ -160,6 +160,36 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
 		return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 	}
+	if cfg.Mode == RuntimeXXMI {
+		version, ok := strings.CutPrefix(runtimeSource, "xxmi-libs@")
+		if !ok || !semver.IsValid("v"+version) {
+			return errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
+		}
+		cacheRoot, err := xxmiCacheRoot()
+		if err != nil {
+			return err
+		}
+		cacheFolder := filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
+		if err := verifyXXMILibsCache(cacheFolder, version); err != nil {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+		if err := validateXXMIRuntimeFiles(cfg.ImporterFolder, cacheFolder, cfg.Migoto.UnsafeMode); err != nil {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+	} else if !cfg.Migoto.UnsafeMode {
+		id, ok := strings.CutPrefix(runtimeSource, "legacy@")
+		if !ok || len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
+			return errors.New("XXMI_RUNTIME_CORRUPTED: invalid legacy source")
+		}
+		cacheRoot, err := xxmiCacheRoot()
+		if err != nil {
+			return err
+		}
+		cacheFolder := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", id)
+		if err := validateLegacyRuntimeFiles(cfg.ImporterFolder, cacheFolder); err != nil {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+	}
 	if x.elevated == nil {
 		return errors.New("XXMI_ELEVATION_DENIED: elevated helper is unavailable")
 	}

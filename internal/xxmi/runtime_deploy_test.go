@@ -224,6 +224,102 @@ func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {
 	}
 }
 
+func TestValidateXXMIRuntimeFilesRejectsChangedDLLWithRewrittenManifest(t *testing.T) {
+	t.Parallel()
+	importer := t.TempDir()
+	cache := t.TempDir()
+	files := map[string]string{"d3d11.dll": "signed d3d11", "d3dcompiler_47.dll": "signed compiler"}
+	manifest := runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.0.0", Files: map[string]string{}}
+	for name, content := range files {
+		for _, folder := range []string{importer, cache} {
+			if err := os.WriteFile(filepath.Join(folder, name), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		manifest.Files[name] = hashBytes([]byte(content))
+	}
+	writeManifest := func() {
+		t.Helper()
+		data, err := json.Marshal(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(importer, runtimeManifestName), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeManifest()
+	if err := validateXXMIRuntimeFiles(importer, cache, false); err != nil {
+		t.Fatal(err)
+	}
+	modified := []byte("modified d3d11")
+	if err := os.WriteFile(filepath.Join(importer, "d3d11.dll"), modified, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Files["d3d11.dll"] = hashBytes(modified)
+	writeManifest()
+	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
+		t.Fatalf("rewritten manifest should pass its own hash check: %v", err)
+	}
+	if err := validateXXMIRuntimeFiles(importer, cache, false); err == nil {
+		t.Fatal("modified DLL passed signed-cache comparison")
+	}
+	if err := validateXXMIRuntimeFiles(importer, cache, true); err != nil {
+		t.Fatalf("unsafe mode rejected a user-managed DLL: %v", err)
+	}
+}
+
+func TestValidateLegacyRuntimeFilesRejectsChangedDLLWithRewrittenManifest(t *testing.T) {
+	t.Parallel()
+	importer := t.TempDir()
+	cache := t.TempDir()
+	files := map[string]string{"3DMigoto Loader.exe": "loader", "d3d11.dll": "legacy DLL"}
+	source := LegacyRuntimeSource{ZipSHA256: "test zip", Files: map[string]string{}}
+	manifest := runtimeManifest{Mode: RuntimeLegacy, Source: "legacy@abcdef123456", Files: map[string]string{}}
+	for name, content := range files {
+		for _, folder := range []string{importer, cache} {
+			if err := os.WriteFile(filepath.Join(folder, name), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		source.Files[name] = hashBytes([]byte(content))
+		manifest.Files[name] = source.Files[name]
+	}
+	sourceData, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "source.json"), sourceData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest := func() {
+		t.Helper()
+		data, err := json.Marshal(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(importer, runtimeManifestName), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeManifest()
+	if err := validateLegacyRuntimeFiles(importer, cache); err != nil {
+		t.Fatal(err)
+	}
+	modified := []byte("modified legacy DLL")
+	if err := os.WriteFile(filepath.Join(importer, "d3d11.dll"), modified, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Files["d3d11.dll"] = hashBytes(modified)
+	writeManifest()
+	if err := validateDeployedRuntime(importer, RuntimeLegacy); err != nil {
+		t.Fatalf("rewritten manifest should pass its own hash check: %v", err)
+	}
+	if err := validateLegacyRuntimeFiles(importer, cache); err == nil {
+		t.Fatal("modified DLL passed legacy source comparison")
+	}
+}
+
 func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
