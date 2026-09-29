@@ -31,23 +31,8 @@ func (x *XXMI) OptimizeMods(ctx context.Context, input OptimizeModsInput) (optim
 	if err != nil {
 		return optimizer.Report{}, err
 	}
-	patterns := []string{"DISABLED*"}
-	section := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.ToLower(strings.TrimSpace(strings.Trim(line, "[]")))
-			continue
-		}
-		if section != "include" || strings.HasPrefix(line, ";") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if ok && strings.EqualFold(strings.TrimSpace(key), "exclude_recursive") {
-			patterns = strings.Fields(strings.TrimSpace(strings.SplitN(value, ";", 2)[0]))
-			break
-		}
-	}
+	patterns := iniOptimizerExclusions(data)
+
 	root, err := xxmiCacheRoot()
 	if err != nil {
 		return optimizer.Report{}, err
@@ -71,4 +56,29 @@ func (x *XXMI) OptimizeMods(ctx context.Context, input OptimizeModsInput) (optim
 		Exclude:   patterns, Prefix: prefix, DryRun: input.DryRun,
 		ResetCache: input.ResetCache || cfg.IniOptimizer.ResetCache,
 	})
+}
+
+func iniOptimizerExclusions(data []byte) []string {
+	patterns := []string{}
+	section := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.ToLower(strings.TrimSpace(strings.Trim(line, "[]")))
+			continue
+		}
+		if section != "include" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "exclude_recursive") {
+			if pattern := strings.TrimSpace(strings.SplitN(value, ";", 2)[0]); pattern != "" {
+				patterns = append(patterns, pattern)
+			}
+		}
+	}
+	if len(patterns) == 0 {
+		return []string{"DISABLED*"}
+	}
+	return patterns
 }
