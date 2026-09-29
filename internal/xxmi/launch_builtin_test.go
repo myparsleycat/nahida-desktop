@@ -1,6 +1,7 @@
 package xxmi
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -96,7 +98,9 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stages []string
-	service := NewWithOptions(Options{EventEmit: func(name string, data ...any) {
+	var output bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	service := NewWithOptions(Options{Log: log, EventEmit: func(name string, data ...any) {
 		if name == "xxmi:launch-progress" {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
@@ -107,6 +111,14 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 	}
 	if !slices.Equal(stages, []string{"resolve-game", "failed"}) {
 		t.Fatalf("launch stages = %v", stages)
+	}
+	for _, expected := range []string{
+		`"stage":"resolve-game"`, `"source":"xxmi-libs@latest"`, `"rollback":"not-started"`,
+		`"gameFolder":""`,
+	} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("launch diagnostic is missing %s: %s", expected, output.String())
+		}
 	}
 }
 

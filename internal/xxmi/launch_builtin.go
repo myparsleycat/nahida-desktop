@@ -28,6 +28,17 @@ func (x *XXMI) launchBuiltinGameLocked(
 	allowOldLibs bool,
 ) (returnErr error) {
 	stage := "validate"
+	runtimeSource := "xxmi-libs@latest"
+	if cfg.Mode == RuntimeLegacy {
+		runtimeSource = "legacy@latest"
+		if cfg.LegacyRuntime != "" {
+			runtimeSource = "legacy@" + cfg.LegacyRuntime
+		}
+	} else if cfg.XXMIVersion.Pinned != "" {
+		runtimeSource = "xxmi-libs@" + normalizeVersion(cfg.XXMIVersion.Pinned)
+	}
+	rollbackState := "not-started"
+	gameExe := ""
 	defer func() {
 		if returnErr != nil {
 			if x.eventEmit != nil {
@@ -35,13 +46,13 @@ func (x *XXMI) launchBuiltinGameLocked(
 					"importer": key, "stage": "failed", "detail": stage,
 				})
 			}
-			if x.log != nil {
-				_ = infra.ReportError(x.log, returnErr, "XXMI.StartGame", infra.Diagnostic{
-					Operation: "launch-game", Stage: stage,
-					Fields: map[string]any{"importer": key, "mode": cfg.Mode, "importerFolder": cfg.ImporterFolder,
-						"gameFolder": cfg.GameFolder},
-				})
-			}
+			returnErr = infra.ReportError(x.log, returnErr, "XXMI.StartGame", infra.Diagnostic{
+				Operation: "launch-game", Stage: stage,
+				Fields: map[string]any{
+					"importer": key, "mode": cfg.Mode, "source": runtimeSource, "rollback": rollbackState,
+					"importerFolder": cfg.ImporterFolder, "gameFolder": cfg.GameFolder, "gameExe": gameExe,
+				},
+			})
 		}
 	}()
 	progress := func(next string) {
@@ -75,7 +86,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
 	}
-	gameExe := game.ExePath
+	gameExe = game.ExePath
 	processName := filepath.Base(gameExe)
 	if len(packageSpec.processNames) > 0 {
 		processName = packageSpec.processNames[0]
@@ -125,9 +136,16 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	progress("deploy-runtime")
+	rollbackState = "not-attempted"
 	warnings, err := x.deployRuntime(ctx, key, cfg)
 	if err != nil {
 		return err
+	}
+	if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
+		var deployed runtimeManifest
+		if json.Unmarshal(data, &deployed) == nil && deployed.Source != "" {
+			runtimeSource = deployed.Source
+		}
 	}
 	for _, warning := range warnings {
 		if x.log != nil {
