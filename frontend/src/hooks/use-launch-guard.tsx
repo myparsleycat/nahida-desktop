@@ -24,6 +24,19 @@ const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
 const LAUNCH_BLOCKER_OLD_LIBS = "XXMI_LIBS_TOO_OLD";
+const launchErrorCodes = [
+  "XXMI_BUSY",
+  "XXMI_GAME_RUNNING",
+  "XXMI_RUNTIME_LOCKED",
+  "XXMI_ELEVATION_DENIED",
+  "XXMI_LOADER_TOO_OLD",
+  "XXMI_INJECT_FAILED",
+  "XXMI_GAME_START_TIMEOUT",
+  "XXMI_LEGACY_LOADER_RUNNING",
+  "XXMI_LEGACY_LOADER_EXITED",
+  "XXMI_LEGACY_LOADER_NOT_READY",
+  "GIMI_FPS_UNLOCKER_RUNNING",
+] as const;
 
 type LaunchDialog =
   | "gimi-dcr"
@@ -36,7 +49,11 @@ type LaunchDialog =
 
 export type LaunchGuardResult =
   | { status: "started" }
-  | { status: "blocked"; kind: LaunchDialog | "importer-setup" };
+  | { status: "blocked"; kind: LaunchDialog | "importer-setup" | "launch-error" };
+
+export function launchErrorCode(message: string): (typeof launchErrorCodes)[number] | null {
+  return launchErrorCodes.find((code) => message.includes(code)) ?? null;
+}
 
 export function launchDialog(message: string): LaunchDialog | null {
   if (message.includes(LAUNCH_BLOCKER_GAME_FOLDER)) {
@@ -95,6 +112,13 @@ export function useLaunchGuard() {
         }
         const kind = launchDialog(message);
         if (!kind) {
+          const code = launchErrorCode(message);
+          if (code) {
+            toast.error(t(`page.setting.xxmi.builtin.launchErrors.${code}`), {
+              description: message,
+            });
+            return { status: "blocked", kind: "launch-error" };
+          }
           throw error;
         }
         setDialog(kind);

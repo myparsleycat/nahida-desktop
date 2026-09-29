@@ -22,7 +22,7 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.f
 
 import { toast } from "sonner";
 
-import { launchDialog, useLaunchGuard } from "./use-launch-guard";
+import { launchDialog, launchErrorCode, useLaunchGuard } from "./use-launch-guard";
 
 const toastError = vi.mocked(toast.error);
 
@@ -68,6 +68,34 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI_LIBS_TOO_OLD")).toBe("old-libs");
   expect(launchDialog("XXMI is not configured")).toBeNull();
+});
+
+it.each([
+  "XXMI_BUSY",
+  "XXMI_GAME_RUNNING",
+  "XXMI_RUNTIME_LOCKED",
+  "XXMI_ELEVATION_DENIED",
+  "XXMI_LOADER_TOO_OLD",
+  "XXMI_INJECT_FAILED",
+  "XXMI_GAME_START_TIMEOUT",
+  "XXMI_LEGACY_LOADER_RUNNING",
+  "XXMI_LEGACY_LOADER_EXITED",
+  "XXMI_LEGACY_LOADER_NOT_READY",
+  "GIMI_FPS_UNLOCKER_RUNNING",
+])("shows guidance for %s and keeps the backend detail", async (code) => {
+  const detail = `${code}: native code 200`;
+  xxmi.StartGame.mockRejectedValueOnce(new Error(detail));
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+
+  await waitFor(() =>
+    expect(toastError).toHaveBeenCalledWith(`page.setting.xxmi.builtin.launchErrors.${code}`, {
+      description: detail,
+    }),
+  );
+  expect(launchErrorCode(detail)).toBe(code);
+  expect(screen.queryByRole("alertdialog")).toBeNull();
 });
 
 it("launches EFMI with old libraries only after confirmation", async () => {
