@@ -21,6 +21,14 @@ const state = vi.hoisted(() => ({
       },
     ],
   },
+  updates: [] as Array<{
+    importer: string;
+    package: string;
+    installed: string;
+    latestVersion: string;
+    pinned: boolean;
+    available: boolean;
+  }>,
 }));
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: {} }));
@@ -36,7 +44,7 @@ vi.mock("@renderer/hooks/use-settings", () => ({
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: string[] }) => ({
-    data: queryKey[0] === "xxmi:overview" ? state.overview : [],
+    data: queryKey[0] === "xxmi:overview" ? state.overview : state.updates,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -52,7 +60,10 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { XXMIDashboard } from "./xxmi";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  state.updates = [];
+});
 
 it("keeps the package controls visible when a cache is damaged and disables a running importer", () => {
   render(<XXMIDashboard />);
@@ -63,4 +74,32 @@ it("keeps the package controls visible when a cache is damaged and disables a ru
     "disabled",
     true,
   );
+});
+
+it("shows a shared library update when the first importer pins it and another follows latest", () => {
+  state.updates = [
+    {
+      importer: "GIMI",
+      package: "xxmi-libs",
+      installed: "1.7.5",
+      latestVersion: "1.7.6",
+      pinned: true,
+      available: true,
+    },
+    {
+      importer: "WWMI",
+      package: "xxmi-libs",
+      installed: "1.7.5",
+      latestVersion: "1.7.6",
+      pinned: false,
+      available: true,
+    },
+  ];
+
+  render(<XXMIDashboard />);
+
+  expect(screen.getByText(/xxmi-libs: 1\.7\.5.*1\.7\.6/)).toBeTruthy();
+  expect(
+    screen.getAllByRole("button", { name: "page.setting.xxmi.builtin.skipVersion" }),
+  ).toHaveLength(1);
 });

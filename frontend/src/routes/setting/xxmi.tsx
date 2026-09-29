@@ -295,7 +295,9 @@ export function XXMIDashboard() {
               (entry, index, list) =>
                 entry.available &&
                 !entry.pinned &&
-                list.findIndex((item) => item.package === entry.package) === index,
+                list.findIndex(
+                  (item) => item.package === entry.package && item.available && !item.pinned,
+                ) === index,
             )
             .map((entry) => (
               <div
