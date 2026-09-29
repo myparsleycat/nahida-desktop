@@ -85,18 +85,18 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if err := validateRegularLocalFile(spec.ModuleDLL); err != nil {
 		return fmt.Errorf("module DLL: %w", err)
 	}
-	if spec.Mode == ModeXXMI {
+	if spec.Mode == ModeXXMI && (spec.InjectMode != "Bypass" || len(spec.ExtraDLLs) > 0) {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI loader DLL: %w", err)
 		}
-	} else {
+	} else if spec.Mode == ModeLegacy && spec.InjectMode != "Bypass" {
 		if err := verifyFile(spec.LegacyLoader); err != nil {
 			return fmt.Errorf("legacy loader: %w", err)
 		}
-		if len(spec.ExtraDLLs) > 0 {
-			if err := verifyFile(spec.LoaderDLL); err != nil {
-				return fmt.Errorf("XXMI extra DLL injector: %w", err)
-			}
+	}
+	if spec.Mode == ModeLegacy && len(spec.ExtraDLLs) > 0 {
+		if err := verifyFile(spec.LoaderDLL); err != nil {
+			return fmt.Errorf("XXMI extra DLL injector: %w", err)
 		}
 	}
 	for _, dll := range spec.ExtraDLLs {

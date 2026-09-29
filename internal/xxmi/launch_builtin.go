@@ -409,9 +409,11 @@ func (x *XXMI) builtinLaunchSpec(
 			return inject.LaunchSpec{}, err
 		}
 	} else {
-		spec.LegacyLoader, err = verifiedLaunchFile(filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
-		if err != nil {
-			return inject.LaunchSpec{}, err
+		if spec.InjectMode != "Bypass" {
+			spec.LegacyLoader, err = verifiedLaunchFile(filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
+			if err != nil {
+				return inject.LaunchSpec{}, err
+			}
 		}
 		if len(spec.ExtraDLLs) > 0 {
 			version := cfg.XXMIVersion.Pinned

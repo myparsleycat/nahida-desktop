@@ -55,6 +55,25 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	if err := ValidateLaunchSpec(legacy); err != nil {
 		t.Fatalf("verified legacy extra DLL injector was rejected: %v", err)
 	}
+	bypass := spec
+	bypass.InjectMode = "Bypass"
+	bypass.LoaderDLL = VerifiedFile{}
+	if err := ValidateLaunchSpec(bypass); err != nil {
+		t.Fatalf("XXMI bypass without an injector was rejected: %v", err)
+	}
+	bypass.Mode = ModeLegacy
+	bypass.LegacyLoader = VerifiedFile{}
+	if err := ValidateLaunchSpec(bypass); err != nil {
+		t.Fatalf("legacy bypass without a loader was rejected: %v", err)
+	}
+	bypass.ExtraDLLs = []string{filepath.Join(root, "extra.dll")}
+	if err := ValidateLaunchSpec(bypass); err == nil {
+		t.Fatal("bypass extra DLL was accepted without a verified injector")
+	}
+	bypass.LoaderDLL = spec.LoaderDLL
+	if err := ValidateLaunchSpec(bypass); err != nil {
+		t.Fatalf("bypass extra DLL with verified injector was rejected: %v", err)
+	}
 }
 
 func fileHash(t *testing.T, path string) string {

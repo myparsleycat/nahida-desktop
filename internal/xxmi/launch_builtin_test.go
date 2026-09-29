@@ -287,6 +287,28 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 	}
 }
 
+func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
+	root := t.TempDir()
+	gameExe := filepath.Join(root, "game.exe")
+	if err := os.WriteFile(gameExe, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, runtimeManifestName), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := ImporterConfig{
+		ImporterFolder: root, Mode: RuntimeLegacy,
+		CustomLaunch: CustomLaunch{Enabled: true, Command: "start game", InjectMode: "Bypass"},
+	}
+	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" {
+		t.Fatalf("legacy bypass spec = %+v", spec)
+	}
+}
+
 func TestResolveExtraDLLPathsUsesConfiguredRoot(t *testing.T) {
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))

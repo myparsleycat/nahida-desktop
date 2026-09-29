@@ -21,6 +21,9 @@ func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := ValidateLaunchSpec(spec); err != nil {
 		return LaunchResult{}, err
 	}
+	if spec.InjectMode == "Bypass" {
+		return launchBypass(ctx, spec)
+	}
 	if spec.Mode == ModeLegacy {
 		return launchLegacy(ctx, spec)
 	}
@@ -43,6 +46,46 @@ func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	case outcome := <-result:
 		return outcome.value, outcome.err
 	}
+}
+
+func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+	if pid, err := findProcessPID(spec.ProcessName); err != nil {
+		return LaunchResult{}, err
+	} else if pid != 0 {
+		return LaunchResult{}, errors.New("XXMI_GAME_RUNNING")
+	}
+	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
+	if err := startGameProcess(spec); err != nil {
+		return LaunchResult{}, err
+	}
+	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
+	if err != nil {
+		return LaunchResult{}, err
+	}
+	var warnings []string
+	if err := setProcessPriority(pid, spec.Priority); err != nil {
+		warnings = append(warnings, "Could not set game process priority: "+err.Error())
+	}
+	if len(spec.ExtraDLLs) > 0 {
+		library, err := windows.LoadDLL(spec.LoaderDLL.Path)
+		if err != nil {
+			return LaunchResult{}, fmt.Errorf("load XXMI extra DLL injector: %w", err)
+		}
+		injectProc, err := library.FindProc("Inject")
+		if err != nil {
+			_ = library.Release()
+			return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
+		}
+		err = injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds)
+		_ = library.Release()
+		if err != nil {
+			return LaunchResult{}, err
+		}
+	}
+	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+		return LaunchResult{}, err
+	}
+	return LaunchResult{PID: pid, InjectionVerified: false, Warnings: warnings}, nil
 }
 
 func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
@@ -105,12 +148,6 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	}
 	if err := injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds); err != nil {
 		return LaunchResult{}, err
-	}
-	if spec.InjectMode == "Bypass" {
-		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
-			return LaunchResult{}, err
-		}
-		return LaunchResult{PID: pid, InjectionVerified: false, Warnings: warnings}, nil
 	}
 	if !useHook {
 		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(module)), uintptr(spec.TimeoutSeconds))
