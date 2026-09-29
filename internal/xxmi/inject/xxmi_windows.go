@@ -83,7 +83,11 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			uintptr(unsafe.Pointer(&mutex)),
 		)
 		if code != 0 || hook == 0 {
-			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: HookLibrary returned %d", code)
+			if code == 0 {
+				return LaunchResult{}, errors.New("XXMI_INJECT_FAILED: HookLibrary returned a null hook")
+			}
+			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: HookLibrary returned %d (%s)",
+				code, hookFailureReason(code))
 		}
 		defer func() { _, _, _ = unhookProc.Call(uintptr(unsafe.Pointer(&hook)), uintptr(unsafe.Pointer(&mutex))) }()
 	}
@@ -111,7 +115,8 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if !useHook {
 		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(module)), uintptr(spec.TimeoutSeconds))
 		if code != 0 {
-			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: Inject returned %d", code)
+			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: Inject returned %d (%s)",
+				code, injectFailureReason(code))
 		}
 		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
 			return LaunchResult{}, err
@@ -140,7 +145,8 @@ func injectExtraDLLs(proc *windows.Proc, pid int, dlls []string, timeoutSeconds 
 		}
 		code, _, _ := proc.Call(uintptr(pid), uintptr(unsafe.Pointer(pointer)), uintptr(timeoutSeconds))
 		if code != 0 {
-			return fmt.Errorf("XXMI_INJECT_FAILED: extra DLL Inject returned %d", code)
+			return fmt.Errorf("XXMI_INJECT_FAILED: extra DLL Inject returned %d (%s): %s",
+				code, injectFailureReason(code), dll)
 		}
 	}
 	return nil
