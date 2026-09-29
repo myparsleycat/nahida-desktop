@@ -50,6 +50,11 @@ func runtimeSettingHooks(
 				updater.HandleAutoUpdateModeChanged(mode)
 			}
 		},
+		AfterIncludePrereleaseChanged: func(enabled bool) {
+			if updater != nil {
+				updater.HandleIncludePrereleaseChanged(enabled)
+			}
+		},
 		AfterLogLevelChanged: log.SetLevel,
 		AfterPowerSaveBlockChanged: func() {
 			if transfers == nil {

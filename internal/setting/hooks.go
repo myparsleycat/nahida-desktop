@@ -3,17 +3,18 @@ package setting
 // Hooks are optional afterSet side effects owned by runtime services.
 // Empty Hooks are a no-op so settings remain usable in tests and headless callers.
 type Hooks struct {
-	AfterSet                   func(key string, value any)
-	AfterRunOnStartupChanged   func(enabled bool) error
-	AfterLanguageChanged       func(language string)
-	AfterAutoUpdateModeChanged func(mode string)
-	AfterLogLevelChanged       func(level string)
-	AfterPowerSaveBlockChanged func()
-	AfterBandwidthLimitChanged func(mibps int)
-	AfterOpenConsoleChanged    func(enabled bool)
-	AfterPersistTogglesChanged func(enabled bool)
-	AfterElevatedHelperChanged func(enabled bool)
-	AfterRendererReload        func()
+	AfterSet                      func(key string, value any)
+	AfterRunOnStartupChanged      func(enabled bool) error
+	AfterLanguageChanged          func(language string)
+	AfterAutoUpdateModeChanged    func(mode string)
+	AfterIncludePrereleaseChanged func(enabled bool)
+	AfterLogLevelChanged          func(level string)
+	AfterPowerSaveBlockChanged    func()
+	AfterBandwidthLimitChanged    func(mibps int)
+	AfterOpenConsoleChanged       func(enabled bool)
+	AfterPersistTogglesChanged    func(enabled bool)
+	AfterElevatedHelperChanged    func(enabled bool)
+	AfterRendererReload           func()
 }
 
 func (h Hooks) elevatedHelperChanged(enabled bool) {
@@ -44,6 +45,12 @@ func (h Hooks) languageChanged(language string) {
 func (h Hooks) autoUpdateModeChanged(mode string) {
 	if h.AfterAutoUpdateModeChanged != nil {
 		h.AfterAutoUpdateModeChanged(mode)
+	}
+}
+
+func (h Hooks) includePrereleaseChanged(enabled bool) {
+	if h.AfterIncludePrereleaseChanged != nil {
+		h.AfterIncludePrereleaseChanged(enabled)
 	}
 }
 

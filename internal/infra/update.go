@@ -22,15 +22,17 @@ import (
 )
 
 const (
-	updaterRepository     = "myparsleycat/nahida-desktop"
-	updaterChecksumAsset  = "SHA256SUMS"
-	updaterCheckInterval  = time.Hour
-	translationEndpoint   = "https://api.nahida.live/translate"
-	maxTranslationPayload = 8 << 20
+	updaterRepository        = "myparsleycat/nahida-desktop"
+	updaterChecksumAsset     = "SHA256SUMS"
+	updaterCheckInterval     = time.Hour
+	releaseChannelPrerelease = "prerelease"
+	translationEndpoint      = "https://api.nahida.live/translate"
+	maxTranslationPayload    = 8 << 20
 )
 
 type UpdaterSettings interface {
 	GetAutoUpdateMode(context.Context) (string, error)
+	GetIncludePrerelease(context.Context) (bool, error)
 	GetLanguage(context.Context) (string, error)
 }
 
@@ -82,17 +84,20 @@ type Updater struct {
 	emit     func(string, ...any)
 	ready    func()
 
-	available         bool
-	downloaded        bool
-	releaseVersion    string
-	notifiedVersion   string
-	originalNotes     string
-	translatedNotes   string
-	translatedLang    string
-	dialogDismissed   bool
-	checking          bool
-	downloading       bool
-	translationSerial uint64
+	available             bool
+	downloaded            bool
+	releaseVersion        string
+	releaseChannel        string
+	notifiedVersion       string
+	originalNotes         string
+	translatedNotes       string
+	translatedLang        string
+	dialogDismissed       bool
+	checking              bool
+	downloading           bool
+	recheckAfterBusy      bool
+	channelRefreshPending bool
+	translationSerial     uint64
 
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -121,12 +126,73 @@ func (u *Updater) AttachGitHubRate(store githubRateStore, httpClient *Client, lo
 	rate.UseLog(log)
 }
 
-func githubProviderConfig(version string) githubprovider.Config {
+func githubProviderConfig(prerelease bool) githubprovider.Config {
 	return githubprovider.Config{
 		Repository:    updaterRepository,
 		ChecksumAsset: updaterChecksumAsset,
-		Prerelease:    strings.Contains(version, "-beta."),
+		Prerelease:    prerelease,
 	}
+}
+
+// includePrereleaseProvider chooses the stable or pre-release GitHub source
+// on each check. Wails accepts the provider list once, and a GitHub provider
+// keeps its Prerelease flag for its lifetime.
+type includePrereleaseProvider struct {
+	stable     wailsupdater.Provider
+	prerelease wailsupdater.Provider
+	include    func(context.Context) (bool, error)
+}
+
+func newIncludePrereleaseProvider(
+	httpClient *Client,
+	include func(context.Context) (bool, error),
+) (wailsupdater.Provider, error) {
+	stable, err := newGitHubUpdateProvider(false, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	prerelease, err := newGitHubUpdateProvider(true, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	return &includePrereleaseProvider{stable: stable, prerelease: prerelease, include: include}, nil
+}
+
+func newGitHubUpdateProvider(prerelease bool, httpClient *Client) (wailsupdater.Provider, error) {
+	config := githubProviderConfig(prerelease)
+	if httpClient != nil {
+		config.HTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: httpClient.HTTPClient().Transport}
+	}
+	return githubprovider.New(config)
+}
+
+func (p *includePrereleaseProvider) Name() string { return "github" }
+
+func (p *includePrereleaseProvider) Check(
+	ctx context.Context,
+	req wailsupdater.CheckRequest,
+) (*wailsupdater.Release, error) {
+	source := p.stable
+	if p.include != nil {
+		include, err := p.include(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if include {
+			source = p.prerelease
+		}
+	}
+	return source.Check(ctx, req)
+}
+
+// Download uses either GitHub provider. The asset URL is already on the release.
+func (p *includePrereleaseProvider) Download(
+	ctx context.Context,
+	rel *wailsupdater.Release,
+	dst io.Writer,
+	onProgress func(written, total int64),
+) error {
+	return p.stable.Download(ctx, rel, dst, onProgress)
 }
 
 // Configure binds the Wails v3 updater after application.New has created it.
@@ -142,14 +208,8 @@ func (u *Updater) Configure(opts UpdaterOptions) error {
 	}
 	provider := opts.Provider
 	if provider == nil {
-		config := githubProviderConfig(version)
-		if opts.HTTP != nil {
-			// Preserve the provider timeout while routing release metadata, checksums,
-			// redirects and artifacts through the application's network policy.
-			config.HTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: opts.HTTP.HTTPClient().Transport}
-		}
 		var err error
-		provider, err = githubprovider.New(config)
+		provider, err = newIncludePrereleaseProvider(opts.HTTP, u.includePrerelease)
 		if err != nil {
 			return err
 		}
@@ -219,7 +279,11 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 		u.mu.Unlock()
 		return nil
 	}
+	refreshPending := u.channelRefreshPending
 	u.mu.Unlock()
+	if refreshPending {
+		return u.refreshUpdateCandidate(ctx, userInitiated)
+	}
 	allowed, err := u.githubRateAllowsCheck(ctx, userInitiated)
 	if err != nil {
 		return err
@@ -277,31 +341,24 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	u.broadcastStatus(ctx)
 	release, err := engine.Check(ctx)
 	if err != nil {
-		u.mu.Lock()
-		u.checking, u.downloading = false, false
-		u.available, u.downloaded = false, false
-		u.releaseVersion, u.originalNotes = "", ""
-		u.clearTranslationLocked()
-		u.dialogDismissed = false
-		u.mu.Unlock()
-		u.broadcastStatus(ctx)
+		u.resetCheckedRelease(ctx)
+		u.finishIncludePrereleaseChange(ctx)
 		return err
 	}
 	if release == nil {
 		u.mu.Lock()
-		u.checking, u.downloading = false, false
-		u.available, u.downloaded = false, false
-		u.releaseVersion, u.originalNotes = "", ""
-		u.clearTranslationLocked()
-		u.dialogDismissed = false
+		u.channelRefreshPending = false
 		u.mu.Unlock()
-		u.broadcastStatus(ctx)
+		u.resetCheckedRelease(ctx)
+		u.finishIncludePrereleaseChange(ctx)
 		return nil
 	}
 	u.mu.Lock()
 	u.checking = false
+	u.channelRefreshPending = false
 	u.available = true
 	u.releaseVersion = release.Version
+	u.releaseChannel = release.Channel
 	u.originalNotes = normalizeReleaseNotes(release.Notes)
 	u.clearTranslationLocked()
 	u.mu.Unlock()
@@ -309,9 +366,25 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	u.broadcastStatus(ctx)
 	u.translateCurrentReleaseNotes(ctx)
 	if mode == "auto" {
+		if u.skipPrereleaseDownload(ctx) {
+			u.finishIncludePrereleaseChange(ctx)
+			return nil
+		}
 		return u.DownloadUpdate(ctx)
 	}
+	u.finishIncludePrereleaseChange(ctx)
 	return nil
+}
+
+func (u *Updater) resetCheckedRelease(ctx context.Context) {
+	u.mu.Lock()
+	u.checking, u.downloading = false, false
+	u.available, u.downloaded = false, false
+	u.releaseVersion, u.releaseChannel, u.originalNotes = "", "", ""
+	u.clearTranslationLocked()
+	u.dialogDismissed = false
+	u.mu.Unlock()
+	u.broadcastStatus(ctx)
 }
 
 func (u *Updater) DownloadUpdate(ctx context.Context) error {
@@ -332,7 +405,26 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 		u.downloading = false
 		u.mu.Unlock()
 		u.broadcastStatus(ctx)
+		u.finishIncludePrereleaseChange(ctx)
 		return err
+	}
+	u.mu.Lock()
+	channel := u.releaseChannel
+	deferRecheck := u.recheckAfterBusy
+	u.mu.Unlock()
+	if deferRecheck && channel == releaseChannelPrerelease {
+		include, err := u.includePrerelease(ctx)
+		if err != nil || !include {
+			u.mu.Lock()
+			u.downloading = false
+			u.mu.Unlock()
+			u.broadcastStatus(ctx)
+			u.finishIncludePrereleaseChange(ctx)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
 	}
 	u.mu.Lock()
 	u.downloading = false
@@ -345,6 +437,7 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
 	u.notifyReady()
+	u.finishIncludePrereleaseChange(ctx)
 	return nil
 }
 
@@ -411,6 +504,215 @@ func (u *Updater) GetStatus(ctx context.Context) (UpdaterStatus, error) {
 }
 
 //wails:ignore
+func (u *Updater) HandleIncludePrereleaseChanged(enabled bool) {
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	ctx := u.ctx
+	if u.checking || u.downloading {
+		u.recheckAfterBusy = true
+		u.mu.Unlock()
+		return
+	}
+	u.mu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	go u.runLogged(
+		func() error { return u.applyIncludePrereleaseChange(ctx, enabled) },
+		"updater.includePrereleaseChanged",
+	)
+}
+
+func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool) error {
+	if enabled {
+		u.mu.Lock()
+		u.channelRefreshPending = true
+		u.mu.Unlock()
+		mode, err := u.mode(ctx)
+		if err != nil {
+			return err
+		}
+		if mode == "off" {
+			return nil
+		}
+		return u.refreshUpdateCandidate(ctx, false)
+	}
+	u.mu.Lock()
+	u.channelRefreshPending = false
+	if u.checking || u.downloading {
+		u.recheckAfterBusy = true
+		u.mu.Unlock()
+		return nil
+	}
+	if u.releaseChannel != releaseChannelPrerelease {
+		u.mu.Unlock()
+		return nil
+	}
+	u.clearUpdateCandidateLocked()
+	u.mu.Unlock()
+	u.broadcastStatus(ctx)
+	mode, err := u.mode(ctx)
+	if err != nil {
+		return err
+	}
+	if mode == "off" {
+		return nil
+	}
+	return u.CheckForUpdates(ctx, false)
+}
+
+func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool) error {
+	u.mu.Lock()
+	if u.checking || u.downloading {
+		u.recheckAfterBusy = true
+		u.mu.Unlock()
+		return nil
+	}
+	previousVersion := u.releaseVersion
+	previousDownloaded := u.downloaded
+	engine := u.engine
+	u.mu.Unlock()
+	if engine == nil {
+		return errors.New("updater is not configured")
+	}
+	allowed, err := u.githubRateAllowsCheck(ctx, userInitiated)
+	if err != nil || !allowed {
+		return err
+	}
+
+	u.mu.Lock()
+	if u.checking || u.downloading {
+		u.recheckAfterBusy = true
+		u.mu.Unlock()
+		return nil
+	}
+	u.checking = true
+	u.mu.Unlock()
+	u.broadcastStatus(ctx)
+
+	release, err := engine.Check(ctx)
+	if err != nil {
+		u.mu.Lock()
+		u.checking = false
+		u.mu.Unlock()
+		u.broadcastStatus(ctx)
+		u.finishIncludePrereleaseChange(ctx)
+		return err
+	}
+	mode, err := u.mode(ctx)
+	if err != nil {
+		u.mu.Lock()
+		u.checking = false
+		u.mu.Unlock()
+		u.broadcastStatus(ctx)
+		u.finishIncludePrereleaseChange(ctx)
+		return err
+	}
+	if release == nil {
+		u.mu.Lock()
+		u.channelRefreshPending = false
+		u.mu.Unlock()
+		u.resetCheckedRelease(ctx)
+		u.finishIncludePrereleaseChange(ctx)
+		return nil
+	}
+
+	u.mu.Lock()
+	u.checking = false
+	u.channelRefreshPending = false
+	u.available = true
+	u.releaseChannel = release.Channel
+	sameRelease := release.Version == previousVersion && previousVersion != ""
+	if sameRelease {
+		u.downloaded = previousDownloaded
+		if userInitiated && previousDownloaded {
+			u.dialogDismissed = false
+			u.notifiedVersion = u.releaseVersion
+		}
+	} else {
+		u.downloaded = false
+		u.dialogDismissed = false
+		u.notifiedVersion = ""
+		u.releaseVersion = release.Version
+		u.originalNotes = normalizeReleaseNotes(release.Notes)
+		u.clearTranslationLocked()
+	}
+	downloaded := u.downloaded
+	u.mu.Unlock()
+	if !sameRelease {
+		u.broadcast("updater:update-available")
+		u.translateCurrentReleaseNotes(ctx)
+	}
+	u.broadcastStatus(ctx)
+	if sameRelease && downloaded && userInitiated {
+		u.notifyReady()
+	}
+	if mode == "auto" && !downloaded {
+		if u.skipPrereleaseDownload(ctx) {
+			u.finishIncludePrereleaseChange(ctx)
+			return nil
+		}
+		return u.DownloadUpdate(ctx)
+	}
+	u.finishIncludePrereleaseChange(ctx)
+	return nil
+}
+
+func (u *Updater) skipPrereleaseDownload(ctx context.Context) bool {
+	u.mu.Lock()
+	deferRecheck := u.recheckAfterBusy
+	channel := u.releaseChannel
+	u.mu.Unlock()
+	if !deferRecheck || channel != releaseChannelPrerelease {
+		return false
+	}
+	include, err := u.includePrerelease(ctx)
+	if err != nil {
+		u.logError(err, "updater.includePrereleaseChanged")
+		return true
+	}
+	return !include
+}
+
+func (u *Updater) clearUpdateCandidateLocked() {
+	u.available, u.downloaded = false, false
+	u.releaseVersion, u.releaseChannel, u.originalNotes = "", "", ""
+	u.notifiedVersion = ""
+	u.dialogDismissed = false
+	u.clearTranslationLocked()
+}
+
+func (u *Updater) includePrerelease(ctx context.Context) (bool, error) {
+	u.mu.Lock()
+	settings := u.settings
+	u.mu.Unlock()
+	if settings == nil {
+		return false, nil
+	}
+	return settings.GetIncludePrerelease(ctx)
+}
+
+func (u *Updater) finishIncludePrereleaseChange(ctx context.Context) {
+	u.mu.Lock()
+	if !u.recheckAfterBusy || u.checking || u.downloading {
+		u.mu.Unlock()
+		return
+	}
+	u.recheckAfterBusy = false
+	u.mu.Unlock()
+	include, err := u.includePrerelease(ctx)
+	if err != nil {
+		u.logError(err, "updater.includePrereleaseChanged")
+		return
+	}
+	if err := u.applyIncludePrereleaseChange(ctx, include); err != nil {
+		u.logError(err, "updater.includePrereleaseChanged")
+	}
+}
+
+//wails:ignore
 func (u *Updater) HandleAutoUpdateModeChanged(mode string) {
 	if u == nil {
 		return
@@ -418,11 +720,14 @@ func (u *Updater) HandleAutoUpdateModeChanged(mode string) {
 	u.mu.Lock()
 	ctx := u.ctx
 	available, downloaded, downloading, checking := u.available, u.downloaded, u.downloading, u.checking
+	refreshPending := u.channelRefreshPending
 	u.mu.Unlock()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	switch {
+	case mode != "off" && refreshPending && !checking && !downloading:
+		go u.runLogged(func() error { return u.CheckForUpdates(ctx, false) }, "updater.modeChanged")
 	case mode == "auto" && available && !downloaded && !downloading:
 		go u.runLogged(func() error { return u.DownloadUpdate(ctx) }, "updater.modeChanged")
 	case mode != "off" && !available && !downloaded && !checking:

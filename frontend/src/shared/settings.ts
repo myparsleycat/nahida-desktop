@@ -15,6 +15,7 @@ export interface AppSettings {
     "general.runOnStartup": boolean;
     "general.language": string;
     "general.autoUpdateMode": AutoUpdateMode;
+    "general.includePrerelease": boolean;
     "general.runInBackground": boolean;
     "general.defaultStartPage": string;
     "general.logLevel": string;
@@ -111,6 +112,11 @@ export const APP_SETTINGS = {
         publicKey: "general.autoUpdateMode",
         scope: "general",
         storageKey: "general_auto_update_mode",
+    },
+    "general.includePrerelease": {
+        publicKey: "general.includePrerelease",
+        scope: "general",
+        storageKey: "general_include_prerelease",
     },
     "general.runInBackground": {
         publicKey: "general.runInBackground",

@@ -8,6 +8,7 @@ const (
 	KeyGeneralRunOnStartup                       = "general.runOnStartup"
 	KeyGeneralLanguage                           = "general.language"
 	KeyGeneralAutoUpdateMode                     = "general.autoUpdateMode"
+	KeyGeneralIncludePrerelease                  = "general.includePrerelease"
 	KeyGeneralRunInBackground                    = "general.runInBackground"
 	KeyGeneralDefaultStartPage                   = "general.defaultStartPage"
 	KeyGeneralLogLevel                           = "general.logLevel"
@@ -96,6 +97,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralRunOnStartup, ScopeGeneral, "general_run_on_startup"},
 	{KeyGeneralLanguage, ScopeGeneral, "general_language"},
 	{KeyGeneralAutoUpdateMode, ScopeGeneral, "general_auto_update_mode"},
+	{KeyGeneralIncludePrerelease, ScopeGeneral, "general_include_prerelease"},
 	{KeyGeneralRunInBackground, ScopeGeneral, "general_run_in_background"},
 	{KeyGeneralDefaultStartPage, ScopeGeneral, "general_default_start_page"},
 	{KeyGeneralLogLevel, ScopeGeneral, "general_log_level"},

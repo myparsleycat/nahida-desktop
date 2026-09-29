@@ -1829,6 +1829,8 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist를 사용할 때는 백그라운드 실행을 유지하는 편이 더 안전하고 안정적입니다. 이 기능을 끄면 모든 창을 닫는 순간 앱이 종료되므로, 앱을 다시 열기 전까지 해당 기능을 사용할 수 없습니다. 그래도 백그라운드 실행을 끄시겠어요?",
           "runInBackgroundDisableConfirmAction": "그래도 끄기",
           "autoUpdate": "자동 업데이트",
+          "includePrerelease": "사전 릴리스 포함",
+          "includePrereleaseDescription": "정식 릴리스 외에 GitHub pre-release도 업데이트 후보에 포함합니다. 초안 릴리스는 포함하지 않습니다.",
           "updateStatus": "업데이트 상태",
           "autoUpdateModes": {
             "auto": {
