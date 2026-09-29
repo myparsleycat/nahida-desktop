@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -177,6 +178,19 @@ func TestWaitForGameProcesses(t *testing.T) {
 			t.Fatalf("wait result = %v", err)
 		}
 	})
+}
+
+func TestRuntimeFileErrorClassifiesSharingViolation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "d3d11.dll")
+	locked := runtimeFileError(syscall.Errno(32), path)
+	if !strings.Contains(locked.Error(), "XXMI_RUNTIME_LOCKED") || !strings.Contains(locked.Error(), path) ||
+		!errors.Is(locked, syscall.Errno(32)) {
+		t.Fatalf("sharing violation = %v", locked)
+	}
+	denied := runtimeFileError(syscall.Errno(5), path)
+	if strings.Contains(denied.Error(), "XXMI_RUNTIME_LOCKED") || !errors.Is(denied, syscall.Errno(5)) {
+		t.Fatalf("access denied = %v", denied)
+	}
 }
 
 func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {

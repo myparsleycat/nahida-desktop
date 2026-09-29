@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const runtimeManifestName = ".nahida-runtime.json"
@@ -256,7 +258,7 @@ func deployRuntimeFiles(
 			warnings = append(warnings, "Backed up modified runtime file "+name)
 		}
 		if err := root.removeAll(name); err != nil {
-			return nil, err
+			return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, name))
 		}
 	}
 	for name := range previous.UserManaged {
@@ -277,7 +279,7 @@ func deployRuntimeFiles(
 			return nil, err
 		}
 		if err := root.removeAll(name); err != nil {
-			return nil, err
+			return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, name))
 		}
 		warnings = append(warnings, "Backed up modified runtime file "+name)
 	}
@@ -287,7 +289,7 @@ func deployRuntimeFiles(
 				return nil, err
 			}
 			if err := root.removeAll("nvapi64.dll"); err != nil {
-				return nil, err
+				return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, "nvapi64.dll"))
 			}
 			warnings = append(warnings, "Backed up deprecated nvapi64.dll")
 		} else if !errors.Is(err, os.ErrNotExist) {
@@ -320,7 +322,7 @@ func deployRuntimeFiles(
 			warnings = append(warnings, "Backed up modified runtime file "+name)
 		}
 		if err := root.writeFileAtomic(ctx, name, bytes.NewReader(desiredBytes), 0o600, info); err != nil {
-			return nil, err
+			return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, name))
 		}
 		manifest.Files[name] = wantedHash
 	}
@@ -333,9 +335,21 @@ func deployRuntimeFiles(
 		return nil, err
 	}
 	if err := root.writeFileAtomic(ctx, runtimeManifestName, bytes.NewReader(data), 0o600, info); err != nil {
-		return nil, err
+		return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, runtimeManifestName))
 	}
 	return warnings, nil
+}
+
+func runtimeFileError(err error, path string) error {
+	fs := platform.NewFS()
+	lock := fs.IsLockedPathError(err, path)
+	if !lock.IsLocked {
+		return err
+	}
+	if len(lock.Processes) > 0 {
+		return fmt.Errorf("XXMI_RUNTIME_LOCKED: %s is held by %s: %w", path, fs.FormatProcessList(lock.Processes), err)
+	}
+	return fmt.Errorf("XXMI_RUNTIME_LOCKED: %s: %w", path, err)
 }
 
 func bootstrapExternalRuntime(
