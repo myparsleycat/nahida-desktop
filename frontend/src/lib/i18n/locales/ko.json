@@ -2018,6 +2018,7 @@
           "applyPerfTweaks": "성능 조정 적용",
           "disableWoundedFX": "부상 효과 비활성화",
           "meshLODDistanceBaseFOV": "메시 LOD 기준 시야각",
+          "meshLODDistanceScale": "메시 LOD 거리 배율",
           "meshLODDistanceOffset": "메시 LOD 거리 오프셋",
           "textureStreamingBoost": "텍스처 스트리밍 부스트",
           "textureStreamingMinBoost": "텍스처 스트리밍 최소 부스트",

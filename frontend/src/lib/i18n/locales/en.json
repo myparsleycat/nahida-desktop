@@ -2089,6 +2089,7 @@
           "applyPerfTweaks": "Apply performance tweaks",
           "disableWoundedFX": "Disable wounded effect",
           "meshLODDistanceBaseFOV": "Mesh LOD base FOV",
+          "meshLODDistanceScale": "Mesh LOD distance scale",
           "meshLODDistanceOffset": "Mesh LOD distance offset",
           "textureStreamingBoost": "Texture streaming boost",
           "textureStreamingMinBoost": "Minimum texture streaming boost",

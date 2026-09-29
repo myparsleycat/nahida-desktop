@@ -1999,6 +1999,7 @@
           "applyPerfTweaks": "应用性能调整",
           "disableWoundedFX": "禁用受伤效果",
           "meshLODDistanceBaseFOV": "网格 LOD 基准视野角",
+          "meshLODDistanceScale": "网格 LOD 距离倍率",
           "meshLODDistanceOffset": "网格 LOD 距离偏移",
           "textureStreamingBoost": "纹理流送增强",
           "textureStreamingMinBoost": "纹理流送最小增强",

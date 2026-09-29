@@ -15,7 +15,7 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 	options := WWMIOptions{
 		UnlockFPS: true, ApplyPerfTweaks: true,
 		PerfTweaks:             map[string]float64{"r.Streaming.HLODStrategy": 2},
-		MeshLODDistanceBaseFOV: 165, MeshLODDistanceOffset: -10,
+		MeshLODDistanceBaseFOV: 165, MeshLODDistanceScale: 1.25, MeshLODDistanceOffset: -10,
 		TextureStreamingBoost: 20, TextureStreamingUseAll: true,
 	}
 	userPath := filepath.Join(game, "Client", "Config", "UserEngine.ini")
@@ -37,7 +37,8 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Count(string(userData), "r.Streaming.Boost=") != 1 ||
-		!strings.Contains(string(userData), "r.Streaming.Boost=20.0") {
+		!strings.Contains(string(userData), "r.Streaming.Boost=20.0") ||
+		!strings.Contains(string(userData), "r.Kuro.SkeletalMesh.LODDistanceScale=1.25") {
 		t.Fatalf("UserEngine.ini = %q", userData)
 	}
 	fpsPath := filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini")

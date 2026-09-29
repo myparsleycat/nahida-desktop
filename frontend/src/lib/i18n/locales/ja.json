@@ -2000,6 +2000,7 @@
           "applyPerfTweaks": "パフォーマンス調整を適用",
           "disableWoundedFX": "負傷エフェクトを無効化",
           "meshLODDistanceBaseFOV": "メッシュ LOD 基準視野角",
+          "meshLODDistanceScale": "メッシュ LOD 距離スケール",
           "meshLODDistanceOffset": "メッシュ LOD 距離オフセット",
           "textureStreamingBoost": "テクスチャストリーミングのブースト",
           "textureStreamingMinBoost": "テクスチャストリーミングの最小ブースト",

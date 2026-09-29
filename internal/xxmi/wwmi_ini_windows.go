@@ -31,6 +31,7 @@ func configureWWMIINIFiles(ctx context.Context, game string, options WWMIOptions
 		func(doc *iniDocument) {
 			values := map[string]string{
 				"r.Kuro.SkeletalMesh.DistanceLODBaseFOV":           strconv.Itoa(options.MeshLODDistanceBaseFOV),
+				"r.Kuro.SkeletalMesh.LODDistanceScale":             wwmiFloat(options.MeshLODDistanceScale),
 				"r.Kuro.SkeletalMesh.LODDistanceScaleDeviceOffset": wwmiFloat(options.MeshLODDistanceOffset),
 				"r.Streaming.Boost":                                wwmiFloat(options.TextureStreamingBoost),
 				"r.Streaming.MinBoost":                             wwmiFloat(options.TextureStreamingMinBoost),

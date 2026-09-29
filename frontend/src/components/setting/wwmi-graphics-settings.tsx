@@ -16,6 +16,7 @@ export function WWMIGraphicsSettings({ options, onChange }: Props) {
       {(
         [
           "meshLODDistanceBaseFOV",
+          "meshLODDistanceScale",
           "meshLODDistanceOffset",
           "textureStreamingBoost",
           "textureStreamingMinBoost",

@@ -41,6 +41,9 @@ it("preserves WWMI values while editing graphics and performance settings", () =
   }
 
   render(<Settings />);
+  fireEvent.change(screen.getByLabelText("page.setting.xxmi.builtin.meshLODDistanceScale"), {
+    target: { value: "1.25" },
+  });
   fireEvent.change(screen.getByLabelText("page.setting.xxmi.builtin.textureStreamingBoost"), {
     target: { value: "12.5" },
   });
@@ -50,6 +53,7 @@ it("preserves WWMI values while editing graphics and performance settings", () =
 
   expect(changed).toHaveBeenLastCalledWith({
     ...initial,
+    meshLODDistanceScale: 1.25,
     textureStreamingBoost: 12.5,
     perfTweaks: { "r.Streaming.HLODStrategy": 3 },
   });
