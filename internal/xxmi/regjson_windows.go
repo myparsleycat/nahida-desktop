@@ -24,6 +24,15 @@ func editRegistryJSON(hive registry.Key, subkeys []string, valueName string, edi
 		return fmt.Errorf("game registry key is not found: %w", err)
 	}
 	defer func() { _ = key.Close() }()
+	return editRegistryJSONValue(key, valueName, edit)
+}
+
+type registryJSONValue interface {
+	GetBinaryValue(string) ([]byte, uint32, error)
+	SetBinaryValue(string, []byte) error
+}
+
+func editRegistryJSONValue(key registryJSONValue, valueName string, edit func(map[string]any) error) error {
 	raw, valueType, err := key.GetBinaryValue(valueName)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotExist) {
@@ -38,21 +47,29 @@ func editRegistryJSON(hive registry.Key, subkeys []string, valueName string, edi
 	if err != nil {
 		return err
 	}
-	before, err := json.Marshal(value)
+	before, err := serializeRegistryJSON(value)
 	if err != nil {
 		return err
 	}
 	if err := edit(value); err != nil {
 		return err
 	}
-	after, err := json.Marshal(value)
+	after, err := serializeRegistryJSON(value)
 	if err != nil {
 		return err
 	}
 	if bytes.Equal(before, after) {
 		return nil
 	}
-	return key.SetBinaryValue(valueName, append(after, 0))
+	return key.SetBinaryValue(valueName, after)
+}
+
+func serializeRegistryJSON(value map[string]any) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, 0), nil
 }
 
 func parseRegistryJSON(raw []byte) (map[string]any, error) {
