@@ -194,7 +194,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 		return fmt.Errorf("XXMI_ELEVATION_DENIED: %w", err)
 	}
 	defer release()
-	launchSpec, err := x.builtinLaunchSpec(key, cfg, gameExe, processName)
+	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName)
 	if err != nil {
 		return err
 	}
@@ -327,6 +327,7 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
 }
 
 func (x *XXMI) builtinLaunchSpec(
+	ctx context.Context,
 	key string,
 	cfg ImporterConfig,
 	gameExe, processName string,
@@ -383,7 +384,10 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.InjectMode = cfg.CustomLaunch.InjectMode
 	}
 	if cfg.ExtraLibraries.Enabled {
-		spec.ExtraDLLs = append([]string(nil), cfg.ExtraLibraries.Paths...)
+		spec.ExtraDLLs, err = x.resolveExtraDLLPaths(ctx, cfg.ExtraLibraries.Paths)
+		if err != nil {
+			return inject.LaunchSpec{}, err
+		}
 	}
 	if cfg.Mode == RuntimeXXMI {
 		version := strings.TrimPrefix(deployed.Source, "xxmi-libs@")
@@ -432,6 +436,25 @@ func (x *XXMI) builtinLaunchSpec(
 		}
 	}
 	return spec, nil
+}
+
+func (x *XXMI) resolveExtraDLLPaths(ctx context.Context, paths []string) ([]string, error) {
+	resolved := append([]string(nil), paths...)
+	var root *string
+	for i, library := range resolved {
+		if filepath.IsAbs(library) {
+			continue
+		}
+		if root == nil {
+			var err error
+			root, err = x.GetXXMIPath(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		resolved[i] = filepath.Join(*root, library)
+	}
+	return resolved, nil
 }
 
 func verifiedLaunchFile(path string) (inject.VerifiedFile, error) {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -271,7 +272,7 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 	}
 	for _, direct := range []bool{false, true} {
 		cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct}
-		spec, err := New().builtinLaunchSpec("WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
+		spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -283,5 +284,31 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 			spec.StartArgs[0] != "-dx11" || spec.UseHook || spec.InjectMode != "Inject" {
 			t.Fatalf("direct=%t, spec=%+v", direct, spec)
 		}
+	}
+}
+
+func TestResolveExtraDLLPathsUsesConfiguredRoot(t *testing.T) {
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := New()
+	x.UseClient(client)
+	root := t.TempDir()
+	if err := x.SetRoot(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+	absolute := filepath.Join(t.TempDir(), "absolute.dll")
+	paths, err := x.resolveExtraDLLPaths(ctx, []string{filepath.Join("dlls", "extra.dll"), absolute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 2 || paths[0] != filepath.Join(root, "dlls", "extra.dll") || paths[1] != absolute {
+		t.Fatalf("extra DLLs = %q", paths)
 	}
 }
