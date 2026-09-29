@@ -208,7 +208,7 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
 	if x.log != nil {
 		x.log.Info("Starting game "+importer+" via XXMI Launcher", "XXMI.startGame")
 	}
-	if err := startLauncher(ctx, executable, importer); err != nil {
+	if err := startLauncher(executable, importer); err != nil {
 		return err
 	}
 
