@@ -2,6 +2,8 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -88,6 +90,62 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 	if _, err := x.CheckUpdates(ctx, true); err == nil {
 		t.Fatal("force update check did not attempt a release refresh")
 	}
+}
+
+func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := New()
+	x.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	cfg.Mode = RuntimeLegacy
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := json.Marshal(runtimeManifest{Mode: RuntimeLegacy, Source: "legacy@123456789abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName), manifest, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range []string{"importer:GIMI", "xxmi-libs"} {
+		latest := "1.7.7"
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			Package: pkg, LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range statuses {
+		if status.Package == "xxmi-libs" {
+			if status.Installed != "" || !status.Pinned {
+				t.Fatalf("legacy runtime reported as XXMI libraries: %+v", status)
+			}
+			return
+		}
+	}
+	t.Fatalf("XXMI libraries status missing: %+v", statuses)
 }
 
 func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {

@@ -117,7 +117,9 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
 				var deployed runtimeManifest
 				if json.Unmarshal(data, &deployed) == nil {
-					libs.Installed, _ = strings.CutPrefix(deployed.Source, "xxmi-libs@")
+					if version, ok := strings.CutPrefix(deployed.Source, "xxmi-libs@"); ok {
+						libs.Installed = version
+					}
 				}
 			}
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
