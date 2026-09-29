@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -25,23 +26,12 @@ const (
 	gimiImporterKey          = "GIMI"
 )
 
-type volatileGrade struct {
-	Key   int `json:"key"`
-	Value int `json:"value"`
-}
-
-type saveItem struct {
-	EntryType   int    `json:"entryType"`
-	Index       int    `json:"index"`
-	ItemVersion string `json:"itemVersion"`
-}
-
+// genshinGeneralData keeps the registry record as ordered JSON so a rewrite preserves key order, number
+// text, and fields this code does not know about, like the reference launcher's dict round trip.
 type genshinGeneralData struct {
-	settings       map[string]json.RawMessage
-	graphicsData   map[string]json.RawMessage
-	globalPerfData map[string]json.RawMessage
-	grades         []volatileGrade
-	saveItems      []saveItem
+	settings       sleepyJSONValue
+	graphicsData   sleepyJSONValue
+	globalPerfData sleepyJSONValue
 }
 
 func (x *XXMI) DisableGenshinDynamicCharacterResolution(ctx context.Context) error {
@@ -102,43 +92,41 @@ func parseGenshinGeneralData(raw []byte) (*genshinGeneralData, error) {
 	if !isASCII(payload) {
 		return nil, errors.New("genshin impact graphics settings are not ASCII")
 	}
-	var settings map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &settings); err != nil {
+	settings, err := parseSleepyJSON(payload)
+	if err != nil {
 		return nil, fmt.Errorf("genshin impact graphics settings are not JSON: %w", err)
 	}
-	graphicsData, err := unmarshalNestedObject(settings, genshinGraphicsDataKey)
+	if settings.kind != '{' {
+		return nil, errors.New("genshin impact graphics settings are not a JSON object")
+	}
+
+	graphicsData, err := parseNestedObject(&settings, genshinGraphicsDataKey)
 	if err != nil {
 		return nil, err
 	}
-	grades, err := unmarshalObjectSlice[volatileGrade](graphicsData, genshinGraphicsDataKey, genshinVolatileGradesKey)
+	if _, err := objectArray(&graphicsData, genshinGraphicsDataKey, genshinVolatileGradesKey); err != nil {
+		return nil, err
+	}
+	globalPerfData, err := parseNestedObject(&settings, genshinGlobalPerfDataKey)
 	if err != nil {
 		return nil, err
 	}
-	globalPerfData, err := unmarshalNestedObject(settings, genshinGlobalPerfDataKey)
-	if err != nil {
+	if _, err := objectArray(&globalPerfData, genshinGlobalPerfDataKey, genshinSaveItemsKey); err != nil {
 		return nil, err
 	}
-	saveItems, err := unmarshalObjectSlice[saveItem](globalPerfData, genshinGlobalPerfDataKey, genshinSaveItemsKey)
-	if err != nil {
-		return nil, err
-	}
-	return &genshinGeneralData{
-		settings:       settings,
-		graphicsData:   graphicsData,
-		globalPerfData: globalPerfData,
-		grades:         grades,
-		saveItems:      saveItems,
-	}, nil
+	return &genshinGeneralData{settings: settings, graphicsData: graphicsData, globalPerfData: globalPerfData}, nil
 }
 
 func (d *genshinGeneralData) dcrEnabled() bool {
-	for _, entry := range d.grades {
-		if entry.Key == genshinDCRSettingKey && entry.Value == genshinDCREnabledValue {
+	for _, grade := range d.graphicsData.field(genshinVolatileGradesKey).items {
+		if jsonIntField(&grade, "key") == genshinDCRSettingKey &&
+			jsonIntField(&grade, "value") == genshinDCREnabledValue {
 			return true
 		}
 	}
-	for _, entry := range d.saveItems {
-		if entry.EntryType == genshinDCRSettingKey && entry.Index == genshinDCREnabledIndex {
+	for _, item := range d.globalPerfData.field(genshinSaveItemsKey).items {
+		if jsonIntField(&item, "entryType") == genshinDCRSettingKey &&
+			jsonIntField(&item, "index") == genshinDCREnabledIndex {
 			return true
 		}
 	}
@@ -147,106 +135,125 @@ func (d *genshinGeneralData) dcrEnabled() bool {
 
 func (d *genshinGeneralData) disableDCR() bool {
 	updated := false
+
+	grades := d.graphicsData.field(genshinVolatileGradesKey)
 	foundGrade := false
-	for i, entry := range d.grades {
-		if entry.Key != genshinDCRSettingKey {
+	for i := range grades.items {
+		grade := &grades.items[i]
+		if jsonIntField(grade, "key") != genshinDCRSettingKey {
 			continue
 		}
 		foundGrade = true
-		if entry.Value == genshinDCREnabledValue {
-			d.grades[i].Value = genshinDCRDisabledValue
+		if jsonIntField(grade, "value") == genshinDCREnabledValue {
+			grade.setField("value", jsonInt(genshinDCRDisabledValue))
 			updated = true
 		}
 	}
 	if !foundGrade {
-		d.grades = append(d.grades, volatileGrade{Key: genshinDCRSettingKey, Value: genshinDCRDisabledValue})
+		grades.items = append(grades.items, sleepyJSONValue{kind: '{', fields: []sleepyJSONField{
+			{key: "key", value: jsonInt(genshinDCRSettingKey)},
+			{key: "value", value: jsonInt(genshinDCRDisabledValue)},
+		}})
 		updated = true
 	}
+
+	items := d.globalPerfData.field(genshinSaveItemsKey)
 	foundItem := false
-	for i, entry := range d.saveItems {
-		if entry.EntryType != genshinDCRSettingKey {
+	for i := range items.items {
+		item := &items.items[i]
+		if jsonIntField(item, "entryType") != genshinDCRSettingKey {
 			continue
 		}
 		foundItem = true
-		if entry.Index == genshinDCREnabledIndex {
-			d.saveItems[i].Index = genshinDCRDisabledIndex
-			d.saveItems[i].ItemVersion = genshinDCRItemVersion
+		if jsonIntField(item, "index") == genshinDCREnabledIndex {
+			item.setField("index", jsonInt(genshinDCRDisabledIndex))
+			item.setField("itemVersion", sleepyJSONValue{scalar: genshinDCRItemVersion})
 			updated = true
 		}
 	}
 	if !foundItem {
-		d.saveItems = append(d.saveItems, saveItem{
-			EntryType:   genshinDCRSettingKey,
-			Index:       genshinDCRDisabledIndex,
-			ItemVersion: genshinDCRItemVersion,
-		})
+		items.items = append(items.items, sleepyJSONValue{kind: '{', fields: []sleepyJSONField{
+			{key: "entryType", value: jsonInt(genshinDCRSettingKey)},
+			{key: "index", value: jsonInt(genshinDCRDisabledIndex)},
+			{key: "itemVersion", value: sleepyJSONValue{scalar: genshinDCRItemVersion}},
+		}})
 		updated = true
 	}
 	return updated
 }
 
 func (d *genshinGeneralData) encode() ([]byte, error) {
-	gradesRaw, err := marshalCompact(d.grades)
+	graphicsJSON, err := compactSleepyJSON(d.graphicsData)
 	if err != nil {
 		return nil, err
 	}
-	d.graphicsData[genshinVolatileGradesKey] = gradesRaw
-	itemsRaw, err := marshalCompact(d.saveItems)
+	perfJSON, err := compactSleepyJSON(d.globalPerfData)
 	if err != nil {
 		return nil, err
 	}
-	d.globalPerfData[genshinSaveItemsKey] = itemsRaw
-	graphicsJSON, err := marshalCompact(d.graphicsData)
-	if err != nil {
-		return nil, err
-	}
-	perfJSON, err := marshalCompact(d.globalPerfData)
-	if err != nil {
-		return nil, err
-	}
-	graphicsString, err := json.Marshal(string(graphicsJSON))
-	if err != nil {
-		return nil, err
-	}
-	perfString, err := json.Marshal(string(perfJSON))
-	if err != nil {
-		return nil, err
-	}
-	d.settings[genshinGraphicsDataKey] = graphicsString
-	d.settings[genshinGlobalPerfDataKey] = perfString
-	outer, err := marshalCompact(d.settings)
+	d.settings.setField(genshinGraphicsDataKey, sleepyJSONValue{scalar: string(graphicsJSON)})
+	d.settings.setField(genshinGlobalPerfDataKey, sleepyJSONValue{scalar: string(perfJSON)})
+	outer, err := compactSleepyJSON(d.settings)
 	if err != nil {
 		return nil, err
 	}
 	return append(outer, 0), nil
 }
 
-func unmarshalNestedObject(settings map[string]json.RawMessage, key string) (map[string]json.RawMessage, error) {
-	raw, ok := settings[key]
-	if !ok {
-		return nil, fmt.Errorf("unknown graphics settings format: %q key not found", key)
+func parseNestedObject(settings *sleepyJSONValue, key string) (sleepyJSONValue, error) {
+	field := settings.field(key)
+	if field == nil {
+		return sleepyJSONValue{}, fmt.Errorf("unknown graphics settings format: %q key not found", key)
 	}
-	var encoded string
-	if err := json.Unmarshal(raw, &encoded); err != nil {
-		return nil, fmt.Errorf("unknown graphics settings format: %q is not a JSON string", key)
+	encoded, ok := field.scalar.(string)
+	if field.kind != 0 || !ok {
+		return sleepyJSONValue{}, fmt.Errorf("unknown graphics settings format: %q is not a JSON string", key)
 	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(encoded), &object); err != nil {
-		return nil, fmt.Errorf("unknown graphics settings format: %q is not JSON: %w", key, err)
+	object, err := parseSleepyJSON([]byte(encoded))
+	if err != nil {
+		return sleepyJSONValue{}, fmt.Errorf("unknown graphics settings format: %q is not JSON: %w", key, err)
+	}
+	if object.kind != '{' {
+		return sleepyJSONValue{}, fmt.Errorf("unknown graphics settings format: %q is not a JSON object", key)
 	}
 	return object, nil
 }
 
-func unmarshalObjectSlice[T any](object map[string]json.RawMessage, parent, key string) ([]T, error) {
-	raw, ok := object[key]
-	if !ok {
+func objectArray(object *sleepyJSONValue, parent, key string) (*sleepyJSONValue, error) {
+	array := object.field(key)
+	if array == nil {
 		return nil, fmt.Errorf("unknown graphics settings format: %q.%s key not found", parent, key)
 	}
-	var items []T
-	if err := json.Unmarshal(raw, &items); err != nil {
+	if array.kind != '[' {
 		return nil, fmt.Errorf("unknown graphics settings format: %q.%s is not an array", parent, key)
 	}
-	return items, nil
+	for _, item := range array.items {
+		if item.kind != '{' {
+			return nil, fmt.Errorf("unknown graphics settings format: %q.%s has a non-object entry", parent, key)
+		}
+	}
+	return array, nil
+}
+
+// jsonIntField returns an integer field, or -1 when it is missing or not an integer so it matches no setting.
+func jsonIntField(object *sleepyJSONValue, key string) int {
+	field := object.field(key)
+	if field == nil {
+		return -1
+	}
+	number, ok := field.scalar.(json.Number)
+	if !ok {
+		return -1
+	}
+	value, err := strconv.Atoi(number.String())
+	if err != nil {
+		return -1
+	}
+	return value
+}
+
+func jsonInt(value int) sleepyJSONValue {
+	return sleepyJSONValue{scalar: json.Number(strconv.Itoa(value))}
 }
 
 func stripNullTerminator(raw []byte) []byte {
@@ -263,14 +270,4 @@ func isASCII(raw []byte) bool {
 		}
 	}
 	return true
-}
-
-func marshalCompact(value any) ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(value); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }

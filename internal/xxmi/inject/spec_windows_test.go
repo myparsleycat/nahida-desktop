@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -73,6 +74,33 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	bypass.LoaderDLL = spec.LoaderDLL
 	if err := ValidateLaunchSpec(bypass); err != nil {
 		t.Fatalf("bypass extra DLL with verified injector was rejected: %v", err)
+	}
+}
+
+func TestValidateLaunchSpecAcceptsLinkedFolders(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	realGame := filepath.Join(root, "real-game")
+	if err := os.Mkdir(realGame, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"game.exe", "d3d11.dll"} {
+		if err := os.WriteFile(filepath.Join(realGame, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	game := filepath.Join(root, "game")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", game, realGame).CombinedOutput(); err != nil {
+		t.Skipf("junction creation unavailable: %v (%s)", err, output)
+	}
+
+	spec := LaunchSpec{
+		Mode: ModeXXMI, ProcessName: "game.exe", StartExe: filepath.Join(game, "game.exe"),
+		WorkDir: game, StartMethod: "Native", Priority: "Normal", InjectMode: "Bypass", TimeoutSeconds: 30,
+		ModuleDLL: filepath.Join(game, "d3d11.dll"),
+	}
+	if err := ValidateLaunchSpec(spec); err != nil {
+		t.Fatalf("game folder relocated with a junction was rejected: %v", err)
 	}
 }
 

@@ -72,53 +72,73 @@ func installDiagnosticValue(value string) string {
 	return value
 }
 
-func executeXcmdDeletes(commandRoot, importerFolder, section string) error {
+func executeXcmdDeletes(commandRoot, importerFolder, section string) ([]string, error) {
 	targetRoot, err := openInstallRoot(importerFolder)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = targetRoot.Close() }()
 	return executeXcmdDeletesRoot(context.Background(), commandRoot, targetRoot, section)
 }
 
-func executeXcmdDeletesRoot(ctx context.Context, commandRoot string, targetRoot *installRoot, section string) error {
+func executeXcmdDeletesRoot(
+	ctx context.Context,
+	commandRoot string,
+	targetRoot *installRoot,
+	section string,
+) ([]string, error) {
 	root, err := openInstallRoot(commandRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = root.Close() }()
 	return executeXcmdDeletesFromRoot(ctx, root, targetRoot, section)
 }
 
+// executeXcmdDeletesFromRoot runs one auto_update.xcmd section and returns the targets it skipped. A target
+// reached through a user's symbolic link or junction is never deleted, but it is skipped rather than failing
+// the whole section, since the reference launcher does not stop on such paths either.
 func executeXcmdDeletesFromRoot(
 	ctx context.Context,
 	commandRoot *installRoot,
 	targetRoot *installRoot,
 	section string,
-) error {
+) ([]string, error) {
 	raw, _, err := commandRoot.readFile(filepath.Join("Core", "auto_update.xcmd"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
-	for _, relative := range parseXcmdDeletes(string(raw), section) {
+	deletes, err := parseXcmdDeletes(string(raw), section)
+	if err != nil {
+		return nil, err
+	}
+	var skipped []string
+	for _, relative := range deletes {
 		if err := ctx.Err(); err != nil {
-			return err
+			return skipped, err
 		}
 		target, err := resolveXcmdDeleteRelative(relative)
 		if err != nil {
-			return err
+			return skipped, err
 		}
-		if err := targetRoot.removeAll(target); err != nil {
-			return err
+		err = targetRoot.removeAll(target)
+		if errors.Is(err, errInstallReparsePoint) {
+			skipped = append(skipped, target)
+			continue
+		}
+		if err != nil {
+			return skipped, err
 		}
 	}
-	return nil
+	return skipped, nil
 }
 
-func parseXcmdDeletes(raw, section string) []string {
+// parseXcmdDeletes returns the delete targets of one auto_update.xcmd section. Like the reference launcher,
+// any other command in that section is an error rather than being skipped.
+func parseXcmdDeletes(raw, section string) ([]string, error) {
 	current := ""
 	var out []string
 	for _, line := range strings.Split(raw, "\n") {
@@ -133,16 +153,16 @@ func parseXcmdDeletes(raw, section string) []string {
 		if !strings.EqualFold(current, section) {
 			continue
 		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok || !strings.EqualFold(strings.TrimSpace(key), "delete") {
-			continue
+		key, value, _ := strings.Cut(line, "=")
+		if !strings.EqualFold(strings.TrimSpace(key), "delete") {
+			return nil, fmt.Errorf("unknown auto_update.xcmd command %q in [%s]", strings.TrimSpace(key), section)
 		}
 		path := strings.TrimSpace(value)
 		if path != "" {
 			out = append(out, path)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func resolveXcmdDeletePath(importerFolder, raw string) (string, error) {

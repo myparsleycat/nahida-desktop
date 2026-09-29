@@ -58,12 +58,11 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		return LaunchResult{}, ctx.Err()
 	case <-timer.C:
 	}
-	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
 	if err := startGameProcess(spec); err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
 	}
-	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
+	pid, err := waitForProcess(ctx, spec.ProcessName, spec.timeout())
 	if err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
@@ -91,7 +90,7 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			return LaunchResult{}, err
 		}
 	}
-	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
 	}

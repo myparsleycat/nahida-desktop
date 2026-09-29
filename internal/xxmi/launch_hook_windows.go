@@ -4,26 +4,28 @@ package xxmi
 
 import (
 	"context"
-	"errors"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
-	"golang.org/x/sys/windows"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
+// runLaunchHook runs a user command through cmd.exe. The reference launcher ignores the command's exit code,
+// so a non-zero exit is returned as *exec.ExitError for the caller to downgrade to a warning. An enabled but
+// empty command is skipped, as the reference launcher does. An empty workDir inherits the current directory.
 func runLaunchHook(ctx context.Context, hook CommandHook, workDir string) error {
-	if !hook.Enabled {
+	if !hook.Enabled || strings.TrimSpace(hook.Command) == "" {
 		return nil
 	}
-	if strings.TrimSpace(hook.Command) == "" {
-		return errors.New("launch hook command is empty")
+
+	// A detached command must outlive the launch request, so only a waited command is bound to ctx.
+	commandCtx := context.Background()
+	if hook.Wait {
+		commandCtx = ctx
 	}
-	systemDir, err := windows.GetSystemDirectory()
+	command, err := inject.ShellCommand(commandCtx, hook.Command)
 	if err != nil {
 		return err
 	}
-	command := exec.CommandContext(ctx, filepath.Join(systemDir, "cmd.exe"), "/C", hook.Command)
 	command.Dir = workDir
 	if hook.Wait {
 		return command.Run()

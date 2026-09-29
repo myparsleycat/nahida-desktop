@@ -182,7 +182,7 @@ func deployRuntimeFiles(
 		return nil, err
 	}
 	defer func() { _ = root.Close() }()
-	if _, _, err := root.readFile("d3dx.ini"); err != nil {
+	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
 		return nil, fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
 	}
 	previous := runtimeManifest{Files: map[string]string{}}

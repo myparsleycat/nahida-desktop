@@ -24,6 +24,17 @@ type VersionPin struct {
 	Pinned string `json:"pinned,omitempty"`
 }
 
+// UnmarshalJSON replaces the whole pin so a stored pin cannot merge with a default follow value.
+func (p *VersionPin) UnmarshalJSON(data []byte) error {
+	type rawVersionPin VersionPin
+	var pin rawVersionPin
+	if err := json.Unmarshal(data, &pin); err != nil {
+		return err
+	}
+	*p = VersionPin(pin)
+	return nil
+}
+
 type CommandHook struct {
 	Enabled bool   `json:"enabled"`
 	Command string `json:"command"`
@@ -163,7 +174,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	switch key {
 	case "GIMI":
 		cfg.ProcessStartMethod = "Shell"
-		cfg.GIMI = &GIMIOptions{UnlockFPSValue: 120}
+		cfg.GIMI = &GIMIOptions{UnlockFPSValue: 120, DisableDCR: true}
 	case "SRMI":
 		cfg.SRMI = &SRMIOptions{}
 	case "HIMI":

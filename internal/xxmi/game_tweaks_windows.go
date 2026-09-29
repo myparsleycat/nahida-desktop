@@ -4,8 +4,10 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -36,11 +38,11 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 	case "SRMI":
 		if cfg.SRMI != nil && cfg.SRMI.UnlockFPS {
 			err := editRegistryJSON(registry.CURRENT_USER, []string{`Software\Cognosphere\Star Rail`},
-				"GraphicsSettings_Model_h2986158309", func(value map[string]any) error {
-					if _, ok := value["FPS"]; !ok {
+				"GraphicsSettings_Model_h2986158309", func(value *sleepyJSONValue) error {
+					if value.field("FPS") == nil {
 						return errors.New("star rail graphics settings are missing FPS")
 					}
-					value["FPS"] = 120
+					value.setField("FPS", sleepyJSONValue{scalar: json.Number("120")})
 					return nil
 				})
 			if err != nil {
@@ -55,12 +57,13 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 				return fmt.Errorf("HIMI_FPS_UNLOCK_FAILED: invalid FPS target %d", fps)
 			}
 			err := editRegistryJSON(registry.CURRENT_USER, []string{`Software\miHoYo\Honkai Impact 3rd`},
-				"GENERAL_DATA_V2_PersonalGraphicsSettingV2_h3480068519", func(value map[string]any) error {
-					if _, ok := value["TargetFrameRateForInLevel"]; !ok {
+				"GENERAL_DATA_V2_PersonalGraphicsSettingV2_h3480068519", func(value *sleepyJSONValue) error {
+					if value.field("TargetFrameRateForInLevel") == nil {
 						return errors.New("honkai impact graphics settings are missing TargetFrameRateForInLevel")
 					}
-					value["TargetFrameRateForInLevel"] = fps
-					value["TargetFrameRateForOthers"] = fps
+					target := sleepyJSONValue{scalar: json.Number(strconv.Itoa(fps))}
+					value.setField("TargetFrameRateForInLevel", target)
+					value.setField("TargetFrameRateForOthers", target)
 					return nil
 				})
 			if err != nil {

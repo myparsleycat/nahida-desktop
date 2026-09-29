@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -54,11 +55,10 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	} else if pid != 0 {
 		return LaunchResult{}, errors.New("XXMI_GAME_RUNNING")
 	}
-	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
 	if err := startGameProcess(spec); err != nil {
 		return LaunchResult{}, err
 	}
-	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
+	pid, err := waitForProcess(ctx, spec.ProcessName, spec.timeout())
 	if err != nil {
 		return LaunchResult{}, err
 	}
@@ -82,7 +82,7 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			return LaunchResult{}, err
 		}
 	}
-	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
 		return LaunchResult{}, err
 	}
 	return LaunchResult{PID: pid, InjectionVerified: false, Warnings: warnings}, nil
@@ -134,11 +134,10 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		}
 		defer func() { _, _, _ = unhookProc.Call(uintptr(unsafe.Pointer(&hook)), uintptr(unsafe.Pointer(&mutex))) }()
 	}
-	deadline := time.Now().Add(time.Duration(spec.TimeoutSeconds) * time.Second)
 	if err := startGameProcess(spec); err != nil {
 		return LaunchResult{}, err
 	}
-	pid, err := waitForProcess(ctx, spec.ProcessName, time.Until(deadline))
+	pid, err := waitForProcess(ctx, spec.ProcessName, spec.timeout())
 	if err != nil {
 		return LaunchResult{}, err
 	}
@@ -146,22 +145,30 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
-	if err := injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds); err != nil {
-		return LaunchResult{}, err
-	}
 	if !useHook {
+		// Match the reference injector: the XXMI DLL goes in first, and an extra library entry for the
+		// same DLL is not injected a second time.
 		code, _, _ := injectProc.Call(uintptr(pid), uintptr(unsafe.Pointer(module)), uintptr(spec.TimeoutSeconds))
 		if code != 0 {
 			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: Inject returned %d (%s)",
 				code, injectFailureReason(code))
 		}
-		if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+		extras := slices.DeleteFunc(slices.Clone(spec.ExtraDLLs), func(dll string) bool {
+			return strings.EqualFold(filepath.Clean(dll), filepath.Clean(spec.ModuleDLL))
+		})
+		if err := injectExtraDLLs(injectProc, pid, extras, spec.TimeoutSeconds); err != nil {
+			return LaunchResult{}, err
+		}
+		if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
 			return LaunchResult{}, err
 		}
 		return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
 	}
+	if err := injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds); err != nil {
+		return LaunchResult{}, err
+	}
 	earlyCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
-	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
+	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
 		return LaunchResult{}, err
 	}
 	lateCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
@@ -199,13 +206,12 @@ func startGameProcess(spec LaunchSpec) error {
 		return nil
 	}
 	if spec.CustomLaunchCmd != "" {
-		systemDir, err := windows.GetSystemDirectory()
+		command, err := ShellCommand(context.Background(), spec.CustomLaunchCmd)
 		if err != nil {
 			return err
 		}
-		command := exec.Command(filepath.Join(systemDir, "cmd.exe"), "/C", spec.CustomLaunchCmd)
 		command.Dir = spec.WorkDir
-		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+		command.SysProcAttr.CreationFlags = windows.CREATE_NEW_CONSOLE
 		if err := command.Start(); err != nil {
 			return err
 		}

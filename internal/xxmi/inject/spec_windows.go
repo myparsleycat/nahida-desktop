@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -107,6 +108,12 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	return nil
 }
 
+// timeout bounds a single launch wait. Like the reference launcher, process spawn and window appearance
+// each get the full timeout, so launchers that start the game through a wrapper do not share one budget.
+func (spec LaunchSpec) timeout() time.Duration {
+	return time.Duration(spec.TimeoutSeconds) * time.Second
+}
+
 func priorityClass(priority string) (uint32, error) {
 	switch priority {
 	case "Low":
@@ -149,58 +156,40 @@ func verifyFile(file VerifiedFile) error {
 	return nil
 }
 
+// validateRegularLocalFile follows links like the reference launcher: game and importer folders are often
+// relocated with junctions, and these paths come from the user's own settings, so a link grants nothing.
 func validateRegularLocalFile(path string) error {
 	if err := validateLocalPath(path); err != nil {
 		return err
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.Mode().IsRegular() {
 		return errors.New("path is not a regular file")
 	}
-	return rejectReparsePoint(path)
+	return nil
 }
 
 func validateLocalDirectory(path string) error {
 	if err := validateLocalPath(path); err != nil {
 		return err
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.IsDir() {
 		return errors.New("path is not a directory")
 	}
-	return rejectReparsePoint(path)
+	return nil
 }
 
 func validateLocalPath(path string) error {
 	if !filepath.IsAbs(path) || filepath.VolumeName(path) == "" || strings.HasPrefix(path, `\\`) ||
 		strings.ContainsRune(path, 0) {
 		return errors.New("path must be an absolute local drive path")
-	}
-	return nil
-}
-
-func rejectReparsePoint(path string) error {
-	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
-		windowsPath, err := windows.UTF16PtrFromString(current)
-		if err != nil {
-			return err
-		}
-		attributes, err := windows.GetFileAttributes(windowsPath)
-		if err != nil {
-			return err
-		}
-		if attributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-			return errors.New("reparse point is not allowed")
-		}
-		if filepath.Dir(current) == current {
-			break
-		}
 	}
 	return nil
 }

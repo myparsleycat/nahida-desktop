@@ -197,7 +197,7 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
 	if gameExecutable == "" {
 		gameExecutable = processName
 	}
-	if err := x.rejectLaunchBlockers(ctx, importer, gameExecutable); err != nil {
+	if err := x.rejectLaunchBlockers(ctx, importer, gameExecutable, true); err != nil {
 		return err
 	}
 
@@ -561,7 +561,7 @@ func (x *XXMI) installExternalImporterPackage(
 	}
 
 	stage = "pre-install"
-	if err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
+	if _, err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
 		_ = stageRoot.Close()
 		return fmt.Errorf("pre-install %s package: %w", spec.key, err)
 	}
@@ -571,7 +571,7 @@ func (x *XXMI) installExternalImporterPackage(
 		return fmt.Errorf("install %s package: %w", spec.key, err)
 	}
 	stage = "post-install"
-	if err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
+	if _, err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
 		_ = stageRoot.Close()
 		return fmt.Errorf("post-install %s package: %w", spec.key, err)
 	}

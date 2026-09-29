@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -21,8 +23,9 @@ const (
 )
 
 type importerInstallJournal struct {
-	State   string `json:"state"`
-	HadLive bool   `json:"hadLive"`
+	State     string   `json:"state"`
+	HadLive   bool     `json:"hadLive"`
+	Preserved []string `json:"preserved,omitempty"`
 }
 
 type importerInstallTransaction struct {
@@ -39,6 +42,8 @@ type importerInstallTransaction struct {
 	configRaw    []byte
 	configInfo   os.FileInfo
 	state        string
+	// preserved names top-level live entries that are moved into the new tree instead of copied.
+	preserved []string
 }
 
 func beginImporterInstallTransaction(
@@ -55,6 +60,12 @@ func beginImporterInstallTransaction(
 		return nil, err
 	}
 	importerAbsolute = filepath.Clean(importerAbsolute)
+	if info, err := os.Lstat(importerAbsolute); err == nil && isInstallReparsePoint(info) {
+		// Replace the link's target rather than the link, so a relocated importer folder stays where the user put it.
+		if importerAbsolute, err = filepath.EvalSymlinks(importerAbsolute); err != nil {
+			return nil, err
+		}
+	}
 	if filepath.Dir(importerAbsolute) == importerAbsolute {
 		return nil, errors.New("importer folder cannot be a volume root")
 	}
@@ -165,11 +176,107 @@ func (t *importerInstallTransaction) prepare(ctx context.Context) (*installRoot,
 		_ = stage.Close()
 		return nil, errors.New("importer folder identity changed before staging")
 	}
-	if err := copyTreeRoots(ctx, live, stage, nil); err != nil {
+	t.preserved, err = preservedImporterEntries(live)
+	if err != nil {
+		_ = stage.Close()
+		return nil, err
+	}
+	skip := func(relative string) bool {
+		first, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
+		return slices.ContainsFunc(t.preserved, func(name string) bool { return strings.EqualFold(name, first) })
+	}
+	if err := copyTreeRoots(ctx, live, stage, skip); err != nil {
 		_ = stage.Close()
 		return nil, err
 	}
 	return stage, nil
+}
+
+// preservedImporterEntries lists the live entries that belong to the user rather than the package: the Mods
+// folder and any top-level symbolic link or junction. The reference launcher updates in place and never
+// touches them, so they are moved into the new tree at commit instead of being copied or dropped.
+func preservedImporterEntries(live *installRoot) ([]string, error) {
+	entries, err := fs.ReadDir(live.root.FS(), ".")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		info, err := live.root.Lstat(entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		if strings.EqualFold(entry.Name(), "Mods") || isInstallReparsePoint(info) {
+			names = append(names, entry.Name())
+		}
+	}
+	return names, nil
+}
+
+// movePreserved moves preserved entries from the backed-up tree into the stage. When the package staged
+// content under the same name, a directory's content is written into the preserved entry, following a link as
+// the reference launcher's in-place update does, and the staged copy is discarded.
+func (t *importerInstallTransaction) movePreserved(ctx context.Context) error {
+	for _, name := range t.preserved {
+		from := filepath.Join(t.backupName, name)
+		to := filepath.Join(t.stageName, name)
+		if _, err := t.parent.root.Lstat(from); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+
+		staged, err := t.parent.root.Lstat(to)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+		case err != nil:
+			return err
+		case staged.IsDir() && t.parent.root.Remove(to) == nil:
+		default:
+			target, statErr := os.Stat(filepath.Join(t.parent.path, from))
+			if statErr == nil && target.IsDir() && staged.IsDir() {
+				if err := copyTreeContext(
+					ctx, filepath.Join(t.parent.path, to), filepath.Join(t.parent.path, from),
+				); err != nil {
+					return fmt.Errorf("merge staged %s into preserved entry: %w", name, err)
+				}
+			}
+			if err := t.parent.root.RemoveAll(to); err != nil {
+				return err
+			}
+		}
+
+		if err := t.parent.root.Rename(from, to); err != nil {
+			return fmt.Errorf("move preserved %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// restorePreserved moves preserved entries back into the backup before the new tree is discarded, so a
+// rollback never deletes a user's Mods folder.
+func (t *importerInstallTransaction) restorePreserved() error {
+	for _, name := range t.preserved {
+		backup := filepath.Join(t.backupName, name)
+		if _, err := t.parent.root.Lstat(backup); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		for _, container := range []string{t.liveName, t.stageName} {
+			moved := filepath.Join(container, name)
+			if _, err := t.parent.root.Lstat(moved); errors.Is(err, os.ErrNotExist) {
+				continue
+			} else if err != nil {
+				return err
+			}
+			if err := t.parent.root.Rename(moved, backup); err != nil {
+				return fmt.Errorf("restore preserved %s: %w", name, err)
+			}
+			break
+		}
+	}
+	return nil
 }
 
 func (t *importerInstallTransaction) commit(
@@ -202,6 +309,9 @@ func (t *importerInstallTransaction) commit(
 		}
 	}
 	if err := t.writeJournal(context.Background(), installStateTreeBackedUp); err != nil {
+		return nil, parsedConfig{}, err
+	}
+	if err := t.movePreserved(ctx); err != nil {
 		return nil, parsedConfig{}, err
 	}
 	if err := t.parent.renameChild(t.stageName, t.liveName); err != nil {
@@ -273,6 +383,7 @@ func (t *importerInstallTransaction) recoverInterrupted() error {
 	if err := json.Unmarshal(raw, &journal); err != nil {
 		return err
 	}
+	t.preserved = journal.Preserved
 	switch journal.State {
 	case installStatePrepared, installStateTreeBackedUp, installStateTreeInstalled:
 		return t.rollbackJournal(context.Background(), journal)
@@ -292,6 +403,10 @@ func (t *importerInstallTransaction) rollbackJournal(ctx context.Context, journa
 		result = errors.Join(result, err)
 	}
 	if backupExists {
+		if err := t.restorePreserved(); err != nil {
+			// Keep every tree in place; discarding the new tree now could delete preserved user data.
+			return errors.Join(result, err)
+		}
 		result = errors.Join(result, t.parent.removeAll(t.liveName))
 		if result == nil {
 			result = errors.Join(result, t.parent.renameChild(t.backupName, t.liveName))
@@ -318,7 +433,7 @@ func (t *importerInstallTransaction) rollbackJournal(ctx context.Context, journa
 }
 
 func (t *importerInstallTransaction) writeJournal(ctx context.Context, state string) error {
-	raw, err := json.Marshal(importerInstallJournal{State: state, HadLive: t.hadLive})
+	raw, err := json.Marshal(importerInstallJournal{State: state, HadLive: t.hadLive, Preserved: t.preserved})
 	if err != nil {
 		return err
 	}

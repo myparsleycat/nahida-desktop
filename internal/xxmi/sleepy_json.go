@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf16"
 )
 
 type sleepyJSONField struct {
@@ -157,4 +158,93 @@ func writeSleepyJSON(output *strings.Builder, value sleepyJSONValue, level int) 
 		output.Write(data)
 	}
 	return nil
+}
+
+// compactSleepyJSON writes value like Python's json.dumps(value, separators=(",", ":")) with the default
+// ensure_ascii, keeping the original key order and number text.
+func compactSleepyJSON(value sleepyJSONValue) ([]byte, error) {
+	var output strings.Builder
+	if err := writeCompactJSON(&output, value, 0); err != nil {
+		return nil, err
+	}
+	return []byte(output.String()), nil
+}
+
+func writeCompactJSON(output *strings.Builder, value sleepyJSONValue, level int) error {
+	if level > 64 {
+		return errors.New("JSON nesting exceeds limit")
+	}
+	switch value.kind {
+	case '{':
+		output.WriteByte('{')
+		for index, field := range value.fields {
+			if index > 0 {
+				output.WriteByte(',')
+			}
+			writeASCIIJSONString(output, field.key)
+			output.WriteByte(':')
+			if err := writeCompactJSON(output, field.value, level+1); err != nil {
+				return err
+			}
+		}
+		output.WriteByte('}')
+	case '[':
+		output.WriteByte('[')
+		for index, item := range value.items {
+			if index > 0 {
+				output.WriteByte(',')
+			}
+			if err := writeCompactJSON(output, item, level+1); err != nil {
+				return err
+			}
+		}
+		output.WriteByte(']')
+	default:
+		if text, ok := value.scalar.(string); ok {
+			writeASCIIJSONString(output, text)
+			return nil
+		}
+		data, err := json.Marshal(value.scalar)
+		if err != nil {
+			return fmt.Errorf("serialize JSON value: %w", err)
+		}
+		output.Write(data)
+	}
+	return nil
+}
+
+// writeASCIIJSONString escapes like Python's ensure_ascii: every character outside printable ASCII becomes
+// a lowercase \uXXXX escape, using a surrogate pair above the Basic Multilingual Plane.
+func writeASCIIJSONString(output *strings.Builder, text string) {
+	output.WriteByte('"')
+	for _, character := range text {
+		switch character {
+		case '"':
+			output.WriteString(`\"`)
+		case '\\':
+			output.WriteString(`\\`)
+		case '\b':
+			output.WriteString(`\b`)
+		case '\f':
+			output.WriteString(`\f`)
+		case '\n':
+			output.WriteString(`\n`)
+		case '\r':
+			output.WriteString(`\r`)
+		case '\t':
+			output.WriteString(`\t`)
+		default:
+			if character >= 0x20 && character < 0x7f {
+				output.WriteRune(character)
+				continue
+			}
+			if character > 0xffff {
+				high, low := utf16.EncodeRune(character)
+				fmt.Fprintf(output, `\u%04x\u%04x`, high, low)
+				continue
+			}
+			fmt.Fprintf(output, `\u%04x`, character)
+		}
+	}
+	output.WriteByte('"')
 }

@@ -42,12 +42,33 @@ func (f *fakeLaunch) disableSmoothMotion(context.Context, string) error {
 	return f.disableSmoothErr
 }
 
+func TestRejectLaunchBlockersIgnoresUnreadableSmoothMotion(t *testing.T) {
+	t.Parallel()
+	service := NewWithOptions(Options{})
+	unreadable := errors.New("nvapi failed")
+
+	err := service.rejectLaunchBlockersFrom(
+		t.Context(), "WWMI", "Client-Win64-Shipping.exe", true, &fakeLaunch{smoothErr: unreadable},
+	)
+	if err != nil {
+		t.Fatalf("error = %v, want an unreadable smooth motion setting to allow the launch", err)
+	}
+
+	err = service.rejectLaunchBlockersFrom(
+		t.Context(), "GIMI", "GenshinImpact.exe", true, &fakeLaunch{dcr: true, smoothErr: unreadable},
+	)
+	if !errors.Is(err, errGimiDCREnabled) {
+		t.Fatalf("error = %v, want the DCR blocker kept", err)
+	}
+}
+
 func TestCollectLaunchBlockers(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name     string
 		importer string
 		exe      string
+		skipDCR  bool
 		fake     fakeLaunch
 		want     []error
 		wantErr  string
@@ -70,6 +91,14 @@ func TestCollectLaunchBlockers(t *testing.T) {
 			fake:     fakeLaunch{dcr: true},
 			want:     []error{errGimiDCREnabled},
 			dcrReads: 1,
+			smooth:   1,
+		},
+		{
+			name:     "gimi without dcr check",
+			importer: "GIMI",
+			exe:      "GenshinImpact.exe",
+			skipDCR:  true,
+			fake:     fakeLaunch{dcr: true, dcrErr: errors.New("registry missing")},
 			smooth:   1,
 		},
 		{
@@ -113,7 +142,7 @@ func TestCollectLaunchBlockers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fake := tc.fake
-			got, err := collectLaunchBlockers(t.Context(), tc.importer, tc.exe, &fake)
+			got, err := collectLaunchBlockers(t.Context(), tc.importer, tc.exe, !tc.skipDCR, &fake)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
@@ -197,7 +226,7 @@ func TestCollectLaunchBlockersHonorsCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := collectLaunchBlockers(ctx, "GIMI", "GenshinImpact.exe", &fakeLaunch{dcr: true})
+	_, err := collectLaunchBlockers(ctx, "GIMI", "GenshinImpact.exe", true, &fakeLaunch{dcr: true})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}

@@ -81,6 +81,36 @@ func TestXXMILaunchCountUpdatePreservesConcurrentSettings(t *testing.T) {
 	}
 }
 
+func TestXXMILaunchCountStartsAtOneFromUnknownCount(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, config := range []string{`{"launchCount":-1}`, `{}`} {
+		if err := client.XXMIImporters.Upsert(ctx, "GIMI", config); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.XXMIImporters.IncrementLaunchCount(ctx, "GIMI"); err != nil {
+			t.Fatal(err)
+		}
+		row, err := client.XXMIImporters.Get(ctx, "GIMI")
+		if err != nil || row == nil {
+			t.Fatalf("updated importer = %+v, err = %v", row, err)
+		}
+		var settings struct {
+			LaunchCount int `json:"launchCount"`
+		}
+		if err := json.Unmarshal([]byte(row.Config), &settings); err != nil {
+			t.Fatal(err)
+		}
+		if settings.LaunchCount != 1 {
+			t.Fatalf("launch count from %s = %d, want 1", config, settings.LaunchCount)
+		}
+	}
+}
+
 func TestXXMIImportRollsBackAllStores(t *testing.T) {
 	t.Parallel()
 	client := mustNewTemp(t)

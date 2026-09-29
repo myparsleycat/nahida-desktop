@@ -10,38 +10,38 @@ func TestParseGenshinGeneralDataDetectsDCR(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name    string
-		grades  []volatileGrade
-		items   []saveItem
+		grades  []testGrade
+		items   []testSaveItem
 		enabled bool
 	}{
 		{
 			name:    "enabled in both records",
-			grades:  []volatileGrade{{Key: 21, Value: 2}},
-			items:   []saveItem{{EntryType: 21, Index: 1, ItemVersion: "OSRELWin5.0.0"}},
+			grades:  []testGrade{{Key: 21, Value: 2}},
+			items:   []testSaveItem{{EntryType: 21, Index: 1, ItemVersion: "OSRELWin5.0.0"}},
 			enabled: true,
 		},
 		{
 			name:    "enabled only in volatile grades",
-			grades:  []volatileGrade{{Key: 1, Value: 1}, {Key: 21, Value: 2}},
-			items:   []saveItem{{EntryType: 21, Index: 0, ItemVersion: "OSRELWin5.0.0"}},
+			grades:  []testGrade{{Key: 1, Value: 1}, {Key: 21, Value: 2}},
+			items:   []testSaveItem{{EntryType: 21, Index: 0, ItemVersion: "OSRELWin5.0.0"}},
 			enabled: true,
 		},
 		{
 			name:    "enabled only in save items",
-			grades:  []volatileGrade{{Key: 21, Value: 1}},
-			items:   []saveItem{{EntryType: 7, Index: 0}, {EntryType: 21, Index: 1}},
+			grades:  []testGrade{{Key: 21, Value: 1}},
+			items:   []testSaveItem{{EntryType: 7, Index: 0}, {EntryType: 21, Index: 1}},
 			enabled: true,
 		},
 		{
 			name:    "already disabled",
-			grades:  []volatileGrade{{Key: 21, Value: 1}},
-			items:   []saveItem{{EntryType: 21, Index: 0, ItemVersion: "OSRELWin5.0.0"}},
+			grades:  []testGrade{{Key: 21, Value: 1}},
+			items:   []testSaveItem{{EntryType: 21, Index: 0, ItemVersion: "OSRELWin5.0.0"}},
 			enabled: false,
 		},
 		{
 			name:    "dcr keys absent",
-			grades:  []volatileGrade{{Key: 1, Value: 1}},
-			items:   []saveItem{{EntryType: 7, Index: 0}},
+			grades:  []testGrade{{Key: 1, Value: 1}},
+			items:   []testSaveItem{{EntryType: 7, Index: 0}},
 			enabled: false,
 		},
 	}
@@ -62,8 +62,8 @@ func TestParseGenshinGeneralDataDetectsDCR(t *testing.T) {
 func TestParseGenshinGeneralDataStripsNullTerminator(t *testing.T) {
 	t.Parallel()
 	raw := mustEncodeGeneralData(t,
-		[]volatileGrade{{Key: 21, Value: 1}},
-		[]saveItem{{EntryType: 21, Index: 0}},
+		[]testGrade{{Key: 21, Value: 1}},
+		[]testSaveItem{{EntryType: 21, Index: 0}},
 	)
 	if !bytes.HasSuffix(raw, []byte{0}) {
 		t.Fatal("fixture is not null-terminated")
@@ -101,8 +101,8 @@ func TestParseGenshinGeneralDataRejectsUnknownShape(t *testing.T) {
 func TestDisableDCRMutatesEnabledSettings(t *testing.T) {
 	t.Parallel()
 	data, err := parseGenshinGeneralData(mustEncodeGeneralData(t,
-		[]volatileGrade{{Key: 21, Value: 2}, {Key: 3, Value: 4}},
-		[]saveItem{{EntryType: 21, Index: 1, ItemVersion: "old"}},
+		[]testGrade{{Key: 21, Value: 2}, {Key: 3, Value: 4}},
+		[]testSaveItem{{EntryType: 21, Index: 1, ItemVersion: "old"}},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -127,20 +127,20 @@ func TestDisableDCRMutatesEnabledSettings(t *testing.T) {
 	if roundTrip.dcrEnabled() {
 		t.Fatal("round-trip dcrEnabled")
 	}
-	if len(roundTrip.grades) != 2 || roundTrip.grades[0].Value != genshinDCRDisabledValue {
-		t.Fatalf("grades = %+v", roundTrip.grades)
+	grades, items := decodeGeneralData(t, encoded)
+	if len(grades) != 2 || grades[0].Value != genshinDCRDisabledValue {
+		t.Fatalf("grades = %+v", grades)
 	}
-	if roundTrip.saveItems[0].Index != genshinDCRDisabledIndex ||
-		roundTrip.saveItems[0].ItemVersion != genshinDCRItemVersion {
-		t.Fatalf("save item = %+v", roundTrip.saveItems[0])
+	if items[0].Index != genshinDCRDisabledIndex || items[0].ItemVersion != genshinDCRItemVersion {
+		t.Fatalf("save item = %+v", items[0])
 	}
 }
 
 func TestDisableDCRAppendsMissingEntries(t *testing.T) {
 	t.Parallel()
 	data, err := parseGenshinGeneralData(mustEncodeGeneralData(t,
-		[]volatileGrade{{Key: 1, Value: 1}},
-		[]saveItem{{EntryType: 7, Index: 0}},
+		[]testGrade{{Key: 1, Value: 1}},
+		[]testSaveItem{{EntryType: 7, Index: 0}},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -155,14 +155,11 @@ func TestDisableDCRAppendsMissingEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	roundTrip, err := parseGenshinGeneralData(encoded)
-	if err != nil {
-		t.Fatal(err)
+	grades, _ := decodeGeneralData(t, encoded)
+	if len(grades) != 2 {
+		t.Fatalf("grades = %+v", grades)
 	}
-	if len(roundTrip.grades) != 2 {
-		t.Fatalf("grades = %+v", roundTrip.grades)
-	}
-	last := roundTrip.grades[1]
+	last := grades[1]
 	if last.Key != genshinDCRSettingKey || last.Value != genshinDCRDisabledValue {
 		t.Fatalf("appended grade = %+v", last)
 	}
@@ -171,8 +168,8 @@ func TestDisableDCRAppendsMissingEntries(t *testing.T) {
 func TestDisableDCRSkipsAlreadyDisabledSettings(t *testing.T) {
 	t.Parallel()
 	data, err := parseGenshinGeneralData(mustEncodeGeneralData(t,
-		[]volatileGrade{{Key: 21, Value: 1}},
-		[]saveItem{{EntryType: 21, Index: 0, ItemVersion: genshinDCRItemVersion}},
+		[]testGrade{{Key: 21, Value: 1}},
+		[]testSaveItem{{EntryType: 21, Index: 0, ItemVersion: genshinDCRItemVersion}},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +179,39 @@ func TestDisableDCRSkipsAlreadyDisabledSettings(t *testing.T) {
 	}
 }
 
-func mustEncodeGeneralData(t *testing.T, grades []volatileGrade, items []saveItem) []byte {
+func TestDisableDCRPreservesUnknownFieldsAndOrder(t *testing.T) {
+	t.Parallel()
+	graphics := `{"volatileVersion":"x","customVolatileGrades":[{"key":21,"value":2,"extra":1.50}]}`
+	perf := `{"saveItems":[{"entryType":21,"index":1,"itemVersion":"old","flag":true}],"z":"\u00e9"}`
+	raw, err := json.Marshal(map[string]string{genshinGraphicsDataKey: graphics, genshinGlobalPerfDataKey: perf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put a later key first to prove the outer order is kept rather than sorted.
+	raw = append([]byte(`{"zOuter":1,`), raw[1:]...)
+	data, err := parseGenshinGeneralData(append(raw, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !data.disableDCR() {
+		t.Fatal("disableDCR = false, want true")
+	}
+	encoded, err := data.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := `{"zOuter":1,` +
+		`"globalPerfData":"{\"saveItems\":[{\"entryType\":21,\"index\":0,\"itemVersion\":\"OSRELWin5.0.0\",` +
+		`\"flag\":true}],\"z\":\"\\u00e9\"}",` +
+		`"graphicsData":"{\"volatileVersion\":\"x\",\"customVolatileGrades\":[{\"key\":21,\"value\":1,` +
+		`\"extra\":1.50}]}"}` + "\x00"
+	if string(encoded) != want {
+		t.Fatalf("encoded = %s\nwant    = %s", encoded, want)
+	}
+}
+
+func mustEncodeGeneralData(t *testing.T, grades []testGrade, items []testSaveItem) []byte {
 	t.Helper()
 	graphics, err := json.Marshal(map[string]any{genshinVolatileGradesKey: grades})
 	if err != nil {
@@ -200,4 +229,36 @@ func mustEncodeGeneralData(t *testing.T, grades []volatileGrade, items []saveIte
 		t.Fatal(err)
 	}
 	return append(outer, 0)
+}
+
+type testGrade struct {
+	Key   int `json:"key"`
+	Value int `json:"value"`
+}
+
+type testSaveItem struct {
+	EntryType   int    `json:"entryType"`
+	Index       int    `json:"index"`
+	ItemVersion string `json:"itemVersion"`
+}
+
+func decodeGeneralData(t *testing.T, encoded []byte) ([]testGrade, []testSaveItem) {
+	t.Helper()
+	var outer map[string]string
+	if err := json.Unmarshal(bytes.TrimSuffix(encoded, []byte{0}), &outer); err != nil {
+		t.Fatal(err)
+	}
+	var graphics struct {
+		Grades []testGrade `json:"customVolatileGrades"`
+	}
+	if err := json.Unmarshal([]byte(outer[genshinGraphicsDataKey]), &graphics); err != nil {
+		t.Fatal(err)
+	}
+	var perf struct {
+		Items []testSaveItem `json:"saveItems"`
+	}
+	if err := json.Unmarshal([]byte(outer[genshinGlobalPerfDataKey]), &perf); err != nil {
+		t.Fatal(err)
+	}
+	return graphics.Grades, perf.Items
 }

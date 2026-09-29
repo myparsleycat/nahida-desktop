@@ -50,6 +50,42 @@ func TestImporterSettingsRejectNestedGameFolderAndInvalidPin(t *testing.T) {
 	}
 }
 
+func TestPinnedVersionsSurviveReload(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.PackageVersion = VersionPin{Pinned: "1.2.3"}
+	cfg.XXMIVersion = VersionPin{Pinned: "1.1.7"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.PackageVersion != cfg.PackageVersion || stored.XXMIVersion != cfg.XXMIVersion {
+		t.Fatalf("reloaded pins = %+v, %+v", stored.PackageVersion, stored.XXMIVersion)
+	}
+	if err := ValidateImporterSettings("GIMI", stored); err != nil {
+		t.Fatalf("reloaded config validation: %v", err)
+	}
+}
+
 func TestImporterSettingsRejectInvalidWindowMode(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())

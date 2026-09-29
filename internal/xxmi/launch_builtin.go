@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,12 +62,38 @@ func (x *XXMI) launchBuiltinGameLocked(
 			x.eventEmit("xxmi:launch-progress", map[string]any{"importer": key, "stage": stage})
 		}
 	}
+	warn := func(warning string) {
+		if x.log != nil {
+			x.log.Warn(map[string]any{"importer": key, "stage": stage, "warning": warning}, "XXMI.StartGame")
+		}
+		if x.eventEmit != nil {
+			x.eventEmit("xxmi:launch-progress", map[string]any{
+				"importer": key, "stage": stage, "warning": warning,
+			})
+		}
+	}
 	if !cfg.Enabled {
 		return errors.New("XXMI_NOT_CONFIGURED")
 	}
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
 	}
+
+	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
+	// prepare drives, folders, or mods that the later steps read.
+	progress("pre-launch")
+	hookDir := ""
+	if info, err := os.Stat(cfg.GameFolder); err == nil && info.IsDir() {
+		hookDir = cfg.GameFolder
+	}
+	if err := runLaunchHook(ctx, cfg.RunPreLaunch, hookDir); err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			return err
+		}
+		warn(fmt.Sprintf("Pre-launch command exited with code %d", exit.ExitCode()))
+	}
+
 	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
 		return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
 	}
@@ -111,23 +138,23 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err != nil {
 		return err
 	}
-	if key == "GIMI" && cfg.ConfigureGame && migotoDLLUsed && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
-		enabled, err := x.gimiDCREnabled(ctx)
-		if err != nil {
+	// Like the reference launcher, DCR is only managed when game settings are configured for a loaded XXMI DLL.
+	checkDCR := key == "GIMI" && cfg.ConfigureGame && migotoDLLUsed
+	if checkDCR && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
+		if err := x.disableGIMIDCR(ctx); err != nil {
 			return err
 		}
-		if enabled {
-			if err := x.disableGIMIDCR(ctx); err != nil {
-				return err
-			}
-		}
 	}
-	if err := x.rejectLaunchBlockers(ctx, key, gameExe); err != nil {
+	if err := x.rejectLaunchBlockers(ctx, key, gameExe, checkDCR); err != nil {
 		return err
 	}
 	progress("xcmd-prelaunch")
-	if err := executeXcmdDeletes(cfg.ImporterFolder, cfg.ImporterFolder, "PreLaunch"); err != nil {
+	skipped, err := executeXcmdDeletes(cfg.ImporterFolder, cfg.ImporterFolder, "PreLaunch")
+	if err != nil {
 		return err
+	}
+	for _, target := range skipped {
+		warn("Skipped auto_update.xcmd delete through a symbolic link or junction: " + target)
 	}
 	progress("ensure-runtime")
 	if key == "EFMI" && cfg.Mode == RuntimeXXMI && !allowOldLibs {
@@ -218,10 +245,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
-	progress("pre-launch")
-	if err := runLaunchHook(ctx, cfg.RunPreLaunch, filepath.Dir(gameExe)); err != nil {
-		return err
-	}
 	progress("elevate")
 	release, err := x.elevated.Acquire(ctx)
 	if err != nil {
@@ -238,28 +261,27 @@ func (x *XXMI) launchBuiltinGameLocked(
 		return err
 	}
 	for _, warning := range result.Warnings {
-		if x.log != nil {
-			x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
-		}
-		if x.eventEmit != nil {
-			x.eventEmit("xxmi:launch-progress", map[string]any{
-				"importer": key, "stage": stage, "warning": warning,
-			})
-		}
+		warn(warning)
 	}
+
+	// The game is already running, so later failures are reported as warnings instead of a failed launch.
 	progress("post-load")
 	if err := runLaunchHook(ctx, cfg.RunPostLoad, filepath.Dir(gameExe)); err != nil {
-		return err
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			warn(fmt.Sprintf("Post-load command exited with code %d", exit.ExitCode()))
+		} else {
+			warn("Post-load command failed: " + err.Error())
+		}
 	}
 	progress("finish")
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
 	if client == nil {
-		return errors.New("XXMI settings store is not configured")
-	}
-	if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
-		return err
+		warn("Launch count was not updated: XXMI settings store is not configured")
+	} else if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
+		warn("Launch count was not updated: " + err.Error())
 	}
 	if x.log != nil {
 		x.log.Info(fmt.Sprintf("Started %s (PID: %d, verified: %t)", key, result.PID, result.InjectionVerified),
@@ -297,7 +319,16 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConf
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	data, info, err := root.readFile("d3dx.ini")
+	iniRoot, iniName, err := root.resolveUserFile("d3dx.ini")
+	if err != nil {
+		return err
+	}
+	if iniRoot == nil {
+		iniRoot = root
+	} else {
+		defer func() { _ = iniRoot.Close() }()
+	}
+	data, info, err := iniRoot.readFile(iniName)
 	if err != nil {
 		return err
 	}
@@ -321,7 +352,7 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConf
 	if !doc.Changed() {
 		return nil
 	}
-	return root.writeFileAtomic(ctx, "d3dx.ini", bytes.NewReader(doc.Bytes()), 0o600, info)
+	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
 }
 
 func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {

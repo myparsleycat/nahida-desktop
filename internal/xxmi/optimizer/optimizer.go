@@ -182,51 +182,76 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 	return report, nil
 }
 
+// walkINI visits the INI files under folder. Like the reference launcher's os.walk(followlinks=True), it
+// follows symbolic links and junctions, including a linked folder itself, since users commonly relocate Mods
+// or individual mods that way. A link back into one of its own ancestors is skipped to stop cycles.
 func walkINI(ctx context.Context, folder string, exclude []string, visit func(string, fs.FileInfo) error) error {
-	if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
+	info, err := os.Stat(folder)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
-	} else if err != nil {
+	}
+	if err != nil {
 		return err
 	}
-	return filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	if !info.IsDir() {
+		return nil
+	}
+	return walkINIDir(ctx, folder, []os.FileInfo{info}, exclude, visit)
+}
+
+func walkINIDir(
+	ctx context.Context,
+	folder string,
+	ancestors []os.FileInfo,
+	exclude []string,
+	visit func(string, fs.FileInfo) error,
+) error {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return nil
+		if excludedININame(entry.Name(), exclude) {
+			continue
 		}
-		if path != folder {
-			relative, err := filepath.Rel(folder, path)
-			if err != nil {
-				return err
-			}
-			for _, part := range strings.Split(relative, string(filepath.Separator)) {
-				for _, pattern := range exclude {
-					matched, _ := filepath.Match(strings.ToLower(pattern), strings.ToLower(part))
-					if matched {
-						if entry.IsDir() {
-							return filepath.SkipDir
-						}
-						return nil
-					}
-				}
-			}
-		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(path), ".ini") {
-			return nil
-		}
-		info, err := entry.Info()
+		path := filepath.Join(folder, entry.Name())
+		info, err := os.Stat(path)
 		if err != nil {
+			// A dangling link is ignored, as os.walk does.
+			if entry.Type()&(os.ModeSymlink|os.ModeIrregular) != 0 && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 			return err
 		}
-		if !info.Mode().IsRegular() {
-			return nil
+
+		if info.IsDir() {
+			if slices.ContainsFunc(ancestors, func(ancestor os.FileInfo) bool { return os.SameFile(ancestor, info) }) {
+				continue
+			}
+			if err := walkINIDir(ctx, path, append(ancestors, info), exclude, visit); err != nil {
+				return err
+			}
+			continue
 		}
-		return visit(path, info)
-	})
+		if info.Mode().IsRegular() && strings.EqualFold(filepath.Ext(path), ".ini") {
+			if err := visit(path, info); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func excludedININame(name string, exclude []string) bool {
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(strings.ToLower(pattern), strings.ToLower(name)); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func readINI(path string) (iniFile, error) {

@@ -304,6 +304,17 @@ func TestParseImporterVersionFile(t *testing.T) {
 	}
 }
 
+func TestParseXcmdDeletesRejectsUnknownCommandInSection(t *testing.T) {
+	raw := "[PreInstall]\ndelete = Core/a.ini\n; comment\n\n[PostInstall]\nrename = Core/b.ini\n"
+	got, err := parseXcmdDeletes(raw, "PreInstall")
+	if err != nil || len(got) != 1 || got[0] != "Core/a.ini" {
+		t.Fatalf("PreInstall = %q err=%v", got, err)
+	}
+	if _, err := parseXcmdDeletes(raw, "PostInstall"); err == nil || !strings.Contains(err.Error(), "rename") {
+		t.Fatalf("PostInstall err = %v, want unknown command", err)
+	}
+}
+
 func TestResolveXcmdDeletePath(t *testing.T) {
 	root := t.TempDir()
 	tests := []struct {

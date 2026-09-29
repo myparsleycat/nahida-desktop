@@ -110,10 +110,9 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	if err := service.StartGame(ctx, "EFMI"); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch", "ensure-runtime",
-		"deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer", "game-tweaks",
-		"pre-launch", "elevate",
-		"inject-launch", "inject-launch", "post-load", "finish"}
+	want := []string{"pre-launch", "resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch",
+		"ensure-runtime", "deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer",
+		"game-tweaks", "elevate", "inject-launch", "inject-launch", "post-load", "finish"}
 	if !slices.Equal(stages, want) {
 		t.Fatalf("launch stages = %v; want %v", stages, want)
 	}
@@ -125,7 +124,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, helper.spec)
 	}
 	stored, err := service.GetImporterConfig(ctx, "EFMI")
-	if err != nil || stored.LaunchCount != 0 {
+	if err != nil || stored.LaunchCount != 1 {
 		t.Fatalf("stored launch count = %d, err = %v", stored.LaunchCount, err)
 	}
 }

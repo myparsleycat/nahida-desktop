@@ -94,9 +94,11 @@ ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, key, argString(val
 	})
 }
 
+// IncrementLaunchCount records one launch. A missing or negative count means "not counted yet", so the
+// first recorded launch stores 1.
 func (s XXMIImportersStore) IncrementLaunchCount(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `UPDATE "xxmi_importers"
-SET "config" = json_set("config", '$.launchCount', COALESCE(json_extract("config", '$.launchCount'), -1) + 1),
+SET "config" = json_set("config", '$.launchCount', MAX(COALESCE(json_extract("config", '$.launchCount'), 0), 0) + 1),
     "updated_at" = ?
 WHERE "key" = ?`, time.Now().UTC().Format(time.RFC3339Nano), key)
 }

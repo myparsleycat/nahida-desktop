@@ -110,7 +110,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
 		t.Fatalf("launch error = %v", err)
 	}
-	if !slices.Equal(stages, []string{"resolve-game", "failed"}) {
+	if !slices.Equal(stages, []string{"pre-launch", "resolve-game", "failed"}) {
 		t.Fatalf("launch stages = %v", stages)
 	}
 	for _, expected := range []string{

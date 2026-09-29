@@ -4,14 +4,20 @@ package xxmi
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"golang.org/x/sys/windows/registry"
 )
 
-func editRegistryJSON(hive registry.Key, subkeys []string, valueName string, edit func(map[string]any) error) error {
+// editRegistryJSON rewrites a null-terminated JSON record like the reference launcher: compact, ASCII-only,
+// in the original key order, and only when the edit changed something.
+func editRegistryJSON(
+	hive registry.Key,
+	subkeys []string,
+	valueName string,
+	edit func(*sleepyJSONValue) error,
+) error {
 	var key registry.Key
 	var err error
 	for _, path := range subkeys {
@@ -32,7 +38,7 @@ type registryJSONValue interface {
 	SetBinaryValue(string, []byte) error
 }
 
-func editRegistryJSONValue(key registryJSONValue, valueName string, edit func(map[string]any) error) error {
+func editRegistryJSONValue(key registryJSONValue, valueName string, edit func(*sleepyJSONValue) error) error {
 	raw, valueType, err := key.GetBinaryValue(valueName)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotExist) {
@@ -51,7 +57,7 @@ func editRegistryJSONValue(key registryJSONValue, valueName string, edit func(ma
 	if err != nil {
 		return err
 	}
-	if err := edit(value); err != nil {
+	if err := edit(&value); err != nil {
 		return err
 	}
 	after, err := serializeRegistryJSON(value)
@@ -64,28 +70,21 @@ func editRegistryJSONValue(key registryJSONValue, valueName string, edit func(ma
 	return key.SetBinaryValue(valueName, after)
 }
 
-func serializeRegistryJSON(value map[string]any) ([]byte, error) {
-	data, err := json.Marshal(value)
+func serializeRegistryJSON(value sleepyJSONValue) ([]byte, error) {
+	data, err := compactSleepyJSON(value)
 	if err != nil {
 		return nil, err
 	}
 	return append(data, 0), nil
 }
 
-func parseRegistryJSON(raw []byte) (map[string]any, error) {
-	text := raw
-	if index := bytes.IndexByte(raw, 0); index >= 0 {
-		text = raw[:index]
+func parseRegistryJSON(raw []byte) (sleepyJSONValue, error) {
+	value, err := parseSleepyJSON(stripNullTerminator(raw))
+	if err != nil {
+		return sleepyJSONValue{}, fmt.Errorf("invalid graphics settings JSON: %w", err)
 	}
-	if !json.Valid(text) {
-		return nil, errors.New("invalid graphics settings JSON")
-	}
-	var value map[string]any
-	if err := json.Unmarshal(text, &value); err != nil {
-		return nil, err
-	}
-	if value == nil {
-		return nil, errors.New("graphics settings JSON is not an object")
+	if value.kind != '{' {
+		return sleepyJSONValue{}, errors.New("graphics settings JSON is not an object")
 	}
 	return value, nil
 }

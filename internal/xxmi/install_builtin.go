@@ -188,7 +188,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 		}
 	}
 	stage = "pre-install"
-	if err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
+	if _, err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
@@ -198,7 +198,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 		return err
 	}
 	stage = "post-install"
-	if err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
+	if _, err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
