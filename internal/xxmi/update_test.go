@@ -272,3 +272,42 @@ func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 		t.Fatalf("disabled auto-update: checks = %d, err = %v", checks, err)
 	}
 }
+
+func TestAutoUpdateLeavesPinnedPackagesUntouched(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := New()
+	x.UseClient(client)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	cfg.PackageVersion = VersionPin{Pinned: "1.0.0"}
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	for pkg, latest := range map[string]string{"importer:GIMI": "1.1.0", "xxmi-libs": "1.7.7"} {
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			Package: pkg, LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil {
+		t.Fatalf("pinned packages triggered auto-install: %v", err)
+	}
+	stored, err := x.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.PackageVersion.Pinned != "1.0.0" || stored.XXMIVersion.Pinned != "1.7.6" {
+		t.Fatalf("auto-update changed pins: %+v, err = %v", stored, err)
+	}
+}
