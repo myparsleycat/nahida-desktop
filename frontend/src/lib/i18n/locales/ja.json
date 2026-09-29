@@ -2076,7 +2076,13 @@
             "XXMI_LEGACY_LOADER_RUNNING": "別の従来版 3DMigoto ローダーが実行中です。",
             "XXMI_LEGACY_LOADER_EXITED": "従来版 3DMigoto ローダーが準備前に終了しました。",
             "XXMI_LEGACY_LOADER_NOT_READY": "従来版 3DMigoto ローダーの準備が完了しませんでした。",
-            "GIMI_FPS_UNLOCKER_RUNNING": "実行中の GI FPS Unlocker を終了してから再試行してください。"
+            "GIMI_FPS_UNLOCKER_RUNNING": "実行中の GI FPS Unlocker を終了してから再試行してください。",
+            "GIMI_FPS_UNLOCKER_CONFIG_FAILED": "GI FPS Unlocker を設定できませんでした。ファイルと起動設定を確認してください。",
+            "GIMI_HDR_CONFIG_FAILED": "原神の設定で HDR を有効にできませんでした。ゲームを一度起動し、レジストリへのアクセスを確認してください。",
+            "SRMI_FPS_UNLOCK_FAILED": "崩壊：スターレイルを 120 FPS に設定できませんでした。ゲーム内の FPS 設定を一度変更して再試行してください。",
+            "HIMI_FPS_UNLOCK_FAILED": "崩壊3rd の FPS 目標値を設定できませんでした。ゲーム内の FPS 設定を一度変更して再試行してください。",
+            "ZZMI_GAME_CONFIG_FAILED": "ゼンレスゾーンゼロのグラフィック設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。",
+            "WWMI_GAME_CONFIG_FAILED": "鳴潮の設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。"
           },
           "importerFolder": "インポーターフォルダー",
           "gameFolder": "ゲームフォルダー",

@@ -2160,7 +2160,13 @@
             "XXMI_LEGACY_LOADER_RUNNING": "Another legacy 3DMigoto loader is already running.",
             "XXMI_LEGACY_LOADER_EXITED": "The legacy 3DMigoto loader exited before it was ready.",
             "XXMI_LEGACY_LOADER_NOT_READY": "The legacy 3DMigoto loader did not become ready.",
-            "GIMI_FPS_UNLOCKER_RUNNING": "Close the running GI FPS Unlocker before launching again."
+            "GIMI_FPS_UNLOCKER_RUNNING": "Close the running GI FPS Unlocker before launching again.",
+            "GIMI_FPS_UNLOCKER_CONFIG_FAILED": "Could not configure GI FPS Unlocker. Check its files and launch settings.",
+            "GIMI_HDR_CONFIG_FAILED": "Could not enable HDR in Genshin Impact settings. Start the game once and check registry access.",
+            "SRMI_FPS_UNLOCK_FAILED": "Could not set Honkai: Star Rail to 120 FPS. Start the game and change its FPS setting once, then retry.",
+            "HIMI_FPS_UNLOCK_FAILED": "Could not set the Honkai Impact 3rd FPS target. Start the game and change its FPS setting once, then retry.",
+            "ZZMI_GAME_CONFIG_FAILED": "Could not configure Zenless Zone Zero graphics settings. Check the game folder or disable Configure Game Settings.",
+            "WWMI_GAME_CONFIG_FAILED": "Could not configure Wuthering Waves settings. Check the game folder or disable Configure Game Settings."
           },
           "importerFolder": "Importer folder",
           "gameFolder": "Game folder",

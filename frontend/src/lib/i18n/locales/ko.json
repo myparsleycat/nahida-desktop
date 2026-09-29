@@ -2094,7 +2094,13 @@
             "XXMI_LEGACY_LOADER_RUNNING": "다른 레거시 3DMigoto 로더가 이미 실행 중입니다.",
             "XXMI_LEGACY_LOADER_EXITED": "레거시 3DMigoto 로더가 준비 전에 종료되었습니다.",
             "XXMI_LEGACY_LOADER_NOT_READY": "레거시 3DMigoto 로더가 준비되지 않았습니다.",
-            "GIMI_FPS_UNLOCKER_RUNNING": "실행 중인 GI FPS Unlocker를 종료한 뒤 다시 실행하세요."
+            "GIMI_FPS_UNLOCKER_RUNNING": "실행 중인 GI FPS Unlocker를 종료한 뒤 다시 실행하세요.",
+            "GIMI_FPS_UNLOCKER_CONFIG_FAILED": "GI FPS Unlocker를 설정하지 못했습니다. 파일과 실행 설정을 확인하세요.",
+            "GIMI_HDR_CONFIG_FAILED": "원신 설정에서 HDR을 켜지 못했습니다. 게임을 한 번 실행하고 레지스트리 접근 권한을 확인하세요.",
+            "SRMI_FPS_UNLOCK_FAILED": "붕괴: 스타레일을 120 FPS로 설정하지 못했습니다. 게임에서 FPS 설정을 한 번 변경한 뒤 다시 시도하세요.",
+            "HIMI_FPS_UNLOCK_FAILED": "붕괴3rd의 FPS 목표값을 설정하지 못했습니다. 게임에서 FPS 설정을 한 번 변경한 뒤 다시 시도하세요.",
+            "ZZMI_GAME_CONFIG_FAILED": "젠레스 존 제로 그래픽 설정을 변경하지 못했습니다. 게임 폴더를 확인하거나 게임 설정 자동 조정을 끄세요.",
+            "WWMI_GAME_CONFIG_FAILED": "명조 설정을 변경하지 못했습니다. 게임 폴더를 확인하거나 게임 설정 자동 조정을 끄세요."
           },
           "importerFolder": "임포터 폴더",
           "gameFolder": "게임 폴더",

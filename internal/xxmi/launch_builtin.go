@@ -185,7 +185,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
 		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
-			return err
+			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
 	progress("pre-launch")

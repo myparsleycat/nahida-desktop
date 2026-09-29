@@ -82,6 +82,12 @@ it.each([
   "XXMI_LEGACY_LOADER_EXITED",
   "XXMI_LEGACY_LOADER_NOT_READY",
   "GIMI_FPS_UNLOCKER_RUNNING",
+  "GIMI_FPS_UNLOCKER_CONFIG_FAILED",
+  "GIMI_HDR_CONFIG_FAILED",
+  "SRMI_FPS_UNLOCK_FAILED",
+  "HIMI_FPS_UNLOCK_FAILED",
+  "ZZMI_GAME_CONFIG_FAILED",
+  "WWMI_GAME_CONFIG_FAILED",
 ])("shows guidance for %s and keeps the backend detail", async (code) => {
   const detail = `${code}: native code 200`;
   xxmi.StartGame.mockRejectedValueOnce(new Error(detail));
