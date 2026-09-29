@@ -123,18 +123,23 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		}
 		return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
 	}
-	code, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
-	if code != 0 {
-		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d", code)
-	}
+	earlyCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
 	if err := waitForVisibleWindow(ctx, pid, time.Until(deadline)); err != nil {
 		return LaunchResult{}, err
 	}
-	code, _, _ = waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
-	if code != 0 {
-		return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: WaitForInjection returned %d after game window", code)
+	lateCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
+	verified, warning := summarizeHookVerification(earlyCode, lateCode)
+	if warning != "" {
+		warnings = append(warnings, warning)
 	}
-	return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
+	return LaunchResult{PID: pid, InjectionVerified: verified, Warnings: warnings}, nil
+}
+
+func summarizeHookVerification(earlyCode, lateCode uintptr) (bool, string) {
+	if earlyCode == 0 || lateCode == 0 {
+		return true, ""
+	}
+	return false, fmt.Sprintf("Could not verify XXMI hook injection (early code %d, late code %d)", earlyCode, lateCode)
 }
 
 func injectExtraDLLs(proc *windows.Proc, pid int, dlls []string, timeoutSeconds int) error {
