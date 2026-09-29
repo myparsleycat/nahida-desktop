@@ -72,6 +72,96 @@ func TestImportExternalLauncherRollsBackFailedInstall(t *testing.T) {
 	}
 }
 
+func TestImportExternalLauncherReusesResetImporterFolder(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []ImportUserDataMode{ImportUserDataKeep, ImportUserDataMove} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			ctx, client, service, external := newImportTest(t)
+			source := filepath.Join(external, "GIMI")
+			writeImportSourceFiles(t, source)
+			root := t.TempDir()
+			target := filepath.Join(root, "GIMI")
+			fakeImportInstaller(t, service, nil)
+			if _, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+				Path: external, Root: root, UserData: ImportUserDataKeep,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := service.ResetBuiltinRuntime(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(
+				filepath.Join(target, "d3dx_user.ini"),
+				[]byte("built-in state"),
+				0o600,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+				Path: external, Root: root, UserData: mode,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(filepath.Join(target, "Mods"))
+			if err != nil || isInstallReparsePoint(info) != (mode == ImportUserDataKeep) {
+				t.Fatalf("Mods after %s reimport: info = %v, err = %v", mode, info, err)
+			}
+			assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
+			assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
+			if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row == nil {
+				t.Fatalf("reimported row = %+v, err = %v", row, err)
+			}
+		})
+	}
+}
+
+func TestImportExternalLauncherRestoresReusedFolderOnFailure(t *testing.T) {
+	t.Parallel()
+	ctx, _, service, external := newImportTest(t)
+	source := filepath.Join(external, "GIMI")
+	writeImportSourceFiles(t, source)
+	root := t.TempDir()
+	target := filepath.Join(root, "GIMI")
+	fakeImportInstaller(t, service, nil)
+	if _, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: root, UserData: ImportUserDataKeep,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "d3dx_user.ini"), []byte("built-in state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// An empty folder in place of the ShaderFixes link, as the built-in launcher leaves after the link is removed.
+	if err := os.Remove(filepath.Join(target, "ShaderFixes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(target, "ShaderFixes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeImportInstaller(t, service, errors.New("install failed"))
+
+	_, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: root, UserData: ImportUserDataMove,
+	})
+	if err == nil || !strings.Contains(err.Error(), "install failed") {
+		t.Fatalf("failed reimport result = %v", err)
+	}
+	assertFile(t, filepath.Join(source, "Mods", "user.ini"), "user mod")
+	assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
+	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")
+	if info, err := os.Lstat(filepath.Join(target, "Mods")); err != nil || !isInstallReparsePoint(info) {
+		t.Fatalf("Mods link not restored: info = %v, err = %v", info, err)
+	}
+	assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
+	if entries, err := os.ReadDir(filepath.Join(target, "ShaderFixes")); err != nil || len(entries) != 0 {
+		t.Fatalf("empty ShaderFixes not restored: entries = %v, err = %v", entries, err)
+	}
+	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "built-in state")
+}
+
 func TestImportExternalLauncherRejectsUnsafeTargets(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -80,14 +170,29 @@ func TestImportExternalLauncherRejectsUnsafeTargets(t *testing.T) {
 		want error
 	}{
 		{
-			name: "non-empty target",
+			name: "target with its own mods",
+			root: func(t *testing.T, _ string) string {
+				t.Helper()
+				root := t.TempDir()
+				if err := os.MkdirAll(filepath.Join(root, "GIMI", "Mods"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "GIMI", "Mods", "own.ini"), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return root
+			},
+			want: errImportTargetNotEmpty,
+		},
+		{
+			name: "target linking elsewhere",
 			root: func(t *testing.T, _ string) string {
 				t.Helper()
 				root := t.TempDir()
 				if err := os.MkdirAll(filepath.Join(root, "GIMI"), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(root, "GIMI", "d3dx.ini"), []byte("x"), 0o600); err != nil {
+				if err := createJunction(filepath.Join(root, "GIMI", "Mods"), t.TempDir()); err != nil {
 					t.Fatal(err)
 				}
 				return root

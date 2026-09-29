@@ -2055,7 +2055,7 @@
           "importUserDataMove": "移到此处",
           "importErrors": {
             "XXMI_IMPORT_FOLDER_CONFLICT": "根文件夹与外部启动器的导入器文件夹重叠。请选择单独的根文件夹。",
-            "XXMI_IMPORT_TARGET_NOT_EMPTY": "根文件夹下的导入器文件夹中已有文件。请选择空的根文件夹。",
+            "XXMI_IMPORT_TARGET_NOT_EMPTY": "根文件夹下的导入器文件夹中已有与要导入的用户数据（Mods、ShaderFixes）冲突的数据。请移走该文件夹或选择其他根文件夹。",
             "XXMI_IMPORT_MOVE_CROSS_VOLUME": "用户数据只能在同一驱动器内移动。请保留现有位置，或选择同一驱动器上的根文件夹。",
             "XXMI_GAME_RUNNING": "导入前请关闭游戏。"
           },

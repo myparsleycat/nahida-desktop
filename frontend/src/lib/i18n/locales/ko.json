@@ -2074,7 +2074,7 @@
           "importUserDataMove": "이쪽으로 이동",
           "importErrors": {
             "XXMI_IMPORT_FOLDER_CONFLICT": "루트 폴더가 외부 런처의 임포터 폴더와 겹칩니다. 별도의 루트 폴더를 선택하세요.",
-            "XXMI_IMPORT_TARGET_NOT_EMPTY": "루트 폴더 아래 임포터 폴더에 이미 파일이 있습니다. 빈 루트 폴더를 선택하세요.",
+            "XXMI_IMPORT_TARGET_NOT_EMPTY": "루트 폴더 아래 임포터 폴더에 가져올 사용자 데이터(Mods, ShaderFixes)와 겹치는 데이터가 이미 있습니다. 해당 폴더를 옮기거나 다른 루트 폴더를 선택하세요.",
             "XXMI_IMPORT_MOVE_CROSS_VOLUME": "사용자 데이터는 같은 드라이브 안에서만 이동할 수 있습니다. 기존 경로를 유지하거나 같은 드라이브의 루트 폴더를 선택하세요.",
             "XXMI_GAME_RUNNING": "가져오기 전에 게임을 종료하세요."
           },

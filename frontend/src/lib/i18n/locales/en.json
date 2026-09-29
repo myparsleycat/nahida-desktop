@@ -2140,7 +2140,7 @@
           "importUserDataMove": "Move here",
           "importErrors": {
             "XXMI_IMPORT_FOLDER_CONFLICT": "The root folder overlaps the external launcher's importer folders. Choose a separate root folder.",
-            "XXMI_IMPORT_TARGET_NOT_EMPTY": "An importer folder under the root folder already has files. Choose an empty root folder.",
+            "XXMI_IMPORT_TARGET_NOT_EMPTY": "An importer folder under the root folder already has its own user data (Mods or ShaderFixes). Move it aside or choose another root folder.",
             "XXMI_IMPORT_MOVE_CROSS_VOLUME": "User data can only be moved within the same drive. Keep the existing location or choose a root folder on the same drive.",
             "XXMI_GAME_RUNNING": "Close the game before importing."
           },
