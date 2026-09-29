@@ -42,6 +42,14 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	if !ok {
 		return errors.New("unknown importer")
 	}
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	if external {
+		stage = "install-external-package"
+		return x.installExternalImporterPackage(ctx, spec, input)
+	}
 	cfg, err := x.GetImporterConfig(ctx, spec.key)
 	if err != nil {
 		return err

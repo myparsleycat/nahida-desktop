@@ -17,6 +17,14 @@ func (x *XXMI) StartGameWithCompatibility(ctx context.Context, importer string, 
 		return errors.New("XXMI_BUSY")
 	}
 	defer x.releaseImporter(importer)
+
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	if external {
+		return x.startExternalGame(ctx, importer)
+	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err

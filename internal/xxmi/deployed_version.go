@@ -10,6 +10,11 @@ import (
 
 //wails:ignore
 func (x *XXMI) DeployedLibsVersion(ctx context.Context, importer string) (string, bool) {
+	if external, err := x.usesExternalLauncher(ctx); err != nil {
+		return "", false
+	} else if external {
+		return x.externalDeployedLibsVersion(ctx)
+	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil || !cfg.Enabled || cfg.Mode != RuntimeXXMI {
 		return "", false

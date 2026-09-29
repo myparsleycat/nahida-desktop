@@ -99,6 +99,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		}
 	}})
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	if err := service.SaveImporterConfig(ctx, "EFMI", cfg); err != nil {
 		t.Fatal(err)
 	}

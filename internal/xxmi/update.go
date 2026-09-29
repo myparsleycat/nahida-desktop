@@ -37,6 +37,10 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 	if client == nil {
 		return nil, errors.New("XXMI settings store is not configured")
 	}
+	// The external launcher tracks and installs its own package updates.
+	if mode, err := launcherMode(ctx, client); err != nil || mode == LauncherExternal {
+		return []UpdateStatus{}, err
+	}
 	rows, err := client.XXMIImporters.List(ctx)
 	if err != nil {
 		return nil, err

@@ -67,6 +67,7 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 	}
 	x := New()
 	x.UseClient(client)
+	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -105,6 +106,7 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 	}
 	x := New()
 	x.UseClient(client)
+	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -161,6 +163,7 @@ func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
 	}
 	x := New()
 	x.UseClient(client)
+	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -246,6 +249,7 @@ func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 		}
 	}})
 	x.UseClient(client)
+	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)

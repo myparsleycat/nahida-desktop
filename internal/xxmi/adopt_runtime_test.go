@@ -30,6 +30,7 @@ func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)
 	}

@@ -60,6 +60,7 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 }
 
 type Overview struct {
+	LauncherMode     LauncherMode        `json:"launcherMode"`
 	Configured       bool                `json:"configured"`
 	Root             string              `json:"root"`
 	Importers        []EnabledImporter   `json:"importers"`
@@ -76,6 +77,13 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	x.mu.RUnlock()
 	if client == nil {
 		return Overview{}, errors.New("XXMI settings store is not configured")
+	}
+	mode, err := launcherMode(ctx, client)
+	if err != nil {
+		return Overview{}, err
+	}
+	if mode == LauncherExternal {
+		return x.externalOverview(ctx)
 	}
 	root, err := client.Settings.GetValue(ctx, "xxmi_root")
 	if err != nil {
@@ -118,7 +126,12 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 			}
 		}
 	}
-	overview := Overview{Configured: len(rows) > 0, Root: filepath.Clean(rootPath), Importers: importers}
+	overview := Overview{
+		LauncherMode: LauncherBuiltin,
+		Configured:   len(rows) > 0,
+		Root:         filepath.Clean(rootPath),
+		Importers:    importers,
+	}
 	if overview.LibsCache, err = x.ListCachedLibs(ctx); err != nil {
 		overview.CacheIssues = append(overview.CacheIssues, "XXMI libraries: "+err.Error())
 	}
@@ -143,4 +156,16 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		}
 	}
 	return overview, nil
+}
+
+func (x *XXMI) externalOverview(ctx context.Context) (Overview, error) {
+	overview := Overview{LauncherMode: LauncherExternal, Importers: []EnabledImporter{}}
+	launcher, err := x.loadExternalLauncher(ctx)
+	if err != nil || launcher == nil {
+		return overview, err
+	}
+	overview.Configured = true
+	overview.Root = launcher.path
+	overview.Importers, err = x.externalEnabledImporters(ctx)
+	return overview, err
 }

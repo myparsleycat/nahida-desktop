@@ -23,6 +23,7 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	root := t.TempDir()
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	if err := service.SetRoot(ctx, root); err != nil {
 		t.Fatal(err)
 	}
@@ -92,6 +93,7 @@ func TestBuiltinConsumersIgnoreUnimportedExternalLauncher(t *testing.T) {
 	root := t.TempDir()
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	if err := service.SetRoot(ctx, root); err != nil {
 		t.Fatal(err)
 	}
@@ -133,6 +135,7 @@ func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	if err := service.EnableImporter(ctx, "GIMI", filepath.Join(t.TempDir(), "GIMI")); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +163,7 @@ func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -191,6 +195,7 @@ func TestOverviewSuggestsExternalRootUntilUserChoosesOne(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	useBuiltinLauncher(t, service)
 	overview, err := service.GetOverview(ctx)
 	if err != nil || overview.ExternalLauncher == nil || overview.Root != external {
 		t.Fatalf("external root suggestion = %+v, err = %v", overview, err)

@@ -19,6 +19,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 const (
@@ -501,6 +502,14 @@ func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath 
 	if t.xxmi == nil {
 		return nil
 	}
+	mode, err := t.xxmi.GetLauncherMode(ctx)
+	if err != nil {
+		return err
+	}
+	if mode == xxmi.LauncherExternal {
+		return t.xxmi.EnsureLauncherClosed(ctx)
+	}
+
 	if importerKey == "" {
 		importers, err := t.xxmi.GetEnabledImporters(ctx)
 		if err != nil {

@@ -321,6 +321,7 @@ func TestResolveExtraDLLPathsUsesConfiguredRoot(t *testing.T) {
 	}
 	x := New()
 	x.UseClient(client)
+	useBuiltinLauncher(t, x)
 	root := t.TempDir()
 	if err := x.SetRoot(ctx, root); err != nil {
 		t.Fatal(err)

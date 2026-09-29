@@ -108,6 +108,17 @@ func (x *XXMI) rejectLaunchBlockers(ctx context.Context, importer, exe string) e
 // A game profile inherits global NVIDIA Smooth Motion unless that profile has its own value,
 // and clearing writes the off value on the game profile only.
 func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	if external {
+		gameExecutable, err := x.externalGameExecutable(ctx, importer)
+		if err != nil {
+			return err
+		}
+		return x.clearLaunchBlockers(ctx, importer, gameExecutable)
+	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
@@ -124,6 +135,10 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 		}
 		gameExecutable = game.ExePath
 	}
+	return x.clearLaunchBlockers(ctx, importer, gameExecutable)
+}
+
+func (x *XXMI) clearLaunchBlockers(ctx context.Context, importer, gameExecutable string) error {
 	if err := applyLaunchFixes(ctx, importer, gameExecutable, x); err != nil {
 		if infra.IsReportedError(err) {
 			return err

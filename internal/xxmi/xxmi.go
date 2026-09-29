@@ -63,7 +63,9 @@ type EnabledImporter struct {
 }
 
 type Data struct {
+	Mode             LauncherMode      `json:"mode"`
 	XXMIPath         *string           `json:"xxmiPath"`
+	DLLVersion       *string           `json:"dllVersion"`
 	EnabledImporters []EnabledImporter `json:"enabledImporters"`
 }
 
@@ -133,12 +135,18 @@ func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Unlock()
 }
 
+// GetXXMIPath returns the external launcher folder in external mode and the built-in root otherwise.
 func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return nil, errors.New("XXMI settings store is not configured")
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
+	}
+	mode, err := launcherMode(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if mode == LauncherExternal {
+		return x.externalLauncherPath(ctx)
 	}
 	root, err := client.Settings.GetValue(ctx, "xxmi_root")
 	if err != nil {
@@ -152,11 +160,9 @@ func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
 }
 
 func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return nil, errors.New("XXMI settings store is not configured")
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
 	}
 	value, err := client.Settings.GetValue(ctx, xxmiPathKey)
 	if err != nil || value == nil || strings.TrimSpace(*value) == "" {
@@ -167,7 +173,11 @@ func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
 }
 
 func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
-	builtin, err := x.builtinEnabledImporters(ctx)
+	mode, err := x.GetLauncherMode(ctx)
+	if err != nil {
+		return Data{}, err
+	}
+	importers, err := x.GetEnabledImporters(ctx)
 	if err != nil {
 		return Data{}, err
 	}
@@ -175,10 +185,21 @@ func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
 	if err != nil {
 		return Data{}, err
 	}
-	return Data{XXMIPath: root, EnabledImporters: builtin}, nil
+	data := Data{Mode: mode, XXMIPath: root, EnabledImporters: importers}
+	if mode == LauncherExternal {
+		data.DLLVersion = dllVersion(root)
+	}
+	return data, nil
 }
 
 func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if external {
+		return x.externalEnabledImporters(ctx)
+	}
 	return x.builtinEnabledImporters(ctx)
 }
 
@@ -186,6 +207,13 @@ func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, erro
 //
 //wails:ignore
 func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return HuntingRuntime{}, err
+	}
+	if external {
+		return x.externalHuntingRuntime(ctx, importerKey)
+	}
 	builtin, err := x.builtinEnabledImporters(ctx)
 	if err != nil {
 		return HuntingRuntime{}, err
