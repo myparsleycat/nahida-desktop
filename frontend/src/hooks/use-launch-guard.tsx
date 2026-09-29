@@ -67,6 +67,7 @@ export function useLaunchGuard() {
   const [pendingImporter, setPendingImporter] = useState<string | null>(null);
   const [dialog, setDialog] = useState<LaunchDialog>("gimi-dcr");
   const [isConfirming, setIsConfirming] = useState(false);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [gameFolder, setGameFolder] = useState("");
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
@@ -78,11 +79,13 @@ export function useLaunchGuard() {
       await XXMI.StartGame(importer);
       return { status: "started" };
     } catch (error) {
-      const kind = launchDialog(toErrorMessage(error));
+      const message = toErrorMessage(error);
+      const kind = launchDialog(message);
       if (!kind) {
         throw error;
       }
       setDialog(kind);
+      setRuntimeError(kind === "runtime-repair" ? message : null);
       setPendingImporter(importer);
       return { status: "blocked", kind };
     }
@@ -94,6 +97,7 @@ export function useLaunchGuard() {
     confirmGeneration.current += 1;
     setIsConfirming(false);
     setPendingImporter(null);
+    setRuntimeError(null);
     setGameFolder("");
     setDetectedFolders(undefined);
   }, []);
@@ -133,6 +137,7 @@ export function useLaunchGuard() {
       const kind = launchDialog(message);
       if (kind) {
         setDialog(kind);
+        setRuntimeError(kind === "runtime-repair" ? message : null);
         return;
       }
       toast.error(message);
@@ -218,6 +223,11 @@ export function useLaunchGuard() {
                 )}
               </AlertDialogDescription>
             )}
+            {dialog === "runtime-repair" && runtimeError && (
+              <p className="max-h-24 overflow-auto text-xs break-all text-muted-foreground">
+                {runtimeError}
+              </p>
+            )}
           </AlertDialogHeader>
           {dialog === "game-folder" && (
             <div className="space-y-2">
@@ -301,6 +311,7 @@ export function useLaunchGuard() {
       handleKeepWounded,
       isConfirming,
       pendingImporter,
+      runtimeError,
       t,
     ],
   );

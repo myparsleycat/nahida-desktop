@@ -63,13 +63,16 @@ it("launches EFMI with old libraries only after confirmation", async () => {
 });
 
 it("repairs a damaged runtime before retrying launch", async () => {
-  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_RUNTIME_CORRUPTED"));
+  xxmi.StartGame.mockRejectedValueOnce(
+    new Error("XXMI_RUNTIME_CORRUPTED: C:\\Mods\\GIMI\\d3d11.dll is missing"),
+  );
   xxmi.StartGame.mockResolvedValueOnce(undefined);
   xxmi.RepairRuntime.mockResolvedValue([]);
 
   render(<Harness />);
   fireEvent.click(screen.getByRole("button", { name: "play" }));
   expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  expect(screen.getByText(/C:\\Mods\\GIMI\\d3d11\.dll is missing/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.repairRuntime" }));
 
   await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
