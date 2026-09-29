@@ -72,6 +72,64 @@ func TestImportExternalLauncherRollsBackFailedInstall(t *testing.T) {
 	}
 }
 
+func TestImportExternalLauncherInstallsLatestWhenVersionUnreadable(t *testing.T) {
+	t.Parallel()
+	ctx, _, service, external := newImportTest(t)
+	source := filepath.Join(external, "GIMI")
+	writeImportSourceFiles(t, source)
+	if err := os.Remove(filepath.Join(source, "Core", "GIMI", "main.ini")); err != nil {
+		t.Fatal(err)
+	}
+	installs := fakeImportInstaller(t, service, nil)
+
+	if _, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: t.TempDir(), UserData: ImportUserDataKeep,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(*installs, ",") != "GIMI@1" {
+		t.Fatalf("installs = %v, want the launcher's latest GIMI release", *installs)
+	}
+}
+
+func TestImportExternalLauncherRejectsUnknownImporterVersion(t *testing.T) {
+	t.Parallel()
+	ctx, client, service, external := newImportTest(t)
+	source := filepath.Join(external, "GIMI")
+	writeImportSourceFiles(t, source)
+	if err := os.Remove(filepath.Join(source, "Core", "GIMI", "main.ini")); err != nil {
+		t.Fatal(err)
+	}
+	config := xxmiTestConfig()
+	config["Packages"] = map[string]any{"packages": map[string]any{}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, xxmiConfigName), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	installs := fakeImportInstaller(t, service, nil)
+
+	_, err = service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: root, UserData: ImportUserDataMove,
+	})
+	if !errors.Is(err, errImportVersionUnknown) {
+		t.Fatalf("import result = %v, want %v", err, errImportVersionUnknown)
+	}
+	if len(*installs) != 0 {
+		t.Fatalf("installs = %v, want none", *installs)
+	}
+	assertFile(t, filepath.Join(source, "Mods", "user.ini"), "user mod")
+	if _, err := os.Lstat(filepath.Join(root, "GIMI")); !os.IsNotExist(err) {
+		t.Fatalf("importer folder created for a rejected import: %v", err)
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row != nil {
+		t.Fatalf("row saved after rejected import: row = %+v, err = %v", row, err)
+	}
+}
+
 func TestImportExternalLauncherReusesResetImporterFolder(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []ImportUserDataMode{ImportUserDataKeep, ImportUserDataMove} {

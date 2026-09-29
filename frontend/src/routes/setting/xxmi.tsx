@@ -60,6 +60,7 @@ const importErrorCodes = [
   "XXMI_IMPORT_FOLDER_CONFLICT",
   "XXMI_IMPORT_TARGET_NOT_EMPTY",
   "XXMI_IMPORT_MOVE_CROSS_VOLUME",
+  "XXMI_IMPORT_VERSION_UNKNOWN",
   "XXMI_GAME_RUNNING",
 ] as const;
 const settingsConfig = {
@@ -98,6 +99,8 @@ export function XXMIDashboard() {
   const [importOpen, setImportOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const root = editedRoot ?? overview?.root ?? "";
+  // A cleared root field imports into the saved root, which the overview already resolves to the default.
+  const importRoot = root.trim() || overview?.root || "";
   const pendingUpdates = installableUpdates(updates);
   const latestFPS = fpsReleases?.[0];
 
@@ -110,40 +113,48 @@ export function XXMIDashboard() {
 
   const importExternal = async (userData: ImportUserDataMode) => {
     if (!overview?.externalLauncher) return;
-    try {
-      const imported = await XXMI.ImportExternalLauncher({
-        path: overview.externalLauncher.path,
-        root,
-        userData,
-      });
-      // Moved Mods folders no longer exist at the old path, so games that used them follow the move.
-      if (userData === ImportUserDataMode.ImportUserDataMove) {
-        const normalize = (path: string) =>
-          path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
-        const games = (await Mod.GetGames()) ?? [];
-        for (const importer of imported ?? []) {
-          const oldMods = normalize(`${importer.previousFolder}\\Mods`);
-          for (const game of games.filter((game) => normalize(game.modFolderPath) === oldMods)) {
-            await Mod.UpdateGame(game.game, {
-              modFolderPath: `${importer.importerFolder}\\Mods`,
-              importer: game.importer,
-              linkedModFolderPath: game.linkedModFolderPath,
-              gameInstallPath: game.gameInstallPath,
-              gameExecutablePath: game.gameExecutablePath,
-            });
-          }
-        }
-        void queryClient.invalidateQueries({ queryKey: ["games"] });
-      }
-      setImportOpen(false);
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
-      toast.success(t("page.setting.xxmi.builtin.imported"));
-    } catch (error) {
+    const imported = await XXMI.ImportExternalLauncher({
+      path: overview.externalLauncher.path,
+      root: importRoot,
+      userData,
+    }).catch((error: unknown) => {
       const message = toErrorMessage(error);
       const code = importErrorCodes.find((code) => message.includes(code));
       toast.error(code ? t(`page.setting.xxmi.builtin.importErrors.${code}`) : message);
+      return undefined;
+    });
+    if (imported === undefined) return;
+    setImportOpen(false);
+    setEditedRoot(null);
+    refresh();
+    void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    toast.success(t("page.setting.xxmi.builtin.imported"));
+    if (userData !== ImportUserDataMode.ImportUserDataMove) return;
+
+    // The import is already committed, so a game that fails to follow the moved Mods folder is reported on its own
+    // instead of failing the import.
+    const normalize = (path: string) =>
+      path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+    const games = await Mod.GetGames().catch(() => undefined);
+    let failed = games === undefined;
+    for (const importer of imported ?? []) {
+      const oldMods = normalize(`${importer.previousFolder}\\Mods`);
+      for (const game of (games ?? []).filter(
+        (game) => normalize(game.modFolderPath) === oldMods,
+      )) {
+        await Mod.UpdateGame(game.game, {
+          modFolderPath: `${importer.importerFolder}\\Mods`,
+          importer: game.importer,
+          linkedModFolderPath: game.linkedModFolderPath,
+          gameInstallPath: game.gameInstallPath,
+          gameExecutablePath: game.gameExecutablePath,
+        }).catch(() => {
+          failed = true;
+        });
+      }
     }
+    void queryClient.invalidateQueries({ queryKey: ["games"] });
+    if (failed) toast.warning(t("page.setting.xxmi.builtin.importGamesFailed"));
   };
 
   const resetBuiltin = async () => {
@@ -572,7 +583,7 @@ export function XXMIDashboard() {
               {t("page.setting.xxmi.builtin.importUserDataTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("page.setting.xxmi.builtin.importUserDataDescription", { root })}
+              {t("page.setting.xxmi.builtin.importUserDataDescription", { root: importRoot })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">

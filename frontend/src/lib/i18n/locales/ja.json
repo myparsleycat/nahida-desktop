@@ -2050,14 +2050,16 @@
           "imported": "ランチャー設定をインポートしました",
           "importUserDataTitle": "ユーザーデータのインポート",
           "importUserDataDescription": "パッケージと XXMI ライブラリは {{root}} 下に新しくインストールします。Mods、ShaderFixes、d3dx_user.ini の扱いを選択してください。",
-          "importUserDataKeepHint": "維持: 外部ランチャーのフォルダーに残し、新しいインポーターフォルダーからリンクします。",
+          "importUserDataKeepHint": "維持: Mods と ShaderFixes は外部ランチャーのフォルダーに残し、新しいインポーターフォルダーからリンクします。d3dx_user.ini はコピーするため、以後二つのランチャー間で変更は同期されません。",
           "importUserDataMoveHint": "移動: 新しいインポーターフォルダーへ移動し、元の Mods フォルダーを使っていたゲームのパスも更新します。",
           "importUserDataKeep": "既存の場所を維持",
           "importUserDataMove": "ここへ移動",
+          "importGamesFailed": "ランチャー設定はインポートしましたが、一部のゲームを移動後の Mods フォルダーに切り替えられませんでした。ゲーム設定で Mods フォルダーを更新してください。",
           "importErrors": {
             "XXMI_IMPORT_FOLDER_CONFLICT": "ルートフォルダーが外部ランチャーのインポーターフォルダーと重なっています。別のルートフォルダーを選択してください。",
             "XXMI_IMPORT_TARGET_NOT_EMPTY": "ルートフォルダー下のインポーターフォルダーに、インポートするユーザーデータ（Mods、ShaderFixes）と重なるデータが既にあります。そのフォルダーを移動するか、別のルートフォルダーを選択してください。",
             "XXMI_IMPORT_MOVE_CROSS_VOLUME": "ユーザーデータは同じドライブ内でのみ移動できます。既存の場所を維持するか、同じドライブのルートフォルダーを選択してください。",
+            "XXMI_IMPORT_VERSION_UNKNOWN": "インポーターのインストール済みバージョンを読み取れません。外部ランチャーで更新または再インストールしてから、もう一度お試しください。",
             "XXMI_GAME_RUNNING": "インポートする前にゲームを終了してください。"
           },
           "packages": "共有パッケージ",

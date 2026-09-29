@@ -37,7 +37,7 @@ type importerImportPlan struct {
 	spec      importerPackageSpec
 	source    string
 	cfg       ImporterConfig
-	installed *string
+	installed string
 }
 
 func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, error) {
@@ -189,8 +189,18 @@ func (x *XXMI) ImportExternalLauncher(
 		}
 		cfg.OverwriteINI = info.Importer.OverwriteINI
 		cfg.Mode = RuntimeXXMI
+
+		// The built-in folder starts empty, so an importer whose deployed version cannot be read falls back to the
+		// launcher's latest known release; without either, the import would leave an enabled importer with no package.
 		installed := readImporterVersion(folder, spec)
-		if !autoUpdate && installed != nil {
+		if installed == nil && parsed.Packages.Packages[key].LatestVersion != "" {
+			latest := normalizeVersion(parsed.Packages.Packages[key].LatestVersion)
+			installed = &latest
+		}
+		if installed == nil {
+			return nil, fmt.Errorf("%w: %s in %q", errImportVersionUnknown, key, folder)
+		}
+		if !autoUpdate {
 			cfg.PackageVersion = VersionPin{Pinned: *installed}
 		}
 		if libsVersion != nil {
@@ -209,7 +219,7 @@ func (x *XXMI) ImportExternalLauncher(
 			return nil, fmt.Errorf("import %s config: %w", key, err)
 		}
 		plans = append(plans, importerImportPlan{
-			spec: spec, source: filepath.Clean(folder), cfg: cfg, installed: installed,
+			spec: spec, source: filepath.Clean(folder), cfg: cfg, installed: *installed,
 		})
 		importPackageState("importer:"+key, parsed.Packages.Packages[key])
 	}
@@ -268,13 +278,11 @@ func (x *XXMI) ImportExternalLauncher(
 		if err := migration.prepare(plan.source, plan.cfg.ImporterFolder, plan.cfg.OverwriteINI); err != nil {
 			return nil, err
 		}
-		if plan.installed != nil {
-			stage = "install-" + plan.spec.key
-			if err := x.installImporter(ctx, plan.spec, plan.cfg, InstallImporterPackageInput{
-				Importer: plan.spec.key, Version: *plan.installed,
-			}); err != nil {
-				return nil, fmt.Errorf("install %s %s: %w", plan.spec.key, *plan.installed, err)
-			}
+		stage = "install-" + plan.spec.key
+		if err := x.installImporter(ctx, plan.spec, plan.cfg, InstallImporterPackageInput{
+			Importer: plan.spec.key, Version: plan.installed,
+		}); err != nil {
+			return nil, fmt.Errorf("install %s %s: %w", plan.spec.key, plan.installed, err)
 		}
 		data, err := json.Marshal(plan.cfg)
 		if err != nil {

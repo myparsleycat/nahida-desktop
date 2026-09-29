@@ -28,6 +28,7 @@ var (
 	errImportFolderConflict    = errors.New("XXMI_IMPORT_FOLDER_CONFLICT")
 	errImportTargetNotEmpty    = errors.New("XXMI_IMPORT_TARGET_NOT_EMPTY")
 	errImportMoveAcrossVolumes = errors.New("XXMI_IMPORT_MOVE_CROSS_VOLUME")
+	errImportVersionUnknown    = errors.New("XXMI_IMPORT_VERSION_UNKNOWN")
 )
 
 type importerFolderMove struct {

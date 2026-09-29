@@ -2134,14 +2134,16 @@
           "imported": "Launcher settings imported",
           "importUserDataTitle": "Import user data",
           "importUserDataDescription": "Packages and XXMI libraries are installed fresh under {{root}}. Choose what happens to Mods, ShaderFixes, and d3dx_user.ini.",
-          "importUserDataKeepHint": "Keep: they stay in the external launcher folder and are linked into the new importer folders.",
+          "importUserDataKeepHint": "Keep: Mods and ShaderFixes stay in the external launcher folder and are linked into the new importer folders. d3dx_user.ini is copied, so changes no longer sync between the two launchers.",
           "importUserDataMoveHint": "Move: they move into the new importer folders, and games that used the old Mods folders are updated.",
           "importUserDataKeep": "Keep existing location",
           "importUserDataMove": "Move here",
+          "importGamesFailed": "Launcher settings were imported, but some games could not be switched to the moved Mods folder. Update their Mods folder in the game settings.",
           "importErrors": {
             "XXMI_IMPORT_FOLDER_CONFLICT": "The root folder overlaps the external launcher's importer folders. Choose a separate root folder.",
             "XXMI_IMPORT_TARGET_NOT_EMPTY": "An importer folder under the root folder already has its own user data (Mods or ShaderFixes). Move it aside or choose another root folder.",
             "XXMI_IMPORT_MOVE_CROSS_VOLUME": "User data can only be moved within the same drive. Keep the existing location or choose a root folder on the same drive.",
+            "XXMI_IMPORT_VERSION_UNKNOWN": "The installed version of an importer could not be read. Update or reinstall it in the external launcher, then try again.",
             "XXMI_GAME_RUNNING": "Close the game before importing."
           },
           "packages": "Shared packages",
