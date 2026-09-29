@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -23,6 +24,13 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		t.Fatal(err)
 	}
 	external := t.TempDir()
+	versionFile := filepath.Join(external, "GIMI", "Core", "GIMI", "main.ini")
+	if err := os.MkdirAll(filepath.Dir(versionFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(versionFile, []byte("global $version = 1.23\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	config := xxmiTestConfig()
 	config["Launcher"].(map[string]any)["pre_release"] = true
 	importers := config["Importers"].(map[string]any)
@@ -53,7 +61,7 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		!cfg.GIMI.UnlockFPS || cfg.GIMI.UnlockFPSValue != 144 {
 		t.Fatalf("imported config = %+v", cfg)
 	}
-	if cfg.PackageVersion.Follow != "latest" {
+	if cfg.PackageVersion.Pinned != "1.2.3" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)
 	}
 	for key, want := range map[string]string{
@@ -67,6 +75,47 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 	got, err := os.ReadFile(configPath)
 	if err != nil || string(got) != string(data) {
 		t.Fatalf("source config changed: %v", err)
+	}
+}
+
+func TestMapExternalImporterSettingsFixture(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("testdata", "external_importer_settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture map[string]map[string]any
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := cfg
+	want.ProcessStartMethod = "Native"
+	want.ProcessPriority = "High"
+	want.WindowMode = "Fullscreen"
+	want.ProcessTimeout = 45
+	want.XXMIDLLInitDelay = 250
+	want.UseLaunchOptions = false
+	want.LaunchOptions = "--sample"
+	want.ConfigureGame = false
+	want.LaunchCount = 9
+	want.RunPreLaunch = CommandHook{Enabled: true, Command: "pre-command", Wait: false}
+	want.RunPostLoad = CommandHook{Enabled: true, Command: "post-command", Wait: false}
+	want.CustomLaunch = CustomLaunch{Enabled: true, Command: "custom-command", InjectMode: "Inject"}
+	want.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{`C:\DLLs\first.dll`, `C:\DLLs\second.dll`}}
+	want.DeployedSignatures = map[string]string{"d3d11.dll": "sample-signature"}
+	want.Migoto = MigotoOptions{
+		EnforceRendering: false, EnableHunting: true, DumpShaders: true,
+		MuteWarnings: false, CallsLogging: true, DebugLogging: true, UnsafeMode: true,
+	}
+	want.GIMI = &GIMIOptions{UnlockFPS: true, UnlockFPSValue: 144, EnableHDR: true, DisableDCR: true}
+
+	mapExternalImporterSettings(&cfg, fixture["Importer"], fixture["Migoto"])
+	if !reflect.DeepEqual(cfg, want) {
+		t.Fatalf("imported settings = %+v; want %+v", cfg, want)
 	}
 }
 
