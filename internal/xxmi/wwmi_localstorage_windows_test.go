@@ -14,7 +14,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 	ctx := context.Background()
 	game := t.TempDir()
 	cfg := ImporterConfig{ConfigureGame: true, WWMI: &WWMIOptions{UnlockFPS: true}}
-	if err := configureWWMILocalStorage(ctx, game, cfg); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, true); err != nil {
 		t.Fatal(err)
 	}
 	database, err := sql.Open("sqlite", filepath.Join(game, "Client", "Saved", "LocalStorage", "LocalStorage.db"))
@@ -43,6 +43,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 		ctx,
 		game,
 		cfg,
+		true,
 	); err == nil ||
 		err.Error() != "WWMI_WOUNDED_FX_DECISION_REQUIRED" {
 		t.Fatalf("wounded effect error = %v", err)
@@ -50,7 +51,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 	cfg.WoundedFXDecided = true
 	cfg.WWMI.DisableWoundedFX = true
 	cfg.WWMI.UnlockFPS = false
-	if err := configureWWMILocalStorage(ctx, game, cfg); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, true); err != nil {
 		t.Fatal(err)
 	}
 	var trigger string
@@ -64,5 +65,30 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 		Scan(&wounded); err != nil ||
 		wounded != "0" {
 		t.Fatalf("SkinDamageMode = %q, error = %v", wounded, err)
+	}
+}
+
+func TestConfigureWWMILocalStorageBypassKeepsFPSWithoutMigotoSettings(t *testing.T) {
+	ctx := context.Background()
+	game := t.TempDir()
+	cfg := ImporterConfig{ConfigureGame: true, WWMI: &WWMIOptions{UnlockFPS: true, ForceMaxLODBias: true}}
+	if err := configureWWMILocalStorage(ctx, game, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", filepath.Join(game, "Client", "Saved", "LocalStorage", "LocalStorage.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = database.Close() }()
+	var fps string
+	if err := database.QueryRow("SELECT value FROM LocalStorage WHERE key = ?", "CustomFrameRate").
+		Scan(&fps); err != nil ||
+		fps != "120" {
+		t.Fatalf("CustomFrameRate = %q, error = %v", fps, err)
+	}
+	var count int
+	if err := database.QueryRow("SELECT count(*) FROM LocalStorage WHERE key IN (?, ?)", "ImageDetail", "RayTracing").
+		Scan(&count); err != nil || count != 0 {
+		t.Fatalf("Migoto settings count = %d, error = %v", count, err)
 	}
 }

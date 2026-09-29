@@ -15,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func configureWWMILocalStorage(ctx context.Context, gameFolder string, cfg ImporterConfig) error {
+func configureWWMILocalStorage(ctx context.Context, gameFolder string, cfg ImporterConfig, migotoDLLUsed bool) error {
 	folder := filepath.Join(gameFolder, "Client", "Saved", "LocalStorage")
 	root, err := ensureInstallRoot(folder)
 	if err != nil {
@@ -113,7 +113,7 @@ func configureWWMILocalStorage(ctx context.Context, gameFolder string, cfg Impor
 	if err := updateWWMIFPS(ctx, transaction, cfg.WWMI.UnlockFPS); err != nil {
 		return err
 	}
-	if cfg.ConfigureGame {
+	if cfg.ConfigureGame && migotoDLLUsed {
 		if cfg.WWMI.ForceMaxLODBias {
 			if err := setWWMIValue(ctx, transaction, "ImageDetail", "3"); err != nil {
 				return err

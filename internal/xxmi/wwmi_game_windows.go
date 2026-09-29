@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-func configureWWMIGame(ctx context.Context, cfg ImporterConfig) error {
+func configureWWMIGame(ctx context.Context, cfg ImporterConfig, migotoDLLUsed bool) error {
 	game := cfg.GameFolder
 	if !fileExists(filepath.Join(game, "Wuthering Waves.exe")) {
 		return fmt.Errorf("WWMI game folder is missing Wuthering Waves.exe")
@@ -21,7 +21,7 @@ func configureWWMIGame(ctx context.Context, cfg ImporterConfig) error {
 		}
 	}
 	if cfg.ConfigureGame || cfg.WWMI.UnlockFPS {
-		if err := configureWWMILocalStorage(ctx, game, cfg); err != nil {
+		if err := configureWWMILocalStorage(ctx, game, cfg, migotoDLLUsed); err != nil {
 			return err
 		}
 	}

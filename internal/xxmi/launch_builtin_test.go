@@ -312,3 +312,28 @@ func TestResolveExtraDLLPathsUsesConfiguredRoot(t *testing.T) {
 		t.Fatalf("extra DLLs = %q", paths)
 	}
 }
+
+func TestMigotoDLLUsedBypassExtraLibraries(t *testing.T) {
+	ctx := context.Background()
+	x := New()
+	cfg := ImporterConfig{ImporterFolder: filepath.Join(t.TempDir(), "GIMI")}
+	used, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil || !used {
+		t.Fatalf("default DLL use = %t, error = %v", used, err)
+	}
+	cfg.CustomLaunch = CustomLaunch{Enabled: true, InjectMode: "Bypass"}
+	used, err = x.migotoDLLUsed(ctx, cfg)
+	if err != nil || used {
+		t.Fatalf("bypass DLL use = %t, error = %v", used, err)
+	}
+	cfg.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{filepath.Join(cfg.ImporterFolder, "D3D11.DLL")}}
+	used, err = x.migotoDLLUsed(ctx, cfg)
+	if err != nil || !used {
+		t.Fatalf("extra DLL use = %t, error = %v", used, err)
+	}
+	cfg.ExtraLibraries.Enabled = false
+	used, err = x.migotoDLLUsed(ctx, cfg)
+	if err != nil || used {
+		t.Fatalf("disabled extra DLL use = %t, error = %v", used, err)
+	}
+}

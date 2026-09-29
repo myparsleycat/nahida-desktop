@@ -10,15 +10,12 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig) error {
+func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, migotoDLLUsed bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if key == "WWMI" && cfg.WWMI != nil {
-		return configureWWMIGame(ctx, cfg)
-	}
-	if !cfg.ConfigureGame {
-		return nil
+		return configureWWMIGame(ctx, cfg, migotoDLLUsed)
 	}
 	switch key {
 	case "GIMI":
@@ -58,7 +55,9 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig) e
 				})
 		}
 	case "ZZMI":
-		return configureZZMIGame(ctx, cfg.GameFolder)
+		if cfg.ConfigureGame && migotoDLLUsed {
+			return configureZZMIGame(ctx, cfg.GameFolder)
+		}
 	}
 	return nil
 }

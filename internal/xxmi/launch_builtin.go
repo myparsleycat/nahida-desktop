@@ -107,7 +107,11 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 
 	progress("launch-guard")
-	if key == "GIMI" && cfg.ConfigureGame && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
+	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	if key == "GIMI" && cfg.ConfigureGame && migotoDLLUsed && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
 		enabled, err := x.gimiDCREnabled(ctx)
 		if err != nil {
 			return err
@@ -176,7 +180,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	progress("game-tweaks")
-	if err := initializeGameLaunch(ctx, key, cfg); err != nil {
+	if err := initializeGameLaunch(ctx, key, cfg, migotoDLLUsed); err != nil {
 		return err
 	}
 	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
@@ -455,6 +459,26 @@ func (x *XXMI) resolveExtraDLLPaths(ctx context.Context, paths []string) ([]stri
 		resolved[i] = filepath.Join(*root, library)
 	}
 	return resolved, nil
+}
+
+func (x *XXMI) migotoDLLUsed(ctx context.Context, cfg ImporterConfig) (bool, error) {
+	if !cfg.CustomLaunch.Enabled || cfg.CustomLaunch.InjectMode != "Bypass" {
+		return true, nil
+	}
+	if !cfg.ExtraLibraries.Enabled {
+		return false, nil
+	}
+	paths, err := x.resolveExtraDLLPaths(ctx, cfg.ExtraLibraries.Paths)
+	if err != nil {
+		return false, err
+	}
+	moduleDLL := filepath.Join(cfg.ImporterFolder, "d3d11.dll")
+	for _, path := range paths {
+		if strings.EqualFold(filepath.Clean(path), moduleDLL) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func verifiedLaunchFile(path string) (inject.VerifiedFile, error) {
