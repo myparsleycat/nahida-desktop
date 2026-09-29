@@ -2064,6 +2064,7 @@
           "back": "XXMI に戻る",
           "general": "一般",
           "enabled": "有効",
+          "importerSetupRequired": "{{importer}} の設定とパッケージのインストールを完了してから起動してください。",
           "importerFolder": "インポーターフォルダー",
           "gameFolder": "ゲームフォルダー",
           "mode": "ランタイムモード",

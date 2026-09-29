@@ -2063,6 +2063,7 @@
           "back": "返回 XXMI",
           "general": "常规",
           "enabled": "启用",
+          "importerSetupRequired": "请先完成 {{importer}} 的设置并安装软件包，然后再启动。",
           "importerFolder": "导入器文件夹",
           "gameFolder": "游戏文件夹",
           "mode": "运行时模式",

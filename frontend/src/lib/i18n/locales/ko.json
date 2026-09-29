@@ -2082,6 +2082,7 @@
           "back": "XXMI로 돌아가기",
           "general": "일반",
           "enabled": "활성화",
+          "importerSetupRequired": "{{importer}} 설정과 패키지 설치를 완료한 뒤 실행하세요.",
           "importerFolder": "임포터 폴더",
           "gameFolder": "게임 폴더",
           "mode": "런타임 모드",

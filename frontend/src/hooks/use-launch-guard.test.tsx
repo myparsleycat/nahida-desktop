@@ -13,10 +13,12 @@ const xxmi = vi.hoisted(() => ({
   ValidateGameFolder: vi.fn(),
   RepairRuntime: vi.fn(),
 }));
+const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), warning: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 
 import { toast } from "sonner";
 
@@ -34,8 +36,28 @@ afterEach(() => {
   xxmi.DetectGameFolders.mockReset();
   xxmi.ValidateGameFolder.mockReset();
   xxmi.RepairRuntime.mockReset();
+  navigate.mockReset();
   toastError.mockClear();
 });
+
+it.each(["XXMI_NOT_CONFIGURED", "XXMI_IMPORTER_NOT_INSTALLED"])(
+  "opens importer setup for %s",
+  async (code) => {
+    xxmi.StartGame.mockRejectedValueOnce(new Error(code));
+    navigate.mockResolvedValue(undefined);
+
+    render(<Harness importer="GIMI" />);
+    fireEvent.click(screen.getByRole("button", { name: "play" }));
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        to: "/setting/xxmi/$importer",
+        params: { importer: "GIMI" },
+      }),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  },
+);
 
 it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("GIMI_DCR_ENABLED")).toBe("gimi-dcr");

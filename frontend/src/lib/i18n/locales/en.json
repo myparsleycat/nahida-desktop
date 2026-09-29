@@ -2148,6 +2148,7 @@
           "back": "Back to XXMI",
           "general": "General",
           "enabled": "Enabled",
+          "importerSetupRequired": "Configure {{importer}} and install its package before launching.",
           "importerFolder": "Importer folder",
           "gameFolder": "Game folder",
           "mode": "Runtime mode",

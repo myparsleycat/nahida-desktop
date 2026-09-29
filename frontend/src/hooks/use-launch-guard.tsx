@@ -12,6 +12,7 @@ import {
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { toErrorMessage } from "@shared/utils";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -33,7 +34,9 @@ type LaunchDialog =
   | "runtime-repair"
   | "old-libs";
 
-export type LaunchGuardResult = { status: "started" } | { status: "blocked"; kind: LaunchDialog };
+export type LaunchGuardResult =
+  | { status: "started" }
+  | { status: "blocked"; kind: LaunchDialog | "importer-setup" };
 
 export function launchDialog(message: string): LaunchDialog | null {
   if (message.includes(LAUNCH_BLOCKER_GAME_FOLDER)) {
@@ -64,6 +67,7 @@ export function launchDialog(message: string): LaunchDialog | null {
 
 export function useLaunchGuard() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [pendingImporter, setPendingImporter] = useState<string | null>(null);
   const [dialog, setDialog] = useState<LaunchDialog>("gimi-dcr");
   const [isConfirming, setIsConfirming] = useState(false);
@@ -74,22 +78,33 @@ export function useLaunchGuard() {
   >();
   const confirmGeneration = useRef(0);
 
-  const startImporter = useCallback(async (importer: string): Promise<LaunchGuardResult> => {
-    try {
-      await XXMI.StartGame(importer);
-      return { status: "started" };
-    } catch (error) {
-      const message = toErrorMessage(error);
-      const kind = launchDialog(message);
-      if (!kind) {
-        throw error;
+  const startImporter = useCallback(
+    async (importer: string): Promise<LaunchGuardResult> => {
+      try {
+        await XXMI.StartGame(importer);
+        return { status: "started" };
+      } catch (error) {
+        const message = toErrorMessage(error);
+        if (
+          message.includes("XXMI_NOT_CONFIGURED") ||
+          message.includes("XXMI_IMPORTER_NOT_INSTALLED")
+        ) {
+          toast.info(t("page.setting.xxmi.builtin.importerSetupRequired", { importer }));
+          await navigate({ to: "/setting/xxmi/$importer", params: { importer } });
+          return { status: "blocked", kind: "importer-setup" };
+        }
+        const kind = launchDialog(message);
+        if (!kind) {
+          throw error;
+        }
+        setDialog(kind);
+        setRuntimeError(kind === "runtime-repair" ? message : null);
+        setPendingImporter(importer);
+        return { status: "blocked", kind };
       }
-      setDialog(kind);
-      setRuntimeError(kind === "runtime-repair" ? message : null);
-      setPendingImporter(importer);
-      return { status: "blocked", kind };
-    }
-  }, []);
+    },
+    [navigate, t],
+  );
 
   // Bumping the generation cancels any in-flight confirmation, so dismissing the dialog
   // while ClearLaunchBlockers is still running does not launch the game afterwards.
