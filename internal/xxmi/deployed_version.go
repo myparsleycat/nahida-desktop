@@ -14,7 +14,11 @@ func (x *XXMI) DeployedLibsVersion(ctx context.Context, importer string) (string
 	if err != nil || !cfg.Enabled || cfg.Mode != RuntimeXXMI {
 		return "", false
 	}
-	data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
+	return deployedLibsVersion(cfg.ImporterFolder)
+}
+
+func deployedLibsVersion(folder string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(folder, runtimeManifestName))
 	if err != nil {
 		return "", false
 	}

@@ -94,6 +94,7 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if version := normalizeVersion(cfg.XXMIVersion.Pinned); version != "" {
 		return version, nil
 	}
+	deployed, _ := deployedLibsVersion(cfg.ImporterFolder)
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
@@ -107,7 +108,10 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, "xxmi-libs")
 		if err == nil && len(releases) > 0 {
-			return releases[0].Version, nil
+			return selectLibsVersion(releases[0].Version, "", deployed), nil
+		}
+		if deployed != "" {
+			return deployed, nil
 		}
 		if cached := newestCachedPackageVersion("xxmi-libs"); cached != "" {
 			return cached, nil
@@ -117,7 +121,25 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 		}
 		return "", errors.New("XXMI libraries latest version is unknown")
 	}
-	return normalizeVersion(*pkg.LatestVersion), nil
+	skipped := ""
+	if pkg.SkippedVersion != nil {
+		skipped = normalizeVersion(*pkg.SkippedVersion)
+	}
+	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed), nil
+}
+
+func selectLibsVersion(latest, skipped, deployed string) string {
+	if deployed == "" || latest == deployed {
+		return latest
+	}
+	if latest == "" || latest == skipped {
+		return deployed
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil || verifyXXMILibsCache(filepath.Join(root, "packages", "xxmi-libs", latest), latest) != nil {
+		return deployed
+	}
+	return latest
 }
 
 func newestLegacyRuntime(parent string) (string, error) {

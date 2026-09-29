@@ -396,3 +396,58 @@ func TestResolveLibsVersionFetchesLatestBeforeUpdateCheck(t *testing.T) {
 		t.Fatalf("resolved version = %q, err = %v", version, err)
 	}
 }
+
+func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := NewWithOptions(Options{})
+	x.UseClient(client)
+	folder := t.TempDir()
+	cfg, err := DefaultImporterConfig("GIMI", folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := json.Marshal(runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.0.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName), manifest, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	latest := "2.0.0"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		db.XXMIPackageRow{Package: "xxmi-libs", LatestVersion: &latest},
+	); err != nil {
+		t.Fatal(err)
+	}
+	version, err := x.resolveLibsVersion(ctx, cfg)
+	if err != nil || version != "1.0.0" {
+		t.Fatalf("uncached update selected %q, err = %v", version, err)
+	}
+	if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+		Package: "xxmi-libs", LatestVersion: &latest, SkippedVersion: &latest,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	version, err = x.resolveLibsVersion(ctx, cfg)
+	if err != nil || version != "1.0.0" {
+		t.Fatalf("skipped update selected %q, err = %v", version, err)
+	}
+	cfg.XXMIVersion.Pinned = "2.0.0"
+	version, err = x.resolveLibsVersion(ctx, cfg)
+	if err != nil || version != "2.0.0" {
+		t.Fatalf("pinned version selected %q, err = %v", version, err)
+	}
+}
