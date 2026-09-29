@@ -108,7 +108,7 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, "xxmi-libs")
 		if err == nil && len(releases) > 0 {
-			return selectLibsVersion(releases[0].Version, "", deployed), nil
+			return selectLibsVersion(releases[0].Version, "", deployed, verifiedCachedLibsVersion), nil
 		}
 		if deployed != "" {
 			return deployed, nil
@@ -125,21 +125,25 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg.SkippedVersion != nil {
 		skipped = normalizeVersion(*pkg.SkippedVersion)
 	}
-	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed), nil
+	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, verifiedCachedLibsVersion), nil
 }
 
-func selectLibsVersion(latest, skipped, deployed string) string {
+func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {
 	if deployed == "" || latest == deployed {
 		return latest
 	}
 	if latest == "" || latest == skipped {
 		return deployed
 	}
-	root, err := xxmiCacheRoot()
-	if err != nil || verifyXXMILibsCache(filepath.Join(root, "packages", "xxmi-libs", latest), latest) != nil {
+	if !cacheVerified(latest) {
 		return deployed
 	}
 	return latest
+}
+
+func verifiedCachedLibsVersion(version string) bool {
+	root, err := xxmiCacheRoot()
+	return err == nil && verifyXXMILibsCache(filepath.Join(root, "packages", "xxmi-libs", version), version) == nil
 }
 
 func newestLegacyRuntime(parent string) (string, error) {

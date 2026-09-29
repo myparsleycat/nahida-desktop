@@ -451,3 +451,32 @@ func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.
 		t.Fatalf("pinned version selected %q, err = %v", version, err)
 	}
 }
+
+func TestSelectLibsVersionRespectsSkippedAndVerifiedUpdates(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, latest, skipped, deployed, want string
+		verified                              bool
+		wantChecks                            int
+	}{
+		{name: "verified update", latest: "2.0.0", deployed: "1.0.0", verified: true, want: "2.0.0", wantChecks: 1},
+		{name: "failed update", latest: "2.0.0", deployed: "1.0.0", want: "1.0.0", wantChecks: 1},
+		{name: "skipped cached update", latest: "2.0.0", skipped: "2.0.0", deployed: "1.0.0", verified: true, want: "1.0.0"},
+		{name: "initial install", latest: "2.0.0", want: "2.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			checks := 0
+			got := selectLibsVersion(tc.latest, tc.skipped, tc.deployed, func(version string) bool {
+				checks++
+				if version != tc.latest {
+					t.Fatalf("checked %q, want %q", version, tc.latest)
+				}
+				return tc.verified
+			})
+			if got != tc.want || checks != tc.wantChecks {
+				t.Fatalf("selected %q with %d cache checks; want %q with %d", got, checks, tc.want, tc.wantChecks)
+			}
+		})
+	}
+}
