@@ -44,6 +44,23 @@ func TestIsValidWindowsFilename(t *testing.T) {
 	}
 }
 
+func TestIsUnaddressableName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"Loading...", true}, {"Folder.", true}, {"space ", true}, {"...", true},
+		{"mod.ini", false}, {".hidden", false}, {"Mod", false}, {".", false}, {"..", false},
+	}
+	for _, tt := range tests {
+		if got := IsUnaddressableName(tt.name); got != tt.want {
+			t.Errorf("IsUnaddressableName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestSanitizeWindowsFilename(t *testing.T) {
 	t.Parallel()
 

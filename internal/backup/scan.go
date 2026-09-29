@@ -178,6 +178,15 @@ func scanTargets(
 				result.skipped["link"]++
 				return nil
 			}
+			// A name ending in a dot or space cannot be opened by path, so reading
+			// it would fail the whole run; the entry is counted once and left out.
+			if path != root && platform.IsUnaddressableName(entry.Name()) {
+				result.skipped["unaddressable"]++
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			if entry.IsDir() {
 				return nil
 			}

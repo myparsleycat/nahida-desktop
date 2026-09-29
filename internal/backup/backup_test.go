@@ -104,6 +104,34 @@ func TestScanTargetsFiltersAndCountsSkipped(t *testing.T) {
 	}
 }
 
+func TestScanTargetsSkipsUnaddressableNames(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "merged.ini"), "ini")
+	extended := `\\?\` + root
+	if err := os.Mkdir(extended+`\Loading...`, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{`Loading...\mod.ini`, `trailing.`} {
+		if err := os.WriteFile(extended+`\`+name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(extended) })
+
+	result, err := scanTargets(t.Context(), []Target{{Path: root}}, func(string, int64) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.files) != 1 || result.files[0].relPath != "merged.ini" {
+		t.Fatalf("scanned = %+v", result.files)
+	}
+	if result.skipped["unaddressable"] != 2 {
+		t.Fatalf("skipped = %v", result.skipped)
+	}
+}
+
 func TestHashFilesReusesTheCache(t *testing.T) {
 	t.Parallel()
 
