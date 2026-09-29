@@ -63,6 +63,9 @@ func TestImportExternalLauncherKeepsImporterFolderAndSourceConfig(t *testing.T) 
 		!cfg.GIMI.UnlockFPS || cfg.GIMI.UnlockFPSValue != 144 {
 		t.Fatalf("imported config = %+v", cfg)
 	}
+	if cfg.WindowMode != "Windowed" {
+		t.Fatalf("imported window mode = %q", cfg.WindowMode)
+	}
 	if len(cfg.ExtraLibraries.Paths) != 1 ||
 		cfg.ExtraLibraries.Paths[0] != filepath.Join(external, "extensions", "sample.dll") {
 		t.Fatalf("imported extra libraries = %q", cfg.ExtraLibraries.Paths)

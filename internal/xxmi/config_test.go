@@ -50,6 +50,24 @@ func TestImporterSettingsRejectNestedGameFolderAndInvalidPin(t *testing.T) {
 	}
 }
 
+func TestImporterSettingsRejectInvalidWindowMode(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"} {
+		cfg.WindowMode = mode
+		if err := ValidateImporterSettings("GIMI", cfg); err != nil {
+			t.Fatalf("valid window mode %q rejected: %v", mode, err)
+		}
+	}
+	cfg.WindowMode = "other"
+	if err := ValidateImporterSettings("GIMI", cfg); err == nil {
+		t.Fatal("invalid window mode accepted")
+	}
+}
+
 func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

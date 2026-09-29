@@ -217,7 +217,18 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		cfg.ProcessPriority = value
 	}
 	if value := getString("window_mode"); value != "" {
-		cfg.WindowMode = value
+		switch strings.ToLower(strings.ReplaceAll(value, " ", "")) {
+		case "windowed":
+			cfg.WindowMode = "Windowed"
+		case "borderless":
+			cfg.WindowMode = "Borderless"
+		case "fullscreen":
+			cfg.WindowMode = "Fullscreen"
+		case "exclusivefullscreen":
+			cfg.WindowMode = "Exclusive Fullscreen"
+		default:
+			cfg.WindowMode = value
+		}
 	}
 	cfg.ProcessTimeout = getInt("process_timeout", cfg.ProcessTimeout)
 	cfg.XXMIDLLInitDelay = getInt("xxmi_dll_init_delay", cfg.XXMIDLLInitDelay)

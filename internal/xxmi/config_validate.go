@@ -54,6 +54,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if cfg.XXMIDLLInitDelay < 0 || cfg.XXMIDLLInitDelay > 600000 {
 		return fmt.Errorf("invalid XXMI DLL initialization delay")
 	}
+	if !slices.Contains([]string{"Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"}, cfg.WindowMode) {
+		return fmt.Errorf("invalid window mode %q", cfg.WindowMode)
+	}
 	if !slices.Contains([]string{"Hook", "Inject", "Bypass"}, cfg.CustomLaunch.InjectMode) {
 		return fmt.Errorf("invalid custom launch injection mode %q", cfg.CustomLaunch.InjectMode)
 	}
