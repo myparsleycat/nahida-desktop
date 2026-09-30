@@ -26,6 +26,7 @@ import {
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { toErrorMessage } from "@shared/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   FolderOpenIcon,
@@ -108,6 +109,7 @@ const applyModelDefaults = (
 
 function AgentSettingsRoute() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<AgentSettingsView>();
   const [catalog, setCatalog] = useState<AgentProviderCatalogView>();
   const [apiKey, setAPIKey] = useState("");
@@ -217,6 +219,7 @@ function AgentSettingsRoute() {
     } catch (error) {
       toast.error(String(error));
     } finally {
+      void queryClient.invalidateQueries({ queryKey: ["agent", "settings"] });
       setBusy(false);
     }
   };
@@ -290,6 +293,7 @@ function AgentSettingsRoute() {
       toast.error(String(error));
     } finally {
       setLogin(undefined);
+      void queryClient.invalidateQueries({ queryKey: ["agent", "settings"] });
       setBusy(false);
     }
   };
@@ -331,6 +335,7 @@ function AgentSettingsRoute() {
     } catch (error) {
       toast.error(String(error));
     } finally {
+      void queryClient.invalidateQueries({ queryKey: ["agent", "settings"] });
       setBusy(false);
     }
   };

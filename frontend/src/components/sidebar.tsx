@@ -1,3 +1,4 @@
+import { Service as Agent } from "@bindings/agent";
 import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { openGlobalAgent } from "@renderer/lib/agent-navigation";
@@ -6,7 +7,7 @@ import { viewStore } from "@renderer/store/drive";
 import { gameBananaStore } from "@renderer/store/gamebanana";
 import { useGlobalStore } from "@renderer/store/global";
 import { getAggregateTransferProgress } from "@shared/transfer-progress";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
@@ -36,6 +37,19 @@ export function Sidebar({ className }: { className?: string }) {
   const transfers = useGlobalStore((state) => state.transfers);
   const { session, isBackendOffline } = useAuth();
   const showDriveNav = !!session;
+  const agentSettings = useQuery({
+    queryKey: ["agent", "settings"],
+    queryFn: () => Agent.GetSettings(),
+  });
+  // Custom endpoints can serve local models or authenticate through their configured headers.
+  const showAgentNav =
+    !agentSettings.isError &&
+    !!agentSettings.data?.provider &&
+    !!agentSettings.data.endpoint.trim() &&
+    !!agentSettings.data.model.trim() &&
+    (agentSettings.data.provider === "custom" ||
+      agentSettings.data.credential.kind === "api" ||
+      agentSettings.data.credential.kind === "oauth");
   const retryDriveQueriesIfNeeded = () => {
     if (!isBackendOffline) return;
     void queryClient.invalidateQueries({ queryKey: ["drive"] });
@@ -228,23 +242,26 @@ export function Sidebar({ className }: { className?: string }) {
             <TooltipContent side="right">Tools</TooltipContent>
           </Tooltip>
 
-          <Tooltip disableHoverablePopup>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isAgentPage)}
-                  aria-current={isAgentPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => void openGlobalAgent(navi)}
-                />
-              }
-            >
-              <SparklesIcon className={cn(iconSize)} />
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("page.agent.title")}</TooltipContent>
-          </Tooltip>
+          {showAgentNav && (
+            <Tooltip disableHoverablePopup>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className={getNavButtonClassName(isAgentPage)}
+                    aria-current={isAgentPage ? "page" : undefined}
+                    aria-label={t("page.agent.title")}
+                    onPointerDown={handlePointerDown}
+                    onClick={() => void openGlobalAgent(navi)}
+                  />
+                }
+              >
+                <SparklesIcon className={cn(iconSize)} />
+              </TooltipTrigger>
+              <TooltipContent side="right">{t("page.agent.title")}</TooltipContent>
+            </Tooltip>
+          )}
 
           <Separator orientation="horizontal" />
 
