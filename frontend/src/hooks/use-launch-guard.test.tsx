@@ -51,7 +51,7 @@ it.each(["XXMI_NOT_CONFIGURED", "XXMI_IMPORTER_NOT_INSTALLED"])(
 
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
-        to: "/setting/xxmi/$importer",
+        to: "/xxmi/$importer",
         params: { importer: "GIMI" },
       }),
     );

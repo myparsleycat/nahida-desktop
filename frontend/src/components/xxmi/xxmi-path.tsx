@@ -2,7 +2,7 @@ import { XXMI } from "@bindings/xxmi";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import type { XXMIData } from "@renderer/routes/setting/xxmi";
+import type { XXMIData } from "@renderer/routes/xxmi/index";
 import { InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

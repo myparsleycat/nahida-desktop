@@ -2093,6 +2093,7 @@
           "autoUpdate": "パッケージを自動更新",
           "prereleases": "プレリリースを含める",
           "importers": "インポーター",
+          "manage": "管理",
           "updateAvailable": "更新あり",
           "running": "実行中",
           "notInstalled": "未インストール",

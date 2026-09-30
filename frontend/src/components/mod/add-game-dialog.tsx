@@ -178,7 +178,7 @@ function AddGameDialogContent({
 
   const handleOpenXXMISettings = () => {
     onClose();
-    void navi({ to: "/setting/xxmi" });
+    void navi({ to: "/xxmi" });
   };
 
   const handleImporterChange = (value: string, onChange: (value: string) => void) => {

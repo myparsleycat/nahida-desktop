@@ -61,7 +61,7 @@ vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
   useLaunchGuard: () => ({ startImporter: vi.fn(), launchGuardDialog: null }),
 }));
-vi.mock("@renderer/components/setting/wwmi-graphics-settings", () => ({
+vi.mock("@renderer/components/xxmi/wwmi-graphics-settings", () => ({
   WWMIGraphicsSettings: () => null,
 }));
 vi.mock("@tanstack/react-query", () => ({
@@ -86,12 +86,12 @@ vi.mock("@tanstack/react-router", () => ({
     useParams: () => ({ importer: "GIMI" }),
   }),
   lazyRouteComponent: (component: unknown) => component,
-  useNavigate: () => vi.fn(),
+  useBlocker: () => ({ status: "idle" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
-import { XXMIImporterSettings } from "@renderer/components/setting/xxmi-importer-settings";
+import { XXMIImporterSettings } from "@renderer/components/xxmi/xxmi-importer-settings";
 
 afterEach(() => {
   cleanup();

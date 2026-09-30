@@ -113,7 +113,7 @@ export function useLaunchGuard() {
           message.includes("XXMI_IMPORTER_NOT_INSTALLED")
         ) {
           toast.info(t("page.setting.xxmi.builtin.importerSetupRequired", { importer }));
-          await navigate({ to: "/setting/xxmi/$importer", params: { importer } });
+          await navigate({ to: "/xxmi/$importer", params: { importer } });
           return { status: "blocked", kind: "importer-setup" };
         }
         const kind = launchDialog(message);
