@@ -153,305 +153,309 @@ export function XXMIDashboard() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl p-4">
-      {external ? (
-        <Card className="mx-auto max-w-2xl">
-          <CardContent className="space-y-6">
-            <XXMIExternalLauncher />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {pendingUpdates.length > 0 && (
-            <Card className="border-primary/40 bg-primary/5">
-              <CardHeader>
-                <CardTitle>
-                  {t("page.setting.xxmi.builtin.updatesPending", { count: pendingUpdates.length })}
-                </CardTitle>
-                <CardAction>
-                  <Button
-                    size="sm"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.InstallUpdates(pendingUpdates.map((entry) => entry.package));
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    <DownloadIcon />
-                    {t("page.setting.xxmi.builtin.installUpdates")}
-                  </Button>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {pendingUpdates.map((entry) => (
-                  <div key={entry.package} className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 font-mono text-xs break-all text-muted-foreground">
-                      {entry.package}:{" "}
-                      {entry.installed || t("page.setting.xxmi.builtin.notInstalled")} →{" "}
-                      {entry.latestVersion}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.SkipVersion(entry.package, entry.latestVersion);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.skipVersion")}
-                    </Button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid items-start gap-6 xl:grid-cols-2">
-            <div className="space-y-6">
-              <Card>
+    <main className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
+      <div className="mx-auto w-full max-w-6xl p-4">
+        {external ? (
+          <Card className="mx-auto max-w-2xl">
+            <CardContent className="space-y-6">
+              <XXMIExternalLauncher />
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {pendingUpdates.length > 0 && (
+              <Card className="border-primary/40 bg-primary/5">
                 <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.options")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <PathField
-                    label={t("page.setting.xxmi.builtin.root")}
-                    value={root}
-                    onValueChange={setEditedRoot}
-                  >
-                    <Button
-                      disabled={!root || root === overview?.root}
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.SetRoot(root);
-                          setEditedRoot(null);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.saved"));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("g.save")}
-                    </Button>
-                  </PathField>
-                  {overview?.externalLauncher && (
-                    <Alert>
-                      <InfoIcon />
-                      <AlertTitle>{t("page.setting.xxmi.builtin.externalDetected")}</AlertTitle>
-                      <AlertDescription className="space-y-2">
-                        <p className="font-mono text-xs break-all">
-                          {overview.externalLauncher.path}
-                        </p>
-                        <p>{t("page.setting.xxmi.builtin.externalWarning")}</p>
-                        <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                          {t("page.setting.xxmi.builtin.import")}
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  <Separator />
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.autoUpdate")}
-                    checked={settings?.autoUpdate ?? false}
-                    onCheckedChange={(value) => update("autoUpdate", value)}
-                  />
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.prereleases")}
-                    checked={settings?.includePrereleases ?? false}
-                    onCheckedChange={(value) => update("includePrereleases", value)}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.reset")}</CardTitle>
-                  <CardDescription>
-                    {t("page.setting.xxmi.builtin.resetDescription")}
-                  </CardDescription>
+                  <CardTitle>
+                    {t("page.setting.xxmi.builtin.updatesPending", {
+                      count: pendingUpdates.length,
+                    })}
+                  </CardTitle>
                   <CardAction>
                     <Button
-                      variant="destructive"
-                      disabled={!overview}
-                      onClick={() => setResetOpen(true)}
+                      size="sm"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.InstallUpdates(pendingUpdates.map((entry) => entry.package));
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
                     >
-                      <RotateCcwIcon />
-                      {t("page.setting.xxmi.builtin.resetConfirm")}
+                      <DownloadIcon />
+                      {t("page.setting.xxmi.builtin.installUpdates")}
                     </Button>
                   </CardAction>
                 </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {pendingUpdates.map((entry) => (
+                    <div key={entry.package} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 font-mono text-xs break-all text-muted-foreground">
+                        {entry.package}:{" "}
+                        {entry.installed || t("page.setting.xxmi.builtin.notInstalled")} →{" "}
+                        {entry.latestVersion}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.SkipVersion(entry.package, entry.latestVersion);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.skipVersion")}
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="grid items-start gap-6 xl:grid-cols-2">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("page.setting.xxmi.builtin.options")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <PathField
+                      label={t("page.setting.xxmi.builtin.root")}
+                      value={root}
+                      onValueChange={setEditedRoot}
+                    >
+                      <Button
+                        disabled={!root || root === overview?.root}
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.SetRoot(root);
+                            setEditedRoot(null);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.saved"));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("g.save")}
+                      </Button>
+                    </PathField>
+                    {overview?.externalLauncher && (
+                      <Alert>
+                        <InfoIcon />
+                        <AlertTitle>{t("page.setting.xxmi.builtin.externalDetected")}</AlertTitle>
+                        <AlertDescription className="space-y-2">
+                          <p className="font-mono text-xs break-all">
+                            {overview.externalLauncher.path}
+                          </p>
+                          <p>{t("page.setting.xxmi.builtin.externalWarning")}</p>
+                          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                            {t("page.setting.xxmi.builtin.import")}
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <Separator />
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.autoUpdate")}
+                      checked={settings?.autoUpdate ?? false}
+                      onCheckedChange={(value) => update("autoUpdate", value)}
+                    />
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.prereleases")}
+                      checked={settings?.includePrereleases ?? false}
+                      onCheckedChange={(value) => update("includePrereleases", value)}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("page.setting.xxmi.builtin.reset")}</CardTitle>
+                    <CardDescription>
+                      {t("page.setting.xxmi.builtin.resetDescription")}
+                    </CardDescription>
+                    <CardAction>
+                      <Button
+                        variant="destructive"
+                        disabled={!overview}
+                        onClick={() => setResetOpen(true)}
+                      >
+                        <RotateCcwIcon />
+                        {t("page.setting.xxmi.builtin.resetConfirm")}
+                      </Button>
+                    </CardAction>
+                  </CardHeader>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.packages")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  {overview?.cacheIssues?.map((issue) => (
+                    <Alert key={issue} variant="destructive">
+                      <TriangleAlertIcon />
+                      <AlertTitle>{t("page.setting.xxmi.builtin.cacheIssue")}</AlertTitle>
+                      <AlertDescription className="break-all">{issue}</AlertDescription>
+                    </Alert>
+                  ))}
+                  <PackageRow
+                    title={t("page.setting.xxmi.builtin.libs")}
+                    versions={libs?.map((entry) => ({
+                      key: entry.version,
+                      label: entry.referenced
+                        ? `${entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
+                        : entry.version,
+                      active: entry.referenced,
+                    }))}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!libs?.some((entry) => !entry.referenced)}
+                      onClickPromise={async () => {
+                        try {
+                          const removed = await XXMI.PruneLibsCache();
+                          refresh();
+                          toast.success(
+                            t("page.setting.xxmi.builtin.pruned", { count: removed?.length ?? 0 }),
+                          );
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      <Trash2Icon />
+                      {t("page.setting.xxmi.builtin.prune")}
+                    </Button>
+                  </PackageRow>
+                  <Separator />
+                  <PackageRow
+                    title={t("page.setting.xxmi.builtin.legacy")}
+                    versions={legacy?.map((entry) => ({ key: entry.id, label: entry.id }))}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClickPromise={async () => {
+                        try {
+                          const selected = await Dialog.ShowOpenDialog({
+                            title: t("page.setting.xxmi.builtin.importLegacy"),
+                            defaultPath: "",
+                            filters: [{ name: "ZIP", extensions: ["zip"] }],
+                            properties: ["openFile"],
+                          });
+                          if (selected.canceled || !selected.filePaths?.[0]) return;
+                          await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.importedLegacy"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      <FileArchiveIcon />
+                      {t("page.setting.xxmi.builtin.importLegacy")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.UpdateLegacyRuntime();
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.downloaded"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      <DownloadIcon />
+                      {t("page.setting.xxmi.builtin.downloadLegacy")}
+                    </Button>
+                  </PackageRow>
+                  <Separator />
+                  <PackageRow
+                    title={t("page.setting.xxmi.builtin.fpsUnlocker")}
+                    versions={fpsVersions?.map((version) => ({ key: version, label: version }))}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!latestFPS || fpsVersions?.includes(latestFPS.version)}
+                      onClickPromise={async () => {
+                        if (!latestFPS) return;
+                        try {
+                          await XXMI.EnsureFPSUnlockerVersion(latestFPS.version);
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.downloaded"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      <DownloadIcon />
+                      {t("page.setting.xxmi.builtin.downloadFPS")}
+                    </Button>
+                  </PackageRow>
+                </CardContent>
               </Card>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("page.setting.xxmi.builtin.packages")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                {overview?.cacheIssues?.map((issue) => (
-                  <Alert key={issue} variant="destructive">
-                    <TriangleAlertIcon />
-                    <AlertTitle>{t("page.setting.xxmi.builtin.cacheIssue")}</AlertTitle>
-                    <AlertDescription className="break-all">{issue}</AlertDescription>
-                  </Alert>
-                ))}
-                <PackageRow
-                  title={t("page.setting.xxmi.builtin.libs")}
-                  versions={libs?.map((entry) => ({
-                    key: entry.version,
-                    label: entry.referenced
-                      ? `${entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
-                      : entry.version,
-                    active: entry.referenced,
-                  }))}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!libs?.some((entry) => !entry.referenced)}
-                    onClickPromise={async () => {
-                      try {
-                        const removed = await XXMI.PruneLibsCache();
-                        refresh();
-                        toast.success(
-                          t("page.setting.xxmi.builtin.pruned", { count: removed?.length ?? 0 }),
-                        );
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    <Trash2Icon />
-                    {t("page.setting.xxmi.builtin.prune")}
-                  </Button>
-                </PackageRow>
-                <Separator />
-                <PackageRow
-                  title={t("page.setting.xxmi.builtin.legacy")}
-                  versions={legacy?.map((entry) => ({ key: entry.id, label: entry.id }))}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClickPromise={async () => {
-                      try {
-                        const selected = await Dialog.ShowOpenDialog({
-                          title: t("page.setting.xxmi.builtin.importLegacy"),
-                          defaultPath: "",
-                          filters: [{ name: "ZIP", extensions: ["zip"] }],
-                          properties: ["openFile"],
-                        });
-                        if (selected.canceled || !selected.filePaths?.[0]) return;
-                        await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.importedLegacy"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    <FileArchiveIcon />
-                    {t("page.setting.xxmi.builtin.importLegacy")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.UpdateLegacyRuntime();
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.downloaded"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    <DownloadIcon />
-                    {t("page.setting.xxmi.builtin.downloadLegacy")}
-                  </Button>
-                </PackageRow>
-                <Separator />
-                <PackageRow
-                  title={t("page.setting.xxmi.builtin.fpsUnlocker")}
-                  versions={fpsVersions?.map((version) => ({ key: version, label: version }))}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!latestFPS || fpsVersions?.includes(latestFPS.version)}
-                    onClickPromise={async () => {
-                      if (!latestFPS) return;
-                      try {
-                        await XXMI.EnsureFPSUnlockerVersion(latestFPS.version);
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.downloaded"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    <DownloadIcon />
-                    {t("page.setting.xxmi.builtin.downloadFPS")}
-                  </Button>
-                </PackageRow>
-              </CardContent>
-            </Card>
           </div>
-        </div>
-      )}
-      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("page.setting.xxmi.builtin.resetTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("page.setting.xxmi.builtin.resetConfirmDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-            <Button variant="destructive" onClickPromise={resetBuiltin}>
-              {t("page.setting.xxmi.builtin.resetConfirm")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={importOpen} onOpenChange={setImportOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("page.setting.xxmi.builtin.importUserDataTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("page.setting.xxmi.builtin.importUserDataDescription", { root: importRoot })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>{t("page.setting.xxmi.builtin.importUserDataKeepHint")}</li>
-            <li>{t("page.setting.xxmi.builtin.importUserDataMoveHint")}</li>
-          </ul>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-            <Button
-              variant="outline"
-              onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataKeep)}
-            >
-              {t("page.setting.xxmi.builtin.importUserDataKeep")}
-            </Button>
-            <Button onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataMove)}>
-              {t("page.setting.xxmi.builtin.importUserDataMove")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        )}
+        <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("page.setting.xxmi.builtin.resetTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("page.setting.xxmi.builtin.resetConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+              <Button variant="destructive" onClickPromise={resetBuiltin}>
+                {t("page.setting.xxmi.builtin.resetConfirm")}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={importOpen} onOpenChange={setImportOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("page.setting.xxmi.builtin.importUserDataTitle")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("page.setting.xxmi.builtin.importUserDataDescription", { root: importRoot })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>{t("page.setting.xxmi.builtin.importUserDataKeepHint")}</li>
+              <li>{t("page.setting.xxmi.builtin.importUserDataMoveHint")}</li>
+            </ul>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+              <Button
+                variant="outline"
+                onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataKeep)}
+              >
+                {t("page.setting.xxmi.builtin.importUserDataKeep")}
+              </Button>
+              <Button onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataMove)}>
+                {t("page.setting.xxmi.builtin.importUserDataMove")}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </main>
   );
 }

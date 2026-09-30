@@ -200,750 +200,787 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col p-4">
-      <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-4">
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 space-y-3 border-b bg-background/95 px-4 pt-4 pb-3 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <GameIcon gameName={importer} className="size-7 rounded-md" />
-            <span className="font-semibold">{importer}</span>
-            <div className="ml-auto flex gap-2">
-              <Button
-                variant="outline"
-                disabled={dirty}
-                title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
-                onClickPromise={async () => {
-                  try {
-                    await startImporter(importer);
-                  } catch (error) {
-                    toast.error(toErrorMessage(error));
-                  }
-                }}
-              >
-                <PlayIcon />
-                {t("page.setting.xxmi.builtin.launch")}
-              </Button>
-              <Button disabled={!dirty} onClickPromise={() => save()}>
-                {t("g.save")}
-              </Button>
-            </div>
-          </div>
-          {dirty && (
-            <div
-              role="status"
-              className="flex items-center justify-between gap-3 rounded-md bg-primary/10 px-3 py-1.5 text-xs"
-            >
-              <span>{t("page.setting.xxmi.builtin.unsavedChanges")}</span>
-              <Button variant="ghost" size="xs" onClick={() => setConfig(null)}>
-                {t("page.setting.xxmi.builtin.discard")}
-              </Button>
-            </div>
-          )}
-          <TabsList variant="line" className="w-full justify-start">
-            <TabsTrigger value="general">{t("page.setting.xxmi.builtin.general")}</TabsTrigger>
-            <TabsTrigger value="package">{t("page.setting.xxmi.builtin.packageTab")}</TabsTrigger>
-            {hasGameTweaks && (
-              <TabsTrigger value="game">{t("page.setting.xxmi.builtin.gameTweaks")}</TabsTrigger>
-            )}
-            <TabsTrigger value="advanced">{t("page.setting.xxmi.builtin.advanced")}</TabsTrigger>
-            <TabsTrigger value="tools">{t("page.setting.xxmi.builtin.tools")}</TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="general" className="grid items-start gap-6 xl:grid-cols-2">
-          <Card>
-            <CardContent className="space-y-4 text-sm">
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.enabled")}
-                checked={config.enabled}
-                onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
-              />
-              <Separator />
-              <PathField
-                label={t("page.setting.xxmi.builtin.importerFolder")}
-                value={config.importerFolder}
-                onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
-              />
-              <PathField
-                label={t("page.setting.xxmi.builtin.gameFolder")}
-                value={config.gameFolder}
-                onValueChange={(gameFolder) => setConfig({ ...config, gameFolder })}
-              >
+    <main className="flex min-h-0 flex-1 flex-col">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(String(value))}
+        className="min-h-0 flex-1 gap-0"
+      >
+        {/* The header stays outside the scroll area; a matching gutter keeps it aligned with the body. */}
+        <div className="shrink-0 scrollbar-gutter-stable overflow-hidden border-b">
+          <div className="mx-auto w-full max-w-6xl space-y-3 px-4 pt-4 pb-3">
+            <div className="flex items-center gap-2">
+              <GameIcon gameName={importer} className="size-7 rounded-md" />
+              <span className="font-semibold">{importer}</span>
+              <div className="ml-auto flex gap-2">
                 <Button
                   variant="outline"
+                  disabled={dirty}
+                  title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
                   onClickPromise={async () => {
                     try {
-                      setDetectedFolders(await XXMI.DetectGameFolders(importer));
+                      await startImporter(importer);
                     } catch (error) {
                       toast.error(toErrorMessage(error));
                     }
                   }}
                 >
-                  <ScanSearchIcon />
-                  {t("page.setting.xxmi.builtin.detectGame")}
+                  <PlayIcon />
+                  {t("page.setting.xxmi.builtin.launch")}
                 </Button>
-              </PathField>
-              <Separator />
-              <div className="flex items-center justify-between gap-4">
-                <FieldLabel label={t("page.setting.xxmi.builtin.mode")} />
-                <ButtonGroup>
-                  {(
-                    [
-                      [RuntimeMode.RuntimeXXMI, "XXMI"],
-                      [RuntimeMode.RuntimeLegacy, "3DMigoto"],
-                    ] as const
-                  ).map(([mode, label]) => (
-                    <Button
-                      key={mode}
-                      variant={config.mode === mode ? "default" : "outline"}
-                      aria-pressed={config.mode === mode}
-                      onClick={() => setConfig({ ...config, mode })}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </ButtonGroup>
+                <Button disabled={!dirty} onClickPromise={() => save()}>
+                  {t("g.save")}
+                </Button>
               </div>
-              {config.mode === RuntimeMode.RuntimeLegacy && (
-                <div className="space-y-3 border-l-2 pl-4">
-                  <SelectRow
-                    label={t("page.setting.xxmi.builtin.legacy")}
-                    value={config.legacyRuntime || FOLLOW_LATEST}
-                    options={[
-                      { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.newestCached") },
-                      ...(legacyRuntimes?.map((runtime) => runtime.id) ?? []),
-                    ]}
-                    onValueChange={(value) =>
-                      setConfig({
-                        ...config,
-                        legacyRuntime: value === FOLLOW_LATEST ? "" : value,
-                      })
-                    }
-                  />
-                  <Alert>
-                    <TriangleAlertIcon />
-                    <AlertDescription>
-                      {t("page.setting.xxmi.builtin.legacyWarning")}
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.launchOptions")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <SelectRow
-                label={t("page.setting.xxmi.builtin.windowMode")}
-                value={config.windowMode}
-                options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
-                onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
-              />
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.useLaunchOptions")}
-                checked={config.useLaunchOptions}
-                onCheckedChange={(useLaunchOptions) => setConfig({ ...config, useLaunchOptions })}
+            </div>
+            {dirty && (
+              <div
+                role="status"
+                className="flex items-center justify-between gap-3 rounded-md bg-primary/10 px-3 py-1.5 text-xs"
               >
-                <Input
-                  aria-label={t("page.setting.xxmi.builtin.useLaunchOptions")}
-                  className="font-mono"
-                  spellCheck={false}
-                  value={config.launchOptions}
-                  onChange={(event) => setConfig({ ...config, launchOptions: event.target.value })}
-                />
-              </ToggleRow>
-              <Separator />
-              <SelectRow
-                label={t("page.setting.xxmi.builtin.startMethod")}
-                value={config.processStartMethod}
-                options={["Native", "Shell", "Manual"]}
-                onValueChange={(processStartMethod) => setConfig({ ...config, processStartMethod })}
-              />
-              <SelectRow
-                label={t("page.setting.xxmi.builtin.priority")}
-                value={config.processPriority}
-                options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
-                onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
-              />
-              <NumberRow
-                label={t("page.setting.xxmi.builtin.timeout")}
-                min={0}
-                value={config.processTimeout}
-                onValueChange={(processTimeout) => setConfig({ ...config, processTimeout })}
-              />
-              <NumberRow
-                label={t("page.setting.xxmi.builtin.initDelay")}
-                min={0}
-                value={config.xxmiDLLInitDelay}
-                onValueChange={(xxmiDLLInitDelay) => setConfig({ ...config, xxmiDLLInitDelay })}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="package" className="grid items-start gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.packageVersion")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">
-                  {t("page.setting.xxmi.builtin.currentPin")}:{" "}
-                  {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
-                </Badge>
-                {packageVerification && (
-                  <span className="text-xs text-muted-foreground">
-                    {t("page.setting.xxmi.builtin.installedVerification", {
-                      version: packageVerification.version,
-                      method:
-                        packageVerification.method === "ecdsa"
-                          ? t("page.setting.xxmi.builtin.verificationECDSA")
-                          : packageVerification.method === "digest"
-                            ? t("page.setting.xxmi.builtin.verificationDigest")
-                            : t("page.setting.xxmi.builtin.verificationNone"),
-                    })}
-                  </span>
-                )}
+                <span>{t("page.setting.xxmi.builtin.unsavedChanges")}</span>
+                <Button variant="ghost" size="xs" onClick={() => setConfig(null)}>
+                  {t("page.setting.xxmi.builtin.discard")}
+                </Button>
               </div>
-              <div className="max-h-72 divide-y overflow-y-auto rounded-lg border">
-                <VersionOption
-                  selected={!config.packageVersion.pinned}
-                  onSelect={() => {
-                    setSelectedPackage("");
-                    setAllowUnsigned(false);
-                    setConfig({ ...config, packageVersion: { follow: "latest" } });
-                  }}
-                >
-                  {t("page.setting.xxmi.builtin.latest")}
-                </VersionOption>
-                {releases?.map((release) => (
-                  <VersionOption
-                    key={release.version}
-                    selected={config.packageVersion.pinned === release.version}
-                    onSelect={() => {
-                      setSelectedPackage(release.version);
-                      setAllowUnsigned(false);
-                      setConfig({ ...config, packageVersion: { pinned: release.version } });
-                    }}
-                  >
-                    <span className="font-mono">{release.version}</span>
-                    <Badge variant={release.signed ? "secondary" : "destructive"}>
-                      {release.signed
-                        ? t("page.setting.xxmi.builtin.signed")
-                        : t("page.setting.xxmi.builtin.unsigned")}
-                    </Badge>
-                  </VersionOption>
-                ))}
-              </div>
-              {selectedPackage && (
-                <div className="space-y-3 rounded-lg border p-3">
-                  {selectedRelease?.notes && (
-                    <p className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap text-muted-foreground">
-                      {selectedRelease.notes}
-                    </p>
-                  )}
-                  {selectedRelease && !selectedRelease.signed && (
-                    <label className="flex items-center gap-2 text-destructive">
-                      <ShieldAlertIcon className="size-4 shrink-0" />
-                      <span className="flex-1">{t("page.setting.xxmi.builtin.allowUnsigned")}</span>
-                      <Switch checked={allowUnsigned} onCheckedChange={setAllowUnsigned} />
-                    </label>
-                  )}
-                  <Button
-                    className="w-full"
-                    disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
-                    onClickPromise={async () => {
-                      if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned)) return;
-                      const allowPackage = !selectedRelease.signed && allowUnsigned;
-                      try {
-                        const resolved = await resolveImporterGameFolder(importer, config);
-                        const games = await linkedGamesForImporterMove(
-                          saved?.importerFolder,
-                          config.importerFolder,
-                        );
-                        if (games.length) {
-                          setPendingFolderChange({
-                            next: resolved,
-                            games,
-                            install: { version: selectedPackage, allowUnsigned: allowPackage },
-                          });
-                          return;
-                        }
-                        await XXMI.SaveImporterConfig(importer, resolved);
-                        await finishInstall(selectedPackage, allowPackage);
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.install")}
-                  </Button>
-                </div>
+            )}
+            <TabsList variant="line" className="w-full justify-start">
+              <TabsTrigger value="general">{t("page.setting.xxmi.builtin.general")}</TabsTrigger>
+              <TabsTrigger value="package">{t("page.setting.xxmi.builtin.packageTab")}</TabsTrigger>
+              {hasGameTweaks && (
+                <TabsTrigger value="game">{t("page.setting.xxmi.builtin.gameTweaks")}</TabsTrigger>
               )}
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.overwriteINI")}
-                checked={config.overwriteINI}
-                onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
-              />
-            </CardContent>
-          </Card>
+              <TabsTrigger value="advanced">{t("page.setting.xxmi.builtin.advanced")}</TabsTrigger>
+              <TabsTrigger value="tools">{t("page.setting.xxmi.builtin.tools")}</TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-          <Card>
-            <CardContent className="space-y-4 text-sm">
-              <SelectRow
-                label={
-                  <span className="flex items-center gap-1.5">
-                    {t("page.setting.xxmi.builtin.libs")}
-                    {customDll && (
-                      <Badge variant="outline">{t("page.setting.xxmi.builtin.customDll")}</Badge>
-                    )}
-                  </span>
-                }
-                value={config.xxmiVersion.pinned || FOLLOW_LATEST}
-                options={[
-                  { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                  ...(libsReleases?.map((release) => release.version) ?? []),
-                ]}
-                onValueChange={(value) =>
-                  setConfig({
-                    ...config,
-                    xxmiVersion: value === FOLLOW_LATEST ? { follow: "latest" } : { pinned: value },
-                  })
-                }
-              />
-              {customDll && (
-                <Alert>
-                  <ShieldAlertIcon />
-                  <AlertDescription className="flex items-center justify-between gap-4">
-                    <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
-                    {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+        <div className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl p-4">
+            <TabsContent value="general" className="grid items-start gap-6 xl:grid-cols-2">
+              <Card>
+                <CardContent className="space-y-4 text-sm">
+                  <ToggleRow
+                    label={t("page.setting.xxmi.builtin.enabled")}
+                    checked={config.enabled}
+                    onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
+                  />
+                  <Separator />
+                  <PathField
+                    label={t("page.setting.xxmi.builtin.importerFolder")}
+                    value={config.importerFolder}
+                    onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
+                  />
+                  <PathField
+                    label={t("page.setting.xxmi.builtin.gameFolder")}
+                    value={config.gameFolder}
+                    onValueChange={(gameFolder) => setConfig({ ...config, gameFolder })}
+                  >
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      disabled={dirty}
-                      title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
                       onClickPromise={async () => {
                         try {
-                          const warnings = await XXMI.RestoreOfficialDLL(importer);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
-                          warnings?.forEach((warning) => toast.warning(warning));
+                          setDetectedFolders(await XXMI.DetectGameFolders(importer));
                         } catch (error) {
                           toast.error(toErrorMessage(error));
                         }
                       }}
                     >
-                      {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                      <ScanSearchIcon />
+                      {t("page.setting.xxmi.builtin.detectGame")}
                     </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  </PathField>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-4">
+                    <FieldLabel label={t("page.setting.xxmi.builtin.mode")} />
+                    <ButtonGroup>
+                      {(
+                        [
+                          [RuntimeMode.RuntimeXXMI, "XXMI"],
+                          [RuntimeMode.RuntimeLegacy, "3DMigoto"],
+                        ] as const
+                      ).map(([mode, label]) => (
+                        <Button
+                          key={mode}
+                          variant={config.mode === mode ? "default" : "outline"}
+                          aria-pressed={config.mode === mode}
+                          onClick={() => setConfig({ ...config, mode })}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                  </div>
+                  {config.mode === RuntimeMode.RuntimeLegacy && (
+                    <div className="space-y-3 border-l-2 pl-4">
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.legacy")}
+                        value={config.legacyRuntime || FOLLOW_LATEST}
+                        options={[
+                          {
+                            value: FOLLOW_LATEST,
+                            label: t("page.setting.xxmi.builtin.newestCached"),
+                          },
+                          ...(legacyRuntimes?.map((runtime) => runtime.id) ?? []),
+                        ]}
+                        onValueChange={(value) =>
+                          setConfig({
+                            ...config,
+                            legacyRuntime: value === FOLLOW_LATEST ? "" : value,
+                          })
+                        }
+                      />
+                      <Alert>
+                        <TriangleAlertIcon />
+                        <AlertDescription>
+                          {t("page.setting.xxmi.builtin.legacyWarning")}
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-        {hasGameTweaks && (
-          <TabsContent value="game" className="grid items-start gap-6 xl:grid-cols-2">
-            <Card>
-              <CardContent className="space-y-4 text-sm">
-                <ToggleRow
-                  label={t("page.setting.xxmi.builtin.configureGame")}
-                  checked={config.configureGame}
-                  onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
-                />
-                <Separator />
-                {config.gimi && (
-                  <>
-                    <ToggleRow
-                      label={t("page.setting.xxmi.builtin.unlockFPS")}
-                      checked={config.gimi.unlockFPS}
-                      onCheckedChange={(unlockFPS) =>
-                        setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
-                      }
-                    >
-                      <NumberRow
-                        label={t("page.setting.xxmi.builtin.fpsTarget")}
-                        min={30}
-                        max={1000}
-                        value={config.gimi.unlockFPSValue}
-                        onValueChange={(unlockFPSValue) =>
-                          setConfig({ ...config, gimi: { ...config.gimi!, unlockFPSValue } })
-                        }
-                      />
-                    </ToggleRow>
-                    {(["enableHDR", "disableDCR"] as const).map((field) => (
-                      <ToggleRow
-                        key={field}
-                        label={t(`page.setting.xxmi.builtin.${field}`)}
-                        checked={config.gimi![field]}
-                        onCheckedChange={(value) =>
-                          setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
-                        }
-                      />
-                    ))}
-                  </>
-                )}
-                {config.srmi && (
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.unlockFPS")}
-                    checked={config.srmi.unlockFPS}
-                    onCheckedChange={(unlockFPS) =>
-                      setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
-                    }
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.launchOptions")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <SelectRow
+                    label={t("page.setting.xxmi.builtin.windowMode")}
+                    value={config.windowMode}
+                    options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
+                    onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
                   />
-                )}
-                {config.himi && (
                   <ToggleRow
-                    label={t("page.setting.xxmi.builtin.unlockFPS")}
-                    checked={config.himi.unlockFPS}
-                    onCheckedChange={(unlockFPS) =>
-                      setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
+                    label={t("page.setting.xxmi.builtin.useLaunchOptions")}
+                    checked={config.useLaunchOptions}
+                    onCheckedChange={(useLaunchOptions) =>
+                      setConfig({ ...config, useLaunchOptions })
                     }
                   >
-                    <NumberRow
-                      label={t("page.setting.xxmi.builtin.fpsTarget")}
-                      min={30}
-                      max={1000}
-                      value={config.himi.unlockFPSValue}
-                      onValueChange={(unlockFPSValue) =>
-                        setConfig({ ...config, himi: { ...config.himi!, unlockFPSValue } })
+                    <Input
+                      aria-label={t("page.setting.xxmi.builtin.useLaunchOptions")}
+                      className="font-mono"
+                      spellCheck={false}
+                      value={config.launchOptions}
+                      onChange={(event) =>
+                        setConfig({ ...config, launchOptions: event.target.value })
                       }
                     />
                   </ToggleRow>
+                  <Separator />
+                  <SelectRow
+                    label={t("page.setting.xxmi.builtin.startMethod")}
+                    value={config.processStartMethod}
+                    options={["Native", "Shell", "Manual"]}
+                    onValueChange={(processStartMethod) =>
+                      setConfig({ ...config, processStartMethod })
+                    }
+                  />
+                  <SelectRow
+                    label={t("page.setting.xxmi.builtin.priority")}
+                    value={config.processPriority}
+                    options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
+                    onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
+                  />
+                  <NumberRow
+                    label={t("page.setting.xxmi.builtin.timeout")}
+                    min={0}
+                    value={config.processTimeout}
+                    onValueChange={(processTimeout) => setConfig({ ...config, processTimeout })}
+                  />
+                  <NumberRow
+                    label={t("page.setting.xxmi.builtin.initDelay")}
+                    min={0}
+                    value={config.xxmiDLLInitDelay}
+                    onValueChange={(xxmiDLLInitDelay) => setConfig({ ...config, xxmiDLLInitDelay })}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="package" className="grid items-start gap-6 xl:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.packageVersion")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">
+                      {t("page.setting.xxmi.builtin.currentPin")}:{" "}
+                      {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
+                    </Badge>
+                    {packageVerification && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("page.setting.xxmi.builtin.installedVerification", {
+                          version: packageVerification.version,
+                          method:
+                            packageVerification.method === "ecdsa"
+                              ? t("page.setting.xxmi.builtin.verificationECDSA")
+                              : packageVerification.method === "digest"
+                                ? t("page.setting.xxmi.builtin.verificationDigest")
+                                : t("page.setting.xxmi.builtin.verificationNone"),
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="max-h-72 divide-y overflow-y-auto rounded-lg border">
+                    <VersionOption
+                      selected={!config.packageVersion.pinned}
+                      onSelect={() => {
+                        setSelectedPackage("");
+                        setAllowUnsigned(false);
+                        setConfig({ ...config, packageVersion: { follow: "latest" } });
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.latest")}
+                    </VersionOption>
+                    {releases?.map((release) => (
+                      <VersionOption
+                        key={release.version}
+                        selected={config.packageVersion.pinned === release.version}
+                        onSelect={() => {
+                          setSelectedPackage(release.version);
+                          setAllowUnsigned(false);
+                          setConfig({ ...config, packageVersion: { pinned: release.version } });
+                        }}
+                      >
+                        <span className="font-mono">{release.version}</span>
+                        <Badge variant={release.signed ? "secondary" : "destructive"}>
+                          {release.signed
+                            ? t("page.setting.xxmi.builtin.signed")
+                            : t("page.setting.xxmi.builtin.unsigned")}
+                        </Badge>
+                      </VersionOption>
+                    ))}
+                  </div>
+                  {selectedPackage && (
+                    <div className="space-y-3 rounded-lg border p-3">
+                      {selectedRelease?.notes && (
+                        <p className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap text-muted-foreground">
+                          {selectedRelease.notes}
+                        </p>
+                      )}
+                      {selectedRelease && !selectedRelease.signed && (
+                        <label className="flex items-center gap-2 text-destructive">
+                          <ShieldAlertIcon className="size-4 shrink-0" />
+                          <span className="flex-1">
+                            {t("page.setting.xxmi.builtin.allowUnsigned")}
+                          </span>
+                          <Switch checked={allowUnsigned} onCheckedChange={setAllowUnsigned} />
+                        </label>
+                      )}
+                      <Button
+                        className="w-full"
+                        disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
+                        onClickPromise={async () => {
+                          if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned))
+                            return;
+                          const allowPackage = !selectedRelease.signed && allowUnsigned;
+                          try {
+                            const resolved = await resolveImporterGameFolder(importer, config);
+                            const games = await linkedGamesForImporterMove(
+                              saved?.importerFolder,
+                              config.importerFolder,
+                            );
+                            if (games.length) {
+                              setPendingFolderChange({
+                                next: resolved,
+                                games,
+                                install: { version: selectedPackage, allowUnsigned: allowPackage },
+                              });
+                              return;
+                            }
+                            await XXMI.SaveImporterConfig(importer, resolved);
+                            await finishInstall(selectedPackage, allowPackage);
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.install")}
+                      </Button>
+                    </div>
+                  )}
+                  <ToggleRow
+                    label={t("page.setting.xxmi.builtin.overwriteINI")}
+                    checked={config.overwriteINI}
+                    onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-4 text-sm">
+                  <SelectRow
+                    label={
+                      <span className="flex items-center gap-1.5">
+                        {t("page.setting.xxmi.builtin.libs")}
+                        {customDll && (
+                          <Badge variant="outline">
+                            {t("page.setting.xxmi.builtin.customDll")}
+                          </Badge>
+                        )}
+                      </span>
+                    }
+                    value={config.xxmiVersion.pinned || FOLLOW_LATEST}
+                    options={[
+                      { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                      ...(libsReleases?.map((release) => release.version) ?? []),
+                    ]}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        xxmiVersion:
+                          value === FOLLOW_LATEST ? { follow: "latest" } : { pinned: value },
+                      })
+                    }
+                  />
+                  {customDll && (
+                    <Alert>
+                      <ShieldAlertIcon />
+                      <AlertDescription className="flex items-center justify-between gap-4">
+                        <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
+                        {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={dirty}
+                          title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
+                          onClickPromise={async () => {
+                            try {
+                              const warnings = await XXMI.RestoreOfficialDLL(importer);
+                              refresh();
+                              toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
+                              warnings?.forEach((warning) => toast.warning(warning));
+                            } catch (error) {
+                              toast.error(toErrorMessage(error));
+                            }
+                          }}
+                        >
+                          {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {hasGameTweaks && (
+              <TabsContent value="game" className="grid items-start gap-6 xl:grid-cols-2">
+                <Card>
+                  <CardContent className="space-y-4 text-sm">
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.configureGame")}
+                      checked={config.configureGame}
+                      onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
+                    />
+                    <Separator />
+                    {config.gimi && (
+                      <>
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.unlockFPS")}
+                          checked={config.gimi.unlockFPS}
+                          onCheckedChange={(unlockFPS) =>
+                            setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
+                          }
+                        >
+                          <NumberRow
+                            label={t("page.setting.xxmi.builtin.fpsTarget")}
+                            min={30}
+                            max={1000}
+                            value={config.gimi.unlockFPSValue}
+                            onValueChange={(unlockFPSValue) =>
+                              setConfig({ ...config, gimi: { ...config.gimi!, unlockFPSValue } })
+                            }
+                          />
+                        </ToggleRow>
+                        {(["enableHDR", "disableDCR"] as const).map((field) => (
+                          <ToggleRow
+                            key={field}
+                            label={t(`page.setting.xxmi.builtin.${field}`)}
+                            checked={config.gimi![field]}
+                            onCheckedChange={(value) =>
+                              setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
+                            }
+                          />
+                        ))}
+                      </>
+                    )}
+                    {config.srmi && (
+                      <ToggleRow
+                        label={t("page.setting.xxmi.builtin.unlockFPS")}
+                        checked={config.srmi.unlockFPS}
+                        onCheckedChange={(unlockFPS) =>
+                          setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
+                        }
+                      />
+                    )}
+                    {config.himi && (
+                      <ToggleRow
+                        label={t("page.setting.xxmi.builtin.unlockFPS")}
+                        checked={config.himi.unlockFPS}
+                        onCheckedChange={(unlockFPS) =>
+                          setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
+                        }
+                      >
+                        <NumberRow
+                          label={t("page.setting.xxmi.builtin.fpsTarget")}
+                          min={30}
+                          max={1000}
+                          value={config.himi.unlockFPSValue}
+                          onValueChange={(unlockFPSValue) =>
+                            setConfig({ ...config, himi: { ...config.himi!, unlockFPSValue } })
+                          }
+                        />
+                      </ToggleRow>
+                    )}
+                    {config.wwmi &&
+                      (
+                        [
+                          "unlockFPS",
+                          "forceMaxLODBias",
+                          "applyPerfTweaks",
+                          "disableWoundedFX",
+                        ] as const
+                      ).map((field) => (
+                        <ToggleRow
+                          key={field}
+                          label={t(`page.setting.xxmi.builtin.${field}`)}
+                          checked={config.wwmi![field]}
+                          onCheckedChange={(value) =>
+                            setConfig({
+                              ...config,
+                              woundedFXDecided:
+                                field === "disableWoundedFX" ? true : config.woundedFXDecided,
+                              wwmi: { ...config.wwmi!, [field]: value },
+                            })
+                          }
+                        />
+                      ))}
+                  </CardContent>
+                </Card>
+                {config.wwmi && (
+                  <Card>
+                    <CardContent className="space-y-4 text-sm">
+                      <WWMIGraphicsSettings
+                        options={config.wwmi}
+                        onChange={(wwmi) => setConfig({ ...config, wwmi })}
+                      />
+                    </CardContent>
+                  </Card>
                 )}
-                {config.wwmi &&
-                  (
-                    ["unlockFPS", "forceMaxLODBias", "applyPerfTweaks", "disableWoundedFX"] as const
+              </TabsContent>
+            )}
+
+            <TabsContent value="advanced" className="grid items-start gap-6 xl:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.commands")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  {(["runPreLaunch", "runPostLoad"] as const).map((field) => (
+                    <ToggleRow
+                      key={field}
+                      label={t(
+                        field === "runPreLaunch"
+                          ? "page.setting.xxmi.builtin.preLaunch"
+                          : "page.setting.xxmi.builtin.postLoad",
+                      )}
+                      checked={config[field].enabled}
+                      onCheckedChange={(enabled) =>
+                        setConfig({ ...config, [field]: { ...config[field], enabled } })
+                      }
+                    >
+                      <Input
+                        aria-label={t(
+                          field === "runPreLaunch"
+                            ? "page.setting.xxmi.builtin.preLaunch"
+                            : "page.setting.xxmi.builtin.postLoad",
+                        )}
+                        className="font-mono"
+                        spellCheck={false}
+                        value={config[field].command}
+                        onChange={(event) =>
+                          setConfig({
+                            ...config,
+                            [field]: { ...config[field], command: event.target.value },
+                          })
+                        }
+                      />
+                      <ToggleRow
+                        label={t("page.setting.xxmi.builtin.waitForCommand")}
+                        checked={config[field].wait}
+                        onCheckedChange={(wait) =>
+                          setConfig({ ...config, [field]: { ...config[field], wait } })
+                        }
+                      />
+                    </ToggleRow>
+                  ))}
+                  <ToggleRow
+                    label={t("page.setting.xxmi.builtin.customLaunch")}
+                    checked={config.customLaunch.enabled}
+                    onCheckedChange={(enabled) =>
+                      setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
+                    }
+                  >
+                    <Input
+                      aria-label={t("page.setting.xxmi.builtin.customLaunch")}
+                      className="font-mono"
+                      spellCheck={false}
+                      value={config.customLaunch.command}
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          customLaunch: { ...config.customLaunch, command: event.target.value },
+                        })
+                      }
+                    />
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.injectMode")}
+                      value={config.customLaunch.injectMode}
+                      options={["Hook", "Inject", "Bypass"]}
+                      onValueChange={(injectMode) =>
+                        setConfig({
+                          ...config,
+                          customLaunch: { ...config.customLaunch, injectMode },
+                        })
+                      }
+                    />
+                    <Alert>
+                      <ShieldAlertIcon />
+                      <AlertDescription>
+                        {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
+                      </AlertDescription>
+                    </Alert>
+                  </ToggleRow>
+                  <ToggleRow
+                    label={t("page.setting.xxmi.builtin.extraLibraries")}
+                    description={
+                      config.mode === RuntimeMode.RuntimeLegacy && !cachedLibs?.length
+                        ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
+                        : undefined
+                    }
+                    checked={config.extraLibraries.enabled}
+                    disabled={
+                      config.mode === RuntimeMode.RuntimeLegacy &&
+                      !cachedLibs?.some(
+                        (entry) =>
+                          !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,
+                      )
+                    }
+                    onCheckedChange={(enabled) =>
+                      setConfig({
+                        ...config,
+                        extraLibraries: { ...config.extraLibraries, enabled },
+                      })
+                    }
+                  >
+                    <Input
+                      aria-label={t("page.setting.xxmi.builtin.extraLibraries")}
+                      className="font-mono"
+                      spellCheck={false}
+                      value={config.extraLibraries.paths?.join(";") ?? ""}
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          extraLibraries: {
+                            ...config.extraLibraries,
+                            paths: event.target.value
+                              .split(";")
+                              .map((path) => path.trim())
+                              .filter(Boolean),
+                          },
+                        })
+                      }
+                    />
+                  </ToggleRow>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>3DMigoto</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  {(
+                    [
+                      "enforceRendering",
+                      "enableHunting",
+                      "dumpShaders",
+                      "muteWarnings",
+                      "callsLogging",
+                      "debugLogging",
+                      "unsafeMode",
+                    ] as const
                   ).map((field) => (
                     <ToggleRow
                       key={field}
                       label={t(`page.setting.xxmi.builtin.${field}`)}
-                      checked={config.wwmi![field]}
+                      description={
+                        field === "unsafeMode" && config.migoto.unsafeMode
+                          ? t("page.setting.xxmi.builtin.unsafeWarning")
+                          : undefined
+                      }
+                      checked={config.migoto[field]}
                       onCheckedChange={(value) =>
-                        setConfig({
-                          ...config,
-                          woundedFXDecided:
-                            field === "disableWoundedFX" ? true : config.woundedFXDecided,
-                          wwmi: { ...config.wwmi!, [field]: value },
-                        })
+                        setConfig({ ...config, migoto: { ...config.migoto, [field]: value } })
                       }
                     />
                   ))}
-              </CardContent>
-            </Card>
-            {config.wwmi && (
-              <Card>
-                <CardContent className="space-y-4 text-sm">
-                  <WWMIGraphicsSettings
-                    options={config.wwmi}
-                    onChange={(wwmi) => setConfig({ ...config, wwmi })}
-                  />
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
-        )}
+            </TabsContent>
 
-        <TabsContent value="advanced" className="grid items-start gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.commands")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              {(["runPreLaunch", "runPostLoad"] as const).map((field) => (
-                <ToggleRow
-                  key={field}
-                  label={t(
-                    field === "runPreLaunch"
-                      ? "page.setting.xxmi.builtin.preLaunch"
-                      : "page.setting.xxmi.builtin.postLoad",
-                  )}
-                  checked={config[field].enabled}
-                  onCheckedChange={(enabled) =>
-                    setConfig({ ...config, [field]: { ...config[field], enabled } })
-                  }
-                >
-                  <Input
-                    aria-label={t(
-                      field === "runPreLaunch"
-                        ? "page.setting.xxmi.builtin.preLaunch"
-                        : "page.setting.xxmi.builtin.postLoad",
-                    )}
-                    className="font-mono"
-                    spellCheck={false}
-                    value={config[field].command}
-                    onChange={(event) =>
-                      setConfig({
-                        ...config,
-                        [field]: { ...config[field], command: event.target.value },
-                      })
+            <TabsContent value="tools" className="grid items-start gap-6 xl:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <ToggleRow
+                    label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
+                    checked={config.iniOptimizer.enabled}
+                    onCheckedChange={(enabled) =>
+                      setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
                     }
                   />
                   <ToggleRow
-                    label={t("page.setting.xxmi.builtin.waitForCommand")}
-                    checked={config[field].wait}
-                    onCheckedChange={(wait) =>
-                      setConfig({ ...config, [field]: { ...config[field], wait } })
+                    label={t("page.setting.xxmi.builtin.resetOptimizerCache")}
+                    checked={config.iniOptimizer.resetCache}
+                    onCheckedChange={(resetCache) =>
+                      setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, resetCache } })
                     }
                   />
-                </ToggleRow>
-              ))}
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.customLaunch")}
-                checked={config.customLaunch.enabled}
-                onCheckedChange={(enabled) =>
-                  setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
-                }
-              >
-                <Input
-                  aria-label={t("page.setting.xxmi.builtin.customLaunch")}
-                  className="font-mono"
-                  spellCheck={false}
-                  value={config.customLaunch.command}
-                  onChange={(event) =>
-                    setConfig({
-                      ...config,
-                      customLaunch: { ...config.customLaunch, command: event.target.value },
-                    })
-                  }
-                />
-                <SelectRow
-                  label={t("page.setting.xxmi.builtin.injectMode")}
-                  value={config.customLaunch.injectMode}
-                  options={["Hook", "Inject", "Bypass"]}
-                  onValueChange={(injectMode) =>
-                    setConfig({ ...config, customLaunch: { ...config.customLaunch, injectMode } })
-                  }
-                />
-                <Alert>
-                  <ShieldAlertIcon />
-                  <AlertDescription>
-                    {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
-                  </AlertDescription>
-                </Alert>
-              </ToggleRow>
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.extraLibraries")}
-                description={
-                  config.mode === RuntimeMode.RuntimeLegacy && !cachedLibs?.length
-                    ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
-                    : undefined
-                }
-                checked={config.extraLibraries.enabled}
-                disabled={
-                  config.mode === RuntimeMode.RuntimeLegacy &&
-                  !cachedLibs?.some(
-                    (entry) =>
-                      !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,
-                  )
-                }
-                onCheckedChange={(enabled) =>
-                  setConfig({ ...config, extraLibraries: { ...config.extraLibraries, enabled } })
-                }
-              >
-                <Input
-                  aria-label={t("page.setting.xxmi.builtin.extraLibraries")}
-                  className="font-mono"
-                  spellCheck={false}
-                  value={config.extraLibraries.paths?.join(";") ?? ""}
-                  onChange={(event) =>
-                    setConfig({
-                      ...config,
-                      extraLibraries: {
-                        ...config.extraLibraries,
-                        paths: event.target.value
-                          .split(";")
-                          .map((path) => path.trim())
-                          .filter(Boolean),
-                      },
-                    })
-                  }
-                />
-              </ToggleRow>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>3DMigoto</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              {(
-                [
-                  "enforceRendering",
-                  "enableHunting",
-                  "dumpShaders",
-                  "muteWarnings",
-                  "callsLogging",
-                  "debugLogging",
-                  "unsafeMode",
-                ] as const
-              ).map((field) => (
-                <ToggleRow
-                  key={field}
-                  label={t(`page.setting.xxmi.builtin.${field}`)}
-                  description={
-                    field === "unsafeMode" && config.migoto.unsafeMode
-                      ? t("page.setting.xxmi.builtin.unsafeWarning")
-                      : undefined
-                  }
-                  checked={config.migoto[field]}
-                  onCheckedChange={(value) =>
-                    setConfig({ ...config, migoto: { ...config.migoto, [field]: value } })
-                  }
-                />
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="tools" className="grid items-start gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
-                checked={config.iniOptimizer.enabled}
-                onCheckedChange={(enabled) =>
-                  setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
-                }
-              />
-              <ToggleRow
-                label={t("page.setting.xxmi.builtin.resetOptimizerCache")}
-                checked={config.iniOptimizer.resetCache}
-                onCheckedChange={(resetCache) =>
-                  setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, resetCache } })
-                }
-              />
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClickPromise={async () => {
-                    try {
-                      setOptimizationPreview(
-                        await XXMI.OptimizeMods({
-                          importer,
-                          dryRun: true,
-                          resetCache: config.iniOptimizer.resetCache,
-                        }),
-                      );
-                    } catch (error) {
-                      toast.error(toErrorMessage(error));
-                    }
-                  }}
-                >
-                  {t("page.setting.xxmi.builtin.previewOptimization")}
-                </Button>
-                <Button
-                  disabled={!optimizationPreview?.changes?.length}
-                  onClickPromise={async () => {
-                    try {
-                      const report = await XXMI.OptimizeMods({
-                        importer,
-                        dryRun: false,
-                        resetCache: config.iniOptimizer.resetCache,
-                      });
-                      setOptimizationPreview(undefined);
-                      toast.success(
-                        t("page.setting.xxmi.builtin.optimized", {
-                          count: report?.changes?.length ?? 0,
-                        }),
-                      );
-                    } catch (error) {
-                      toast.error(toErrorMessage(error));
-                    }
-                  }}
-                >
-                  {t("page.setting.xxmi.builtin.applyOptimization")}
-                </Button>
-              </div>
-              {optimizationPreview && (
-                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2 font-mono text-xs">
-                  {optimizationPreview.changes?.length ? (
-                    optimizationPreview.changes.map((change, index) => (
-                      <p key={`${change.path}:${change.line}:${index}`} className="break-all">
-                        {change.action}: {change.path}
-                        {change.line ? `:${change.line}` : ""} · {change.reason}
-                      </p>
-                    ))
-                  ) : (
-                    <p>{t("page.setting.xxmi.builtin.noOptimizationChanges")}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClickPromise={async () => {
+                        try {
+                          setOptimizationPreview(
+                            await XXMI.OptimizeMods({
+                              importer,
+                              dryRun: true,
+                              resetCache: config.iniOptimizer.resetCache,
+                            }),
+                          );
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.previewOptimization")}
+                    </Button>
+                    <Button
+                      disabled={!optimizationPreview?.changes?.length}
+                      onClickPromise={async () => {
+                        try {
+                          const report = await XXMI.OptimizeMods({
+                            importer,
+                            dryRun: false,
+                            resetCache: config.iniOptimizer.resetCache,
+                          });
+                          setOptimizationPreview(undefined);
+                          toast.success(
+                            t("page.setting.xxmi.builtin.optimized", {
+                              count: report?.changes?.length ?? 0,
+                            }),
+                          );
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.applyOptimization")}
+                    </Button>
+                  </div>
+                  {optimizationPreview && (
+                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2 font-mono text-xs">
+                      {optimizationPreview.changes?.length ? (
+                        optimizationPreview.changes.map((change, index) => (
+                          <p key={`${change.path}:${change.line}:${index}`} className="break-all">
+                            {change.action}: {change.path}
+                            {change.line ? `:${change.line}` : ""} · {change.reason}
+                          </p>
+                        ))
+                      ) : (
+                        <p>{t("page.setting.xxmi.builtin.noOptimizationChanges")}</p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("page.setting.xxmi.builtin.maintenance")}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClickPromise={async () => {
-                  try {
-                    const warnings = await XXMI.RepairRuntime(importer);
-                    toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
-                    warnings?.forEach((warning) => toast.warning(warning));
-                  } catch (error) {
-                    toast.error(toErrorMessage(error));
-                  }
-                }}
-              >
-                {t("page.setting.xxmi.builtin.repairRuntime")}
-              </Button>
-              <Button
-                variant="outline"
-                onClickPromise={async () => {
-                  try {
-                    await XXMI.OpenImporterFolder(importer);
-                  } catch (error) {
-                    toast.error(toErrorMessage(error));
-                  }
-                }}
-              >
-                {t("page.setting.xxmi.builtin.openImporterFolder")}
-              </Button>
-              <Button
-                variant="outline"
-                onClickPromise={async () => {
-                  try {
-                    await XXMI.CreateShortcut(importer);
-                    refresh();
-                    toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
-                  } catch (error) {
-                    toast.error(toErrorMessage(error));
-                  }
-                }}
-              >
-                {t("page.setting.xxmi.builtin.createShortcut")}
-              </Button>
-              {saved?.shortcutPath && (
-                <Button
-                  variant="outline"
-                  onClickPromise={async () => {
-                    try {
-                      await XXMI.DeleteShortcut(importer);
-                      refresh();
-                      toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
-                    } catch (error) {
-                      toast.error(toErrorMessage(error));
-                    }
-                  }}
-                >
-                  {t("page.setting.xxmi.builtin.deleteShortcut")}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("page.setting.xxmi.builtin.maintenance")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClickPromise={async () => {
+                      try {
+                        const warnings = await XXMI.RepairRuntime(importer);
+                        toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
+                        warnings?.forEach((warning) => toast.warning(warning));
+                      } catch (error) {
+                        toast.error(toErrorMessage(error));
+                      }
+                    }}
+                  >
+                    {t("page.setting.xxmi.builtin.repairRuntime")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClickPromise={async () => {
+                      try {
+                        await XXMI.OpenImporterFolder(importer);
+                      } catch (error) {
+                        toast.error(toErrorMessage(error));
+                      }
+                    }}
+                  >
+                    {t("page.setting.xxmi.builtin.openImporterFolder")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClickPromise={async () => {
+                      try {
+                        await XXMI.CreateShortcut(importer);
+                        refresh();
+                        toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
+                      } catch (error) {
+                        toast.error(toErrorMessage(error));
+                      }
+                    }}
+                  >
+                    {t("page.setting.xxmi.builtin.createShortcut")}
+                  </Button>
+                  {saved?.shortcutPath && (
+                    <Button
+                      variant="outline"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.DeleteShortcut(importer);
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.deleteShortcut")}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </div>
+        </div>
       </Tabs>
 
       <Dialog

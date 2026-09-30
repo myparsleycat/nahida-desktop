@@ -62,7 +62,7 @@ export function XXMILayout() {
 
       <div className="flex min-h-0 flex-1">
         {overview && !external && <XXMIImporterList />}
-        <div className="min-w-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Outlet />
         </div>
       </div>
