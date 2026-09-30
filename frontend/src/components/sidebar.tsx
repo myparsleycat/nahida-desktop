@@ -1,5 +1,4 @@
 import { Service as Agent } from "@bindings/agent";
-import { Shell } from "@bindings/platform";
 import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { openGlobalAgent } from "@renderer/lib/agent-navigation";
@@ -13,8 +12,6 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
   BananaIcon,
-  BookOpenIcon,
-  BugIcon,
   BugPlayIcon,
   DatabaseBackupIcon,
   GamepadIcon,
@@ -31,24 +28,11 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
-function getDocumentationUrl(language: string) {
-  switch (language) {
-    case "ko":
-      return "https://desktop.nahida.live/ko/";
-    case "ja":
-      return "https://desktop.nahida.live/ja/";
-    case "zh":
-      return "https://desktop.nahida.live/zh-CN/";
-    default:
-      return "https://desktop.nahida.live";
-  }
-}
-
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
   const { session, isBackendOffline } = useAuth();
@@ -97,7 +81,6 @@ export function Sidebar({ className }: { className?: string }) {
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
   const isDevelopmentPage = pathname.startsWith("/development");
-  const documentationUrl = getDocumentationUrl(i18n.language);
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
@@ -402,44 +385,6 @@ export function Sidebar({ className }: { className?: string }) {
               <Separator orientation="horizontal" />
             </>
           )}
-
-          <Tooltip disableHoverablePopup>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    void Shell.OpenExternal(documentationUrl);
-                  }}
-                />
-              }
-            >
-              <BookOpenIcon className={cn(iconSize)} />
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("page.docs.title")}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip disableHoverablePopup>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    void Shell.OpenExternal(
-                      "https://github.com/myparsleycat/nahida-desktop/issues",
-                    );
-                  }}
-                />
-              }
-            >
-              <BugIcon className={cn(iconSize)} />
-            </TooltipTrigger>
-            <TooltipContent side="right">Report</TooltipContent>
-          </Tooltip>
 
           <Tooltip disableHoverablePopup>
             <TooltipTrigger
