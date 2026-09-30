@@ -1,6 +1,12 @@
 import { Setting } from "@bindings/setting";
 import { Tools } from "@bindings/tools";
 import { XXMI } from "@bindings/xxmi";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
@@ -62,23 +68,27 @@ export default function TogglePersistence() {
 
   return (
     <div className="flex flex-col space-y-4 p-4">
-      <div className="flex w-full flex-row items-center justify-between rounded-lg border p-3 transition-shadow duration-200 hover:shadow">
-        <div className="flex flex-col space-y-1">
-          <h3 className="text font-semibold">{t("page.setting.xxmi.persistToggles")}</h3>
-          <p className="text-sm text-muted-foreground">
-            {t("page.setting.xxmi.persistTogglesDescription")}
-          </p>
+      <SectionContent>
+        <div className="flex w-full flex-row items-center justify-between">
+          <div className="flex flex-col space-y-1">
+            <h3 className="text font-semibold">{t("page.setting.xxmi.persistToggles")}</h3>
+            <p className="text-sm text-muted-foreground">
+              {t("page.setting.xxmi.persistTogglesDescription")}
+            </p>
+          </div>
+          <Switch
+            checked={!!enabled}
+            onCheckedChange={(c) => mutate(c)}
+            disabled={isQueryPending || isMutatePending}
+          />
         </div>
-        <Switch
-          checked={!!enabled}
-          onCheckedChange={(c) => mutate(c)}
-          disabled={isQueryPending || isMutatePending}
-        />
-      </div>
+      </SectionContent>
 
-      <div className="flex h-80 w-full flex-col rounded-lg border p-3 transition-shadow duration-200 hover:shadow">
-        <div className="mb-2 text-sm font-medium text-muted-foreground">Logs</div>
-        <ScrollArea className="flex-1 overflow-auto rounded border bg-muted/30 p-2">
+      <Section className="h-80">
+        <SectionHeader>
+          <SectionTitle>Logs</SectionTitle>
+        </SectionHeader>
+        <ScrollArea className="min-h-0 flex-1 overflow-auto rounded-md bg-muted/50 p-2">
           {logs.length === 0 ? (
             <div className="text-sm text-muted-foreground italic">No logs yet.</div>
           ) : (
@@ -91,7 +101,7 @@ export default function TogglePersistence() {
             </div>
           )}
         </ScrollArea>
-      </div>
+      </Section>
     </div>
   );
 }

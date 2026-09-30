@@ -329,7 +329,7 @@ function ErrorComponent({ error }: ErrorComponentProps) {
           </Alert>
 
           {message ? (
-            <details className="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+            <details className="rounded-lg bg-muted/50 px-3 py-2 text-xs">
               <summary className="cursor-pointer font-medium text-muted-foreground select-none">
                 {t("page.root.error.details")}
               </summary>

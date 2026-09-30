@@ -483,12 +483,12 @@ function ModRouteContent() {
               })}
             </AlertDialogDescription>
             <div className="mt-2 w-full space-y-2 text-left text-sm">
-              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+              <div className="space-y-1 rounded-md bg-muted/50 p-3">
                 <Label>{t("page.mod.dialog.extract_archive_path.flatten_single_root")}</Label>
                 <p>{t("page.mod.dialog.extract_archive_path.flatten_single_root_example")}</p>
               </div>
 
-              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+              <div className="space-y-1 rounded-md bg-muted/50 p-3">
                 <Label>{t("page.mod.dialog.extract_archive_path.keep_archive_root")}</Label>
                 <p>{t("page.mod.dialog.extract_archive_path.keep_archive_root_example")}</p>
               </div>

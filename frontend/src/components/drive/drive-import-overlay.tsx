@@ -386,7 +386,7 @@ function DriveImportDialog({
                 </div>
 
                 {isImporting && copyProgress && (
-                  <div className="space-y-2 rounded-md border p-3">
+                  <div className="space-y-2 rounded-md bg-muted/50 p-3">
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <span className="truncate">
                         {copyProgress.itemName ??

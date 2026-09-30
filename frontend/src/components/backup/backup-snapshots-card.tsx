@@ -12,7 +12,6 @@ import {
 } from "@renderer/components/ui/alert-dialog";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import {
   Dialog,
@@ -22,6 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import {
+  Section,
+  SectionAction,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { formatSize } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestoreIcon, FolderOpenIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
@@ -62,22 +69,22 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
   const rows = snapshots.data ?? [];
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <CardTitle className="text-sm font-medium">{t("page.backup.snapshots.title")}</CardTitle>
-          <p className="text-xs text-muted-foreground">{t("page.backup.snapshots.description")}</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("page.backup.snapshots.refresh")}
-          onClick={() => void snapshots.refetch()}
-        >
-          <RefreshCwIcon className={snapshots.isFetching ? "animate-spin" : undefined} />
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-1">
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{t("page.backup.snapshots.title")}</SectionTitle>
+        <SectionDescription>{t("page.backup.snapshots.description")}</SectionDescription>
+        <SectionAction>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("page.backup.snapshots.refresh")}
+            onClick={() => void snapshots.refetch()}
+          >
+            <RefreshCwIcon className={snapshots.isFetching ? "animate-spin" : undefined} />
+          </Button>
+        </SectionAction>
+      </SectionHeader>
+      <SectionContent>
         {snapshots.isError && (
           <p className="py-6 text-center text-sm text-destructive">
             {backupErrorMessage(t, snapshots.error)}
@@ -91,10 +98,7 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
           </p>
         )}
         {rows.map((snapshot) => (
-          <div
-            key={snapshot.id}
-            className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
-          >
+          <div key={snapshot.id} className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium tabular-nums">{snapshotDate(snapshot)}</span>
@@ -130,7 +134,7 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
             </Button>
           </div>
         ))}
-      </CardContent>
+      </SectionContent>
       <RestoreDialog snapshot={restoring} onClose={() => setRestoring(null)} />
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
@@ -154,7 +158,7 @@ export function BackupSnapshotsCard({ busy }: { busy: boolean }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </Section>
   );
 }
 

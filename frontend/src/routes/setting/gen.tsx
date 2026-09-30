@@ -11,7 +11,12 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -20,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useSettings } from "@renderer/hooks/use-settings";
@@ -218,13 +222,11 @@ function RouteComponent() {
 
   return (
     <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.gen.application.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.gen.application.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           {appStatus?.supportsAutostart && (
             <>
               <div className="flex items-center justify-between">
@@ -241,8 +243,6 @@ function RouteComponent() {
                   onCheckedChange={(val) => update("runOnStartup", val)}
                 />
               </div>
-
-              <Separator />
             </>
           )}
 
@@ -277,9 +277,6 @@ function RouteComponent() {
               </Select>
             </div>
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -294,9 +291,6 @@ function RouteComponent() {
               onCheckedChange={(val) => update("includePrerelease", val)}
             />
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 space-y-0.5">
               <span className="text-sm font-medium">
@@ -326,9 +320,6 @@ function RouteComponent() {
               </Button>
             )}
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -343,9 +334,6 @@ function RouteComponent() {
               onCheckedChange={(val) => update("elevatedHelperEnabled", val)}
             />
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -360,9 +348,6 @@ function RouteComponent() {
               onCheckedChange={handleRunInBackgroundChange}
             />
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -377,8 +362,8 @@ function RouteComponent() {
               onCheckedChange={(val) => update("titlebarActivityBadgeClickNavigate", val)}
             />
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
       <AlertDialog
         open={isRunInBackgroundConfirmOpen}
@@ -402,8 +387,8 @@ function RouteComponent() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Card>
-        <CardContent>
+      <Section>
+        <SectionContent>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="language">
@@ -515,14 +500,14 @@ function RouteComponent() {
               </Select>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">{t("page.setting.gen.other.title")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.gen.other.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -556,8 +541,8 @@ function RouteComponent() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
     </main>
   );
 }

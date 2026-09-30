@@ -17,6 +17,13 @@ import { Shell } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import {
+  Section,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -621,7 +628,7 @@ function AgentSettingsRoute() {
             )}
             {activeProvider?.supportsOAuth && authMode === "account" ? (
               credential.kind === "oauth" ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border p-2 text-xs">
+                <div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 p-2 text-xs">
                   <span className="min-w-0 truncate">
                     {credential.accountLabel || t("page.agent.provider_connected")}
                   </span>
@@ -799,9 +806,12 @@ function AgentSettingsRoute() {
       </SettingsSection>
 
       <SettingsSection title="MCP" description={t("page.agent.mcp_warning")}>
-        <div className="space-y-2">
+        <div className="space-y-0.5">
           {servers.map((server) => (
-            <div key={server.id} className="flex items-center gap-2 rounded-lg border p-2">
+            <div
+              key={server.id}
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+            >
               <ServerIcon className="size-4 text-muted-foreground" />
               <button className="min-w-0 flex-1 text-left" onClick={() => editServer(server)}>
                 <div className="truncate text-sm font-medium">{server.name}</div>
@@ -826,7 +836,7 @@ function AgentSettingsRoute() {
               </Button>
             </div>
           ))}
-          <Button variant="outline" onClick={() => setMCPDraft({ ...emptyMCP })}>
+          <Button variant="outline" className="mt-2" onClick={() => setMCPDraft({ ...emptyMCP })}>
             <PlusIcon className="size-4" /> {t("page.agent.add_server")}
           </Button>
         </div>
@@ -841,9 +851,9 @@ function AgentSettingsRoute() {
       </SettingsSection>
 
       <SettingsSection title={t("page.agent.skills")} description={t("page.agent.skills_hint")}>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {skills.map((skill) => (
-            <div key={`${skill.source}-${skill.name}`} className="rounded-lg border p-3">
+            <div key={`${skill.source}-${skill.name}`}>
               <div className="flex items-center justify-between text-sm font-medium">
                 {skill.name}
                 <span className="text-[10px] text-muted-foreground">{skill.source}</span>
@@ -896,7 +906,7 @@ function MCPEditor({
       ),
     });
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+    <div className="space-y-3 rounded-md bg-muted/50 p-3">
       <div className="grid grid-cols-2 gap-2">
         <Input
           placeholder="Name"
@@ -1037,13 +1047,15 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-xl border bg-card p-4">
-      <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </div>
-      {children}
-    </section>
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{title}</SectionTitle>
+        <SectionDescription>{description}</SectionDescription>
+      </SectionHeader>
+      <SectionContent layout="flow" className="gap-4">
+        {children}
+      </SectionContent>
+    </Section>
   );
 }
 

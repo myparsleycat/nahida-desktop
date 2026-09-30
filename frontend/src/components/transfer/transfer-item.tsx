@@ -186,7 +186,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     : error;
 
   return (
-    <div className="group grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-lg border bg-card p-4 transition-all hover:border-accent">
+    <div className="group grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-lg p-4 transition-all hover:bg-muted/50">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
         {type === "upload" ? (
           <ArrowUpFromLine className="size-5 shrink-0" />

@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
 
@@ -33,54 +32,46 @@ export function GameHomePanel({
   const disableNext = subfeedQuery.data == null || Boolean(metadata?._bIsComplete);
 
   return (
-    <div className="h-full min-h-0 min-w-0 p-2">
-      <Card className="flex h-full min-h-0 flex-col p-0">
-        <CardHeader className="shrink-0">
-          <div className="flex items-center justify-between gap-3 pt-3">
-            <div>
-              <CardTitle className="text-base">{t("page.gamebanana.latest_feed")}</CardTitle>
-            </div>
-            <PaginationButtons
-              page={subfeedPage}
-              totalPages={totalPages}
-              onPrev={() => onSubfeedPage(subfeedPage - 1)}
-              onNext={() => onSubfeedPage(subfeedPage + 1)}
-              onPageChange={onSubfeedPage}
-              disablePrev={subfeedPage <= 1}
-              disableNext={disableNext}
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
+        <h2 className="text-sm font-medium">{t("page.gamebanana.latest_feed")}</h2>
+        <PaginationButtons
+          page={subfeedPage}
+          totalPages={totalPages}
+          onPrev={() => onSubfeedPage(subfeedPage - 1)}
+          onNext={() => onSubfeedPage(subfeedPage + 1)}
+          onPageChange={onSubfeedPage}
+          disablePrev={subfeedPage <= 1}
+          disableNext={disableNext}
+        />
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-3 p-4">
+          {subfeedQuery.isLoading && <OverviewSkeleton />}
+          {subfeedQuery.error && (
+            <ErrorState
+              title={t("page.gamebanana.error_title")}
+              description={errorPresentation.description}
+              details={errorPresentation.details}
             />
+          )}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+            {getFeedRecords(subfeedQuery).map((submission) => (
+              <SubmissionCard
+                key={`feed-${submission._idRow}-${getSubmissionDateKey(submission)}`}
+                submission={submission}
+                language={language}
+                onClick={() =>
+                  onSelectMod({
+                    id: submission._idRow,
+                    modelName: submission._sModelName,
+                  })
+                }
+              />
+            ))}
           </div>
-        </CardHeader>
-        <CardContent className="min-h-0 flex-1 p-0 px-1">
-          <ScrollArea className="h-full min-h-0">
-            <div className="space-y-3 p-4">
-              {subfeedQuery.isLoading && <OverviewSkeleton />}
-              {subfeedQuery.error && (
-                <ErrorState
-                  title={t("page.gamebanana.error_title")}
-                  description={errorPresentation.description}
-                  details={errorPresentation.details}
-                />
-              )}
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-                {getFeedRecords(subfeedQuery).map((submission) => (
-                  <SubmissionCard
-                    key={`feed-${submission._idRow}-${getSubmissionDateKey(submission)}`}
-                    submission={submission}
-                    language={language}
-                    onClick={() =>
-                      onSelectMod({
-                        id: submission._idRow,
-                        modelName: submission._sModelName,
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+        </div>
+      </ScrollArea>
     </div>
   );
 }

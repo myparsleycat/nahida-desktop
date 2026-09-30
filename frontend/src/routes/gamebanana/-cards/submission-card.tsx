@@ -19,7 +19,7 @@ export function SubmissionCard({
       language={language}
       onClick={onClick}
       active={active}
-      hoverClassName="hover:bg-muted/40"
+      hoverClassName="hover:bg-muted/60"
     />
   );
 }

@@ -1,7 +1,12 @@
 import { Mod, type CompressionState } from "@bindings/mod";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -83,13 +88,11 @@ export function ModCompressionCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">
-          {t("page.setting.mod.compression.title")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{t("page.setting.mod.compression.title")}</SectionTitle>
+      </SectionHeader>
+      <SectionContent>
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <div className="text-sm font-medium">{t("page.setting.mod.compression.method")}</div>
@@ -160,7 +163,7 @@ export function ModCompressionCard() {
           </div>
         )}
 
-        <div className="rounded-md border p-3">
+        <div className="rounded-md bg-muted/50 p-3">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="text-sm font-medium">
@@ -204,7 +207,7 @@ export function ModCompressionCard() {
             </p>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }

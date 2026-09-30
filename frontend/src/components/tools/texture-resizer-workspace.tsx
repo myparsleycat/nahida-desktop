@@ -18,6 +18,12 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import {
+  Section,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
 import { cn } from "@renderer/lib/utils";
@@ -447,16 +453,16 @@ export function TextureResizerWorkspace({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-current/15 bg-card/50">
-        <div className="border-b border-current/15 px-4 py-3">
-          <div className="font-medium">{t("page.tools.texture_resizer.texture_list_title")}</div>
-          <div className="text-xs text-muted-foreground">
+      <Section className="min-h-0 flex-1">
+        <SectionHeader>
+          <SectionTitle>{t("page.tools.texture_resizer.texture_list_title")}</SectionTitle>
+          <SectionDescription>
             {modName ||
               loadedTargetPath ||
               fixedTargetPath ||
               t("page.tools.texture_resizer.texture_list_empty")}
-          </div>
-        </div>
+          </SectionDescription>
+        </SectionHeader>
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="relative w-full">
@@ -509,7 +515,7 @@ export function TextureResizerWorkspace({
             )}
           </div>
         </ScrollArea>
-      </div>
+      </Section>
 
       <Dialog
         open={dialogOpen}
@@ -549,7 +555,7 @@ export function TextureResizerWorkspace({
                 return (
                   <div className="space-y-3 pr-4">
                     {dialogTextures.length > 1 && (
-                      <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
+                      <div className="flex items-center justify-between rounded-md bg-muted/50 p-3">
                         <div>
                           <div className="text-sm font-medium">
                             {t("page.tools.texture_resizer.bulk_apply")}
@@ -611,7 +617,7 @@ export function TextureResizerWorkspace({
                       </div>
                     )}
                     {batchProgress && (
-                      <div className="space-y-2 rounded-md border bg-background/40 p-3">
+                      <div className="space-y-2 rounded-md bg-muted/50 p-3">
                         <div className="text-xs text-muted-foreground">
                           {runningFilePath
                             ? dialogTextures.find((texture) => texture.filePath === runningFilePath)
@@ -768,8 +774,8 @@ function TextureItemRow({
   return (
     <tr
       className={cn(
-        "transition-colors hover:bg-card/50",
-        selected && "bg-card/50",
+        "transition-colors hover:bg-muted/50",
+        selected && "bg-muted/50",
         canSelect && "cursor-pointer",
       )}
       onClick={() => {

@@ -3,6 +3,7 @@ import { XXMI } from "@bindings/xxmi";
 import { FourThousandOneFixerBuildToolsPath } from "@renderer/components/tools/4001-fixer-build-tools-path";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
+import { SectionContent } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -262,7 +263,7 @@ export default function FourThousandOneFixer() {
         </p>
       </div>
 
-      <div className="space-y-2 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow">
+      <SectionContent layout="flow" className="gap-2">
         <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           {t("page.tools.4001_fixer.target_importer")}
         </label>
@@ -294,7 +295,7 @@ export default function FourThousandOneFixer() {
             </button>
           ))}
         </div>
-      </div>
+      </SectionContent>
 
       {requiresElevation ? (
         <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
@@ -321,7 +322,7 @@ export default function FourThousandOneFixer() {
         <TabsContent value="build" className="space-y-4">
           <FourThousandOneFixerBuildToolsPath disabled={isRunning} />
 
-          <div className="grid grid-cols-1 gap-4 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow md:grid-cols-2">
+          <SectionContent layout="flow" className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                 {t("page.tools.4001_fixer.provider")}
@@ -396,7 +397,7 @@ export default function FourThousandOneFixer() {
                 {t("page.tools.4001_fixer.version_hint")}
               </p>
             </div>
-          </div>
+          </SectionContent>
 
           <Button
             onClick={handleBuild}
@@ -416,7 +417,7 @@ export default function FourThousandOneFixer() {
         </TabsContent>
 
         <TabsContent value="diversify" className="space-y-4">
-          <div className="rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow">
+          <div>
             <p className="text-sm text-muted-foreground">
               {backupPath
                 ? t("page.tools.4001_fixer.restore_description")
@@ -449,7 +450,7 @@ export default function FourThousandOneFixer() {
       </Tabs>
 
       {progress && (
-        <div className="rounded-lg border bg-card p-3 transition-shadow duration-200 hover:shadow">
+        <div className="rounded-md bg-muted/50 p-3">
           <div
             className={`flex animate-in items-center gap-2 text-sm font-medium fade-in ${
               progress.includes("ERR") || progress.includes("Error")

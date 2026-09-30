@@ -11,8 +11,13 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -97,11 +102,11 @@ function NetworkSettingsForm({ initial }: { initial: ProxySettings }) {
   };
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">{t("page.setting.network.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.network.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -261,8 +266,8 @@ function NetworkSettingsForm({ initial }: { initial: ProxySettings }) {
               </Button>
             </fieldset>
           </form>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
       <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -153,7 +153,7 @@ export function ModGrid(_props: ModGridProps) {
                 {Array.from({ length: 12 }).map((_, index) => (
                   <div
                     key={index.toString()}
-                    className="flex flex-col space-y-3 rounded-lg border p-4"
+                    className="flex flex-col space-y-3 rounded-lg bg-muted/40 p-4"
                   >
                     <Skeleton className="h-48 w-full rounded-md" />
                     <div className="space-y-2">

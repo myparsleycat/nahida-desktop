@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -82,98 +81,90 @@ export function CategoryPanel({
   ] as const;
 
   return (
-    <div className="h-full min-h-0 min-w-0 p-2">
-      <Card className="flex h-full min-h-0 flex-col">
-        <CardHeader className="shrink-0">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Select
-              value={modsSort}
-              items={sortOptions}
-              onValueChange={(value) => onModsSort(value as GameBananaModIndexSort)}
-            >
-              <SelectTrigger
-                className="w-full sm:w-48"
-                aria-label={t("page.gamebanana.mod_sort.label")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start">
-                <SelectGroup>
-                  {sortOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <div className="relative w-full sm:w-64">
-              <SearchIcon className="pointer-events-none absolute top-2.5 left-2 size-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                value={modSearch}
-                onChange={(event) => onChangeModSearch(event.target.value)}
-                placeholder={t("page.gamebanana.search_mods")}
-              />
-            </div>
-            <PaginationButtons
-              page={paginationPage}
-              totalPages={paginationTotalPages}
-              onPrev={() => handleModsPageChange(modsPage - 1)}
-              onNext={() => handleModsPageChange(modsPage + 1)}
-              onPageChange={handleModsPageChange}
-              disablePrev={disablePrev}
-              disableNext={disableNext}
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b px-4 py-2">
+        <Select
+          value={modsSort}
+          items={sortOptions}
+          onValueChange={(value) => onModsSort(value as GameBananaModIndexSort)}
+        >
+          <SelectTrigger
+            className="w-full sm:w-48"
+            aria-label={t("page.gamebanana.mod_sort.label")}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start">
+            <SelectGroup>
+              {sortOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <div className="relative w-full sm:w-64">
+          <SearchIcon className="pointer-events-none absolute top-2.5 left-2 size-4 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            value={modSearch}
+            onChange={(event) => onChangeModSearch(event.target.value)}
+            placeholder={t("page.gamebanana.search_mods")}
+          />
+        </div>
+        <PaginationButtons
+          page={paginationPage}
+          totalPages={paginationTotalPages}
+          onPrev={() => handleModsPageChange(modsPage - 1)}
+          onNext={() => handleModsPageChange(modsPage + 1)}
+          onPageChange={handleModsPageChange}
+          disablePrev={disablePrev}
+          disableNext={disableNext}
+        />
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-4 p-4">
+          {categoryOverviewQuery.isLoading && <OverviewSkeleton />}
+          {categoryOverviewQuery.error && (
+            <ErrorState
+              title={t("page.gamebanana.error_title")}
+              description={errorPresentation.description}
+              details={errorPresentation.details}
             />
-          </div>
-        </CardHeader>
-        <CardContent className="min-h-0 flex-1 p-0 pl-6">
-          <ScrollArea className="h-full min-h-0 pr-4">
-            <div className="space-y-4">
-              {categoryOverviewQuery.isLoading && <OverviewSkeleton />}
-              {categoryOverviewQuery.error && (
-                <ErrorState
-                  title={t("page.gamebanana.error_title")}
-                  description={errorPresentation.description}
-                  details={errorPresentation.details}
-                />
+          )}
+          {categoryOverviewQuery.data && (
+            <section className="space-y-3">
+              {filteredMods.length === 0 && (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  {t("page.gamebanana.no_results")}
+                </div>
               )}
-              {categoryOverviewQuery.data && (
-                <section className="space-y-3">
-                  {filteredMods.length === 0 && (
-                    <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                      {t("page.gamebanana.no_results")}
-                    </div>
-                  )}
 
-                  <div
-                    className={cn(
-                      "grid gap-4",
-                      hasSidebar
-                        ? "sm:grid-cols-3 2xl:grid-cols-4"
-                        : "sm:grid-cols-4 2xl:grid-cols-5",
-                    )}
-                  >
-                    {filteredMods.map((mod) => (
-                      <ModGridCard
-                        key={`mod-${mod._idRow}`}
-                        mod={mod}
-                        language={language}
-                        onClick={() =>
-                          onSelectMod({
-                            id: mod._idRow,
-                            modelName: mod._sModelName,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+              <div
+                className={cn(
+                  "grid gap-4",
+                  hasSidebar ? "sm:grid-cols-3 2xl:grid-cols-4" : "sm:grid-cols-4 2xl:grid-cols-5",
+                )}
+              >
+                {filteredMods.map((mod) => (
+                  <ModGridCard
+                    key={`mod-${mod._idRow}`}
+                    mod={mod}
+                    language={language}
+                    onClick={() =>
+                      onSelectMod({
+                        id: mod._idRow,
+                        modelName: mod._sModelName,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

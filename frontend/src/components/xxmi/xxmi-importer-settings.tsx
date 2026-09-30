@@ -17,10 +17,14 @@ import {
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { ButtonGroup } from "@renderer/components/ui/button-group";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
-import { Separator } from "@renderer/components/ui/separator";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
@@ -208,7 +212,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       >
         {/* The header stays outside the scroll area; a matching gutter keeps it aligned with the body. */}
         <div className="shrink-0 scrollbar-gutter-stable overflow-hidden border-b">
-          <div className="mx-auto w-full max-w-6xl space-y-3 px-4 pt-4 pb-3">
+          <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-4 pb-3">
             <div className="flex items-center gap-2">
               <GameIcon gameName={importer} className="size-7 rounded-md" />
               <span className="font-semibold">{importer}</span>
@@ -257,16 +261,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
         </div>
 
         <div className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl p-4">
-            <TabsContent value="general" className="grid items-start gap-6 xl:grid-cols-2">
-              <Card>
-                <CardContent className="space-y-4 text-sm">
+          <div className="mx-auto w-full max-w-2xl p-4">
+            <TabsContent value="general" className="flex flex-col gap-6">
+              <Section>
+                <SectionContent>
                   <ToggleRow
                     label={t("page.setting.xxmi.builtin.enabled")}
                     checked={config.enabled}
                     onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
                   />
-                  <Separator />
                   <PathField
                     label={t("page.setting.xxmi.builtin.importerFolder")}
                     value={config.importerFolder}
@@ -291,7 +294,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       {t("page.setting.xxmi.builtin.detectGame")}
                     </Button>
                   </PathField>
-                  <Separator />
                   <div className="flex items-center justify-between gap-4">
                     <FieldLabel label={t("page.setting.xxmi.builtin.mode")} />
                     <ButtonGroup>
@@ -313,7 +315,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </ButtonGroup>
                   </div>
                   {config.mode === RuntimeMode.RuntimeLegacy && (
-                    <div className="space-y-3 border-l-2 pl-4">
+                    <div className="space-y-3 rounded-md bg-muted/50 p-3">
                       <SelectRow
                         label={t("page.setting.xxmi.builtin.legacy")}
                         value={config.legacyRuntime || FOLLOW_LATEST}
@@ -339,14 +341,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </Alert>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.launchOptions")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>{t("page.setting.xxmi.builtin.launchOptions")}</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
                   <SelectRow
                     label={t("page.setting.xxmi.builtin.windowMode")}
                     value={config.windowMode}
@@ -370,7 +372,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       }
                     />
                   </ToggleRow>
-                  <Separator />
                   <SelectRow
                     label={t("page.setting.xxmi.builtin.startMethod")}
                     value={config.processStartMethod}
@@ -397,16 +398,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     value={config.xxmiDLLInitDelay}
                     onValueChange={(xxmiDLLInitDelay) => setConfig({ ...config, xxmiDLLInitDelay })}
                   />
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
             </TabsContent>
 
-            <TabsContent value="package" className="grid items-start gap-6 xl:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.packageVersion")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
+            <TabsContent value="package" className="flex flex-col gap-6">
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
                       {t("page.setting.xxmi.builtin.currentPin")}:{" "}
@@ -426,7 +427,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </span>
                     )}
                   </div>
-                  <div className="max-h-72 divide-y overflow-y-auto rounded-lg border">
+                  <div className="max-h-72 space-y-0.5 overflow-y-auto">
                     <VersionOption
                       selected={!config.packageVersion.pinned}
                       onSelect={() => {
@@ -457,7 +458,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     ))}
                   </div>
                   {selectedPackage && (
-                    <div className="space-y-3 rounded-lg border p-3">
+                    <div className="space-y-3 rounded-lg bg-muted/50 p-3">
                       {selectedRelease?.notes && (
                         <p className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap text-muted-foreground">
                           {selectedRelease.notes}
@@ -509,11 +510,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     checked={config.overwriteINI}
                     onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
                   />
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
 
-              <Card>
-                <CardContent className="space-y-4 text-sm">
+              <Section>
+                <SectionContent>
                   <SelectRow
                     label={
                       <span className="flex items-center gap-1.5">
@@ -566,20 +567,19 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </AlertDescription>
                     </Alert>
                   )}
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
             </TabsContent>
 
             {hasGameTweaks && (
-              <TabsContent value="game" className="grid items-start gap-6 xl:grid-cols-2">
-                <Card>
-                  <CardContent className="space-y-4 text-sm">
+              <TabsContent value="game" className="flex flex-col gap-6">
+                <Section>
+                  <SectionContent>
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.configureGame")}
                       checked={config.configureGame}
                       onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
                     />
-                    <Separator />
                     {config.gimi && (
                       <>
                         <ToggleRow
@@ -662,27 +662,27 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           }
                         />
                       ))}
-                  </CardContent>
-                </Card>
+                  </SectionContent>
+                </Section>
                 {config.wwmi && (
-                  <Card>
-                    <CardContent className="space-y-4 text-sm">
+                  <Section>
+                    <SectionContent>
                       <WWMIGraphicsSettings
                         options={config.wwmi}
                         onChange={(wwmi) => setConfig({ ...config, wwmi })}
                       />
-                    </CardContent>
-                  </Card>
+                    </SectionContent>
+                  </Section>
                 )}
               </TabsContent>
             )}
 
-            <TabsContent value="advanced" className="grid items-start gap-6 xl:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.commands")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
+            <TabsContent value="advanced" className="flex flex-col gap-6">
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>{t("page.setting.xxmi.builtin.commands")}</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
                   {(["runPreLaunch", "runPostLoad"] as const).map((field) => (
                     <ToggleRow
                       key={field}
@@ -799,14 +799,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       }
                     />
                   </ToggleRow>
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>3DMigoto</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>3DMigoto</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
                   {(
                     [
                       "enforceRendering",
@@ -832,16 +832,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       }
                     />
                   ))}
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
             </TabsContent>
 
-            <TabsContent value="tools" className="grid items-start gap-6 xl:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
+            <TabsContent value="tools" className="flex flex-col gap-6">
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
                   <ToggleRow
                     label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
                     checked={config.iniOptimizer.enabled}
@@ -899,7 +899,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </Button>
                   </div>
                   {optimizationPreview && (
-                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2 font-mono text-xs">
+                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-muted/50 p-2 font-mono text-xs">
                       {optimizationPreview.changes?.length ? (
                         optimizationPreview.changes.map((change, index) => (
                           <p key={`${change.path}:${change.line}:${index}`} className="break-all">
@@ -912,72 +912,74 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       )}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </SectionContent>
+              </Section>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("page.setting.xxmi.builtin.maintenance")}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        const warnings = await XXMI.RepairRuntime(importer);
-                        toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
-                        warnings?.forEach((warning) => toast.warning(warning));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.repairRuntime")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.OpenImporterFolder(importer);
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.openImporterFolder")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClickPromise={async () => {
-                      try {
-                        await XXMI.CreateShortcut(importer);
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
-                      } catch (error) {
-                        toast.error(toErrorMessage(error));
-                      }
-                    }}
-                  >
-                    {t("page.setting.xxmi.builtin.createShortcut")}
-                  </Button>
-                  {saved?.shortcutPath && (
+              <Section>
+                <SectionHeader>
+                  <SectionTitle>{t("page.setting.xxmi.builtin.maintenance")}</SectionTitle>
+                </SectionHeader>
+                <SectionContent>
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       onClickPromise={async () => {
                         try {
-                          await XXMI.DeleteShortcut(importer);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
+                          const warnings = await XXMI.RepairRuntime(importer);
+                          toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
+                          warnings?.forEach((warning) => toast.warning(warning));
                         } catch (error) {
                           toast.error(toErrorMessage(error));
                         }
                       }}
                     >
-                      {t("page.setting.xxmi.builtin.deleteShortcut")}
+                      {t("page.setting.xxmi.builtin.repairRuntime")}
                     </Button>
-                  )}
-                </CardContent>
-              </Card>
+                    <Button
+                      variant="outline"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.OpenImporterFolder(importer);
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.openImporterFolder")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClickPromise={async () => {
+                        try {
+                          await XXMI.CreateShortcut(importer);
+                          refresh();
+                          toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
+                        } catch (error) {
+                          toast.error(toErrorMessage(error));
+                        }
+                      }}
+                    >
+                      {t("page.setting.xxmi.builtin.createShortcut")}
+                    </Button>
+                    {saved?.shortcutPath && (
+                      <Button
+                        variant="outline"
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.DeleteShortcut(importer);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.deleteShortcut")}
+                      </Button>
+                    )}
+                  </div>
+                </SectionContent>
+              </Section>
             </TabsContent>
           </div>
         </div>
@@ -1076,7 +1078,7 @@ function VersionOption({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
+        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
         selected && "bg-muted",
       )}
     >

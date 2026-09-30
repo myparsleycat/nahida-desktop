@@ -1,8 +1,14 @@
 import { Backup, type Overview } from "@bindings/backup";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Progress } from "@renderer/components/ui/progress";
+import {
+  Section,
+  SectionAction,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { useSetting } from "@renderer/hooks/use-settings";
 import { formatSize } from "@shared/utils";
 import { CloudUploadIcon, LoaderIcon, XIcon } from "lucide-react";
@@ -41,27 +47,29 @@ export function BackupStatusCard({ overview }: { overview: Overview | undefined 
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4">
+    <Section>
+      <SectionHeader>
         <div className="flex items-center gap-2">
-          <CardTitle className="text-sm font-medium">{t("page.backup.status.title")}</CardTitle>
+          <SectionTitle>{t("page.backup.status.title")}</SectionTitle>
           <Badge variant={enabled.data ? "default" : "secondary"}>
             {enabled.data ? t("page.backup.status.auto_on") : t("page.backup.status.auto_off")}
           </Badge>
         </div>
-        {running ? (
-          <Button variant="outline" size="sm" onClick={() => void Backup.Cancel()}>
-            <XIcon />
-            {t("g.cancel")}
-          </Button>
-        ) : (
-          <Button size="sm" onClick={() => void runNow()} disabled={!overview}>
-            <CloudUploadIcon />
-            {t("page.backup.status.run_now")}
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-4">
+        <SectionAction>
+          {running ? (
+            <Button variant="outline" size="sm" onClick={() => void Backup.Cancel()}>
+              <XIcon />
+              {t("g.cancel")}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => void runNow()} disabled={!overview}>
+              <CloudUploadIcon />
+              {t("page.backup.status.run_now")}
+            </Button>
+          )}
+        </SectionAction>
+      </SectionHeader>
+      <SectionContent>
         {running && status && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm">
@@ -112,7 +120,7 @@ export function BackupStatusCard({ overview }: { overview: Overview | undefined 
               : t("page.backup.status.not_scheduled")}
           </dd>
         </dl>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }

@@ -203,7 +203,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
       </Field>
 
       {selectedComponent ? (
-        <div className="space-y-2 rounded-md border border-border/80 p-3">
+        <div className="space-y-2 rounded-md bg-background/60 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-medium">{selectedComponent.componentId}</div>
             <div className="flex items-center gap-2">
@@ -292,10 +292,8 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                 <div
                   key={zone.id}
                   className={cn(
-                    "w-full rounded-md border px-3 py-2 text-left transition-colors",
-                    !isLinked && isSelected
-                      ? "border-primary bg-primary/10"
-                      : "border-border/60 hover:bg-muted/60",
+                    "w-full rounded-md px-3 py-2 text-left transition-colors",
+                    !isLinked && isSelected ? "bg-primary/10" : "hover:bg-muted/60",
                   )}
                 >
                   {isLinked ? (
@@ -640,7 +638,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
             })}
         </div>
       ) : (
-        <div className="rounded-md border border-border/80 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md bg-background/60 px-3 py-2 text-xs text-muted-foreground">
           {t("page.tools.touch_profile.no_interactive_components")}
         </div>
       )}
@@ -649,7 +647,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
       activeZoneId !== ALL_ZONES &&
       selectedComponent &&
       !(linkedComponents[selectedComponent.componentId] ?? true) ? (
-        <div className="rounded-md border border-border/80 p-3">
+        <div className="rounded-md bg-background/60 p-3">
           <div className="text-sm font-medium">
             {t("page.tools.touch_profile.advanced_title")}: {selectedZone.label}
           </div>

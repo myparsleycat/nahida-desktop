@@ -55,7 +55,7 @@ export function PresetBuilder({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex flex-col gap-2 border-b p-3">
         <div className="flex items-center justify-between">
           <div className="flex-1">
@@ -116,8 +116,8 @@ export function PresetBuilder({
                   key={script.id}
                   value={script}
                   className={cn(
-                    "group grid cursor-grab grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border border-border bg-card p-4 transition-colors active:cursor-grabbing",
-                    "hover:border-accent/40 hover:bg-card/80",
+                    "group grid cursor-grab grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md bg-muted/50 p-4 transition-colors active:cursor-grabbing",
+                    "hover:bg-muted",
                   )}
                 >
                   <div className="pointer-events-none flex shrink-0 items-center gap-2">

@@ -574,7 +574,7 @@ export function ContentMenuGrid(props: ContentMenuProps) {
           key={item.id}
           data-uuid={item.id}
           className={cn(
-            "sorted-contents cursor-pointer rounded-sm border p-2 hover:bg-secondary",
+            "sorted-contents cursor-pointer rounded-md p-2 hover:bg-secondary",
             selection.selectedItems.some((selected) => selected.id === item.id) && "bg-secondary",
           )}
           draggable="true"

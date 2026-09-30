@@ -37,7 +37,7 @@ export function NteBootstrapProgressView({ active }: NteBootstrapProgressViewPro
   const isCompleted = displayProgress.phase === "completed";
 
   return (
-    <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2">
+    <div className="space-y-2 rounded-md bg-muted/50 px-3 py-2">
       <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
         <div className="flex min-w-0 items-center gap-2">
           {isFailed ? (

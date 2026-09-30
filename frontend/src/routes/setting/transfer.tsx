@@ -1,6 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
-import { Separator } from "@renderer/components/ui/separator";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { createFileRoute } from "@tanstack/react-router";
@@ -56,13 +60,11 @@ function RouteComponent() {
 
   return (
     <div className="space-y-6 p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.transfer.concurrency.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.transfer.concurrency.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -93,9 +95,6 @@ function RouteComponent() {
               className="w-28"
             />
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -126,16 +125,14 @@ function RouteComponent() {
               className="w-28"
             />
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.transfer.bandwidth.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.transfer.bandwidth.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -168,16 +165,14 @@ function RouteComponent() {
               className="w-28"
             />
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.transfer.other.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.transfer.other.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -192,9 +187,6 @@ function RouteComponent() {
               onCheckedChange={(val) => update("moveTransferPageWhenStartTransfer", val)}
             />
           </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -209,8 +201,8 @@ function RouteComponent() {
               onCheckedChange={(val) => update("powerSaveBlockInTransfer", val)}
             />
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
     </div>
   );
 }

@@ -57,7 +57,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
             <DialogDescription className="break-all">{runner.activeModPath}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">{rules?.activeTag ?? t("g.unknown")}</Badge>
               <span className="font-mono text-muted-foreground">
@@ -120,7 +120,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
 
             {(["hash", "jane", "dialyn"] as const).map((tool) => (
               <TabsContent key={tool} value={tool} className="mt-4">
-                <div className="space-y-4 rounded-xl border bg-card p-5">
+                <div className="space-y-4">
                   <div className="flex items-start gap-3">
                     <div className="rounded-lg bg-primary/10 p-2 text-primary">
                       <WrenchIcon className="size-5" />
@@ -176,8 +176,8 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                 </div>
               </div>
 
-              <ScrollArea className="h-[380px] rounded-lg border">
-                <div className="space-y-3 p-3">
+              <ScrollArea className="h-[380px]">
+                <div className="space-y-2">
                   {runner.isLoadingZZMIBackups ? (
                     <div className="flex justify-center p-8">
                       <Loader2Icon className="animate-spin" />
@@ -188,7 +188,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                     </p>
                   ) : (
                     runner.zzmiBackups.map((session) => (
-                      <div key={session.id} className="space-y-3 rounded-lg border bg-card p-3">
+                      <div key={session.id} className="space-y-3 rounded-lg bg-muted/50 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="flex gap-2">
                             <FileClockIcon className="mt-0.5 size-4 text-primary" />

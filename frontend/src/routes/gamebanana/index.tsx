@@ -425,7 +425,7 @@ function RouteComponent() {
 
         <div
           className={cn(
-            "grid min-h-0 flex-1 gap-2 overflow-hidden",
+            "grid min-h-0 flex-1 overflow-hidden",
             showCategorySidebar && "lg:grid-cols-[minmax(0,1fr)_320px]",
           )}
         >
@@ -471,7 +471,7 @@ function RouteComponent() {
           </div>
 
           {showCategorySidebar && (
-            <div className="min-h-0 min-w-0 py-2 pr-2">
+            <div className="min-h-0 min-w-0 border-l">
               {isViewingMod ? (
                 <ModFilesSidebar
                   t={t}

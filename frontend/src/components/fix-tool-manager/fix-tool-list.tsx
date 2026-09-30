@@ -114,8 +114,8 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card transition-all duration-200 ${
-        isDragOver ? "border-primary bg-primary/5 ring-2 ring-primary/20" : ""
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-lg transition-all duration-200 ${
+        isDragOver ? "bg-primary/5 ring-2 ring-primary/20" : ""
       }`}
     >
       <div className="flex flex-col gap-2 border-b p-3">
@@ -149,7 +149,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden">
-        <div className="flex flex-col space-y-2 p-3">
+        <div className="flex flex-col space-y-0.5 p-3">
           {!filteredScripts || filteredScripts.length === 0 ? (
             <div
               className={`rounded-lg border-2 border-dashed p-12 text-center transition-colors ${
@@ -167,14 +167,14 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
             <Reorder.Group
               axis="y"
               values={filteredScripts}
-              className="flex flex-col space-y-2"
+              className="flex flex-col space-y-0.5"
               onReorder={() => {}}
             >
               {filteredScripts.map((script) => (
                 <Reorder.Item
                   key={script.id}
                   value={script}
-                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-lg border border-border bg-card p-3 transition-colors hover:border-accent/40 hover:bg-card/80"
+                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md p-3 transition-colors hover:bg-muted/50"
                 >
                   <div className="flex min-w-0 flex-row items-center space-x-2">
                     {script.type === "python" ? (
