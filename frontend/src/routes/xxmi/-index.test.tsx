@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -122,6 +122,23 @@ it("lists importer status next to the page and disables a running importer", () 
     "disabled",
     true,
   );
+});
+
+it("collapses importers that are not installed", () => {
+  render(<XXMIImporterList />);
+
+  const trigger = screen.getByRole("button", {
+    name: /page\.setting\.xxmi\.builtin\.notInstalled/,
+  });
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(trigger.textContent).toContain("5");
+  expect(screen.getByText("GIMI")).toBeTruthy();
+  expect(screen.queryByText("WWMI")).toBeNull();
+
+  fireEvent.click(trigger);
+
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByText("WWMI")).toBeTruthy();
 });
 
 it("shows a shared library update when the first importer pins it and another follows latest", () => {
