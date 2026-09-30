@@ -1811,6 +1811,8 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じた時点でアプリが終了するため、アプリを再度開くまでこの機能は使えなくなります。それでもバックグラウンド実行をオフにしますか？",
           "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
+          "includePrerelease": "プレリリースを含める",
+          "includePrereleaseDescription": "正式リリースに加えて GitHub の pre-release も更新候補に含めます。下書きリリースは含まれません。",
           "updateStatus": "更新状態",
           "autoUpdateModes": {
             "auto": {

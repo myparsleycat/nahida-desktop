@@ -41,6 +41,7 @@ const settingsConfig = {
   runOnStartup: "general.runOnStartup",
   language: "general.language",
   autoUpdateMode: "general.autoUpdateMode",
+  includePrerelease: "general.includePrerelease",
   runInBackground: "general.runInBackground",
   titlebarActivityBadgeClickNavigate: "general.titlebarActivityBadgeClickNavigate",
   defaultStartPage: "general.defaultStartPage",
@@ -275,6 +276,23 @@ function RouteComponent() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.includePrerelease")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.application.includePrereleaseDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.includePrerelease}
+              onCheckedChange={(val) => update("includePrerelease", val)}
+            />
           </div>
 
           <Separator />

@@ -368,6 +368,10 @@ func (s *Setting) GetAutoUpdateMode(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralAutoUpdateMode)
 }
 
+func (s *Setting) GetIncludePrerelease(ctx context.Context) (bool, error) {
+	return s.getBool(ctx, KeyGeneralIncludePrerelease)
+}
+
 func (s *Setting) SetAutoUpdateMode(ctx context.Context, mode string) error {
 	return s.Set(ctx, KeyGeneralAutoUpdateMode, mode)
 }

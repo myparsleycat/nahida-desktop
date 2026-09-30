@@ -1810,6 +1810,8 @@
           "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 时，保持后台运行会更安全、更稳定。如果关闭此选项，一旦关闭所有窗口，应用就会退出，因此在重新打开应用之前将无法使用该功能。\n\n仍然要关闭后台运行吗？",
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
+          "includePrerelease": "包含预发布版本",
+          "includePrereleaseDescription": "除正式版本外，也将 GitHub pre-release 作为更新候选。草稿版本不会包含在内。",
           "updateStatus": "更新状态",
           "autoUpdateModes": {
             "auto": {

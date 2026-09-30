@@ -227,6 +227,30 @@ func electronMigrationTestValue(source string, index int) string {
 	}
 }
 
+func TestIncludePrereleaseDefaultsOff(t *testing.T) {
+	t.Parallel()
+
+	var changed []bool
+	s, _ := openTemp(t, Options{Hooks: Hooks{AfterIncludePrereleaseChanged: func(enabled bool) {
+		changed = append(changed, enabled)
+	}}})
+	ctx := context.Background()
+	got, err := s.GetIncludePrerelease(ctx)
+	if err != nil || got {
+		t.Fatalf("default = %v, %v", got, err)
+	}
+	if err := s.Set(ctx, KeyGeneralIncludePrerelease, true); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	got, err = s.GetIncludePrerelease(ctx)
+	if err != nil || !got {
+		t.Fatalf("stored = %v, %v", got, err)
+	}
+	if len(changed) != 1 || !changed[0] {
+		t.Fatalf("hook = %v", changed)
+	}
+}
+
 func TestSetGetEncodings(t *testing.T) {
 	t.Parallel()
 

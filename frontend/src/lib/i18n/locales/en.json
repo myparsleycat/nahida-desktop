@@ -1843,6 +1843,8 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist works more reliably when background run is enabled. If you turn this off, closing all windows will quit the app, and you will not be able to use that feature until the app is open again. Do you still want to turn off background run?",
           "runInBackgroundDisableConfirmAction": "Turn off anyway",
           "autoUpdate": "Auto update",
+          "includePrerelease": "Include pre-releases",
+          "includePrereleaseDescription": "Also offer GitHub pre-releases as app updates. Draft releases stay excluded.",
           "updateStatus": "Update status",
           "autoUpdateModes": {
             "auto": {

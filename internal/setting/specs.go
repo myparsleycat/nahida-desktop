@@ -31,6 +31,15 @@ func (sp spec) resolved(s *Setting, value any) any {
 	return value
 }
 
+func includePrereleaseSpec() spec {
+	parsed := boolSpec(definitionsByKey[KeyGeneralIncludePrerelease], false)
+	parsed.afterSet = func(s *Setting, _ context.Context, value any) error {
+		s.opts.Hooks.includePrereleaseChanged(asBool(value))
+		return nil
+	}
+	return parsed
+}
+
 func boolSpec(def Definition, fallback bool) spec {
 	return spec{
 		def: def,
@@ -137,7 +146,8 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
-		KeyGeneralRunInBackground: boolSpec(definitionsByKey[KeyGeneralRunInBackground], true),
+		KeyGeneralIncludePrerelease: includePrereleaseSpec(),
+		KeyGeneralRunInBackground:   boolSpec(definitionsByKey[KeyGeneralRunInBackground], true),
 		KeyGeneralDefaultStartPage: {
 			def: definitionsByKey[KeyGeneralDefaultStartPage],
 			getDefault: func(*Setting) any {
