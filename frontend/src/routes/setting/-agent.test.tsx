@@ -16,6 +16,12 @@ import { Suspense, type ComponentType } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
+const calls = vi.hoisted(() => ({ invalidate: vi.fn() }));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: calls.invalidate }),
+}));
+
 vi.mock("@bindings/platform", () => ({
   Shell: { CopyStr: vi.fn() },
 }));
@@ -544,6 +550,7 @@ it("stores a replacement API key for the selected provider", async () => {
     apiKey: "go-key",
   });
   expect(toast.success).toHaveBeenCalledWith("page.agent.settings_saved");
+  expect(calls.invalidate).toHaveBeenCalledWith({ queryKey: ["agent", "settings"] });
 });
 
 it("tests a typed API key before it is saved", async () => {
@@ -588,6 +595,7 @@ it("signs in to ChatGPT and reloads the provider list", async () => {
   expect(Agent.CompleteProviderLogin).toHaveBeenCalledOnce();
   expect(toast.success).toHaveBeenCalledWith("page.agent.login_complete");
   expect(Agent.ListProviders).toHaveBeenCalledTimes(2);
+  expect(calls.invalidate).toHaveBeenCalledWith({ queryKey: ["agent", "settings"] });
   // The plan does not serve the stored model, so the form moves to the newest one it does.
   expect((screen.getByLabelText("page.agent.model") as HTMLInputElement).value).toBe("gpt-5.5");
 });
@@ -634,6 +642,7 @@ it("signs out of the ChatGPT account", async () => {
   await renderSettings();
   await clickButton("page.agent.sign_out");
   expect(Agent.SignOutProvider).toHaveBeenCalledWith("openai");
+  expect(calls.invalidate).toHaveBeenCalledWith({ queryKey: ["agent", "settings"] });
 });
 
 it("refreshes the model catalog", async () => {
