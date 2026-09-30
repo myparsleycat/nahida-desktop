@@ -5,5 +5,6 @@ export const Route = createFileRoute("/xxmi/$importer")({ component: RouteCompon
 
 function RouteComponent() {
   const { importer } = Route.useParams();
-  return <XXMIImporterSettings importer={importer} />;
+  // The route instance is reused across importers, so a key keeps one importer's draft from leaking into another.
+  return <XXMIImporterSettings key={importer} importer={importer} />;
 }

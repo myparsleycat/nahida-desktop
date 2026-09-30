@@ -35,10 +35,9 @@ import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useBlocker } from "@tanstack/react-router";
 import { isEqual } from "es-toolkit";
 import {
-  ArrowLeftIcon,
   CheckIcon,
   PlayIcon,
   ScanSearchIcon,
@@ -82,7 +81,6 @@ async function resolveImporterGameFolder(importer: string, next: ImporterConfig)
 
 export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { startImporter, launchGuardDialog } = useLaunchGuard();
   const { data: saved } = useQuery({
@@ -117,7 +115,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     enabled: config?.mode === RuntimeMode.RuntimeLegacy,
   });
   const [tab, setTab] = useState("general");
-  const [leaveOpen, setLeaveOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState("");
   const selectedRelease = releases?.find((release) => release.version === selectedPackage);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
@@ -191,26 +188,22 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       toast.error(toErrorMessage(error));
     }
   };
-  const back = () => navigate({ to: "/xxmi" });
+  // Switching importers or pages drops the draft, so leaving with unsaved changes asks first.
+  const leave = useBlocker({
+    shouldBlockFn: () => dirty,
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
 
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
 
   return (
-    <main className="mx-auto flex w-full flex-1 flex-col p-4 select-none">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col p-4">
       <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-4">
         <div className="sticky top-0 z-10 -mx-4 -mt-4 space-y-3 border-b bg-background/95 px-4 pt-4 pb-3 backdrop-blur">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("page.setting.xxmi.builtin.back")}
-              title={t("page.setting.xxmi.builtin.back")}
-              onClick={() => (dirty ? setLeaveOpen(true) : back())}
-            >
-              <ArrowLeftIcon />
-            </Button>
             <GameIcon gameName={importer} className="size-7 rounded-md" />
             <span className="font-semibold">{importer}</span>
             <div className="ml-auto flex gap-2">
@@ -256,7 +249,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </TabsList>
         </div>
 
-        <TabsContent value="general" className="space-y-6">
+        <TabsContent value="general" className="grid items-start gap-6 xl:grid-cols-2">
           <Card>
             <CardContent className="space-y-4 text-sm">
               <ToggleRow
@@ -390,7 +383,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="package" className="space-y-6">
+        <TabsContent value="package" className="grid items-start gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>{t("page.setting.xxmi.builtin.packageVersion")}</CardTitle>
@@ -554,7 +547,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
         </TabsContent>
 
         {hasGameTweaks && (
-          <TabsContent value="game" className="space-y-6">
+          <TabsContent value="game" className="grid items-start gap-6 xl:grid-cols-2">
             <Card>
               <CardContent className="space-y-4 text-sm">
                 <ToggleRow
@@ -655,7 +648,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </TabsContent>
         )}
 
-        <TabsContent value="advanced" className="space-y-6">
+        <TabsContent value="advanced" className="grid items-start gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>{t("page.setting.xxmi.builtin.commands")}</CardTitle>
@@ -808,7 +801,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tools" className="space-y-6">
+        <TabsContent value="tools" className="grid items-start gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</CardTitle>
@@ -1007,7 +1000,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+      <AlertDialog
+        open={leave.status === "blocked"}
+        onOpenChange={(open) => !open && leave.reset?.()}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("page.setting.xxmi.builtin.leaveTitle")}</AlertDialogTitle>
@@ -1017,7 +1013,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void back()}>
+            <AlertDialogAction variant="destructive" onClick={() => leave.proceed?.()}>
               {t("page.setting.xxmi.builtin.leaveConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>

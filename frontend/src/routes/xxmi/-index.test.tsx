@@ -64,13 +64,18 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: object) => ({ options }),
   lazyRouteComponent: (component: unknown) => component,
+  useLocation: () => ({ pathname: "/xxmi" }),
   useNavigate: () => vi.fn(),
+  Outlet: () => null,
 }));
 vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+import { XXMIImporterList } from "@renderer/components/xxmi/xxmi-importer-list";
+
 import { XXMIDashboard } from "./index";
+import { XXMILayout } from "./route";
 
 afterEach(() => {
   cleanup();
@@ -86,15 +91,30 @@ it("shows the external launcher settings instead of the built-in runtime in exte
   expect(screen.getByDisplayValue("C:\XXMI Launcher")).toBeTruthy();
   expect(screen.getByText("page.setting.xxmi.activeImporter")).toBeTruthy();
   expect(screen.queryByText("page.setting.xxmi.builtin.root")).toBeNull();
+  cleanup();
+
+  render(<XXMILayout />);
+
+  expect(screen.queryByText("page.setting.xxmi.builtin.importers")).toBeNull();
   expect(
     screen.getByRole("button", { name: "page.setting.xxmi.launcherMode.external" }),
   ).toHaveProperty("disabled", true);
 });
 
-it("keeps the package controls visible when a cache is damaged and disables a running importer", () => {
+it("keeps the package controls visible when a cache is damaged", () => {
   render(<XXMIDashboard />);
 
   expect(screen.getByRole("alert").textContent).toContain("missing source.json");
+});
+
+it("lists importer status next to the page and disables a running importer", () => {
+  render(<XXMILayout />);
+
+  expect(screen.getByText("page.setting.xxmi.builtin.importers")).toBeTruthy();
+  cleanup();
+
+  render(<XXMIImporterList />);
+
   expect(screen.getByText("page.setting.xxmi.builtin.updateAvailable")).toBeTruthy();
   expect(screen.getByText("page.setting.xxmi.builtin.running")).toBeTruthy();
   expect(screen.getByText("page.setting.xxmi.builtin.customDll")).toBeTruthy();

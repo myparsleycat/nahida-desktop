@@ -86,7 +86,7 @@ vi.mock("@tanstack/react-router", () => ({
     useParams: () => ({ importer: "GIMI" }),
   }),
   lazyRouteComponent: (component: unknown) => component,
-  useNavigate: () => vi.fn(),
+  useBlocker: () => ({ status: "idle" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));

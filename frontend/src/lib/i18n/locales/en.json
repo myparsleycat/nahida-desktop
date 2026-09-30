@@ -2177,6 +2177,7 @@
           "autoUpdate": "Automatically update packages",
           "prereleases": "Include prereleases",
           "importers": "Importers",
+          "manage": "Manage",
           "updateAvailable": "Update available",
           "running": "Running",
           "notInstalled": "Not installed",

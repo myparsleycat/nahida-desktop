@@ -2092,6 +2092,7 @@
           "autoUpdate": "自动更新软件包",
           "prereleases": "包含预发布版本",
           "importers": "导入器",
+          "manage": "管理",
           "updateAvailable": "有可用更新",
           "running": "运行中",
           "notInstalled": "未安装",

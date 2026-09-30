@@ -2111,6 +2111,7 @@
           "autoUpdate": "패키지 자동 업데이트",
           "prereleases": "시험판 포함",
           "importers": "임포터",
+          "manage": "관리",
           "updateAvailable": "업데이트 있음",
           "running": "실행 중",
           "notInstalled": "설치되지 않음",
