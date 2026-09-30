@@ -829,7 +829,7 @@ func TestDisablingPrereleaseDropsPrereleaseCandidate(t *testing.T) {
 		releaseVersion: "3.1.0-beta.2",
 		releaseChannel: releaseChannelPrerelease,
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), false); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	status, err := u.GetStatus(context.Background())
@@ -855,7 +855,7 @@ func TestDisablingPrereleaseKeepsStableCandidate(t *testing.T) {
 		releaseVersion: "3.0.0",
 		releaseChannel: "stable",
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), false); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if engine.checks != 0 || u.releaseVersion != "3.0.0" || !u.available {
@@ -875,7 +875,7 @@ func TestDisablingPrereleaseWhileUpdatesOffClearsWithoutCheck(t *testing.T) {
 		releaseVersion: "3.1.0-beta.1",
 		releaseChannel: releaseChannelPrerelease,
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), false); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	status, err := u.GetStatus(context.Background())
@@ -901,7 +901,7 @@ func TestEnablingPrereleaseRechecksAndReplacesStable(t *testing.T) {
 		releaseVersion: "3.0.0",
 		releaseChannel: "stable",
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), true); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), true, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	status, err := u.GetStatus(context.Background())
@@ -931,7 +931,7 @@ func TestEnablingPrereleaseKeepsDownloadedStableWhenUnchanged(t *testing.T) {
 		releaseChannel:  "stable",
 		notifiedVersion: "3.0.0",
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), true); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), true, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if engine.downloads != 0 || notified != 0 || !u.downloaded || u.releaseVersion != "3.0.0" {
@@ -961,7 +961,7 @@ func TestEnablingPrereleaseRetriesFailedRefresh(t *testing.T) {
 		releaseChannel: "stable",
 	}
 	ctx := context.Background()
-	if err := u.applyIncludePrereleaseChange(ctx, true); !errors.Is(err, checkErr) {
+	if err := u.applyIncludePrereleaseChange(ctx, true, 0); !errors.Is(err, checkErr) {
 		t.Fatalf("first refresh error = %v, want %v", err, checkErr)
 	}
 	if !u.channelRefreshPending || !u.downloaded || u.releaseVersion != "3.0.0" {
@@ -1003,7 +1003,7 @@ func TestEnablingPrereleaseRetriesAfterRateLimit(t *testing.T) {
 		releaseChannel: "stable",
 	}
 	ctx := context.Background()
-	if err := u.applyIncludePrereleaseChange(ctx, true); err != nil {
+	if err := u.applyIncludePrereleaseChange(ctx, true, 0); err != nil {
 		t.Fatalf("rate-limited refresh: %v", err)
 	}
 	if engine.checks != 0 || !u.channelRefreshPending || !u.downloaded {
@@ -1038,7 +1038,7 @@ func TestEnablingPrereleaseWhileUpdatesOffDoesNotCheck(t *testing.T) {
 		releaseVersion: "3.0.0",
 		releaseChannel: "stable",
 	}
-	if err := u.applyIncludePrereleaseChange(context.Background(), true); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), true, 0); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if engine.checks != 0 || u.releaseVersion != "3.0.0" {
@@ -1050,8 +1050,71 @@ func TestHandleIncludePrereleaseChangedDefersWhileChecking(t *testing.T) {
 	t.Parallel()
 	u := &Updater{checking: true}
 	u.HandleIncludePrereleaseChanged(true)
+	u.HandleIncludePrereleaseChanged(false)
 	if !u.recheckAfterBusy {
 		t.Fatal("expected the change to wait until the check finishes")
+	}
+	if u.includePrereleaseGeneration != 2 {
+		t.Fatalf("generation = %d, want 2", u.includePrereleaseGeneration)
+	}
+}
+
+func TestApplyIncludePrereleaseChangeIgnoresStaleGeneration(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		enabled bool
+		busy    bool
+	}{
+		{name: "stale enable", enabled: true},
+		{name: "stale disable"},
+		{name: "stale enable while busy", enabled: true, busy: true},
+		{name: "stale disable while busy", busy: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			engine := &fakeUpdaterEngine{}
+			emitted := 0
+			u := &Updater{
+				engine:                      engine,
+				settings:                    fakeUpdaterSettings{mode: "off"},
+				emit:                        func(string, ...any) { emitted++ },
+				available:                   true,
+				downloaded:                  true,
+				releaseVersion:              "3.1.0-beta.2",
+				releaseChannel:              releaseChannelPrerelease,
+				checking:                    tt.busy,
+				channelRefreshPending:       !tt.enabled,
+				includePrereleaseGeneration: 2,
+			}
+			before, err := u.GetStatus(context.Background())
+			if err != nil {
+				t.Fatalf("status before stale callback: %v", err)
+			}
+
+			if err := u.applyIncludePrereleaseChange(context.Background(), tt.enabled, 1); err != nil {
+				t.Fatalf("stale callback: %v", err)
+			}
+			after, err := u.GetStatus(context.Background())
+			if err != nil {
+				t.Fatalf("status after stale callback: %v", err)
+			}
+			if !reflect.DeepEqual(after, before) {
+				t.Fatalf("stale callback changed status: before=%#v after=%#v", before, after)
+			}
+			if u.channelRefreshPending != !tt.enabled || u.recheckAfterBusy ||
+				u.releaseChannel != releaseChannelPrerelease {
+				t.Fatalf(
+					"pending=%v deferred=%v channel=%s",
+					u.channelRefreshPending,
+					u.recheckAfterBusy,
+					u.releaseChannel,
+				)
+			}
+			if engine.checks != 0 || emitted != 0 {
+				t.Fatalf("checks=%d emitted=%d, want no side effects", engine.checks, emitted)
+			}
+		})
 	}
 }
 
@@ -1085,7 +1148,7 @@ func TestDownloadedPrereleaseIsDiscardedWhenSwitchTurnsOff(t *testing.T) {
 		t.Fatal("download did not start")
 	}
 	settings.includePrerelease = false
-	if err := u.applyIncludePrereleaseChange(context.Background(), false); err != nil {
+	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("defer channel change: %v", err)
 	}
 	if !u.recheckAfterBusy || engine.checks != 0 || !u.available || u.releaseVersion != "3.1.0-beta.2" {

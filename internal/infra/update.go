@@ -84,20 +84,21 @@ type Updater struct {
 	emit     func(string, ...any)
 	ready    func()
 
-	available             bool
-	downloaded            bool
-	releaseVersion        string
-	releaseChannel        string
-	notifiedVersion       string
-	originalNotes         string
-	translatedNotes       string
-	translatedLang        string
-	dialogDismissed       bool
-	checking              bool
-	downloading           bool
-	recheckAfterBusy      bool
-	channelRefreshPending bool
-	translationSerial     uint64
+	available                   bool
+	downloaded                  bool
+	releaseVersion              string
+	releaseChannel              string
+	notifiedVersion             string
+	originalNotes               string
+	translatedNotes             string
+	translatedLang              string
+	dialogDismissed             bool
+	checking                    bool
+	downloading                 bool
+	recheckAfterBusy            bool
+	channelRefreshPending       bool
+	includePrereleaseGeneration uint64
+	translationSerial           uint64
 
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -509,6 +510,8 @@ func (u *Updater) HandleIncludePrereleaseChanged(enabled bool) {
 		return
 	}
 	u.mu.Lock()
+	u.includePrereleaseGeneration++
+	generation := u.includePrereleaseGeneration
 	ctx := u.ctx
 	if u.checking || u.downloading {
 		u.recheckAfterBusy = true
@@ -520,14 +523,18 @@ func (u *Updater) HandleIncludePrereleaseChanged(enabled bool) {
 		ctx = context.Background()
 	}
 	go u.runLogged(
-		func() error { return u.applyIncludePrereleaseChange(ctx, enabled) },
+		func() error { return u.applyIncludePrereleaseChange(ctx, enabled, generation) },
 		"updater.includePrereleaseChanged",
 	)
 }
 
-func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool) error {
+func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool, generation uint64) error {
+	u.mu.Lock()
+	if generation != u.includePrereleaseGeneration {
+		u.mu.Unlock()
+		return nil
+	}
 	if enabled {
-		u.mu.Lock()
 		u.channelRefreshPending = true
 		u.mu.Unlock()
 		mode, err := u.mode(ctx)
@@ -539,7 +546,6 @@ func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool
 		}
 		return u.refreshUpdateCandidate(ctx, false)
 	}
-	u.mu.Lock()
 	u.channelRefreshPending = false
 	if u.checking || u.downloading {
 		u.recheckAfterBusy = true
@@ -701,13 +707,14 @@ func (u *Updater) finishIncludePrereleaseChange(ctx context.Context) {
 		return
 	}
 	u.recheckAfterBusy = false
+	generation := u.includePrereleaseGeneration
 	u.mu.Unlock()
 	include, err := u.includePrerelease(ctx)
 	if err != nil {
 		u.logError(err, "updater.includePrereleaseChanged")
 		return
 	}
-	if err := u.applyIncludePrereleaseChange(ctx, include); err != nil {
+	if err := u.applyIncludePrereleaseChange(ctx, include, generation); err != nil {
 		u.logError(err, "updater.includePrereleaseChanged")
 	}
 }
