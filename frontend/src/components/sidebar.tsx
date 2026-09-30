@@ -18,6 +18,7 @@ import {
   DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
+  PackageIcon,
   SettingsIcon,
   Share2Icon,
   SparklesIcon,
@@ -76,6 +77,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isSharePage = pathname.startsWith("/drive/share");
   const isBackupPage = pathname.startsWith("/backup");
   const isModPage = pathname.startsWith("/mod");
+  const isXXMIPage = pathname.startsWith("/xxmi");
   const isToolsPage = pathname.startsWith("/tools");
   const isAgentPage = pathname.startsWith("/agent");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
@@ -201,6 +203,26 @@ export function Sidebar({ className }: { className?: string }) {
               <GamepadIcon className={cn(iconSize)} />
             </TooltipTrigger>
             <TooltipContent side="right">{t("page.mod.title")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isXXMIPage)}
+                  aria-current={isXXMIPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/xxmi" });
+                  }}
+                />
+              }
+            >
+              <PackageIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">XXMI</TooltipContent>
           </Tooltip>
 
           <Tooltip disableHoverablePopup>

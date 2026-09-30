@@ -64,15 +64,13 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: object) => ({ options }),
   lazyRouteComponent: (component: unknown) => component,
-  useLocation: () => ({ pathname: "/setting/xxmi" }),
   useNavigate: () => vi.fn(),
-  Outlet: () => null,
 }));
 vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-import { XXMIDashboard } from "./xxmi";
+import { XXMIDashboard } from "./index";
 
 afterEach(() => {
   cleanup();

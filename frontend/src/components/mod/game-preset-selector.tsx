@@ -133,7 +133,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 
     if (!xxmiOverview?.configured) {
       toast.info(t("page.mod.dialog.add-game.xxmi_path_required"));
-      void navi({ to: "/setting/xxmi" });
+      void navi({ to: "/xxmi" });
       return;
     }
 

@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import type { XXMIData } from "@renderer/routes/setting/xxmi";
+import type { XXMIData } from "@renderer/routes/xxmi/index";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
@@ -16,9 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-type EnabledImporter = NonNullable<XXMIData["enabledImporters"]>[number];
-
-export function XXMIPackageVersion({
+export function XXMIDllVersion({
   xxmiData,
   refetch,
 }: {
@@ -26,63 +24,30 @@ export function XXMIPackageVersion({
   refetch: () => void;
 }) {
   const { t } = useTranslation();
-  const importers = xxmiData?.enabledImporters ?? [];
-  const hasPath = !!xxmiData?.xxmiPath;
-
-  if (!hasPath || importers.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="space-y-0.5">
-        <span className="text-sm font-medium">{t("page.setting.xxmi.packageVersion")}</span>
-        <p className="text-xs text-muted-foreground">
-          {t("page.setting.xxmi.packageVersionDescription")}
-        </p>
-      </div>
-      {importers.map((importer) => (
-        <XXMIImporterPackageRow key={importer.key} importer={importer} refetch={refetch} />
-      ))}
-    </div>
-  );
-}
-
-function XXMIImporterPackageRow({
-  importer,
-  refetch,
-}: {
-  importer: EnabledImporter;
-  refetch: () => void;
-}) {
-  const { t } = useTranslation();
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+
   const query = useQuery({
-    queryKey: ["xxmi:getImporterReleases", importer.key],
-    queryFn: () => XXMI.GetImporterReleases(importer.key),
+    queryKey: ["xxmi:getLibsReleases"],
+    queryFn: () => XXMI.GetLibsReleases(),
   });
+
   const versions = query.data?.map((release) => release.tag);
   const version = selectedVersion ?? versions?.[0] ?? "";
-  const isCurrentVersion = (value: string) =>
-    isSamePackageVersion(value, importer.installedVersion);
+  const hasPath = !!xxmiData?.xxmiPath;
+  const isCurrentVersion = (value: string) => isSameDllVersion(value, xxmiData?.dllVersion);
   const currentVersionLabel =
-    versions?.find((item) => isCurrentVersion(item)) ?? importer.installedVersion;
+    versions?.find((item) => isCurrentVersion(item)) ?? xxmiData?.dllVersion;
 
   const applyVersion = async () => {
     try {
-      await XXMI.InstallImporterPackage({ importer: importer.key, version, allowUnsigned: false });
-      toast.success(
-        t("page.setting.xxmi.fn.installImporterPackage.success", {
-          importer: importer.key,
-          version,
-        }),
-      );
+      await XXMI.InstallDLLVersion({ version });
+      toast.success(t("page.setting.xxmi.fn.installDllVersion.success", { version }));
       refetch();
     } catch (error) {
       toast.error(
         toErrorMessage(error).includes("XXMI Launcher")
-          ? t("page.setting.xxmi.fn.installImporterPackage.launcherCloseFailed")
-          : t("page.setting.xxmi.fn.installImporterPackage.failed"),
+          ? t("page.setting.xxmi.fn.installDllVersion.launcherCloseFailed")
+          : t("page.setting.xxmi.fn.installDllVersion.failed"),
       );
     }
   };
@@ -90,32 +55,39 @@ function XXMIImporterPackageRow({
   return (
     <div className="flex items-center justify-between gap-6">
       <div className="space-y-0.5">
-        <span className="text-sm font-medium">{importer.key}</span>
+        <span className="text-sm font-medium">{t("page.setting.xxmi.dllVersion")}</span>
         <p className="text-xs text-muted-foreground">
-          {t("page.setting.xxmi.packageVersionCurrent", {
-            version: currentVersionLabel ?? t("page.setting.xxmi.packageVersionUnknown"),
-          })}
+          {t("page.setting.xxmi.dllVersionDescription")}
         </p>
+        {hasPath && (
+          <p className="text-xs text-muted-foreground">
+            {t("page.setting.xxmi.dllVersionCurrent", {
+              version: currentVersionLabel ?? t("page.setting.xxmi.dllVersionUnknown"),
+            })}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {query.isError ? (
+        {xxmiData && !hasPath ? (
+          <p className="text-sm text-muted-foreground">
+            {t("page.setting.xxmi.persistNotFoundXXMI")}
+          </p>
+        ) : query.isError ? (
           <>
             <p className="text-sm text-destructive">
-              {t("page.setting.xxmi.packageVersionLoadFailed")}
+              {t("page.setting.xxmi.dllVersionLoadFailed")}
             </p>
             <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
-              {t("page.setting.xxmi.packageVersionRetry")}
+              {t("page.setting.xxmi.dllVersionRetry")}
             </Button>
           </>
         ) : query.isPending ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2Icon className="size-3.5 animate-spin" />
-            {t("page.setting.xxmi.packageVersionLoading")}
+            {t("page.setting.xxmi.dllVersionLoading")}
           </div>
         ) : !versions || versions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t("page.setting.xxmi.packageVersionEmpty")}
-          </p>
+          <p className="text-sm text-muted-foreground">{t("page.setting.xxmi.dllVersionEmpty")}</p>
         ) : (
           <>
             <Select
@@ -127,7 +99,7 @@ function XXMIImporterPackageRow({
               }}
             >
               <SelectTrigger className="w-36">
-                <SelectValue placeholder={t("page.setting.xxmi.packageVersion")} />
+                <SelectValue placeholder={t("page.setting.xxmi.dllVersion")} />
               </SelectTrigger>
               <SelectContent className="h-64">
                 <SelectGroup>
@@ -141,7 +113,13 @@ function XXMIImporterPackageRow({
             </Select>
             <Button
               onClickPromise={applyVersion}
-              disabled={!version || query.isError || query.isPending || isCurrentVersion(version)}
+              disabled={
+                !hasPath ||
+                !version ||
+                query.isError ||
+                query.isPending ||
+                isCurrentVersion(version)
+              }
             >
               {t("g.confirm")}
             </Button>
@@ -152,11 +130,11 @@ function XXMIImporterPackageRow({
   );
 }
 
-function isSamePackageVersion(selected?: string | null, installed?: string | null) {
+function isSameDllVersion(selected?: string | null, installed?: string | null) {
   if (!selected || !installed) return false;
-  return normalizePackageVersion(selected) === normalizePackageVersion(installed);
+  return normalizeDllVersion(selected) === normalizeDllVersion(installed);
 }
 
-function normalizePackageVersion(value: string) {
+function normalizeDllVersion(value: string) {
   return value.trim().replace(/^v/i, "");
 }

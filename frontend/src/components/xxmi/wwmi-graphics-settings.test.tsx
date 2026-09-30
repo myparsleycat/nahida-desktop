@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { WWMIOptions } from "@bindings/xxmi/models";
-import { WWMIGraphicsSettings } from "@renderer/components/setting/wwmi-graphics-settings";
+import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { expect, it, vi } from "vitest";

@@ -1,9 +1,9 @@
 import { XXMI } from "@bindings/xxmi";
-import { XXMIDllVersion } from "@renderer/components/setting/xxmi/xxmi-dll-version";
-import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
-import { XXMIPackageVersion } from "@renderer/components/setting/xxmi/xxmi-package-version";
-import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
 import { Separator } from "@renderer/components/ui/separator";
+import { XXMIDllVersion } from "@renderer/components/xxmi/xxmi-dll-version";
+import { XXMIImporters } from "@renderer/components/xxmi/xxmi-importers";
+import { XXMIPackageVersion } from "@renderer/components/xxmi/xxmi-package-version";
+import { XXMIPath } from "@renderer/components/xxmi/xxmi-path";
 import { useQuery } from "@tanstack/react-query";
 
 export function XXMIExternalLauncher() {

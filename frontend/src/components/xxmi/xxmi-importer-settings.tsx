@@ -3,14 +3,6 @@ import type { GameConfig } from "@bindings/mod/models";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type ImporterConfig } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
-import { WWMIGraphicsSettings } from "@renderer/components/setting/wwmi-graphics-settings";
-import {
-  FieldLabel,
-  NumberRow,
-  PathField,
-  SelectRow,
-  ToggleRow,
-} from "@renderer/components/setting/xxmi/xxmi-fields";
 import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import {
   AlertDialog,
@@ -31,6 +23,14 @@ import { Input } from "@renderer/components/ui/input";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
+import {
+  FieldLabel,
+  NumberRow,
+  PathField,
+  SelectRow,
+  ToggleRow,
+} from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
@@ -191,7 +191,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       toast.error(toErrorMessage(error));
     }
   };
-  const back = () => navigate({ to: "/setting/xxmi" });
+  const back = () => navigate({ to: "/xxmi" });
 
   if (!config) return null;
 

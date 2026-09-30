@@ -1,7 +1,7 @@
 import { GameIcon } from "@renderer/components/game-icon";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
-import type { XXMIData } from "@renderer/routes/setting/xxmi";
+import type { XXMIData } from "@renderer/routes/xxmi/index";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";

@@ -3,8 +3,6 @@ import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
 import { ImportUserDataMode, LauncherMode } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
-import { XXMIExternalLauncher } from "@renderer/components/setting/xxmi/xxmi-external-launcher";
-import { PathField, ToggleRow } from "@renderer/components/setting/xxmi/xxmi-fields";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
   AlertDialog,
@@ -27,11 +25,13 @@ import {
   CardTitle,
 } from "@renderer/components/ui/card";
 import { Separator } from "@renderer/components/ui/separator";
+import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
+import { PathField, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { uniqBy } from "es-toolkit";
 import {
   DownloadIcon,
@@ -48,7 +48,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/setting/xxmi")({ component: RouteComponent });
+export const Route = createFileRoute("/xxmi/")({ component: XXMIDashboard });
 
 export type XXMIData = Awaited<ReturnType<typeof XXMI.GetXXMIData>>;
 
@@ -67,11 +67,6 @@ const settingsConfig = {
   autoUpdate: "xxmi.autoUpdate",
   includePrereleases: "xxmi.includePrereleases",
 } as const;
-
-function RouteComponent() {
-  const location = useLocation();
-  return location.pathname.startsWith("/setting/xxmi/") ? <Outlet /> : <XXMIDashboard />;
-}
 
 export function XXMIDashboard() {
   const { t } = useTranslation();
@@ -344,7 +339,7 @@ export function XXMIDashboard() {
                           title={t("page.setting.xxmi.builtin.configure")}
                           onClick={() =>
                             navigate({
-                              to: "/setting/xxmi/$importer",
+                              to: "/xxmi/$importer",
                               params: { importer: key },
                             })
                           }

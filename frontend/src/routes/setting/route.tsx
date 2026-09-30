@@ -9,7 +9,6 @@ import {
   HardDrive,
   Menu,
   Network,
-  PackageIcon,
   ServerCrash,
   Settings,
   User,
@@ -40,7 +39,6 @@ function RouteComponent() {
     () => [
       { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
       { icon: GamepadIcon, label: t("page.setting.tabs.mod"), path: "/setting/mod" },
-      { icon: PackageIcon, label: "XXMI", path: "/setting/xxmi" },
       { icon: HardDrive, label: t("page.setting.tabs.drive"), path: "/setting/drive" },
       { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
       { icon: ArrowUpDown, label: t("page.setting.tabs.transfer"), path: "/setting/transfer" },
