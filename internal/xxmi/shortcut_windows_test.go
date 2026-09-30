@@ -7,15 +7,52 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
+	"golang.org/x/sys/windows"
 )
 
 func TestCreateWindowsShortcut(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("original path", func(t *testing.T) {
+		testCreateWindowsShortcut(t, executable)
+	})
+	t.Run("uppercase path", func(t *testing.T) {
+		testCreateWindowsShortcut(t, strings.ToUpper(executable))
+	})
+	t.Run("short path", func(t *testing.T) {
+		longPath, err := windows.UTF16PtrFromString(executable)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buffer := make([]uint16, len(executable)+1)
+		length, err := windows.GetShortPathName(longPath, &buffer[0], uint32(len(buffer)))
+		if err != nil || length >= uint32(len(buffer)) {
+			t.Fatalf("short executable path length = %d, error = %v", length, err)
+		}
+		shortPath := windows.UTF16ToString(buffer)
+		if strings.EqualFold(shortPath, executable) {
+			t.Skip("executable has no distinct 8.3 path on this filesystem")
+		}
+		testCreateWindowsShortcut(t, shortPath)
+	})
+}
+
+func testCreateWindowsShortcut(t *testing.T, executable string) {
+	t.Helper()
+	executableInfo, err := os.Stat(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if _, err := win.CoInitializeEx(co.COINIT_APARTMENTTHREADED | co.COINIT_DISABLE_OLE1DDE); err != nil {
@@ -23,10 +60,6 @@ func TestCreateWindowsShortcut(t *testing.T) {
 	}
 	defer win.CoUninitialize()
 	path := filepath.Join(t.TempDir(), "GIMI Quick Start.lnk")
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := createWindowsShortcut(context.Background(), path, executable, "--xxmi-launch GIMI"); err != nil {
 		t.Fatal(err)
 	}
@@ -55,16 +88,26 @@ func TestCreateWindowsShortcut(t *testing.T) {
 		t.Fatal(co.HRESULT(result))
 	}
 	target, err := link.GetPath(nil, co.SLGP_RAWPATH)
-	if err != nil || !filepath.IsAbs(target) || filepath.Clean(target) != filepath.Clean(executable) {
-		t.Fatalf("shortcut target = %q, error = %v", target, err)
+	if err != nil || !filepath.IsAbs(target) {
+		t.Fatalf("shortcut target = %q, want executable = %q, error = %v", target, executable, err)
+	}
+
+	// Shell links can expand 8.3 names and normalize casing; compare file identity.
+	targetInfo, err := os.Stat(target)
+	if err != nil || !os.SameFile(targetInfo, executableInfo) {
+		t.Fatalf("shortcut target = %q, want executable = %q, error = %v", target, executable, err)
 	}
 	args, err := link.GetArguments()
 	if err != nil || args != "--xxmi-launch GIMI" {
 		t.Fatalf("shortcut arguments = %q, error = %v", args, err)
 	}
 	icon, index, err := link.GetIconLocation()
-	if err != nil || filepath.Clean(icon) != filepath.Clean(executable) || index != 0 {
-		t.Fatalf("shortcut icon = %q, index = %d, error = %v", icon, index, err)
+	if err != nil || index != 0 {
+		t.Fatalf("shortcut icon = %q, want executable = %q, index = %d, error = %v", icon, executable, index, err)
+	}
+	iconInfo, err := os.Stat(icon)
+	if err != nil || !os.SameFile(iconInfo, executableInfo) {
+		t.Fatalf("shortcut icon = %q, want executable = %q, index = %d, error = %v", icon, executable, index, err)
 	}
 }
 
