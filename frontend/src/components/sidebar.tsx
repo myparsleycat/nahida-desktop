@@ -188,26 +188,6 @@ export function Sidebar({ className }: { className?: string }) {
                 <Button
                   variant="ghost"
                   size="icon-lg"
-                  className={getNavButtonClassName(isModPage)}
-                  aria-current={isModPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    void navi({ to: "/mod" });
-                  }}
-                />
-              }
-            >
-              <GamepadIcon className={cn(iconSize)} />
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("page.mod.title")}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip disableHoverablePopup>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
                   className={getNavButtonClassName(isXXMIPage)}
                   aria-current={isXXMIPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
@@ -220,6 +200,26 @@ export function Sidebar({ className }: { className?: string }) {
               <PackageIcon className={cn(iconSize)} />
             </TooltipTrigger>
             <TooltipContent side="right">XXMI</TooltipContent>
+          </Tooltip>
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isModPage)}
+                  aria-current={isModPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/mod" });
+                  }}
+                />
+              }
+            >
+              <GamepadIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("page.mod.title")}</TooltipContent>
           </Tooltip>
 
           <Tooltip disableHoverablePopup>
