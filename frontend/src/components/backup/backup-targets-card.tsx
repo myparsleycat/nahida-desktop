@@ -2,7 +2,14 @@ import { Backup, type Target } from "@bindings/backup";
 import { Dialog } from "@bindings/platform";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import {
+  Section,
+  SectionAction,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderIcon, FolderPlusIcon, GamepadIcon, TrashIcon } from "lucide-react";
@@ -41,18 +48,18 @@ export function BackupTargetsCard({ targets }: { targets: Target[] }) {
   const custom = targets.filter((target) => target.kind === "custom");
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <CardTitle className="text-sm font-medium">{t("page.backup.targets.title")}</CardTitle>
-          <p className="text-xs text-muted-foreground">{t("page.backup.targets.description")}</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void addFolder()}>
-          <FolderPlusIcon />
-          {t("page.backup.targets.add_folder")}
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-1">
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{t("page.backup.targets.title")}</SectionTitle>
+        <SectionDescription>{t("page.backup.targets.description")}</SectionDescription>
+        <SectionAction>
+          <Button variant="outline" size="sm" onClick={() => void addFolder()}>
+            <FolderPlusIcon />
+            {t("page.backup.targets.add_folder")}
+          </Button>
+        </SectionAction>
+      </SectionHeader>
+      <SectionContent>
         {games.length === 0 && custom.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {t("page.backup.targets.empty")}
@@ -81,8 +88,8 @@ export function BackupTargetsCard({ targets }: { targets: Target[] }) {
             </Button>
           </TargetRow>
         ))}
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
@@ -97,7 +104,7 @@ function TargetRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
+    <div className="flex items-center gap-3">
       <span className="text-muted-foreground">{icon}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">

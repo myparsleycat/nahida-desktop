@@ -97,7 +97,7 @@ export function StatCard({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border bg-muted/20 p-3">
+    <div className="rounded-md bg-muted/50 p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {icon}
         <span>{label}</span>

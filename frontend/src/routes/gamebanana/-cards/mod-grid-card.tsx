@@ -16,7 +16,7 @@ export function ModGridCard({
       item={mod}
       language={language}
       onClick={onClick}
-      hoverClassName="hover:bg-muted/30"
+      hoverClassName="hover:bg-muted/60"
     />
   );
 }

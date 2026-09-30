@@ -1,11 +1,11 @@
 import { Button } from "@renderer/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
+  Section,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { useSetting } from "@renderer/hooks/use-settings";
 import { disabledPrefixString } from "@shared/mod";
 import type { BisectSnapshot } from "@shared/types";
@@ -52,11 +52,7 @@ export function isExcludeValidationMessage(message: string) {
 }
 
 function StatusCard({ text }: { text: string }) {
-  return (
-    <Card>
-      <CardContent className="text-sm text-muted-foreground">{text}</CardContent>
-    </Card>
-  );
+  return <p className="text-sm text-muted-foreground">{text}</p>;
 }
 
 export function RoundView({
@@ -72,18 +68,18 @@ export function RoundView({
 }) {
   const { t } = useTranslation();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <Section>
+      <SectionHeader>
+        <SectionTitle>
           {t("page.tools.mod_bisect.round_title", {
             round: snapshot.round,
             batchSize: snapshot.batchSize,
             remaining: snapshot.candidates.length,
           })}
-        </CardTitle>
-        <CardDescription>{t("page.tools.mod_bisect.round_description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+        </SectionTitle>
+        <SectionDescription>{t("page.tools.mod_bisect.round_description")}</SectionDescription>
+      </SectionHeader>
+      <SectionContent layout="flow">
         <div className="text-xs text-muted-foreground">
           {t("page.tools.mod_bisect.disabled_count", {
             count: snapshot.currentBatch.length,
@@ -96,7 +92,7 @@ export function RoundView({
             })}
           </div>
         ) : null}
-        <ScrollArea className="h-56 rounded border bg-muted/30 p-2">
+        <ScrollArea className="h-56 rounded-md bg-muted/50 p-2">
           <ul className="space-y-0.5 font-mono text-xs break-all">
             {snapshot.currentBatch.map((iniPath) => (
               <li key={iniPath}>{relativeDisplay(snapshot.modRootPath, iniPath)}</li>
@@ -119,8 +115,8 @@ export function RoundView({
             {t("page.tools.mod_bisect.problem_fixed")}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
@@ -138,16 +134,16 @@ export function DoneView({
   const originalPath = snapshot.finalBadPath ?? "";
   const basename = originalPath ? (originalPath.split(/[\\/]+/).pop() ?? originalPath) : "";
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("page.tools.mod_bisect.done_title")}</CardTitle>
-        <CardDescription>
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{t("page.tools.mod_bisect.done_title")}</SectionTitle>
+        <SectionDescription>
           {t("page.tools.mod_bisect.done_description", {
             path: relativeDisplay(snapshot.modRootPath, originalPath),
           })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+        </SectionDescription>
+      </SectionHeader>
+      <SectionContent layout="flow">
         <div className="text-xs text-muted-foreground">
           {t("page.tools.mod_bisect.keep_disabled_hint", {
             from: basename,
@@ -169,8 +165,8 @@ export function DoneView({
             {t("page.tools.mod_bisect.re_enable_all")}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 

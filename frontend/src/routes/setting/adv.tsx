@@ -70,8 +70,8 @@ function RouteComponent() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-md border text-[13px]">
-        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px] border-b bg-muted/50 font-medium text-muted-foreground">
+      <div className="overflow-hidden text-[13px]">
+        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px] rounded-md bg-muted/50 font-medium text-muted-foreground">
           <div className="p-3 tracking-wider uppercase">Key</div>
           <div className="p-3 tracking-wider uppercase">Value</div>
           <div className="p-3 text-center tracking-wider uppercase">Action</div>

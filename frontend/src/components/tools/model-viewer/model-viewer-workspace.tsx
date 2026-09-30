@@ -527,7 +527,7 @@ export function ModelViewerWorkspace({
             showToggleViewer && "lg:grid-cols-[minmax(0,1fr)_360px]",
           )}
         >
-          <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
+          <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
             {payloadTransport ? (
               <>
                 <ThreeModelViewer
@@ -571,7 +571,7 @@ export function ModelViewerWorkspace({
           </div>
 
           {showToggleViewer ? (
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
               <div className="border-b px-4 py-3">
                 <div className="text-sm font-medium">
                   {t("page.tools.model_viewer.toggle_viewer")}

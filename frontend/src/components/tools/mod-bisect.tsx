@@ -1,13 +1,13 @@
 import { Tools } from "@bindings/tools";
 import { Button } from "@renderer/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Section,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -136,13 +136,13 @@ export default function ModBisect() {
     recoverMutation.isPending;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("page.tools.mod_bisect.title")}</CardTitle>
-          <CardDescription>{t("page.tools.mod_bisect.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto p-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.tools.mod_bisect.title")}</SectionTitle>
+          <SectionDescription>{t("page.tools.mod_bisect.description")}</SectionDescription>
+        </SectionHeader>
+        <SectionContent layout="flow">
           <div className="flex flex-wrap items-center gap-2">
             <GameSelect
               games={games}
@@ -215,7 +215,7 @@ export default function ModBisect() {
             disabled={isActive || isBusy || !selectedGame}
           />
 
-          <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium">
                 {t("page.tools.mod_bisect.preserve_d3dx")}
@@ -232,12 +232,12 @@ export default function ModBisect() {
           </div>
 
           {snapshot?.error && status !== "done" ? (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
+            <div className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
               {snapshot.error}
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
       <BisectStatusCards
         snapshot={snapshot}

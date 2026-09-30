@@ -202,7 +202,7 @@ export default function ToolsPage() {
                   if (isExternal) {
                     return (
                       <Link key={tool.nameKey} to={tool.path}>
-                        <div className="group flex cursor-pointer items-center justify-between rounded-lg border border-border bg-card p-4 transition-all hover:border-accent/40 hover:bg-card/80">
+                        <div className="group flex cursor-pointer items-center justify-between rounded-lg p-4 transition-all hover:bg-muted/50">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary font-mono text-sm font-bold text-muted-foreground">
                               {tool.initials}
@@ -224,7 +224,7 @@ export default function ToolsPage() {
                     <button
                       key={tool.nameKey}
                       onClick={() => setActiveIndex(index)}
-                      className="group flex items-center justify-between rounded-lg border border-border bg-card p-4 text-left transition-all hover:border-accent/40 hover:bg-card/80"
+                      className="group flex items-center justify-between rounded-lg p-4 text-left transition-all hover:bg-muted/50"
                     >
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary font-mono text-sm font-bold text-muted-foreground transition-colors group-hover:bg-accent/20 group-hover:text-accent">

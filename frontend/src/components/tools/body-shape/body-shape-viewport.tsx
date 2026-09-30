@@ -127,7 +127,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
     }, [props.orientation]);
 
     return (
-      <div className="h-full min-h-80 w-full rounded-md border border-border bg-background">
+      <div className="h-full min-h-80 w-full rounded-md bg-background">
         <Canvas
           frameloop="demand"
           camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}

@@ -48,7 +48,9 @@ export function ToggleRow({
         <FieldLabel label={label} description={description} />
         <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
       </label>
-      {checked && children && <div className="space-y-3 border-l-2 pl-4">{children}</div>}
+      {checked && children && (
+        <div className="space-y-3 rounded-md bg-muted/50 p-3">{children}</div>
+      )}
     </div>
   );
 }

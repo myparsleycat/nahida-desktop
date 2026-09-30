@@ -1,6 +1,11 @@
 import { Backup } from "@bindings/backup";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -9,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import type { BackupInterval } from "@shared/settings";
@@ -92,11 +96,11 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">{t("page.backup.schedule.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{t("page.backup.schedule.title")}</SectionTitle>
+      </SectionHeader>
+      <SectionContent>
         <Row
           title={t("page.backup.schedule.enabled.title")}
           description={t("page.backup.schedule.enabled.description")}
@@ -109,7 +113,6 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             />
           )}
         </Row>
-        <Separator />
         <Row
           title={t("page.backup.schedule.interval.title")}
           description={t("page.backup.schedule.interval.description")}
@@ -138,7 +141,6 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             </Select>
           )}
         </Row>
-        <Separator />
         <Row
           title={t("page.backup.schedule.on_startup.title")}
           description={t("page.backup.schedule.on_startup.description")}
@@ -151,7 +153,6 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             />
           )}
         </Row>
-        <Separator />
         <Row
           title={t("page.backup.schedule.watch_changes.title")}
           description={t("page.backup.schedule.watch_changes.description")}
@@ -164,7 +165,6 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             />
           )}
         </Row>
-        <Separator />
         <Row
           title={t("page.backup.schedule.keep_count.title")}
           description={t("page.backup.schedule.keep_count.description")}
@@ -185,7 +185,6 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             />
           )}
         </Row>
-        <Separator />
         <Row
           title={t("page.backup.schedule.device_name.title")}
           description={t("page.backup.schedule.device_name.description")}
@@ -204,7 +203,7 @@ export function BackupScheduleCard({ deviceName }: { deviceName: string }) {
             />
           )}
         </Row>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }

@@ -201,7 +201,7 @@ export function UpdateAlertDialog() {
                 </Button>
               )}
             </div>
-            <ScrollArea className="h-64 rounded-md border">
+            <ScrollArea className="h-64 rounded-md bg-muted/50">
               <ReleaseNotesContent text={displayedReleaseNotesText} />
             </ScrollArea>
           </section>

@@ -18,9 +18,7 @@ export function PresetViewer() {
   });
 
   return (
-    <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card transition-all duration-200`}
-    >
+    <div className={`flex h-full min-h-0 flex-col overflow-hidden`}>
       <div className="flex flex-col gap-2 border-b p-3">
         <div className="flex items-center justify-between">
           <div>
@@ -37,7 +35,7 @@ export function PresetViewer() {
             query.data.map((preset) => (
               <div
                 key={preset.id}
-                className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-border bg-card p-3 transition-colors hover:border-accent/40 hover:bg-card/80"
+                className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md p-3 transition-colors hover:bg-muted/50"
               >
                 <p className="min-w-0 truncate text-sm font-medium text-foreground">
                   {preset.name}

@@ -1,9 +1,14 @@
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
 import { ModCompressionCard } from "@renderer/components/setting/mod-compression-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { FieldDescription, FieldGroup, FieldTitle } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -12,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
@@ -182,13 +186,11 @@ function ModSettingsRouteContent() {
   return (
     <div className="space-y-6 p-4">
       <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">
-              {t("page.setting.mod.mod_management.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col space-y-4">
+        <Section>
+          <SectionHeader>
+            <SectionTitle>{t("page.setting.mod.mod_management.title")}</SectionTitle>
+          </SectionHeader>
+          <SectionContent>
             <div className="flex items-center justify-between space-x-2">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">
@@ -220,9 +222,6 @@ function ModSettingsRouteContent() {
                 </SelectContent>
               </Select>
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">
@@ -237,9 +236,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(val) => update("deleteArchiveAfterExtract", val)}
               />
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">
@@ -254,9 +250,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(val) => update("moveFolderInsteadOfCopy", val)}
               />
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <span id={AUTO_INSPECT_FIX_LABEL_ID} className="text-sm font-medium">
@@ -272,9 +265,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(val) => void handleAutoInspectFixChange(val)}
               />
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <span className="text-sm font-medium">
@@ -289,9 +279,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(val) => update("copyShaderFixesOnEnable", val)}
               />
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <span className="text-sm font-medium">
@@ -320,9 +307,6 @@ function ModSettingsRouteContent() {
                 </SelectContent>
               </Select>
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <span className="text-sm font-medium">
@@ -337,9 +321,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(val) => update("searchModPreview", val)}
               />
             </div>
-
-            <Separator />
-
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5 pr-4">
@@ -356,7 +337,7 @@ function ModSettingsRouteContent() {
                 />
               </div>
 
-              <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+              <div className="grid gap-2 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
                 {DOWNLOAD_SOURCES.map((source) => (
                   <label
                     key={source}
@@ -380,16 +361,14 @@ function ModSettingsRouteContent() {
                 ))}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </SectionContent>
+        </Section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">
-              {t("page.setting.mod.layout.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col space-y-4">
+        <Section>
+          <SectionHeader>
+            <SectionTitle>{t("page.setting.mod.layout.title")}</SectionTitle>
+          </SectionHeader>
+          <SectionContent>
             <div className="flex items-center justify-between space-x-4">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">
@@ -421,9 +400,6 @@ function ModSettingsRouteContent() {
                 </SelectContent>
               </Select>
             </div>
-
-            <Separator />
-
             <div className="flex items-center justify-between space-x-4">
               <div className="space-y-0.5">
                 <span id={GRID_MODEL_PREVIEW_LABEL_ID} className="text-sm font-medium">
@@ -439,9 +415,6 @@ function ModSettingsRouteContent() {
                 onCheckedChange={(value) => update("gridModelPreview", value)}
               />
             </div>
-
-            <Separator />
-
             <div className="space-y-1">
               <span className="text-sm font-medium">{t("page.setting.mod.layout.grid.mode")}</span>
               <p className="text-xs text-muted-foreground">
@@ -556,8 +529,8 @@ function ModSettingsRouteContent() {
                 </div>
               )}
             </FieldGroup>
-          </CardContent>
-        </Card>
+          </SectionContent>
+        </Section>
 
         <ModCompressionCard />
       </div>

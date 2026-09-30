@@ -197,7 +197,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
                         runner.setOptionFlag("rendering33", !runner.wuwaOptions.rendering33);
                       }
                     }}
-                    className="cursor-pointer rounded-lg border bg-card/50 p-4"
+                    className="cursor-pointer rounded-lg bg-muted/50 p-4 transition-colors hover:bg-muted"
                   >
                     <div className="flex items-start gap-4">
                       <div className="min-w-0 flex-1 space-y-1">
@@ -249,7 +249,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
                         runner.toggleAeroFix();
                       }
                     }}
-                    className="cursor-pointer rounded-lg border bg-card/50 p-4"
+                    className="cursor-pointer rounded-lg bg-muted/50 p-4 transition-colors hover:bg-muted"
                   >
                     <div className="flex items-start gap-4">
                       <div className="min-w-0 flex-1 space-y-1">
@@ -393,7 +393,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
 
                 {runner.showAdvancedRollback ? (
                   <div className="space-y-3 bg-muted/30 px-6 pt-1 pb-5">
-                    <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
+                    <div className="flex items-start gap-3 rounded-lg bg-background p-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold">
                           {t(`${translationKey}.rollback.restore_all`)}
@@ -651,7 +651,7 @@ function OptionCard({
         }
       }}
       className={cn(
-        "flex cursor-pointer items-start gap-4 rounded-lg border bg-card/50 p-4",
+        "flex cursor-pointer items-start gap-4 rounded-lg bg-muted/50 p-4 transition-colors hover:bg-muted",
         disabled && "pointer-events-none opacity-50",
       )}
     >
@@ -697,8 +697,8 @@ function BackupGroupCard({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[10px] border bg-card/60 shadow-sm transition-all",
-        pending && "border-amber-400/80 ring-1 ring-amber-400/20 dark:border-amber-500/50",
+        "overflow-hidden rounded-lg bg-muted/50 transition-all",
+        pending && "ring-1 ring-amber-400/60 dark:ring-amber-500/50",
       )}
     >
       <div className="flex flex-col gap-3 p-4">
@@ -753,7 +753,7 @@ function BackupGroupCard({
           </div>
         </div>
 
-        <div className="max-h-[150px] space-y-2.5 overflow-y-auto rounded-lg border bg-muted/40 p-3 shadow-inner">
+        <div className="max-h-[150px] space-y-2.5 overflow-y-auto rounded-lg bg-background/60 p-3">
           {[...filesByDir.entries()].map(([dir, files]) => (
             <div key={dir} className="flex flex-col font-mono text-[10.5px] leading-normal">
               <span className="mb-0.5 flex items-center gap-1 font-bold break-all text-sky-600 dark:text-sky-400">

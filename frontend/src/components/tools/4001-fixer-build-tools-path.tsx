@@ -1,6 +1,7 @@
 import { Tools } from "@bindings/tools";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { SectionContent } from "@renderer/components/ui/section";
 import { Logger } from "@renderer/lib/logger";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon, XIcon } from "lucide-react";
@@ -84,7 +85,7 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
   };
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow">
+    <SectionContent layout="flow" className="gap-2">
       <label
         htmlFor="4001-fixer-build-tools-path"
         className="text-xs font-medium tracking-widest text-muted-foreground uppercase"
@@ -140,6 +141,6 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
           {t("page.tools.4001_fixer.build_tools_path_hint")}
         </p>
       )}
-    </div>
+    </SectionContent>
   );
 }

@@ -129,7 +129,7 @@ export function VariantSlider({
   };
 
   return (
-    <div className="rounded-md border bg-background/50 p-3">
+    <div className="rounded-md bg-muted/50 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {variable.iconPath ? (

@@ -1,7 +1,12 @@
 import { CDNTrace } from "@bindings/infra";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -27,11 +32,11 @@ function RouteComponent() {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-xl space-y-6 p-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Runtime error</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader>
+              <SectionTitle>Runtime error</SectionTitle>
+            </SectionHeader>
+            <SectionContent>
               <div className="flex items-center justify-between gap-6">
                 <p className="text-xs text-muted-foreground">
                   Throw an intentional render error to exercise the app error boundary.
@@ -40,8 +45,8 @@ function RouteComponent() {
                   Throw error
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </SectionContent>
+          </Section>
 
           <CDNTraceCard />
         </div>
@@ -59,11 +64,11 @@ function CDNTraceCard() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">cdn-cgi/trace</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Section>
+      <SectionHeader>
+        <SectionTitle>cdn-cgi/trace</SectionTitle>
+      </SectionHeader>
+      <SectionContent>
         <div className="flex items-center justify-between gap-6">
           <p className="text-xs text-muted-foreground">
             Cloudflare trace for the app HTTP client against the Nahida API origin.
@@ -89,8 +94,8 @@ function CDNTraceCard() {
         ) : (
           <CDNTraceDocument text={query.data ?? ""} />
         )}
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 

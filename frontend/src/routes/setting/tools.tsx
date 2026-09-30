@@ -1,4 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { createFileRoute } from "@tanstack/react-router";
@@ -36,13 +41,11 @@ function RouteComponent() {
 
   return (
     <div className="space-y-6 p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.tools.wuwaFixer.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.tools.wuwaFixer.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span
@@ -61,8 +64,8 @@ function RouteComponent() {
               onCheckedChange={(val) => void handleWuwaFixerUpdateNotificationChange(val)}
             />
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
     </div>
   );
 }

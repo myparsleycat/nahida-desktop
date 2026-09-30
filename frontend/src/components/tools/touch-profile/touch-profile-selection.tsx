@@ -124,10 +124,8 @@ export function TouchProfileSelection({
           <div
             key={component.id}
             className={cn(
-              "w-full rounded-md border px-3 py-2 transition-colors",
-              selectedMeshId === component.id
-                ? "border-primary bg-primary/10"
-                : "border-border/60 hover:bg-muted/60",
+              "w-full rounded-md px-3 py-2 transition-colors",
+              selectedMeshId === component.id ? "bg-primary/10" : "hover:bg-muted/60",
             )}
           >
             <div className="flex items-center gap-2">
@@ -179,7 +177,7 @@ export function TouchProfileSelection({
       </div>
 
       {analysisMode === "bone" ? (
-        <div className="space-y-3 rounded-md border border-border/60 p-3">
+        <div className="space-y-3 rounded-md bg-background/60 p-3">
           <div>
             <div className="text-sm font-medium">
               {t("page.tools.touch_profile.bone_select_title")}
@@ -309,7 +307,7 @@ export function TouchProfileSelection({
                             return (
                               <div
                                 key={`${assignment.boneId}-${ai}`}
-                                className="flex items-center gap-2 rounded-md border border-border/40 px-2 py-1.5"
+                                className="flex items-center gap-2 rounded-md bg-background/60 px-2 py-1.5"
                                 onMouseEnter={() => {
                                   boneHoverRef.current = assignment.boneId;
                                   syncAssignmentBonePreview();

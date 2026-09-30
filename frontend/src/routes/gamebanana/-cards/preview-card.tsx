@@ -30,8 +30,8 @@ export function PreviewCard({
     <button
       type="button"
       className={cn(
-        "w-full overflow-hidden rounded-2xl border bg-card text-left transition-colors",
-        active ? "border-primary bg-primary/8" : hoverClassName,
+        "w-full overflow-hidden rounded-2xl bg-muted/30 text-left transition-colors",
+        active ? "bg-primary/8 ring-2 ring-primary" : hoverClassName,
       )}
       onClick={onClick}
     >

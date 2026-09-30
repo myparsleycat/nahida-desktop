@@ -410,7 +410,7 @@ function EditGameDialogContent({
 
         <div className="space-y-2">
           <FieldLabel>{t("page.mod.dialog.edit-game.order_label")}</FieldLabel>
-          <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
             <span className="text-sm text-muted-foreground">
               {t("page.mod.dialog.edit-game.order_value", {
                 current: currentGameIndex + 1,

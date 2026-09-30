@@ -1,5 +1,6 @@
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { SectionContent } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -186,7 +187,7 @@ export function TextureResizerForm({
   ) : null;
 
   const backupField = (
-    <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
+    <div className="flex items-center justify-between rounded-md bg-muted/50 p-3">
       <div>
         <div className="text-sm font-medium">{t("page.tools.texture_resizer.backup")}</div>
         <div className="text-xs text-muted-foreground">
@@ -321,7 +322,7 @@ export function TextureResizerForm({
 
   const upscaleNormalWarning =
     currentColorSpace === "linear" ? (
-      <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+      <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
         {t("page.tools.texture_resizer.upscale_normal_warning")}
       </div>
     ) : null;
@@ -359,7 +360,7 @@ export function TextureResizerForm({
       </p>
     </div>
   ) : (
-    <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+    <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
       {t("page.tools.texture_resizer.custom_hint")}
     </div>
   );
@@ -400,7 +401,7 @@ export function TextureResizerForm({
   );
 
   const percentSlider = (
-    <div className="space-y-3 rounded-md border bg-background/40 p-3">
+    <div className="space-y-3 rounded-md bg-muted/50 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">{t("page.tools.texture_resizer.percent")}</div>
@@ -428,7 +429,7 @@ export function TextureResizerForm({
   );
 
   const customSizeInputs = (
-    <div className="space-y-3 rounded-md border bg-background/40 p-3">
+    <div className="space-y-3 rounded-md bg-muted/50 p-3">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
@@ -487,7 +488,7 @@ export function TextureResizerForm({
 
   const resizeStepSlider =
     resizeSource && resizeCandidates.length > 0 && selectedResizeCandidate ? (
-      <div className="space-y-3 rounded-md border bg-background/40 p-3">
+      <div className="space-y-3 rounded-md bg-muted/50 p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-medium">{t("page.tools.texture_resizer.resize_step")}</div>
@@ -544,7 +545,7 @@ export function TextureResizerForm({
         )}
       </div>
     ) : (
-      <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+      <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
         {t("page.tools.texture_resizer.resize_step_unavailable")}
       </div>
     );
@@ -578,7 +579,7 @@ export function TextureResizerForm({
             : [];
 
   return (
-    <div className="grid gap-4 rounded-lg border bg-card p-4">
+    <SectionContent layout="flow" className="grid gap-4">
       {showTargetPath && (
         <div className="space-y-2">
           <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
@@ -614,7 +615,7 @@ export function TextureResizerForm({
       {fullSpanFields.map((field, index) => (
         <Fragment key={index}>{field}</Fragment>
       ))}
-    </div>
+    </SectionContent>
   );
 }
 

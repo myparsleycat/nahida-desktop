@@ -59,7 +59,7 @@ export function TransferList({
         onClearCompleted={onClearCompleted}
       />
 
-      <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
+      <div className="flex w-full max-w-full min-w-0 flex-col gap-1">
         {filteredTransfers.length === 0 ? (
           <TransferEmptyState activeTab={activeTab} hasSearchQuery={!!searchQuery} />
         ) : (

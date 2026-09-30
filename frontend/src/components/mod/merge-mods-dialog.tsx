@@ -414,11 +414,11 @@ function MergeGroupEditor({
   );
 
   if (!scrollable) {
-    return <div className="rounded-lg border p-3">{items}</div>;
+    return <div className="rounded-lg bg-muted/50 p-3">{items}</div>;
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-muted/50">
       <ScrollArea className="min-h-0 flex-1 overflow-y-auto" viewportClassName="p-3">
         {items}
       </ScrollArea>
@@ -429,7 +429,7 @@ function MergeGroupEditor({
 function MergeLeafRow({ pack, path: packPath }: { pack?: MergePackClassification; path: string }) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full flex-col justify-center rounded-md border bg-background/60 px-3 py-2">
+    <div className="flex h-full flex-col justify-center rounded-md bg-background/60 px-3 py-2">
       <div className="truncate font-medium">{pack?.name ?? stripDisabledPrefix(packPath)}</div>
       <div className="text-xs text-muted-foreground">
         {t(`page.mod.merge.family.${pack?.family ?? "ordinary"}`)}

@@ -218,7 +218,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
           <ScrollArea>
             <div className="max-h-64 space-y-3 text-sm">
               {conflicts.map((conflict) => (
-                <div key={conflict.modKey} className="rounded-md border p-3">
+                <div key={conflict.modKey} className="rounded-md bg-muted/50 p-3">
                   <div className="font-medium">
                     {t("page.mod.dialog.add-preset.conflict.mod-key-label")}
                   </div>

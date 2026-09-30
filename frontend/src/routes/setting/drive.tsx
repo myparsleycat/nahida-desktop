@@ -1,6 +1,11 @@
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionTitle,
+} from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -9,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import type { DriveNameSortPolicy } from "@shared/drive";
@@ -46,13 +50,11 @@ function RouteComponent() {
 
   return (
     <div className="space-y-6 p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.drive.sorting.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.drive.sorting.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -91,16 +93,14 @@ function RouteComponent() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.drive.import.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.drive.import.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
           <div className="flex items-center justify-between gap-6">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -115,15 +115,12 @@ function RouteComponent() {
               onCheckedChange={(val) => update("autoTryPasswords", val)}
             />
           </div>
-
-          <Separator />
-
           <PasswordListSetting
             value={settings.passwordList}
             onChange={(value) => update("passwordList", value)}
           />
-        </CardContent>
-      </Card>
+        </SectionContent>
+      </Section>
     </div>
   );
 }

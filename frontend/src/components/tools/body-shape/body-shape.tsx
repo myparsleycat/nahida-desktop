@@ -679,7 +679,7 @@ export default function BodyShapeTool({
       ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
+        <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
           {selectedMesh ? (
             <BodyShapeViewport
               ref={simpleViewportRef}
@@ -719,7 +719,7 @@ export default function BodyShapeTool({
           ) : null}
         </div>
 
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
           <div className="border-b px-4 py-3">
             <div className="text-sm font-medium">
               {t("page.tools.body_shape.title")} ({t("g.beta")})
@@ -958,7 +958,7 @@ export default function BodyShapeTool({
                       {t("page.tools.body_shape.selection_empty_hint")}
                     </p>
                   ) : (
-                    <div className="space-y-2 rounded-md border bg-background/50 p-3">
+                    <div className="space-y-2 rounded-md bg-background/60 p-3">
                       <div className="text-sm font-medium">
                         {t("page.tools.body_shape.selection_controls")}
                       </div>
@@ -1191,7 +1191,7 @@ export default function BodyShapeTool({
                   </div>
 
                   {metrics ? (
-                    <div className="space-y-1 rounded-md border bg-background/50 p-3 text-xs text-muted-foreground">
+                    <div className="space-y-1 rounded-md bg-background/60 p-3 text-xs text-muted-foreground">
                       <div>
                         {t("page.tools.body_shape.metrics.vertices")}: {metrics.vertexCount}
                       </div>

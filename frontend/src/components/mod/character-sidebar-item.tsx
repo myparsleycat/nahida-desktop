@@ -362,7 +362,7 @@ CharacterSidebarItem.displayName = "CharacterSidebarItem";
 export function CharacterSidebarItemSkeleton({ layout = "row" }: { layout?: SidebarLayoutMode }) {
   if (layout === "grid") {
     return (
-      <div className="rounded-xl border bg-card p-2">
+      <div className="rounded-xl bg-muted/40 p-2">
         <Skeleton className="aspect-square w-full rounded-lg" />
         <div className="mt-2 space-y-2">
           <Skeleton className="h-4 w-full" />
