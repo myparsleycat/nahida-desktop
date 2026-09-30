@@ -2307,9 +2307,6 @@
         "no_results": "No matching setting keys found."
       }
     },
-    "docs": {
-      "title": "Documentation"
-    },
     "backup": {
       "title": "Backup",
       "description": "Automatically back up the mod folders of your registered games and any folders you add. Only file types the server accepts are uploaded, and unchanged files are never uploaded twice.",
