@@ -1,0 +1,38 @@
+{
+  "Importer": {
+    "process_start_method": "Native",
+    "process_priority": "High",
+    "window_mode": "Fullscreen",
+    "process_timeout": 45,
+    "xxmi_dll_init_delay": 250,
+    "use_launch_options": false,
+    "launch_options": "--sample",
+    "configure_game": false,
+    "launch_count": 9,
+    "run_pre_launch_enabled": true,
+    "run_pre_launch": "pre-command",
+    "run_pre_launch_wait": false,
+    "run_post_load_enabled": true,
+    "run_post_load": "post-command",
+    "run_post_load_wait": false,
+    "custom_launch_enabled": true,
+    "custom_launch": "custom-command",
+    "custom_launch_inject_mode": "Inject",
+    "extra_libraries_enabled": true,
+    "extra_libraries": "C:\\DLLs\\first.dll\nC:\\DLLs\\second.dll",
+    "deployed_migoto_signatures": {"d3d11.dll": "sample-signature"},
+    "unlock_fps": true,
+    "unlock_fps_value": 144,
+    "enable_hdr": true,
+    "disable_dcr": true
+  },
+  "Migoto": {
+    "enforce_rendering": false,
+    "enable_hunting": true,
+    "dump_shaders": true,
+    "mute_warnings": false,
+    "calls_logging": true,
+    "debug_logging": true,
+    "unsafe_mode": true
+  }
+}

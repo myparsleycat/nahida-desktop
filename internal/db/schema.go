@@ -1,6 +1,6 @@
 package db
 
-const AppSchemaVersion = 6
+const AppSchemaVersion = 7
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
@@ -67,6 +67,25 @@ func sqlDefault(value string) *string {
 }
 
 var TableSpecs = []TableSpec{
+	{
+		Name: "xxmi_importers",
+		Columns: []ColumnSpec{
+			{Name: "key", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "config", Type: TypeText, NotNull: true},
+			{Name: "updated_at", Type: TypeText, NotNull: true},
+		},
+	},
+	{
+		Name: "xxmi_packages",
+		Columns: []ColumnSpec{
+			{Name: "package", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "latest_version", Type: TypeText},
+			{Name: "latest_release_notes", Type: TypeText},
+			{Name: "update_check_time", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
+			{Name: "skipped_version", Type: TypeText},
+			{Name: "updated_at", Type: TypeText, NotNull: true},
+		},
+	},
 	{
 		Name: "setting",
 		Columns: []ColumnSpec{

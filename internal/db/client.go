@@ -14,6 +14,8 @@ type Client struct {
 	Settings                SettingsStore
 	AppState                AppStateStore
 	GamePaths               GamePathsStore
+	XXMIImporters           XXMIImportersStore
+	XXMIPackages            XXMIPackagesStore
 	BackupCustomPaths       BackupCustomPathsStore
 	BackupFileCache         BackupFileCacheStore
 	BackupCommitted         BackupCommittedStore
@@ -47,6 +49,8 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.Settings = SettingsStore{c: c}
 	c.AppState = AppStateStore{c: c}
 	c.GamePaths = GamePathsStore{c: c}
+	c.XXMIImporters = XXMIImportersStore{c: c}
+	c.XXMIPackages = XXMIPackagesStore{c: c}
 	c.BackupCustomPaths = BackupCustomPathsStore{c: c}
 	c.BackupFileCache = BackupFileCacheStore{c: c}
 	c.BackupCommitted = BackupCommittedStore{c: c}

@@ -2,8 +2,76 @@ package xxmi
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
+	"strings"
 )
+
+func ValidateImporterSettings(key string, cfg ImporterConfig) error {
+	if _, ok := lookupImporterPackage(key); !ok {
+		return fmt.Errorf("unknown importer %q", key)
+	}
+	if cfg.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported importer config schema version %d", cfg.SchemaVersion)
+	}
+	if cfg.Mode != RuntimeXXMI && cfg.Mode != RuntimeLegacy {
+		return fmt.Errorf("invalid runtime mode %q", cfg.Mode)
+	}
+	for name, pin := range map[string]VersionPin{"packageVersion": cfg.PackageVersion, "xxmiVersion": cfg.XXMIVersion} {
+		normalized := normalizeVersion(pin.Pinned)
+		if (pin.Follow == "latest") == (pin.Pinned != "") ||
+			pin.Pinned != "" && (normalized == "" || normalized == "." || normalized == "..") ||
+			strings.ContainsAny(pin.Pinned, `\/:*?"<>|`) {
+			return fmt.Errorf("invalid %s", name)
+		}
+	}
+	if err := validateLocalFolder("importerFolder", cfg.ImporterFolder, true); err != nil {
+		return err
+	}
+	if err := validateLocalFolder("gameFolder", cfg.GameFolder, false); err != nil {
+		return err
+	}
+	if cfg.GameFolder != "" {
+		importer := strings.ToLower(filepath.Clean(cfg.ImporterFolder))
+		game := strings.ToLower(filepath.Clean(cfg.GameFolder))
+		if importer == game || strings.HasPrefix(importer, game+string(filepath.Separator)) ||
+			strings.HasPrefix(game, importer+string(filepath.Separator)) {
+			return fmt.Errorf("importer and game folders must not contain each other")
+		}
+	}
+	if !slices.Contains([]string{"Native", "Shell", "Manual"}, cfg.ProcessStartMethod) {
+		return fmt.Errorf("invalid process start method %q", cfg.ProcessStartMethod)
+	}
+	if !slices.Contains(
+		[]string{"Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"},
+		cfg.ProcessPriority,
+	) {
+		return fmt.Errorf("invalid process priority %q", cfg.ProcessPriority)
+	}
+	if cfg.ProcessTimeout < 5 || cfg.ProcessTimeout > 600 {
+		return fmt.Errorf("process timeout must be between 5 and 600 seconds")
+	}
+	if cfg.XXMIDLLInitDelay < 0 || cfg.XXMIDLLInitDelay > 600000 {
+		return fmt.Errorf("invalid XXMI DLL initialization delay")
+	}
+	if !slices.Contains([]string{"Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"}, cfg.WindowMode) {
+		return fmt.Errorf("invalid window mode %q", cfg.WindowMode)
+	}
+	if !slices.Contains([]string{"Hook", "Inject", "Bypass"}, cfg.CustomLaunch.InjectMode) {
+		return fmt.Errorf("invalid custom launch injection mode %q", cfg.CustomLaunch.InjectMode)
+	}
+	return nil
+}
+
+func validateLocalFolder(name, path string, required bool) error {
+	if path == "" && !required {
+		return nil
+	}
+	if !filepath.IsAbs(path) || filepath.VolumeName(path) == "" || strings.HasPrefix(path, `\\`) {
+		return fmt.Errorf("%s must be an absolute local drive path", name)
+	}
+	return nil
+}
 
 type configValueKind uint8
 

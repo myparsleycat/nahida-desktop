@@ -61,7 +61,7 @@ function XXMIImporterPackageRow({
     queryKey: ["xxmi:getImporterReleases", importer.key],
     queryFn: () => XXMI.GetImporterReleases(importer.key),
   });
-  const versions = query.data;
+  const versions = query.data?.map((release) => release.tag);
   const version = selectedVersion ?? versions?.[0] ?? "";
   const isCurrentVersion = (value: string) =>
     isSamePackageVersion(value, importer.installedVersion);
@@ -70,7 +70,7 @@ function XXMIImporterPackageRow({
 
   const applyVersion = async () => {
     try {
-      await XXMI.InstallImporterPackage({ importer: importer.key, version });
+      await XXMI.InstallImporterPackage({ importer: importer.key, version, allowUnsigned: false });
       toast.success(
         t("page.setting.xxmi.fn.installImporterPackage.success", {
           importer: importer.key,

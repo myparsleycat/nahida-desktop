@@ -32,11 +32,25 @@ func modelViewerArgument(args []string, workingDir string) string {
 	return ""
 }
 
+func xxmiLaunchArgument(args []string) string {
+	for index := 1; index+1 < len(args); index++ {
+		if args[index] != "--xxmi-launch" {
+			continue
+		}
+		switch strings.ToUpper(args[index+1]) {
+		case "GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI":
+			return strings.ToUpper(args[index+1])
+		}
+	}
+	return ""
+}
+
 func newLaunchHandler(
 	openViewer func(string),
 	openMain func(),
 	handleArguments func([]string),
 	download func([]string),
+	quickStart func(string, bool),
 ) func(application.SecondInstanceData) {
 	initial := true
 	return func(data application.SecondInstanceData) {
@@ -44,6 +58,10 @@ func newLaunchHandler(
 		initial = false
 		if path := modelViewerArgument(data.Args, data.WorkingDir); path != "" {
 			openViewer(path)
+			return
+		}
+		if key := xxmiLaunchArgument(data.Args); key != "" {
+			quickStart(key, first)
 			return
 		}
 		if first {

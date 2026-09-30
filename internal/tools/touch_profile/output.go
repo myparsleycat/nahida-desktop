@@ -107,7 +107,7 @@ func (t *Service) generateTouchOutput(
 		assets,
 		namespace,
 		varPrefix,
-		t.touchUseFrameGuard(ctx),
+		t.touchUseFrameGuard(ctx, sourceRoot),
 	); err != nil {
 		return TouchValidationResult{}, err
 	}

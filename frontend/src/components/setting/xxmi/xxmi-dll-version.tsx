@@ -31,7 +31,7 @@ export function XXMIDllVersion({
     queryFn: () => XXMI.GetLibsReleases(),
   });
 
-  const versions = query.data;
+  const versions = query.data?.map((release) => release.tag);
   const version = selectedVersion ?? versions?.[0] ?? "";
   const hasPath = !!xxmiData?.xxmiPath;
   const isCurrentVersion = (value: string) => isSameDllVersion(value, xxmiData?.dllVersion);

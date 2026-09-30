@@ -96,6 +96,22 @@ func (c *Client) Configured() bool {
 // Releases lists the repository's published releases, newest first, without
 // drafts and prereleases.
 func (c *Client) Releases(ctx context.Context, repo Repo) ([]Release, error) {
+	releases, err := c.AllReleases(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+	published := releases[:0]
+	for _, release := range releases {
+		if release.Prerelease {
+			continue
+		}
+		published = append(published, release)
+	}
+	return published, nil
+}
+
+// AllReleases lists published releases, including prereleases, newest first.
+func (c *Client) AllReleases(ctx context.Context, repo Repo) ([]Release, error) {
 	if err := repo.Validate(); err != nil {
 		return nil, err
 	}
@@ -106,7 +122,7 @@ func (c *Client) Releases(ctx context.Context, repo Repo) ([]Release, error) {
 
 	published := releases[:0]
 	for _, release := range releases {
-		if release.Draft || release.Prerelease {
+		if release.Draft {
 			continue
 		}
 		published = append(published, release)

@@ -47,6 +47,7 @@ func (r Repo) webURL() string { return webBaseURL + "/" + r.String() }
 
 type Release struct {
 	TagName     string  `json:"tag_name"`
+	Body        string  `json:"body"`
 	Draft       bool    `json:"draft"`
 	Prerelease  bool    `json:"prerelease"`
 	PublishedAt string  `json:"published_at"`

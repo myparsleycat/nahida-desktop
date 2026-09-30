@@ -39,8 +39,6 @@ var (
 const (
 	seeMaskNoCloseProcess = 0x00000040
 	swHide                = 0
-	waitObject0           = 0
-	waitTimeout           = 258
 )
 
 type shellExecuteInfoW struct {
@@ -155,7 +153,10 @@ func killProcessForExecutable(executable string) func(int) error {
 	}
 }
 
-func startLauncher(ctx context.Context, executable, importer string) error {
+// startLauncher returns once the launcher process exists. XXMI Launcher can stay
+// alive for the whole game session, so waiting for it to exit would keep the
+// importer busy after the game has already closed.
+func startLauncher(executable, importer string) error {
 	verb, err := syscall.UTF16PtrFromString("runas")
 	if err != nil {
 		return err
@@ -184,26 +185,7 @@ func startLauncher(ctx context.Context, executable, importer string) error {
 	if info.hProcess == 0 {
 		return errors.New("start XXMI Launcher: missing process handle")
 	}
-	defer func() { _ = windows.CloseHandle(info.hProcess) }()
-	for {
-		result, waitErr := windows.WaitForSingleObject(info.hProcess, 100)
-		switch result {
-		case waitObject0:
-			var exitCode uint32
-			if err := windows.GetExitCodeProcess(info.hProcess, &exitCode); err != nil {
-				return fmt.Errorf("read XXMI Launcher exit code: %w", err)
-			}
-			return nil
-		case waitTimeout:
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-		default:
-			return fmt.Errorf("wait for XXMI Launcher: result %d: %w", result, waitErr)
-		}
-	}
+	return windows.CloseHandle(info.hProcess)
 }
 
 func processHasVisibleWindow(pid int) bool {

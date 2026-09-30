@@ -18,11 +18,18 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// errInstallReparsePoint marks a symbolic link or junction met below an installation root. Callers that
+// follow the reference launcher's "ignore what cannot be handled" semantics skip on it instead of failing.
+var errInstallReparsePoint = errors.New("reparse point is not allowed")
+
 type installRoot struct {
 	path string
 	root *os.Root
 }
 
+// openInstallRoot opens path as a confined root. The root itself is chosen by the user or by this
+// application, so a linked root is followed like the reference launcher does; only entries below it are
+// confined.
 func openInstallRoot(path string) (*installRoot, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -33,8 +40,13 @@ func openInstallRoot(path string) (*installRoot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateInstallDirectory(before, absolute); err != nil {
-		return nil, err
+	if isInstallReparsePoint(before) {
+		if before, err = os.Stat(absolute); err != nil {
+			return nil, err
+		}
+	}
+	if !before.IsDir() {
+		return nil, fmt.Errorf("installation path is not a directory: %q", absolute)
 	}
 	root, err := os.OpenRoot(absolute)
 	if err != nil {
@@ -265,7 +277,8 @@ func (r *installRoot) writeFileAtomic(
 }
 
 func (r *installRoot) removeAll(relative string) error {
-	return r.withParent(relative, false, 0, func(parent *os.Root, name string) error {
+	// A missing intermediate directory means the target is already gone, just like a missing leaf.
+	err := r.withParent(relative, false, 0, func(parent *os.Root, name string) error {
 		info, err := parent.Lstat(name)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -274,10 +287,14 @@ func (r *installRoot) removeAll(relative string) error {
 			return err
 		}
 		if isInstallReparsePoint(info) {
-			return fmt.Errorf("refusing to remove reparse point %q", filepath.Join(r.path, relative))
+			return fmt.Errorf("refusing to remove %q: %w", filepath.Join(r.path, relative), errInstallReparsePoint)
 		}
 		return parent.RemoveAll(name)
 	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func (r *installRoot) withParent(
@@ -311,9 +328,31 @@ func (r *installRoot) childInfo(name string) (os.FileInfo, error) {
 		return nil, err
 	}
 	if isInstallReparsePoint(info) {
-		return nil, fmt.Errorf("reparse point is not allowed at %q", filepath.Join(r.path, name))
+		return nil, fmt.Errorf("%w at %q", errInstallReparsePoint, filepath.Join(r.path, name))
 	}
 	return info, nil
+}
+
+// resolveUserFile resolves a top-level user-owned file such as d3dx.ini. The reference launcher reads and
+// writes through a linked file, so a link is followed to its target's directory. A nil root means name is a
+// plain file in r.
+func (r *installRoot) resolveUserFile(name string) (*installRoot, string, error) {
+	if err := validateInstallComponent(name); err != nil {
+		return nil, "", err
+	}
+	info, err := r.root.Lstat(name)
+	if err != nil || !isInstallReparsePoint(info) {
+		return nil, name, err
+	}
+	target, err := filepath.EvalSymlinks(filepath.Join(r.path, name))
+	if err != nil {
+		return nil, "", err
+	}
+	root, err := openInstallRoot(filepath.Dir(target))
+	if err != nil {
+		return nil, "", err
+	}
+	return root, filepath.Base(target), nil
 }
 
 func (r *installRoot) renameChild(oldName, newName string) error {
@@ -375,7 +414,7 @@ func validateInstallComponent(name string) error {
 
 func validateInstallDirectory(info os.FileInfo, path string) error {
 	if isInstallReparsePoint(info) {
-		return fmt.Errorf("reparse point is not allowed at %q", path)
+		return fmt.Errorf("%w at %q", errInstallReparsePoint, path)
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("installation path is not a directory: %q", path)
@@ -385,7 +424,7 @@ func validateInstallDirectory(info os.FileInfo, path string) error {
 
 func validateInstallFile(info os.FileInfo, path string) error {
 	if isInstallReparsePoint(info) {
-		return fmt.Errorf("reparse point is not allowed at %q", path)
+		return fmt.Errorf("%w at %q", errInstallReparsePoint, path)
 	}
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("installation path is not a regular file: %q", path)

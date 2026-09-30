@@ -13,7 +13,7 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   const [processingKey, setProcessingKey] = useState<string | null>(null);
   const { startImporter, launchGuardDialog } = useLaunchGuard();
 
-  if (!xxmiData?.xxmiConfig) {
+  if (!xxmiData?.xxmiPath) {
     return null;
   }
 

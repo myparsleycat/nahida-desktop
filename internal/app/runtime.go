@@ -143,6 +143,7 @@ func newRuntime() *runtime {
 	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
 	xxmiService := xxmi.NewWithOptions(xxmi.Options{
 		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit, GitHub: githubClient,
+		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
 	})
 	dialog := platform.NewDialog()
 	login := newGameBananaLogin()

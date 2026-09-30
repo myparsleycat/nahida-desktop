@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -22,74 +21,6 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
-}
-
-func TestSavePathLoadsConfigManifestAndEnabledImporters(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	manifestDir := filepath.Join(root, "Resources", "Packages", "XXMI")
-	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(manifestDir, "Manifest.json"),
-		[]byte(`{"version":"v1.2.3"}`),
-		0o644,
-	); err != nil {
-		t.Fatal(err)
-	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data.XXMIPath == nil || *data.XXMIPath != root || data.DLLVersion == nil || *data.DLLVersion != "v1.2.3" {
-		t.Fatalf("data = %+v", data)
-	}
-	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].Key != "GIMI" ||
-		data.EnabledImporters[0].ImporterFolder != filepath.Join(root, "GIMI") {
-		t.Fatalf("enabled importers = %+v", data.EnabledImporters)
-	}
-}
-
-func TestSavePathEmitsRendererReloadAfterStateUpdate(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	var events []string
-	service := NewWithOptions(Options{EventEmit: func(name string, _ ...any) {
-		events = append(events, name)
-	}})
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 || events[0] != "renderer:reload" {
-		t.Fatalf("events = %v", events)
-	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil || data.XXMIPath == nil || *data.XXMIPath != root {
-		t.Fatalf("data = %+v, err=%v", data, err)
-	}
 }
 
 func TestFindXXMIPathPrefersValidAppDataCandidate(t *testing.T) {
@@ -105,7 +36,7 @@ func TestFindXXMIPathPrefersValidAppDataCandidate(t *testing.T) {
 		searchCalled = true
 		return nil, nil
 	}})
-	result, err := service.FindXXMIPath(context.Background())
+	result, err := service.findExternalLauncherPath(context.Background())
 	if err != nil || result == nil || *result != candidate {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
@@ -130,7 +61,7 @@ func TestFindXXMIPathScansRootsAndExcludesBackups(t *testing.T) {
 	service := NewWithOptions(Options{SearchRoots: func() ([]string, error) {
 		return []string{root}, nil
 	}})
-	result, err := service.FindXXMIPath(context.Background())
+	result, err := service.findExternalLauncherPath(context.Background())
 	if err != nil || result == nil || *result != wanted {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
@@ -145,57 +76,13 @@ func TestFindFileAcrossRootsHonorsCancellation(t *testing.T) {
 	}
 }
 
-func TestSavePathRejectsInvalidConfig(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+func TestReadAndValidateConfigRejectsInvalidConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), []byte(`{"Launcher":{}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err == nil {
+	if _, _, err := readAndValidateConfig(filepath.Join(root, xxmiConfigName)); err == nil {
 		t.Fatal("expected invalid config error")
-	}
-}
-
-func TestLoadTreatsCorruptSavedConfigAsUnconfigured(t *testing.T) {
-	ctx := context.Background()
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(ctx); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(ctx, root); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), []byte(`{"Launcher":`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := service.GetXXMIData(ctx)
-	if err != nil {
-		t.Fatalf("GetXXMIData returned corrupt-config error: %v", err)
-	}
-	if data.XXMIPath == nil || *data.XXMIPath != root || data.XXMIConfig != nil || len(data.EnabledImporters) != 0 {
-		t.Fatalf("data after corrupt config = %#v", data)
-	}
-	config, err := service.GetXXMIConfig(ctx)
-	if err != nil || config != nil {
-		t.Fatalf("GetXXMIConfig = %#v, %v; want nil, nil", config, err)
 	}
 }
 
@@ -257,41 +144,6 @@ func TestValidateXXMIConfigMatchesRequiredElectronFields(t *testing.T) {
 	}
 }
 
-func TestSavePathAcceptsEmptyImporterFolderAndResolvesItToRoot(t *testing.T) {
-	ctx := context.Background()
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(ctx); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	config := xxmiTestConfig()
-	gimi := config["Importers"].(map[string]any)["GIMI"].(map[string]any)
-	gimi["Importer"].(map[string]any)["importer_folder"] = ""
-	raw, err := json.Marshal(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, xxmiConfigName), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	service := New()
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(ctx, root); err != nil {
-		t.Fatal(err)
-	}
-	data, err := service.GetXXMIData(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(data.EnabledImporters) != 1 || data.EnabledImporters[0].ImporterFolder != root {
-		t.Fatalf("enabled importers = %#v, want GIMI rooted at %q", data.EnabledImporters, root)
-	}
-}
-
 func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 	var requests atomic.Int32
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -329,15 +181,9 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(first, ",") != "v2,v1" || strings.Join(second, ",") != "v2,v1" || requests.Load() != 1 {
+	if len(first) != 2 || first[0].Tag != "v2" || first[1].Tag != "v1" ||
+		len(second) != 2 || second[0].Tag != "v2" || second[1].Tag != "v1" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
-	}
-	// The refresh cooldown itself is covered by the github package.
-	if err := service.UpdateLibsReleases(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("refresh inside cooldown refetched: %d", requests.Load())
 	}
 }
 
@@ -375,67 +221,6 @@ func TestGetLibsReleasesDeduplicatesInitialInFlightRequest(t *testing.T) {
 	}
 }
 
-func TestInstallDLLVersionStagesAndValidatesBeforeCopy(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	var archive bytes.Buffer
-	writer := zip.NewWriter(&archive)
-	entry, err := writer.Create("package/d3d11.dll")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := entry.Write([]byte("dll")); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		body := []byte(`{"version":"v1.2.3"}`)
-		if strings.HasSuffix(request.URL.Path, ".zip") {
-			body = archive.Bytes()
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Status:     "200 OK",
-			Header:     make(http.Header),
-			Body:       io.NopCloser(bytes.NewReader(body)),
-			Request:    request,
-		}, nil
-	})}
-	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
-	download := infra.NewDownload()
-	download.UseClient(infraClient)
-	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.InstallDLLVersion(context.Background(), InstallDLLVersionInput{Version: "v1.2.3"}); err != nil {
-		t.Fatal(err)
-	}
-	installed, err := os.ReadFile(filepath.Join(root, "Resources", "Packages", "XXMI", "d3d11.dll"))
-	if err != nil || string(installed) != "dll" {
-		t.Fatalf("installed = %q, error = %v", installed, err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(root, "Resources", "Packages", "XXMI", "Manifest.json"))
-	if err != nil || !bytes.Contains(manifest, []byte("v1.2.3")) {
-		t.Fatalf("manifest = %q, error = %v", manifest, err)
-	}
-	rawConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
-	if err != nil || !bytes.Contains(rawConfig, []byte(`"auto_update": false`)) {
-		t.Fatalf("config = %q, error = %v", rawConfig, err)
-	}
-}
-
 func TestGetImporterReleasesRejectsUnknownImporter(t *testing.T) {
 	_, err := New().GetImporterReleases(context.Background(), "NOPE")
 	if err == nil || !strings.Contains(err.Error(), "unknown importer") {
@@ -469,7 +254,8 @@ func TestGetImporterReleasesUsesImporterRepoAndCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(first, ",") != "v8.9.0" || strings.Join(second, ",") != "v8.9.0" || requests.Load() != 1 {
+	if len(first) != 1 || first[0].Tag != "v8.9.0" ||
+		len(second) != 1 || second[0].Tag != "v8.9.0" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
 	}
 }
@@ -486,94 +272,6 @@ func TestInstallImporterPackageRejectsInvalidInput(t *testing.T) {
 		context.Background(), InstallImporterPackageInput{Importer: "NOPE", Version: "v1.2.3"},
 	); err == nil || !strings.Contains(err.Error(), "unknown importer") {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestInstallImporterPackageOverlaysAndPreservesMods(t *testing.T) {
-	client, err := db.New(filepath.Join(t.TempDir(), "settings.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = client.Close() }()
-	if err := client.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeXXMITestConfig(t, root)
-	gimi := filepath.Join(root, "GIMI")
-	for _, directory := range []string{
-		filepath.Join(gimi, "Mods"), filepath.Join(gimi, "Core"), filepath.Join(gimi, "ShaderFixes"),
-	} {
-		if err := os.MkdirAll(directory, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for path, content := range map[string]string{
-		filepath.Join(gimi, "Mods", "user-mod.ini"):    "keep-mod",
-		filepath.Join(gimi, "d3dx.ini"):                "user-ini",
-		filepath.Join(gimi, "Core", "obsolete.ini"):    "gone",
-		filepath.Join(gimi, "Core", "keep.ini"):        "old-keep",
-		filepath.Join(gimi, "ShaderFixes", "old.hlsl"): "gone",
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	zipBody := writeXXMITestZip(t, map[string]string{
-		"Core/GIMI/main.ini": "global $version = 1.23\n",
-		"Core/auto_update.xcmd": "[PreInstall]\ndelete = Core/obsolete.ini\n\n" +
-			"[PostInstall]\ndelete = ShaderFixes/old.hlsl\n",
-		"Core/keep.ini":            "new-keep",
-		"d3dx.ini":                 "package-ini",
-		"ShaderFixes/new.hlsl":     "new-shader",
-		"Mods/should-not-copy.ini": "from-zip",
-	})
-	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if !strings.Contains(request.URL.Path, "/SilentNightSound/GIMI-Package/releases/download/") ||
-			!strings.HasSuffix(request.URL.Path, "/GIMI-PACKAGE-v1.2.3.zip") {
-			t.Fatalf("URL = %s", request.URL)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header),
-			Body: io.NopCloser(bytes.NewReader(zipBody)), Request: request,
-		}, nil
-	})}
-	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
-	download := infra.NewDownload()
-	download.UseClient(infraClient)
-	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
-	service.UseClient(client)
-	if err := service.SaveXXMIPath(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.InstallImporterPackage(
-		context.Background(), InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3"},
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	assertFile(t, filepath.Join(gimi, "Mods", "user-mod.ini"), "keep-mod")
-	assertFile(t, filepath.Join(gimi, "d3dx.ini"), "user-ini")
-	assertFile(t, filepath.Join(gimi, "Core", "keep.ini"), "new-keep")
-	assertFile(t, filepath.Join(gimi, "ShaderFixes", "new.hlsl"), "new-shader")
-	if _, err := os.Stat(filepath.Join(gimi, "Core", "obsolete.ini")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("obsolete.ini still present: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(gimi, "ShaderFixes", "old.hlsl")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("old.hlsl still present: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(gimi, "Mods", "should-not-copy.ini")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("zip Mods file was copied: %v", err)
-	}
-	rawConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
-	if err != nil || !bytes.Contains(rawConfig, []byte(`"auto_update": false`)) ||
-		!bytes.Contains(rawConfig, []byte(`"deployed_version": "1.2.3"`)) {
-		t.Fatalf("config = %q, error = %v", rawConfig, err)
-	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil || len(data.EnabledImporters) != 1 || data.EnabledImporters[0].InstalledVersion == nil ||
-		*data.EnabledImporters[0].InstalledVersion != "1.2.3" {
-		t.Fatalf("data = %+v, err = %v", data, err)
 	}
 }
 
@@ -603,6 +301,17 @@ func TestParseImporterVersionFile(t *testing.T) {
 				t.Fatalf("got %q err=%v, want %q", got, err, test.want)
 			}
 		})
+	}
+}
+
+func TestParseXcmdDeletesRejectsUnknownCommandInSection(t *testing.T) {
+	raw := "[PreInstall]\ndelete = Core/a.ini\n; comment\n\n[PostInstall]\nrename = Core/b.ini\n"
+	got, err := parseXcmdDeletes(raw, "PreInstall")
+	if err != nil || len(got) != 1 || got[0] != "Core/a.ini" {
+		t.Fatalf("PreInstall = %q err=%v", got, err)
+	}
+	if _, err := parseXcmdDeletes(raw, "PostInstall"); err == nil || !strings.Contains(err.Error(), "rename") {
+		t.Fatalf("PostInstall err = %v, want unknown command", err)
 	}
 }
 

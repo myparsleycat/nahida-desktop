@@ -67,7 +67,10 @@ const (
 	KeyModelViewerExposure    = "modelViewer.exposure"
 	KeyModelViewerToonShadows = "modelViewer.toonShadows"
 
-	KeyXXMIPersistToggles = "xxmi.persistToggles"
+	KeyXXMIRoot               = "xxmi.root"
+	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
+	KeyXXMIIncludePrereleases = "xxmi.includePrereleases"
+	KeyXXMIPersistToggles     = "xxmi.persistToggles"
 )
 
 const (
@@ -157,6 +160,9 @@ var allDefinitions = []Definition{
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
+	{KeyXXMIRoot, ScopeXXMI, "xxmi_root"},
+	{KeyXXMIAutoUpdate, ScopeXXMI, "xxmi_auto_update"},
+	{KeyXXMIIncludePrereleases, ScopeXXMI, "xxmi_include_prereleases"},
 }
 
 type storageKeyMigration struct {

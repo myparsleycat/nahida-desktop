@@ -77,6 +77,21 @@ func TestReleaseTagsReturnsIndependentCopies(t *testing.T) {
 	}
 }
 
+func TestCachedReleasesPreservesDetailsAndReturnsIndependentAssets(t *testing.T) {
+	client := newTestClient(t, func(*http.Request) (int, string) {
+		return http.StatusOK, `[{"tag_name":"v2","body":"release notes","assets":[{"name":"package.zip"}]}]`
+	})
+	first, err := client.CachedReleases(context.Background(), testRepo, false)
+	if err != nil || len(first) != 1 || first[0].Body != "release notes" {
+		t.Fatalf("releases = %v, err = %v", first, err)
+	}
+	first[0].Assets[0].Name = "changed"
+	second, err := client.CachedReleases(context.Background(), testRepo, false)
+	if err != nil || second[0].Assets[0].Name != "package.zip" {
+		t.Fatalf("cached releases = %v, err = %v", second, err)
+	}
+}
+
 func TestReleaseTagsDeduplicatesInFlightFetch(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

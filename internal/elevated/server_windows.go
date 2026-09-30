@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 type ServerOptions struct {
@@ -154,6 +155,25 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 			response.Payload, err = json.Marshal(result)
 			if err != nil {
 				response.Error = "encode input result"
+				break
+			}
+			response.OK = true
+		case operationXXMILaunch:
+			var spec inject.LaunchSpec
+			if err := json.Unmarshal(request.Payload, &spec); err != nil {
+				response.ErrorCode, response.Error = "XXMI_INVALID_LAUNCH", "invalid XXMI launch request"
+				break
+			}
+			callCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutSeconds+60)*time.Second)
+			result, err := inject.Launch(callCtx, spec)
+			cancel()
+			if err != nil {
+				response.ErrorCode, response.Error = inject.ClassifyError(err), err.Error()
+				break
+			}
+			response.Payload, err = json.Marshal(result)
+			if err != nil {
+				response.Error = "encode XXMI launch result"
 				break
 			}
 			response.OK = true

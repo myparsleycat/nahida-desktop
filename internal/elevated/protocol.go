@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	protocolVersion = 1
-	maxMessageSize  = 64 * 1024
-	operationHello  = "session.hello"
-	operationPing   = "session.ping"
-	operationStop   = "session.stop"
-	operationKeys   = "input.send_keys"
+	protocolVersion     = 1
+	maxMessageSize      = 64 * 1024
+	operationHello      = "session.hello"
+	operationPing       = "session.ping"
+	operationStop       = "session.stop"
+	operationKeys       = "input.send_keys"
+	operationXXMILaunch = "xxmi.launch"
 )
 
 type message struct {

@@ -14,6 +14,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 const (
@@ -31,7 +32,14 @@ type Options struct {
 	EventEmit   func(name string, data ...any)
 	SearchRoots func() ([]string, error)
 	// GitHub serves release lists and files; nil builds one from HTTP and Download.
-	GitHub *github.Client
+	GitHub   *github.Client
+	Elevated elevatedLauncher
+}
+
+type elevatedLauncher interface {
+	Acquire(context.Context) (func(), error)
+	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	HelperImageName() string
 }
 
 type PackageInfo struct {
@@ -45,16 +53,22 @@ type PackageInfo struct {
 
 type EnabledImporter struct {
 	Key              string      `json:"key"`
+	Mode             RuntimeMode `json:"mode"`
 	ImporterFolder   string      `json:"importerFolder"`
+	GameFolder       string      `json:"gameFolder"`
+	Running          bool        `json:"running"`
+	UpdateAvailable  bool        `json:"updateAvailable"`
 	InstalledVersion *string     `json:"installedVersion"`
 	PackageInfo      PackageInfo `json:"packageInfo"`
+	// CustomDLL reports that the built-in runtime preserves a user-provided d3d11.dll instead of the signed one.
+	CustomDLL bool `json:"customDll"`
 }
 
 type Data struct {
+	Mode             LauncherMode      `json:"mode"`
 	XXMIPath         *string           `json:"xxmiPath"`
 	DLLVersion       *string           `json:"dllVersion"`
 	EnabledImporters []EnabledImporter `json:"enabledImporters"`
-	XXMIConfig       map[string]any    `json:"xxmiConfig"`
 }
 
 // HuntingRuntime is the resolved on-disk and process metadata a high-level
@@ -86,16 +100,17 @@ type parsedConfig struct {
 
 type XXMI struct {
 	mu          sync.RWMutex
+	packageMu   sync.Mutex
 	client      *db.Client
 	log         *infra.Log
 	github      *github.Client
 	archive     *infra.Archive
+	elevated    elevatedLauncher
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
-	path        *string
-	config      map[string]any
-	parsed      parsedConfig
-	busy        bool
+	busy        map[string]bool
+	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
+	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 }
 
 func New() *XXMI {
@@ -111,10 +126,12 @@ func NewWithOptions(opts Options) *XXMI {
 	if githubClient == nil {
 		githubClient = github.New(github.Options{HTTP: opts.HTTP, Download: opts.Download, Log: opts.Log})
 	}
-	return &XXMI{
+	x := &XXMI{
 		log: opts.Log, github: githubClient, archive: opts.Archive,
-		eventEmit: opts.EventEmit, searchRoots: searchRoots,
+		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
 	}
+	x.installImporter = x.installBuiltinImporterPackage
+	return x
 }
 
 //wails:ignore
@@ -124,19 +141,34 @@ func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Unlock()
 }
 
-// EnsureLauncherClosed closes the launcher before DLL replacement operations.
-//
-//wails:ignore
-func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
-	return ensureLauncherClosed(ctx)
+// GetXXMIPath returns the external launcher folder in external mode and the built-in root otherwise.
+func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
+	}
+	mode, err := launcherMode(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if mode == LauncherExternal {
+		return x.externalLauncherPath(ctx)
+	}
+	root, err := client.Settings.GetValue(ctx, "xxmi_root")
+	if err != nil {
+		return nil, err
+	}
+	if root != nil && *root != "" {
+		return root, nil
+	}
+	fallback, err := xxmiCacheRoot()
+	return &fallback, err
 }
 
-func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return nil, errors.New("XXMI settings store is not configured")
+func (x *XXMI) externalLauncherPath(ctx context.Context) (*string, error) {
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
 	}
 	value, err := client.Settings.GetValue(ctx, xxmiPathKey)
 	if err != nil || value == nil || strings.TrimSpace(*value) == "" {
@@ -146,220 +178,80 @@ func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
 	return &cleaned, nil
 }
 
-func (x *XXMI) SaveXXMIPath(ctx context.Context, inputPath string) error {
-	absolute, err := filepath.Abs(strings.TrimSpace(inputPath))
-	if err != nil {
-		return err
-	}
-	config, parsed, err := readAndValidateConfig(filepath.Join(absolute, xxmiConfigName))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return infra.WithCause(errors.New("XXMI Launcher Config.json not found"), err)
-		}
-		return fmt.Errorf("XXMI Launcher Config.json is invalid: %w", err)
-	}
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return errors.New("XXMI settings store is not configured")
-	}
-	if err := client.Settings.Upsert(ctx, xxmiPathKey, &absolute); err != nil {
-		return err
-	}
-	x.mu.Lock()
-	x.path = &absolute
-	x.config = config
-	x.parsed = parsed
-	x.mu.Unlock()
-	if x.eventEmit != nil {
-		x.eventEmit("renderer:reload")
-	}
-	return nil
-}
-
-func (x *XXMI) FindXXMIPath(ctx context.Context) (*string, error) {
-	appData := strings.TrimSpace(os.Getenv("APPDATA"))
-	if appData != "" {
-		candidate := filepath.Join(appData, "XXMI Launcher")
-		if isValidConfig(filepath.Join(candidate, xxmiConfigName)) {
-			return &candidate, nil
-		}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	roots, err := x.searchRoots()
-	if err != nil {
-		return nil, err
-	}
-	var diagnostics infra.DiagnosticBatch
-	defer diagnostics.Report(x.log, "XXMI", "find-config")
-	result, err := findFileAcrossRoots(ctx, roots, xxmiConfigName, map[string]struct{}{"Backups": {}}, diagnostics.Add)
-	if err != nil || result == nil {
-		return nil, err
-	}
-	directory := filepath.Dir(*result)
-	return &directory, nil
-}
-
-func isValidConfig(path string) bool {
-	_, _, err := readAndValidateConfig(path)
-	return err == nil
-}
-
-func (x *XXMI) GetXXMIConfig(ctx context.Context) (map[string]any, error) {
-	if err := x.load(ctx); err != nil {
-		return nil, err
-	}
-	x.mu.RLock()
-	defer x.mu.RUnlock()
-	return cloneMap(x.config), nil
-}
-
 func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
-	if err := x.load(ctx); err != nil {
+	mode, err := x.GetLauncherMode(ctx)
+	if err != nil {
 		return Data{}, err
 	}
-	x.mu.RLock()
-	path := cloneString(x.path)
-	config := cloneMap(x.config)
-	enabled := x.enabledImportersLocked()
-	x.mu.RUnlock()
-	return Data{XXMIPath: path, DLLVersion: dllVersion(path), EnabledImporters: enabled, XXMIConfig: config}, nil
+	importers, err := x.GetEnabledImporters(ctx)
+	if err != nil {
+		return Data{}, err
+	}
+	root, err := x.GetXXMIPath(ctx)
+	if err != nil {
+		return Data{}, err
+	}
+	data := Data{Mode: mode, XXMIPath: root, EnabledImporters: importers}
+	if mode == LauncherExternal {
+		data.DLLVersion = dllVersion(root)
+	}
+	return data, nil
 }
 
 func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, error) {
-	if err := x.load(ctx); err != nil {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
 		return nil, err
 	}
-	x.mu.RLock()
-	out := x.enabledImportersLocked()
-	x.mu.RUnlock()
-	return out, nil
+	if external {
+		return x.externalEnabledImporters(ctx)
+	}
+	return x.builtinEnabledImporters(ctx)
 }
 
 // ResolveHuntingRuntime returns the active importer's game and INI metadata.
 //
 //wails:ignore
 func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
-	if err := x.load(ctx); err != nil {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
 		return HuntingRuntime{}, err
 	}
-
-	wanted := strings.TrimSpace(importerKey)
-	x.mu.RLock()
-	defer x.mu.RUnlock()
-	for key, importer := range x.parsed.Importers {
-		if !strings.EqualFold(key, wanted) {
+	if external {
+		return x.externalHuntingRuntime(ctx, importerKey)
+	}
+	builtin, err := x.builtinEnabledImporters(ctx)
+	if err != nil {
+		return HuntingRuntime{}, err
+	}
+	for _, importer := range builtin {
+		if !strings.EqualFold(importer.Key, importerKey) {
 			continue
 		}
-		packageInfo, enabled := x.parsed.Packages.Packages[key]
-		if !enabled || strings.TrimSpace(packageInfo.LatestVersion) == "" {
-			return HuntingRuntime{}, fmt.Errorf("importer %q is not enabled", key)
+		spec, ok := lookupImporterPackage(importer.Key)
+		if !ok {
+			return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
 		}
-		folder := x.importerFolderLocked(key)
-		return HuntingRuntime{
-			ImporterKey: key, ImporterFolder: folder, INIPath: filepath.Join(folder, "d3dx.ini"),
-			GameEXENames: slices.Clone(importer.Importer.GameEXENames),
-		}, nil
+		names := spec.processNames
+		if len(names) == 0 {
+			names = spec.gameExeNames
+		}
+		return HuntingRuntime{ImporterKey: importer.Key, ImporterFolder: importer.ImporterFolder,
+			INIPath: filepath.Join(importer.ImporterFolder, "d3dx.ini"), GameEXENames: slices.Clone(names)}, nil
 	}
 	return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
 }
 
-func (x *XXMI) GetLibsReleases(ctx context.Context) ([]string, error) {
-	return x.releaseTags(ctx, libsRepo, false)
+func (x *XXMI) GetLibsReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	return x.ListReleases(ctx, "xxmi-libs")
 }
 
-func (x *XXMI) UpdateLibsReleases(ctx context.Context) error {
-	_, err := x.releaseTags(ctx, libsRepo, true)
-	return err
-}
-
-func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]string, error) {
+func (x *XXMI) GetImporterReleases(ctx context.Context, importer string) ([]ReleaseInfo, error) {
 	spec, ok := lookupImporterPackage(importer)
 	if !ok {
 		return nil, errors.New("unknown importer")
 	}
-	return x.releaseTags(ctx, spec.repo, false)
-}
-
-func (x *XXMI) releaseTags(ctx context.Context, repo github.Repo, refresh bool) ([]string, error) {
-	tags, err := x.github.ReleaseTags(ctx, repo, refresh)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch %s releases: %w", repo, err)
-	}
-	return tags, nil
-}
-
-func (x *XXMI) load(ctx context.Context) error {
-	path, err := x.GetXXMIPath(ctx)
-	if err != nil {
-		return err
-	}
-	if path == nil {
-		x.mu.Lock()
-		x.path = nil
-		x.config = nil
-		x.parsed = parsedConfig{}
-		x.mu.Unlock()
-		return nil
-	}
-	config, parsed, err := readAndValidateConfig(filepath.Join(*path, xxmiConfigName))
-	if err != nil {
-		if x.log != nil {
-			_ = infra.ReportError(
-				x.log,
-				err,
-				"XXMI.initialize",
-				infra.Diagnostic{Operation: "initialize", Stage: "background"},
-			)
-		}
-		x.mu.Lock()
-		x.path = cloneString(path)
-		x.config = nil
-		x.parsed = parsedConfig{}
-		x.mu.Unlock()
-		return nil
-	}
-	x.mu.Lock()
-	x.path = cloneString(path)
-	x.config = config
-	x.parsed = parsed
-	x.mu.Unlock()
-	return nil
-}
-
-func (x *XXMI) enabledImportersLocked() []EnabledImporter {
-	out := make([]EnabledImporter, 0, len(x.parsed.Importers))
-	keys := make([]string, 0, len(x.parsed.Importers))
-	for key := range x.parsed.Importers {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	for _, key := range keys {
-		packageInfo, ok := x.parsed.Packages.Packages[key]
-		if !ok || strings.TrimSpace(packageInfo.LatestVersion) == "" {
-			continue
-		}
-		folder := x.importerFolderLocked(key)
-		var installed *string
-		if spec, ok := lookupImporterPackage(key); ok {
-			installed = readImporterVersion(folder, spec)
-		}
-		out = append(out, EnabledImporter{
-			Key: key, ImporterFolder: folder, InstalledVersion: installed, PackageInfo: packageInfo,
-		})
-	}
-	return out
-}
-
-func (x *XXMI) importerFolderLocked(key string) string {
-	folder := x.parsed.Importers[key].Importer.ImporterFolder
-	if !filepath.IsAbs(folder) && x.path != nil {
-		folder = filepath.Join(*x.path, folder)
-	}
-	return folder
+	return x.ListReleases(ctx, "importer:"+spec.key)
 }
 
 func readAndValidateConfig(path string) (map[string]any, parsedConfig, error) {
@@ -400,24 +292,6 @@ func dllVersion(path *string) *string {
 		return nil
 	}
 	return &manifest.Version
-}
-
-func cloneMap(value map[string]any) map[string]any {
-	if value == nil {
-		return nil
-	}
-	raw, _ := json.Marshal(value)
-	var cloned map[string]any
-	_ = json.Unmarshal(raw, &cloned)
-	return cloned
-}
-
-func cloneString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
 }
 
 func (x *XXMI) reportCleanup(err error, operation string) {
