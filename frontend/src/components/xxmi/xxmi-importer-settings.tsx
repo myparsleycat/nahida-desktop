@@ -493,7 +493,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                               });
                               return;
                             }
-                            await XXMI.SaveImporterConfig(importer, resolved);
+                            if (!(await persist(resolved))) return;
                             await finishInstall(selectedPackage, allowPackage);
                           } catch (error) {
                             toast.error(toErrorMessage(error));
