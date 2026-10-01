@@ -52,24 +52,6 @@ func TestImporterLaunchLockAllowsOtherImporters(t *testing.T) {
 	service.releaseImporter("SRMI")
 }
 
-func TestEFMIMinimumLibrariesVersion(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		version string
-		old     bool
-	}{
-		{"1.1.7", true},
-		{"1.7.4", true},
-		{"1.7.5", false},
-		{"1.8.0", false},
-		{"invalid", false},
-	} {
-		if got := efmiNeedsNewerLibs(tc.version); got != tc.old {
-			t.Errorf("version %s: old = %t, want %t", tc.version, got, tc.old)
-		}
-	}
-}
-
 func TestImporterInjectionDefaults(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -107,7 +89,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
 	}})
-	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg, false)
+	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg)
 	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
 		t.Fatalf("launch error = %v", err)
 	}
