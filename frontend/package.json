@@ -32,7 +32,7 @@
     "dompurify": "^3.4.16",
     "es-hangul": "^2.4.0",
     "es-toolkit": "^1.52.0",
-    "filesize": "^11.0.24",
+    "filesize": "^11.0.25",
     "framer-motion": "^13.4.4",
     "i18next": "^26.4.2",
     "lucide-react": "^1.48.0",
