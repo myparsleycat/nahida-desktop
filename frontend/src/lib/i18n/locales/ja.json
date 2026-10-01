@@ -1781,7 +1781,7 @@
           "runOnStartup": "ログイン時に実行",
           "runOnStartupDescription": "システム起動時にアプリを自動的に実行します。",
           "elevatedHelper": "昇格ヘルパー",
-          "elevatedHelperDescription": "管理者権限で実行中のゲームにキー入力を送るため、アプリ起動時に別のヘルパーを管理者権限で起動します。Windows の UAC 確認が表示されます。",
+          "elevatedHelperDescription": "管理者権限が必要な操作を処理するため、アプリ起動時に別のヘルパーを管理者権限で起動します。Windows の UAC 確認が表示されます。",
           "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
           "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
           "checkUpdate": "更新確認",
