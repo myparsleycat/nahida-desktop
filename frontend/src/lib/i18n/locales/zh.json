@@ -1768,6 +1768,9 @@
         }
       },
       "gen": {
+        "update": {
+          "title": "更新"
+        },
         "application": {
           "title": "应用程序",
           "runOnStartup": "开机启动",

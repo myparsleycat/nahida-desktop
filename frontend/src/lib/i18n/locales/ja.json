@@ -1769,6 +1769,9 @@
         }
       },
       "gen": {
+        "update": {
+          "title": "アップデート"
+        },
         "application": {
           "title": "アプリケーション",
           "runOnStartup": "ログイン時に実行",

@@ -1801,6 +1801,9 @@
         }
       },
       "gen": {
+        "update": {
+          "title": "Updates"
+        },
         "application": {
           "title": "Application",
           "runOnStartup": "Run on startup",

@@ -246,80 +246,6 @@ function RouteComponent() {
             </>
           )}
 
-          <div className="flex items-center justify-between space-x-3">
-            <div className="flex-1 space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.autoUpdate")}
-              </span>
-              <p className="text-xs text-muted-foreground">{selectedAutoUpdateMode?.description}</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Select
-                value={settings.autoUpdateMode}
-                items={autoUpdateModeOptions}
-                onValueChange={(val) => {
-                  if (val === null) return;
-                  void update("autoUpdateMode", val);
-                }}
-              >
-                <SelectTrigger className="w-42">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent finalFocus={false}>
-                  <SelectGroup>
-                    {autoUpdateModeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.includePrerelease")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.includePrereleaseDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={settings.includePrerelease}
-              onCheckedChange={(val) => update("includePrerelease", val)}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.updateStatus")}
-              </span>
-              <p className="text-xs text-muted-foreground">{updaterStatusText}</p>
-            </div>
-            {(shouldOfferManualDownload || updateDownloaded) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                isLoading={isUpdaterActionPending || updaterChecking || updaterDownloading}
-                onClick={handleUpdateAction}
-              >
-                {updateDownloaded ? (
-                  <>
-                    <RefreshCwIcon />
-                    {t("updater.actions.install")}
-                  </>
-                ) : (
-                  <>
-                    <DownloadIcon />
-                    {t("updater.actions.download")}
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">
@@ -362,33 +288,6 @@ function RouteComponent() {
               onCheckedChange={(val) => update("titlebarActivityBadgeClickNavigate", val)}
             />
           </div>
-        </SectionContent>
-      </Section>
-
-      <AlertDialog
-        open={isRunInBackgroundConfirmOpen}
-        onOpenChange={setIsRunInBackgroundConfirmOpen}
-      >
-        <AlertDialogContent className="w-full">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("page.setting.gen.application.runInBackgroundDisableConfirmTitle")}
-            </AlertDialogTitle>
-          </AlertDialogHeader>
-          <p className="text-sm text-pretty text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground">
-            {t("page.setting.gen.application.runInBackgroundDisableConfirmDescription")}
-          </p>
-          <AlertDialogFooter className="flex flex-row justify-end">
-            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmDisableRunInBackground}>
-              {t("page.setting.gen.application.runInBackgroundDisableConfirmAction")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Section>
-        <SectionContent>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="language">
@@ -499,6 +398,110 @@ function RouteComponent() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </SectionContent>
+      </Section>
+
+      <AlertDialog
+        open={isRunInBackgroundConfirmOpen}
+        onOpenChange={setIsRunInBackgroundConfirmOpen}
+      >
+        <AlertDialogContent className="w-full">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.setting.gen.application.runInBackgroundDisableConfirmTitle")}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <p className="text-sm text-pretty text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground">
+            {t("page.setting.gen.application.runInBackgroundDisableConfirmDescription")}
+          </p>
+          <AlertDialogFooter className="flex flex-row justify-end">
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDisableRunInBackground}>
+              {t("page.setting.gen.application.runInBackgroundDisableConfirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.gen.update.title")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent>
+          <div className="flex items-center justify-between space-x-3">
+            <div className="flex-1 space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.autoUpdate")}
+              </span>
+              <p className="text-xs text-muted-foreground">{selectedAutoUpdateMode?.description}</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Select
+                value={settings.autoUpdateMode}
+                items={autoUpdateModeOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("autoUpdateMode", val);
+                }}
+              >
+                <SelectTrigger className="w-42">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent finalFocus={false}>
+                  <SelectGroup>
+                    {autoUpdateModeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.includePrerelease")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.application.includePrereleaseDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.includePrerelease}
+              onCheckedChange={(val) => update("includePrerelease", val)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.updateStatus")}
+              </span>
+              <p className="text-xs text-muted-foreground">{updaterStatusText}</p>
+            </div>
+            {(shouldOfferManualDownload || updateDownloaded) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                isLoading={isUpdaterActionPending || updaterChecking || updaterDownloading}
+                onClick={handleUpdateAction}
+              >
+                {updateDownloaded ? (
+                  <>
+                    <RefreshCwIcon />
+                    {t("updater.actions.install")}
+                  </>
+                ) : (
+                  <>
+                    <DownloadIcon />
+                    {t("updater.actions.download")}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </SectionContent>
       </Section>

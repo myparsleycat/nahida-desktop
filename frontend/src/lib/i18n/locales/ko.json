@@ -1787,6 +1787,9 @@
         }
       },
       "gen": {
+        "update": {
+          "title": "업데이트"
+        },
         "application": {
           "title": "애플리케이션",
           "runOnStartup": "로그인할 때 실행",
