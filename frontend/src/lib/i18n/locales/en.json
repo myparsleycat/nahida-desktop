@@ -206,6 +206,10 @@
         "paused": "Paused",
         "queued": "Queued",
         "preparing": "Preparing",
+        "upload_activity": {
+          "preparing": "Reading and compressing files",
+          "waiting": "Waiting for server response"
+        },
         "planning": {
           "permission_check": "Checking permissions",
           "parent_lookup": "Looking up parent folders",

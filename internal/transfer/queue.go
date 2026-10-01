@@ -503,6 +503,7 @@ func (t *Transfer) ManualStart(pid string) error {
 	item.record.FailedFiles = 0
 	item.record.Error = ""
 	item.record.ErrorCode = ""
+	item.record.UploadPhase = ""
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
 	t.destinationMu.Unlock()
@@ -543,6 +544,7 @@ func (t *Transfer) ResetTransfer(pid string) error {
 	item.record.FailedFiles = 0
 	item.record.Error = ""
 	item.record.ErrorCode = ""
+	item.record.UploadPhase = ""
 	item.samples = nil
 	item.completedIDs = make(map[string]struct{})
 	shouldEmit := t.scheduleEmitLocked(true, t.now())

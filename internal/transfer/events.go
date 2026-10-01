@@ -37,14 +37,15 @@ func (t *Transfer) dispatchSnapshots(
 }
 
 // scheduleEmitLocked plans a renderer update while t.mu is held. Immediate
-// state changes cancel a pending progress update, while ordinary progress uses
-// a leading-and-trailing throttle so the latest snapshot is never stranded.
+// state changes are immediate; active transfers also refresh while reads or
+// server responses are stalled, so speed and ETA do not remain stale.
 func (t *Transfer) scheduleEmitLocked(immediate bool, now time.Time) bool {
 	if t.emitStopped {
 		return false
 	}
 	if immediate {
 		t.cancelProgressEmitLocked()
+		t.scheduleHeartbeatLocked()
 		return true
 	}
 
@@ -56,18 +57,39 @@ func (t *Transfer) scheduleEmitLocked(immediate bool, now time.Time) bool {
 	if t.lastProgressEmit.IsZero() || elapsed < 0 || elapsed >= interval {
 		t.cancelProgressEmitLocked()
 		t.lastProgressEmit = now
+		t.scheduleHeartbeatLocked()
 		return true
 	}
 	if t.progressEmitTimer != nil {
 		return false
 	}
 
+	t.startProgressTimerLocked(interval - elapsed)
+	return false
+}
+
+func (t *Transfer) startProgressTimerLocked(delay time.Duration) {
 	t.progressEmitGen++
 	generation := t.progressEmitGen
-	t.progressEmitTimer = time.AfterFunc(interval-elapsed, func() {
+	t.progressEmitTimer = time.AfterFunc(delay, func() {
 		t.flushProgressEmit(generation)
 	})
-	return false
+}
+
+func (t *Transfer) scheduleHeartbeatLocked() {
+	if t.emitStopped || t.progressEmitTimer != nil || (t.app == nil && t.syncWindowProgress == nil) {
+		return
+	}
+	for _, item := range t.entries {
+		if item.record.Status == StatusPreparing || item.record.Status == StatusProgress {
+			interval := t.emitEvery
+			if interval <= 0 {
+				interval = emitInterval
+			}
+			t.startProgressTimerLocked(interval)
+			return
+		}
+	}
 }
 
 func (t *Transfer) cancelProgressEmitLocked() {
@@ -89,9 +111,15 @@ func (t *Transfer) flushProgressEmit(generation uint64) {
 	}
 	t.progressEmitTimer = nil
 	t.lastProgressEmit = t.now()
+	for _, item := range t.entries {
+		if item.record.Status == StatusProgress {
+			updateSpeed(item, t.lastProgressEmit, false)
+		}
+	}
 	app := t.app
 	syncWindowProgress := t.syncWindowProgress
 	items := t.snapshotEntriesLocked()
+	t.scheduleHeartbeatLocked()
 	t.mu.Unlock()
 	t.dispatchSnapshots(app, syncWindowProgress, items)
 }

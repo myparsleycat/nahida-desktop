@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/transfer"
 )
 
 const maxMultipartUploadConcurrency = 4
@@ -20,6 +21,7 @@ type UploadExecutionProgress struct {
 	Bytes                int64
 	FileID               string
 	IsServerDeduplicated bool
+	Phase                transfer.UploadPhase
 }
 
 type uploadRun struct {
@@ -51,6 +53,7 @@ type uploadRun struct {
 	rejections        map[string]string
 	stateMu           sync.Mutex
 	progressMu        sync.Mutex
+	activity          *uploadActivity
 }
 
 // executeUploadPlanV2 uploads what a plan still needs. Beside the joined
@@ -72,6 +75,9 @@ func (d *Drive) executeUploadPlanV2(
 		return nil, err
 	}
 	defer run.close()
+	run.activity.mu.Lock()
+	run.activity.reportLocked()
+	run.activity.mu.Unlock()
 
 	run.indexPlan()
 	if err := run.dispatchIntents(); err != nil {
@@ -135,8 +141,10 @@ func (d *Drive) newUploadRun(
 		failures:          make([]error, 0),
 		rejections:        make(map[string]string),
 	}
+	run.activity = &uploadActivity{onProgress: run.emitProgress}
+	run.ctx = context.WithValue(ctx, uploadActivityKey{}, run.activity)
 	for bundleID := range plan.Bundles {
-		run.bundleContexts[bundleID], run.bundleCancels[bundleID] = context.WithCancel(ctx)
+		run.bundleContexts[bundleID], run.bundleCancels[bundleID] = context.WithCancel(run.ctx)
 	}
 	return run, nil
 }
@@ -252,12 +260,14 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 	if source.Size >= r.rules.DirectUploadMaxLogicalBytes {
 		return r.queuePartsIntent(upload, source, targets)
 	}
+	r.activity.setPreparing(true)
 	data, compression, useParts, err := prepareUploadRoute(
 		source,
 		upload,
 		r.rules.Compression,
 		r.rules.MaxUploadBodyBytes,
 	)
+	r.activity.setPreparing(false)
 	if err != nil {
 		r.failTargets(err, targets)
 		return nil

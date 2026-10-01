@@ -379,16 +379,30 @@ func (d *Drive) sendMultipart(
 	if d == nil || d.http == nil {
 		return uploadHTTPResult{}, errDriveHTTPUnconfigured
 	}
+	finishSending := beginUploadRequest(ctx)
+	defer finishSending()
 	boundary := "----nahida-desktop-" + uuid.NewString()
 	prefix, suffix, err := multipartEnvelope(boundary, upload.fields, upload.filename, upload.fieldName)
 	if err != nil {
 		return uploadHTTPResult{}, err
 	}
+	remaining := upload.fileSize
 	body := io.MultiReader(
 		bytes.NewReader(prefix),
-		&uploadProgressReader{reader: upload.file, onProgress: upload.onProgress},
+		&uploadProgressReader{reader: upload.file, onProgress: func(bytes int64) {
+			if upload.onProgress != nil {
+				upload.onProgress(bytes)
+			}
+			remaining -= bytes
+			if remaining <= 0 {
+				finishSending()
+			}
+		}},
 		bytes.NewReader(suffix),
 	)
+	if remaining == 0 {
+		finishSending()
+	}
 	header := make(http.Header)
 	header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
 	contentLength := int64(len(prefix)) + upload.fileSize + int64(len(suffix))

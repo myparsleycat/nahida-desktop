@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,7 +18,77 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/transfer"
 )
+
+func TestUploadPartsReportsWaitingAndResumesAfterDelayedResponse(t *testing.T) {
+	const partSize = 128 * 1024
+	firstReceived := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		if request.URL.Path == "/parts/0" {
+			close(firstReceived)
+			select {
+			case <-release:
+			case <-request.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	defer releaseOnce.Do(func() { close(release) })
+	path := writeUploadContent(t, "delayed.bin", bytes.Repeat([]byte("x"), 2*partSize))
+	rules := testUploadRules()
+	rules.Parts.MaxBytes = partSize
+	var transferred atomic.Int64
+	phases := make(chan transfer.UploadPhase, 16)
+	activity := &uploadActivity{onProgress: func(progress UploadExecutionProgress) { phases <- progress.Phase }}
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), uploadActivityKey{}, activity))
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- uploadTestDrive(server).uploadParts(ctx, UploadPlanEntry{URL: server.URL}, FinalUploadFile{
+			UploadFile: UploadFile{Name: "delayed.bin", FullPath: filepath.ToSlash(path), Size: 2 * partSize},
+		}, rules, func(bytes int64) { transferred.Add(bytes) })
+	}()
+	select {
+	case <-firstReceived:
+	case <-time.After(time.Second):
+		t.Fatal("first upload part did not reach the server")
+	}
+	if transferred.Load() != partSize {
+		t.Fatalf("bytes during response wait = %d, want %d", transferred.Load(), partSize)
+	}
+	for _, want := range []transfer.UploadPhase{transfer.UploadTransferring, transfer.UploadWaiting} {
+		select {
+		case got := <-phases:
+			if got != want {
+				t.Fatalf("upload phase = %s, want %s", got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("missing upload phase %s", want)
+		}
+	}
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("upload did not resume after the response")
+	}
+	if transferred.Load() != 2*partSize {
+		t.Fatalf("final uploaded bytes = %d", transferred.Load())
+	}
+	if got := <-phases; got != transfer.UploadTransferring {
+		t.Fatalf("resumed upload phase = %s", got)
+	}
+}
 
 type uploadRoundTripFunc func(*http.Request) (*http.Response, error)
 

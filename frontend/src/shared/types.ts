@@ -1,4 +1,6 @@
 // oxlint-disable typescript/no-explicit-any
+import type { Snapshot as TransferSnapshot } from "@bindings/transfer";
+
 import type { BackendStatus } from "./backend";
 import type { Session } from "./schemas/auth";
 import type { UpdaterStatus } from "./updater";
@@ -579,6 +581,7 @@ export interface Transfer {
     errorCode?: string;
     planPhase?: PlanPhase;
     planProgress?: number | null;
+    uploadPhase?: TransferSnapshot["uploadPhase"];
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;

@@ -10,10 +10,86 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"nahida.live/desktop/internal/transfer"
 )
+
+func TestUploadQueueBackpressureReportsWaitingInsteadOfPreparation(t *testing.T) {
+	t.Parallel()
+	firstReceived := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		if strings.HasSuffix(request.URL.Path, "/one/parts/0") {
+			close(firstReceived)
+			select {
+			case <-release:
+			case <-request.Context().Done():
+				return
+			}
+		}
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	defer releaseOnce.Do(func() { close(release) })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	directory := t.TempDir()
+	files := []FinalUploadFile{
+		uploadExecutionFile(t, directory, "one", "one.bin", "one"),
+		uploadExecutionFile(t, directory, "two", "two.bin", "two"),
+		uploadExecutionFile(t, directory, "three", "three.bin", "three"),
+	}
+	plan := UploadPlan{
+		Items:   []UploadPlanItem{},
+		Uploads: map[string]UploadPlanEntry{},
+		Bundles: map[string]NTEBundle{},
+	}
+	for _, file := range files {
+		plan.Items = append(plan.Items, UploadPlanItem{ClientID: file.FID, Status: "pending", IntentID: file.FID})
+		plan.Uploads[file.FID] = uploadPlanEntry(file.FID, server.URL+"/v2/uploads/"+file.FID, "token", "hash")
+	}
+	rules := testUploadRules()
+	rules.DirectUploadMaxLogicalBytes = 1
+	run, err := uploadTestDrive(server).newUploadRun(ctx, files, plan, rules, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.indexPlan()
+	done := make(chan error, 1)
+	go func() { done <- run.dispatchIntents() }()
+	select {
+	case <-firstReceived:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first upload part did not reach the server")
+	}
+	run.activity.mu.Lock()
+	phase := run.activity.phase
+	run.activity.mu.Unlock()
+	if phase != transfer.UploadWaiting {
+		t.Errorf("queue waiting for a server response reported %s, want %s", phase, transfer.UploadWaiting)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("dispatch finished before the server response: %v", err)
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("queued uploads did not resume after the server response")
+	}
+	run.close()
+}
 
 func TestRunUploadTasksHonorsConfiguredConcurrency(t *testing.T) {
 	var active atomic.Int32
