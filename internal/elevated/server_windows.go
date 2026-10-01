@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
@@ -23,6 +24,11 @@ type ServerOptions struct {
 	Secret    string
 	ParentPID uint32
 	ParentExe string
+}
+
+type serverOperations struct {
+	sendKeys   func(context.Context, platform.KeyRequest) (platform.KeyResult, error)
+	launchXXMI func(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
 }
 
 func RunServer(ctx context.Context, options ServerOptions) error {
@@ -63,6 +69,12 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	if err != nil {
 		return fmt.Errorf("read parent process user: %w", err)
 	}
+	instance, err := lockHelperInstance(parentSID.String())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(instance) }()
+
 	security := "D:P(A;;GA;;;" + parentSID.String() + ")(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NW;;;LW)"
 	listener, err := winio.ListenPipe(options.Pipe, &winio.PipeConfig{
 		SecurityDescriptor: security,
@@ -74,17 +86,38 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	}
 	defer func() { _ = listener.Close() }()
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	parentGone := make(chan struct{})
+	watchStop, err := windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		return fmt.Errorf("create elevated helper parent watch event: %w", err)
+	}
+	watchDone := make(chan struct{})
 	go func() {
-		_, _ = windows.WaitForSingleObject(parent, windows.INFINITE)
+		defer close(watchDone)
+		event, waitErr := windows.WaitForMultipleObjects([]windows.Handle{parent, watchStop}, false, windows.INFINITE)
+		if waitErr != nil || event != windows.WAIT_OBJECT_0 {
+			return
+		}
 		close(parentGone)
+		cancel()
 		_ = listener.Close()
 	}()
+	defer func() {
+		_ = windows.SetEvent(watchStop)
+		<-watchDone
+		_ = windows.CloseHandle(watchStop)
+	}()
+	stopListener := context.AfterFunc(ctx, func() { _ = listener.Close() })
+	defer stopListener()
 	conn, err := listener.Accept()
 	if err != nil {
 		select {
 		case <-parentGone:
 			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
 			return fmt.Errorf("accept elevated helper client: %w", err)
 		}
@@ -97,26 +130,52 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	if clientPID != options.ParentPID {
 		return fmt.Errorf("reject elevated helper client pid %d, expected %d", clientPID, options.ParentPID)
 	}
+	input := platform.NewInput()
+	return serveHelperConnection(ctx, conn, options.Secret, serverOperations{
+		sendKeys: input.SendKeys, launchXXMI: inject.Launch,
+	})
+}
+
+// serveHelperConnection reads independently of the current operation so a
+// disconnect cancels held keys and loader waits immediately. Operations remain
+// sequential, and the server returns only after their cleanup has completed.
+func serveHelperConnection(ctx context.Context, conn net.Conn, secret string, operations serverOperations) error {
+	ctx, cancel := context.WithCancel(ctx)
+	stopConnection := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopConnection()
+	requests := make(chan message)
+	readDone := make(chan struct{})
+	var readErr error
 	go func() {
-		select {
-		case <-ctx.Done():
-		case <-parentGone:
+		defer close(requests)
+		defer close(readDone)
+		defer cancel()
+		for {
+			request, err := readMessage(conn)
+			if err != nil {
+				readErr = err
+				return
+			}
+			select {
+			case requests <- request:
+			case <-ctx.Done():
+				return
+			}
 		}
+	}()
+	defer func() {
+		cancel()
 		_ = conn.Close()
+		<-readDone
 	}()
 
-	input := platform.NewInput()
 	authenticated := false
-	for {
-		request, readErr := readMessage(conn)
-		if readErr != nil {
-			if errors.Is(readErr, net.ErrClosed) || errors.Is(readErr, os.ErrClosed) {
-				return nil
-			}
-			return readErr
+	for request := range requests {
+		if ctx.Err() != nil {
+			return nil
 		}
 		response := message{Version: protocolVersion, ID: request.ID}
-		if request.Version != protocolVersion || !secretsEqual(request.Secret, options.Secret) {
+		if request.Version != protocolVersion || !secretsEqual(request.Secret, secret) {
 			response.Error = "authentication failed"
 			_ = writeMessage(conn, response)
 			return errors.New("elevated helper authentication failed")
@@ -146,7 +205,7 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 				break
 			}
 			callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			result, err := input.SendKeys(callCtx, keyRequest)
+			result, err := operations.sendKeys(callCtx, keyRequest)
 			cancel()
 			if err != nil {
 				response.ErrorCode, response.Error = platform.ClassifyInputError(err)
@@ -165,7 +224,7 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 				break
 			}
 			callCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutSeconds+60)*time.Second)
-			result, err := inject.Launch(callCtx, spec)
+			result, err := operations.launchXXMI(callCtx, spec)
 			cancel()
 			if err != nil {
 				response.ErrorCode, response.Error = inject.ClassifyError(err), err.Error()
@@ -180,10 +239,17 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 		default:
 			response.Error = "operation is not allowed"
 		}
+		if ctx.Err() != nil {
+			return nil
+		}
 		if err := writeMessage(conn, response); err != nil {
 			return err
 		}
 	}
+	if errors.Is(readErr, io.EOF) || errors.Is(readErr, net.ErrClosed) || errors.Is(readErr, os.ErrClosed) {
+		return nil
+	}
+	return readErr
 }
 
 func processUserSID(process windows.Handle) (*windows.SID, error) {

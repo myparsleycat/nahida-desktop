@@ -25,6 +25,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -136,7 +137,7 @@ func (c *Client) Start(ctx context.Context) error {
 // start launches the helper and connects to it. It holds startMu, not mu, while
 // the launch and pipe dial are in flight, and captures generation so a Close
 // that lands mid-launch wins.
-func (c *Client) start(ctx context.Context) error {
+func (c *Client) start(ctx context.Context) (startErr error) {
 	c.startMu.Lock()
 	defer c.startMu.Unlock()
 
@@ -149,8 +150,26 @@ func (c *Client) start(ctx context.Context) error {
 		c.mu.Unlock()
 		return context.Canceled
 	}
+
+	// A failed teardown retains the process handle. Never launch a replacement
+	// until that exact process has exited, even when its pipe is already gone.
+	if c.process != 0 {
+		if err := c.closeLocked(); err != nil {
+			pid := c.pid
+			c.mu.Unlock()
+			return fmt.Errorf("stop previous elevated helper pid %d: %w", pid, err)
+		}
+	}
 	generation := c.generation
 	c.mu.Unlock()
+
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return fmt.Errorf("read elevated helper owner: %w", err)
+	}
+	if err := checkHelperInstance(user.User.Sid.String()); err != nil {
+		return err
+	}
 
 	executable, err := os.Executable()
 	if err != nil {
@@ -203,39 +222,49 @@ func (c *Client) start(ctx context.Context) error {
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	pipe := `\\.\pipe\nahida-elevated-` + strconv.FormatUint(uint64(os.Getpid()), 10) + "-" + secret[:16]
 	process, pid, err := launch(helper, pipe, secret, uint32(os.Getpid()), executable)
+
+	// Keep ownership of failed launches until cleanup confirms process exit.
+	// startMu prevents another launch while this deferred teardown runs.
+	defer func() {
+		if startErr == nil || process == 0 {
+			return
+		}
+		c.mu.Lock()
+		c.process, c.pid = process, pid
+		startErr = helperStartupError(startErr, c.closeLocked())
+		c.mu.Unlock()
+		startErr = infra.AnnotateError(startErr, infra.Diagnostic{
+			Operation: "elevated-helper", Stage: "startup-cleanup",
+			Fields: map[string]any{"helperPID": pid, "helperPath": helper, "parentPID": os.Getpid()},
+		})
+	}()
 	if err != nil {
 		return err
 	}
 	processPath, err := processImagePath(process)
 	if err != nil {
-		discardStartedHelper(process)
 		return fmt.Errorf("read elevated helper image path: %w", err)
 	}
 	if !equalPath(processPath, helper) {
-		discardStartedHelper(process)
 		return fmt.Errorf("verify elevated helper image %q, expected %q", processPath, helper)
 	}
 	if c.invalidated(generation) || ctx.Err() != nil {
-		discardStartedHelper(process)
 		return context.Canceled
 	}
 
 	connectCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	conn, err := dialPipeUntilReady(connectCtx, pipe)
+	conn, err := dialPipeUntilReady(connectCtx, pipe, process)
 	if err != nil {
-		discardStartedHelper(process)
 		return fmt.Errorf("connect elevated helper: %w", err)
 	}
 	serverPID, err := namedPipeProcessID(conn, procGetNamedPipeServerPID)
 	if err != nil {
 		_ = conn.Close()
-		discardStartedHelper(process)
 		return fmt.Errorf("read elevated helper pipe server pid: %w", err)
 	}
 	if serverPID != pid {
 		_ = conn.Close()
-		discardStartedHelper(process)
 		return fmt.Errorf("verify elevated helper process: pid %d, expected %d", serverPID, pid)
 	}
 
@@ -245,20 +274,23 @@ func (c *Client) start(ctx context.Context) error {
 	if c.generation != generation || !c.wanted || ctx.Err() != nil {
 		c.mu.Unlock()
 		_ = conn.Close()
-		discardStartedHelper(process)
 		return context.Canceled
 	}
 	c.conn, c.process, c.pid, c.secret = conn, process, pid, secret
+
+	// The client now owns the handle, including a failed handshake teardown.
+	process = 0
 	if _, err := c.callLocked(connectCtx, operationHello, nil); err != nil {
 		closeErr := c.closeLocked()
 		c.mu.Unlock()
 		if ctx.Err() != nil {
-			return context.Canceled
+			err = errors.Join(context.Canceled, err)
 		}
-		return errors.Join(err, closeErr)
+		return helperStartupError(err, closeErr)
 	}
+	watchProcess := c.process
 	c.mu.Unlock()
-	c.watch(process, generation)
+	c.watch(watchProcess, generation)
 	return nil
 }
 
@@ -270,8 +302,17 @@ func (c *Client) invalidated(generation uint64) bool {
 	return c.generation != generation || !c.wanted
 }
 
-func dialPipeUntilReady(ctx context.Context, pipe string) (net.Conn, error) {
+func dialPipeUntilReady(ctx context.Context, pipe string, process windows.Handle) (net.Conn, error) {
 	for {
+		if process != 0 {
+			event, err := windows.WaitForSingleObject(process, 0)
+			if err != nil {
+				return nil, fmt.Errorf("check elevated helper startup: %w", err)
+			}
+			if event == windows.WAIT_OBJECT_0 {
+				return nil, errors.New("elevated helper exited before connecting")
+			}
+		}
 		conn, err := winio.DialPipeContext(ctx, pipe)
 		if err == nil {
 			return conn, nil
@@ -288,11 +329,6 @@ func dialPipeUntilReady(ctx context.Context, pipe string) (net.Conn, error) {
 		case <-timer.C:
 		}
 	}
-}
-
-func discardStartedHelper(process windows.Handle) {
-	_ = windows.TerminateProcess(process, 1)
-	_ = windows.CloseHandle(process)
 }
 
 func processImagePath(process windows.Handle) (string, error) {
@@ -439,7 +475,7 @@ func (c *Client) Close() error {
 	c.generation++
 	c.signalWatchLocked()
 	if c.conn == nil {
-		return nil
+		return c.closeLocked()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -528,7 +564,7 @@ func elevatedHelperError(response message) error {
 }
 
 func (c *Client) closeLocked() error {
-	hadConn := c.conn != nil || c.process != 0
+	hadConn := c.conn != nil
 
 	// Drop the watchStop reference before the watcher goroutine closes that
 	// event. SetEvent is safe while the handle is still open; a later Start
@@ -539,10 +575,20 @@ func (c *Client) closeLocked() error {
 	if c.conn != nil {
 		err = c.conn.Close()
 	}
+	c.conn, c.secret = nil, ""
 	if c.process != 0 {
-		err = errors.Join(err, windows.CloseHandle(c.process))
+		if stopErr := stopHelperProcess(c.process); stopErr != nil {
+			err = errors.Join(err, infra.AnnotateError(stopErr, infra.Diagnostic{
+				Operation: "elevated-helper", Stage: "stop-process",
+				Fields: map[string]any{"helperPID": c.pid, "cleanupPending": true},
+			}))
+		} else {
+			err = errors.Join(err, windows.CloseHandle(c.process))
+			c.process, c.pid = 0, 0
+		}
+	} else {
+		c.pid = 0
 	}
-	c.conn, c.process, c.pid, c.secret = nil, 0, 0, ""
 	if hadConn {
 		// Transport errors and process death reuse this path without Close, so
 		// a replacement Start would otherwise keep the same generation and a
@@ -587,8 +633,7 @@ func launch(helper, pipe, secret string, parentPID uint32, parentExe string) (wi
 	}
 	pid, err := windows.GetProcessId(info.hProcess)
 	if err != nil {
-		_ = windows.CloseHandle(info.hProcess)
-		return 0, 0, fmt.Errorf("read elevated helper pid: %w", err)
+		return info.hProcess, 0, fmt.Errorf("read elevated helper pid: %w", err)
 	}
 	return info.hProcess, pid, nil
 }
