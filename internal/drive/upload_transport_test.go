@@ -47,6 +47,7 @@ func TestUploadSourceFailuresAreMarked(t *testing.T) {
 		UploadPlanEntry{},
 		file,
 		UploadRules{},
+		false,
 		nil,
 	); !errors.Is(
 		err,
@@ -567,7 +568,7 @@ func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
 	progress := int64(0)
 	if err := uploadTestDrive(server).uploadParts(context.Background(), upload, FinalUploadFile{
 		UploadFile: UploadFile{Name: "file.bin", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
-	}, testUploadRules(), func(bytes int64) { progress += bytes }); err != nil {
+	}, testUploadRules(), false, func(bytes int64) { progress += bytes }); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 2 || completeRequests.Load() != 2 || progress != int64(len(content)) {

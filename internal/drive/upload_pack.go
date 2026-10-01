@@ -16,6 +16,8 @@ type preparedUpload struct {
 	compression  string
 	payloadBytes int64
 	logicalSize  int64
+	// recoverable marks a member whose storage failures a recovery pass replans.
+	recoverable bool
 }
 
 type packedUploadGroup struct {
