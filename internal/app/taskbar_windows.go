@@ -10,6 +10,8 @@ import (
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
+	"github.com/rodrigocfd/windigo/x/cosh"
+	"github.com/rodrigocfd/windigo/x/winsh"
 )
 
 const taskbarProgressTotal = 10_000
@@ -98,10 +100,10 @@ func (t *nativeTaskbar) run() {
 
 	releaser := win.NewOleReleaser()
 	defer releaser.Release()
-	var taskbar *win.ITaskbarList3
+	var taskbar *winsh.ITaskbarList3
 	if err := win.CoCreateInstance(
 		releaser,
-		&co.CLSID_TaskbarList,
+		&cosh.CLSID_TaskbarList,
 		nil,
 		co.CLSCTX_INPROC_SERVER,
 		&taskbar,
@@ -117,7 +119,7 @@ func (t *nativeTaskbar) run() {
 	var lastHWND win.HWND
 	defer func() {
 		if lastHWND != 0 {
-			_ = taskbar.SetProgressState(lastHWND, co.TBPF_NOPROGRESS)
+			_ = taskbar.SetProgressState(lastHWND, cosh.TBPF_NOPROGRESS)
 		}
 	}()
 	lastError := ""
@@ -128,7 +130,7 @@ func (t *nativeTaskbar) run() {
 		case update := <-t.updates:
 			hwnd := win.HWND(update.hwnd)
 			if lastHWND != 0 && lastHWND != hwnd {
-				_ = taskbar.SetProgressState(lastHWND, co.TBPF_NOPROGRESS)
+				_ = taskbar.SetProgressState(lastHWND, cosh.TBPF_NOPROGRESS)
 			}
 			lastHWND = hwnd
 			err := applyTaskbarUpdate(taskbar, hwnd, update.value, update.mode)
@@ -151,9 +153,9 @@ func (t *nativeTaskbar) reportError(err error) {
 	}
 }
 
-func applyTaskbarUpdate(taskbar *win.ITaskbarList3, hwnd win.HWND, value *float64, mode string) error {
+func applyTaskbarUpdate(taskbar *winsh.ITaskbarList3, hwnd win.HWND, value *float64, mode string) error {
 	if value == nil {
-		return taskbar.SetProgressState(hwnd, co.TBPF_NOPROGRESS)
+		return taskbar.SetProgressState(hwnd, cosh.TBPF_NOPROGRESS)
 	}
 	progress := *value
 	if math.IsNaN(progress) || math.IsInf(progress, 0) {
@@ -170,15 +172,15 @@ func applyTaskbarUpdate(taskbar *win.ITaskbarList3, hwnd win.HWND, value *float6
 	return nil
 }
 
-func taskbarProgressFlag(mode string) co.TBPF {
+func taskbarProgressFlag(mode string) cosh.TBPF {
 	switch mode {
 	case "indeterminate":
-		return co.TBPF_INDETERMINATE
+		return cosh.TBPF_INDETERMINATE
 	case "paused":
-		return co.TBPF_PAUSED
+		return cosh.TBPF_PAUSED
 	case "error":
-		return co.TBPF_ERROR
+		return cosh.TBPF_ERROR
 	default:
-		return co.TBPF_NORMAL
+		return cosh.TBPF_NORMAL
 	}
 }

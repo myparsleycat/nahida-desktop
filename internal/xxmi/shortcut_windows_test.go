@@ -14,6 +14,8 @@ import (
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
+	"github.com/rodrigocfd/windigo/x/cosh"
+	"github.com/rodrigocfd/windigo/x/winsh"
 	"golang.org/x/sys/windows"
 )
 
@@ -69,8 +71,8 @@ func testCreateWindowsShortcut(t *testing.T, executable string) {
 	}
 	releaser := win.NewOleReleaser()
 	defer releaser.Release()
-	var link *win.IShellLink
-	if err := win.CoCreateInstance(releaser, &co.CLSID_ShellLink, nil, co.CLSCTX_INPROC_SERVER, &link); err != nil {
+	var link *winsh.IShellLink
+	if err := win.CoCreateInstance(releaser, &cosh.CLSID_ShellLink, nil, co.CLSCTX_INPROC_SERVER, &link); err != nil {
 		t.Fatal(err)
 	}
 	var persist *shortcutPersistFile
@@ -81,13 +83,13 @@ func testCreateWindowsShortcut(t *testing.T, executable string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vtable := *(**[9]uintptr)(unsafe.Pointer(persist.Ppvt()))
-	result, _, _ := syscall.SyscallN(vtable[5], uintptr(unsafe.Pointer(persist.Ppvt())),
-		uintptr(unsafe.Pointer(filePath)), 0)
+	ppvt := persist.Ppvt()
+	vtable := *(**[9]uintptr)(*(*unsafe.Pointer)(unsafe.Pointer(&ppvt)))
+	result, _, _ := syscall.SyscallN(vtable[5], ppvt, uintptr(unsafe.Pointer(filePath)), 0)
 	if result != uintptr(co.HRESULT_S_OK) {
 		t.Fatal(co.HRESULT(result))
 	}
-	target, err := link.GetPath(nil, co.SLGP_RAWPATH)
+	target, err := link.GetPath(nil, cosh.SLGP_RAWPATH)
 	if err != nil || !filepath.IsAbs(target) {
 		t.Fatalf("shortcut target = %q, want executable = %q, error = %v", target, executable, err)
 	}

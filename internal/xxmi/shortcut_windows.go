@@ -14,6 +14,8 @@ import (
 
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
+	"github.com/rodrigocfd/windigo/x/cosh"
+	"github.com/rodrigocfd/windigo/x/winsh"
 )
 
 var persistFileIID = co.IID(co.GUID{
@@ -92,11 +94,11 @@ func desktopShortcutPath(key string) (string, error) {
 	defer win.CoUninitialize()
 	releaser := win.NewOleReleaser()
 	defer releaser.Release()
-	var desktop *win.IShellItem
-	if err := win.SHGetKnownFolderItem(releaser, &co.FOLDERID_Desktop, co.KF_DEFAULT, 0, &desktop); err != nil {
+	var desktop *winsh.IShellItem
+	if err := winsh.SHGetKnownFolderItem(releaser, &cosh.FOLDERID_Desktop, cosh.KF_DEFAULT, 0, &desktop); err != nil {
 		return "", err
 	}
-	desktopPath, err := desktop.GetDisplayName(co.SIGDN_FILESYSPATH)
+	desktopPath, err := desktop.GetDisplayName(cosh.SIGDN_FILESYSPATH)
 	if err != nil {
 		return "", err
 	}
@@ -120,8 +122,8 @@ func createWindowsShortcut(ctx context.Context, path, executable, args string) e
 	}
 	releaser := win.NewOleReleaser()
 	defer releaser.Release()
-	var link *win.IShellLink
-	if err := win.CoCreateInstance(releaser, &co.CLSID_ShellLink, nil, co.CLSCTX_INPROC_SERVER, &link); err != nil {
+	var link *winsh.IShellLink
+	if err := win.CoCreateInstance(releaser, &cosh.CLSID_ShellLink, nil, co.CLSCTX_INPROC_SERVER, &link); err != nil {
 		return err
 	}
 	if err := link.SetPath(executable); err != nil {
@@ -144,9 +146,11 @@ func createWindowsShortcut(ctx context.Context, path, executable, args string) e
 	if err != nil {
 		return err
 	}
-	vtable := *(**[9]uintptr)(unsafe.Pointer(persist.Ppvt()))
-	result, _, _ := syscall.SyscallN(vtable[6], uintptr(unsafe.Pointer(persist.Ppvt())),
-		uintptr(unsafe.Pointer(filePath)), 1)
+	// Ppvt returns the COM object address as a uintptr; reinterpret it in place so
+	// govet does not see a uintptr-to-pointer conversion.
+	ppvt := persist.Ppvt()
+	vtable := *(**[9]uintptr)(*(*unsafe.Pointer)(unsafe.Pointer(&ppvt)))
+	result, _, _ := syscall.SyscallN(vtable[6], ppvt, uintptr(unsafe.Pointer(filePath)), 1)
 	if result != uintptr(co.HRESULT_S_OK) {
 		return co.HRESULT(result)
 	}
