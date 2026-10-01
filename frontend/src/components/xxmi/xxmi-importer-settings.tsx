@@ -386,6 +386,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
                     onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
                   />
+                  <SelectRow
+                    label={t("page.setting.xxmi.builtin.injectionMethod")}
+                    description={t("page.setting.xxmi.builtin.injectionMethodDescription")}
+                    value={config.injectionMethod || "Default"}
+                    options={[
+                      { value: "Default", label: t("page.setting.xxmi.builtin.injectionDefault") },
+                      { value: "Native", label: t("page.setting.xxmi.builtin.injectionNative") },
+                    ]}
+                    onValueChange={(injectionMethod) => setConfig({ ...config, injectionMethod })}
+                  />
                   <NumberRow
                     label={t("page.setting.xxmi.builtin.timeout")}
                     min={0}
@@ -761,13 +771,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <ToggleRow
                     label={t("page.setting.xxmi.builtin.extraLibraries")}
                     description={
-                      config.mode === RuntimeMode.RuntimeLegacy && !cachedLibs?.length
+                      config.mode === RuntimeMode.RuntimeLegacy &&
+                      config.injectionMethod !== "Native" &&
+                      !cachedLibs?.length
                         ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
                         : undefined
                     }
                     checked={config.extraLibraries.enabled}
                     disabled={
                       config.mode === RuntimeMode.RuntimeLegacy &&
+                      config.injectionMethod !== "Native" &&
                       !cachedLibs?.some(
                         (entry) =>
                           !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,

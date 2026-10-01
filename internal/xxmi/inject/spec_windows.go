@@ -38,6 +38,7 @@ type LaunchSpec struct {
 	Priority        string       `json:"priority"`
 	CustomLaunchCmd string       `json:"customLaunchCmd"`
 	InjectMode      string       `json:"injectMode"`
+	InjectionMethod string       `json:"injectionMethod"`
 	UseHook         bool         `json:"useHook"`
 	LoaderDLL       VerifiedFile `json:"loaderDLL"`
 	ModuleDLL       string       `json:"moduleDLL"`
@@ -69,6 +70,9 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if spec.InjectMode != "Hook" && spec.InjectMode != "Inject" && spec.InjectMode != "Bypass" {
 		return errors.New("invalid injection mode")
 	}
+	if spec.InjectionMethod != "" && spec.InjectionMethod != "Default" && spec.InjectionMethod != "Native" {
+		return errors.New("invalid injection method")
+	}
 	if _, err := priorityClass(spec.Priority); err != nil {
 		return err
 	}
@@ -86,16 +90,17 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if err := validateRegularLocalFile(spec.ModuleDLL); err != nil {
 		return fmt.Errorf("module DLL: %w", err)
 	}
-	if spec.Mode == ModeXXMI && (spec.InjectMode != "Bypass" || len(spec.ExtraDLLs) > 0) {
+	if spec.InjectionMethod != "Native" && spec.Mode == ModeXXMI &&
+		(spec.InjectMode != "Bypass" || len(spec.ExtraDLLs) > 0) {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI loader DLL: %w", err)
 		}
-	} else if spec.Mode == ModeLegacy && spec.InjectMode != "Bypass" {
+	} else if spec.InjectionMethod != "Native" && spec.Mode == ModeLegacy && spec.InjectMode != "Bypass" {
 		if err := verifyFile(spec.LegacyLoader); err != nil {
 			return fmt.Errorf("legacy loader: %w", err)
 		}
 	}
-	if spec.Mode == ModeLegacy && len(spec.ExtraDLLs) > 0 {
+	if spec.InjectionMethod != "Native" && spec.Mode == ModeLegacy && len(spec.ExtraDLLs) > 0 {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI extra DLL injector: %w", err)
 		}

@@ -2153,6 +2153,10 @@
           "unsigned": "未签名",
           "commands": "自定义命令",
           "injectMode": "注入方式",
+          "injectionMethod": "DLL 注入器",
+          "injectionMethodDescription": "Native 使用 LoadLibraryW 将运行库和额外 DLL 直接注入 x64 游戏，替代钩子注入方式。Bypass 模式仅注入额外 DLL。",
+          "injectionDefault": "现有启动器方式",
+          "injectionNative": "Native (Go)",
           "leaveTitle": "放弃更改？",
           "leaveDescription": "未保存的更改将会丢失。",
           "leaveConfirm": "放弃并离开"

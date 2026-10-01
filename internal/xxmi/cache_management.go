@@ -123,7 +123,7 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]bool
 			referenced[normalizeVersion(cfg.XXMIVersion.Pinned)] = true
 		} else if cfg.Mode == RuntimeXXMI && pkg != nil && pkg.LatestVersion != nil {
 			referenced[normalizeVersion(*pkg.LatestVersion)] = true
-		} else if cfg.Mode == RuntimeLegacy && cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0 {
+		} else if legacyUsesXXMIInjector(cfg) {
 			if version := newestCachedPackageVersion("xxmi-libs"); version != "" {
 				referenced[version] = true
 			}

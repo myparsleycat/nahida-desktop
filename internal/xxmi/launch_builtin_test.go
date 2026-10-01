@@ -3,6 +3,7 @@ package xxmi
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -309,6 +310,54 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 	}
 	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" {
 		t.Fatalf("legacy bypass spec = %+v", spec)
+	}
+}
+
+func TestNativeLaunchSpecDoesNotRequireLoader(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []RuntimeMode{RuntimeXXMI, RuntimeLegacy} {
+		for _, bypass := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/bypass=%t", mode, bypass), func(t *testing.T) {
+				t.Parallel()
+				root := t.TempDir()
+				for _, name := range []string{"game.exe", "d3d11.dll", "extra.dll"} {
+					if err := os.WriteFile(filepath.Join(root, name), []byte("test"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.WriteFile(filepath.Join(root, runtimeManifestName), []byte("{}"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				cfg, err := DefaultImporterConfig("GIMI", root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cfg.ImporterFolder, cfg.Mode, cfg.InjectionMethod = root, mode, "Native"
+				cfg.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{filepath.Join(root, "extra.dll")}}
+				cfg.CustomLaunch = CustomLaunch{Enabled: true, Command: "start game", InjectMode: "Hook"}
+				if bypass {
+					cfg.CustomLaunch.InjectMode = "Bypass"
+				}
+				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe")
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantMode := "Inject"
+				if bypass {
+					wantMode = "Bypass"
+				}
+				if spec.InjectionMethod != "Native" || spec.UseHook || spec.InjectMode != wantMode ||
+					spec.LoaderDLL.Path != "" || spec.LegacyLoader.Path != "" || len(spec.ExtraDLLs) != 1 {
+					t.Fatalf("native launch spec = %+v", spec)
+				}
+				if err := inject.ValidateLaunchSpec(spec); err != nil {
+					t.Fatal(err)
+				}
+				if legacyUsesXXMIInjector(cfg) {
+					t.Fatal("native extra DLLs unexpectedly require cached XXMI injector")
+				}
+			})
+		}
 	}
 }
 

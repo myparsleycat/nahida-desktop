@@ -2154,6 +2154,10 @@
           "unsigned": "署名なし",
           "commands": "カスタムコマンド",
           "injectMode": "注入方式",
+          "injectionMethod": "DLL インジェクター",
+          "injectionMethodDescription": "Native は LoadLibraryW で x64 ゲームにランタイムと追加 DLL を直接注入します。フック方式を置き換え、Bypass では追加 DLL のみ注入します。",
+          "injectionDefault": "従来のランチャー方式",
+          "injectionNative": "Native (Go)",
           "leaveTitle": "変更を破棄しますか？",
           "leaveDescription": "保存されていない変更は失われます。",
           "leaveConfirm": "破棄して戻る"

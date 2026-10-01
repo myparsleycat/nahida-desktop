@@ -2172,6 +2172,10 @@
           "unsigned": "서명 없음",
           "commands": "사용자 명령",
           "injectMode": "주입 방식",
+          "injectionMethod": "DLL 인젝터",
+          "injectionMethodDescription": "Native는 x64 게임에 LoadLibraryW로 런타임과 추가 DLL을 직접 주입합니다. 기존 훅 방식을 대체하며, Bypass에서는 추가 DLL만 주입합니다.",
+          "injectionDefault": "기존 런처 방식",
+          "injectionNative": "Native (Go)",
           "leaveTitle": "변경 사항을 버릴까요?",
           "leaveDescription": "저장하지 않은 변경 사항은 사라집니다.",
           "leaveConfirm": "버리고 나가기"

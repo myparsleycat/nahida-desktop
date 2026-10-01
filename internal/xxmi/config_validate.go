@@ -42,6 +42,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if !slices.Contains([]string{"Native", "Shell", "Manual"}, cfg.ProcessStartMethod) {
 		return fmt.Errorf("invalid process start method %q", cfg.ProcessStartMethod)
 	}
+	if !slices.Contains([]string{"", "Default", "Native"}, cfg.InjectionMethod) {
+		return fmt.Errorf("invalid injection method %q", cfg.InjectionMethod)
+	}
 	if !slices.Contains(
 		[]string{"Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"},
 		cfg.ProcessPriority,

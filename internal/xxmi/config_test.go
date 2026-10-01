@@ -23,6 +23,9 @@ func TestDefaultImporterSettings(t *testing.T) {
 		if err := ValidateImporterSettings(key, cfg); err != nil {
 			t.Fatalf("%s validation: %v", key, err)
 		}
+		if cfg.InjectionMethod != "Default" {
+			t.Fatalf("%s changed default injection method: %q", key, cfg.InjectionMethod)
+		}
 	}
 }
 
@@ -70,6 +73,7 @@ func TestPinnedVersionsSurviveReload(t *testing.T) {
 	}
 	cfg.PackageVersion = VersionPin{Pinned: "1.2.3"}
 	cfg.XXMIVersion = VersionPin{Pinned: "1.1.7"}
+	cfg.InjectionMethod = "Native"
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +87,28 @@ func TestPinnedVersionsSurviveReload(t *testing.T) {
 	}
 	if err := ValidateImporterSettings("GIMI", stored); err != nil {
 		t.Fatalf("reloaded config validation: %v", err)
+	}
+	if stored.InjectionMethod != "Native" {
+		t.Fatalf("reloaded injection method = %q", stored.InjectionMethod)
+	}
+}
+
+func TestImporterInjectionMethodValidation(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"", "Default", "Native", "unknown"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			cfg := cfg
+			cfg.InjectionMethod = method
+			err := ValidateImporterSettings("GIMI", cfg)
+			if (err != nil) != (method == "unknown") {
+				t.Fatalf("method %q: %v", method, err)
+			}
+		})
 	}
 }
 

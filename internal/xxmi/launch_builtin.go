@@ -52,6 +52,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 				Fields: map[string]any{
 					"importer": key, "mode": cfg.Mode, "source": runtimeSource, "rollback": rollbackState,
 					"importerFolder": cfg.ImporterFolder, "gameFolder": cfg.GameFolder, "gameExe": gameExe,
+					"injectionMethod": cfg.InjectionMethod,
 				},
 			})
 		}
@@ -418,7 +419,8 @@ func (x *XXMI) builtinLaunchSpec(
 		Mode: inject.RuntimeMode(cfg.Mode), ProcessName: processName, StartExe: gameExe,
 		WorkDir: filepath.Dir(gameExe), StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
 		InjectMode: injectMode, UseHook: packageSpec.useHook, TimeoutSeconds: cfg.ProcessTimeout,
-		ModuleDLL: filepath.Join(cfg.ImporterFolder, "d3d11.dll"),
+		InjectionMethod: cfg.InjectionMethod,
+		ModuleDLL:       filepath.Join(cfg.ImporterFolder, "d3d11.dll"),
 	}
 	if cfg.UseLaunchOptions {
 		spec.StartArgs, err = splitLaunchOptions(cfg.LaunchOptions)
@@ -449,11 +451,20 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command
 		spec.InjectMode = cfg.CustomLaunch.InjectMode
 	}
+	if spec.InjectionMethod == "Native" {
+		spec.UseHook = false
+		if spec.InjectMode != "Bypass" {
+			spec.InjectMode = "Inject"
+		}
+	}
 	if cfg.ExtraLibraries.Enabled {
 		spec.ExtraDLLs, err = x.resolveExtraDLLPaths(ctx, cfg.ExtraLibraries.Paths)
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
+	}
+	if spec.InjectionMethod == "Native" {
+		return spec, nil
 	}
 	if cfg.Mode == RuntimeXXMI {
 		version := strings.TrimPrefix(deployed.Source, "xxmi-libs@")
