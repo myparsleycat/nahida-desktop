@@ -206,6 +206,10 @@
         "paused": "일시정지",
         "queued": "대기 중",
         "preparing": "준비 중",
+        "upload_activity": {
+          "preparing": "파일 읽기·압축 중",
+          "waiting": "서버 응답 대기 중"
+        },
         "planning": {
           "permission_check": "권한 확인 중",
           "parent_lookup": "상위 폴더 조회 중",

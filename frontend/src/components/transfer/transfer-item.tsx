@@ -172,6 +172,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     errorCode,
     planPhase,
     planProgress,
+    uploadPhase,
   } = props;
   const { t } = useTranslation();
 
@@ -181,6 +182,13 @@ export const TransferItem = memo((props: TransferItemProps) => {
   const isFailed = status === "failed";
   const isPlanning = status === "uploading" && planPhase != null;
   const isFinalizing = isActive && progress >= 100;
+  const uploadActivity =
+    status === "uploading" &&
+    (uploadPhase === "preparing" || uploadPhase === "waiting") &&
+    !isPlanning &&
+    !isFinalizing
+      ? uploadPhase
+      : null;
   const translatedError = errorCode
     ? t(`page.transfer.item.error.${errorCode}`, { defaultValue: error ?? errorCode })
     : error;
@@ -213,6 +221,12 @@ export const TransferItem = memo((props: TransferItemProps) => {
               return (
                 <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
                   {t("page.transfer.item.finalizing")}
+                </span>
+              );
+            } else if (uploadActivity) {
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {t(`page.transfer.item.upload_activity.${uploadActivity}`)}
                 </span>
               );
             } else if (
@@ -248,7 +262,10 @@ export const TransferItem = memo((props: TransferItemProps) => {
           })()}
         </div>
 
-        <Progress value={isPlanning ? (planProgress ?? 0) : progress} className="w-full" />
+        <Progress
+          value={isPlanning ? (planProgress ?? 0) : progress}
+          className={cn("w-full", uploadActivity && "animate-pulse")}
+        />
 
         <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
           <span className="shrink-0">{fileSize}</span>
@@ -259,14 +276,20 @@ export const TransferItem = memo((props: TransferItemProps) => {
                   {t(`page.transfer.item.planning.${planPhase}`)}
                 </span>
               )}
-              {!isPlanning && !isFinalizing && (isActive || isPaused) && speed && (
-                <span className="shrink-0 whitespace-nowrap">{speed}</span>
-              )}
-              {!isPlanning && !isFinalizing && (isActive || isPaused) && timeRemaining && (
-                <span className="hidden truncate whitespace-nowrap sm:inline">
-                  {t("page.transfer.item.time_remaining", { time: timeRemaining })}
-                </span>
-              )}
+              {!isPlanning &&
+                !isFinalizing &&
+                !uploadActivity &&
+                (isActive || isPaused) &&
+                speed && <span className="shrink-0 whitespace-nowrap">{speed}</span>}
+              {!isPlanning &&
+                !isFinalizing &&
+                !uploadActivity &&
+                (isActive || isPaused) &&
+                timeRemaining && (
+                  <span className="hidden truncate whitespace-nowrap sm:inline">
+                    {t("page.transfer.item.time_remaining", { time: timeRemaining })}
+                  </span>
+                )}
               {isCompleted && (
                 <span className="text-success shrink-0 whitespace-nowrap">
                   {t("page.transfer.item.completed")}

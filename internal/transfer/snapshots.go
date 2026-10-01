@@ -72,31 +72,7 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 	}
 	applyUpdates(&item.record.Snapshot, updates)
 	if updates.TransferredSize != nil && item.record.Status == StatusProgress {
-		lastIsDuplicate := len(item.samples) > 0 &&
-			item.samples[len(item.samples)-1].size == item.record.TransferredSize
-		if !lastIsDuplicate {
-			item.samples = append(item.samples, speedSample{at: now, size: item.record.TransferredSize})
-		}
-		cutoff := now.Add(-speedWindow)
-		first := 0
-		for first < len(item.samples) && item.samples[first].at.Before(cutoff) {
-			first++
-		}
-		item.samples = slices.Clone(item.samples[first:])
-		if len(item.samples) > 1 {
-			oldest := item.samples[0]
-			newest := item.samples[len(item.samples)-1]
-			elapsed := newest.at.Sub(oldest.at).Seconds()
-			if elapsed > 0 {
-				item.record.Speed = float64(newest.size-oldest.size) / elapsed
-			}
-		} else {
-			item.record.Speed = 0
-			item.record.ETA = 0
-		}
-		if item.record.Speed > 0 && item.record.TotalSize > item.record.TransferredSize {
-			item.record.ETA = math.Ceil(float64(item.record.TotalSize-item.record.TransferredSize) / item.record.Speed)
-		}
+		updateSpeed(item, now, true)
 		if item.record.TotalSize > 0 {
 			item.record.Progress = clamp(
 				float64(item.record.TransferredSize)/float64(item.record.TotalSize)*100,
@@ -119,6 +95,48 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 		return t.RefreshPowerSaveBlock(context.Background())
 	}
 	return nil
+}
+
+func updateSpeed(item *entry, now time.Time, recordSample bool) {
+	if recordSample {
+		sample := speedSample{at: now, size: item.record.TransferredSize}
+		count := len(item.samples)
+		if count > 0 && sample.size < item.samples[count-1].size {
+			item.samples = item.samples[:0]
+			count = 0
+		}
+		if count == 0 || sample.size != item.samples[count-1].size {
+			// Keep the baseline and the latest value in each time bucket. Memory
+			// and copying stay bounded even when network reads arrive in bursts.
+			if count > 1 &&
+				now.Truncate(speedSampleInterval).Equal(item.samples[count-1].at.Truncate(speedSampleInterval)) {
+				item.samples[count-1] = sample
+			} else {
+				item.samples = append(item.samples, sample)
+			}
+		}
+	}
+	cutoff := now.Add(-speedWindow)
+	first := 0
+	for first < len(item.samples) && item.samples[first].at.Before(cutoff) {
+		first++
+	}
+	if first > 0 {
+		item.samples = item.samples[:copy(item.samples, item.samples[first:])]
+	}
+
+	item.record.Speed = 0
+	item.record.ETA = 0
+	if len(item.samples) > 1 {
+		oldest := item.samples[0]
+		newest := item.samples[len(item.samples)-1]
+		if elapsed := now.Sub(oldest.at).Seconds(); elapsed > 0 {
+			item.record.Speed = float64(newest.size-oldest.size) / elapsed
+		}
+	}
+	if item.record.Speed > 0 && item.record.TotalSize > item.record.TransferredSize {
+		item.record.ETA = math.Ceil(float64(item.record.TotalSize-item.record.TransferredSize) / item.record.Speed)
+	}
 }
 
 //wails:ignore
@@ -236,6 +254,9 @@ func (t *Transfer) IsFileCompleted(pid, fileID string) bool {
 func applyUpdates(record *Snapshot, updates Updates) {
 	if updates.Status != nil {
 		record.Status = *updates.Status
+		if record.Status != StatusProgress {
+			record.UploadPhase = ""
+		}
 	}
 	if updates.CurrentID != nil {
 		record.CurrentID = *updates.CurrentID
@@ -288,6 +309,9 @@ func applyUpdates(record *Snapshot, updates Updates) {
 	if updates.PlanProgress != nil {
 		progress := clamp(*updates.PlanProgress, 0, 100)
 		record.PlanProgress = &progress
+	}
+	if updates.UploadPhase != nil && record.Status == StatusProgress {
+		record.UploadPhase = *updates.UploadPhase
 	}
 	if updates.ClearCurrentID {
 		record.CurrentID = ""

@@ -52,18 +52,38 @@ export function buildTransferTitlebarActivity(
     const allFinalizing =
         progressingTransfers.length > 0 && progressingTransfers.every(isFinalizingTransfer);
     const allPaused = activeTransfers.every((transfer) => transfer.status === "paused");
+    const allPreparing =
+        progressingTransfers.length > 0 &&
+        progressingTransfers.every(
+            (transfer) => transfer.type === "upload" && transfer.uploadPhase === "preparing",
+        );
+    const allWaiting =
+        progressingTransfers.length > 0 &&
+        progressingTransfers.every(
+            (transfer) => transfer.type === "upload" && transfer.uploadPhase === "waiting",
+        );
     const label = allPaused
         ? t("titlebar.activity.transfer.paused")
         : allFinalizing
           ? t("titlebar.activity.transfer.finalizing")
-          : activeDownloads.length > 0 && activeUploads.length === 0
-            ? t("titlebar.activity.transfer.downloading")
-            : activeUploads.length > 0 && activeDownloads.length === 0
-              ? t("titlebar.activity.transfer.uploading")
-              : t("titlebar.activity.transfer.transferring");
+          : allPreparing
+            ? t("page.transfer.item.upload_activity.preparing")
+            : allWaiting
+              ? t("page.transfer.item.upload_activity.waiting")
+              : activeDownloads.length > 0 && activeUploads.length === 0
+                ? t("titlebar.activity.transfer.downloading")
+                : activeUploads.length > 0 && activeDownloads.length === 0
+                  ? t("titlebar.activity.transfer.uploading")
+                  : t("titlebar.activity.transfer.transferring");
 
     const speed = activeTransfers
-        .filter((transfer) => transfer.status === "progress" && !isFinalizingTransfer(transfer))
+        .filter(
+            (transfer) =>
+                transfer.status === "progress" &&
+                !isFinalizingTransfer(transfer) &&
+                transfer.uploadPhase !== "preparing" &&
+                transfer.uploadPhase !== "waiting",
+        )
         .reduce((sum, transfer) => sum + transfer.speed, 0);
     const progress = getAggregateTransferProgress(transfers);
     const detailParts = [

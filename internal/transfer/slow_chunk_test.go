@@ -13,6 +13,24 @@ func testSlowMonitor(now *time.Time) *SlowChunkMonitor {
 	})
 }
 
+func TestSlowChunkSamplesStayBoundedDuringFastTransfer(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(100, 0)
+	monitor := testSlowMonitor(&now)
+	defer monitor.Close()
+	chunk := monitor.Register(SlowChunkRegistration{FileID: "fast", ChunkSize: 1 << 40})
+	for index := range 100_000 {
+		now = now.Add(100 * time.Microsecond)
+		monitor.RecordSample(chunk.Key, int64(index+1)*32*1024)
+	}
+	if count := len(monitor.entries[chunk.Key].samples); count > int(slowChunkSpeedWindow/speedSampleInterval)+2 {
+		t.Fatalf("slow chunk samples grew with reads: %d", count)
+	}
+	if speed := speedFromSamples(monitor.entries[chunk.Key].samples, now); speed == nil || *speed <= 0 {
+		t.Fatalf("bounded samples lost speed information: %v", speed)
+	}
+}
+
 func registerSlowTestChunk(
 	monitor *SlowChunkMonitor,
 	input SlowChunkRegistration,
