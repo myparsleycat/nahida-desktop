@@ -29,6 +29,7 @@ type uploadRun struct {
 	plan             UploadPlan
 	rules            UploadRules
 	concurrency      int
+	recovers         bool
 	onProgress       func(UploadExecutionProgress)
 	filesByID        map[string]FinalUploadFile
 	bundleByClientID map[string]string
@@ -64,6 +65,21 @@ func (d *Drive) executeUploadPlanV2(
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
 ) (map[string]string, error) {
+	return d.runUploadPlan(ctx, files, plan, rules, concurrency, false, onProgress)
+}
+
+// runUploadPlan is executeUploadPlanV2 for a caller that says whether it
+// recovers: a recovery pass replans the storage failures of unbundled files, so
+// those uploads leave such a failure to it rather than retrying in place.
+func (d *Drive) runUploadPlan(
+	ctx context.Context,
+	files []FinalUploadFile,
+	plan UploadPlan,
+	rules UploadRules,
+	concurrency int,
+	recovers bool,
+	onProgress func(UploadExecutionProgress),
+) (map[string]string, error) {
 	if d == nil || d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
@@ -71,6 +87,7 @@ func (d *Drive) executeUploadPlanV2(
 	if err != nil {
 		return nil, err
 	}
+	run.recovers = recovers
 	defer run.close()
 
 	run.indexPlan()
@@ -274,6 +291,7 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 		compression:  compression,
 		payloadBytes: int64(len(data)),
 		logicalSize:  source.Size,
+		recoverable:  r.recoverable(targets),
 	}
 	if allBundled {
 		return r.queueBundledDirectIntent(member, targets)
@@ -302,6 +320,7 @@ func (r *uploadRun) queuePartsIntent(upload UploadPlanEntry, source FinalUploadF
 			upload,
 			source,
 			r.rules,
+			r.recoverable(targets),
 			func(bytes int64) { r.report(source, bytes, false) },
 		)
 		if err != nil {
@@ -323,6 +342,7 @@ func (r *uploadRun) queueBundledDirectIntent(member preparedUpload, targets []Fi
 			member.source,
 			member.data,
 			member.compression,
+			member.recoverable,
 			func(bytes int64) { r.report(member.source, bytes, false) },
 		)
 		if err != nil {
@@ -349,6 +369,7 @@ func (r *uploadRun) flushPacked() error {
 					member.source,
 					member.data,
 					member.compression,
+					member.recoverable,
 					func(bytes int64) {
 						r.report(member.source, bytes, false)
 					},
@@ -582,6 +603,15 @@ func refusedContent(targets []FinalUploadFile) []FinalUploadFile {
 	})
 }
 
+// recoverable reports whether a recovery pass replans a storage failure of
+// these targets. It mirrors splitUploadRecovery: a bundle member is never
+// replanned, because its failure aborts the bundle.
+func (r *uploadRun) recoverable(targets []FinalUploadFile) bool {
+	return r.recovers && !slices.ContainsFunc(targets, func(file FinalUploadFile) bool {
+		return r.bundleByClientID[file.FID] != ""
+	})
+}
+
 func (r *uploadRun) abortBundle(bundleID string, cause error) {
 	bundle, ok := r.plan.Bundles[bundleID]
 	if !ok {
@@ -705,7 +735,7 @@ func (d *Drive) completeNTEBundle(ctx context.Context, bundle NTEBundle) error {
 		if result.status >= 200 && result.status < 300 && result.status != http.StatusAccepted {
 			return nil
 		}
-		if !retryableUploadResult(result) {
+		if !retryableUploadResult(result, false) {
 			return uploadResultError(result)
 		}
 		if err := d.sleep(ctx, retryDelay(min(attempt, 4), 30*time.Second)); err != nil {

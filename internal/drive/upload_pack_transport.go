@@ -125,7 +125,7 @@ func (d *Drive) uploadPack(
 					continue
 				}
 				if found && (packResult.Status == "pending" || packResult.Status == "processing") {
-					uploadRequired, waitErr := d.waitUploadIntent(ctx, member.upload)
+					uploadRequired, waitErr := d.waitUploadIntent(ctx, member.upload, member.recoverable)
 					if waitErr == nil && !uploadRequired {
 						if credited < member.logicalSize && onProgress != nil {
 							onProgress(member.logicalSize - credited)
@@ -148,6 +148,7 @@ func (d *Drive) uploadPack(
 						member.source,
 						member.data,
 						member.compression,
+						member.recoverable,
 						func(bytes int64) {
 							if onProgress != nil {
 								onProgress(bytes)
@@ -179,7 +180,8 @@ func (d *Drive) uploadPack(
 		if reportedLogical > 0 && onProgress != nil {
 			onProgress(-reportedLogical)
 		}
-		if !retryableUploadResult(result) || attempt == uploadRetryLimit {
+		// A failure of the whole pack names no member, so no recovery pass replans it.
+		if !retryableUploadResult(result, false) || attempt == uploadRetryLimit {
 			return uploadResultError(result)
 		}
 		if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {

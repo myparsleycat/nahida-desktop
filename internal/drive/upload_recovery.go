@@ -29,7 +29,7 @@ func (d *Drive) executeUploadPlanWithRecovery(
 	rejections := make(map[string]string)
 	var terminal []error
 	for attempt := 0; ; attempt++ {
-		refused, err := d.executeUploadPlanV2(ctx, files, plan, rules, concurrency, onProgress)
+		refused, err := d.runUploadPlan(ctx, files, plan, rules, concurrency, true, onProgress)
 		for id, reason := range refused {
 			rejections[id] = reason
 		}

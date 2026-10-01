@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -149,6 +151,110 @@ func TestUploadRecoveryReplansOnlyTemporaryFailures(t *testing.T) {
 				}
 			} else if err != nil || credited != 12 {
 				t.Fatalf("recovery result: %v credits=%d", err, credited)
+			}
+		})
+	}
+}
+
+func TestStorageFailureKeepsTransportRetriesWithoutRecoveryOwner(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		ids      []string
+		bundled  bool
+		recovery bool
+		want     map[string]int
+	}{
+		{name: "direct plan execution", ids: []string{"one"}, want: map[string]int{"/v2/uploads/one": 2}},
+		{
+			name:     "whole pack",
+			ids:      []string{"one", "two"},
+			recovery: true,
+			want:     map[string]int{"/v2/uploads:pack": 2},
+		},
+		{
+			name:     "bundle member",
+			ids:      []string{"one"},
+			bundled:  true,
+			recovery: true,
+			want:     map[string]int{"/v2/uploads/one": 2, "/bundle/complete": 2},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			requests := make(map[string]int)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				mu.Lock()
+				requests[r.URL.Path]++
+				first := requests[r.URL.Path] == 1
+				mu.Unlock()
+
+				w.Header().Set("Content-Type", "application/json")
+				if first {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					_, _ = io.WriteString(w, `{"reason":"storage_temporarily_unavailable"}`)
+					return
+				}
+				_, _ = io.WriteString(
+					w,
+					`{"results":[{"intentId":"one","status":"completed"},{"intentId":"two","status":"completed"}]}`,
+				)
+			}))
+			defer server.Close()
+			drive := uploadServiceTestDrive(server, transfer.New())
+			files := make([]FinalUploadFile, 0, len(tc.ids))
+			plan := UploadPlan{Uploads: make(map[string]UploadPlanEntry), Bundles: make(map[string]NTEBundle)}
+			for _, id := range tc.ids {
+				path := filepath.Join(t.TempDir(), id+".ini")
+				if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				files = append(
+					files,
+					FinalUploadFile{
+						UploadFile: UploadFile{FID: id, Name: id + ".ini", FullPath: path, Size: 4},
+						ParentID:   "dest",
+						SHA256:     id,
+					},
+				)
+				item := UploadPlanItem{ClientID: id, IntentID: id, Status: "pending"}
+				if tc.bundled {
+					item.BundleID = "bundle"
+				}
+				plan.Items = append(plan.Items, item)
+				plan.Uploads[id] = uploadPlanEntry(id, server.URL+"/v2/uploads/"+id, "token", "hash")
+			}
+			if tc.bundled {
+				plan.Bundles["bundle"] = NTEBundle{
+					ID:              "bundle",
+					MemberClientIDs: tc.ids,
+					CompleteURL:     server.URL + "/bundle/complete",
+					AbortURL:        server.URL + "/bundle/abort",
+				}
+			}
+
+			ready := 0
+			onProgress := func(progress UploadExecutionProgress) {
+				if progress.FileID != "" {
+					ready++
+				}
+			}
+			var err error
+			if tc.recovery {
+				_, err = drive.executeUploadPlanWithRecovery(
+					t.Context(),
+					"dest",
+					files,
+					plan,
+					testUploadRules(),
+					8,
+					onProgress,
+				)
+			} else {
+				_, err = drive.executeUploadPlanV2(t.Context(), files, plan, testUploadRules(), 8, onProgress)
+			}
+			if err != nil || ready != len(tc.ids) || !maps.Equal(requests, tc.want) {
+				t.Fatalf("transport retry: %v ready=%d requests=%v", err, ready, requests)
 			}
 		})
 	}

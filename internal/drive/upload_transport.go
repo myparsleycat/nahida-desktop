@@ -72,16 +72,16 @@ func (d *Drive) uploadIntent(
 		return err
 	}
 	if file.Size >= rules.DirectUploadMaxLogicalBytes {
-		return d.uploadParts(ctx, upload, file, rules, onProgress)
+		return d.uploadParts(ctx, upload, file, rules, false, onProgress)
 	}
 	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.Compression, rules.MaxUploadBodyBytes)
 	if err != nil {
 		return err
 	}
 	if useParts {
-		return d.uploadParts(ctx, upload, file, rules, onProgress)
+		return d.uploadParts(ctx, upload, file, rules, false, onProgress)
 	}
-	return d.uploadPreparedDirect(ctx, upload, file, data, compression, onProgress)
+	return d.uploadPreparedDirect(ctx, upload, file, data, compression, false, onProgress)
 }
 
 func (d *Drive) uploadPreparedDirect(
@@ -90,6 +90,7 @@ func (d *Drive) uploadPreparedDirect(
 	file FinalUploadFile,
 	data []byte,
 	compression string,
+	recoverable bool,
 	onProgress func(int64),
 ) error {
 	fields := directUploadFields(upload, compression)
@@ -136,7 +137,7 @@ func (d *Drive) uploadPreparedDirect(
 			return nil
 		}
 		if result.status == http.StatusAccepted {
-			uploadRequired, waitErr := d.waitUploadIntent(ctx, upload)
+			uploadRequired, waitErr := d.waitUploadIntent(ctx, upload, recoverable)
 			if waitErr != nil {
 				if reportedLogical > 0 && onProgress != nil {
 					onProgress(-reportedLogical)
@@ -153,7 +154,7 @@ func (d *Drive) uploadPreparedDirect(
 		if reportedLogical > 0 && onProgress != nil {
 			onProgress(-reportedLogical)
 		}
-		if !retryableUploadResult(result) || attempt == uploadRetryLimit {
+		if !retryableUploadResult(result, recoverable) || attempt == uploadRetryLimit {
 			return uploadResultError(result)
 		}
 		if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {
@@ -163,7 +164,7 @@ func (d *Drive) uploadPreparedDirect(
 	return errors.New("direct upload exhausted retries")
 }
 
-func (d *Drive) waitUploadIntent(ctx context.Context, upload UploadPlanEntry) (bool, error) {
+func (d *Drive) waitUploadIntent(ctx context.Context, upload UploadPlanEntry, recoverable bool) (bool, error) {
 	started := d.now()
 	for attempt := 0; d.now().Sub(started) < uploadCompleteLimit; attempt++ {
 		result, err := d.sendJSON(
@@ -185,7 +186,7 @@ func (d *Drive) waitUploadIntent(ctx context.Context, upload UploadPlanEntry) (b
 			return false, nil
 		case nextAction == "upload", uploadStatusEndpointUnavailable(result):
 			return true, nil
-		case !retryableUploadResult(result):
+		case !retryableUploadResult(result, recoverable):
 			return false, uploadResultError(result)
 		}
 
@@ -205,6 +206,7 @@ func (d *Drive) uploadParts(
 	upload UploadPlanEntry,
 	file FinalUploadFile,
 	rules UploadRules,
+	recoverable bool,
 	onProgress func(int64),
 ) (returnErr error) {
 	handle, err := os.Open(filepath.FromSlash(file.FullPath))
@@ -277,7 +279,7 @@ func (d *Drive) uploadParts(
 				if attemptReported > 0 {
 					report(-attemptReported)
 				}
-				if !retryableUploadResult(result) || attempt == uploadRetryLimit {
+				if !retryableUploadResult(result, recoverable) || attempt == uploadRetryLimit {
 					return false, uploadResultError(result)
 				}
 				if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {
@@ -322,7 +324,7 @@ func (d *Drive) uploadParts(
 		if result.status == http.StatusAccepted {
 			nextAction, _ := result.payload["nextAction"].(string)
 			if nextAction == "poll" {
-				uploadRequired, waitErr := d.waitUploadIntent(ctx, upload)
+				uploadRequired, waitErr := d.waitUploadIntent(ctx, upload, recoverable)
 				if waitErr != nil {
 					return waitErr
 				}
@@ -350,7 +352,7 @@ func (d *Drive) uploadParts(
 			}
 			continue
 		}
-		if !retryableUploadResult(result) {
+		if !retryableUploadResult(result, recoverable) {
 			return uploadResultError(result)
 		}
 		if err := d.sleep(ctx, retryDelay(min(attempt, 4), 30*time.Second)); err != nil {
@@ -593,10 +595,14 @@ func parseUploadHTTPResult(status int, raw []byte) uploadHTTPResult {
 	return result
 }
 
-func retryableUploadResult(result uploadHTTPResult) bool {
+// retryableUploadResult reports whether repeating the request may clear the
+// failure. recoverable marks an upload whose storage failures a recovery pass
+// replans.
+func retryableUploadResult(result uploadHTTPResult, recoverable bool) bool {
 	// Storage failures have exhausted the server's retries. Let the recovery
 	// pass replan these files instead of multiplying transport-level retries.
-	if result.reason == storageTemporaryFailure {
+	// A failure no recovery pass replans keeps the transport-level retries.
+	if recoverable && result.reason == storageTemporaryFailure {
 		return false
 	}
 	return result.status == 0 || result.status == http.StatusAccepted || result.status == http.StatusRequestTimeout ||
