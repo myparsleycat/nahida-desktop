@@ -206,6 +206,10 @@
         "paused": "一時停止",
         "queued": "待機中",
         "preparing": "準備中",
+        "upload_activity": {
+          "preparing": "ファイルを読み込み・圧縮中",
+          "waiting": "サーバーの応答を待機中"
+        },
         "planning": {
           "permission_check": "権限を確認中",
           "parent_lookup": "親フォルダーを検索中",

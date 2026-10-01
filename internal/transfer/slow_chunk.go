@@ -186,13 +186,21 @@ func (m *SlowChunkMonitor) RecordSample(key string, transferredBytes int64) {
 		entry.LastProgressAt = now
 	}
 	entry.TransferredBytes = normalized
-	entry.samples = append(entry.samples, byteSample{at: now, bytes: normalized})
+	sample := byteSample{at: now, bytes: normalized}
+	count := len(entry.samples)
+	if count > 1 && now.Truncate(speedSampleInterval).Equal(entry.samples[count-1].at.Truncate(speedSampleInterval)) {
+		entry.samples[count-1] = sample
+	} else {
+		entry.samples = append(entry.samples, sample)
+	}
 	cutoff := now.Add(-slowChunkSpeedWindow)
 	first := 0
 	for first < len(entry.samples) && entry.samples[first].at.Before(cutoff) {
 		first++
 	}
-	entry.samples = slices.Clone(entry.samples[first:])
+	if first > 0 {
+		entry.samples = entry.samples[:copy(entry.samples, entry.samples[first:])]
+	}
 }
 
 func (m *SlowChunkMonitor) ResetProgress(key string, transferredBytes int64) {

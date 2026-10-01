@@ -206,6 +206,10 @@
         "paused": "已暂停",
         "queued": "排队中",
         "preparing": "准备中",
+        "upload_activity": {
+          "preparing": "正在读取和压缩文件",
+          "waiting": "正在等待服务器响应"
+        },
         "planning": {
           "permission_check": "正在检查权限",
           "parent_lookup": "正在查找上级文件夹",

@@ -1,4 +1,4 @@
-import type { PlanPhase } from "@shared/types";
+import type { PlanPhase, TransferWithoutData } from "@shared/types";
 
 export type TransferStatus =
     | "uploading"
@@ -33,6 +33,7 @@ export interface TransferItemProps {
     errorCode?: string;
     planPhase?: PlanPhase;
     planProgress?: number | null;
+    uploadPhase?: TransferWithoutData["uploadPhase"];
 }
 
 export interface TransferStatsProps {

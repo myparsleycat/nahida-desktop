@@ -1,4 +1,5 @@
 import type { CompressionState } from "@bindings/mod";
+import { UploadPhase } from "@bindings/transfer";
 import {
     buildElevatedHelperTitlebarActivity,
     buildModCompressionTitlebarActivity,
@@ -31,6 +32,48 @@ function transfer(partial: Partial<TransferWithoutData>): TransferWithoutData {
 }
 
 describe("buildTransferTitlebarActivity", () => {
+    it("shows a waiting upload without stale speed and preserves its percentage", () => {
+        const activity = buildTransferTitlebarActivity(
+            [
+                transfer({
+                    progress: 50,
+                    transferedSize: 50,
+                    speed: 500,
+                    uploadPhase: UploadPhase.UploadWaiting,
+                }),
+            ],
+            t,
+        );
+        expect(activity?.label).toBe("page.transfer.item.upload_activity.waiting");
+        expect(activity?.detail).toBe("50%");
+        expect(activity?.progress).toBe(50);
+    });
+
+    it("shows file preparation and keeps concurrent sending uploads visible", () => {
+        const preparing = transfer({
+            progress: 0,
+            transferedSize: 0,
+            uploadPhase: UploadPhase.UploadPreparing,
+        });
+        expect(buildTransferTitlebarActivity([preparing], t)?.label).toBe(
+            "page.transfer.item.upload_activity.preparing",
+        );
+        const activity = buildTransferTitlebarActivity(
+            [
+                preparing,
+                transfer({
+                    pid: "sending",
+                    progress: 50,
+                    transferedSize: 50,
+                    speed: 500,
+                    uploadPhase: UploadPhase.UploadTransferring,
+                }),
+            ],
+            t,
+        );
+        expect(activity?.label).toBe("titlebar.activity.transfer.uploading");
+        expect(activity?.detail).toContain("/s");
+    });
     it("labels a single finalizing upload as finalizing", () => {
         const activity = buildTransferTitlebarActivity([transfer({ progress: 100, speed: 0 })], t);
         expect(activity?.label).toBe("titlebar.activity.transfer.finalizing");

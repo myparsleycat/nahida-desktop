@@ -90,6 +90,7 @@ function RouteComponent() {
       errorCode: t.errorCode,
       planPhase: t.planPhase,
       planProgress: t.planProgress,
+      uploadPhase: t.uploadPhase,
     };
   });
 

@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	updateEventName = "transfer:update"
-	emitInterval    = 500 * time.Millisecond
-	speedWindow     = 5 * time.Second
-	mib             = 1024 * 1024
+	updateEventName     = "transfer:update"
+	emitInterval        = 500 * time.Millisecond
+	speedWindow         = 5 * time.Second
+	speedSampleInterval = 100 * time.Millisecond
+	mib                 = 1024 * 1024
 )
 
 type Status string
@@ -46,6 +47,14 @@ const (
 	PlanFileValidation  PlanPhase = "file_validation"
 	PlanDedupLookup     PlanPhase = "dedup_lookup"
 	PlanProcessing      PlanPhase = "processing"
+)
+
+type UploadPhase string
+
+const (
+	UploadPreparing    UploadPhase = "preparing"
+	UploadTransferring UploadPhase = "transferring"
+	UploadWaiting      UploadPhase = "waiting"
 )
 
 type DownloadFile struct {
@@ -122,6 +131,7 @@ type Snapshot struct {
 	ErrorCode          string              `json:"errorCode,omitempty"`
 	PlanPhase          *PlanPhase          `json:"planPhase,omitempty"`
 	PlanProgress       *float64            `json:"planProgress,omitempty"`
+	UploadPhase        UploadPhase         `json:"uploadPhase,omitempty"`
 }
 
 type Record struct {
@@ -187,6 +197,7 @@ type Updates struct {
 	ErrorCode          *string
 	PlanPhase          *PlanPhase
 	PlanProgress       *float64
+	UploadPhase        *UploadPhase
 	ClearCurrentID     bool
 	ClearError         bool
 	ClearErrorCode     bool

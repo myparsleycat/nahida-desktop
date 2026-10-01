@@ -356,6 +356,10 @@ func (d *Drive) runUpload(
 			func(progress UploadExecutionProgress) {
 				state.mu.Lock()
 				defer state.mu.Unlock()
+				if progress.Phase != "" {
+					_ = transfers.Update(pid, transfer.Updates{UploadPhase: &progress.Phase})
+					return
+				}
 				uploadedBytes += progress.Bytes
 				if progress.FileID != "" && !transfers.IsFileCompleted(pid, progress.FileID) {
 					if transfers.MarkFileCompleted(pid, progress.FileID) == nil {

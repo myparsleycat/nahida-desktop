@@ -734,7 +734,9 @@ func TestProgressEmitDeliversLatestTrailingSnapshot(t *testing.T) {
 	if got.TransferredSize != 30 || got.Progress != 30 || got.Speed <= 0 || got.ETA <= 0 {
 		t.Fatalf("trailing transfer = %#v", got)
 	}
-	assertNoTransferEmission(t, emissions, interval+20*time.Millisecond)
+	if got := emittedTransfer(t, awaitTransferEmission(t, emissions), "trailing"); got.TransferredSize != 30 {
+		t.Fatalf("heartbeat changed transferred bytes: %#v", got)
+	}
 }
 
 func TestProgressEmitCoalescesTransfersIntoOneSnapshot(t *testing.T) {
@@ -767,7 +769,10 @@ func TestProgressEmitCoalescesTransfersIntoOneSnapshot(t *testing.T) {
 	if got := emittedTransfer(t, emission, "second"); got.TransferredSize != 40 {
 		t.Fatalf("second transfer = %#v", got)
 	}
-	assertNoTransferEmission(t, emissions, interval+20*time.Millisecond)
+	emission = awaitTransferEmission(t, emissions)
+	if got := emittedTransfer(t, emission, "second"); got.TransferredSize != 40 {
+		t.Fatalf("heartbeat changed transferred bytes: %#v", got)
+	}
 }
 
 func TestProgressEmitMaintainsCadenceUnderContinuousUpdates(t *testing.T) {
