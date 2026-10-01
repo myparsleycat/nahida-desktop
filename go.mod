@@ -16,7 +16,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/myparsleycat/ddsutil v0.2.0
 	github.com/openai/openai-go v1.12.0
-	github.com/rodrigocfd/windigo v0.2.6
+	github.com/rodrigocfd/windigo v0.2.7
 	github.com/samber/lo v1.53.0
 	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 	golang.org/x/arch v0.30.0
