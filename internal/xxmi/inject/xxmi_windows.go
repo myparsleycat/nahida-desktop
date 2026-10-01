@@ -41,12 +41,10 @@ func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			err   error
 		}{value, err}
 	}()
-	select {
-	case <-ctx.Done():
-		return LaunchResult{}, ctx.Err()
-	case outcome := <-result:
-		return outcome.value, outcome.err
-	}
+	// The helper must not exit while the thread still owns a hook or DLL.
+	// Cancellation reaches launchXXMI; wait for its deferred cleanup as well.
+	outcome := <-result
+	return outcome.value, outcome.err
 }
 
 func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {

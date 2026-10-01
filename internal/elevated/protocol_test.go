@@ -67,7 +67,7 @@ func TestDialPipeUntilReadyWaitsForServerCreation(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	conn, err := dialPipeUntilReady(ctx, pipe)
+	conn, err := dialPipeUntilReady(ctx, pipe, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
