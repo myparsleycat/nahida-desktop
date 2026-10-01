@@ -66,14 +66,6 @@ export function XXMIImporterList() {
                   {importer.mode === "legacy" ? "3DMigoto" : "XXMI"}
                 </Badge>
               )}
-              {importer?.customDll && (
-                <Badge
-                  variant="outline"
-                  title={t("page.setting.xxmi.builtin.customDllDescription")}
-                >
-                  {t("page.setting.xxmi.builtin.customDll")}
-                </Badge>
-              )}
               {available && <Badge>{t("page.setting.xxmi.builtin.updateAvailable")}</Badge>}
               {importer?.running && (
                 <Badge variant="outline">{t("page.setting.xxmi.builtin.running")}</Badge>
@@ -82,6 +74,14 @@ export function XXMIImporterList() {
             <p className="truncate text-xs text-muted-foreground">
               {importer?.packageInfo.deployed_version ||
                 t("page.setting.xxmi.builtin.notInstalled")}
+              {importer?.customDll && (
+                <>
+                  {" · "}
+                  <span title={t("page.setting.xxmi.builtin.customDllDescription")}>
+                    {t("page.setting.xxmi.builtin.customDll")}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </button>
