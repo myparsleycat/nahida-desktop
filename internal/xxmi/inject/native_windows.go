@@ -129,11 +129,11 @@ func injectNativeDLL(ctx context.Context, pid int, path string, timeout time.Dur
 	if processMachine != pe.IMAGE_FILE_MACHINE_AMD64 {
 		return 0, fmt.Errorf("native injection requires an x64 target (machine %#x)", processMachine)
 	}
-	loadLibrary, err := remoteSystemProc(ctx, pid, "LoadLibraryW")
+	loadLibrary, err := remoteSystemProc(ctx, process, pid, "LoadLibraryW")
 	if err != nil {
 		return 0, err
 	}
-	getLastError, err := remoteSystemProc(ctx, pid, "GetLastError")
+	getLastError, err := remoteSystemProc(ctx, process, pid, "GetLastError")
 	if err != nil {
 		return 0, err
 	}
@@ -216,7 +216,7 @@ func injectNativeDLL(ctx context.Context, pid int, path string, timeout time.Dur
 	return module, nil
 }
 
-func remoteSystemProc(ctx context.Context, pid int, name string) (uintptr, error) {
+func remoteSystemProc(ctx context.Context, process windows.Handle, pid int, name string) (uintptr, error) {
 	proc := nativeKernel32.NewProc(name)
 	if err := proc.Find(); err != nil {
 		return 0, fmt.Errorf("resolve %s locally: %w", name, err)
@@ -236,29 +236,56 @@ func remoteSystemProc(ctx context.Context, pid int, name string) (uintptr, error
 		return 0, fmt.Errorf("read %s module name: %w", name, err)
 	}
 	moduleName := filepath.Base(windows.UTF16ToString(buffer))
-	snapshot, err := snapshotNativeModules(ctx, uint32(pid), windows.CreateToolhelp32Snapshot)
+	entry, err := waitNativeModule(ctx, process, uint32(pid), moduleName)
 	if err != nil {
-		return 0, fmt.Errorf("snapshot target modules for %s: %w", name, err)
+		return 0, fmt.Errorf("locate target module for %s: %w", name, err)
 	}
-	defer func() { _ = windows.CloseHandle(snapshot) }()
-	entry := windows.ModuleEntry32{Size: uint32(windows.SizeofModuleEntry32)}
-	for err = windows.Module32First(snapshot, &entry); err == nil; err = windows.Module32Next(snapshot, &entry) {
-		if strings.EqualFold(windows.UTF16ToString(entry.Module[:]), moduleName) {
-			offset := proc.Addr() - info.AllocationBase
-			if offset >= uintptr(entry.ModBaseSize) {
-				return 0, fmt.Errorf("%s address is outside target module %q", name, moduleName)
+	offset := proc.Addr() - info.AllocationBase
+	if offset >= uintptr(entry.ModBaseSize) {
+		return 0, fmt.Errorf("%s address is outside target module %q", name, moduleName)
+	}
+	return entry.ModBaseAddr + offset, nil
+}
+
+func waitNativeModule(
+	ctx context.Context,
+	process windows.Handle,
+	pid uint32,
+	moduleName string,
+) (windows.ModuleEntry32, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		snapshot, err := snapshotNativeModules(ctx, process, pid, windows.CreateToolhelp32Snapshot)
+		if err != nil {
+			return windows.ModuleEntry32{}, fmt.Errorf("snapshot target modules: %w", err)
+		}
+		entry := windows.ModuleEntry32{Size: uint32(windows.SizeofModuleEntry32)}
+		for err = windows.Module32First(snapshot, &entry); err == nil; err = windows.Module32Next(snapshot, &entry) {
+			if strings.EqualFold(windows.UTF16ToString(entry.Module[:]), moduleName) {
+				break
 			}
-			return entry.ModBaseAddr + offset, nil
+		}
+		_ = windows.CloseHandle(snapshot)
+		if err == nil {
+			return entry, nil
+		}
+		if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+			return windows.ModuleEntry32{}, fmt.Errorf("enumerate target modules: %w", err)
+		}
+
+		// A successful snapshot can precede loading KernelBase or another system DLL.
+		select {
+		case <-ctx.Done():
+			return windows.ModuleEntry32{}, fmt.Errorf("target module %q is not loaded: %w", moduleName, ctx.Err())
+		case <-ticker.C:
 		}
 	}
-	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
-		return 0, fmt.Errorf("enumerate target modules for %s: %w", name, err)
-	}
-	return 0, fmt.Errorf("target module %q for %s is not loaded", moduleName, name)
 }
 
 func snapshotNativeModules(
 	ctx context.Context,
+	process windows.Handle,
 	pid uint32,
 	createSnapshot func(uint32, uint32) (windows.Handle, error),
 ) (windows.Handle, error) {
@@ -268,13 +295,23 @@ func snapshotNativeModules(
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
+		status, err := windows.WaitForSingleObject(process, 0)
+		if err != nil {
+			return 0, fmt.Errorf("check target process: %w", err)
+		}
+		if status == windows.WAIT_OBJECT_0 {
+			return 0, errors.New("target process exited before module lookup")
+		}
+		if status != uint32(windows.WAIT_TIMEOUT) {
+			return 0, fmt.Errorf("unexpected target process wait status %#x", status)
+		}
 		snapshot, err := createSnapshot(windows.TH32CS_SNAPMODULE, pid)
-		if !errors.Is(err, windows.ERROR_BAD_LENGTH) {
+		if !errors.Is(err, windows.ERROR_BAD_LENGTH) && !errors.Is(err, windows.ERROR_PARTIAL_COPY) {
 			return snapshot, err
 		}
 
-		// The target loader can change the module list during startup. Retry only
-		// this transient snapshot failure within the DLL load's shared deadline.
+		// The caller has verified an x64 target, so ERROR_PARTIAL_COPY can indicate
+		// uninitialized loader data rather than a cross-architecture snapshot.
 		select {
 		case <-ctx.Done():
 			return 0, errors.Join(err, ctx.Err())
