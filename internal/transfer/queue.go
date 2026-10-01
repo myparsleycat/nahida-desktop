@@ -269,19 +269,27 @@ func (t *Transfer) notifyStarted(ctx context.Context, name string) {
 	if t.eventEmit == nil {
 		return
 	}
-	t.eventEmit("fn:toast", "전송이 시작되었습니다", map[string]any{"description": name})
-	settings, ok := t.settings.(startNotificationSettings)
-	if !ok {
+
+	// Opening the transfer page already shows the new entry, so the toast is only for users who stay put.
+	if t.movesToTransferPage(ctx) {
+		t.eventEmit("fn:navi", "/transfer")
 		return
 	}
+	t.eventEmit("fn:toast", "전송이 시작되었습니다", map[string]any{"description": name})
+}
+
+func (t *Transfer) movesToTransferPage(ctx context.Context) bool {
+	settings, ok := t.settings.(startNotificationSettings)
+	if !ok {
+		return false
+	}
+
 	move, err := settings.GetMoveTransferPageWhenStartTransfer(ctx)
 	if err != nil {
 		t.logError(err, "transfer.startNotification")
-		return
+		return false
 	}
-	if move {
-		t.eventEmit("fn:navi", "/transfer")
-	}
+	return move
 }
 
 //wails:ignore

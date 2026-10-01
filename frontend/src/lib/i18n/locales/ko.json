@@ -115,7 +115,6 @@
       "login_copied": "로그인 링크를 복사했습니다",
       "login_copy_failed": "로그인 링크를 복사하지 못했습니다",
       "login_cancel": "로그인 취소",
-      "login_complete": "ChatGPT 로그인 완료",
       "sign_out": "로그아웃",
       "model_hint": "목록에서 모델을 고르거나 모델 ID를 직접 입력하세요.",
       "catalog_updated": "모델 목록: {{date}}",
@@ -136,7 +135,6 @@
       "context_messages": "대화 메시지",
       "max_output": "최대 출력 토큰",
       "settings_saved": "나히다 에이전트 설정을 저장했습니다",
-      "connection_ok": "연결에 성공했습니다",
       "test_connection": "연결 테스트",
       "secret_configured": "설정된 키 유지",
       "keep": "현재 값 유지",
@@ -314,7 +312,6 @@
         "download": "다운로드",
         "rename": "이름 바꾸기",
         "trash": "휴지통",
-        "trash_success": "{{count}}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다",
         "new_dir": "폴더 생성",
         "delete": "삭제",
         "copy": "복사",
@@ -346,8 +343,7 @@
             "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
             "2": "동일한 이름의 폴더가 이미 존재합니다.",
             "toast-promise": {
-              "loading": "디렉토리를 생성하고 있습니다...",
-              "success": "디렉토리가 생성되었습니다"
+              "loading": "디렉토리를 생성하고 있습니다..."
             }
           }
         },
@@ -386,7 +382,6 @@
           "action": "삭제",
           "#": {
             "toast": {
-              "success": "{{count}}개 삭제 요청이 접수되었어요",
               "partial": "{{accepted}}개 삭제 요청이 접수되었고, {{failed}}개는 실패했어요",
               "error": "삭제 요청에 실패했어요"
             }
@@ -457,8 +452,6 @@
         }
       },
       "content-header": {
-        "all_enabled": "모든 모드가 활성화되었습니다",
-        "all_disabled": "모든 모드가 비활성화되었습니다",
         "tools": "도구",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer",
@@ -576,7 +569,6 @@
         "nte-launch": {
           "title": "런처 경로 지정",
           "path_label": "런처 경로",
-          "path_required": "런처 경로를 선택해 주세요.",
           "launch": "저장 후 런처 실행"
         },
         "gimi-dcr": {
@@ -634,7 +626,6 @@
           "description": "{{name}} 아래에 새 폴더를 만듭니다.",
           "name-placeholder": "폴더 이름",
           "#": {
-            "success": "\"{{name}}\" 폴더를 만들었습니다",
             "invalid-name": "폴더 이름이 올바르지 않습니다",
             "already-exists": "이미 존재하는 폴더명입니다",
             "failed": "폴더 생성에 실패했습니다"
@@ -644,7 +635,6 @@
           "title": "이 폴더를 삭제할까요?",
           "description": "\"{{name}}\" 폴더를 삭제할까요? 삭제한 폴더는 휴지통에서 복원할 수 있습니다.",
           "#": {
-            "success": "폴더를 휴지통으로 보냈습니다",
             "failed": "폴더 삭제에 실패했습니다"
           }
         },
@@ -748,8 +738,7 @@
             "clean_backups": "모든 백업 파일 삭제",
             "clean_backups_desc": "대상 폴더의 모든 .BAK 파일을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
             "clean_action": "삭제...",
-            "warn_clean": "확인하려면 WIPE를 입력하세요:",
-            "clean_success": "백업 파일을 모두 삭제했습니다!"
+            "warn_clean": "확인하려면 WIPE를 입력하세요:"
           },
           "log": {
             "input_placeholder": "입력..."
@@ -812,7 +801,6 @@
       "hooks": {
         "use-mod-mutations": {
           "add-game-mutation": {
-            "success": "게임이 추가되었습니다.",
             "duplicate-game-name": "이미 존재하는 게임 이름입니다.",
             "duplicate-mod-folder-path": "이미 사용 중인 모드 폴더 경로입니다.",
             "invalid-params": "게임 이름과 모드 폴더 경로를 입력해주세요.",
@@ -820,12 +808,6 @@
             "nte_mods_link_conflict": "게임 Mods 폴더와 사용자 지정 모드 폴더 모두에 파일이 있습니다. 연결하기 전에 한쪽을 비워주세요.",
             "nte_mods_link_path_occupied": "게임 Mods 폴더 경로가 사용 중이어서 연결할 수 없습니다.",
             "nte_custom_mod_folder_inside_link_path": "사용자 지정 모드 폴더는 게임 Mods 폴더 경로 안에 있거나, 그 반대일 수 없습니다."
-          },
-          "delete-game-mutation": {
-            "success": "게임이 삭제되었습니다."
-          },
-          "update-game-mutation": {
-            "success": "게임 설정이 저장되었습니다."
           },
           "reorder-games-mutation": {
             "failed": "게임 순서를 저장하지 못했습니다."
@@ -854,7 +836,6 @@
           },
           "locked-description": "다음 프로세스에서 해당 폴더를 사용 중입니다: {{processes}}",
           "create-preset-mutation": {
-            "success": "프리셋이 추가되었습니다.",
             "duplicate-name": "이미 존재하는 프리셋 이름입니다.",
             "conflict-resolve-failed": "일부 중복 모드 폴더를 자동으로 정리하지 못했습니다."
           },
@@ -862,9 +843,6 @@
             "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요.",
             "success": "프리셋이 적용되었습니다.",
             "missing": "프리셋 적용이 완료되었지만 누락된 모드가 {{count}}개 있습니다."
-          },
-          "delete-preset-mutation": {
-            "success": "프리셋이 삭제되었습니다."
           }
         }
       },
@@ -888,28 +866,18 @@
         "find-conflict": "충돌 모드 찾기"
       },
       "toast": {
-        "trash-loading": "휴지통으로 이동 중...",
-        "trash-success": "삭제 완료",
         "trash-error": "삭제 실패",
         "change-preview-error": "기본 프리뷰 이미지를 변경하지 못했습니다.",
         "value-required": "값을 입력해주세요.",
-        "rename-success": "모드 이름이 변경되었습니다",
-        "manual-subgroup-success": "서브그룹으로 지정했습니다",
-        "manual-subgroup-remove-success": "서브그룹 지정을 해제했습니다",
         "paste-preview": {
-          "copying": "프리뷰 복사 중...",
-          "success": "프리뷰가 업데이트되었습니다",
           "copy-error": "프리뷰 복사에 실패했습니다",
           "downloading": "프리뷰 다운로드 중...",
           "download-error": "프리뷰 다운로드에 실패했습니다",
-          "saving": "프리뷰 저장 중...",
           "save-error": "프리뷰 저장에 실패했습니다",
           "no-image": "클립보드에 이미지, 이미지 URL 또는 이미지 파일이 없습니다.",
           "clipboard-error": "클립보드를 읽지 못했습니다."
         },
         "preview-drop": {
-          "saving": "프리뷰 저장 중...",
-          "success": "프리뷰가 업데이트되었습니다",
           "error": "프리뷰 저장에 실패했습니다",
           "unsupported": "사이드바에는 이미지 또는 동영상 파일 1개만 프리뷰로 드롭할 수 있습니다.",
           "path-error": "파일 경로를 확인할 수 없습니다."
@@ -932,7 +900,6 @@
         "cancelled_title": "GameBanana 로그인이 취소되었습니다",
         "cancelled_description": "로그인하지 않아도 탐색과 다운로드는 계속 이용할 수 있습니다.",
         "sign_in": "로그인",
-        "signed_out": "로그아웃되었습니다.",
         "signed_in_as": "{{name}} 님으로 로그인됨",
         "guest_notice": "로그인 없이도 탐색과 로그인이 필요하지 않은 모드 다운로드를 이용할 수 있습니다. 좋아요를 누르려면 로그인하세요.",
         "unsupported_title": "GameBanana 자동 로그인을 사용할 수 없습니다",
@@ -1130,7 +1097,6 @@
         "no_visibility": "모드 표시 상태를 확인할 활성 변수나 Position 연결을 찾지 못했습니다. 원본 INI의 렌더링 조건을 확인해 주세요.",
         "generate_failed": "메뉴를 생성하지 못했습니다. 원본 INI의 namespace와 기존 메뉴 충돌 여부를 확인해 주세요.",
         "title": "XXMI 메뉴 메이커",
-        "loaded": "원본을 불러왔습니다",
         "draft_restored": "일치하는 초안을 복원했습니다",
         "load_failed": "원본 파일을 불러오지 못했습니다",
         "no_keys": "처리 가능한 [Key*] 섹션이 없습니다",
@@ -1527,7 +1493,6 @@
           "complete": "완료"
         },
         "toast": {
-          "loaded": "Touch 초안 준비 완료",
           "load_failed": "모드 분석 실패",
           "created": "Touch 모드 생성 완료",
           "create_failed": "Touch 모드 생성 실패",
@@ -1988,8 +1953,7 @@
           "title": "게임 런처",
           "description": "설치된 XXMI 런처로 게임을 실행할지, 내장 런타임으로 실행할지 선택합니다. 전환해도 두 방식의 설정은 모두 유지됩니다.",
           "external": "XXMI 런처",
-          "builtin": "내장",
-          "changed": "게임 런처가 변경되었습니다"
+          "builtin": "내장"
         },
         "builtin": {
           "detectGame": "게임 폴더 감지",
@@ -2001,7 +1965,6 @@
           "createShortcut": "Quick Start 바로가기 만들기",
           "shortcutCreated": "바탕화면 바로가기를 만들었습니다",
           "deleteShortcut": "Quick Start 바로가기 삭제",
-          "shortcutDeleted": "바탕화면 바로가기를 삭제했습니다",
           "iniOptimizer": "INI 최적화",
           "optimizeAtLaunch": "게임 실행 시 자동 최적화",
           "resetOptimizerCache": "최적화 캐시 초기화",
@@ -2040,9 +2003,7 @@
           "perfTweakValues": "성능 조정 값",
           "checkUpdates": "업데이트 확인",
           "installUpdates": "업데이트 설치",
-          "updatesInstalled": "업데이트를 설치했습니다",
           "skipVersion": "이번 버전 건너뛰기",
-          "versionSkipped": "이번 버전을 건너뜁니다",
           "startMethod": "시작 방식",
           "priority": "프로세스 우선순위",
           "initDelay": "DLL 초기화 지연(ms)",
@@ -2063,7 +2024,6 @@
           "elevatedCommandWarning": "이 명령은 관리자 권한으로 실행됩니다.",
           "extraLibraries": "추가 DLL 경로(세미콜론으로 구분)",
           "root": "임포터 루트 폴더",
-          "saved": "XXMI 설정을 저장했습니다",
           "externalDetected": "외부 XXMI Launcher를 찾았습니다",
           "externalWarning": "가져오기 전에 외부 런처와 게임을 닫으세요. 임포터마다 루트 폴더 아래에 전용 폴더를 만들고 패키지를 새로 설치합니다.",
           "import": "설정 가져오기",
@@ -2097,7 +2057,6 @@
           "downloadLegacy": "레거시 런타임 다운로드",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "최신 버전 다운로드",
-          "downloaded": "레거시 런타임을 받았습니다",
           "importLegacy": "레거시 ZIP 가져오기",
           "importedLegacy": "레거시 런타임을 가져왔습니다",
           "options": "전역 옵션",
@@ -2211,16 +2170,13 @@
             }
           },
           "saveXXMIPath": {
-            "success": "XXMI 경로가 저장되었습니다",
             "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
           },
           "installDllVersion": {
-            "success": "XXMI DLL 버전 {{version}} 을 적용했습니다",
             "failed": "선택한 XXMI DLL 버전을 적용하지 못했습니다",
             "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
           },
           "installImporterPackage": {
-            "success": "{{importer}} 패키지 버전 {{version}} 을 적용했습니다",
             "failed": "선택한 importer 패키지 버전을 적용하지 못했습니다",
             "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
           }
@@ -2404,8 +2360,6 @@
         "started": "복원을 시작했습니다"
       },
       "toast": {
-        "completed": "백업을 완료했습니다",
-        "unchanged": "마지막 백업 이후 바뀐 것이 없습니다",
         "failed": "백업에 실패했습니다",
         "restored": "복원을 완료했습니다",
         "restore_failed": "복원에 실패했습니다"

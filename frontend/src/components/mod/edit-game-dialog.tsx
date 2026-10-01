@@ -26,7 +26,6 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { ArrowDownIcon, ArrowUpIcon, FolderOpen, Trash2Icon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
 
@@ -152,6 +151,7 @@ function EditGameDialogContent({
       : null,
   );
   const [isResolvingNte, setIsResolvingNte] = useState(false);
+  const [isNteNotFound, setIsNteNotFound] = useState(false);
   const currentGameIndex = games.findIndex((game) => game.game === editingGame.game);
   const canMoveUp = currentGameIndex > 0;
   const canMoveDown = currentGameIndex >= 0 && currentGameIndex < games.length - 1;
@@ -170,14 +170,12 @@ function EditGameDialogContent({
       const importer = value.importer === NO_IMPORTER_VALUE ? null : value.importer;
       const isNte = isNteImporter(importer);
       if (!path) {
-        toast.warning(t("page.mod.dialog.add-game.#.1"));
         return;
       }
 
       if (isNte) {
         const resolution = nteResolution ?? (await resolveNtePath(path).catch(() => null));
         if (!resolution) {
-          toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
           return;
         }
 
@@ -212,6 +210,7 @@ function EditGameDialogContent({
 
     form.setFieldValue("path", path);
     setNteResolution(null);
+    setIsNteNotFound(false);
 
     if (isNteSelected) {
       await resolveNtePath(path);
@@ -230,9 +229,7 @@ function EditGameDialogContent({
     try {
       const resolution = await Mod.ResolveNteInstallPath(installPath);
       setNteResolution(resolution);
-      if (!resolution) {
-        toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
-      }
+      setIsNteNotFound(!resolution);
       return resolution;
     } finally {
       setIsResolvingNte(false);
@@ -290,6 +287,7 @@ function EditGameDialogContent({
                   onChange={(event) => {
                     field.handleChange(event.target.value);
                     setNteResolution(null);
+                    setIsNteNotFound(false);
                   }}
                 />
                 <Button
@@ -309,6 +307,9 @@ function EditGameDialogContent({
               ) : null}
               {field.state.meta.isTouched && !field.state.meta.isValid ? (
                 <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+              ) : null}
+              {isNteSelected && isNteNotFound ? (
+                <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
               ) : null}
             </Field>
           )}
@@ -337,6 +338,7 @@ function EditGameDialogContent({
                   const nextIsNte = isNteImporter(value);
                   field.handleChange(value);
                   setNteResolution(null);
+                  setIsNteNotFound(false);
 
                   if (wasNte && !nextIsNte) {
                     form.setFieldValue(

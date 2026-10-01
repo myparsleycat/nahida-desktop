@@ -593,7 +593,6 @@ it("signs in to ChatGPT and reloads the provider list", async () => {
 
   expect(Agent.StartProviderLogin).toHaveBeenCalledWith("openai");
   expect(Agent.CompleteProviderLogin).toHaveBeenCalledOnce();
-  expect(toast.success).toHaveBeenCalledWith("page.agent.login_complete");
   expect(Agent.ListProviders).toHaveBeenCalledTimes(2);
   expect(calls.invalidate).toHaveBeenCalledWith({ queryKey: ["agent", "settings"] });
   // The plan does not serve the stored model, so the form moves to the newest one it does.
@@ -657,7 +656,6 @@ it("shows the model that answered the connection test", async () => {
   await renderSettings();
   await clickButton("page.agent.test_connection");
   expect(screen.getByRole("status").textContent).toBe("page.agent.test_result");
-  expect(toast.success).toHaveBeenCalledWith("page.agent.connection_ok");
 });
 
 async function clickMCPTestButton() {

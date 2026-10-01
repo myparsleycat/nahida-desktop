@@ -31,7 +31,6 @@ import { useForm } from "@tanstack/react-form";
 import { LoaderIcon, Plus } from "lucide-react";
 import { type MouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 interface CreatePresetDialogProps {
   disabled?: boolean;
@@ -55,7 +54,6 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
     onSubmit: async ({ value }) => {
       const name = value.name.trim();
       if (!name) {
-        toast.warning(t("page.mod.dialog.add-preset.#.0"));
         return;
       }
 

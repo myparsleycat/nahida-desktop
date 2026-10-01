@@ -115,7 +115,6 @@
       "login_copied": "Sign-in link copied",
       "login_copy_failed": "Could not copy the sign-in link",
       "login_cancel": "Cancel sign-in",
-      "login_complete": "Signed in with ChatGPT",
       "sign_out": "Sign out",
       "model_hint": "Pick a model from the list or type a model id.",
       "catalog_updated": "Model list: {{date}}",
@@ -136,7 +135,6 @@
       "context_messages": "Conversation",
       "max_output": "Maximum output tokens",
       "settings_saved": "Nahida Agent settings saved",
-      "connection_ok": "Connection succeeded",
       "test_connection": "Test connection",
       "secret_configured": "Keep configured key",
       "keep": "Keep current value",
@@ -332,7 +330,6 @@
         "rename": "Rename",
         "delete": "Delete",
         "trash": "Trash",
-        "trash_success": "{{count}} files and directories moved to trash",
         "new_dir": "Create folder",
         "copy": "Copy",
         "cut": "Cut",
@@ -363,8 +360,7 @@
             "1": "Failed to get path info for directory creation",
             "2": "A folder with the same name already exists.",
             "toast-promise": {
-              "loading": "Creating directory...",
-              "success": "Directory created"
+              "loading": "Creating directory..."
             }
           }
         },
@@ -403,7 +399,6 @@
           "action": "Delete",
           "#": {
             "toast": {
-              "success": "Deletion requested for {{count}} items",
               "partial": "Deletion requested for {{accepted}} items; {{failed}} failed",
               "error": "Deletion request failed"
             }
@@ -474,8 +469,6 @@
         }
       },
       "content-header": {
-        "all_enabled": "All mods enabled",
-        "all_disabled": "All mods disabled",
         "tools": "Tools",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer",
@@ -593,7 +586,6 @@
         "nte-launch": {
           "title": "Set launcher path",
           "path_label": "Launcher path",
-          "path_required": "Please select a launcher path.",
           "launch": "Save and launch launcher"
         },
         "gimi-dcr": {
@@ -650,7 +642,6 @@
           "description": "Create a new folder under {{name}}.",
           "name-placeholder": "Folder name",
           "#": {
-            "success": "\"{{name}}\" folder created",
             "invalid-name": "The folder name is invalid",
             "already-exists": "A folder with that name already exists",
             "failed": "Failed to create folder"
@@ -660,7 +651,6 @@
           "title": "Delete Folder",
           "description": "Are you sure you want to delete \"{{name}}\"? The folder can be restored from the recycle bin.",
           "#": {
-            "success": "Folder moved to trash",
             "failed": "Failed to delete folder"
           }
         },
@@ -764,8 +754,7 @@
             "clean_backups": "Delete All Backup Files",
             "clean_backups_desc": "Permanently removes all .BAK files from the target folder. This cannot be undone.",
             "clean_action": "Delete...",
-            "warn_clean": "Type WIPE to confirm:",
-            "clean_success": "Backups wiped successfully!"
+            "warn_clean": "Type WIPE to confirm:"
           },
           "log": {
             "input_placeholder": "Input..."
@@ -828,7 +817,6 @@
       "hooks": {
         "use-mod-mutations": {
           "add-game-mutation": {
-            "success": "Game added",
             "duplicate-game-name": "A game with that name already exists",
             "duplicate-mod-folder-path": "That mod folder path is already in use",
             "invalid-params": "Game name and mod folder path are required",
@@ -836,12 +824,6 @@
             "nte_mods_link_conflict": "Both the game Mods folder and the custom mod folder contain files. Clear one before linking.",
             "nte_mods_link_path_occupied": "The game Mods folder path is occupied and cannot be linked.",
             "nte_custom_mod_folder_inside_link_path": "The custom mod folder cannot be inside the game Mods folder path, or vice versa."
-          },
-          "delete-game-mutation": {
-            "success": "Game deleted"
-          },
-          "update-game-mutation": {
-            "success": "Game settings saved"
           },
           "reorder-games-mutation": {
             "failed": "Failed to save game order"
@@ -870,7 +852,6 @@
           },
           "locked-description": "Used by: {{processes}}",
           "create-preset-mutation": {
-            "success": "Preset created",
             "duplicate-name": "A preset with that name already exists",
             "conflict-resolve-failed": "Some duplicate mod folders could not be resolved automatically"
           },
@@ -878,9 +859,6 @@
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",
             "success": "Preset applied",
             "missing": "Preset applied, but {{count}} mods were missing"
-          },
-          "delete-preset-mutation": {
-            "success": "Preset deleted"
           }
         }
       },
@@ -904,28 +882,18 @@
         "find-conflict": "Find Conflict Mods"
       },
       "toast": {
-        "trash-loading": "Moving to recycle bin...",
-        "trash-success": "Deleted successfully",
         "trash-error": "Failed to delete",
         "change-preview-error": "Failed to change the default preview image.",
         "value-required": "Please enter a value.",
-        "rename-success": "Mod renamed successfully",
-        "manual-subgroup-success": "Marked as subgroup",
-        "manual-subgroup-remove-success": "Subgroup mark removed",
         "paste-preview": {
-          "copying": "Copying preview...",
-          "success": "Preview updated",
           "copy-error": "Failed to copy preview",
           "downloading": "Downloading preview...",
           "download-error": "Failed to download preview",
-          "saving": "Saving preview...",
           "save-error": "Failed to save preview",
           "no-image": "No image, image URL, or image file found in the clipboard.",
           "clipboard-error": "Failed to read the clipboard."
         },
         "preview-drop": {
-          "saving": "Saving preview...",
-          "success": "Preview updated",
           "error": "Failed to save preview",
           "unsupported": "Only one image or video file can be dropped onto the sidebar as a preview.",
           "path-error": "Failed to resolve the file path."
@@ -948,7 +916,6 @@
         "cancelled_title": "GameBanana login was cancelled",
         "cancelled_description": "You can keep browsing and downloading without signing in.",
         "sign_in": "Sign in",
-        "signed_out": "Signed out.",
         "signed_in_as": "Signed in as {{name}}",
         "guest_notice": "Browsing and downloads for mods that do not require sign-in work without signing in. Sign in to like mods.",
         "unsupported_title": "Automatic GameBanana login is unavailable",
@@ -1146,7 +1113,6 @@
         "no_visibility": "No render visibility flag or Position binding was found. Check the rendering conditions in the original INI.",
         "generate_failed": "Could not generate the menu. Check the original namespace and existing menu conflicts.",
         "title": "XXMI Menu Maker",
-        "loaded": "Source loaded",
         "draft_restored": "Matching draft restored",
         "load_failed": "Could not load the source file",
         "no_keys": "No usable [Key*] sections were found",
@@ -1541,7 +1507,6 @@
           "complete": "Complete"
         },
         "toast": {
-          "loaded": "Touch draft ready",
           "load_failed": "Failed to analyze mod",
           "created": "Touch mod created",
           "create_failed": "Failed to create Touch mod",
@@ -2054,15 +2019,12 @@
           "title": "Game launcher",
           "description": "Choose whether games start through an installed XXMI Launcher or the built-in runtime. Settings for both are kept when you switch.",
           "external": "XXMI Launcher",
-          "builtin": "Built-in",
-          "changed": "Game launcher has been changed"
+          "builtin": "Built-in"
         },
         "builtin": {
           "checkUpdates": "Check updates",
           "installUpdates": "Install updates",
-          "updatesInstalled": "Updates installed",
           "skipVersion": "Skip this version",
-          "versionSkipped": "This version will be skipped",
           "detectGame": "Detect game folder",
           "noGameFolders": "No game folders were found. Enter the folder manually.",
           "maintenance": "Maintenance",
@@ -2072,7 +2034,6 @@
           "createShortcut": "Create Quick Start shortcut",
           "shortcutCreated": "Desktop shortcut created",
           "deleteShortcut": "Delete Quick Start shortcut",
-          "shortcutDeleted": "Desktop shortcut deleted",
           "iniOptimizer": "INI optimizer",
           "optimizeAtLaunch": "Optimize when launching",
           "resetOptimizerCache": "Reset optimizer cache",
@@ -2129,7 +2090,6 @@
           "elevatedCommandWarning": "This command runs with administrator rights.",
           "extraLibraries": "Extra DLL paths (separated by semicolons)",
           "root": "Importer root folder",
-          "saved": "XXMI settings saved",
           "externalDetected": "An external XXMI Launcher was found",
           "externalWarning": "Close the external launcher and its games before importing. Each importer gets its own folder under the root folder with a freshly installed package.",
           "import": "Import settings",
@@ -2163,7 +2123,6 @@
           "downloadLegacy": "Download legacy runtime",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "Download latest",
-          "downloaded": "Legacy runtime downloaded",
           "importLegacy": "Import legacy ZIP",
           "importedLegacy": "Legacy runtime imported",
           "options": "Global options",
@@ -2277,16 +2236,13 @@
             }
           },
           "saveXXMIPath": {
-            "success": "XXMI path has been saved",
             "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
           },
           "installDllVersion": {
-            "success": "XXMI DLL version {{version}} has been applied",
             "failed": "Failed to apply the selected XXMI DLL version",
             "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
           },
           "installImporterPackage": {
-            "success": "{{importer}} package version {{version}} has been applied",
             "failed": "Failed to apply the selected importer package version",
             "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
           }
@@ -2420,8 +2376,6 @@
         "started": "Restore started"
       },
       "toast": {
-        "completed": "Backup completed",
-        "unchanged": "Nothing changed since the last backup",
         "failed": "Backup failed",
         "restored": "Restore completed",
         "restore_failed": "Restore failed"

@@ -463,7 +463,6 @@ export function useModFixRunner() {
     setIsRollbackBusy(true);
     try {
       await Tools.WuwaFixerCleanBackups(activeModPath);
-      toast.success(t(`${translationKey}.rollback.clean_success`));
       await refreshBackups(activeModPath);
     } catch (error) {
       toast.error(toErrorMessage(error));

@@ -106,11 +106,7 @@ export function RenameDialog() {
       }
 
       const rename = `${value.name}${value.ext}`;
-      const validateResult = ValidateName(rename);
-      if (validateResult) {
-        toast.warning(t("page.drive.dialog.rename.#.rename.1"), {
-          description: validateResult,
-        });
+      if (ValidateName(rename)) {
         return;
       }
 
@@ -151,8 +147,11 @@ export function RenameDialog() {
             <form.Field
               name="name"
               validators={{
-                onChange: ({ value }) =>
-                  value.trim() ? undefined : t("page.drive.dialog.rename.#.rename.0"),
+                onChangeListenTo: ["ext"],
+                onChange: ({ value, fieldApi }) =>
+                  value.trim()
+                    ? (ValidateName(`${value}${fieldApi.form.getFieldValue("ext")}`) ?? undefined)
+                    : t("page.drive.dialog.rename.#.rename.0"),
               }}
               children={(field) => (
                 <Field>
@@ -238,7 +237,6 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
       await Drive.CreateDir(id, name);
     },
     onSuccess: async () => {
-      toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
       form.reset();
       dialog.setOpen("createDirDialog", false);
       await queryClient.invalidateQueries();
@@ -253,21 +251,19 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
       }
     },
   });
+  const validateDirName = (name: string) => {
+    if (!name.trim()) return t("page.drive.dialog.create_dir.#.0");
+    if (contents.some((item) => item.isDir && item.name === name)) {
+      return t("page.drive.dialog.create_dir.#.2");
+    }
+    return ValidateName(name) ?? undefined;
+  };
   const form = useForm({
     defaultValues: {
       name: "",
     },
     onSubmit: async ({ value }) => {
-      const validateResult = ValidateName(value.name);
-      if (validateResult) {
-        toast.warning(t("page.drive.dialog.create_dir.#.0"), {
-          description: validateResult,
-        });
-        return;
-      }
-
-      if (contents.some((item) => item.isDir && item.name === value.name)) {
-        toast.warning(t("page.drive.dialog.create_dir.#.2"));
+      if (validateDirName(value.name)) {
         return;
       }
 
@@ -300,8 +296,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
           <form.Field
             name="name"
             validators={{
-              onChange: ({ value }) =>
-                value.trim() ? undefined : t("page.drive.dialog.create_dir.#.0"),
+              onChange: ({ value }) => validateDirName(value),
             }}
             children={(field) => (
               <Field>
@@ -387,12 +382,6 @@ export function DeleteItemsDialog() {
               failed: requestedIds.length - acceptedIds.length,
             }),
             { description: outcome.errorMessage },
-          );
-        } else {
-          toast.success(
-            t("page.drive.dialog.delete_items.#.toast.success", {
-              count: acceptedIds.length,
-            }),
           );
         }
         setSelectedItems([]);

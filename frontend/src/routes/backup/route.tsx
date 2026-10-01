@@ -49,8 +49,6 @@ function RouteComponent() {
     const removeResult = Events.On("backup:result", (event) => {
       const result = event.data as RunResultEvent;
       void queryClient.invalidateQueries({ queryKey: ["backup"] });
-      if (result.outcome === "completed") toast.success(t("page.backup.toast.completed"));
-      if (result.outcome === "unchanged") toast(t("page.backup.toast.unchanged"));
       if (result.outcome === "failed") {
         toast.error(t("page.backup.toast.failed"), {
           description: backupErrorMessage(t, result.error),

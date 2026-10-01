@@ -45,7 +45,6 @@ export function useGameMutations() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
             setIsAddGameDialogOpen(false);
-            toast.success(t("page.mod.hooks.use-mod-mutations.add-game-mutation.success"));
         },
         onError: (error) => {
             const errorMessage = toErrorMessage(error);
@@ -125,7 +124,6 @@ export function useGameMutations() {
             queryClient.removeQueries({ queryKey: ["presets", deletedGame] });
             queryClient.removeQueries({ queryKey: ["modGroup"] });
             void queryClient.invalidateQueries({ queryKey: ["games"] });
-            toast.success(t("page.mod.hooks.use-mod-mutations.delete-game-mutation.success"));
         },
         onError: (err) => {
             toast.error(err.message);
@@ -158,7 +156,6 @@ export function useGameMutations() {
 
             setEditingGame(null);
             setIsEditGameDialogOpen(false);
-            toast.success(t("page.mod.hooks.use-mod-mutations.update-game-mutation.success"));
         },
         onError: (error) => {
             const errorMessage = toErrorMessage(error);
@@ -444,7 +441,6 @@ export function useModMutations() {
             if (refreshedGroup) {
                 updateLocalGroupCache(refreshedGroup);
             }
-            toast.success(t("page.mod.toast.rename-success"));
         },
     });
 
@@ -482,7 +478,6 @@ export function usePresetMutations() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setIsPresetDialogOpen(false);
-            toast.success(t("page.mod.hooks.use-mod-mutations.create-preset-mutation.success"));
         },
         onError: (error) => {
             if (toErrorMessage(error).includes("PRESET_NAME_EXISTS")) {
@@ -527,9 +522,13 @@ export function usePresetMutations() {
             toast.success(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.success"));
         },
         onError: (error) => {
-            if (toErrorMessage(error).includes("LEGACY_PRESET_NOT_SUPPORTED")) {
+            const errorMessage = toErrorMessage(error);
+            if (errorMessage.includes("LEGACY_PRESET_NOT_SUPPORTED")) {
                 toast.error(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.legacy"));
+                return;
             }
+
+            toast.error(errorMessage);
         },
     });
 
@@ -539,7 +538,9 @@ export function usePresetMutations() {
             void queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setSelectedPreset(null);
             setIsSelectedPresetDialogOpen(false);
-            toast.success(t("page.mod.hooks.use-mod-mutations.delete-preset-mutation.success"));
+        },
+        onError: (error) => {
+            toast.error(toErrorMessage(error));
         },
     });
 

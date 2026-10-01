@@ -39,12 +39,7 @@ export function CustomDownloadDialog({
     },
     onSubmit: async ({ value }) => {
       const trimmedUrl = value.url.trim();
-      if (!groupPath || !trimmedUrl) {
-        return;
-      }
-
-      if (!isURL(trimmedUrl)) {
-        toast.warning(t("page.mod.content-header.download_dialog.invalid_url"));
+      if (!groupPath || !isURL(trimmedUrl)) {
         return;
       }
 

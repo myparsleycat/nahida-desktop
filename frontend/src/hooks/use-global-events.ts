@@ -132,7 +132,7 @@ export function useGlobalEvents(
             if (stage === "auto-update" && typeof detail === "string") {
                 toast.warning(i18n.t("page.setting.xxmi.builtin.autoUpdateFailed", { importer }));
             }
-            if (stage === "ini-optimizer" && typeof optimized === "number") {
+            if (stage === "ini-optimizer" && typeof optimized === "number" && optimized > 0) {
                 toast.success(i18n.t("page.setting.xxmi.builtin.optimized", { count: optimized }));
             }
             if (typeof warning === "string" && warning) {

@@ -155,7 +155,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       setPendingFolderChange(null);
       setConfig(null);
       refresh();
-      toast.success(t("page.setting.xxmi.builtin.saved"));
       return true;
     } catch (error) {
       toast.error(toErrorMessage(error));
@@ -165,7 +164,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const finishInstall = async (version: string, allowUnsigned: boolean) => {
     await XXMI.InstallImporterPackage({ importer, version, allowUnsigned });
     refresh();
-    toast.success(t("page.setting.xxmi.builtin.installed"));
   };
   const save = async (next = config) => {
     if (!next) return;
@@ -981,7 +979,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           try {
                             await XXMI.DeleteShortcut(importer);
                             refresh();
-                            toast.success(t("page.setting.xxmi.builtin.shortcutDeleted"));
                           } catch (error) {
                             toast.error(toErrorMessage(error));
                           }

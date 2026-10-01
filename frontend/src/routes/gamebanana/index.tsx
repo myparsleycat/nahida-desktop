@@ -32,7 +32,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import isURL from "validator/lib/isURL";
 
 import type { GameOption } from "./-types";
@@ -294,10 +293,7 @@ function RouteComponent() {
   const handleLogout = () => {
     setIsLoggingOut(true);
     void GameBanana.Logout()
-      .then(async () => {
-        await queryClient.invalidateQueries({ queryKey: ["gamebanana"] });
-        toast.success(t("page.gamebanana.auth.signed_out"));
-      })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["gamebanana"] }))
       .catch((error: unknown) => {
         Logger.error(error, "GameBananaRoute:handleLogout");
         showGameBananaAuthFailureToast(t, getGameBananaAuthErrorCode(error));

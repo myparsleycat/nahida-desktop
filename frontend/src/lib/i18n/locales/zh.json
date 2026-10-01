@@ -115,7 +115,6 @@
       "login_copied": "已复制登录链接",
       "login_copy_failed": "无法复制登录链接",
       "login_cancel": "取消登录",
-      "login_complete": "已使用 ChatGPT 登录",
       "sign_out": "退出登录",
       "model_hint": "从列表中选择模型，或直接输入模型 ID。",
       "catalog_updated": "模型列表：{{date}}",
@@ -136,7 +135,6 @@
       "context_messages": "对话消息",
       "max_output": "最大输出令牌",
       "settings_saved": "已保存 Nahida Agent 设置",
-      "connection_ok": "连接成功",
       "test_connection": "测试连接",
       "secret_configured": "保留已配置密钥",
       "keep": "保留当前值",
@@ -314,7 +312,6 @@
         "download": "下载",
         "rename": "重命名",
         "trash": "回收站",
-        "trash_success": "已将{{count}}个文件和目录移至回收站",
         "new_dir": "创建文件夹",
         "delete": "删除",
         "copy": "复制",
@@ -346,8 +343,7 @@
             "1": "获取创建目录的路径信息失败",
             "2": "已存在同名文件夹。",
             "toast-promise": {
-              "loading": "正在创建目录...",
-              "success": "目录已创建"
+              "loading": "正在创建目录..."
             }
           }
         },
@@ -386,7 +382,6 @@
           "action": "删除",
           "#": {
             "toast": {
-              "success": "已受理{{count}}个项目的删除请求",
               "partial": "已受理{{accepted}}个删除请求，{{failed}}个失败",
               "error": "删除请求失败"
             }
@@ -457,8 +452,6 @@
         }
       },
       "content-header": {
-        "all_enabled": "所有模组已启用",
-        "all_disabled": "所有模组已禁用",
         "tools": "工具",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer",
@@ -573,7 +566,6 @@
         "nte-launch": {
           "title": "指定启动器路径",
           "path_label": "启动器路径",
-          "path_required": "请选择启动器路径。",
           "launch": "保存并启动启动器"
         },
         "gimi-dcr": {
@@ -631,7 +623,6 @@
           "description": "在 {{name}} 下创建一个新文件夹。",
           "name-placeholder": "文件夹名称",
           "#": {
-            "success": "已创建“{{name}}”文件夹",
             "invalid-name": "文件夹名称无效",
             "already-exists": "已存在同名文件夹",
             "failed": "创建文件夹失败"
@@ -641,7 +632,6 @@
           "title": "要删除这个文件夹吗？",
           "description": "确定要删除“{{name}}”文件夹吗？删除后的文件夹可以从回收站恢复。",
           "#": {
-            "success": "已将文件夹移至回收站",
             "failed": "删除文件夹失败"
           }
         },
@@ -745,8 +735,7 @@
             "clean_backups": "删除所有备份文件",
             "clean_backups_desc": "永久删除目标文件夹中的所有 .BAK 文件。此操作无法撤销。",
             "clean_action": "删除...",
-            "warn_clean": "输入 WIPE 以确认：",
-            "clean_success": "已成功清除全部备份！"
+            "warn_clean": "输入 WIPE 以确认："
           },
           "log": {
             "input_placeholder": "输入..."
@@ -809,7 +798,6 @@
       "hooks": {
         "use-mod-mutations": {
           "add-game-mutation": {
-            "success": "游戏已添加",
             "duplicate-game-name": "该游戏名称已存在",
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
             "invalid-params": "请输入游戏名称和模组文件夹路径",
@@ -817,12 +805,6 @@
             "nte_mods_link_conflict": "游戏 Mods 文件夹和自定义模组文件夹都包含文件。链接前请先清空其中一个。",
             "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",
             "nte_custom_mod_folder_inside_link_path": "自定义模组文件夹不能位于游戏 Mods 文件夹路径内，反之亦然。"
-          },
-          "delete-game-mutation": {
-            "success": "游戏已删除"
-          },
-          "update-game-mutation": {
-            "success": "游戏设置已保存"
           },
           "set-game-executable-path": {
             "invalid-path": "所选启动器路径无效。",
@@ -848,7 +830,6 @@
           },
           "locked-description": "正在被以下进程使用: {{processes}}",
           "create-preset-mutation": {
-            "success": "预设已创建",
             "duplicate-name": "该预设名称已存在",
             "conflict-resolve-failed": "部分重复模组文件夹无法自动整理"
           },
@@ -856,9 +837,6 @@
             "legacy": "旧版预设无法套用。请删除后重新建立。",
             "success": "预设已应用",
             "missing": "预设已应用，但有 {{count}} 个模组缺失"
-          },
-          "delete-preset-mutation": {
-            "success": "预设已删除"
           }
         }
       },
@@ -882,28 +860,18 @@
         "find-conflict": "查找冲突模组"
       },
       "toast": {
-        "trash-loading": "移动到回收站中...",
-        "trash-success": "删除成功",
         "trash-error": "删除失败",
         "change-preview-error": "无法更改默认预览图片。",
         "value-required": "请输入数值。",
-        "rename-success": "模组重命名成功",
-        "manual-subgroup-success": "已指定为子分组",
-        "manual-subgroup-remove-success": "已取消子分组指定",
         "paste-preview": {
-          "copying": "正在复制预览...",
-          "success": "预览已更新",
           "copy-error": "复制预览失败",
           "downloading": "正在下载预览...",
           "download-error": "下载预览失败",
-          "saving": "正在保存预览...",
           "save-error": "保存预览失败",
           "no-image": "剪贴板中没有图片、图片 URL 或图片文件。",
           "clipboard-error": "读取剪贴板失败。"
         },
         "preview-drop": {
-          "saving": "正在保存预览...",
-          "success": "预览已更新",
           "error": "保存预览失败",
           "unsupported": "侧边栏只接受 1 个图片或视频文件作为预览拖放。",
           "path-error": "无法解析文件路径。"
@@ -926,7 +894,6 @@
         "cancelled_title": "已取消 GameBanana 登录",
         "cancelled_description": "不登录也可以继续浏览和下载。",
         "sign_in": "登录",
-        "signed_out": "已退出登录。",
         "signed_in_as": "已登录：{{name}}",
         "guest_notice": "不登录也可以浏览和下载不需要登录的模组。点赞需要先登录。",
         "unsupported_title": "无法使用 GameBanana 自动登录",
@@ -1111,7 +1078,6 @@
         "no_visibility": "未找到可判断显示状态的变量或 Position 绑定。请检查原始 INI 的渲染条件。",
         "generate_failed": "无法生成菜单。请检查原始 namespace 及现有菜单冲突。",
         "title": "XXMI 菜单制作器",
-        "loaded": "已加载源文件",
         "draft_restored": "已恢复匹配的草稿",
         "load_failed": "无法加载源文件",
         "no_keys": "未找到可用的 [Key*] 段",
@@ -1508,7 +1474,6 @@
           "complete": "完成"
         },
         "toast": {
-          "loaded": "Touch 草稿已就绪",
           "load_failed": "模组分析失败",
           "created": "已创建 Touch 模组",
           "create_failed": "创建 Touch 模组失败",
@@ -1969,8 +1934,7 @@
           "title": "游戏启动器",
           "description": "选择通过已安装的 XXMI Launcher 还是内置运行时启动游戏。切换后两种方式的设置都会保留。",
           "external": "XXMI Launcher",
-          "builtin": "内置",
-          "changed": "游戏启动器已更改"
+          "builtin": "内置"
         },
         "builtin": {
           "detectGame": "检测游戏文件夹",
@@ -1982,7 +1946,6 @@
           "createShortcut": "创建 Quick Start 快捷方式",
           "shortcutCreated": "已创建桌面快捷方式",
           "deleteShortcut": "删除 Quick Start 快捷方式",
-          "shortcutDeleted": "已删除桌面快捷方式",
           "iniOptimizer": "INI 优化",
           "optimizeAtLaunch": "启动游戏时自动优化",
           "resetOptimizerCache": "重置优化缓存",
@@ -2021,9 +1984,7 @@
           "perfTweakValues": "性能调整数值",
           "checkUpdates": "检查更新",
           "installUpdates": "安装更新",
-          "updatesInstalled": "更新已安装",
           "skipVersion": "跳过此版本",
-          "versionSkipped": "将跳过此版本",
           "startMethod": "启动方式",
           "priority": "进程优先级",
           "initDelay": "DLL 初始化延迟（毫秒）",
@@ -2044,7 +2005,6 @@
           "elevatedCommandWarning": "此命令将以管理员权限运行。",
           "extraLibraries": "附加 DLL 路径（用分号分隔）",
           "root": "导入器根目录",
-          "saved": "已保存 XXMI 设置",
           "externalDetected": "发现外部 XXMI Launcher",
           "externalWarning": "导入前请关闭外部启动器和游戏。每个导入器会在根文件夹下获得独立文件夹，并重新安装软件包。",
           "import": "导入设置",
@@ -2078,7 +2038,6 @@
           "downloadLegacy": "下载旧版运行时",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "下载最新版",
-          "downloaded": "已下载旧版运行时",
           "importLegacy": "导入旧版 ZIP",
           "importedLegacy": "已导入旧版运行时",
           "options": "全局选项",
@@ -2192,16 +2151,13 @@
             }
           },
           "saveXXMIPath": {
-            "success": "XXMI路径已保存",
             "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
           },
           "installDllVersion": {
-            "success": "已应用 XXMI DLL 版本 {{version}}",
             "failed": "应用所选 XXMI DLL 版本失败",
             "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
           },
           "installImporterPackage": {
-            "success": "已应用 {{importer}} 包版本 {{version}}",
             "failed": "应用所选 Importer 包版本失败",
             "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
           }
@@ -2385,8 +2341,6 @@
         "started": "已开始恢复"
       },
       "toast": {
-        "completed": "备份完成",
-        "unchanged": "自上次备份以来没有变化",
         "failed": "备份失败",
         "restored": "恢复完成",
         "restore_failed": "恢复失败"

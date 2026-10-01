@@ -41,7 +41,6 @@ export function XXMIDllVersion({
   const applyVersion = async () => {
     try {
       await XXMI.InstallDLLVersion({ version });
-      toast.success(t("page.setting.xxmi.fn.installDllVersion.success", { version }));
       refetch();
     } catch (error) {
       toast.error(

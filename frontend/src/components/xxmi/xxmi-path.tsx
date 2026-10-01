@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/ale
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import type { XXMIData } from "@renderer/routes/xxmi/index";
+import { toErrorMessage } from "@shared/utils";
 import { InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,16 +19,17 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
   const saveXXMIPath = async () => {
     try {
       await XXMI.SaveXXMIPath(xxmiPath);
-      toast.success(t("page.setting.xxmi.fn.saveXXMIPath.success"));
       setShowAutoSearchAlert(false);
       setCustomPath(null);
       refetch();
-    } catch (rawErr) {
-      const err = (rawErr as Error).message;
-
-      if (err.includes("XXMI Launcher Config.json not found")) {
+    } catch (error) {
+      const message = toErrorMessage(error);
+      if (message.includes("XXMI Launcher Config.json not found")) {
         toast.warning(t("page.setting.xxmi.fn.saveXXMIPath.configNotFound"));
+        return;
       }
+
+      toast.error(message);
     }
   };
 

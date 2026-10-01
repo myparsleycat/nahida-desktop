@@ -403,7 +403,6 @@ export default function BodyShapeTool({
     setSelectedKeys([]);
     commitSelectionHistory(before);
     setWeightVersion((version) => version + 1);
-    toast.success(t("page.tools.body_shape.brush_reset"));
   };
 
   const smoothSelection = () => {

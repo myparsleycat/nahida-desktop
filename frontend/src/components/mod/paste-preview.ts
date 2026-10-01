@@ -23,13 +23,7 @@ export async function pasteModPreview({
         if (files.length > 0) {
             const filePath = files[0];
             if (isPreviewImagePath(filePath)) {
-                const promise = Mod.PastePreview(modPath, filePath, "path", null);
-                toast.promise(promise, {
-                    loading: i18n.t("page.mod.toast.paste-preview.copying"),
-                    success: i18n.t("page.mod.toast.paste-preview.success"),
-                    error: i18n.t("page.mod.toast.paste-preview.copy-error"),
-                });
-                promise
+                Mod.PastePreview(modPath, filePath, "path", null)
                     .then(() => {
                         void queryClient.invalidateQueries({
                             queryKey: ["modGroup", selectedGroupPath],
@@ -37,6 +31,7 @@ export async function pasteModPreview({
                     })
                     .catch((error) => {
                         Logger.capture("components/mod/paste-preview.ts", error);
+                        toast.error(i18n.t("page.mod.toast.paste-preview.copy-error"));
                     });
                 return;
             }
@@ -44,20 +39,18 @@ export async function pasteModPreview({
 
         const text = await navigator.clipboard.readText();
         if (text?.startsWith("http") && isPreviewImagePath(text)) {
-            const promise = Mod.PastePreview(modPath, text, "url", null);
-            toast.promise(promise, {
-                loading: i18n.t("page.mod.toast.paste-preview.downloading"),
-                success: i18n.t("page.mod.toast.paste-preview.success"),
-                error: i18n.t("page.mod.toast.paste-preview.download-error"),
-            });
-            promise
+            // The download can take a while, so the loading toast stays until the preview itself shows the result.
+            const id = toast.loading(i18n.t("page.mod.toast.paste-preview.downloading"));
+            Mod.PastePreview(modPath, text, "url", null)
                 .then(() => {
+                    toast.dismiss(id);
                     void queryClient.invalidateQueries({
                         queryKey: ["modGroup", selectedGroupPath],
                     });
                 })
                 .catch((error) => {
                     Logger.capture("components/mod/paste-preview.ts", error);
+                    toast.error(i18n.t("page.mod.toast.paste-preview.download-error"), { id });
                 });
             return;
         }
@@ -87,13 +80,7 @@ export async function pasteModPreview({
                         return;
                     }
 
-                    const promise = Mod.PastePreview(modPath, base64data, "base64", null);
-                    toast.promise(promise, {
-                        loading: i18n.t("page.mod.toast.paste-preview.saving"),
-                        success: i18n.t("page.mod.toast.paste-preview.success"),
-                        error: i18n.t("page.mod.toast.paste-preview.save-error"),
-                    });
-                    promise
+                    Mod.PastePreview(modPath, base64data, "base64", null)
                         .then(() => {
                             void queryClient.invalidateQueries({
                                 queryKey: ["modGroup", selectedGroupPath],
@@ -101,6 +88,7 @@ export async function pasteModPreview({
                         })
                         .catch((error) => {
                             Logger.capture("components/mod/paste-preview.ts", error);
+                            toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
                         });
                 };
                 reader.readAsDataURL(blob);

@@ -35,7 +35,6 @@ function RouteComponent() {
       await Setting.AdvancedSet(key, value);
     },
     onSuccess: () => {
-      toast.success("설정이 저장되었습니다.");
       void queryClient.invalidateQueries({ queryKey: ["settings", "advanced"] });
     },
     onError: () => {
