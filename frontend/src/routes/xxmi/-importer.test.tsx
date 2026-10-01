@@ -103,6 +103,31 @@ afterEach(() => {
   overview.importers = [];
 });
 
+it("defaults old configs to the existing injector and saves the native selection", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+
+  const injector = screen.getByRole("combobox", {
+    name: /page.setting.xxmi.builtin.injectionMethod/,
+  });
+  expect(injector.textContent).toContain("page.setting.xxmi.builtin.injectionDefault");
+  fireEvent.click(injector);
+  const native = await screen.findByRole("option", {
+    name: "page.setting.xxmi.builtin.injectionNative",
+  });
+  fireEvent.pointerDown(native, { pointerType: "mouse" });
+  fireEvent.click(native);
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ injectionMethod: "Native" }),
+    ),
+  );
+});
+
 it("requires a fresh unsigned confirmation for each selected release", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.InstallImporterPackage.mockResolvedValue(undefined);

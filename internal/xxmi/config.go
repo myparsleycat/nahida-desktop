@@ -113,6 +113,7 @@ type ImporterConfig struct {
 	UseLaunchOptions   bool                `json:"useLaunchOptions"`
 	LaunchOptions      string              `json:"launchOptions"`
 	ProcessStartMethod string              `json:"processStartMethod"`
+	InjectionMethod    string              `json:"injectionMethod"`
 	ProcessPriority    string              `json:"processPriority"`
 	ProcessTimeout     int                 `json:"processTimeout"`
 	XXMIDLLInitDelay   int                 `json:"xxmiDLLInitDelay"`
@@ -163,7 +164,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	cfg := ImporterConfig{
 		SchemaVersion: 1, Mode: RuntimeXXMI,
 		PackageVersion: VersionPin{Follow: "latest"}, XXMIVersion: VersionPin{Follow: "latest"},
-		ImporterFolder: filepath.Join(root, key), ProcessStartMethod: "Native",
+		ImporterFolder: filepath.Join(root, key), ProcessStartMethod: "Native", InjectionMethod: "Default",
 		ProcessPriority: "Normal", ProcessTimeout: 30, WindowMode: "Borderless",
 		UseLaunchOptions: true, OverwriteINI: true, ConfigureGame: true,
 		RunPreLaunch: CommandHook{Wait: true}, RunPostLoad: CommandHook{Wait: true},

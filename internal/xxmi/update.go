@@ -199,7 +199,8 @@ func updateAvailable(latest, installed, skipped string) bool {
 }
 
 func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
-	return cfg.Mode == RuntimeLegacy && cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0
+	return cfg.Mode == RuntimeLegacy && cfg.InjectionMethod != "Native" &&
+		cfg.ExtraLibraries.Enabled && len(cfg.ExtraLibraries.Paths) > 0
 }
 
 func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {

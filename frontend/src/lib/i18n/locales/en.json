@@ -2238,6 +2238,10 @@
           "unsigned": "Unsigned",
           "commands": "Custom commands",
           "injectMode": "Injection mode",
+          "injectionMethod": "DLL injector",
+          "injectionMethodDescription": "Native uses LoadLibraryW to inject the runtime and extra DLLs directly into x64 games. It replaces hook injection; Bypass injects only extra DLLs.",
+          "injectionDefault": "Existing launcher",
+          "injectionNative": "Native (Go)",
           "leaveTitle": "Discard changes?",
           "leaveDescription": "Your unsaved changes will be lost.",
           "leaveConfirm": "Discard and leave"

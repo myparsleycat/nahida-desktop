@@ -22,6 +22,9 @@ func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := ValidateLaunchSpec(spec); err != nil {
 		return LaunchResult{}, err
 	}
+	if spec.InjectionMethod == "Native" {
+		return launchNative(ctx, spec)
+	}
 	if spec.InjectMode == "Bypass" {
 		return launchBypass(ctx, spec)
 	}
