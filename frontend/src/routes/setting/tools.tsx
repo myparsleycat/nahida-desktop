@@ -2,6 +2,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
@@ -46,24 +47,17 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.tools.wuwaFixer.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span
-                id={WUWA_FIXER_AUTO_UPDATE_NOTIFICATION_LABEL_ID}
-                className="text-sm font-medium"
-              >
-                {t("page.setting.tools.wuwaFixer.autoUpdateNotification.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.tools.wuwaFixer.autoUpdateNotification.description")}
-              </p>
-            </div>
+          <SectionRow
+            titleId={WUWA_FIXER_AUTO_UPDATE_NOTIFICATION_LABEL_ID}
+            title={t("page.setting.tools.wuwaFixer.autoUpdateNotification.title")}
+            description={t("page.setting.tools.wuwaFixer.autoUpdateNotification.description")}
+          >
             <Switch
               checked={settings.wuwaFixerUpdateNotification}
               aria-labelledby={WUWA_FIXER_AUTO_UPDATE_NOTIFICATION_LABEL_ID}
               onCheckedChange={(val) => void handleWuwaFixerUpdateNotificationChange(val)}
             />
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
     </div>

@@ -5,6 +5,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
@@ -69,19 +70,16 @@ export default function TogglePersistence() {
   return (
     <div className="flex flex-col space-y-4 p-4">
       <SectionContent>
-        <div className="flex w-full flex-row items-center justify-between">
-          <div className="flex flex-col space-y-1">
-            <h3 className="text font-semibold">{t("page.setting.xxmi.persistToggles")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t("page.setting.xxmi.persistTogglesDescription")}
-            </p>
-          </div>
+        <SectionRow
+          title={t("page.setting.xxmi.persistToggles")}
+          description={t("page.setting.xxmi.persistTogglesDescription")}
+        >
           <Switch
             checked={!!enabled}
             onCheckedChange={(c) => mutate(c)}
             disabled={isQueryPending || isMutatePending}
           />
-        </div>
+        </SectionRow>
       </SectionContent>
 
       <Section className="h-80">

@@ -4,6 +4,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -55,15 +56,10 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.drive.sorting.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.drive.nameSortPolicy.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.drive.nameSortPolicy.description")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.drive.nameSortPolicy.title")}
+            description={t("page.setting.drive.nameSortPolicy.description")}
+          >
             <Select
               value={settings.nameSortPolicy}
               items={[
@@ -92,7 +88,7 @@ function RouteComponent() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
 
@@ -101,20 +97,15 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.drive.import.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.drive.autoTryPasswords.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.drive.autoTryPasswords.description")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.drive.autoTryPasswords.title")}
+            description={t("page.setting.drive.autoTryPasswords.description")}
+          >
             <Switch
               checked={settings.autoTryPasswords}
               onCheckedChange={(val) => update("autoTryPasswords", val)}
             />
-          </div>
+          </SectionRow>
           <PasswordListSetting
             value={settings.passwordList}
             onChange={(value) => update("passwordList", value)}

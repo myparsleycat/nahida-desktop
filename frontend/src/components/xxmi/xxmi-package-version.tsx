@@ -1,5 +1,6 @@
 import { XXMI } from "@bindings/xxmi";
 import { Button } from "@renderer/components/ui/button";
+import { SectionRow } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -82,15 +83,12 @@ function XXMIImporterPackageRow({
   };
 
   return (
-    <div className="flex items-center justify-between gap-6">
-      <div className="space-y-0.5">
-        <span className="text-sm font-medium">{importer.key}</span>
-        <p className="text-xs text-muted-foreground">
-          {t("page.setting.xxmi.packageVersionCurrent", {
-            version: currentVersionLabel ?? t("page.setting.xxmi.packageVersionUnknown"),
-          })}
-        </p>
-      </div>
+    <SectionRow
+      title={importer.key}
+      description={t("page.setting.xxmi.packageVersionCurrent", {
+        version: currentVersionLabel ?? t("page.setting.xxmi.packageVersionUnknown"),
+      })}
+    >
       <div className="flex shrink-0 items-center gap-2">
         {query.isError ? (
           <>
@@ -142,7 +140,7 @@ function XXMIImporterPackageRow({
           </>
         )}
       </div>
-    </div>
+    </SectionRow>
   );
 }
 

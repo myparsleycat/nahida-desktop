@@ -1,5 +1,6 @@
 import { XXMI } from "@bindings/xxmi";
 import { Button } from "@renderer/components/ui/button";
+import { SectionRow } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -52,20 +53,21 @@ export function XXMIDllVersion({
   };
 
   return (
-    <div className="flex items-center justify-between gap-6">
-      <div className="space-y-0.5">
-        <span className="text-sm font-medium">{t("page.setting.xxmi.dllVersion")}</span>
-        <p className="text-xs text-muted-foreground">
+    <SectionRow
+      title={t("page.setting.xxmi.dllVersion")}
+      description={
+        <>
           {t("page.setting.xxmi.dllVersionDescription")}
-        </p>
-        {hasPath && (
-          <p className="text-xs text-muted-foreground">
-            {t("page.setting.xxmi.dllVersionCurrent", {
-              version: currentVersionLabel ?? t("page.setting.xxmi.dllVersionUnknown"),
-            })}
-          </p>
-        )}
-      </div>
+          {hasPath && (
+            <span className="mt-0.5 block">
+              {t("page.setting.xxmi.dllVersionCurrent", {
+                version: currentVersionLabel ?? t("page.setting.xxmi.dllVersionUnknown"),
+              })}
+            </span>
+          )}
+        </>
+      }
+    >
       <div className="flex shrink-0 items-center gap-2">
         {xxmiData && !hasPath ? (
           <p className="text-sm text-muted-foreground">
@@ -125,7 +127,7 @@ export function XXMIDllVersion({
           </>
         )}
       </div>
-    </div>
+    </SectionRow>
   );
 }
 

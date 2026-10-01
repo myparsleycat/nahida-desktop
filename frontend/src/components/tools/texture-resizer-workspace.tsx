@@ -22,6 +22,7 @@ import {
   Section,
   SectionDescription,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
@@ -555,21 +556,17 @@ export function TextureResizerWorkspace({
                 return (
                   <div className="space-y-3 pr-4">
                     {dialogTextures.length > 1 && (
-                      <div className="flex items-center justify-between rounded-md bg-muted/50 p-3">
-                        <div>
-                          <div className="text-sm font-medium">
-                            {t("page.tools.texture_resizer.bulk_apply")}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {t("page.tools.texture_resizer.bulk_apply_description")}
-                          </div>
-                        </div>
+                      <SectionRow
+                        className="rounded-md bg-muted/50 p-3"
+                        title={t("page.tools.texture_resizer.bulk_apply")}
+                        description={t("page.tools.texture_resizer.bulk_apply_description")}
+                      >
                         <Switch
                           checked={bulkApply}
                           onCheckedChange={handleBulkApplyChange}
                           disabled={batchProgress != null}
                         />
-                      </div>
+                      </SectionRow>
                     )}
                     {!bulkApply && dialogTextures.length > 1 && (
                       <div className="flex flex-wrap gap-1">
