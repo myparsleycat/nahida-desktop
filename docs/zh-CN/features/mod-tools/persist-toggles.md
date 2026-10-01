@@ -12,6 +12,14 @@
 
 这样一来，即使禁用模组或重新加载模组，也可以继续保留之前的切换状态。
 
+## 复制的模组与 namespace
+
+Nahida Desktop 会根据实际 namespace 查找声明各个持久变量的 INI，包括通过 `namespace = ...` 显式指定的名称。如果主体和 help、菜单 INI 声明的是不同变量，即使共享 namespace，也会分别保存。
+
+如果多个 INI 在同一个 namespace 中声明了同一个变量，Nahida Desktop 会跳过该变量的保存，并在持久化日志中记录冲突文件的路径。切换模组时保存的值可能仍属于之前加载的副本，因此禁用的副本也会参与冲突检查。没有冲突的其他变量仍会正常保存。
+
+修改文件夹名称不会改变显式 namespace。要让各副本的游戏内状态相互独立，需要为每个副本设置不同的 namespace，并同步修改其 help、菜单 INI 中的相关引用。Nahida Desktop 不会自动改写 namespace 或引用。
+
 ## 使用前确认事项
 
 ::: warning

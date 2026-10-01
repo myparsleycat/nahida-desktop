@@ -385,11 +385,11 @@ func fingerprintTogglePersistINI(content string) string {
 	inConstants := false
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))
 		if strings.HasPrefix(trimmed, "[") {
 			inConstants = strings.EqualFold(trimmed, "[Constants]")
 		}
-		if inConstants && regexp.MustCompile(`(?i)^global\s+persist\s+\$`).MatchString(trimmed) {
+		if inConstants && persistDeclarationRE.MatchString(trimmed) {
 			out = append(out, persistValueRE.ReplaceAllString(line, "${1}<persist-value>"))
 			continue
 		}
