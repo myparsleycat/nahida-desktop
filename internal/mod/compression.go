@@ -106,11 +106,21 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 		return err
 	}
 	m.compression.stopped.Store(false)
+	m.RefreshCompressionImporters(ctx)
+	return nil
+}
+
+// RefreshCompressionImporters updates watched mod folders and queues a full pass for the current selection.
+//
+//wails:ignore
+func (m *Mod) RefreshCompressionImporters(ctx context.Context) {
+	if m == nil || m.compression == nil || m.compression.stopped.Load() {
+		return
+	}
 	if err := m.compression.replaceWatcher(ctx); err != nil {
-		m.compression.logError(err, "watch", "", "")
+		m.compression.logError(err, "refresh-importers", "", "")
 	}
 	m.compression.schedule()
-	return nil
 }
 
 // WaitCompressionPass waits for the reconciliation run started by

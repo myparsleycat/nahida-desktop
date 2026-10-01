@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
     xxmiPath: "C:\XXMI Launcher",
     dllVersion: "v1.7.6",
     enabledImporters: [{ key: "GIMI", installedVersion: "1.2.3" }],
+    disabledImporters: [{ key: "SRMI", installedVersion: "4.5.6" }],
   },
   overview: {
     configured: true,
@@ -99,6 +100,20 @@ it("shows the external launcher settings instead of the built-in runtime in exte
   expect(
     screen.getByRole("button", { name: "page.setting.xxmi.launcherMode.external" }),
   ).toHaveProperty("disabled", true);
+});
+
+it("reveals disabled external importers only when asked", () => {
+  state.launcherMode = "external";
+
+  render(<XXMIDashboard />);
+
+  expect(screen.queryByText("SRMI")).toBeNull();
+
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "page.setting.xxmi.showDisabledImporters" }),
+  );
+
+  expect(screen.getByText("SRMI").closest("button")?.getAttribute("aria-disabled")).toBe("true");
 });
 
 it("keeps the package controls visible when a cache is damaged", () => {
