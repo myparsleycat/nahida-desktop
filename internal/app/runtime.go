@@ -159,6 +159,7 @@ func newRuntime() *runtime {
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
 		GameBanana: gameBananaService, Native: native,
 	})
+	xxmiService.UseExternalImportersChanged(modService.RefreshCompressionImporters)
 	download.UseClient(httpClient)
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)

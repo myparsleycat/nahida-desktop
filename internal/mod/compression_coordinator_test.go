@@ -3,6 +3,7 @@ package mod
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -763,6 +764,93 @@ func TestZstdTempsDoNotRestartWatcher(t *testing.T) {
 	if running || pending {
 		t.Fatalf("validation restarted watcher: running=%v pending=%v", running, pending)
 	}
+}
+
+type externalCompressionImporterSource struct {
+	settings       *setting.Setting
+	importerFolder string
+}
+
+func (s externalCompressionImporterSource) GetEnabledImporters(ctx context.Context) ([]xxmi.EnabledImporter, error) {
+	stored, err := s.settings.Client().Settings.GetValue(ctx, "xxmi.disabledImporters")
+	if err != nil {
+		return nil, err
+	}
+	var disabled []string
+	if stored != nil {
+		if err := json.Unmarshal([]byte(*stored), &disabled); err != nil {
+			return nil, err
+		}
+	}
+	if slices.Contains(disabled, "GIMI") {
+		return nil, nil
+	}
+	return []xxmi.EnabledImporter{{Key: "GIMI", ImporterFolder: s.importerFolder}}, nil
+}
+
+func TestExternalImporterEnableRefreshesCompression(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	importer := filepath.Join(base, "GIMI")
+	folder := filepath.Join(importer, "Mods", "DISABLED Watched")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(ctx, "zstd", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	service := xxmi.New()
+	service.UseClient(settings.Client())
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", false); err != nil {
+		t.Fatal(err)
+	}
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     externalCompressionImporterSource{settings: settings, importerFolder: importer},
+	})
+	m.UseClient(settings.Client())
+	service.UseExternalImportersChanged(m.RefreshCompressionImporters)
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	if err := m.StartCompression(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+
+	payload := bytes.Repeat([]byte("reenabled-importer"), 128*1024)
+	existing := filepath.Join(folder, "existing.bin")
+	if err := os.WriteFile(existing, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", true); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, m.compression)
+	if _, err := os.Stat(existing + managedZstdExtension); err != nil {
+		t.Fatalf("re-enabled importer's existing file was not compressed: %v", err)
+	}
+
+	added := filepath.Join(folder, "added.bin")
+	if err := os.WriteFile(added, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(added + managedZstdExtension); err == nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("re-enabled importer's new file was not compressed by the watcher")
 }
 
 func TestCompressionWatcherMergesMultipleModScopes(t *testing.T) {

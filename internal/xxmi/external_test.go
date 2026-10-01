@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -185,6 +186,76 @@ func TestExternalModeTreatsCorruptConfigAsUnconfigured(t *testing.T) {
 	}
 	if err := service.StartGame(ctx, "GIMI"); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("start error = %v", err)
+	}
+}
+
+func TestSetExternalImporterEnabledHidesImporterFromConsumers(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	writeXXMITestConfig(t, root)
+	service := New()
+	service.UseClient(newXXMITestClient(t))
+	useExternalLauncher(t, service, root)
+	var changes []int
+	service.UseExternalImportersChanged(func(ctx context.Context) {
+		importers, err := service.GetEnabledImporters(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changes = append(changes, len(importers))
+	})
+
+	if err := service.SetExternalImporterEnabled(ctx, "unknown", false); err == nil {
+		t.Fatal("unknown importer was accepted")
+	}
+	if !service.acquireImporter("GIMI") {
+		t.Fatal("acquire importer")
+	}
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", false); err == nil || err.Error() != "XXMI_BUSY" {
+		t.Fatalf("error = %v, want XXMI_BUSY", err)
+	}
+	service.releaseImporter("GIMI")
+	if len(changes) != 0 {
+		t.Fatalf("failed changes notified consumers: %v", changes)
+	}
+
+	if err := service.SetExternalImporterEnabled(ctx, "gimi", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", false); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(changes, []int{0}) {
+		t.Fatalf("disable notifications = %v, want [0]", changes)
+	}
+	data, err := service.GetXXMIData(ctx)
+	if err != nil || len(data.EnabledImporters) != 0 ||
+		len(data.DisabledImporters) != 1 || data.DisabledImporters[0].Key != "GIMI" {
+		t.Fatalf("data after disable = %+v, %v", data, err)
+	}
+	if _, err := service.ResolveHuntingRuntime(ctx, "GIMI"); err == nil {
+		t.Fatal("hunting runtime resolved for a disabled importer")
+	}
+	if err := service.StartGame(ctx, "GIMI"); err == nil || !strings.Contains(err.Error(), "is disabled") {
+		t.Fatalf("start error = %v", err)
+	}
+	detected, err := service.DetectExternalLauncher(ctx)
+	if err != nil || len(detected.Importers) != 1 || detected.Importers[0] != "GIMI" {
+		t.Fatalf("detected = %+v, %v", detected, err)
+	}
+
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetExternalImporterEnabled(ctx, "GIMI", true); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(changes, []int{0, 1}) {
+		t.Fatalf("enable notifications = %v, want [0 1]", changes)
+	}
+	data, err = service.GetXXMIData(ctx)
+	if err != nil || len(data.EnabledImporters) != 1 || len(data.DisabledImporters) != 0 {
+		t.Fatalf("data after enable = %+v, %v", data, err)
 	}
 }
 

@@ -24,11 +24,16 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+// externalDisabledImportersKey stores the importers the user turned off for this app as a JSON array.
+// The launcher's own config is left untouched.
+const externalDisabledImportersKey = "xxmi.disabledImporters"
+
 // externalLauncher is a validated snapshot of an external XXMI Launcher installation.
 type externalLauncher struct {
-	path   string
-	config map[string]any
-	parsed parsedConfig
+	path     string
+	config   map[string]any
+	parsed   parsedConfig
+	disabled map[string]struct{}
 }
 
 func (l externalLauncher) configPath() string {
@@ -43,9 +48,46 @@ func (l externalLauncher) importerFolder(key string) string {
 	return filepath.Clean(folder)
 }
 
-func (l externalLauncher) enabled(key string) bool {
+// available reports whether the launcher itself has the importer set up.
+func (l externalLauncher) available(key string) bool {
 	_, configured := l.parsed.Importers[key]
 	return configured && strings.TrimSpace(l.parsed.Packages.Packages[key].LatestVersion) != ""
+}
+
+func (l externalLauncher) enabled(key string) bool {
+	_, disabled := l.disabled[key]
+	return !disabled && l.available(key)
+}
+
+// importers lists the importers accepted by include, sorted by key.
+func (l externalLauncher) importers(include func(key string) bool) []EnabledImporter {
+	keys := make([]string, 0, len(l.parsed.Importers))
+	for key := range l.parsed.Importers {
+		if include(key) {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+
+	out := make([]EnabledImporter, 0, len(keys))
+	for _, key := range keys {
+		folder := l.importerFolder(key)
+		var installed *string
+		if spec, ok := lookupImporterPackage(key); ok {
+			installed = readImporterVersion(folder, spec)
+		}
+		gameFolder := l.parsed.Importers[key].Importer.GameFolder
+		if gameFolder != "" && !filepath.IsAbs(gameFolder) {
+			gameFolder = filepath.Join(l.path, gameFolder)
+		}
+		info := l.parsed.Packages.Packages[key]
+		out = append(out, EnabledImporter{
+			Key: key, Mode: RuntimeXXMI, ImporterFolder: folder, GameFolder: gameFolder,
+			InstalledVersion: installed, PackageInfo: info,
+			UpdateAvailable: updateAvailable(info.LatestVersion, info.DeployedVersion, info.SkippedVersion),
+		})
+	}
+	return out
 }
 
 // loadExternalLauncher returns nil when no external launcher path is saved. An unreadable
@@ -63,7 +105,98 @@ func (x *XXMI) loadExternalLauncher(ctx context.Context) (*externalLauncher, err
 		})
 		return nil, nil
 	}
-	return &externalLauncher{path: *path, config: config, parsed: parsed}, nil
+	disabled, err := x.externalDisabledImporters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &externalLauncher{path: *path, config: config, parsed: parsed, disabled: disabled}, nil
+}
+
+func (x *XXMI) externalDisabledImporters(ctx context.Context) (map[string]struct{}, error) {
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
+	}
+	stored, err := client.Settings.GetValue(ctx, externalDisabledImportersKey)
+	if err != nil || stored == nil || *stored == "" {
+		return nil, err
+	}
+	var keys []string
+	if err := json.Unmarshal([]byte(*stored), &keys); err != nil {
+		return nil, fmt.Errorf("decode disabled XXMI importers: %w", err)
+	}
+	disabled := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		disabled[key] = struct{}{}
+	}
+	return disabled, nil
+}
+
+// SetExternalImporterEnabled hides an external launcher importer from this app or shows it again.
+func (x *XXMI) SetExternalImporterEnabled(ctx context.Context, key string, enabled bool) error {
+	spec, ok := lookupImporterPackage(key)
+	if !ok {
+		return fmt.Errorf("unknown importer %q", key)
+	}
+	client, err := x.settingsClient()
+	if err != nil {
+		return err
+	}
+	if !x.acquireImporter(spec.key) {
+		return errors.New("XXMI_BUSY")
+	}
+	defer x.releaseImporter(spec.key)
+
+	// Notify consumers after disabledMu is released so they can read the saved selection.
+	changed := false
+	defer func() {
+		if !changed {
+			return
+		}
+		x.mu.RLock()
+		notify := x.externalImportersChanged
+		x.mu.RUnlock()
+		if notify != nil {
+			notify(ctx)
+		}
+	}()
+
+	x.disabledMu.Lock()
+	defer x.disabledMu.Unlock()
+	disabled, err := x.externalDisabledImporters(ctx)
+	if err != nil {
+		return err
+	}
+	if _, isDisabled := disabled[spec.key]; isDisabled != enabled {
+		return nil
+	}
+	keys := make([]string, 0, len(disabled)+1)
+	for stored := range disabled {
+		if stored != spec.key {
+			keys = append(keys, stored)
+		}
+	}
+	if !enabled {
+		keys = append(keys, spec.key)
+	}
+	slices.Sort(keys)
+
+	value, err := json.Marshal(keys)
+	if err != nil {
+		return err
+	}
+	encoded := string(value)
+	if err := client.Settings.Upsert(ctx, externalDisabledImportersKey, &encoded); err != nil {
+		return err
+	}
+	changed = true
+	if x.log != nil {
+		x.log.Info(
+			fmt.Sprintf("Set external XXMI importer %s enabled=%t", spec.key, enabled),
+			"XXMI.setExternalImporterEnabled",
+		)
+	}
+	return nil
 }
 
 func (x *XXMI) requireExternalLauncher(ctx context.Context) (*externalLauncher, error) {
@@ -110,33 +243,7 @@ func (x *XXMI) externalEnabledImporters(ctx context.Context) ([]EnabledImporter,
 	if err != nil || launcher == nil {
 		return []EnabledImporter{}, err
 	}
-	keys := make([]string, 0, len(launcher.parsed.Importers))
-	for key := range launcher.parsed.Importers {
-		if launcher.enabled(key) {
-			keys = append(keys, key)
-		}
-	}
-	slices.Sort(keys)
-
-	out := make([]EnabledImporter, 0, len(keys))
-	for _, key := range keys {
-		folder := launcher.importerFolder(key)
-		var installed *string
-		if spec, ok := lookupImporterPackage(key); ok {
-			installed = readImporterVersion(folder, spec)
-		}
-		gameFolder := launcher.parsed.Importers[key].Importer.GameFolder
-		if gameFolder != "" && !filepath.IsAbs(gameFolder) {
-			gameFolder = filepath.Join(launcher.path, gameFolder)
-		}
-		info := launcher.parsed.Packages.Packages[key]
-		out = append(out, EnabledImporter{
-			Key: key, Mode: RuntimeXXMI, ImporterFolder: folder, GameFolder: gameFolder,
-			InstalledVersion: installed, PackageInfo: info,
-			UpdateAvailable: updateAvailable(info.LatestVersion, info.DeployedVersion, info.SkippedVersion),
-		})
-	}
-	return out, nil
+	return launcher.importers(launcher.enabled), nil
 }
 
 func (x *XXMI) externalHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
@@ -188,6 +295,9 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
 	config, ok := launcher.parsed.Importers[importer]
 	if !ok {
 		return fmt.Errorf("importer %s not found", importer)
+	}
+	if _, disabled := launcher.disabled[importer]; disabled {
+		return fmt.Errorf("importer %s is disabled", importer)
 	}
 	processName := externalGameProcessName(importer, config.Importer.GameEXENames)
 	if processName == "" {

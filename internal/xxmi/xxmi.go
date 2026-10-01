@@ -69,6 +69,8 @@ type Data struct {
 	XXMIPath         *string           `json:"xxmiPath"`
 	DLLVersion       *string           `json:"dllVersion"`
 	EnabledImporters []EnabledImporter `json:"enabledImporters"`
+	// DisabledImporters lists external launcher importers the user turned off for this app.
+	DisabledImporters []EnabledImporter `json:"disabledImporters"`
 }
 
 // HuntingRuntime is the resolved on-disk and process metadata a high-level
@@ -99,16 +101,19 @@ type parsedConfig struct {
 }
 
 type XXMI struct {
-	mu          sync.RWMutex
-	packageMu   sync.Mutex
-	client      *db.Client
-	log         *infra.Log
-	github      *github.Client
-	archive     *infra.Archive
-	elevated    elevatedLauncher
-	eventEmit   func(string, ...any)
-	searchRoots func() ([]string, error)
-	busy        map[string]bool
+	mu        sync.RWMutex
+	packageMu sync.Mutex
+	// disabledMu serializes read-modify-write updates of the disabled external importer list.
+	disabledMu               sync.Mutex
+	client                   *db.Client
+	log                      *infra.Log
+	github                   *github.Client
+	archive                  *infra.Archive
+	elevated                 elevatedLauncher
+	eventEmit                func(string, ...any)
+	searchRoots              func() ([]string, error)
+	busy                     map[string]bool
+	externalImportersChanged func(context.Context)
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 }
@@ -138,6 +143,15 @@ func NewWithOptions(opts Options) *XXMI {
 func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Lock()
 	x.client = client
+	x.mu.Unlock()
+}
+
+// UseExternalImportersChanged registers a backend consumer of external importer selection changes.
+//
+//wails:ignore
+func (x *XXMI) UseExternalImportersChanged(changed func(context.Context)) {
+	x.mu.Lock()
+	x.externalImportersChanged = changed
 	x.mu.Unlock()
 }
 
@@ -194,6 +208,15 @@ func (x *XXMI) GetXXMIData(ctx context.Context) (Data, error) {
 	data := Data{Mode: mode, XXMIPath: root, EnabledImporters: importers}
 	if mode == LauncherExternal {
 		data.DLLVersion = dllVersion(root)
+		launcher, err := x.loadExternalLauncher(ctx)
+		if err != nil {
+			return Data{}, err
+		}
+		if launcher != nil {
+			data.DisabledImporters = launcher.importers(func(key string) bool {
+				return launcher.available(key) && !launcher.enabled(key)
+			})
+		}
 	}
 	return data, nil
 }
