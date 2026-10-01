@@ -115,7 +115,6 @@
       "login_copied": "サインインリンクをコピーしました",
       "login_copy_failed": "サインインリンクをコピーできませんでした",
       "login_cancel": "サインインをキャンセル",
-      "login_complete": "ChatGPT でサインインしました",
       "sign_out": "サインアウト",
       "model_hint": "一覧からモデルを選ぶか、モデル ID を直接入力してください。",
       "catalog_updated": "モデル一覧: {{date}}",
@@ -136,7 +135,6 @@
       "context_messages": "会話メッセージ",
       "max_output": "最大出力トークン",
       "settings_saved": "Nahida Agent の設定を保存しました",
-      "connection_ok": "接続に成功しました",
       "test_connection": "接続テスト",
       "secret_configured": "設定済みキーを維持",
       "keep": "現在の値を維持",
@@ -315,7 +313,6 @@
         "download": "ダウンロード",
         "rename": "名前を変更",
         "trash": "ゴミ箱",
-        "trash_success": "{{count}}個のファイルとディレクトリをゴミ箱に移動しました",
         "new_dir": "フォルダー作成",
         "delete": "削除",
         "copy": "コピー",
@@ -347,8 +344,7 @@
             "1": "ディレクトリを作成するパス情報の取得に失敗しました",
             "2": "同じ名前のフォルダーが既に存在します。",
             "toast-promise": {
-              "loading": "ディレクトリを作成しています...",
-              "success": "ディレクトリが作成されました"
+              "loading": "ディレクトリを作成しています..."
             }
           }
         },
@@ -387,7 +383,6 @@
           "action": "削除",
           "#": {
             "toast": {
-              "success": "{{count}}件の削除リクエストを受け付けました",
               "partial": "{{accepted}}件の削除リクエストを受け付け、{{failed}}件は失敗しました",
               "error": "削除リクエストに失敗しました"
             }
@@ -458,8 +453,6 @@
         }
       },
       "content-header": {
-        "all_enabled": "すべてのMODが有効になりました",
-        "all_disabled": "すべてのMODが無効になりました",
         "tools": "ツール",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer",
@@ -574,7 +567,6 @@
         "nte-launch": {
           "title": "ランチャーパスを指定",
           "path_label": "ランチャーのパス",
-          "path_required": "ランチャーのパスを選択してください。",
           "launch": "保存してランチャーを起動"
         },
         "gimi-dcr": {
@@ -632,7 +624,6 @@
           "description": "{{name}} の下に新しいフォルダーを作成します。",
           "name-placeholder": "フォルダー名",
           "#": {
-            "success": "\"{{name}}\" フォルダーを作成しました",
             "invalid-name": "フォルダー名が無効です",
             "already-exists": "同じ名前のフォルダーが既に存在します",
             "failed": "フォルダーの作成に失敗しました"
@@ -642,7 +633,6 @@
           "title": "フォルダーを削除しますか？",
           "description": "「{{name}}」を削除しますか？削除したフォルダーはゴミ箱から復元できます。",
           "#": {
-            "success": "フォルダーをゴミ箱に移動しました",
             "failed": "フォルダーの削除に失敗しました"
           }
         },
@@ -746,8 +736,7 @@
             "clean_backups": "すべてのバックアップを削除",
             "clean_backups_desc": "対象フォルダ内のすべての .BAK ファイルを完全に削除します。この操作は元に戻せません。",
             "clean_action": "削除...",
-            "warn_clean": "確認のため WIPE と入力:",
-            "clean_success": "バックアップをすべて削除しました！"
+            "warn_clean": "確認のため WIPE と入力:"
           },
           "log": {
             "input_placeholder": "入力..."
@@ -810,7 +799,6 @@
       "hooks": {
         "use-mod-mutations": {
           "add-game-mutation": {
-            "success": "ゲームを追加しました",
             "duplicate-game-name": "そのゲーム名は既に存在します",
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
             "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
@@ -818,12 +806,6 @@
             "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
             "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
             "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーはゲームの Mods フォルダーパス内、またはその逆の関係にはできません。"
-          },
-          "delete-game-mutation": {
-            "success": "ゲームを削除しました"
-          },
-          "update-game-mutation": {
-            "success": "ゲーム設定を保存しました"
           },
           "set-game-executable-path": {
             "invalid-path": "選択したランチャーのパスが無効です。",
@@ -849,7 +831,6 @@
           },
           "locked-description": "使用中のプロセス: {{processes}}",
           "create-preset-mutation": {
-            "success": "プリセットを追加しました",
             "duplicate-name": "そのプリセット名は既に存在します",
             "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした"
           },
@@ -857,9 +838,6 @@
             "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。",
             "success": "プリセットを適用しました",
             "missing": "プリセットを適用しましたが、{{count}} 個のMODが見つかりませんでした"
-          },
-          "delete-preset-mutation": {
-            "success": "プリセットを削除しました"
           }
         }
       },
@@ -883,28 +861,18 @@
         "find-conflict": "競合モードを探す"
       },
       "toast": {
-        "trash-loading": "ゴミ箱に移動中...",
-        "trash-success": "削除完了",
         "trash-error": "削除失敗",
         "change-preview-error": "デフォルトのプレビュー画像を変更できませんでした。",
         "value-required": "値を入力してください。",
-        "rename-success": "MOD名を変更しました",
-        "manual-subgroup-success": "サブグループとして指定しました",
-        "manual-subgroup-remove-success": "サブグループ指定を解除しました",
         "paste-preview": {
-          "copying": "プレビューをコピー中...",
-          "success": "プレビューを更新しました",
           "copy-error": "プレビューのコピーに失敗しました",
           "downloading": "プレビューをダウンロード中...",
           "download-error": "プレビューのダウンロードに失敗しました",
-          "saving": "プレビューを保存中...",
           "save-error": "プレビューの保存に失敗しました",
           "no-image": "クリップボードに画像、画像URL、または画像ファイルがありません。",
           "clipboard-error": "クリップボードの読み取りに失敗しました。"
         },
         "preview-drop": {
-          "saving": "プレビューを保存中...",
-          "success": "プレビューを更新しました",
           "error": "プレビューの保存に失敗しました",
           "unsupported": "サイドバーには画像または動画ファイルを1つだけプレビューとしてドロップできます。",
           "path-error": "ファイルパスを取得できません。"
@@ -927,7 +895,6 @@
         "cancelled_title": "GameBanana ログインがキャンセルされました",
         "cancelled_description": "ログインしなくても閲覧とダウンロードは続けられます。",
         "sign_in": "ログイン",
-        "signed_out": "ログアウトしました。",
         "signed_in_as": "{{name}} としてログイン中",
         "guest_notice": "ログインしなくても閲覧と、ログインが不要な MOD のダウンロードができます。いいねするにはログインしてください。",
         "unsupported_title": "GameBanana の自動ログインは利用できません",
@@ -1112,7 +1079,6 @@
         "no_visibility": "表示状態を判定する変数やPositionバインディングが見つかりません。元のINIの描画条件を確認してください。",
         "generate_failed": "メニューを生成できませんでした。元のnamespaceと既存メニューとの競合を確認してください。",
         "title": "XXMI メニューメーカー",
-        "loaded": "ソースを読み込みました",
         "draft_restored": "一致する下書きを復元しました",
         "load_failed": "ソースファイルを読み込めませんでした",
         "no_keys": "使用可能な [Key*] セクションが見つかりません",
@@ -1509,7 +1475,6 @@
           "complete": "完了"
         },
         "toast": {
-          "loaded": "Touch 下書きの準備完了",
           "load_failed": "Mod の解析に失敗",
           "created": "Touch Mod を作成しました",
           "create_failed": "Touch Mod の作成に失敗",
@@ -1970,8 +1935,7 @@
           "title": "ゲームランチャー",
           "description": "インストール済みの XXMI Launcher と内蔵ランタイムのどちらでゲームを起動するか選択します。切り替えても両方の設定は保持されます。",
           "external": "XXMI Launcher",
-          "builtin": "内蔵",
-          "changed": "ゲームランチャーを変更しました"
+          "builtin": "内蔵"
         },
         "builtin": {
           "detectGame": "ゲームフォルダーを検出",
@@ -1983,7 +1947,6 @@
           "createShortcut": "Quick Start ショートカットを作成",
           "shortcutCreated": "デスクトップにショートカットを作成しました",
           "deleteShortcut": "Quick Start ショートカットを削除",
-          "shortcutDeleted": "デスクトップのショートカットを削除しました",
           "iniOptimizer": "INI 最適化",
           "optimizeAtLaunch": "ゲーム起動時に自動最適化",
           "resetOptimizerCache": "最適化キャッシュをリセット",
@@ -2022,9 +1985,7 @@
           "perfTweakValues": "パフォーマンス調整値",
           "checkUpdates": "更新を確認",
           "installUpdates": "更新をインストール",
-          "updatesInstalled": "更新をインストールしました",
           "skipVersion": "このバージョンをスキップ",
-          "versionSkipped": "このバージョンをスキップします",
           "startMethod": "起動方法",
           "priority": "プロセスの優先度",
           "initDelay": "DLL 初期化の遅延（ミリ秒）",
@@ -2045,7 +2006,6 @@
           "elevatedCommandWarning": "このコマンドは管理者権限で実行されます。",
           "extraLibraries": "追加 DLL のパス（セミコロン区切り）",
           "root": "インポーターのルートフォルダー",
-          "saved": "XXMI の設定を保存しました",
           "externalDetected": "外部 XXMI Launcher が見つかりました",
           "externalWarning": "インポートする前に外部ランチャーとゲームを閉じてください。インポーターごとにルートフォルダー下へ専用フォルダーを作成し、パッケージを新しくインストールします。",
           "import": "設定をインポート",
@@ -2079,7 +2039,6 @@
           "downloadLegacy": "従来のランタイムをダウンロード",
           "fpsUnlocker": "GI FPS Unlocker",
           "downloadFPS": "最新版をダウンロード",
-          "downloaded": "従来のランタイムをダウンロードしました",
           "importLegacy": "従来の ZIP をインポート",
           "importedLegacy": "従来のランタイムをインポートしました",
           "options": "全体設定",
@@ -2193,16 +2152,13 @@
             }
           },
           "saveXXMIPath": {
-            "success": "XXMIパスが保存されました",
             "configNotFound": "指定されたパスでXXMI Launcher Config.jsonファイルが見つかりません"
           },
           "installDllVersion": {
-            "success": "XXMI DLLバージョン {{version}} を適用しました",
             "failed": "選択したXXMI DLLバージョンの適用に失敗しました",
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
           },
           "installImporterPackage": {
-            "success": "{{importer}} パッケージバージョン {{version}} を適用しました",
             "failed": "選択したImporterパッケージバージョンの適用に失敗しました",
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
           }
@@ -2386,8 +2342,6 @@
         "started": "復元を開始しました"
       },
       "toast": {
-        "completed": "バックアップが完了しました",
-        "unchanged": "前回のバックアップから変更はありません",
         "failed": "バックアップに失敗しました",
         "restored": "復元が完了しました",
         "restore_failed": "復元に失敗しました"

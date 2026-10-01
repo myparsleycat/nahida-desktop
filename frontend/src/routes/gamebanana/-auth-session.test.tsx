@@ -149,6 +149,5 @@ describe("GameBanana route session handling", () => {
     await waitFor(() =>
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["gamebanana"] }),
     );
-    expect(toast.success).toHaveBeenCalledWith("page.gamebanana.auth.signed_out");
   });
 });

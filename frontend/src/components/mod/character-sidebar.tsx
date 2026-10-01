@@ -156,13 +156,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       }
 
       const trimmedName = value.name.trim();
-      if (!trimmedName) {
-        return;
-      }
-
-      const validationMessage = ValidateName(trimmedName);
-      if (validationMessage) {
-        toast.warning(validationMessage);
+      if (!trimmedName || ValidateName(trimmedName)) {
         return;
       }
 
@@ -181,7 +175,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       setExpandedGroup(variables.groupPath, true);
       setCreateFolderTarget(null);
       createFolderForm.reset();
-      toast.success(t("page.mod.dialog.create-folder.#.success", { name: variables.name }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
         queryClient.invalidateQueries({ queryKey: ["modGroup", variables.groupPath] }),
@@ -281,20 +274,14 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
   const savePreviewPath = useCallback(
     async (group: FolderGroup, filePath: string) => {
-      const promise = Mod.PastePreview(group.path, filePath, "path", group.preview ?? null);
-      toast.promise(promise, {
-        loading: t("page.mod.toast.preview-drop.saving"),
-        success: t("page.mod.toast.preview-drop.success"),
-        error: t("page.mod.toast.preview-drop.error"),
-      });
-
-      promise
+      Mod.PastePreview(group.path, filePath, "path", group.preview ?? null)
         .then(() => {
           setPreviewCacheKey((prev) => prev + 1);
           return invalidatePreviewQueries(group.path);
         })
         .catch((error) => {
           Logger.capture("components/mod/character-sidebar.tsx", error);
+          toast.error(t("page.mod.toast.preview-drop.error"));
         });
     },
     [invalidatePreviewQueries, t],
@@ -339,7 +326,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         path: group.path,
         title: t("page.mod.dialog.delete-folder.title"),
         description: t("page.mod.dialog.delete-folder.description", { name: group.name }),
-        successMessage: t("page.mod.dialog.delete-folder.#.success"),
         errorMessage: t("page.mod.dialog.delete-folder.#.failed"),
         onSuccess: async () => {
           const parentGroupPath = getParentGroupPath(group.path);
@@ -382,20 +368,11 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               : Promise.resolve(),
           ]);
         })
-        .then(() => {
-          toast.success(
-            t(
-              enabled
-                ? "page.mod.toast.manual-subgroup-success"
-                : "page.mod.toast.manual-subgroup-remove-success",
-            ),
-          );
-        })
         .catch((error) => {
           toast.error(toErrorMessage(error));
         });
     },
-    [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup, t],
+    [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup],
   );
 
   const contentProps = {
@@ -580,7 +557,9 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               name="name"
               validators={{
                 onChange: ({ value }) =>
-                  value.trim() ? undefined : t("page.mod.dialog.create-folder.name-placeholder"),
+                  value.trim()
+                    ? (ValidateName(value.trim()) ?? undefined)
+                    : t("page.mod.dialog.create-folder.name-placeholder"),
               }}
               children={(field) => (
                 <Field>

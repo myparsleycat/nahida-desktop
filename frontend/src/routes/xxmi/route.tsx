@@ -24,7 +24,6 @@ export function XXMILayout() {
         predicate: (query) =>
           typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("xxmi:"),
       });
-      toast.success(t("page.setting.xxmi.launcherMode.changed"));
     } catch (error) {
       toast.error(toErrorMessage(error));
     }

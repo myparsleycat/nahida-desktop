@@ -164,7 +164,6 @@ function DriveImportDialog({
       return;
     }
     if (selected.size === 0) {
-      toast.warning("가져올 폴더를 선택하세요.");
       return;
     }
     const destinationIdSnapshot = destinationId;

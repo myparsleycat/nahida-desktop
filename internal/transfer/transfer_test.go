@@ -260,26 +260,38 @@ func TestFailedDownloadReleasesDestinationAfterRunnerStops(t *testing.T) {
 	}
 }
 
-func TestCreateEmitsStartToastAndOptionalNavigation(t *testing.T) {
-	var events []struct {
+func TestCreateEmitsStartNavigationOrToast(t *testing.T) {
+	type event struct {
 		name string
 		data []any
 	}
-	service := NewWithOptions(Options{
-		Settings: testSettings{move: true},
-		EventEmit: func(name string, data ...any) {
-			events = append(events, struct {
-				name string
-				data []any
-			}{name: name, data: data})
-		},
-	})
-	createTestTransfer(t, service, "notified", StatusPreparing, true)
-	if len(events) != 2 || events[0].name != "fn:toast" || events[1].name != "fn:navi" {
-		t.Fatalf("events = %+v", events)
+	tests := []struct {
+		name string
+		move bool
+		want string
+	}{
+		{name: "navigates without a toast", move: true, want: "fn:navi"},
+		{name: "toasts when staying on the page", move: false, want: "fn:toast"},
 	}
-	if got := events[1].data; len(got) != 1 || got[0] != "/transfer" {
-		t.Fatalf("navigation data = %#v", got)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var events []event
+			service := NewWithOptions(Options{
+				Settings: testSettings{move: test.move},
+				EventEmit: func(name string, data ...any) {
+					events = append(events, event{name: name, data: data})
+				},
+			})
+			createTestTransfer(t, service, "notified", StatusPreparing, true)
+
+			if len(events) != 1 || events[0].name != test.want {
+				t.Fatalf("events = %+v", events)
+			}
+			if got := events[0].data; test.move && (len(got) != 1 || got[0] != "/transfer") {
+				t.Fatalf("navigation data = %#v", got)
+			}
+		})
 	}
 }
 

@@ -55,11 +55,7 @@ export function useMenuMakerEditor({
                     sourceAvailable: true,
                 });
                 onSourceLoaded();
-                toast.success(
-                    draft
-                        ? t("page.tools.menu_maker.draft_restored")
-                        : t("page.tools.menu_maker.loaded"),
-                );
+                if (draft) toast.success(t("page.tools.menu_maker.draft_restored"));
             } catch (error) {
                 Logger.error({ error, filePath }, "MenuMakerPage:loadSource");
                 toast.error(

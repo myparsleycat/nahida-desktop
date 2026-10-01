@@ -174,7 +174,6 @@ export function XXMIDashboard() {
                         try {
                           await XXMI.InstallUpdates(pendingUpdates.map((entry) => entry.package));
                           refresh();
-                          toast.success(t("page.setting.xxmi.builtin.updatesInstalled"));
                         } catch (error) {
                           toast.error(toErrorMessage(error));
                         }
@@ -200,7 +199,6 @@ export function XXMIDashboard() {
                           try {
                             await XXMI.SkipVersion(entry.package, entry.latestVersion);
                             refresh();
-                            toast.success(t("page.setting.xxmi.builtin.versionSkipped"));
                           } catch (error) {
                             toast.error(toErrorMessage(error));
                           }
@@ -231,7 +229,6 @@ export function XXMIDashboard() {
                         await XXMI.SetRoot(root);
                         setEditedRoot(null);
                         refresh();
-                        toast.success(t("page.setting.xxmi.builtin.saved"));
                       } catch (error) {
                         toast.error(toErrorMessage(error));
                       }
@@ -344,7 +341,6 @@ export function XXMIDashboard() {
                       try {
                         await XXMI.UpdateLegacyRuntime();
                         refresh();
-                        toast.success(t("page.setting.xxmi.builtin.downloaded"));
                       } catch (error) {
                         toast.error(toErrorMessage(error));
                       }
@@ -367,7 +363,6 @@ export function XXMIDashboard() {
                       try {
                         await XXMI.EnsureFPSUnlockerVersion(latestFPS.version);
                         refresh();
-                        toast.success(t("page.setting.xxmi.builtin.downloaded"));
                       } catch (error) {
                         toast.error(toErrorMessage(error));
                       }

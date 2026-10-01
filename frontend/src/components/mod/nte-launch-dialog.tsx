@@ -45,7 +45,6 @@ export function NteLaunchDialog() {
   const handleLaunch = async () => {
     const path = executablePath.trim();
     if (!path || !selectedGame) {
-      toast.warning(t("page.mod.dialog.nte-launch.path_required"));
       return;
     }
 

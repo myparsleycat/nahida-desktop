@@ -71,12 +71,6 @@ function XXMIImporterPackageRow({
   const applyVersion = async () => {
     try {
       await XXMI.InstallImporterPackage({ importer: importer.key, version, allowUnsigned: false });
-      toast.success(
-        t("page.setting.xxmi.fn.installImporterPackage.success", {
-          importer: importer.key,
-          version,
-        }),
-      );
       refetch();
     } catch (error) {
       toast.error(

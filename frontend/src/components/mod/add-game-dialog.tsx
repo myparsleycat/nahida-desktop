@@ -29,7 +29,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Plus, ShieldAlert, XIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
@@ -93,6 +92,7 @@ function AddGameDialogContent({
   const navi = useNavigate();
   const [nteResolution, setNteResolution] = useState<NteResolution | null>(null);
   const [isResolvingNte, setIsResolvingNte] = useState(false);
+  const [isNteNotFound, setIsNteNotFound] = useState(false);
   const [selectedImporter, setSelectedImporter] = useState(NO_IMPORTER_VALUE);
   const isNteSelected = isNteImporter(selectedImporter);
 
@@ -119,21 +119,13 @@ function AddGameDialogContent({
       const path = value.path.trim();
       const customModFolderPath = value.customModFolderPath.trim();
 
-      if (!name) {
-        toast.warning(t("page.mod.dialog.add-game.#.0"));
-        return;
-      }
-
-      if (!path) {
-        toast.warning(t("page.mod.dialog.add-game.#.1"));
+      if (!name || !path) {
         return;
       }
 
       if (isNte) {
         const resolution = nteResolution ?? (await resolveNtePath(path).catch(() => null));
-
         if (!resolution) {
-          toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
           return;
         }
 
@@ -163,6 +155,7 @@ function AddGameDialogContent({
 
     form.setFieldValue("path", path);
     setNteResolution(null);
+    setIsNteNotFound(false);
 
     if (isNteSelected) {
       await resolveNtePath(path);
@@ -187,6 +180,7 @@ function AddGameDialogContent({
     onChange(value);
     setSelectedImporter(value);
     setNteResolution(null);
+    setIsNteNotFound(false);
 
     if (wasNte && !nextIsNte) {
       form.setFieldValue("path", "");
@@ -203,9 +197,7 @@ function AddGameDialogContent({
     try {
       const resolution = await Mod.ResolveNteInstallPath(installPath);
       setNteResolution(resolution);
-      if (!resolution) {
-        toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
-      }
+      setIsNteNotFound(!resolution);
       return resolution;
     } finally {
       setIsResolvingNte(false);
@@ -272,6 +264,7 @@ function AddGameDialogContent({
                   onChange={(e) => {
                     field.handleChange(e.target.value);
                     setNteResolution(null);
+                    setIsNteNotFound(false);
                   }}
                 />
                 <Button
@@ -291,6 +284,9 @@ function AddGameDialogContent({
               ) : null}
               {field.state.meta.isTouched && !field.state.meta.isValid ? (
                 <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+              ) : null}
+              {isNteSelected && isNteNotFound ? (
+                <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
               ) : null}
             </Field>
           )}

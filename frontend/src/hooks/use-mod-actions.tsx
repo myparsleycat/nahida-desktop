@@ -404,9 +404,6 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
             queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
           ]),
         )
-        .then(() => {
-          toast.success(t("page.mod.toast.manual-subgroup-success"));
-        })
         .catch((error) => {
           toast.error(toErrorMessage(error));
         });

@@ -295,7 +295,6 @@ export function useTouchProfileSession({
             });
             setDraft(next as unknown as TouchDraft);
             setPhase("review");
-            toast.success(t("page.tools.touch_profile.toast.loaded"));
         } catch (error) {
             const inputErrorCode = getTouchProfileInputError(toErrorMessage(error));
             if (inputErrorCode) {

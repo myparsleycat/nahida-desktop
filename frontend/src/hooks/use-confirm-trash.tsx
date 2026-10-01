@@ -27,8 +27,6 @@ interface ConfirmTrashOptions {
   onSuccess?: () => void | Promise<void>;
   onError?: (error: unknown) => void | Promise<void>;
   onOpenChange?: (open: boolean) => void;
-  loadingMessage?: string;
-  successMessage?: string;
   errorMessage?: string;
   actionLabel?: string;
   contentProps?: ComponentProps<typeof AlertDialogContent>;
@@ -56,20 +54,14 @@ export function useConfirmTrash() {
 
       if (!pending) return;
 
-      const promise = Shell.Trash(pending.path);
       setIsDeleting(true);
-      toast.promise(promise, {
-        loading: pending.loadingMessage ?? t("page.mod.toast.trash-loading"),
-        success: pending.successMessage ?? t("page.mod.toast.trash-success"),
-        error: pending.errorMessage ?? t("page.mod.toast.trash-error"),
-      });
-
       try {
-        await promise;
+        await Shell.Trash(pending.path);
         await pending.onSuccess?.();
         pending.onOpenChange?.(false);
         setPending(null);
       } catch (error) {
+        toast.error(pending.errorMessage ?? t("page.mod.toast.trash-error"));
         await pending.onError?.(error);
       } finally {
         setIsDeleting(false);

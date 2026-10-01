@@ -152,7 +152,6 @@ function ModSettingsRouteContent() {
     try {
       await update("gridResponsiveBaseWidth", nextValue);
       setSettings((prev) => ({ ...prev, gridResponsiveBaseWidth: nextValue }));
-      toast.success("설정이 저장되었습니다.");
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridResponsiveBaseWidthChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -164,7 +163,6 @@ function ModSettingsRouteContent() {
     try {
       await update("gridFixedCardWidth", nextValue);
       setSettings((prev) => ({ ...prev, gridFixedCardWidth: nextValue }));
-      toast.success("설정이 저장되었습니다.");
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridFixedCardWidthChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -176,7 +174,6 @@ function ModSettingsRouteContent() {
     try {
       await update("gridFixedColumnCount", nextValue);
       setSettings((prev) => ({ ...prev, gridFixedColumnCount: nextValue }));
-      toast.success("설정이 저장되었습니다.");
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridFixedColumnCountChange");
       toast.error("설정 저장에 실패했습니다.");

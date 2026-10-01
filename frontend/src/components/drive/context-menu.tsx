@@ -82,11 +82,9 @@ function ContextMenuContentSnippet() {
   });
 
   const handleTrashBtn = async (_e: React.MouseEvent) => {
-    const count = selectedItems.length;
     return trashMutation
       .mutateAsync({ items: selectedItems })
       .then(async () => {
-        toast.success(t("page.drive.context_menu.trash_success", { count }));
         setSelectedItems([]);
         await queryClient.invalidateQueries();
       })

@@ -241,7 +241,6 @@ function AgentSettingsRoute() {
         apiKey: apiKeyAction === "replace" ? apiKey : undefined,
       });
       setTestResult(result);
-      toast.success(t("page.agent.connection_ok"));
     } catch (error) {
       setTestResult(undefined);
       toast.error(String(error));
@@ -295,7 +294,6 @@ function AgentSettingsRoute() {
       setCatalog(providers);
       followPlanModels(providers);
       setAuthMode("account");
-      toast.success(t("page.agent.login_complete"));
     } catch (error) {
       toast.error(String(error));
     } finally {
