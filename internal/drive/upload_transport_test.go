@@ -53,7 +53,7 @@ func TestUploadPartsReportsWaitingAndResumesAfterDelayedResponse(t *testing.T) {
 	go func() {
 		done <- uploadTestDrive(server).uploadParts(ctx, UploadPlanEntry{URL: server.URL}, FinalUploadFile{
 			UploadFile: UploadFile{Name: "delayed.bin", FullPath: filepath.ToSlash(path), Size: 2 * partSize},
-		}, rules, func(bytes int64) { transferred.Add(bytes) })
+		}, rules, false, func(bytes int64) { transferred.Add(bytes) })
 	}()
 	select {
 	case <-firstReceived:
