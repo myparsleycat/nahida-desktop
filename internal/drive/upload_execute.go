@@ -519,7 +519,12 @@ func (r *uploadRun) failTargets(failure error, targets []FinalUploadFile) {
 		}
 	}
 	if hasNonBundle || len(bundleIDs) == 0 {
-		r.failures = append(r.failures, failure)
+		var member *packMemberError
+		if errors.As(failure, &member) {
+			r.failures = append(r.failures, failure)
+		} else {
+			r.failures = append(r.failures, &packMemberError{files: slices.Clone(targets), err: failure})
+		}
 	}
 	for bundleID := range bundleIDs {
 		if _, failed := r.failedBundles[bundleID]; failed {

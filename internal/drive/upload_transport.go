@@ -594,6 +594,11 @@ func parseUploadHTTPResult(status int, raw []byte) uploadHTTPResult {
 }
 
 func retryableUploadResult(result uploadHTTPResult) bool {
+	// Storage failures have exhausted the server's retries. Let the recovery
+	// pass replan these files instead of multiplying transport-level retries.
+	if result.reason == storageTemporaryFailure {
+		return false
+	}
 	return result.status == 0 || result.status == http.StatusAccepted || result.status == http.StatusRequestTimeout ||
 		result.status == http.StatusTooManyRequests ||
 		result.status == 524 ||
