@@ -14,7 +14,9 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-var persistDeclarationRE = regexp.MustCompile(`(?i)^global\s+persist\s+\$(.+?)\s*=\s*(.+)$`)
+var persistDeclarationRE = regexp.MustCompile(`(?i)^global\s+persist\s+\$([^\s=\\]+)(?:\s*=\s*(.*))?$`)
+
+var errPersistTargetChanged = errors.New("persist target changed before write")
 
 type PersistModelViewerResult struct {
 	UpdatedVariables []string `json:"updatedVariables"`
@@ -24,17 +26,9 @@ func (t *Service) PersistModelViewerToggleState(
 	iniPath string,
 	state map[string]any,
 ) (PersistModelViewerResult, error) {
-	updates := persistUpdatesFromState(state)
-	if len(updates) == 0 {
-		return PersistModelViewerResult{UpdatedVariables: []string{}}, nil
-	}
 	t.persistMu.Lock()
 	defer t.persistMu.Unlock()
-	updated, err := applyPersistUpdates(iniPath, updates)
-	if err != nil {
-		return PersistModelViewerResult{}, err
-	}
-	return PersistModelViewerResult{UpdatedVariables: updated}, nil
+	return t.persist.PersistStateToINI(iniPath, state)
 }
 
 func (t *Service) GetPersistLogs() []string {
@@ -136,19 +130,27 @@ func persistUpdatesFromState(state map[string]any) map[string]string {
 	return updates
 }
 
-func applyPersistUpdates(iniPath string, updates map[string]string) (result []string, returnErr error) {
-	info, err := os.Stat(iniPath)
+func applyPersistUpdates(iniPath string, updates map[string]string) ([]string, error) {
+	return applyPersistUpdatesChecked(iniPath, updates, nil)
+}
+
+func applyPersistUpdatesChecked(
+	iniPath string,
+	updates map[string]string,
+	expected *persistTarget,
+) (result []string, returnErr error) {
+	raw, info, err := readPersistINI(iniPath)
 	if err != nil {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
 		return nil, errors.New("target INI path is not a regular file")
 	}
-	raw, err := os.ReadFile(iniPath)
-	if err != nil {
-		return nil, err
-	}
 	content := string(raw)
+	if expected != nil && (!os.SameFile(info, expected.info) ||
+		fingerprintTogglePersistINI(content) != expected.fingerprint) {
+		return nil, errPersistTargetChanged
+	}
 	lineEnding := "\n"
 	if strings.Contains(content, "\r\n") {
 		lineEnding = "\r\n"
@@ -157,12 +159,12 @@ func applyPersistUpdates(iniPath string, updates map[string]string) (result []st
 	inConstants := false
 	updated := make([]string, 0, len(updates))
 	for index, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))
 		if strings.HasPrefix(trimmed, "[") {
 			inConstants = strings.EqualFold(trimmed, "[Constants]")
 			continue
 		}
-		if !inConstants || !strings.HasPrefix(strings.ToLower(trimmed), "global persist $") {
+		if !inConstants {
 			continue
 		}
 		match := persistDeclarationRE.FindStringSubmatch(trimmed)
@@ -193,6 +195,15 @@ func applyPersistUpdates(iniPath string, updates map[string]string) (result []st
 			returnErr = infra.WithCause(returnErr, infra.AnnotateError(cleanupErr, infra.Diagnostic{Stage: "cleanup"}))
 		}
 	}()
+	if expected != nil {
+		current, err := os.Stat(iniPath)
+		if err != nil {
+			return nil, err
+		}
+		if !os.SameFile(current, info) {
+			return nil, errPersistTargetChanged
+		}
+	}
 	if err := platform.ReplaceAtomic(tempPath, iniPath); err != nil {
 		return nil, err
 	}

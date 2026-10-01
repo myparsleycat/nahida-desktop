@@ -12,6 +12,14 @@ After you change a toggle in-game and `d3dx_user.ini` is updated by Reload (`F10
 
 As a result, the previous toggle state can remain intact even after disabling or reloading the mod.
 
+## Copied Mods and Namespaces
+
+Nahida Desktop finds the INI that declares each persistent variable using its effective namespace, including an explicit `namespace = ...`. Main and help/menu INIs can share a namespace when they declare different variables.
+
+If multiple INIs declare the same variable in the same namespace, Nahida Desktop skips that variable and records the conflicting paths in the persist log. Disabled copies are included in this check because a value saved during a mod switch may still belong to the previously loaded copy. Other unambiguous variables continue to save.
+
+Changing a folder name does not change an explicit namespace. To keep copied mods independent in-game, give each copy a distinct namespace and update the corresponding references in its help/menu INIs. Nahida Desktop does not automatically rename these namespaces or rewrite their references.
+
 ## Before You Use It
 
 ::: warning

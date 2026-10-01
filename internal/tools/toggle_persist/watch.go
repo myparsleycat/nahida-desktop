@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,30 +32,33 @@ type parsedD3dx struct {
 }
 
 type persistEngine struct {
-	mu           sync.Mutex
-	workMu       sync.Mutex
-	learner      *TogglePersistLearner
-	logs         []string
-	generation   int
-	cached       map[string]parsedD3dx
-	revisions    map[string]int
-	now          int64
-	useFake      bool
-	timers       []*persistTimer
-	flushDue     map[string]*persistTimer
-	unwatch      []func()
-	infoFn       func(string)
-	errorFn      func(string)
-	diagnosticFn func(error, string)
-	emit         func([]string)
+	mu         sync.Mutex
+	workMu     sync.Mutex
+	learner    *TogglePersistLearner
+	logs       []string
+	generation int
+	cached     map[string]parsedD3dx
+	revisions  map[string]int
+	now        int64
+	useFake    bool
+	timers     []*persistTimer
+	flushDue   map[string]*persistTimer
+	// pendingTargets is accessed under workMu, alongside observation and writes.
+	pendingTargets map[string]map[string]persistTarget
+	unwatch        []func()
+	infoFn         func(string)
+	errorFn        func(string)
+	diagnosticFn   func(error, string)
+	emit           func([]string)
 }
 
 func newPersistEngine() *persistEngine {
 	return &persistEngine{
-		learner:   newTogglePersistLearner(),
-		cached:    map[string]parsedD3dx{},
-		revisions: map[string]int{},
-		flushDue:  map[string]*persistTimer{},
+		learner:        newTogglePersistLearner(),
+		cached:         map[string]parsedD3dx{},
+		revisions:      map[string]int{},
+		flushDue:       map[string]*persistTimer{},
+		pendingTargets: map[string]map[string]persistTarget{},
 	}
 }
 
@@ -69,6 +72,8 @@ func (e *persistEngine) PersistStateToINI(
 	targetINIPath string,
 	state map[string]any,
 ) (PersistModelViewerResult, error) {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
 	updates := persistUpdatesFromState(state)
 	if len(updates) == 0 {
 		return PersistModelViewerResult{UpdatedVariables: []string{}}, nil
@@ -88,6 +93,7 @@ func (e *persistEngine) Stop() {
 	e.unwatch = nil
 	e.cached = map[string]parsedD3dx{}
 	e.learner.Clear()
+	e.pendingTargets = map[string]map[string]persistTarget{}
 	for _, timer := range e.timers {
 		timer.cancelled = true
 		if timer.real != nil {
@@ -185,6 +191,11 @@ func (e *persistEngine) handleD3dxUserINIChange(importer persistImporter, iniPat
 		e.mu.Unlock()
 		return
 	}
+	index, err := indexPersistTargets(importer.Folder)
+	if err != nil {
+		e.logError("Error resolving persist targets for "+iniPath+": "+err.Error(), err)
+		return
+	}
 	e.mu.Lock()
 	e.revisions[importer.Key]++
 	revision := e.revisions[importer.Key]
@@ -202,10 +213,29 @@ func (e *persistEngine) handleD3dxUserINIChange(importer persistImporter, iniPat
 		if oldParsed.values[key] == newValue {
 			continue
 		}
-		target := resolvePersistTarget(importer.Folder, key)
+		target, err := index.resolve(key)
+		if err != nil {
+			e.logError("Skipped persist update: "+err.Error(), err)
+			continue
+		}
 		if target == nil {
 			continue
 		}
+		fileKey := fileKey(target.iniPath)
+		pending := e.pendingTargets[fileKey]
+		if pending == nil {
+			pending = map[string]persistTarget{}
+			e.pendingTargets[fileKey] = pending
+		}
+		varKey := strings.ToLower(target.varName)
+		if previous, ok := pending[varKey]; ok &&
+			(!os.SameFile(previous.info, target.info) || previous.fingerprint != target.fingerprint) {
+			e.mu.Lock()
+			delete(e.learner.files, fileKey)
+			e.mu.Unlock()
+			clear(pending)
+		}
+		pending[varKey] = *target
 		e.loadPersistProfile(target.iniPath, generation)
 		if !e.active(generation) {
 			return
@@ -402,6 +432,36 @@ func (e *persistEngine) flushReady(targetINIPath string, generation int) {
 	if !e.active(generation) {
 		return
 	}
+
+	// A reload may change many INIs at once. Share one fresh ownership index
+	// across all files whose quiet windows have ended, rather than scanning the
+	// entire importer again for each file's timer.
+	paths := []string{targetINIPath}
+	e.mu.Lock()
+	now := e.nowMsLocked()
+	for key, file := range e.learner.files {
+		due := nextDueAt(file)
+		if key == fileKey(targetINIPath) || due == nil || *due > now {
+			continue
+		}
+		paths = append(paths, key)
+	}
+	e.mu.Unlock()
+	sort.Strings(paths)
+	indexes := map[string]persistTargetIndex{}
+	for _, path := range paths {
+		e.flushReadyFile(path, generation, indexes)
+	}
+}
+
+func (e *persistEngine) flushReadyFile(
+	targetINIPath string,
+	generation int,
+	indexes map[string]persistTargetIndex,
+) {
+	if !e.active(generation) {
+		return
+	}
 	e.mu.Lock()
 	ready := e.learner.TakeReady(targetINIPath, e.nowMsLocked())
 	e.mu.Unlock()
@@ -410,19 +470,64 @@ func (e *persistEngine) flushReady(targetINIPath string, generation int) {
 		return
 	}
 	updates := map[string]string{}
+	pending := e.pendingTargets[fileKey(targetINIPath)]
+	var expected *persistTarget
 	for _, pair := range ready.Updates {
+		target, exists := pending[pair[0]]
+		delete(pending, pair[0])
+		if !exists {
+			continue
+		}
+		index, exists := indexes[target.importer]
+		if !exists {
+			var err error
+			index, err = indexPersistTargets(target.importer)
+			if err != nil {
+				e.logError("Error revalidating persist targets for "+targetINIPath+": "+err.Error(), err)
+				return
+			}
+			indexes[target.importer] = index
+		}
+		current, err := index.resolve(target.key)
+		if err != nil {
+			e.logError("Skipped queued persist update: "+err.Error(), err)
+			continue
+		}
+		if current == nil || !strings.EqualFold(current.iniPath, target.iniPath) ||
+			!os.SameFile(current.info, target.info) || current.fingerprint != target.fingerprint {
+			continue
+		}
 		updates[pair[0]] = pair[1]
+		expected = &target
+		targetINIPath = target.iniPath
 	}
-	updated, err := applyPersistUpdates(targetINIPath, updates)
+	if len(updates) == 0 {
+		return
+	}
+	updated, err := applyPersistUpdatesChecked(targetINIPath, updates, expected)
 	if err != nil {
 		// A mod can be renamed or removed during the learner's quiet window.
 		// The queued update belongs to the old path and must not interfere with
 		// the mod-manager operation or be reported as an actionable failure.
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, errPersistTargetChanged) {
 			return
 		}
 		e.logError("Error updating mod ini "+targetINIPath+": "+err.Error(), err)
 		return
+	}
+	if len(updated) > 0 && len(pending) > 0 {
+		content, info, err := readPersistINI(targetINIPath)
+		if err != nil {
+			e.logError("Error refreshing persist target identity for "+targetINIPath+": "+err.Error(), err)
+			clear(pending)
+			return
+		}
+		fingerprint := fingerprintTogglePersistINI(string(content))
+		for name, target := range pending {
+			target.info = info
+			target.fingerprint = fingerprint
+			pending[name] = target
+		}
 	}
 	if len(updated) == 1 {
 		e.logInfo("Updated persist variable $" + updated[0] + " in " + targetINIPath)
@@ -489,7 +594,7 @@ func (e *persistEngine) useFakeClock() {
 func (e *persistEngine) cachedValue(importer, key string) string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.cached[importer].values[key]
+	return e.cached[importer].values[strings.ToLower(key)]
 }
 
 func (e *persistEngine) nextDueAt(targetINIPath string) *int64 {
@@ -561,18 +666,11 @@ func (e *persistEngine) addLog(level, message string) {
 	}
 }
 
-var persistTargetRE = regexp.MustCompile(`(?i)^\$\\(.+\.ini)\\([^\\]+)$`)
-
-type persistTarget struct {
-	iniPath string
-	varName string
-}
-
 func parseD3dxUserINI(content string) parsedD3dx {
 	result := parsedD3dx{values: map[string]string{}}
 	inConstants := false
 	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))
 		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
 			continue
 		}
@@ -587,40 +685,13 @@ func parseD3dxUserINI(content string) parsedD3dx {
 		if len(parts) < 2 {
 			continue
 		}
-		key := strings.TrimSpace(parts[0])
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
 		if _, exists := result.values[key]; !exists {
 			result.order = append(result.order, key)
 		}
 		result.values[key] = strings.TrimSpace(parts[1])
 	}
 	return result
-}
-
-func resolvePersistTarget(importerFolder, key string) *persistTarget {
-	match := persistTargetRE.FindStringSubmatch(key)
-	if match == nil {
-		return nil
-	}
-	importerRoot, err := filepath.Abs(importerFolder)
-	if err != nil {
-		importerRoot = filepath.Clean(importerFolder)
-	}
-	targetINIPath, err := filepath.Abs(
-		filepath.Join(importerRoot, filepath.FromSlash(strings.ReplaceAll(match[1], `\`, "/"))),
-	)
-	if err != nil {
-		return nil
-	}
-	relative, err := filepath.Rel(importerRoot, targetINIPath)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) ||
-		filepath.IsAbs(relative) {
-		return nil
-	}
-	info, err := os.Stat(targetINIPath)
-	if err != nil || !info.Mode().IsRegular() {
-		return nil
-	}
-	return &persistTarget{iniPath: targetINIPath, varName: match[2]}
 }
 
 func watchPersistFile(path string, onModify func()) (func(), error) {
