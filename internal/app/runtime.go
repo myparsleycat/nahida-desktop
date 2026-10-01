@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -228,6 +229,19 @@ func newRuntime() *runtime {
 		gameBananaLogin:   login,
 		notifications:     notifier,
 	}
+	rt.xxmi.UseImporterMaintenance(func(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
+		resumeTools, err := rt.tools.SuspendImporterWatchers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resumeMods, err := rt.mod.SuspendImporterWatchers(ctx)
+		if err != nil {
+			return nil, errors.Join(err, resumeTools(nil))
+		}
+		return func(moved []xxmi.ImportedImporter) error {
+			return errors.Join(resumeMods(moved), resumeTools(moved))
+		}, nil
+	})
 	rt.agent = agent.New(agent.Options{
 		HTTP:      httpClient.HTTPClient(),
 		Remote:    httpClient,

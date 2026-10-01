@@ -47,6 +47,13 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 		return err
 	}
 	if external {
+		stage = "pause-importer-watchers"
+		resume, err := x.beginImporterMaintenance(ctx)
+		if err != nil {
+			return err
+		}
+		defer resume(nil)
+
 		stage = "install-external-package"
 		return x.installExternalImporterPackage(ctx, spec, input)
 	}
@@ -54,6 +61,13 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	if err != nil {
 		return err
 	}
+	stage = "pause-importer-watchers"
+	resume, err := x.beginImporterMaintenance(ctx)
+	if err != nil {
+		return err
+	}
+	defer resume(nil)
+
 	stage = "install-package"
 	return x.installBuiltinImporterPackage(ctx, spec, cfg, input)
 }

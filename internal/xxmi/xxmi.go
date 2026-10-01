@@ -114,6 +114,9 @@ type XXMI struct {
 	searchRoots              func() ([]string, error)
 	busy                     map[string]bool
 	externalImportersChanged func(context.Context)
+	importerMaintenance      func(context.Context) (func([]ImportedImporter) error, error)
+	// findProcess queries running games; filesystem migration tests replace it independently of the host.
+	findProcess func(context.Context, string) (int, error)
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 }
@@ -136,6 +139,7 @@ func NewWithOptions(opts Options) *XXMI {
 		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
 	}
 	x.installImporter = x.installBuiltinImporterPackage
+	x.findProcess = findProcessPID
 	return x
 }
 
@@ -152,6 +156,15 @@ func (x *XXMI) UseClient(client *db.Client) {
 func (x *XXMI) UseExternalImportersChanged(changed func(context.Context)) {
 	x.mu.Lock()
 	x.externalImportersChanged = changed
+	x.mu.Unlock()
+}
+
+// UseImporterMaintenance registers the backend pause/resume boundary for importer filesystem changes.
+//
+//wails:ignore
+func (x *XXMI) UseImporterMaintenance(begin func(context.Context) (func([]ImportedImporter) error, error)) {
+	x.mu.Lock()
+	x.importerMaintenance = begin
 	x.mu.Unlock()
 }
 

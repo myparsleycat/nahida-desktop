@@ -41,6 +41,8 @@ const (
 )
 
 type managedWatcher struct {
+	root    string
+	depth   int
 	watcher *watcher.Watcher
 
 	mu        sync.Mutex
@@ -54,6 +56,9 @@ type managedWatcher struct {
 }
 
 func (m *Mod) WatchGame(ctx context.Context, game string) error {
+	m.watchMu.Lock()
+	defer m.watchMu.Unlock()
+
 	path, err := m.GetGamePath(ctx, game)
 	if err != nil {
 		return err
@@ -69,6 +74,9 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 }
 
 func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
+	m.watchMu.Lock()
+	defer m.watchMu.Unlock()
+
 	if _, err := m.ownedPath(ctx, characterPath); err != nil {
 		return err
 	}
@@ -101,14 +109,12 @@ func (m *Mod) ServiceShutdown() error {
 }
 
 func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {
-	m.watchMu.Lock()
 	var previous *managedWatcher
 	if game {
 		previous, m.gameWatcher = m.gameWatcher, next
 	} else {
 		previous, m.characterWatcher = m.characterWatcher, next
 	}
-	m.watchMu.Unlock()
 	return closeManagedWatcher(previous)
 }
 
@@ -133,7 +139,7 @@ func newManagedWatcher(
 	if err != nil {
 		return nil, err
 	}
-	managed := &managedWatcher{eventName: eventName, emit: emit}
+	managed := &managedWatcher{root: root, depth: depth, eventName: eventName, emit: emit}
 	managed.report = func(err error) {
 		for _, report := range reports {
 			if err != nil {
