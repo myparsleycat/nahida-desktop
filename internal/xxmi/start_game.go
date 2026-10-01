@@ -9,10 +9,6 @@ import (
 )
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
-	return x.StartGameWithCompatibility(ctx, importer, false)
-}
-
-func (x *XXMI) StartGameWithCompatibility(ctx context.Context, importer string, allowOldLibs bool) error {
 	if !x.acquireImporter(importer) {
 		return errors.New("XXMI_BUSY")
 	}
@@ -29,7 +25,7 @@ func (x *XXMI) StartGameWithCompatibility(ctx context.Context, importer string, 
 	if err != nil {
 		return err
 	}
-	return x.launchBuiltinGameLocked(ctx, importer, cfg, allowOldLibs)
+	return x.launchBuiltinGameLocked(ctx, importer, cfg)
 }
 
 func configuredGameExecutable(folder string, configured []string) string {

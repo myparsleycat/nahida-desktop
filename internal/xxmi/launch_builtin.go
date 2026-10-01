@@ -22,12 +22,7 @@ import (
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
-func (x *XXMI) launchBuiltinGameLocked(
-	ctx context.Context,
-	key string,
-	cfg ImporterConfig,
-	allowOldLibs bool,
-) (returnErr error) {
+func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg ImporterConfig) (returnErr error) {
 	stage := "validate"
 	runtimeSource := "xxmi-libs@latest"
 	if cfg.Mode == RuntimeLegacy {
@@ -158,15 +153,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 		warn("Skipped auto_update.xcmd delete through a symbolic link or junction: " + target)
 	}
 	progress("ensure-runtime")
-	if key == "EFMI" && cfg.Mode == RuntimeXXMI && !allowOldLibs {
-		version, err := x.resolveLibsVersion(ctx, cfg)
-		if err != nil {
-			return err
-		}
-		if efmiNeedsNewerLibs(version) {
-			return fmt.Errorf("XXMI_LIBS_TOO_OLD: EFMI requires XXMI libraries 1.7.5; selected %s", version)
-		}
-	}
 	progress("deploy-runtime")
 	rollbackState = "not-attempted"
 	warnings, err := x.deployRuntime(ctx, key, cfg, false)
@@ -289,10 +275,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 			"XXMI.StartGame")
 	}
 	return nil
-}
-
-func efmiNeedsNewerLibs(version string) bool {
-	return semver.IsValid("v"+version) && semver.Compare("v"+version, "v1.7.5") < 0
 }
 
 func (x *XXMI) acquireImporter(key string) bool {
