@@ -48,6 +48,15 @@ func (t *Service) StartPersistWatcher(ctx context.Context) error {
 	if t == nil || t.persist == nil {
 		return nil
 	}
+	t.watchMu.Lock()
+	defer t.watchMu.Unlock()
+	return t.startPersistWatcher(ctx)
+}
+
+func (t *Service) startPersistWatcher(ctx context.Context) error {
+	if t == nil || t.persist == nil {
+		return nil
+	}
 	enabled := false
 	if getter, ok := t.settings.(interface {
 		GetPersistToggles(context.Context) (bool, error)
@@ -82,9 +91,27 @@ func (t *Service) StartPersistWatcher(ctx context.Context) error {
 
 func (t *Service) StopPersistWatcher() bool {
 	if t != nil && t.persist != nil {
+		t.watchMu.Lock()
+		defer t.watchMu.Unlock()
 		t.persist.Stop()
 	}
 	return true
+}
+
+// SuspendImporterWatcher drains persist writes and prevents watcher restarts during importer maintenance.
+func (t *Service) SuspendImporterWatcher(ctx context.Context) (func() error, error) {
+	t.watchMu.Lock()
+	if err := ctx.Err(); err != nil {
+		t.watchMu.Unlock()
+		return nil, err
+	}
+	t.persist.Stop()
+	t.persistMu.Lock()
+	return func() error {
+		defer t.watchMu.Unlock()
+		defer t.persistMu.Unlock()
+		return t.startPersistWatcher(context.WithoutCancel(ctx))
+	}, nil
 }
 
 func (t *Service) shutdownPersistWatcher() error {

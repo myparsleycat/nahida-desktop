@@ -33,6 +33,7 @@ type parsedD3dx struct {
 
 type persistEngine struct {
 	mu           sync.Mutex
+	workMu       sync.Mutex
 	learner      *TogglePersistLearner
 	logs         []string
 	generation   int
@@ -80,6 +81,7 @@ func (e *persistEngine) PersistStateToINI(
 }
 
 func (e *persistEngine) Stop() {
+	e.workMu.Lock()
 	e.mu.Lock()
 	e.generation++
 	unwatch := e.unwatch
@@ -102,6 +104,7 @@ func (e *persistEngine) Stop() {
 	e.flushDue = map[string]*persistTimer{}
 	count := len(unwatch)
 	e.mu.Unlock()
+	e.workMu.Unlock()
 	for _, stop := range unwatch {
 		stop()
 	}
@@ -146,6 +149,12 @@ func (e *persistEngine) Start(
 }
 
 func (e *persistEngine) handleD3dxUserINIChange(importer persistImporter, iniPath string, generation int) {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
+	if !e.active(generation) {
+		return
+	}
+
 	// Electron retries isPathReadable + read 10 times with 200ms delay.
 	// Go reads once; mid-write races are not covered by Electron tests.
 	raw, err := os.ReadFile(iniPath)
@@ -387,6 +396,9 @@ func (e *persistEngine) scheduleFlush(targetINIPath string, dueAt *int64, genera
 }
 
 func (e *persistEngine) flushReady(targetINIPath string, generation int) {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
+
 	if !e.active(generation) {
 		return
 	}

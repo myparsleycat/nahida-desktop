@@ -20,6 +20,7 @@ type Service struct {
 	settings  any
 	xxmi      *xxmi.XXMI
 	persistMu sync.Mutex
+	watchMu   sync.Mutex
 	persist   *persistEngine
 }
 

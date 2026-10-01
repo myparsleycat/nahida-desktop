@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/watcher"
 )
 
 func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
@@ -83,6 +84,23 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3"}
+	watch, err := watcher.WatchTree([]string{filepath.Join(importerFolder, "Mods")},
+		watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watch.Close() })
+	service.UseImporterMaintenance(func(context.Context) (func([]ImportedImporter) error, error) {
+		if err := watch.Close(); err != nil {
+			return nil, err
+		}
+		return func([]ImportedImporter) error {
+			var err error
+			watch, err = watcher.WatchTree([]string{filepath.Join(importerFolder, "Mods")},
+				watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
+			return err
+		}, nil
+	})
 	if err := service.InstallImporterPackage(
 		ctx,
 		input,

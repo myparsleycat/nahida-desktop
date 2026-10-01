@@ -97,6 +97,9 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 	if m == nil || m.compression == nil {
 		return nil
 	}
+	m.watchMu.Lock()
+	defer m.watchMu.Unlock()
+
 	if err := m.compression.loadState(ctx); err != nil {
 		m.compression.fail(err, "load-state", "", "")
 		return err

@@ -7,10 +7,137 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/watcher"
 )
+
+func TestImportExternalLauncherSuspendsWatchersUntilCommitOrRollback(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mode   ImportUserDataMode
+		fail   bool
+		cancel bool
+	}{
+		{name: "move", mode: ImportUserDataMove},
+		{name: "keep", mode: ImportUserDataKeep},
+		{name: "rollback", mode: ImportUserDataMove, fail: true},
+		{name: "cancel", mode: ImportUserDataMove, cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _, service, external := newImportTest(t)
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			source := filepath.Join(external, "GIMI")
+			writeImportSourceFiles(t, source)
+			root := t.TempDir()
+			target := filepath.Join(root, "GIMI")
+			watch, err := watcher.WatchTree([]string{filepath.Join(source, "Mods")},
+				watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = watch.Close() })
+			failure := errors.New("package installation failed")
+			service.installImporter = func(
+				ctx context.Context, _ importerPackageSpec, cfg ImporterConfig, _ InstallImporterPackageInput,
+			) error {
+				transaction, err := beginImporterInstallTransaction(ctx, cfg.ImporterFolder, "", "GIMI")
+				if err != nil {
+					return err
+				}
+				defer func() { _ = transaction.Close() }()
+				stage, err := transaction.prepare(ctx)
+				if err != nil {
+					return errors.Join(err, transaction.rollback())
+				}
+				if err := stage.Close(); err != nil {
+					return errors.Join(err, transaction.rollback())
+				}
+				if _, _, err := transaction.commit(ctx, nil); err != nil {
+					return errors.Join(err, transaction.rollback())
+				}
+				if err := transaction.finish(); err != nil {
+					return err
+				}
+				if test.cancel {
+					cancel()
+					return ctx.Err()
+				}
+				if test.fail {
+					return failure
+				}
+				return nil
+			}
+			resumed := false
+			service.UseImporterMaintenance(func(context.Context) (func([]ImportedImporter) error, error) {
+				if err := watch.Close(); err != nil {
+					return nil, err
+				}
+				return func(moved []ImportedImporter) error {
+					resumed = true
+					path := source
+					if test.mode == ImportUserDataMove && !test.fail && !test.cancel {
+						if len(moved) != 1 || moved[0].PreviousFolder != source || moved[0].ImporterFolder != target {
+							t.Fatalf("committed moves = %+v", moved)
+						}
+						path = target
+					} else if len(moved) != 0 {
+						t.Fatalf("uncommitted moves = %+v", moved)
+					}
+					// Rollback must have put user data back before a watcher is reopened.
+					assertFile(t, filepath.Join(path, "Mods", "user.ini"), "user mod")
+					var err error
+					watch, err = watcher.WatchTree([]string{filepath.Join(path, "Mods")},
+						watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
+					return err
+				}, nil
+			})
+			_, err = service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+				Path: external, Root: root, UserData: test.mode,
+			})
+			if test.fail && !errors.Is(err, failure) || test.cancel && !errors.Is(err, context.Canceled) ||
+				!test.fail && !test.cancel && err != nil {
+				t.Fatalf("import error = %v", err)
+			}
+			if !resumed {
+				t.Fatal("watcher was not resumed")
+			}
+		})
+	}
+}
+
+func TestImportExternalLauncherMoveWithActiveWatcherFailsWithoutMaintenance(t *testing.T) {
+	ctx, _, service, external := newImportTest(t)
+	source := filepath.Join(external, "GIMI")
+	writeImportSourceFiles(t, source)
+	watch, err := watcher.WatchTree([]string{filepath.Join(source, "Mods")},
+		watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watch.Close() })
+	root := t.TempDir()
+	service.installImporter = func(
+		_ context.Context, _ importerPackageSpec, _ ImporterConfig, _ InstallImporterPackageInput,
+	) error {
+		parent, err := os.OpenRoot(root)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = parent.Close() }()
+		return parent.Rename("GIMI", ".nahida-gimi-install.backup")
+	}
+	_, err = service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
+		Path: external, Root: root, UserData: ImportUserDataMove,
+	})
+	if !errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+		t.Fatalf("import error = %v, want access denied from the open Mods handle", err)
+	}
+	assertFile(t, filepath.Join(source, "Mods", "user.ini"), "user mod")
+}
 
 func TestImportExternalLauncherMovesUserData(t *testing.T) {
 	t.Parallel()
@@ -311,6 +438,7 @@ func newImportTest(t *testing.T) (context.Context, *db.Client, *XXMI, string) {
 		t.Fatal(err)
 	}
 	service := New()
+	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	service.UseClient(client)
 	return ctx, client, service, external
 }
@@ -338,6 +466,7 @@ func writeImportSourceFiles(t *testing.T, source string) {
 // each install and writes the package version file.
 func fakeImportInstaller(t *testing.T, service *XXMI, result error) *[]string {
 	t.Helper()
+	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	installs := []string{}
 	service.installImporter = func(
 		_ context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput,

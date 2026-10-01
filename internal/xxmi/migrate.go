@@ -236,7 +236,7 @@ func (x *XXMI) ImportExternalLauncher(
 			return nil, err
 		}
 		for _, name := range append(slices.Clone(plan.spec.gameExeNames), plan.spec.processNames...) {
-			pid, err := findProcessPID(ctx, name)
+			pid, err := x.findProcess(ctx, name)
 			if err != nil {
 				return nil, err
 			}
@@ -257,6 +257,19 @@ func (x *XXMI) ImportExternalLauncher(
 			return nil, fmt.Errorf("import GI FPS Unlocker: %w", err)
 		}
 	}
+
+	stage = "pause-importer-watchers"
+	resume, err := x.beginImporterMaintenance(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if rollbackState == "committed" && input.UserData == ImportUserDataMove {
+			resume(imported)
+			return
+		}
+		resume(nil)
+	}()
 
 	migration := &importerFolderMigration{mode: input.UserData}
 	defer func() {
