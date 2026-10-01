@@ -15,6 +15,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -229,65 +230,47 @@ function RouteComponent() {
         <SectionContent>
           {appStatus?.supportsAutostart && (
             <>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-medium">
-                    {t("page.setting.gen.application.runOnStartup")}
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.setting.gen.application.runOnStartupDescription")}
-                  </p>
-                </div>
+              <SectionRow
+                title={t("page.setting.gen.application.runOnStartup")}
+                description={t("page.setting.gen.application.runOnStartupDescription")}
+              >
                 <Switch
                   checked={settings.runOnStartup}
                   onCheckedChange={(val) => update("runOnStartup", val)}
                 />
-              </div>
+              </SectionRow>
             </>
           )}
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.elevatedHelper")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.elevatedHelperDescription")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.gen.application.elevatedHelper")}
+            description={t("page.setting.gen.application.elevatedHelperDescription")}
+          >
             <Switch
               checked={settings.elevatedHelperEnabled}
               onCheckedChange={(val) => update("elevatedHelperEnabled", val)}
             />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.runInBackground")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.runInBackgroundDescription")}
-              </p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.gen.application.runInBackground")}
+            description={t("page.setting.gen.application.runInBackgroundDescription")}
+          >
             <Switch
               checked={settings.runInBackground}
               onCheckedChange={handleRunInBackgroundChange}
             />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.titlebarActivityBadgeClickNavigate")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.titlebarActivityBadgeClickNavigateDescription")}
-              </p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.gen.application.titlebarActivityBadgeClickNavigate")}
+            description={t(
+              "page.setting.gen.application.titlebarActivityBadgeClickNavigateDescription",
+            )}
+          >
             <Switch
               checked={settings.titlebarActivityBadgeClickNavigate}
               onCheckedChange={(val) => update("titlebarActivityBadgeClickNavigate", val)}
             />
-          </div>
+          </SectionRow>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="language">
@@ -429,13 +412,10 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.gen.update.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between space-x-3">
-            <div className="flex-1 space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.autoUpdate")}
-              </span>
-              <p className="text-xs text-muted-foreground">{selectedAutoUpdateMode?.description}</p>
-            </div>
+          <SectionRow
+            title={t("page.setting.gen.application.autoUpdate")}
+            description={selectedAutoUpdateMode?.description}
+          >
             <div className="flex items-center gap-4">
               <Select
                 value={settings.autoUpdateMode}
@@ -459,28 +439,20 @@ function RouteComponent() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.includePrerelease")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.includePrereleaseDescription")}
-              </p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.gen.application.includePrerelease")}
+            description={t("page.setting.gen.application.includePrereleaseDescription")}
+          >
             <Switch
               checked={settings.includePrerelease}
               onCheckedChange={(val) => update("includePrerelease", val)}
             />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.application.updateStatus")}
-              </span>
-              <p className="text-xs text-muted-foreground">{updaterStatusText}</p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.gen.application.updateStatus")}
+            description={updaterStatusText}
+          >
             {(shouldOfferManualDownload || updateDownloaded) && (
               <Button
                 type="button"
@@ -502,7 +474,7 @@ function RouteComponent() {
                 )}
               </Button>
             )}
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
 
@@ -511,15 +483,10 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.gen.other.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.other.imageCacheTitle")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.other.imageCacheDescription")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.gen.other.imageCacheTitle")}
+            description={t("page.setting.gen.other.imageCacheDescription")}
+          >
             <div className="flex items-center gap-2">
               <p className="text-sm">
                 {imageCacheSize === null ? (
@@ -543,7 +510,7 @@ function RouteComponent() {
                 {t("page.setting.gen.other.imageCacheClear")}
               </Button>
             </div>
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
     </main>

@@ -4,6 +4,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -46,15 +47,9 @@ function Row({
 }) {
   const labelId = useId();
   return (
-    <div className="flex items-center justify-between gap-6">
-      <div className="space-y-0.5">
-        <span id={labelId} className="text-sm font-medium">
-          {title}
-        </span>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
+    <SectionRow title={title} titleId={labelId} description={description}>
       {children(labelId)}
-    </div>
+    </SectionRow>
   );
 }
 

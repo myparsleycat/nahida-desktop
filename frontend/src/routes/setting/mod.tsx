@@ -1,12 +1,13 @@
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
 import { ModCompressionCard } from "@renderer/components/setting/mod-compression-card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
-import { FieldDescription, FieldGroup, FieldTitle } from "@renderer/components/ui/field";
+import { FieldGroup } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -188,15 +189,10 @@ function ModSettingsRouteContent() {
             <SectionTitle>{t("page.setting.mod.mod_management.title")}</SectionTitle>
           </SectionHeader>
           <SectionContent>
-            <div className="flex items-center justify-between space-x-2">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.archiveExtractPathMode")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.archiveExtractPathModeDescription")}
-                </p>
-              </div>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.archiveExtractPathMode")}
+              description={t("page.setting.mod.mod_management.archiveExtractPathModeDescription")}
+            >
               <Select
                 value={settings.archiveExtractPathMode}
                 items={archiveExtractPathModeOptions}
@@ -218,73 +214,51 @@ function ModSettingsRouteContent() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.deleteArchiveAfterExtract")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.deleteArchiveAfterExtractDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.deleteArchiveAfterExtract")}
+              description={t(
+                "page.setting.mod.mod_management.deleteArchiveAfterExtractDescription",
+              )}
+            >
               <Switch
                 checked={settings.deleteArchiveAfterExtract}
                 onCheckedChange={(val) => update("deleteArchiveAfterExtract", val)}
               />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.moveFolderInsteadOfCopy")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.moveFolderInsteadOfCopyDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.moveFolderInsteadOfCopy")}
+              description={t("page.setting.mod.mod_management.moveFolderInsteadOfCopyDescription")}
+            >
               <Switch
                 checked={settings.moveFolderInsteadOfCopy}
                 onCheckedChange={(val) => update("moveFolderInsteadOfCopy", val)}
               />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <span id={AUTO_INSPECT_FIX_LABEL_ID} className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.autoInspectFix")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.autoInspectFixDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              titleId={AUTO_INSPECT_FIX_LABEL_ID}
+              title={t("page.setting.mod.mod_management.autoInspectFix")}
+              description={t("page.setting.mod.mod_management.autoInspectFixDescription")}
+            >
               <Switch
                 checked={settings.autoInspectFix}
                 aria-labelledby={AUTO_INSPECT_FIX_LABEL_ID}
                 onCheckedChange={(val) => void handleAutoInspectFixChange(val)}
               />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.copyShaderFixesOnEnable")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.copyShaderFixesOnEnableDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.copyShaderFixesOnEnable")}
+              description={t("page.setting.mod.mod_management.copyShaderFixesOnEnableDescription")}
+            >
               <Switch
                 checked={settings.copyShaderFixesOnEnable}
                 onCheckedChange={(val) => update("copyShaderFixesOnEnable", val)}
               />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.disabledPrefixStyle")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.disabledPrefixStyleDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.disabledPrefixStyle")}
+              description={t("page.setting.mod.mod_management.disabledPrefixStyleDescription")}
+            >
               <Select
                 value={settings.disabledPrefixStyle}
                 items={disabledPrefixStyleOptions}
@@ -303,36 +277,28 @@ function ModSettingsRouteContent() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.mod_management.searchModPreview")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_management.searchModPreviewDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              title={t("page.setting.mod.mod_management.searchModPreview")}
+              description={t("page.setting.mod.mod_management.searchModPreviewDescription")}
+            >
               <Switch
                 checked={settings.searchModPreview}
                 onCheckedChange={(val) => update("searchModPreview", val)}
               />
-            </div>
+            </SectionRow>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5 pr-4">
-                  <span className="text-sm font-medium">
-                    {t("page.setting.mod.mod_management.autoResolveDownloadTarget")}
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.setting.mod.mod_management.autoResolveDownloadTargetDescription")}
-                  </p>
-                </div>
+              <SectionRow
+                title={t("page.setting.mod.mod_management.autoResolveDownloadTarget")}
+                description={t(
+                  "page.setting.mod.mod_management.autoResolveDownloadTargetDescription",
+                )}
+              >
                 <Switch
                   checked={settings.autoResolveDownloadTarget}
                   onCheckedChange={(val) => update("autoResolveDownloadTarget", val)}
                 />
-              </div>
+              </SectionRow>
 
               <div className="grid gap-2 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
                 {DOWNLOAD_SOURCES.map((source) => (
@@ -366,15 +332,10 @@ function ModSettingsRouteContent() {
             <SectionTitle>{t("page.setting.mod.layout.title")}</SectionTitle>
           </SectionHeader>
           <SectionContent>
-            <div className="flex items-center justify-between space-x-4">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.layout.sidebar.mode")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.layout.sidebar.modeDescription")}
-                </p>
-              </div>
+            <SectionRow
+              title={t("page.setting.mod.layout.sidebar.mode")}
+              description={t("page.setting.mod.layout.sidebar.modeDescription")}
+            >
               <Select
                 value={settings.sidebarLayout}
                 items={sidebarLayoutOptions}
@@ -396,22 +357,18 @@ function ModSettingsRouteContent() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center justify-between space-x-4">
-              <div className="space-y-0.5">
-                <span id={GRID_MODEL_PREVIEW_LABEL_ID} className="text-sm font-medium">
-                  {t("page.setting.mod.layout.gridModelPreview")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.layout.gridModelPreviewDescription")}
-                </p>
-              </div>
+            </SectionRow>
+            <SectionRow
+              titleId={GRID_MODEL_PREVIEW_LABEL_ID}
+              title={t("page.setting.mod.layout.gridModelPreview")}
+              description={t("page.setting.mod.layout.gridModelPreviewDescription")}
+            >
               <Switch
                 checked={settings.gridModelPreview}
                 aria-labelledby={GRID_MODEL_PREVIEW_LABEL_ID}
                 onCheckedChange={(value) => update("gridModelPreview", value)}
               />
-            </div>
+            </SectionRow>
             <div className="space-y-1">
               <span className="text-sm font-medium">{t("page.setting.mod.layout.grid.mode")}</span>
               <p className="text-xs text-muted-foreground">
@@ -443,13 +400,10 @@ function ModSettingsRouteContent() {
               </Select>
 
               {settings.gridLayoutMode === "responsive" && (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.grid.responsiveBaseWidth")}</FieldTitle>
-                    <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.grid.responsiveBaseWidthDescription")}
-                    </FieldDescription>
-                  </div>
+                <SectionRow
+                  title={t("page.setting.mod.layout.grid.responsiveBaseWidth")}
+                  description={t("page.setting.mod.layout.grid.responsiveBaseWidthDescription")}
+                >
                   <Input
                     value={settings.gridResponsiveBaseWidth}
                     onChange={(e) =>
@@ -467,17 +421,14 @@ function ModSettingsRouteContent() {
                     className="w-24"
                     inputMode="numeric"
                   />
-                </div>
+                </SectionRow>
               )}
 
               {settings.gridLayoutMode === "fixed_card_width" && (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.grid.fixedCardWidth")}</FieldTitle>
-                    <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.grid.fixedCardWidthDescription")}
-                    </FieldDescription>
-                  </div>
+                <SectionRow
+                  title={t("page.setting.mod.layout.grid.fixedCardWidth")}
+                  description={t("page.setting.mod.layout.grid.fixedCardWidthDescription")}
+                >
                   <Input
                     value={settings.gridFixedCardWidth}
                     onChange={(e) =>
@@ -495,17 +446,14 @@ function ModSettingsRouteContent() {
                     className="w-24"
                     inputMode="numeric"
                   />
-                </div>
+                </SectionRow>
               )}
 
               {settings.gridLayoutMode === "fixed_column_count" && (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.grid.fixedColumnCount")}</FieldTitle>
-                    <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.grid.fixedColumnCountDescription")}
-                    </FieldDescription>
-                  </div>
+                <SectionRow
+                  title={t("page.setting.mod.layout.grid.fixedColumnCount")}
+                  description={t("page.setting.mod.layout.grid.fixedColumnCountDescription")}
+                >
                   <Input
                     value={settings.gridFixedColumnCount}
                     onChange={(e) =>
@@ -523,7 +471,7 @@ function ModSettingsRouteContent() {
                     className="w-24"
                     inputMode="numeric"
                   />
-                </div>
+                </SectionRow>
               )}
             </FieldGroup>
           </SectionContent>

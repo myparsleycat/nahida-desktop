@@ -6,6 +6,7 @@ import {
   SectionContent,
   SectionDescription,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -215,21 +216,16 @@ export default function ModBisect() {
             disabled={isActive || isBusy || !selectedGame}
           />
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">
-                {t("page.tools.mod_bisect.preserve_d3dx")}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t("page.tools.mod_bisect.preserve_d3dx_description")}
-              </span>
-            </div>
+          <SectionRow
+            title={t("page.tools.mod_bisect.preserve_d3dx")}
+            description={t("page.tools.mod_bisect.preserve_d3dx_description")}
+          >
             <Switch
               checked={preserveD3dx}
               onCheckedChange={(checked) => void setSetting("general.bisectPreserveD3dx", checked)}
               disabled={isActive || isBusy}
             />
-          </div>
+          </SectionRow>
 
           {snapshot?.error && status !== "done" ? (
             <div className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">

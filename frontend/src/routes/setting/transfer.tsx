@@ -3,6 +3,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
@@ -65,15 +66,10 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.transfer.concurrency.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.transfer.downloadConcurrency.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.transfer.downloadConcurrency.description")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.transfer.downloadConcurrency.title")}
+            description={t("page.setting.transfer.downloadConcurrency.description")}
+          >
             <Input
               type="number"
               min={DOWNLOAD_MIN_MAX[0]}
@@ -94,16 +90,11 @@ function RouteComponent() {
               }}
               className="w-28"
             />
-          </div>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.transfer.uploadConcurrency.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.transfer.uploadConcurrency.description")}
-              </p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.transfer.uploadConcurrency.title")}
+            description={t("page.setting.transfer.uploadConcurrency.description")}
+          >
             <Input
               type="number"
               min={UPLOAD_MIN_MAX[0]}
@@ -124,7 +115,7 @@ function RouteComponent() {
               }}
               className="w-28"
             />
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
 
@@ -133,15 +124,10 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.transfer.bandwidth.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.transfer.downloadBandwidthLimitMibps.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.transfer.downloadBandwidthLimitMibps.description")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.transfer.downloadBandwidthLimitMibps.title")}
+            description={t("page.setting.transfer.downloadBandwidthLimitMibps.description")}
+          >
             <Input
               type="number"
               min={DOWNLOAD_BANDWIDTH_MIN_MAX[0]}
@@ -164,7 +150,7 @@ function RouteComponent() {
               }}
               className="w-28"
             />
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
 
@@ -173,34 +159,24 @@ function RouteComponent() {
           <SectionTitle>{t("page.setting.transfer.other.title")}</SectionTitle>
         </SectionHeader>
         <SectionContent>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.other.moveTransferPageWhenStartTransfer")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.other.moveTransferPageWhenStartTransferDescription")}
-              </p>
-            </div>
+          <SectionRow
+            title={t("page.setting.gen.other.moveTransferPageWhenStartTransfer")}
+            description={t("page.setting.gen.other.moveTransferPageWhenStartTransferDescription")}
+          >
             <Switch
               checked={settings.moveTransferPageWhenStartTransfer}
               onCheckedChange={(val) => update("moveTransferPageWhenStartTransfer", val)}
             />
-          </div>
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.other.powerSaveBlockInTransfer")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.other.powerSaveBlockInTransferDescription")}
-              </p>
-            </div>
+          </SectionRow>
+          <SectionRow
+            title={t("page.setting.gen.other.powerSaveBlockInTransfer")}
+            description={t("page.setting.gen.other.powerSaveBlockInTransferDescription")}
+          >
             <Switch
               checked={settings.powerSaveBlockInTransfer}
               onCheckedChange={(val) => update("powerSaveBlockInTransfer", val)}
             />
-          </div>
+          </SectionRow>
         </SectionContent>
       </Section>
     </div>

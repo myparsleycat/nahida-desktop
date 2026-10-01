@@ -1,6 +1,6 @@
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import { SectionContent } from "@renderer/components/ui/section";
+import { SectionContent, SectionRow } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -187,19 +187,17 @@ export function TextureResizerForm({
   ) : null;
 
   const backupField = (
-    <div className="flex items-center justify-between rounded-md bg-muted/50 p-3">
-      <div>
-        <div className="text-sm font-medium">{t("page.tools.texture_resizer.backup")}</div>
-        <div className="text-xs text-muted-foreground">
-          {t("page.tools.texture_resizer.backup_description")}
-        </div>
-      </div>
+    <SectionRow
+      className="rounded-md bg-muted/50 p-3"
+      title={t("page.tools.texture_resizer.backup")}
+      description={t("page.tools.texture_resizer.backup_description")}
+    >
       <Switch
         checked={settings.backup}
         onCheckedChange={(checked) => updateSettings({ backup: checked })}
         disabled={disabled}
       />
-    </div>
+    </SectionRow>
   );
 
   const operationField = (

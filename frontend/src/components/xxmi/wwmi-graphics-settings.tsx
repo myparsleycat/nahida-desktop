@@ -42,7 +42,7 @@ export function WWMIGraphicsSettings({ options, onChange }: Props) {
           "textureStreamingFixedPoolSize",
         ] as const
       ).map((field) => (
-        <label key={field} className="flex items-center justify-between">
+        <label key={field} className="flex items-center justify-between gap-6">
           <span>{t(`page.setting.xxmi.builtin.${field}`)}</span>
           <Switch
             checked={options[field]}

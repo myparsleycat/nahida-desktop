@@ -1,6 +1,7 @@
 import { Dialog } from "@bindings/platform";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { SectionRow } from "@renderer/components/ui/section";
 import {
   Select,
   SelectContent,
@@ -17,7 +18,7 @@ import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-export function FieldLabel({ label, description }: { label: ReactNode; description?: ReactNode }) {
+function FieldLabel({ label, description }: { label: ReactNode; description?: ReactNode }) {
   return (
     <span className="min-w-0 space-y-0.5">
       <span className="block text-sm font-medium">{label}</span>
@@ -42,12 +43,18 @@ export function ToggleRow({
   onCheckedChange: (checked: boolean) => void;
   children?: ReactNode;
 }) {
+  const labelId = useId();
+
   return (
     <div className="space-y-3">
-      <label className="flex items-center justify-between gap-4">
-        <FieldLabel label={label} description={description} />
-        <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
-      </label>
+      <SectionRow title={label} titleId={labelId} description={description}>
+        <Switch
+          aria-labelledby={labelId}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={onCheckedChange}
+        />
+      </SectionRow>
       {checked && children && (
         <div className="space-y-3 rounded-md bg-muted/50 p-3">{children}</div>
       )}
@@ -74,10 +81,7 @@ export function SelectRow({
   );
 
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span id={labelId}>
-        <FieldLabel label={label} description={description} />
-      </span>
+    <SectionRow title={label} titleId={labelId} description={description}>
       <Select
         value={value}
         items={items}
@@ -98,7 +102,7 @@ export function SelectRow({
           </SelectGroup>
         </SelectContent>
       </Select>
-    </div>
+    </SectionRow>
   );
 }
 
@@ -119,10 +123,12 @@ export function NumberRow({
   step?: number | "any";
   onValueChange: (value: number) => void;
 }) {
+  const labelId = useId();
+
   return (
-    <label className="flex items-center justify-between gap-4">
-      <FieldLabel label={label} description={description} />
+    <SectionRow title={label} titleId={labelId} description={description}>
       <Input
+        aria-labelledby={labelId}
         type="number"
         className="w-28 shrink-0 text-right"
         min={min}
@@ -131,7 +137,7 @@ export function NumberRow({
         value={value}
         onChange={(event) => onValueChange(Number(event.target.value))}
       />
-    </label>
+    </SectionRow>
   );
 }
 

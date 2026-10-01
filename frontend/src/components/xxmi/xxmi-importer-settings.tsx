@@ -23,18 +23,13 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
-import {
-  FieldLabel,
-  NumberRow,
-  PathField,
-  SelectRow,
-  ToggleRow,
-} from "@renderer/components/xxmi/xxmi-fields";
+import { NumberRow, PathField, SelectRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
@@ -292,8 +287,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       {t("page.setting.xxmi.builtin.detectGame")}
                     </Button>
                   </PathField>
-                  <div className="flex items-center justify-between gap-4">
-                    <FieldLabel label={t("page.setting.xxmi.builtin.mode")} />
+                  <SectionRow title={t("page.setting.xxmi.builtin.mode")}>
                     <ButtonGroup>
                       {(
                         [
@@ -311,7 +305,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         </Button>
                       ))}
                     </ButtonGroup>
-                  </div>
+                  </SectionRow>
                   {config.mode === RuntimeMode.RuntimeLegacy && (
                     <div className="space-y-3 rounded-md bg-muted/50 p-3">
                       <SelectRow

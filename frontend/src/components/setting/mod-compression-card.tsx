@@ -5,6 +5,7 @@ import {
   Section,
   SectionContent,
   SectionHeader,
+  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import {
@@ -93,13 +94,10 @@ export function ModCompressionCard() {
         <SectionTitle>{t("page.setting.mod.compression.title")}</SectionTitle>
       </SectionHeader>
       <SectionContent>
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <div className="text-sm font-medium">{t("page.setting.mod.compression.method")}</div>
-            <p className="text-xs text-muted-foreground">
-              {t(`page.setting.mod.compression.methods.${state.method}.description`)}
-            </p>
-          </div>
+        <SectionRow
+          title={t("page.setting.mod.compression.method")}
+          description={t(`page.setting.mod.compression.methods.${state.method}.description`)}
+        >
           <Select
             value={state.method}
             disabled={!state.canConfigure || requestPending}
@@ -130,18 +128,17 @@ export function ModCompressionCard() {
               </SelectGroup>
             </SelectContent>
           </Select>
-        </div>
+        </SectionRow>
 
         {state.method === "zstd" && (
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <label className="text-sm font-medium" htmlFor="mod-compression-threshold">
+          <SectionRow
+            title={
+              <label htmlFor="mod-compression-threshold">
                 {t("page.setting.mod.compression.threshold")}
               </label>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.mod.compression.thresholdDescription")}
-              </p>
-            </div>
+            }
+            description={t("page.setting.mod.compression.thresholdDescription")}
+          >
             <div className="flex items-center gap-2">
               <Input
                 id="mod-compression-threshold"
@@ -160,7 +157,7 @@ export function ModCompressionCard() {
               />
               <span className="text-sm text-muted-foreground">MiB</span>
             </div>
-          </div>
+          </SectionRow>
         )}
 
         <div className="rounded-md bg-muted/50 p-3">

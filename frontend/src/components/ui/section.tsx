@@ -77,4 +77,44 @@ function SectionContent({
   );
 }
 
-export { Section, SectionAction, SectionContent, SectionDescription, SectionHeader, SectionTitle };
+// A setting row: title and description on the left, its control on the right. The text takes the remaining width so a
+// long description wraps instead of squeezing the control. The row is a div, not a label, because controls such as
+// buttons must not fire when the text is clicked; pass titleId and point the control's aria-labelledby at it.
+function SectionRow({
+  title,
+  description,
+  titleId,
+  className,
+  children,
+  ...props
+}: Omit<React.ComponentProps<"div">, "title"> & {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  titleId?: string;
+}) {
+  return (
+    <div
+      data-slot="section-row"
+      className={cn("flex items-center justify-between gap-6", className)}
+      {...props}
+    >
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <span id={titleId} className="text-sm font-medium">
+          {title}
+        </span>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export {
+  Section,
+  SectionAction,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionRow,
+  SectionTitle,
+};
