@@ -11,6 +11,8 @@
 
 この機能は DLL ビルド手順の多くを自動化しますが、DLL のビルドに必要なツール自体はユーザーが直接インストールする必要があります。
 
+[Git for Windows](https://git-scm.com/downloads/win) をインストールし、Git を `PATH` で使用できるように設定してから Nahida Desktop を再起動してください。ビルドでは、バージョンヘッダーの生成に必要な Git 情報を含めて、選択したリリースタグをチェックアウトします。
+
 1. [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe) をダウンロードして実行します。
 2. 個別コンポーネントで次の項目を選択してインストールします。
    - **MSVC v143 - VS 2022 C++ x64/x86 ビルドツール (最新)**

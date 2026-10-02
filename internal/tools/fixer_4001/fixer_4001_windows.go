@@ -42,7 +42,7 @@ func d3dBuildCommand(vcvarsPath, projectPath string) (string, error) {
 
 	// vcvars64.bat can exit non-zero for non-fatal SDK detection errors while msbuild still resolves the SDK
 	// through its own props, so its exit code must not gate the build.
-	return vcvars + ` & cd /d ` + project + ` && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`, nil
+	return vcvars + ` & cd /d ` + project + ` && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /p:Configuration=Release /p:Platform=x64`, nil
 }
 
 func cmdQuotedLocalPath(path string) (string, error) {

@@ -17,7 +17,6 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/github"
-	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -576,25 +575,22 @@ func existingImporterPath(input *string) (string, bool) {
 }
 
 func (t *Service) prepareD3DSource(ctx context.Context, tempDir, provider, version string) (string, error) {
-	if t.archive == nil || !t.github.Configured() {
-		return "", errors.New("4001 fixer download/archive dependencies are not configured")
+	repo := libsRepo(provider)
+	if err := repo.Validate(); err != nil {
+		return "", err
 	}
 	t.update4001Progress("XXMI_DOWNLOAD_REPO", "")
-	repo := libsRepo(provider)
-	zipPath := filepath.Join(tempDir, "repo.zip")
-	if err := t.github.DownloadFile(ctx, github.FileRequest{
-		Repo:        repo,
-		URL:         github.TagArchiveURL(repo, strings.TrimSpace(version)),
-		Destination: zipPath,
-	}); err != nil {
+	projectPath := filepath.Join(tempDir, "source")
+	if err := checkoutD3DSource(
+		ctx,
+		"https://github.com/"+repo.String()+".git",
+		strings.TrimSpace(version),
+		projectPath,
+	); err != nil {
 		return "", err
 	}
 	t.update4001Progress("XXMI_EXTRACT_REPO", "")
-	extracted, err := t.archive.Extract(ctx, zipPath, tempDir, infra.ExtractOptions{}, nil)
-	if err != nil {
-		return "", err
-	}
-	return findStereovisionProject(extracted)
+	return findStereovisionProject(projectPath)
 }
 
 func findStereovisionProject(root string) (string, error) {
