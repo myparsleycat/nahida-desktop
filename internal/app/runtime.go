@@ -160,7 +160,10 @@ func newRuntime() *runtime {
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
 		GameBanana: gameBananaService, Native: native,
 	})
-	xxmiService.UseExternalImportersChanged(modService.RefreshCompressionImporters)
+	xxmiService.UseExternalImportersChanged(func(ctx context.Context) {
+		modService.RefreshCompressionImporters(ctx)
+		modService.RefreshNamespaceIsolationImporters(ctx)
+	})
 	download.UseClient(httpClient)
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
@@ -229,17 +232,27 @@ func newRuntime() *runtime {
 		gameBananaLogin:   login,
 		notifications:     notifier,
 	}
+	rt.mod.UseNamespaceIsolationHooks(mod.NamespaceIsolationHooks{
+		CheckStopped:   rt.xxmi.CheckNamespaceGameStopped,
+		WithMutation:   rt.xxmi.WithNamespaceMutation,
+		SuspendPersist: rt.tools.SuspendPersistWatcher,
+	})
+	rt.xxmi.UseNamespaceLaunchPreparation(rt.mod.PrepareNamespaceIsolationLaunch)
 	rt.xxmi.UseImporterMaintenance(func(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
+		if err := rt.mod.StopNamespaceIsolation(); err != nil {
+			return nil, err
+		}
 		resumeTools, err := rt.tools.SuspendImporterWatchers(ctx)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, rt.mod.StartNamespaceIsolation(context.WithoutCancel(ctx)))
 		}
 		resumeMods, err := rt.mod.SuspendImporterWatchers(ctx)
 		if err != nil {
-			return nil, errors.Join(err, resumeTools(nil))
+			return nil, errors.Join(err, resumeTools(nil), rt.mod.StartNamespaceIsolation(context.WithoutCancel(ctx)))
 		}
 		return func(moved []xxmi.ImportedImporter) error {
-			return errors.Join(resumeMods(moved), resumeTools(moved))
+			resumeErr := errors.Join(resumeMods(moved), resumeTools(moved))
+			return errors.Join(resumeErr, rt.mod.StartNamespaceIsolation(context.WithoutCancel(ctx)))
 		}, nil
 	})
 	rt.agent = agent.New(agent.Options{

@@ -33,6 +33,16 @@ func (t *Tools) StopPersistWatcher() bool {
 	return true
 }
 
+// SuspendPersistWatcher drains queued writes before mod namespaces change.
+//
+//wails:ignore
+func (t *Tools) SuspendPersistWatcher(ctx context.Context) (func() error, error) {
+	if t == nil || t.persist == nil {
+		return func() error { return nil }, nil
+	}
+	return t.persist.SuspendImporterWatcher(ctx)
+}
+
 func (t *Tools) shutdownPersistWatcher() error {
 	if t == nil || t.persist == nil {
 		return nil

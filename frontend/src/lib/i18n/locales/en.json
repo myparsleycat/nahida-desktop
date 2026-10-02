@@ -2220,6 +2220,26 @@
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "namespaceIsolation": {
+          "title": "Namespace collisions",
+          "description": "Persist Toggles also automatically isolates safe duplicate namespaces across mods.",
+          "disabled": "Enable Persist Toggles to isolate duplicate namespaces.",
+          "checking": "Checking namespaces…",
+          "empty": "No namespace collisions reported.",
+          "queryFailed": "Could not load namespace status.",
+          "rescan": "Rescan",
+          "rescanImporter": "Rescan {{importer}}",
+          "rescanFailed": "Could not rescan namespaces.",
+          "reason": "Reason",
+          "modPaths": "Mod folders",
+          "iniPaths": "INI files",
+          "status": {
+            "waiting_for_game_exit": "Waiting for game exit",
+            "needs_review": "Needs review",
+            "failed": "Failed",
+            "recovery_required": "Recovery required"
+          }
+        },
         "dllVersion": "XXMI DLL Version",
         "dllVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
         "dllVersionLoading": "Loading versions...",

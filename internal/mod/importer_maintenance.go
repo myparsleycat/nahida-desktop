@@ -14,6 +14,8 @@ import (
 //
 //wails:ignore
 func (m *Mod) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
+	// The outer runtime stops namespace isolation before suspending tools.
+	// Do not drain it while the caller already holds the tools watcher mutex.
 	m.watchMu.Lock()
 	if err := ctx.Err(); err != nil {
 		m.watchMu.Unlock()

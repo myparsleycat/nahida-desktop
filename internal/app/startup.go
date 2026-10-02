@@ -91,6 +91,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 	rt.runStartupSteps(ctx, []startupStep{
 		{"bisect-recovery", rt.tools.RecoverBisects},
 		{"compression", rt.runCompressionMaintenance},
+		{"namespace-isolation", rt.mod.StartNamespaceIsolation},
 		{"persist-watcher", rt.tools.StartPersistWatcher},
 	})
 	if ctx.Err() != nil {

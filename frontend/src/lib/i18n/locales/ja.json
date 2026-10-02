@@ -2136,6 +2136,26 @@
         "persistToggles": "トグルの永続保存",
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
+        "namespaceIsolation": {
+          "title": "namespace の競合",
+          "description": "トグル状態の永続保存は、MOD 間の重複 namespace も安全な場合に自動で分離します。",
+          "disabled": "重複 namespace を分離するには、トグル状態の永続保存を有効にしてください。",
+          "checking": "namespace を確認中…",
+          "empty": "namespace の競合は報告されていません。",
+          "queryFailed": "namespace の状態を取得できませんでした。",
+          "rescan": "再検査",
+          "rescanImporter": "{{importer}} を再検査",
+          "rescanFailed": "namespace を再検査できませんでした。",
+          "reason": "理由",
+          "modPaths": "MOD フォルダー",
+          "iniPaths": "INI ファイル",
+          "status": {
+            "waiting_for_game_exit": "ゲームの終了待ち",
+            "needs_review": "確認が必要",
+            "failed": "失敗",
+            "recovery_required": "復旧が必要"
+          }
+        },
         "dllVersion": "XXMI DLLバージョン",
         "dllVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
         "dllVersionLoading": "バージョンを読み込み中...",

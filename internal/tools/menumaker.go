@@ -58,6 +58,10 @@ func (t *Tools) MenuMakerApplyBundle(
 	ctx context.Context,
 	req MenuMakerApplyRequest,
 ) (MenuMakerWriteResult, error) {
+	if t.reserveModFiles != nil {
+		release := t.reserveModFiles()
+		defer release()
+	}
 	return t.menuMaker.ApplyBundle(ctx, req)
 }
 
@@ -65,6 +69,10 @@ func (t *Tools) MenuMakerSaveINI(
 	ctx context.Context,
 	req MenuMakerSaveINIRequest,
 ) (MenuMakerWriteResult, error) {
+	if t.reserveModFiles != nil {
+		release := t.reserveModFiles()
+		defer release()
+	}
 	return t.menuMaker.SaveINI(ctx, req)
 }
 

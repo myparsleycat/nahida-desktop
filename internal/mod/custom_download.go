@@ -319,6 +319,8 @@ func (m *Mod) runGroupDownload(
 			"CustomDownloader:downloadToGroup",
 		)
 	}
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
 	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
 	if err != nil {
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
@@ -412,6 +414,8 @@ func (m *Mod) runGameBananaDownload(
 			return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 		}
 	}
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
 	finalized, err := finalizeStagedDownload(target.stagingPath, target.destinationDir)
 	if err != nil {
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")

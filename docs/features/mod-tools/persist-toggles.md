@@ -12,13 +12,15 @@ After you change a toggle in-game and `d3dx_user.ini` is updated by Reload (`F10
 
 As a result, the previous toggle state can remain intact even after disabling or reloading the mod.
 
-## Copied Mods and Namespaces
+## Copied Mods and Namespace Isolation
 
-Nahida Desktop finds the INI that declares each persistent variable using its effective namespace, including an explicit `namespace = ...`. Main and help/menu INIs can share a namespace when they declare different variables.
+The existing **Persist Toggles** setting also controls automatic namespace isolation. For safe duplicate explicit namespaces across different mods, Nahida Desktop assigns independent namespaces to **all participants**, including disabled copies, and updates the related INI references. Copies made outside Nahida Desktop are detected too, including after restarting the app.
 
-If multiple INIs declare the same variable in the same namespace, Nahida Desktop skips that variable and records the conflicting paths in the persist log. Disabled copies are included in this check because a value saved during a mod switch may still belong to the previously loaded copy. Other unambiguous variables continue to save.
+Isolation only applies to explicit `namespace = ...` declarations. INIs within the same mod may share a namespace, for example a main INI and help/menu INIs; that alone is not a collision. NTE is excluded. Display names in the GUI stay unchanged: namespace suffixes are internal and are not added to mod names.
 
-Changing a folder name does not change an explicit namespace. To keep copied mods independent in-game, give each copy a distinct namespace and update the corresponding references in its help/menu INIs. Nahida Desktop does not automatically rename these namespaces or rewrite their references.
+When the game is running, changes are deferred until it exits. The collision section shows **Waiting for game exit**, **Needs review**, **Failed**, or **Recovery required**, together with the reason, details, and affected mod/INI paths. Use the importer's **Rescan** button to request another check. There is no separate isolation switch, force action, game-stop action, or requirement to press F10 for isolation.
+
+Namespace mappings are recorded in the mod's `nhd` metadata. Backups and recovery information protect the INI changes. If recovery is required, review the reported paths and details before changing files. Nahida Desktop does not transfer old `d3dx_user.ini` values when their ownership is uncertain; ambiguous persistent variables are skipped and logged rather than assigned to a copy. Other unambiguous variables continue to save.
 
 ## Before You Use It
 

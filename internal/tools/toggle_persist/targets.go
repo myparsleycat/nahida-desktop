@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"nahida.live/desktop/internal/mod/namespace"
 )
 
 var globalDeclarationRE = regexp.MustCompile(`(?i)^global\s+(persist\s+)?\$([^\s=\\]+)(?:\s*=\s*.*)?$`)
@@ -22,6 +24,7 @@ type persistTarget struct {
 	fingerprint string
 	persistent  bool
 	disabled    bool
+	blocked     string
 }
 
 type persistTargetIndex map[string][]persistTarget
@@ -35,6 +38,9 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		return nil, fmt.Errorf("resolve persist importer %q: %w", importerFolder, err)
 	}
 	index := persistTargetIndex{}
+	blockedRoots := map[string]string{}
+	mods := filepath.Join(root, "Mods")
+	linkedModsRoot := ""
 	visit := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -42,6 +48,28 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		if entry.IsDir() {
 			if path != root && strings.HasPrefix(entry.Name(), ".") {
 				return fs.SkipDir
+			}
+			if _, err := os.Lstat(filepath.Join(path, ".nhd-namespace")); !errors.Is(err, os.ErrNotExist) {
+				journalPath := path
+				if linkedModsRoot != "" {
+					// Resolve only the trusted Mods boundary; journal validation still
+					// rejects reparse points inside each physical mod directory.
+					relative, err := filepath.Rel(mods, path)
+					if err != nil {
+						return err
+					}
+					journalPath = filepath.Join(linkedModsRoot, relative)
+				}
+				// The isolation coordinator journals under symlink-resolved roots. This
+				// walk follows no link below its roots, so resolving here maps only the
+				// symlinked ancestors that journal validation would otherwise reject.
+				if resolved, err := filepath.EvalSymlinks(journalPath); err == nil {
+					journalPath = resolved
+				}
+				pending, journalErr := namespace.HasIncompleteTransactions(journalPath)
+				if pending || journalErr != nil {
+					blockedRoots[path] = "unfinished namespace transaction"
+				}
 			}
 			return nil
 		}
@@ -82,6 +110,13 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 			target.info = info
 			target.fingerprint = fingerprint
 			target.disabled = disabled
+			for parent, reason := range blockedRoots {
+				if relative, err := filepath.Rel(parent, path); err == nil && relative != ".." &&
+					!strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+					target.blocked = reason
+					break
+				}
+			}
 			index[target.key] = append(index[target.key], target)
 		}
 		return nil
@@ -95,9 +130,15 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 	// reparse points already visited by the initial walk must not be indexed twice.
 	// Follow only this explicit root; nested links and linked INI files are not
 	// traversed, so a namespace cannot redirect writes through an arbitrary link.
-	mods := filepath.Join(root, "Mods")
 	if info, err := os.Lstat(mods); err == nil && !info.IsDir() &&
 		info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+		linkedModsRoot, err = os.Readlink(mods)
+		if err != nil {
+			return nil, fmt.Errorf("resolve linked persist mods %q: %w", mods, err)
+		}
+		if !filepath.IsAbs(linkedModsRoot) {
+			linkedModsRoot = filepath.Join(root, linkedModsRoot)
+		}
 		if err := filepath.WalkDir(mods+string(os.PathSeparator), visit); err != nil {
 			return nil, fmt.Errorf("index linked persist mods %q: %w", mods, err)
 		}
@@ -122,6 +163,9 @@ func parsePersistTargets(content, namespace string) []persistTarget {
 		if preamble {
 			key, value, found := strings.Cut(trimmed, "=")
 			if found && strings.EqualFold(strings.TrimSpace(key), "namespace") {
+				if comment := strings.IndexAny(value, ";#"); comment >= 0 {
+					value = value[:comment]
+				}
 				namespace = strings.TrimSpace(value)
 			}
 			continue
@@ -146,6 +190,11 @@ func parsePersistTargets(content, namespace string) []persistTarget {
 
 func (index persistTargetIndex) resolve(key string) (*persistTarget, error) {
 	targets := index[strings.ToLower(key)]
+	for _, target := range targets {
+		if target.blocked != "" {
+			return nil, fmt.Errorf("persist variable %s blocked in %s: %s", key, target.iniPath, target.blocked)
+		}
+	}
 	if len(targets) > 1 {
 		paths := make([]string, len(targets))
 		for i, target := range targets {
