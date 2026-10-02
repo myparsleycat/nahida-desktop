@@ -474,7 +474,15 @@ function StoringIndicator(props: { size: string }) {
 
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="flex size-full items-center justify-center" />}>
+      <TooltipTrigger
+        render={
+          <span
+            role="status"
+            aria-label={t("page.drive.storing_tooltip")}
+            className="flex size-full items-center justify-center"
+          />
+        }
+      >
         <LoaderIcon className="animate-spin" size={props.size} />
       </TooltipTrigger>
       <TooltipContent>{t("page.drive.storing_tooltip")}</TooltipContent>

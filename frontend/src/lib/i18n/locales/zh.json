@@ -241,6 +241,7 @@
       "title_server_error": "云端硬盘 (服务器错误)",
       "share_drive": "共享云端硬盘",
       "storing_tooltip": "正在上传到文件服务器",
+      "storing_download_excluded": "正在上传到文件服务器的文件已从下载中排除",
       "no_contents_section_message": {
         "0": "此文件夹中没有文件或文件夹",
         "1": "拖放文件或文件夹到此处上传"

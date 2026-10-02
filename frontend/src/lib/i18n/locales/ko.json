@@ -241,6 +241,7 @@
       "title_server_error": "드라이브 (서버 에러)",
       "share_drive": "공유 드라이브",
       "storing_tooltip": "파일 서버에 업로드 중",
+      "storing_download_excluded": "파일 서버에 업로드 중인 파일은 다운로드에서 제외되었습니다",
       "no_contents_section_message": {
         "0": "이 폴더에 파일이나 폴더가 없습니다",
         "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"

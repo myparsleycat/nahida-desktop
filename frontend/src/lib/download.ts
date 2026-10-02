@@ -9,7 +9,7 @@ export async function downloadItems(items: Content[]) {
     const stored = items.filter((item) => !item.storing);
 
     if (stored.length < items.length) {
-        toast.info(t("page.drive.storing_tooltip"));
+        toast.info(t("page.drive.storing_download_excluded"));
     }
 
     if (stored.length === 0) return;
