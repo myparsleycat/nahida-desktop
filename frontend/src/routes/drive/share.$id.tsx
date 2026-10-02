@@ -31,7 +31,11 @@ import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
 import { FileDropTargetID, useWindowFileDrop } from "@renderer/wails/file-drop";
-import { driveContentsRefetchInterval, driveContentsRetry } from "@shared/backend";
+import {
+  driveContentsRefetchInterval,
+  driveContentsRetry,
+  hasStoringContent,
+} from "@shared/backend";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
@@ -90,10 +94,11 @@ function RouteComponent() {
     enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
-    refetchInterval: () =>
+    refetchInterval: (query) =>
       driveContentsRefetchInterval(
         backendStatus,
         typeof document !== "undefined" && document.hidden,
+        hasStoringContent(query.state.data?.children),
       ),
     retry: driveContentsRetry(backendStatus),
     queryFn: async () => {
