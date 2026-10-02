@@ -1975,7 +1975,6 @@
           "unlockFPS": "FPS制限を解除",
           "fpsTarget": "目標FPS",
           "enableHDR": "HDRを有効化",
-          "disableDCR": "動的キャラクター解像度を無効化",
           "forceMaxLODBias": "最高のテクスチャ品質を強制",
           "applyPerfTweaks": "パフォーマンス調整を適用",
           "disableWoundedFX": "負傷エフェクトを無効化",
@@ -2086,6 +2085,9 @@
             "HIMI_FPS_UNLOCK_FAILED": "崩壊3rd の FPS 目標値を設定できませんでした。ゲーム内の FPS 設定を一度変更して再試行してください。",
             "ZZMI_GAME_CONFIG_FAILED": "ゼンレスゾーンゼロのグラフィック設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。",
             "WWMI_GAME_CONFIG_FAILED": "鳴潮の設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。"
+          },
+          "launchWarnings": {
+            "GIMI_DCR_UNREADABLE": "動的キャラクター解像度の設定を確認できませんでした。有効になっていると MOD が正しく適用されない可能性があるため、ゲームのグラフィック設定を確認してください。"
           },
           "importerFolder": "インポーターフォルダー",
           "gameFolder": "ゲームフォルダー",

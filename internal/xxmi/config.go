@@ -71,7 +71,6 @@ type GIMIOptions struct {
 	UnlockFPS      bool `json:"unlockFPS"`
 	UnlockFPSValue int  `json:"unlockFPSValue"`
 	EnableHDR      bool `json:"enableHDR"`
-	DisableDCR     bool `json:"disableDCR"`
 }
 
 type SRMIOptions struct {
@@ -175,7 +174,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	switch key {
 	case "GIMI":
 		cfg.ProcessStartMethod = "Shell"
-		cfg.GIMI = &GIMIOptions{UnlockFPSValue: 120, DisableDCR: true}
+		cfg.GIMI = &GIMIOptions{UnlockFPSValue: 120}
 	case "SRMI":
 		cfg.SRMI = &SRMIOptions{}
 	case "HIMI":

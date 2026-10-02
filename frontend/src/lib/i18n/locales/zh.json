@@ -1974,7 +1974,6 @@
           "unlockFPS": "解除帧率限制",
           "fpsTarget": "目标帧率",
           "enableHDR": "启用 HDR",
-          "disableDCR": "禁用动态角色分辨率",
           "forceMaxLODBias": "强制最高纹理细节",
           "applyPerfTweaks": "应用性能调整",
           "disableWoundedFX": "禁用受伤效果",
@@ -2085,6 +2084,9 @@
             "HIMI_FPS_UNLOCK_FAILED": "无法设置崩坏3的目标帧率。请先在游戏中更改一次帧率设置，然后重试。",
             "ZZMI_GAME_CONFIG_FAILED": "无法更改绝区零的画面设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
             "WWMI_GAME_CONFIG_FAILED": "无法更改鸣潮的设置。请检查游戏文件夹，或关闭自动配置游戏设置。"
+          },
+          "launchWarnings": {
+            "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。"
           },
           "importerFolder": "导入器文件夹",
           "gameFolder": "游戏文件夹",

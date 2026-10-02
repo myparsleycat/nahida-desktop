@@ -134,13 +134,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err != nil {
 		return err
 	}
-	// Like the reference launcher, DCR is only managed when game settings are configured for a loaded XXMI DLL.
-	checkDCR := key == "GIMI" && cfg.ConfigureGame && migotoDLLUsed
-	if checkDCR && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
-		if err := x.disableGIMIDCR(ctx); err != nil {
-			return err
-		}
-	}
+	// The launch guard asks before turning DCR off, so it runs whenever the XXMI DLL is injected,
+	// even when this importer does not configure game settings.
+	checkDCR := key == "GIMI" && migotoDLLUsed
 	if err := x.rejectLaunchBlockers(ctx, key, gameExe, checkDCR); err != nil {
 		return err
 	}

@@ -62,18 +62,52 @@ func TestRejectLaunchBlockersIgnoresUnreadableSmoothMotion(t *testing.T) {
 	}
 }
 
+func TestRejectLaunchBlockersAllowsUnreadableDCR(t *testing.T) {
+	t.Parallel()
+	var payload map[string]any
+	service := NewWithOptions(Options{EventEmit: func(name string, data ...any) {
+		if name != "xxmi:launch-progress" || len(data) == 0 {
+			return
+		}
+		if event, ok := data[0].(map[string]any); ok {
+			payload = event
+		}
+	}})
+
+	err := service.rejectLaunchBlockersFrom(
+		t.Context(), "GIMI", "GenshinImpact.exe", true,
+		&fakeLaunch{dcrErr: errors.New("genshin impact registry key is not found")},
+	)
+	if err != nil {
+		t.Fatalf("error = %v, want an unreadable DCR setting to allow the launch", err)
+	}
+	if payload == nil {
+		t.Fatal("no launch warning was emitted for the unreadable DCR setting")
+	}
+	if payload["warningCode"] != launchWarningGimiDCRUnreadable || payload["importer"] != "GIMI" {
+		t.Fatalf("warning payload = %v", payload)
+	}
+	if _, ok := payload["stage"]; ok {
+		t.Fatalf("notification payload must not report a progress stage: %v", payload)
+	}
+	if detail, ok := payload["detail"].(string); !ok || detail == "" {
+		t.Fatalf("warning detail = %v, want the read error", payload["detail"])
+	}
+}
+
 func TestCollectLaunchBlockers(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name     string
-		importer string
-		exe      string
-		skipDCR  bool
-		fake     fakeLaunch
-		want     []error
-		wantErr  string
-		dcrReads int
-		smooth   int
+		name         string
+		importer     string
+		exe          string
+		skipDCR      bool
+		fake         fakeLaunch
+		want         []error
+		wantWarnings []string
+		wantErr      string
+		dcrReads     int
+		smooth       int
 	}{
 		{
 			name:     "gimi with both settings on",
@@ -122,12 +156,13 @@ func TestCollectLaunchBlockers(t *testing.T) {
 			dcrReads: 0,
 		},
 		{
-			name:     "dcr read failure",
-			importer: "GIMI",
-			exe:      "GenshinImpact.exe",
-			fake:     fakeLaunch{dcrErr: errors.New("registry missing")},
-			wantErr:  "dynamic character resolution",
-			dcrReads: 1,
+			name:         "dcr read failure warns instead of blocking",
+			importer:     "GIMI",
+			exe:          "GenshinImpact.exe",
+			fake:         fakeLaunch{dcrErr: errors.New("registry missing")},
+			wantWarnings: []string{launchWarningGimiDCRUnreadable},
+			dcrReads:     1,
+			smooth:       1,
 		},
 		{
 			name:     "smooth motion read failure",
@@ -142,7 +177,7 @@ func TestCollectLaunchBlockers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fake := tc.fake
-			got, err := collectLaunchBlockers(t.Context(), tc.importer, tc.exe, !tc.skipDCR, &fake)
+			got, warnings, err := collectLaunchBlockers(t.Context(), tc.importer, tc.exe, !tc.skipDCR, &fake)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
@@ -156,6 +191,14 @@ func TestCollectLaunchBlockers(t *testing.T) {
 			for i := range tc.want {
 				if !errors.Is(got[i], tc.want[i]) {
 					t.Fatalf("blocker %d = %v, want %v", i, got[i], tc.want[i])
+				}
+			}
+			if len(warnings) != len(tc.wantWarnings) {
+				t.Fatalf("warnings = %v, want %v", warnings, tc.wantWarnings)
+			}
+			for i := range tc.wantWarnings {
+				if warnings[i].code != tc.wantWarnings[i] {
+					t.Fatalf("warning %d = %q, want %q", i, warnings[i].code, tc.wantWarnings[i])
 				}
 			}
 			if fake.dcrReads != tc.dcrReads {
@@ -226,7 +269,7 @@ func TestCollectLaunchBlockersHonorsCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := collectLaunchBlockers(ctx, "GIMI", "GenshinImpact.exe", true, &fakeLaunch{dcr: true})
+	_, _, err := collectLaunchBlockers(ctx, "GIMI", "GenshinImpact.exe", true, &fakeLaunch{dcr: true})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
