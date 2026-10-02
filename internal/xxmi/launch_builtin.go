@@ -242,6 +242,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err != nil {
 		return err
 	}
+	if err := x.prepareNamespaceLaunch(ctx, key); err != nil {
+		return fmt.Errorf("final namespace preparation before launch: %w", err)
+	}
 	progress("inject-launch")
 	result, err := x.elevated.LaunchXXMI(ctx, launchSpec)
 	if err != nil {
@@ -278,6 +281,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 }
 
 func (x *XXMI) acquireImporter(key string) bool {
+	key = strings.ToUpper(strings.TrimSpace(key))
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	if x.busy[key] {
@@ -291,6 +295,7 @@ func (x *XXMI) acquireImporter(key string) bool {
 }
 
 func (x *XXMI) releaseImporter(key string) {
+	key = strings.ToUpper(strings.TrimSpace(key))
 	x.mu.Lock()
 	delete(x.busy, key)
 	x.mu.Unlock()

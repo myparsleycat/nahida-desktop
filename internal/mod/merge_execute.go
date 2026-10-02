@@ -31,6 +31,9 @@ type MergeModsResult struct {
 }
 
 func (m *Mod) MergeMods(ctx context.Context, request MergeModsRequest) (result MergeModsResult, err error) {
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
+
 	if err := m.validateMergeRequest(ctx, request); err != nil {
 		return result, err
 	}

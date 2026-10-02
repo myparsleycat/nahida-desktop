@@ -2154,6 +2154,26 @@
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
         "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
+        "namespaceIsolation": {
+          "title": "namespace 충돌",
+          "description": "토글 영구 저장은 모드 간 중복 namespace도 안전한 경우 자동으로 분리합니다.",
+          "disabled": "중복 namespace를 분리하려면 토글 영구 저장을 활성화하세요.",
+          "checking": "namespace 확인 중…",
+          "empty": "보고된 namespace 충돌이 없습니다.",
+          "queryFailed": "namespace 상태를 불러오지 못했습니다.",
+          "rescan": "다시 검사",
+          "rescanImporter": "{{importer}} 다시 검사",
+          "rescanFailed": "namespace를 다시 검사하지 못했습니다.",
+          "reason": "사유",
+          "modPaths": "모드 폴더",
+          "iniPaths": "INI 파일",
+          "status": {
+            "waiting_for_game_exit": "게임 종료 대기 중",
+            "needs_review": "검토 필요",
+            "failed": "실패",
+            "recovery_required": "복구 필요"
+          }
+        },
         "dllVersion": "XXMI DLL 버전",
         "dllVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다.",
         "dllVersionLoading": "버전을 불러오는 중...",

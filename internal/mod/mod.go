@@ -75,32 +75,34 @@ type Options struct {
 }
 
 type Mod struct {
-	appData           *appdata.Store
-	client            *db.Client
-	fs                *platform.FS
-	settings          Settings
-	archive           *infra.Archive
-	http              *infra.Client
-	xxmi              ImporterSource
-	log               *infra.Log
-	dialog            *platform.Dialog
-	shaders           *ShaderFixes
-	transfer          *transfer.Transfer
-	gamebanana        *gamebanana.GameBanana
-	native            *platform.Native
-	paths             *pathSelector
-	downloader        *infra.ParallelDownloader
-	extractMu         sync.Mutex
-	extractPrompts    map[string]chan string
-	mu                sync.Mutex
-	watchMu           sync.Mutex
-	gameWatcher       *managedWatcher
-	characterWatcher  *managedWatcher
-	emit              func(string, ...any)
-	inspectAddedMods  func([]string)
-	nteSigBypasserURL string
-	nteASILoaderURL   string
-	compression       *compressionCoordinator
+	appData            *appdata.Store
+	client             *db.Client
+	fs                 *platform.FS
+	settings           Settings
+	archive            *infra.Archive
+	http               *infra.Client
+	xxmi               ImporterSource
+	log                *infra.Log
+	dialog             *platform.Dialog
+	shaders            *ShaderFixes
+	transfer           *transfer.Transfer
+	gamebanana         *gamebanana.GameBanana
+	native             *platform.Native
+	paths              *pathSelector
+	downloader         *infra.ParallelDownloader
+	extractMu          sync.Mutex
+	extractPrompts     map[string]chan string
+	mu                 sync.Mutex
+	watchMu            sync.Mutex
+	gameWatcher        *managedWatcher
+	characterWatcher   *managedWatcher
+	emit               func(string, ...any)
+	inspectAddedMods   func([]string)
+	nteSigBypasserURL  string
+	nteASILoaderURL    string
+	compression        *compressionCoordinator
+	namespaceIsolation *namespaceIsolationCoordinator
+	operationMu        sync.RWMutex
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -139,6 +141,7 @@ func NewWithOptions(opts Options) *Mod {
 	m.shaders.getGames = m.shaderGames
 	m.shaders.logError = m.logShaderError
 	m.compression = newCompressionCoordinator(m)
+	m.namespaceIsolation = newNamespaceIsolationCoordinator(m)
 	return m
 }
 
@@ -173,6 +176,9 @@ func (m *Mod) UseFixInspection(fn func([]string)) {
 }
 
 func (m *Mod) queueFixInspection(paths ...string) {
+	if m != nil && m.namespaceIsolation != nil {
+		m.namespaceIsolation.enqueue()
+	}
 	if m != nil && m.inspectAddedMods != nil && len(paths) > 0 {
 		m.inspectAddedMods(paths)
 	}
@@ -331,6 +337,8 @@ func (m *Mod) GetGames(ctx context.Context) ([]GameConfig, error) {
 }
 
 func (m *Mod) SetGamePath(ctx context.Context, game, modFolderPath string) error {
+	defer m.namespaceIsolation.enqueue()
+
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -356,6 +364,8 @@ func (m *Mod) AddGame(
 	game, modFolderPath string,
 	importer, linkedModFolderPath, gameInstallPath, gameExecutablePath *string,
 ) error {
+	defer m.namespaceIsolation.enqueue()
+
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -445,6 +455,8 @@ func (m *Mod) AddGame(
 }
 
 func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) error {
+	defer m.namespaceIsolation.enqueue()
+
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -517,6 +529,8 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 }
 
 func (m *Mod) RemoveGame(ctx context.Context, game string) error {
+	defer m.namespaceIsolation.enqueue()
+
 	client, err := m.requireClient()
 	if err != nil {
 		return err

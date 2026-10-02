@@ -26,6 +26,9 @@ func (m *Mod) UpdateToggleKey(
 	ctx context.Context,
 	modPath, iniFileName, sectionName, variable, value string,
 ) error {
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
+
 	iniPath := iniFileName
 	if !filepath.IsAbs(iniPath) {
 		iniPath = filepath.Join(modPath, iniFileName)
@@ -113,6 +116,9 @@ func (m *Mod) ExtractArchiveToGroup(
 	ctx context.Context,
 	archivePath, groupPath, mode string,
 ) (string, error) {
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
+
 	if _, err := m.ownedPath(ctx, groupPath); err != nil {
 		return "", err
 	}
@@ -159,6 +165,9 @@ func (m *Mod) CopyFolderToGroup(
 	ctx context.Context,
 	folderPath, groupPath string,
 ) (string, error) {
+	finishOperation := m.beginModOperation()
+	defer finishOperation()
+
 	if _, err := m.ownedPath(ctx, groupPath); err != nil {
 		return "", err
 	}

@@ -97,6 +97,7 @@ func (m *Mod) ServiceShutdown() error {
 	if m == nil {
 		return nil
 	}
+	namespaceErr := m.StopNamespaceIsolation()
 	m.watchMu.Lock()
 	game, character := m.gameWatcher, m.characterWatcher
 	m.gameWatcher, m.characterWatcher = nil, nil
@@ -105,7 +106,7 @@ func (m *Mod) ServiceShutdown() error {
 	if m.compression != nil {
 		compressionErr = m.compression.stop()
 	}
-	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr)
+	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr, namespaceErr)
 }
 
 func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {

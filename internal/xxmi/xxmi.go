@@ -104,17 +104,18 @@ type XXMI struct {
 	mu        sync.RWMutex
 	packageMu sync.Mutex
 	// disabledMu serializes read-modify-write updates of the disabled external importer list.
-	disabledMu               sync.Mutex
-	client                   *db.Client
-	log                      *infra.Log
-	github                   *github.Client
-	archive                  *infra.Archive
-	elevated                 elevatedLauncher
-	eventEmit                func(string, ...any)
-	searchRoots              func() ([]string, error)
-	busy                     map[string]bool
-	externalImportersChanged func(context.Context)
-	importerMaintenance      func(context.Context) (func([]ImportedImporter) error, error)
+	disabledMu                 sync.Mutex
+	client                     *db.Client
+	log                        *infra.Log
+	github                     *github.Client
+	archive                    *infra.Archive
+	elevated                   elevatedLauncher
+	eventEmit                  func(string, ...any)
+	searchRoots                func() ([]string, error)
+	busy                       map[string]bool
+	externalImportersChanged   func(context.Context)
+	importerMaintenance        func(context.Context) (func([]ImportedImporter) error, error)
+	namespaceLaunchPreparation func(context.Context, string) error
 	// findProcess queries running games; filesystem migration tests replace it independently of the host.
 	findProcess func(context.Context, string) (int, error)
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.

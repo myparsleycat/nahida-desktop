@@ -30,6 +30,26 @@ func TestPersistWatcherResolvesNamespaceDeclarations(t *testing.T) {
 			},
 		},
 		{
+			name: "isolated Qingxiao copies retain independent main and GUI toggles",
+			files: map[string]string{
+				"Mods/One/mod.ini":         "namespace = Mods\\QingXiao-FeiHuaLing__nhd_11111111111141118111111111111111\n[Constants]\nglobal persist $xiezi_f1 = 0\n",
+				"Mods/One/GUI/ListGUI.ini": "namespace = Mods\\QingXiao-FeiHuaLing__nhd_11111111111141118111111111111111\n[Constants]\nglobal persist $xiezi_f2 = 0\n",
+				"Mods/Two/mod.ini":         "namespace = Mods\\QingXiao-FeiHuaLing__nhd_22222222222242228222222222222222\n[Constants]\nglobal persist $xiezi_f1 = 0\n",
+				"Mods/Two/GUI/ListGUI.ini": "namespace = Mods\\QingXiao-FeiHuaLing__nhd_22222222222242228222222222222222\n[Constants]\nglobal persist $xiezi_f2 = 0\n",
+			},
+			state: `$\Mods\QingXiao-FeiHuaLing\xiezi_f1 = 9` + "\n" +
+				`$\Mods\QingXiao-FeiHuaLing__nhd_11111111111141118111111111111111\xiezi_f1 = 1` + "\n" +
+				`$\Mods\QingXiao-FeiHuaLing__nhd_11111111111141118111111111111111\xiezi_f2 = 0.25` + "\n" +
+				`$\Mods\QingXiao-FeiHuaLing__nhd_22222222222242228222222222222222\xiezi_f1 = 2` + "\n" +
+				`$\Mods\QingXiao-FeiHuaLing__nhd_22222222222242228222222222222222\xiezi_f2 = 0.75`,
+			want: map[string]string{
+				"Mods/One/mod.ini":         "$xiezi_f1 = 1",
+				"Mods/One/GUI/ListGUI.ini": "$xiezi_f2 = 0.25",
+				"Mods/Two/mod.ini":         "$xiezi_f1 = 2",
+				"Mods/Two/GUI/ListGUI.ini": "$xiezi_f2 = 0.75",
+			},
+		},
+		{
 			name: "explicit namespaces without ini suffix",
 			files: map[string]string{
 				"Mods/Example - 1/mod.ini": "namespace = Creator\\One\n[Constants]\nglobal persist $Toggle = 0\n",
@@ -123,7 +143,7 @@ func TestPersistWatcherResolvesNamespaceDeclarations(t *testing.T) {
 		{
 			name: "case insensitive namespace and bom",
 			files: map[string]string{
-				"Mods/Copy/mod.ini": "\uFEFF; header\r\nNaMeSpAcE = Creator\\Outfit\r\n[constants]\r\nglobal\tpersist\t$Toggle = 0\r\n",
+				"Mods/Copy/mod.ini": "\uFEFF; header\r\nNaMeSpAcE = Creator\\Outfit ; original namespace\r\n[constants]\r\nglobal\tpersist\t$Toggle = 0\r\n",
 			},
 			state: `$\CREATOR\OUTFIT\toggle = 2`,
 			want:  map[string]string{"Mods/Copy/mod.ini": "$Toggle = 2"},
@@ -383,4 +403,37 @@ func triggerPersistContent(t *testing.T, harness *persistHarness, constants stri
 		t.Fatal(err)
 	}
 	harness.onModify()
+}
+
+func TestPersistTargetsBlockUnresolvedNamespaceTransaction(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	broken := filepath.Join(root, "Mods", "Broken")
+	ordinary := filepath.Join(root, "Mods", "Ordinary")
+	for _, path := range []string{broken, ordinary} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			filepath.Join(path, "mod.ini"),
+			[]byte("[Constants]\nglobal persist $Toggle = 0\n"),
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An incomplete or malformed journal must block only the affected physical mod.
+	if err := os.MkdirAll(filepath.Join(broken, ".nhd-namespace", "transactions", "invalid"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	index, err := indexPersistTargets(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target, err := index.resolve(`$\Mods\Broken\mod.ini\Toggle`); target != nil || err == nil {
+		t.Fatalf("unresolved transaction target = %#v, %v", target, err)
+	}
+	if target, err := index.resolve(`$\Mods\Ordinary\mod.ini\Toggle`); target == nil || err != nil {
+		t.Fatalf("unrelated target = %#v, %v", target, err)
+	}
 }

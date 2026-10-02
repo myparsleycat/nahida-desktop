@@ -3,6 +3,7 @@ package xxmi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -126,5 +127,23 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	stored, err := service.GetImporterConfig(ctx, "EFMI")
 	if err != nil || stored.LaunchCount != 1 {
 		t.Fatalf("stored launch count = %d, err = %v", stored.LaunchCount, err)
+	}
+
+	// Commands and runtime preparation run after the initial namespace check.
+	// A newly discovered incomplete transaction must still prevent injection.
+	blocked := errors.New("unfinished namespace transaction after pre-launch")
+	preparations := 0
+	service.UseNamespaceLaunchPreparation(func(context.Context, string) error {
+		preparations++
+		if preparations == 2 {
+			return blocked
+		}
+		return nil
+	})
+	if err := service.StartGame(ctx, "EFMI"); !errors.Is(err, blocked) {
+		t.Fatalf("final namespace check = %v", err)
+	}
+	if preparations != 2 || helper.calls != 1 {
+		t.Fatalf("preparations = %d, injections = %d", preparations, helper.calls)
 	}
 }

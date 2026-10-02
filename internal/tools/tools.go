@@ -61,7 +61,8 @@ type Options struct {
 // Tools is the Wails service the renderer calls. Feature behavior lives in the
 // subpackages; this type keeps the binding contract and wires them together.
 type Tools struct {
-	githubRate *infra.GitHubRateCoordinator
+	githubRate      *infra.GitHubRateCoordinator
+	reserveModFiles func() func()
 
 	bisect        *modbisect.Service
 	bodyShape     *bodyshape.Service
@@ -80,6 +81,10 @@ type Tools struct {
 func New() *Tools { return NewWithOptions(Options{}) }
 
 func NewWithOptions(opts Options) *Tools {
+	var reserveModFiles func() func()
+	if mods, ok := opts.Mod.(interface{ ReserveModFiles() func() }); ok {
+		reserveModFiles = mods.ReserveModFiles
+	}
 	if opts.FS == nil {
 		opts.FS = platform.NewFS()
 	}
@@ -108,7 +113,8 @@ func NewWithOptions(opts Options) *Tools {
 	})
 	fixInspection.Register(zzmifixer.NewInspector(zzmi))
 	return &Tools{
-		githubRate: opts.GitHubRate,
+		reserveModFiles: reserveModFiles,
+		githubRate:      opts.GitHubRate,
 		bisect: modbisect.NewWithOptions(modbisect.Options{
 			Log:       opts.Log,
 			EventEmit: opts.EventEmit,
