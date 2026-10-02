@@ -11,6 +11,8 @@ The `4001 Fixer` brings the available GIMI `4001` workarounds into one tool. It 
 
 This feature automates much of the DLL build process, but you still need to install the required build tools yourself.
 
+Install [Git for Windows](https://git-scm.com/downloads/win) with Git available on `PATH`, then restart Nahida Desktop. The build checks out the selected release tag with its Git metadata, which the version header generator requires.
+
 1. Download and run [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe).
 2. Under Individual components, select the following items and install them:
    - **MSVC v143 - VS 2022 C++ x64/x86 build tools (latest)**

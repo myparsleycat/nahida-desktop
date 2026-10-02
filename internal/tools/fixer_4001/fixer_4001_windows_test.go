@@ -51,7 +51,7 @@ func TestD3DBuildCommandQuotesVSAndProjectPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `"C:\Program Files (x86)\vcvars64.bat" & cd /d "C:\Temp\XXMI Libs" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64`
+	want := `"C:\Program Files (x86)\vcvars64.bat" & cd /d "C:\Temp\XXMI Libs" && msbuild StereovisionHacks.sln /nologo /verbosity:minimal /p:Configuration=Release /p:Platform=x64`
 	if got != want {
 		t.Fatalf("d3dBuildCommand() = %q, want %q", got, want)
 	}

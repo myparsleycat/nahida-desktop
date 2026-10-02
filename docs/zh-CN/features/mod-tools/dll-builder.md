@@ -11,6 +11,8 @@
 
 此功能会自动处理 DLL 构建流程中的大部分步骤，但构建 DLL 所需的工具仍需由用户自行安装。
 
+安装 [Git for Windows](https://git-scm.com/downloads/win)，确保可以通过 `PATH` 使用 Git，然后重新启动 Nahida Desktop。构建会检出所选发布标签及其 Git 元数据，以满足版本头文件生成脚本的要求。
+
 1. 下载并运行 [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe)。
 2. 在单独组件中选择以下项目后进行安装：
    - **MSVC v143 - VS 2022 C++ x64/x86 生成工具（最新）**
