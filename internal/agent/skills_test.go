@@ -5,6 +5,43 @@ import (
 	"testing"
 )
 
+func TestRabbitFXDependencyRemoverSkillAndReferencesAreEmbedded(t *testing.T) {
+	t.Parallel()
+
+	catalog := newSkillCatalog(t.TempDir())
+	views := catalog.Reload()
+	found := false
+	for _, view := range views {
+		if view.Name == "rabbitfx-dependency-remover" {
+			found = view.Source == "built-in" && view.Error == "" && view.Description != ""
+			break
+		}
+	}
+	if !found {
+		t.Fatal("rabbitfx-dependency-remover is not a discoverable built-in skill")
+	}
+
+	for _, reference := range []struct {
+		name string
+		path string
+	}{
+		{name: "instructions"},
+		{name: "removal playbook", path: "references/rabbitfx-removal-playbook.md"},
+		{name: "conversion example", path: "references/example-conversion.md"},
+	} {
+		t.Run(reference.name, func(t *testing.T) {
+			t.Parallel()
+			content, err := catalog.Load("rabbitfx-dependency-remover", reference.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.TrimSpace(content) == "" {
+				t.Fatal("embedded skill content is empty")
+			}
+		})
+	}
+}
+
 func TestTextureRenderSkillAndReferencesAreEmbedded(t *testing.T) {
 	t.Parallel()
 	catalog := newSkillCatalog(t.TempDir())
