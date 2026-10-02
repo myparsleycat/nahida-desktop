@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
@@ -26,7 +27,17 @@ const (
 	restoreBatch = 100
 	// restoreConcurrency is how many files download at once.
 	restoreConcurrency = 4
+	// restoreStoringAttempts is how many times a batch is asked for again
+	// while the server is still putting one of its files into object storage.
+	restoreStoringAttempts = 60
+	// fileStoringCode is the refusal of a batch that names such a file.
+	fileStoringCode = "file_storing"
 )
+
+// restoreStoringWait is how long a restore waits before it asks again for a
+// batch the server refused because a file is still on its way to object
+// storage: a backup that finished a moment ago.
+var restoreStoringWait = 5 * time.Second
 
 // Restore downloads the named folders of a snapshot into destination, one
 // sub-folder per target. The destination has to be missing or empty, so a
@@ -128,16 +139,8 @@ func (b *Backup) restore(
 	var progressMu sync.Mutex
 	throttle := newStatusThrottle(b, Status{State: StateRestoring, Total: len(files), TotalBytes: total})
 	for _, batch := range lo.Chunk(files, restoreBatch) {
-		var downloads []drive.BackupDownload
-		if err := b.opts.Remote.BackupJSON(
-			ctx,
-			http.MethodPost,
-			"/backup/snapshots/"+url.PathEscape(snapshotID)+"/files:download",
-			map[string]any{
-				"ids": lo.Map(batch, func(file ManifestFile, _ int) string { return file.ID }),
-			},
-			&downloads,
-		); err != nil {
+		downloads, err := b.restoreDownloads(ctx, snapshotID, batch)
+		if err != nil {
 			return err
 		}
 		byID := lo.KeyBy(downloads, func(download drive.BackupDownload) string { return download.ID })
@@ -193,6 +196,42 @@ func (b *Backup) restore(
 	}
 	throttle.flush()
 	return nil
+}
+
+// restoreDownloads asks the server where the files of one batch are. A batch
+// that names a file the server has not put into object storage yet is refused
+// whole; that passes within seconds, so the request is repeated instead of
+// failing the restore.
+func (b *Backup) restoreDownloads(
+	ctx context.Context,
+	snapshotID string,
+	batch []ManifestFile,
+) ([]drive.BackupDownload, error) {
+	for attempt := 0; ; attempt++ {
+		var downloads []drive.BackupDownload
+		err := b.opts.Remote.BackupJSON(
+			ctx,
+			http.MethodPost,
+			"/backup/snapshots/"+url.PathEscape(snapshotID)+"/files:download",
+			map[string]any{
+				"ids": lo.Map(batch, func(file ManifestFile, _ int) string { return file.ID }),
+			},
+			&downloads,
+		)
+		if err == nil {
+			return downloads, nil
+		}
+
+		var apiErr *drive.BackupAPIError
+		if !errors.As(err, &apiErr) || apiErr.Code != fileStoringCode || attempt == restoreStoringAttempts {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(restoreStoringWait):
+		}
+	}
 }
 
 // restoreFolders names the sub-folder each chosen target restores into. The

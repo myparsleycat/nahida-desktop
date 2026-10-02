@@ -2,6 +2,8 @@ package backup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -676,6 +678,34 @@ func TestRestoreRemovesItsOutputWhenItFails(t *testing.T) {
 	}
 }
 
+func TestRestoreWaitsForAFileThatIsStillStoring(t *testing.T) {
+	t.Parallel()
+	client := testClient(t)
+	// The fake download writes "x", so the manifest promises its hash.
+	sum := sha256.Sum256([]byte("x"))
+	remote := &fakeRemote{
+		storing: 2,
+		files:   map[string]map[string]string{"game:GI": {"a.ini": hex.EncodeToString(sum[:])}},
+	}
+	backup := testBackup(t, client, remote)
+	destination := filepath.Join(t.TempDir(), "restore")
+	if err := backup.Restore(t.Context(), "snapshot-1", []string{fakeTargetID("game:GI")}, destination); err != nil {
+		t.Fatal(err)
+	}
+	backup.runs.Wait()
+
+	remote.mu.Lock()
+	requests := remote.downloadRequests
+	remote.mu.Unlock()
+	if requests != 3 {
+		t.Fatalf("the batch was requested %d times, want two refusals and the answer", requests)
+	}
+	restored, err := filepath.Glob(filepath.Join(destination, "*", "a.ini"))
+	if err != nil || len(restored) != 1 {
+		t.Fatalf("restored files = %v, %v, want the file once the server stored it", restored, err)
+	}
+}
+
 func TestRunPlansModificationTimeOnlyChange(t *testing.T) {
 	t.Parallel()
 	client := testClient(t)
@@ -1031,9 +1061,13 @@ func (loggedIn) IsLoggedIn(context.Context) (bool, error) { return true, nil }
 // files of the newest snapshot, refuses a snapshot taken against another base,
 // and applies what a commit changes.
 type fakeRemote struct {
-	mu          sync.Mutex
-	unchanged   bool
-	missingOnce int
+	mu sync.Mutex
+	// storing is how many download requests are refused because a file is
+	// still on its way to object storage; downloadRequests counts them all.
+	storing          int
+	downloadRequests int
+	unchanged        bool
+	missingOnce      int
 	// missingCap, when set, bounds how many missing hashes a refused commit
 	// names, the way the server pages them.
 	missingCap  int
@@ -1182,6 +1216,11 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 		}
 		answer = f.commit(commit)
 	case strings.HasSuffix(route, "/files:download"):
+		f.downloadRequests++
+		if f.storing > 0 {
+			f.storing--
+			return &drive.BackupAPIError{Status: http.StatusConflict, Code: "file_storing"}
+		}
 		raw, _ := json.Marshal(body)
 		var request struct {
 			IDs []string `json:"ids"`
@@ -1340,3 +1379,7 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// A restore that meets a storing file waits a moment before it asks again; the
+// tests do not need the moment to be a real one.
+func init() { restoreStoringWait = time.Millisecond }

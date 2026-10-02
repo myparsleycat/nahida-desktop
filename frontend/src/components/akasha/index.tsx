@@ -11,6 +11,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import { downloadItems } from "@renderer/lib/download";
@@ -466,6 +467,21 @@ interface ContentMenuProps {
   itemId: string;
 }
 
+// Stands in for the preview of a file the server has not put into object
+// storage yet.
+function StoringIndicator(props: { size: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex size-full items-center justify-center" />}>
+        <LoaderIcon className="animate-spin" size={props.size} />
+      </TooltipTrigger>
+      <TooltipContent>{t("page.drive.storing_tooltip")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ContentMenuList(props: ContentMenuProps) {
   const { sortedContents, isFetching, itemId } = props;
   const {
@@ -510,7 +526,9 @@ export function ContentMenuList(props: ContentMenuProps) {
               <td className="w-full max-w-0 p-2 pl-3 text-left align-middle">
                 <div className="flex flex-row items-center gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
-                    {isFetching && itemId === item.id ? (
+                    {item.storing ? (
+                      <StoringIndicator size="20" />
+                    ) : isFetching && itemId === item.id ? (
                       <LoaderIcon className="animate-spin" size="20" />
                     ) : item.isDir && !item.preview ? (
                       <FolderIcon className="h-full w-full text-yellow-400" />
@@ -590,7 +608,9 @@ export function ContentMenuGrid(props: ContentMenuProps) {
           onContextMenu={(e) => handleItemRightClick(e, item)}
         >
           <div className="relative flex aspect-square items-center justify-center">
-            {isFetching && id === item.id ? (
+            {item.storing ? (
+              <StoringIndicator size="32" />
+            ) : isFetching && id === item.id ? (
               <LoaderIcon className="animate-spin" size="32" />
             ) : item.isDir && !item.preview ? (
               <FolderIcon className="p-4 text-yellow-400" size="100" />

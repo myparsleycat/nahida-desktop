@@ -474,6 +474,9 @@ export type Content = {
         expiresAt: Date | null;
         url: string;
     } | null;
+    // The server holds the file but has not put it into object storage yet: it
+    // has no preview and cannot be downloaded until the mark is gone.
+    storing?: boolean;
 };
 
 export type DriveImportContent = {

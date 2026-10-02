@@ -240,6 +240,7 @@
       "title": "ドライブ",
       "title_server_error": "ドライブ (サーバーエラー)",
       "share_drive": "共有ドライブ",
+      "storing_tooltip": "ファイルサーバーにアップロード中",
       "no_contents_section_message": {
         "0": "このフォルダーにはファイルやフォルダーがありません",
         "1": "ここにファイルやフォルダーをドラッグしてアップロード",
