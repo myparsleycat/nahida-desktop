@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,20 @@ type uploadRestartData struct {
 	RequestID   string
 }
 
+// directoryCreateBatchSize is the most direct children one create-dirs request
+// may name. The server rejects a body of more than 512.
+const directoryCreateBatchSize = 256
+
+type directoryCreateNode struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+type directoryCreateBatch struct {
+	ParentPath string
+	Dirs       []UploadDirectory
+}
+
 func (d *Drive) CreateDirs(
 	ctx context.Context,
 	parentID string,
@@ -60,7 +75,99 @@ func (d *Drive) CreateDirs(
 	if parentID == "" {
 		return nil, errors.New("upload destination is required")
 	}
-	body := map[string]any{"parentId": parentID, "dirs": directories}
+	batches, err := planDirectoryCreateBatches(directories)
+	if err != nil {
+		return nil, err
+	}
+	pathIDs := map[string]string{"": parentID}
+	created := make([]CreatedUploadDirectory, 0, len(directories))
+	for _, batch := range batches {
+		parentItemID, ok := pathIDs[batch.ParentPath]
+		if !ok || parentItemID == "" {
+			return nil, fmt.Errorf("created directory missing for %q", batch.ParentPath)
+		}
+		rows, err := d.postCreateDirs(ctx, parentItemID, directoryCreateNodes(batch.Dirs))
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) != len(batch.Dirs) {
+			return nil, errors.New("create directories returned an invalid response")
+		}
+		for index, dir := range batch.Dirs {
+			row := rows[index]
+			if row.ID == "" || row.Path != dir.Name {
+				return nil, fmt.Errorf("created directory missing for %q", dir.Path)
+			}
+			created = append(created, CreatedUploadDirectory{ID: row.ID, Path: dir.Path})
+			pathIDs[dir.Path] = row.ID
+		}
+	}
+	return created, nil
+}
+
+// planDirectoryCreateBatches groups folders by their parent and keeps each
+// request to one parent's direct children. Parents are ordered before the
+// folders that hang from them. create-dirs only resolves a nested path inside
+// the same request, so a later batch names the parent by the id it received.
+func planDirectoryCreateBatches(directories []UploadDirectory) ([]directoryCreateBatch, error) {
+	if len(directories) == 0 {
+		return nil, nil
+	}
+	known := map[string]struct{}{"": {}}
+	byParent := make(map[string][]UploadDirectory)
+	parents := make([]string, 0)
+	seenParent := map[string]struct{}{}
+	for _, dir := range directories {
+		known[dir.Path] = struct{}{}
+		if _, ok := seenParent[dir.ParentPath]; !ok {
+			seenParent[dir.ParentPath] = struct{}{}
+			parents = append(parents, dir.ParentPath)
+		}
+		byParent[dir.ParentPath] = append(byParent[dir.ParentPath], dir)
+	}
+	for _, parent := range parents {
+		if _, ok := known[parent]; !ok {
+			return nil, fmt.Errorf("created directory missing for %q", parent)
+		}
+	}
+	slices.SortStableFunc(parents, func(left, right string) int {
+		return directoryPathDepth(left) - directoryPathDepth(right)
+	})
+	batches := make([]directoryCreateBatch, 0, len(parents))
+	for _, parent := range parents {
+		dirs := byParent[parent]
+		for start := 0; start < len(dirs); start += directoryCreateBatchSize {
+			end := min(start+directoryCreateBatchSize, len(dirs))
+			batches = append(batches, directoryCreateBatch{
+				ParentPath: parent,
+				Dirs:       dirs[start:end],
+			})
+		}
+	}
+	return batches, nil
+}
+
+func directoryPathDepth(path string) int {
+	if path == "" {
+		return 0
+	}
+	return strings.Count(path, "/") + 1
+}
+
+func directoryCreateNodes(dirs []UploadDirectory) []directoryCreateNode {
+	nodes := make([]directoryCreateNode, len(dirs))
+	for index, dir := range dirs {
+		nodes[index] = directoryCreateNode{Name: dir.Name, Path: dir.Name}
+	}
+	return nodes
+}
+
+func (d *Drive) postCreateDirs(
+	ctx context.Context,
+	parentID string,
+	dirs []directoryCreateNode,
+) ([]CreatedUploadDirectory, error) {
+	body := map[string]any{"parentId": parentID, "dirs": dirs}
 	var last error
 	for attempt := 0; attempt <= d.dirRetries; attempt++ {
 		data, edenErr, err := d.doJSON(ctx, http.MethodPost, "/akasha/create-dirs", nil, body)
