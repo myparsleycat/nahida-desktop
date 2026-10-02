@@ -5,6 +5,8 @@ description: Analyze and safely edit standard or XXMI/3DMigoto INI files while p
 
 # INI editing
 
+For RabbitFX dependency removal, also load `rabbitfx-dependency-remover` before changing texture bindings or external setter calls. That skill owns mapping evidence and graphics-state lifetime; this skill owns the text-patch mechanics.
+
 - Match inspection depth to the edit. For an explicit modification request with a known, deterministic local pattern, inspect the affected section, check that the target command is not already active, apply the smallest `apply_patch` `update` with `oldString`/`newString`, re-read the changed region, and stop.
 - Bound inspection of large or generated INIs. Use searches and small line ranges around the header, affected section, referenced definition, and tail instead of reading or requesting the whole file. Never ask the user to paste an entire large INI when an exact filename, section name, hash, resource name, or short excerpt would let Nahida inspect it directly or narrow the request.
 - Include the surrounding section header in `oldString` when a command repeats elsewhere in the file. If the update is rejected, enlarge `oldString` until it is unique and retry; never replace the whole INI with `write`.

@@ -13,6 +13,8 @@ Use this skill whenever the user asks to modify a mod or identify the cause of a
 
 The exact rules in this entrypoint take precedence over summarized references and imported source snapshots. Imported references provide background, not additional prerequisites. Do not load a large reference, discover broad tool catalogs, or inspect unrelated files after the available evidence is sufficient for an exact rule.
 
+For a request to remove RabbitFX or make a mod work without it, load `rabbitfx-dependency-remover`. Its texture-binding conversion rules take precedence for that task; do not treat deleting an external call as a generic repair or apply GIMI slot conventions to a WWMI package.
+
 ## Direct-fix fast path
 
 Inspect only the affected INI section and enough referenced definitions to test a known rule. Check for an already active equivalent command so the edit will not create a duplicate. If the rule matches, patch, re-read the changed section, briefly state what changed and how to reload or visually verify it, then stop. Use the general workflow only when no exact rule matches, the patch cannot be applied safely, or the user reports that the verified patch did not solve the symptom.
