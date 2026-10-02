@@ -292,6 +292,69 @@ func TestNamespaceIsolationReCopyAndManualRename(t *testing.T) {
 	}
 }
 
+func TestNamespaceIsolationRefreshFailuresAllowUnrelatedIsolation(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"invalid_metadata", "metadata_refresh_failed"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			m, mods, _ := newNamespaceTestMod(t)
+			a := namespaceFixture(t, mods, "A")
+			namespaceFixture(t, mods, "B")
+			if state, err := m.RescanNamespaceIsolation(t.Context(), ""); err != nil || len(state.Conflicts) != 0 {
+				t.Fatalf("initial isolation: %+v %v", state, err)
+			}
+
+			if reason == "invalid_metadata" {
+				namespaceWrite(t, filepath.Join(a, "nhd.json"), "{")
+			} else {
+				old := namespaceDocument(t, filepath.Join(a, "main.ini")).Namespace
+				for _, relative := range []string{"main.ini", filepath.Join("GUI", "gui.ini")} {
+					content, err := os.ReadFile(filepath.Join(a, relative))
+					if err != nil {
+						t.Fatal(err)
+					}
+					namespaceWrite(
+						t,
+						filepath.Join(a, relative),
+						strings.ReplaceAll(string(content), old, `User\Renamed`),
+					)
+				}
+				hooks := m.namespaceIsolation.hooks
+				var calls int
+				hooks.WithMutation = func(_ context.Context, _ string, change func() error) error {
+					calls++
+					if calls == 1 {
+						return errors.New("metadata refresh gate unavailable")
+					}
+					return change()
+				}
+				m.UseNamespaceIsolationHooks(hooks)
+			}
+
+			c := namespaceFixture(t, mods, "C")
+			d := namespaceFixture(t, mods, "D")
+			state, err := m.RescanNamespaceIsolation(t.Context(), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(state.Conflicts) != 1 || state.Conflicts[0].Reason != reason {
+				t.Fatalf("expected only refresh failure %s: %+v", reason, state)
+			}
+			conflict := state.Conflicts[0]
+			if conflict.ImporterKey != "GIMI" || conflict.Status != "needs_review" || conflict.Detail == "" ||
+				conflict.ID != namespaceConflictID("GIMI", reason, a) || !slices.Equal(conflict.INIPaths, []string{a}) {
+				t.Fatalf("refresh failure lost context: %+v", conflict)
+			}
+			cNamespace := namespaceDocument(t, filepath.Join(c, "main.ini")).Namespace
+			dNamespace := namespaceDocument(t, filepath.Join(d, "main.ini")).Namespace
+			if cNamespace == dNamespace || !strings.Contains(cNamespace, "__nhd_") ||
+				!strings.Contains(dNamespace, "__nhd_") {
+				t.Fatalf("unrelated copies were not isolated: %q %q", cNamespace, dNamespace)
+			}
+		})
+	}
+}
+
 func TestNamespaceIsolationWaitSettingRestartAndGetter(t *testing.T) {
 	t.Parallel()
 	m, mods, settings := newNamespaceTestMod(t)

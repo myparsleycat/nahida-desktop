@@ -166,6 +166,8 @@ func (c *namespaceIsolationCoordinator) reconcile(ctx context.Context, key strin
 				}
 			}
 		}
+		refreshConflicts := []NamespaceIsolationConflict{}
+
 		// Refresh stale manifests only for noncolliding physical mods. A user
 		// namespace edit changes metadata ownership, never the INI declaration.
 		if auto && stopped == nil && len(inventory.issues) == 0 {
@@ -181,7 +183,19 @@ func (c *namespaceIsolationCoordinator) reconcile(ctx context.Context, key strin
 				}
 				changes, refreshErr := namespaceManifestRefresh(path, inventory.files)
 				if refreshErr != nil {
-					inventory.issue("invalid_metadata", path, refreshErr)
+					refreshConflicts = append(refreshConflicts, NamespaceIsolationConflict{
+						ID: namespaceConflictID(
+							inventory.importer.Key,
+							"invalid_metadata",
+							path,
+						),
+						ImporterKey: inventory.importer.Key,
+						ModPaths:    []string{},
+						INIPaths:    []string{path},
+						Status:      "needs_review",
+						Reason:      "invalid_metadata",
+						Detail:      refreshErr.Error(),
+					})
 					continue
 				}
 				if len(changes) == 0 {
@@ -201,11 +215,24 @@ func (c *namespaceIsolationCoordinator) reconcile(ctx context.Context, key strin
 					)
 				})
 				if refreshErr != nil {
-					inventory.issue("metadata_refresh_failed", path, refreshErr)
+					refreshConflicts = append(refreshConflicts, NamespaceIsolationConflict{
+						ID: namespaceConflictID(
+							inventory.importer.Key,
+							"metadata_refresh_failed",
+							path,
+						),
+						ImporterKey: inventory.importer.Key,
+						ModPaths:    []string{},
+						INIPaths:    []string{path},
+						Status:      "needs_review",
+						Reason:      "metadata_refresh_failed",
+						Detail:      refreshErr.Error(),
+					})
 				}
 			}
 		}
 		conflicts = append(conflicts, inventory.issues...)
+		conflicts = append(conflicts, refreshConflicts...)
 		plans := analyzeNamespaceIsolation(inventory)
 		for _, plan := range plans {
 			conflict := plan.conflict
