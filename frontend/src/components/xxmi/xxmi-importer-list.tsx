@@ -9,7 +9,13 @@ import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { partition, uniqBy } from "es-toolkit";
-import { ChevronRightIcon, LayoutDashboardIcon, PlayIcon, RefreshCwIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  CircleArrowUpIcon,
+  LayoutDashboardIcon,
+  PlayIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -59,19 +65,25 @@ export function XXMIImporterList() {
         >
           <GameIcon gameName={key} className="size-8 shrink-0 rounded-md" />
           <div className="min-w-0 flex-1 space-y-0.5">
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-sm font-medium">{key}</span>
-              {importer && (
-                <Badge variant="secondary">
-                  {importer.mode === "legacy" ? "3DMigoto" : "XXMI"}
-                </Badge>
-              )}
-              {available && <Badge>{t("page.setting.xxmi.builtin.updateAvailable")}</Badge>}
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-medium">{key}</span>
               {importer?.running && (
-                <Badge variant="outline">{t("page.setting.xxmi.builtin.running")}</Badge>
+                <span
+                  title={t("page.setting.xxmi.builtin.running")}
+                  className="size-2 shrink-0 rounded-full bg-emerald-500"
+                >
+                  <span className="sr-only">{t("page.setting.xxmi.builtin.running")}</span>
+                </span>
+              )}
+              {available && (
+                <span title={t("page.setting.xxmi.builtin.updateAvailable")} className="shrink-0">
+                  <CircleArrowUpIcon className="size-3.5 text-primary" aria-hidden />
+                  <span className="sr-only">{t("page.setting.xxmi.builtin.updateAvailable")}</span>
+                </span>
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground">
+              {importer && `${importer.mode === "legacy" ? "3DMigoto" : "XXMI"} · `}
               {importer?.packageInfo.deployed_version ||
                 t("page.setting.xxmi.builtin.notInstalled")}
               {importer?.customDll && (
