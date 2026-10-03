@@ -1,3 +1,7 @@
+# Refuse to install package versions published less than 1 day (1440 minutes) ago,
+# reducing exposure to freshly compromised or malicious releases.
+# pnpm 11 reads this setting only from pnpm-workspace.yaml, not from .npmrc.
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@wailsio/runtime@3.0.0-beta.14 || 3.0.0-beta.15 || 3.0.0-beta.16 || 3.0.0-beta.17 || 3.0.0-beta.20 || 3.0.0-beta.21 || 3.0.0-beta.26"
 # Mirrors resize-border support from the pinned Wails fork until the npm runtime includes it.
