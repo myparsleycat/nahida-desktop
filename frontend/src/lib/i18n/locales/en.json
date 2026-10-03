@@ -2198,6 +2198,7 @@
           "packageVersion": "Package versions",
           "overwriteINI": "Replace d3dx.ini when installing a package",
           "currentPin": "Selected package",
+          "packageInstalled": "Installed",
           "installedVerification": "Verification when {{version}} was installed: {{method}}",
           "verificationECDSA": "ECDSA signature",
           "verificationDigest": "SHA-256 digest",

@@ -2114,6 +2114,7 @@
           "packageVersion": "パッケージのバージョン",
           "overwriteINI": "パッケージのインストール時に d3dx.ini を上書きする",
           "currentPin": "選択中のパッケージ",
+          "packageInstalled": "インストール済み",
           "installedVerification": "{{version}} インストール時の検証: {{method}}",
           "verificationECDSA": "ECDSA 署名",
           "verificationDigest": "SHA-256 ハッシュ",

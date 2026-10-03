@@ -2132,6 +2132,7 @@
           "packageVersion": "패키지 버전",
           "overwriteINI": "패키지 설치 시 d3dx.ini 덮어쓰기",
           "currentPin": "선택한 패키지",
+          "packageInstalled": "설치됨",
           "installedVerification": "{{version}} 설치 시 검증: {{method}}",
           "verificationECDSA": "ECDSA 서명",
           "verificationDigest": "SHA-256 해시",

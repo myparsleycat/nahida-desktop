@@ -2113,6 +2113,7 @@
           "packageVersion": "软件包版本",
           "overwriteINI": "安装软件包时覆盖 d3dx.ini",
           "currentPin": "选定的软件包",
+          "packageInstalled": "已安装",
           "installedVerification": "安装 {{version}} 时的验证方式：{{method}}",
           "verificationECDSA": "ECDSA 签名",
           "verificationDigest": "SHA-256 摘要",

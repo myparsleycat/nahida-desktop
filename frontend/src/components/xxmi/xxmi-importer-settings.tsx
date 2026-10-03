@@ -121,12 +121,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const selectedPackage = config?.packageVersion.pinned ?? "";
   const selectedRelease = releases?.find((release) => release.version === selectedPackage);
   const installedImporter = overview?.importers?.find((entry) => entry.key === importer);
-  const packageNeedsInstall =
-    !!selectedPackage &&
-    (normalizedFolder(config?.importerFolder ?? "") !==
-      normalizedFolder(installedImporter?.importerFolder ?? "") ||
-      selectedPackage.replace(/^v/i, "") !==
-        installedImporter?.installedVersion?.replace(/^v/i, ""));
+  const installedVersion = installedImporter?.installedVersion ?? packageVerification?.version;
+  const packageInstalledInFolder =
+    !!installedVersion &&
+    normalizedFolder(config?.importerFolder ?? "") ===
+      normalizedFolder(installedImporter?.importerFolder ?? saved?.importerFolder ?? "");
+  const isInstalledPackageVersion = (version: string) =>
+    packageInstalledInFolder &&
+    version.trim().replace(/^v/i, "") === installedVersion?.trim().replace(/^v/i, "");
+  const packageNeedsInstall = !!selectedPackage && !isInstalledPackageVersion(selectedPackage);
   const [isSaving, setIsSaving] = useState(false);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
@@ -442,6 +445,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       {t("page.setting.xxmi.builtin.currentPin")}:{" "}
                       {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
                     </Badge>
+                    <Badge variant="outline">
+                      {t("page.setting.xxmi.packageVersionCurrent", {
+                        version: packageInstalledInFolder
+                          ? installedVersion
+                          : t("page.setting.xxmi.packageVersionUnknown"),
+                      })}
+                    </Badge>
                     {packageVerification && (
                       <span className="text-xs text-muted-foreground">
                         {t("page.setting.xxmi.builtin.installedVerification", {
@@ -476,6 +486,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         }}
                       >
                         <span className="font-mono">{release.version}</span>
+                        {isInstalledPackageVersion(release.version) && (
+                          <Badge variant="outline">
+                            {t("page.setting.xxmi.builtin.packageInstalled")}
+                          </Badge>
+                        )}
                         <Badge variant={release.signed ? "secondary" : "destructive"}>
                           {release.signed
                             ? t("page.setting.xxmi.builtin.signed")
@@ -491,7 +506,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           {selectedRelease.notes}
                         </p>
                       )}
-                      {selectedRelease && !selectedRelease.signed && (
+                      {packageNeedsInstall && selectedRelease && !selectedRelease.signed && (
                         <label className="flex items-center gap-2 text-destructive">
                           <ShieldAlertIcon className="size-4 shrink-0" />
                           <span className="flex-1">
@@ -500,38 +515,43 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           <Switch checked={allowUnsigned} onCheckedChange={setAllowUnsigned} />
                         </label>
                       )}
-                      <Button
-                        className="w-full"
-                        disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
-                        onClickPromise={async () => {
-                          if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned))
-                            return;
-                          const allowPackage = !selectedRelease.signed && allowUnsigned;
-                          try {
-                            const resolved = await resolveImporterGameFolder(importer, config);
-                            const games = await linkedGamesForImporterMove(
-                              saved?.importerFolder,
-                              config.importerFolder,
-                            );
-                            if (games.length) {
-                              setPendingFolderChange({
-                                next: resolved,
-                                games,
-                                install: { version: selectedPackage, allowUnsigned: allowPackage },
-                              });
+                      {packageNeedsInstall && (
+                        <Button
+                          className="w-full"
+                          disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
+                          onClickPromise={async () => {
+                            if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned))
                               return;
+                            const allowPackage = !selectedRelease.signed && allowUnsigned;
+                            try {
+                              const resolved = await resolveImporterGameFolder(importer, config);
+                              const games = await linkedGamesForImporterMove(
+                                saved?.importerFolder,
+                                config.importerFolder,
+                              );
+                              if (games.length) {
+                                setPendingFolderChange({
+                                  next: resolved,
+                                  games,
+                                  install: {
+                                    version: selectedPackage,
+                                    allowUnsigned: allowPackage,
+                                  },
+                                });
+                                return;
+                              }
+                              await persist(resolved, [], {
+                                version: selectedPackage,
+                                allowUnsigned: allowPackage,
+                              });
+                            } catch (error) {
+                              toast.error(toErrorMessage(error));
                             }
-                            await persist(resolved, [], {
-                              version: selectedPackage,
-                              allowUnsigned: allowPackage,
-                            });
-                          } catch (error) {
-                            toast.error(toErrorMessage(error));
-                          }
-                        }}
-                      >
-                        {t("page.setting.xxmi.builtin.install")}
-                      </Button>
+                          }}
+                        >
+                          {t("page.setting.xxmi.builtin.install")}
+                        </Button>
+                      )}
                     </div>
                   )}
                   <ToggleRow

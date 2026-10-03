@@ -21,6 +21,9 @@ const overview = vi.hoisted(() => ({
     installedVersion?: string;
   }>,
 }));
+const packageVerification = vi.hoisted(() => ({
+  data: null as { version: string; method: string } | null,
+}));
 
 const config = {
   enabled: true,
@@ -77,14 +80,16 @@ vi.mock("@tanstack/react-query", () => ({
         ? config
         : queryKey[0] === "xxmi:overview"
           ? overview
-          : queryKey[0] === "xxmi:releases"
-            ? [
-                { version: "1.0.0", signed: false, notes: "Old unsigned release" },
-                { version: "2.0.0", signed: true, notes: "Signed release" },
-              ]
-            : queryKey[0] === "xxmi:libs-releases"
-              ? [{ version: "1.7.5" }, { version: "1.7.6" }]
-              : [],
+          : queryKey[0] === "xxmi:package-verification"
+            ? packageVerification.data
+            : queryKey[0] === "xxmi:releases"
+              ? [
+                  { version: "1.0.0", signed: false, notes: "Old unsigned release" },
+                  { version: "2.0.0", signed: true, notes: "Signed release" },
+                ]
+              : queryKey[0] === "xxmi:libs-releases"
+                ? [{ version: "1.7.5" }, { version: "1.7.6" }]
+                : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -136,6 +141,7 @@ it("saves a package pin only when that version is already installed in the selec
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
   fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeNull();
   expect(screen.getByRole("button", { name: "g.save" })).toHaveProperty("disabled", false);
   fireEvent.click(screen.getByRole("button", { name: "g.save" }));
   await waitFor(() =>
@@ -145,6 +151,68 @@ it("saves a package pin only when that version is already installed in the selec
     ),
   );
   expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
+});
+
+it.each(["GIMI", "SRMI", "WWMI", "ZZMI", "HIMI", "EFMI"])(
+  "marks the installed package independently of the selected version for %s",
+  (importer) => {
+    overview.importers = [
+      {
+        key: importer,
+        customDll: false,
+        importerFolder: config.importerFolder,
+        installedVersion: "v2.0.0",
+      },
+    ];
+    render(<XXMIImporterSettings importer={importer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    const installed = screen.getByRole("button", { name: /^2\.0\.0/ });
+    expect(installed.getAttribute("aria-pressed")).toBe("false");
+    expect(installed.textContent).toContain("page.setting.xxmi.builtin.packageInstalled");
+    expect(screen.getByRole("button", { name: /^1\.0\.0/ }).textContent).not.toContain(
+      "page.setting.xxmi.builtin.packageInstalled",
+    );
+    fireEvent.click(installed);
+    expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeNull();
+    expect(screen.queryByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^1\.0\.0/ }));
+    expect(installed.textContent).toContain("page.setting.xxmi.builtin.packageInstalled");
+    expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeTruthy();
+  },
+);
+
+it("recognizes a verified installation even when the importer is disabled in the overview", () => {
+  packageVerification.data = { version: "2.0.0", method: "ecdsa" };
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  const installed = screen.getByRole("button", { name: /^2\.0\.0/ });
+  expect(installed.textContent).toContain("page.setting.xxmi.builtin.packageInstalled");
+  fireEvent.click(installed);
+  expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeNull();
+});
+
+it("updates the installed marker and install action when installation state refreshes", () => {
+  const { rerender } = render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  expect(screen.queryByText("page.setting.xxmi.builtin.packageInstalled")).toBeNull();
+  expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeTruthy();
+
+  overview.importers = [
+    {
+      key: "GIMI",
+      customDll: false,
+      importerFolder: config.importerFolder,
+      installedVersion: "2.0.0",
+    },
+  ];
+  rerender(<XXMIImporterSettings importer="GIMI" />);
+  expect(screen.getByRole("button", { name: /^2\.0\.0/ }).textContent).toContain(
+    "page.setting.xxmi.builtin.packageInstalled",
+  );
+  expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeNull();
 });
 
 it("requires installation again when the selected importer folder changes", () => {
@@ -163,6 +231,8 @@ it("requires installation again when the selected importer folder changes", () =
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
   fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
   expect(screen.getByRole("button", { name: "g.save" })).toHaveProperty("disabled", true);
+  expect(screen.queryByText("page.setting.xxmi.builtin.packageInstalled")).toBeNull();
+  expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeTruthy();
 });
 
 it("discards the pending package selection together with the draft", () => {
@@ -183,6 +253,7 @@ afterEach(() => {
   mod.GetGames.mockReset();
   mod.UpdateGame.mockReset();
   overview.importers = [];
+  packageVerification.data = null;
 });
 
 it("defaults old configs to the existing injector and saves the native selection", async () => {
