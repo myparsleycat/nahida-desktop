@@ -2242,7 +2242,6 @@
           "overwriteINIDescription": "Keeps d3dx.ini in sync with the package. Turn off to keep your own edits.",
           "rootDescription": "By default, each importer is installed in its own subfolder here.",
           "prereleasesDescription": "Also offers test versions, which may be unstable.",
-          "configureGameDescriptionGIMI": "Turns off Dynamic Character Resolution before each launch. Mods don't work while it is on.",
           "configureGameDescriptionWWMI": "Before each launch, turns off ray tracing and applies the texture detail and wounded effect options below. Mods don't work with the wrong settings.",
           "unlockFPSDescriptionGIMI": "Starts the game through GI FPS Unlocker, which keeps running in the background to hold the FPS limit.",
           "fpsTargetDescriptionGIMI": "Multiples of 60 such as 120, 180, or 240 cause the fewest glitches.",

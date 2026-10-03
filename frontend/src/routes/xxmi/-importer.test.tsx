@@ -597,16 +597,39 @@ it("hides Configure game settings for SRMI, which adjusts no game-side options",
   }
 });
 
-it("keeps Configure game settings for an importer that adjusts game-side options", () => {
+it("hides Configure game settings for GIMI, which always turns off Dynamic Character Resolution", () => {
   config.gimi = { unlockFPS: false, unlockFPSValue: 120, enableHDR: false };
 
   try {
     render(<XXMIImporterSettings importer="GIMI" />);
     fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.gameTweaks" }));
 
+    expect(
+      screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.configureGame" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("switch", { name: "page.setting.xxmi.builtin.enableHDR" }),
+    ).toBeTruthy();
+  } finally {
+    config.gimi = null;
+  }
+});
+
+it("keeps Configure game settings for WWMI, whose game-side options are optional", () => {
+  config.wwmi = {
+    unlockFPS: false,
+    forceMaxLODBias: false,
+    applyPerfTweaks: false,
+    disableWoundedFX: false,
+  };
+
+  try {
+    render(<XXMIImporterSettings importer="WWMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.gameTweaks" }));
+
     const toggle = screen.getByRole("switch", { name: "page.setting.xxmi.builtin.configureGame" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
   } finally {
-    config.gimi = null;
+    config.wwmi = null;
   }
 });

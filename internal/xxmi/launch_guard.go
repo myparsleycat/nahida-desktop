@@ -96,7 +96,7 @@ func (x *XXMI) disableGIMIDCR(ctx context.Context) error {
 }
 
 // rejectLaunchBlockers fails the launch while a blocker is active. checkDCR is false when the launch
-// neither configures game settings nor loads the XXMI DLL, so Genshin's DCR setting is irrelevant.
+// does not load the XXMI DLL, so Genshin's DCR setting is irrelevant.
 func (x *XXMI) rejectLaunchBlockers(ctx context.Context, importer, exe string, checkDCR bool) error {
 	return x.rejectLaunchBlockersFrom(ctx, importer, exe, checkDCR, x)
 }

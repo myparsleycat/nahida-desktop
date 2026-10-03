@@ -2157,7 +2157,6 @@
           "overwriteINIDescription": "让 d3dx.ini 与软件包保持同步。如需保留自己的修改，请关闭。",
           "rootDescription": "默认情况下，每个导入器会安装到此文件夹下各自的子文件夹中。",
           "prereleasesDescription": "同时提供可能不稳定的测试版本。",
-          "configureGameDescriptionGIMI": "每次启动前关闭“动态角色分辨率”。开启时模组不会生效。",
           "configureGameDescriptionWWMI": "每次启动前关闭光线追踪，并应用下方的纹理细节和受伤效果选项。设置不正确时模组不会生效。",
           "unlockFPSDescriptionGIMI": "通过 GI FPS Unlocker 启动游戏。它会在后台持续运行以保持帧率限制。",
           "fpsTargetDescriptionGIMI": "设为 120、180、240 等 60 的倍数时异常最少。",

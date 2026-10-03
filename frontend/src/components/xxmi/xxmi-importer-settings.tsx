@@ -223,9 +223,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
-  // Only GIMI (Dynamic Character Resolution) and WWMI (graphics options) adjust game-side settings,
-  // so SRMI and HIMI keep their game tab without the shared toggle.
-  const hasGameConfiguration = !!(config.gimi || config.wwmi);
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
 
@@ -679,14 +676,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 <TabsContent value="game" className="flex flex-col gap-6">
                   <Section>
                     <SectionContent>
-                      {hasGameConfiguration && (
+                      {/* Only WWMI has optional game-side settings; GIMI always turns off Dynamic
+                          Character Resolution, and SRMI and HIMI adjust nothing. */}
+                      {config.wwmi && (
                         <ToggleRow
                           label={t("page.setting.xxmi.builtin.configureGame")}
-                          description={
-                            config.gimi
-                              ? t("page.setting.xxmi.builtin.configureGameDescriptionGIMI")
-                              : t("page.setting.xxmi.builtin.configureGameDescriptionWWMI")
-                          }
+                          description={t("page.setting.xxmi.builtin.configureGameDescriptionWWMI")}
                           checked={config.configureGame}
                           onCheckedChange={(configureGame) =>
                             setConfig({ ...config, configureGame })

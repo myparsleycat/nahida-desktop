@@ -2176,7 +2176,6 @@
           "overwriteINIDescription": "d3dx.ini를 패키지에 맞춰 최신 상태로 유지합니다. 직접 수정한 내용을 지키려면 끄세요.",
           "rootDescription": "임포터는 기본적으로 이 폴더 아래의 개별 하위 폴더에 설치됩니다.",
           "prereleasesDescription": "불안정할 수 있는 테스트 버전도 함께 제공합니다.",
-          "configureGameDescriptionGIMI": "실행할 때마다 동적 캐릭터 해상도를 끕니다. 켜져 있으면 모드가 적용되지 않습니다.",
           "configureGameDescriptionWWMI": "실행할 때마다 레이 트레이싱을 끄고 아래의 텍스처 품질·부상 효과 옵션을 적용합니다. 설정이 맞지 않으면 모드가 적용되지 않습니다.",
           "unlockFPSDescriptionGIMI": "GI FPS Unlocker를 통해 게임을 실행합니다. FPS 제한을 유지하기 위해 백그라운드에서 계속 실행됩니다.",
           "fpsTargetDescriptionGIMI": "120, 180, 240처럼 60의 배수로 설정해야 오류가 가장 적습니다.",

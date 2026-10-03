@@ -2158,7 +2158,6 @@
           "overwriteINIDescription": "d3dx.ini をパッケージに合わせて最新の状態に保ちます。自分の編集内容を残したい場合はオフにしてください。",
           "rootDescription": "インポーターは既定でこのフォルダー内の個別のサブフォルダーにインストールされます。",
           "prereleasesDescription": "不安定な可能性があるテスト版も提供します。",
-          "configureGameDescriptionGIMI": "起動のたびに「動的キャラクター解像度」をオフにします。オンのままでは MOD が適用されません。",
           "configureGameDescriptionWWMI": "起動のたびにレイトレーシングをオフにし、下のテクスチャ品質と負傷エフェクトの設定を適用します。設定が合っていないと MOD が適用されません。",
           "unlockFPSDescriptionGIMI": "GI FPS Unlocker 経由でゲームを起動します。FPS 制限を維持するためバックグラウンドで動作し続けます。",
           "fpsTargetDescriptionGIMI": "120、180、240 など 60 の倍数にすると不具合が最も少なくなります。",
