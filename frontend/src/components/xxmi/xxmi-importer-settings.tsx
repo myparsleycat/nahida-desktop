@@ -51,10 +51,8 @@ import { useBlocker } from "@tanstack/react-router";
 import { isEqual } from "es-toolkit";
 import {
   CheckIcon,
-  DownloadIcon,
   FileTextIcon,
   PlayIcon,
-  SaveIcon,
   ScanSearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
@@ -501,22 +499,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           setAllowUnsigned(false);
                           setConfig({ ...config, packageVersion: { follow: "latest" } });
                         }}
-                        actions={
-                          <Button
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label={t("g.save")}
-                            title={t("g.save")}
-                            disabled={!dirty && !config.packageVersion.pinned}
-                            onClickPromise={async () => {
-                              const next = { ...config, packageVersion: { follow: "latest" } };
-                              setConfig(next);
-                              await save(next);
-                            }}
-                          >
-                            <SaveIcon />
-                          </Button>
-                        }
                       >
                         {t("page.setting.xxmi.builtin.latest")}
                       </VersionOption>
@@ -526,59 +508,26 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           selected={config.packageVersion.pinned === release.version}
                           onSelect={() => {
                             setAllowUnsigned(false);
-                            setConfig({ ...config, packageVersion: { pinned: release.version } });
+                            // An uninstalled version cannot be saved, so it is only pinned once the dialog installs it.
+                            if (isInstalledPackageVersion(release.version)) {
+                              setConfig({ ...config, packageVersion: { pinned: release.version } });
+                            } else {
+                              setPackageDialogVersion(release.version);
+                            }
                           }}
                           actions={
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`${t("page.setting.xxmi.builtin.packageDetails")} ${release.version}`}
-                                title={t("page.setting.xxmi.builtin.packageDetails")}
-                                onClick={() => {
-                                  setAllowUnsigned(false);
-                                  setPackageDialogVersion(release.version);
-                                }}
-                              >
-                                <FileTextIcon />
-                              </Button>
-                              {isInstalledPackageVersion(release.version) ? (
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={t("g.save")}
-                                  title={t("g.save")}
-                                  disabled={!dirty && selectedPackage === release.version}
-                                  onClickPromise={async () => {
-                                    const next = {
-                                      ...config,
-                                      packageVersion: { pinned: release.version },
-                                    };
-                                    setConfig(next);
-                                    await save(next);
-                                  }}
-                                >
-                                  <SaveIcon />
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={t("page.setting.xxmi.builtin.install")}
-                                  title={t("page.setting.xxmi.builtin.install")}
-                                  onClick={() => {
-                                    setAllowUnsigned(false);
-                                    setConfig({
-                                      ...config,
-                                      packageVersion: { pinned: release.version },
-                                    });
-                                    setPackageDialogVersion(release.version);
-                                  }}
-                                >
-                                  <DownloadIcon />
-                                </Button>
-                              )}
-                            </>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`${t("page.setting.xxmi.builtin.packageDetails")} ${release.version}`}
+                              title={t("page.setting.xxmi.builtin.packageDetails")}
+                              onClick={() => {
+                                setAllowUnsigned(false);
+                                setPackageDialogVersion(release.version);
+                              }}
+                            >
+                              <FileTextIcon />
+                            </Button>
                           }
                         >
                           <span className="font-mono">{release.version}</span>
@@ -1138,7 +1087,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
             <DialogTitle>
               {importer} · {packageDialogVersion}
             </DialogTitle>
-            <DialogDescription>{t("page.setting.xxmi.builtin.packageDetails")}</DialogDescription>
+            <DialogDescription>
+              {dialogRelease && !isInstalledPackageVersion(dialogRelease.version)
+                ? t("page.setting.xxmi.builtin.packageNotInstalled")
+                : t("page.setting.xxmi.builtin.packageDetails")}
+            </DialogDescription>
           </DialogHeader>
           {dialogRelease && (
             <>
