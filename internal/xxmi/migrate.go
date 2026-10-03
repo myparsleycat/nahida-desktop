@@ -420,7 +420,6 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		cfg.GIMI.UnlockFPS = getBool("unlock_fps", cfg.GIMI.UnlockFPS)
 		cfg.GIMI.UnlockFPSValue = getInt("unlock_fps_value", cfg.GIMI.UnlockFPSValue)
 		cfg.GIMI.EnableHDR = getBool("enable_hdr", cfg.GIMI.EnableHDR)
-		cfg.GIMI.DisableDCR = getBool("disable_dcr", cfg.GIMI.DisableDCR)
 	}
 	if cfg.SRMI != nil {
 		cfg.SRMI.UnlockFPS = getBool("unlock_fps", cfg.SRMI.UnlockFPS)

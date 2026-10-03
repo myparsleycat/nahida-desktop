@@ -1975,7 +1975,6 @@
           "unlockFPS": "FPS制限を解除",
           "fpsTarget": "目標FPS",
           "enableHDR": "HDRを有効化",
-          "disableDCR": "動的キャラクター解像度を無効化",
           "forceMaxLODBias": "最高のテクスチャ品質を強制",
           "applyPerfTweaks": "パフォーマンス調整を適用",
           "disableWoundedFX": "負傷エフェクトを無効化",

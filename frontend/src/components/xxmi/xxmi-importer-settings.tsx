@@ -685,16 +685,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                               }
                             />
                           </ToggleRow>
-                          {(["enableHDR", "disableDCR"] as const).map((field) => (
-                            <ToggleRow
-                              key={field}
-                              label={t(`page.setting.xxmi.builtin.${field}`)}
-                              checked={config.gimi![field]}
-                              onCheckedChange={(value) =>
-                                setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
-                              }
-                            />
-                          ))}
+                          <ToggleRow
+                            label={t("page.setting.xxmi.builtin.enableHDR")}
+                            checked={config.gimi.enableHDR}
+                            onCheckedChange={(enableHDR) =>
+                              setConfig({ ...config, gimi: { ...config.gimi!, enableHDR } })
+                            }
+                          />
                         </>
                       )}
                       {config.srmi && (

@@ -1974,7 +1974,6 @@
           "unlockFPS": "解除帧率限制",
           "fpsTarget": "目标帧率",
           "enableHDR": "启用 HDR",
-          "disableDCR": "禁用动态角色分辨率",
           "forceMaxLODBias": "强制最高纹理细节",
           "applyPerfTweaks": "应用性能调整",
           "disableWoundedFX": "禁用受伤效果",

@@ -2072,7 +2072,6 @@
           "unlockFPS": "Unlock FPS",
           "fpsTarget": "FPS target",
           "enableHDR": "Enable HDR",
-          "disableDCR": "Disable dynamic character resolution",
           "forceMaxLODBias": "Force highest texture detail",
           "applyPerfTweaks": "Apply performance tweaks",
           "disableWoundedFX": "Disable wounded effect",

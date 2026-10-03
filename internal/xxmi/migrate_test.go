@@ -178,7 +178,7 @@ func TestMapExternalImporterSettingsFixture(t *testing.T) {
 		EnforceRendering: false, EnableHunting: true, DumpShaders: true,
 		MuteWarnings: false, CallsLogging: true, DebugLogging: true, UnsafeMode: true,
 	}
-	want.GIMI = &GIMIOptions{UnlockFPS: true, UnlockFPSValue: 144, EnableHDR: true, DisableDCR: true}
+	want.GIMI = &GIMIOptions{UnlockFPS: true, UnlockFPSValue: 144, EnableHDR: true}
 
 	mapExternalImporterSettings(&cfg, fixture["Importer"], fixture["Migoto"])
 	if !reflect.DeepEqual(cfg, want) {

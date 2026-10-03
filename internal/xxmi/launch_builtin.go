@@ -142,8 +142,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		return err
 	}
 	// Like the reference launcher, DCR is only managed when game settings are configured for a loaded XXMI DLL.
+	// Mods do not render with DCR on, so it is turned off without asking.
 	checkDCR := key == "GIMI" && cfg.ConfigureGame && migotoDLLUsed
-	if checkDCR && cfg.GIMI != nil && cfg.GIMI.DisableDCR {
+	if checkDCR {
 		if err := x.disableGIMIDCR(ctx); err != nil {
 			return err
 		}

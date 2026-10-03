@@ -1993,7 +1993,6 @@
           "unlockFPS": "FPS 제한 해제",
           "fpsTarget": "목표 FPS",
           "enableHDR": "HDR 활성화",
-          "disableDCR": "동적 캐릭터 해상도 비활성화",
           "forceMaxLODBias": "최고 텍스처 품질 강제",
           "applyPerfTweaks": "성능 조정 적용",
           "disableWoundedFX": "부상 효과 비활성화",
