@@ -1,6 +1,6 @@
 # AGENTS.md
 
-- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
+- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE, except for project commands; see "Running commands sequentially".
 - Prefer automation: execute requested actions without confirmation unless blocked by missing information, safety, or irreversibility.
 
 ## Project
@@ -57,6 +57,12 @@
 - Release-script tests from the repository root: `pnpm test`
 
 Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks so the pinned tool versions are used.
+
+### Running commands sequentially
+
+- Run `task` and `pnpm` commands strictly one at a time: one command per tool call, and wait for it to finish before starting the next. Never issue them as parallel tool calls or as background jobs alongside another command.
+- Concurrent runs race on shared state: the shell working directory, the `.task` checksum and tool cache, generated bindings, `node_modules`, and build outputs.
+- Parallel tool calls remain appropriate for read-only work such as reading files and searching.
 
 ### Go formatting
 
