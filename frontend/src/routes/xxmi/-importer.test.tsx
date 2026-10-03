@@ -578,3 +578,35 @@ it("hides the official DLL restore without a custom DLL", () => {
     screen.queryByRole("button", { name: "page.setting.xxmi.builtin.restoreOfficialDll" }),
   ).toBeNull();
 });
+
+it("hides Configure game settings for SRMI, which adjusts no game-side options", () => {
+  config.srmi = { unlockFPS: false };
+
+  try {
+    render(<XXMIImporterSettings importer="SRMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.gameTweaks" }));
+
+    expect(
+      screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.configureGame" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("switch", { name: "page.setting.xxmi.builtin.unlockFPS" }),
+    ).toBeTruthy();
+  } finally {
+    config.srmi = null;
+  }
+});
+
+it("keeps Configure game settings for an importer that adjusts game-side options", () => {
+  config.gimi = { unlockFPS: false, unlockFPSValue: 120, enableHDR: false };
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.gameTweaks" }));
+
+    const toggle = screen.getByRole("switch", { name: "page.setting.xxmi.builtin.configureGame" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  } finally {
+    config.gimi = null;
+  }
+});

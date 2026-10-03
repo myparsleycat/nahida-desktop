@@ -223,6 +223,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
+  // Only GIMI (Dynamic Character Resolution) and WWMI (graphics options) adjust game-side settings,
+  // so SRMI and HIMI keep their game tab without the shared toggle.
+  const hasGameConfiguration = !!(config.gimi || config.wwmi);
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
 
@@ -676,18 +679,20 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 <TabsContent value="game" className="flex flex-col gap-6">
                   <Section>
                     <SectionContent>
-                      <ToggleRow
-                        label={t("page.setting.xxmi.builtin.configureGame")}
-                        description={
-                          config.gimi
-                            ? t("page.setting.xxmi.builtin.configureGameDescriptionGIMI")
-                            : config.wwmi
-                              ? t("page.setting.xxmi.builtin.configureGameDescriptionWWMI")
-                              : undefined
-                        }
-                        checked={config.configureGame}
-                        onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
-                      />
+                      {hasGameConfiguration && (
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.configureGame")}
+                          description={
+                            config.gimi
+                              ? t("page.setting.xxmi.builtin.configureGameDescriptionGIMI")
+                              : t("page.setting.xxmi.builtin.configureGameDescriptionWWMI")
+                          }
+                          checked={config.configureGame}
+                          onCheckedChange={(configureGame) =>
+                            setConfig({ ...config, configureGame })
+                          }
+                        />
+                      )}
                       {config.gimi && (
                         <>
                           <ToggleRow
