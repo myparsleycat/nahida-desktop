@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
-import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
   Section,
@@ -30,6 +29,7 @@ import {
 } from "@renderer/components/xxmi/xxmi-fields";
 import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -499,16 +499,18 @@ function PackageRow({
         <span className="font-medium">{title}</span>
         <div className="flex flex-wrap justify-end gap-2">{children}</div>
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
         {versions?.length ? (
           versions.map((version) => (
-            <Badge
+            <span
               key={version.key}
-              variant={version.active ? "secondary" : "outline"}
-              className="font-mono"
+              className={cn(
+                "font-mono text-xs",
+                version.active ? "font-medium text-foreground" : "text-muted-foreground",
+              )}
             >
               {version.label}
-            </Badge>
+            </span>
           ))
         ) : (
           <span className="text-xs text-muted-foreground">

@@ -454,20 +454,22 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
                 </SectionHeader>
                 <SectionContent>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>
                       {t("page.setting.xxmi.builtin.currentPin")}:{" "}
-                      {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
-                    </Badge>
-                    <Badge variant="outline">
+                      <span className="font-medium text-foreground">
+                        {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
+                      </span>
+                    </span>
+                    <span>
                       {t("page.setting.xxmi.packageVersionCurrent", {
                         version: packageInstalledInFolder
                           ? installedVersion
                           : t("page.setting.xxmi.packageVersionUnknown"),
                       })}
-                    </Badge>
+                    </span>
                     {packageVerification && (
-                      <span className="text-xs text-muted-foreground">
+                      <span>
                         {t("page.setting.xxmi.builtin.installedVerification", {
                           version: packageVerification.version,
                           method:
@@ -569,15 +571,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       >
                         <span className="font-mono">{release.version}</span>
                         {isInstalledPackageVersion(release.version) && (
-                          <Badge variant="outline">
+                          <span className="text-xs text-muted-foreground">
                             {t("page.setting.xxmi.builtin.packageInstalled")}
+                          </span>
+                        )}
+                        {!release.signed && (
+                          <Badge variant="destructive">
+                            {t("page.setting.xxmi.builtin.unsigned")}
                           </Badge>
                         )}
-                        <Badge variant={release.signed ? "secondary" : "destructive"}>
-                          {release.signed
-                            ? t("page.setting.xxmi.builtin.signed")
-                            : t("page.setting.xxmi.builtin.unsigned")}
-                        </Badge>
                       </VersionOption>
                     ))}
                   </div>
@@ -596,9 +598,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       <span className="flex items-center gap-1.5">
                         {t("page.setting.xxmi.builtin.libs")}
                         {customDll && (
-                          <Badge variant="outline">
+                          <span className="text-xs font-normal text-muted-foreground">
                             {t("page.setting.xxmi.builtin.customDll")}
-                          </Badge>
+                          </span>
                         )}
                       </span>
                     }
@@ -1122,13 +1124,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </DialogHeader>
           {dialogRelease && (
             <>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {isInstalledPackageVersion(dialogRelease.version) && (
-                  <Badge variant="outline">{t("page.setting.xxmi.builtin.packageInstalled")}</Badge>
+                  <span>{t("page.setting.xxmi.builtin.packageInstalled")}</span>
                 )}
-                <Badge variant={dialogRelease.signed ? "secondary" : "destructive"}>
-                  {t(`page.setting.xxmi.builtin.${dialogRelease.signed ? "signed" : "unsigned"}`)}
-                </Badge>
+                {dialogRelease.signed ? (
+                  <span>{t("page.setting.xxmi.builtin.signed")}</span>
+                ) : (
+                  <Badge variant="destructive">{t("page.setting.xxmi.builtin.unsigned")}</Badge>
+                )}
               </div>
               <p className="max-h-80 overflow-y-auto text-sm whitespace-pre-wrap text-muted-foreground">
                 {dialogRelease.notes || t("page.setting.xxmi.builtin.noPackageNotes")}
