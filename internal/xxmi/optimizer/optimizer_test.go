@@ -143,3 +143,35 @@ func TestOptimizeDisablesModWithGlobalShaderRegexTrigger(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOptimizeDisablesDuplicateZZMILibrary(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "ZZMI with spaces")
+	library := filepath.Join(root, "Core", "ZZMI", "Libraries", "lib.ini")
+	duplicate := filepath.Join(root, "Mods", "Pack", "lib.ini")
+	late := filepath.Join(root, "Mods", "Late", "mod.ini")
+	for path, content := range map[string]string{
+		library:   "; packaged library\n\nnamespace = ZZMI\\Lib\n",
+		duplicate: "namespace = zzmi\\lib\n",
+
+		// A namespace line after other content is not a declaration, so the file is not a duplicate.
+		late: "[Constants]\nnamespace = zzmi\\lib\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Optimize(context.Background(), Options{
+		Importer: "ZZMI", ImporterFolder: root, CachePath: filepath.Join(t.TempDir(), "cache.json"),
+		Prefix: "DISABLED ", DryRun: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Changes) != 1 || report.Changes[0].Path != duplicate ||
+		report.Changes[0].Reason != "duplicate packaged library namespace" {
+		t.Fatalf("changes = %+v", report.Changes)
+	}
+}

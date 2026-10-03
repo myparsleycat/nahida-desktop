@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
+import { ButtonGroup } from "@renderer/components/ui/button-group";
 import { Input } from "@renderer/components/ui/input";
 import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { toErrorMessage } from "@shared/utils";
@@ -23,6 +24,9 @@ import { toast } from "sonner";
 const LAUNCH_BLOCKER_DCR = "GIMI_DCR_ENABLED";
 const LAUNCH_BLOCKER_SMOOTH_MOTION = "NVIDIA_SMOOTH_MOTION_ENABLED";
 const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
+// Keep in sync with errWWMIResourceTierUndecided in internal/xxmi/launch_builtin.go.
+const LAUNCH_BLOCKER_WWMI_RESOURCE_TIER = "WWMI_RESOURCE_TIER_DECISION_REQUIRED";
+const WWMI_RESOURCE_TIERS = ["UHD", "HD", "SD"] as const;
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
 const launchErrorCodes = [
@@ -50,6 +54,7 @@ type LaunchDialog =
   | "smooth-motion"
   | "launch-blockers"
   | "wwmi-wounded"
+  | "wwmi-resource-tier"
   | "game-folder"
   | "runtime-repair";
 
@@ -67,6 +72,9 @@ export function launchDialog(message: string): LaunchDialog | null {
   }
   if (message.includes(LAUNCH_BLOCKER_RUNTIME)) {
     return "runtime-repair";
+  }
+  if (message.includes(LAUNCH_BLOCKER_WWMI_RESOURCE_TIER)) {
+    return "wwmi-resource-tier";
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
     return "wwmi-wounded";
@@ -93,6 +101,8 @@ export function useLaunchGuard() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [gameFolder, setGameFolder] = useState("");
+  // Steam and Epic Games installs ship HD, and it is the official launcher's usual default.
+  const [resourceTier, setResourceTier] = useState<string>("HD");
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
@@ -187,6 +197,7 @@ export function useLaunchGuard() {
     setPendingImporter(null);
     setRuntimeError(null);
     setGameFolder("");
+    setResourceTier("HD");
     setDetectedFolders(undefined);
   }, []);
 
@@ -213,6 +224,13 @@ export function useLaunchGuard() {
           ...config,
           woundedFXDecided: true,
           wwmi: { ...config.wwmi, disableWoundedFX: true },
+        });
+      } else if (dialog === "wwmi-resource-tier") {
+        const config = await XXMI.GetImporterConfig(importer);
+        if (!config.wwmi) throw new Error("WWMI settings are unavailable");
+        await XXMI.SaveImporterConfig(importer, {
+          ...config,
+          wwmi: { ...config.wwmi, resourceTier, resourceTierDecided: true },
         });
       } else {
         await XXMI.ClearLaunchBlockers(importer);
@@ -243,12 +261,18 @@ export function useLaunchGuard() {
 
     // The blockers were just cleared for this importer, so a rejection here means the fix did
     // not take effect. Surface it instead of reopening the dialog and looping forever.
+    // The resource quality is a saved answer that cannot be asked twice, and a first launch
+    // may still need the wounded effect question, so that one goes through the guard again.
     try {
-      await XXMI.StartGame(importer);
+      if (dialog === "wwmi-resource-tier") {
+        await launch(importer);
+      } else {
+        await XXMI.StartGame(importer);
+      }
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
-  }, [dialog, gameFolder, pendingImporter]);
+  }, [dialog, gameFolder, launch, pendingImporter, resourceTier]);
 
   const handleKeepWounded = useCallback(async () => {
     if (!pendingImporter) return;
@@ -352,6 +376,21 @@ export function useLaunchGuard() {
               )}
             </div>
           )}
+          {dialog === "wwmi-resource-tier" && (
+            <ButtonGroup>
+              {WWMI_RESOURCE_TIERS.map((tier) => (
+                <Button
+                  key={tier}
+                  variant={resourceTier === tier ? "default" : "outline"}
+                  aria-pressed={resourceTier === tier}
+                  disabled={isConfirming}
+                  onClick={() => setResourceTier(tier)}
+                >
+                  {tier}
+                </Button>
+              ))}
+            </ButtonGroup>
+          )}
           <AlertDialogFooter>
             {dialog === "wwmi-wounded" ? (
               <AlertDialogAction
@@ -389,6 +428,7 @@ export function useLaunchGuard() {
       handleKeepWounded,
       isConfirming,
       pendingImporter,
+      resourceTier,
       runtimeError,
       t,
     ],

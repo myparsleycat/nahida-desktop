@@ -596,6 +596,11 @@
           "confirm": "無効化して起動",
           "keep": "有効のまま起動"
         },
+        "wwmi-resource-tier": {
+          "title": "リソース品質を選択",
+          "description": "鳴潮は、ダウンロード済みのリソースとこの値が異なると読み込み中にクラッシュします。Steam と Epic Games 版は HD を使用します。公式ランチャーでは実際にダウンロードした品質（通常は HD）を選んでください。後からインポーター設定で変更できます。",
+          "confirm": "保存して起動"
+        },
         "preset-management": {
           "description": "このプリセットには {{length}} 個のMODが保存されています。",
           "legacy-badge": "旧形式",

@@ -68,8 +68,8 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 	mods := filepath.Join(options.ImporterFolder, "Mods")
 	shaderFixes := filepath.Join(options.ImporterFolder, "ShaderFixes")
 	packagedNamespaces := map[string]bool{}
-	if options.Importer == "GIMI" {
-		library := filepath.Join(options.ImporterFolder, "Core", "GIMI", "Libraries")
+	if options.Importer == "GIMI" || options.Importer == "ZZMI" {
+		library := filepath.Join(options.ImporterFolder, "Core", options.Importer, "Libraries")
 		if err := walkINI(ctx, library, options.Exclude, func(path string, info fs.FileInfo) error {
 			file, err := readINI(path)
 			if err != nil {
@@ -278,15 +278,18 @@ func readINI(path string) (iniFile, error) {
 	return file, nil
 }
 
+// iniNamespace returns the namespace an INI file declares. 3DMigoto honors the declaration
+// only on the first line that is neither blank nor a comment.
 func iniNamespace(file iniFile) string {
 	for _, line := range file.lines {
 		line = strings.ToLower(strings.TrimSpace(line))
-		if strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if name, value, ok := strings.Cut(line, "="); ok && strings.TrimSpace(name) == "namespace" {
 			return strings.TrimSpace(value)
 		}
+		return ""
 	}
 	return ""
 }

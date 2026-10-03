@@ -3,6 +3,7 @@ package xxmi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -126,13 +127,78 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	for _, want := range []string{"; user comment\r\n", "target = Game.exe\r\n", "custom = keep\r\n",
 		"loader = nahida-elevated-helper-test.exe\r\n",
 		"texture_hash = 0\r\n", "hunting = 2\r\n", "show_warnings = 0\r\n",
-		"log_level = info\r\n", "calls = 1\r\n", "debug = 0\r\n"} {
+		"calls = 1\r\n", "debug = 0\r\n"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("updated INI is missing %q: %q", want, data)
 		}
 	}
 	if strings.Contains(string(data), "launch =") {
 		t.Errorf("updated INI keeps an empty launch option: %q", data)
+	}
+
+	// Without a deployed XXMI libraries manifest the runtime is treated as one that predates log_level.
+	if strings.Contains(string(data), "log_level") || strings.Contains(string(data), "[Input]") {
+		t.Errorf("updated INI gained options the runtime does not read: %q", data)
+	}
+}
+
+func TestUpdateLaunchINIFollowsDeployedLibsVersion(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		source string
+		modern bool
+	}{
+		{"xxmi-libs@1.1.6", false}, {"xxmi-libs@1.1.7", true}, {"xxmi-libs@1.2.0", true},
+		{"xxmi-libs@1.10.0", true}, {"xxmi-libs@custom", false},
+	} {
+		t.Run(tc.source, func(t *testing.T) {
+			t.Parallel()
+			folder := filepath.Join(t.TempDir(), "Importer with spaces")
+			if err := os.MkdirAll(folder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			manifest := fmt.Sprintf(`{"mode":%q,"source":%q}`, RuntimeXXMI, tc.source)
+			for name, content := range map[string]string{
+				"d3dx.ini": "[Logging]\ncalls = 0\n[Input]\ntoggle_input = VK_F9\n", runtimeManifestName: manifest,
+			} {
+				if err := os.WriteFile(filepath.Join(folder, name), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.ImporterFolder, cfg.Migoto.LogLevel, cfg.Migoto.Input = folder, "Debug", false
+			cfg.Migoto.InputDisableMode = "All"
+			service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+			if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe"); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(folder, "d3dx.ini"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			modern := []string{
+				"log_level = debug", "clear_unknown_settings = 1", "input = 0", "input_disable_mode = all",
+				"toggle_input = VK_F9", "calls = 0",
+			}
+			legacy := []string{"calls = 1", "debug = 1", "toggle_input = VK_F9"}
+			want, unwanted := legacy, []string{"log_level", "clear_unknown_settings", "input_disable_mode"}
+			if tc.modern {
+				want, unwanted = modern, []string{"debug = 1", "ctrl alt shift VK_END"}
+			}
+			for _, option := range want {
+				if !strings.Contains(string(data), option) {
+					t.Errorf("INI is missing %q: %s", option, data)
+				}
+			}
+			for _, option := range unwanted {
+				if strings.Contains(string(data), option) {
+					t.Errorf("INI unexpectedly contains %q: %s", option, data)
+				}
+			}
+		})
 	}
 }
 
@@ -208,7 +274,7 @@ func TestApplyMigotoINIUsesImporterRenderingProfile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc := parseINI(nil)
-			applyMigotoINI(doc, tc.name, MigotoOptions{EnforceRendering: true})
+			applyMigotoINI(doc, tc.name, MigotoOptions{EnforceRendering: true}, false)
 			data := string(doc.Bytes())
 			for _, option := range tc.want {
 				if !strings.Contains(data, option) {
@@ -257,23 +323,138 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(folder, runtimeManifestName), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, direct := range []bool{false, true} {
-		cfg := ImporterConfig{
-			ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct,
-			ProcessStartMethod: "Native", XXMIDLLInjectMode: "Inject",
+	for _, tc := range []struct {
+		name    string
+		direct  bool
+		options string
+		launch  string
+		want    []string
+	}{
+		{"wrapper adds the resource tier", false, "-SkipSplash", "Direct", []string{"-dx11", "-krqlv=uhd"}},
+		{"launch options keep their order", true, "-SkipSplash", "Direct", []string{"-dx11", "-SkipSplash", "-krqlv=uhd"}},
+		{"launch options naming a tier win", true, "-krqlv=sd", "Direct", []string{"-dx11", "-krqlv=sd"}},
+		{"ignored launch options do not suppress the tier", false, "-krqlv=sd", "Direct", []string{"-dx11", "-krqlv=uhd"}},
+		{"manual launch passes no tier", false, "", "Manual", []string{"-dx11"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := ImporterConfig{
+				ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: tc.direct, LaunchOptions: tc.options,
+				GameLaunch: tc.launch, ProcessStartMethod: "Native", XXMIDLLInjectMode: "Inject",
+				WWMI: &WWMIOptions{ResourceTier: "UHD"},
+			}
+			spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := wrapper
+			if tc.direct {
+				want = client
+			}
+			if spec.StartExe != want || spec.WorkDir != filepath.Dir(want) || !slices.Equal(spec.StartArgs, tc.want) ||
+				spec.UseHook || spec.InjectMode != "Inject" {
+				t.Fatalf("spec = %+v", spec)
+			}
+		})
+	}
+}
+
+func TestLaunchProcessNameResolution(t *testing.T) {
+	t.Parallel()
+	wwmi, _ := lookupImporterPackage("WWMI")
+	gimi, _ := lookupImporterPackage("GIMI")
+	for _, tc := range []struct {
+		name    string
+		cfg     ImporterConfig
+		spec    importerPackageSpec
+		gameExe string
+		want    string
+	}{
+		{"override wins", ImporterConfig{GameProcessExe: "Custom.exe"}, wwmi, `C:\Game\Wuthering Waves.exe`, "Custom.exe"},
+		{"importer process executable", ImporterConfig{}, wwmi, `C:\Game\Wuthering Waves.exe`, "Client-Win64-Shipping.exe"},
+		{"executable found in the game folder", ImporterConfig{}, gimi, `C:\Game\YuanShen.exe`, "YuanShen.exe"},
+		{"first game executable without a game folder", ImporterConfig{}, gimi, "", "GenshinImpact.exe"},
+	} {
+		if got := launchProcessName(tc.cfg, tc.spec, tc.gameExe); got != tc.want {
+			t.Errorf("%s: process name = %q; want %q", tc.name, got, tc.want)
 		}
-		spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
-		if err != nil {
+	}
+}
+
+func TestLaunchWithoutGameFolder(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		launch string
+		key    string
+		want   string
+	}{
+		{"Direct", "GIMI", "XXMI_GAME_FOLDER_NOT_CONFIGURED"},
+		{"Custom", "GIMI", "XXMI_ELEVATION_DENIED"},
+		{"Manual", "GIMI", "XXMI_ELEVATION_DENIED"},
+	} {
+		t.Run(tc.launch, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := DefaultImporterConfig(tc.key, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Enabled, cfg.Mode, cfg.GameLaunch = true, RuntimeLegacy, tc.launch
+			cfg.CustomLaunch.Command = "start game"
+			cfg.Migoto.UnsafeMode = true
+			if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			manifest := fmt.Sprintf(`{"mode":%q,"source":"legacy@abcdef123456"}`, RuntimeLegacy)
+			for name, content := range map[string]string{
+				"d3dx.ini": "[Loader]\n", runtimeManifestName: manifest, "d3d11.dll": "dll",
+				"3DMigoto Loader.exe": "loader",
+			} {
+				if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, name), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			service := New()
+			service.UseClient(newXXMITestClient(t))
+			service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
+			err = service.launchBuiltinGameLocked(context.Background(), tc.key, cfg)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("launch error = %v; want %s", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestWWMIDirectLaunchAsksForResourceTierOnce(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := wwmiResourceTierArgument("WWMI", cfg); got != "-krqlv=hd" {
+		t.Fatalf("default tier argument = %q", got)
+	}
+	cfg.Enabled, cfg.GameFolder = true, filepath.Join(t.TempDir(), "Wuthering Waves Game")
+	client := filepath.Join(cfg.GameFolder, "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe")
+	for _, path := range []string{
+		filepath.Join(cfg.ImporterFolder, "d3dx.ini"), filepath.Join(cfg.GameFolder, "Wuthering Waves.exe"), client,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		want := wrapper
-		if direct {
-			want = client
+		if err := os.WriteFile(path, []byte("[Loader]\n"), 0o600); err != nil {
+			t.Fatal(err)
 		}
-		if spec.StartExe != want || spec.WorkDir != filepath.Dir(want) || len(spec.StartArgs) != 1 ||
-			spec.StartArgs[0] != "-dx11" || spec.UseHook || spec.InjectMode != "Inject" {
-			t.Fatalf("direct=%t, spec=%+v", direct, spec)
-		}
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.GameFolder, "Engine"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg)
+	if !errors.Is(err, errWWMIResourceTierUndecided) {
+		t.Fatalf("launch error = %v", err)
+	}
+	cfg.WWMI.ResourceTierDecided = true
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg)
+	if err == nil || errors.Is(err, errWWMIResourceTierUndecided) {
+		t.Fatalf("launch after the decision = %v", err)
 	}
 }
 
@@ -352,16 +533,33 @@ func TestLogLevelReachesINI(t *testing.T) {
 	} {
 		t.Run(tc.level, func(t *testing.T) {
 			t.Parallel()
-			doc := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
-			applyMigotoINI(doc, "GIMI", MigotoOptions{LogLevel: tc.level})
-			data := string(doc.Bytes())
+			legacy := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
+			applyMigotoINI(legacy, "GIMI", MigotoOptions{LogLevel: tc.level}, false)
+			data := string(legacy.Bytes())
+			for _, want := range []string{"calls = " + tc.calls, "debug = " + tc.debug, "show_warnings = 1"} {
+				if !strings.Contains(data, want) {
+					t.Fatalf("legacy INI is missing %q: %s", want, data)
+				}
+			}
+			if strings.Contains(data, "log_level") {
+				t.Fatalf("legacy INI gained log_level: %s", data)
+			}
+
+			modern := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
+			applyMigotoINI(modern, "GIMI", MigotoOptions{
+				LogLevel: tc.level, Input: true, InputDisableMode: "Mods", ToggleInput: "VK_F8",
+			}, true)
+			data = string(modern.Bytes())
 			for _, want := range []string{
-				"log_level = " + strings.ToLower(tc.level), "calls = " + tc.calls, "debug = " + tc.debug,
-				"show_warnings = 1",
+				"log_level = " + strings.ToLower(tc.level), "input = 1", "input_disable_mode = mods",
+				"toggle_input = VK_F8", "clear_unknown_settings = 0",
 			} {
 				if !strings.Contains(data, want) {
 					t.Fatalf("INI is missing %q: %s", want, data)
 				}
+			}
+			if strings.Contains(data, "calls =") || strings.Contains(data, "debug =") {
+				t.Fatalf("INI gained superseded logging switches: %s", data)
 			}
 		})
 	}
@@ -378,7 +576,10 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 	} {
 		t.Run(tc.launch, func(t *testing.T) {
 			t.Parallel()
-			root := t.TempDir()
+			root := filepath.Join(t.TempDir(), "Importer with spaces")
+			if err := os.MkdirAll(root, 0o700); err != nil {
+				t.Fatal(err)
+			}
 			for _, name := range []string{runtimeManifestName, "game.exe", "3DMigoto Loader.exe"} {
 				if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o600); err != nil {
 					t.Fatal(err)
@@ -401,6 +602,15 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			}
 			if err := inject.ValidateLaunchSpec(spec); err != nil {
 				t.Fatal(err)
+			}
+
+			// A custom command or a manual start works without a located game.
+			spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, "", "GenshinImpact.exe")
+			if err != nil || spec.WorkDir != root {
+				t.Fatalf("launch spec without a game = %+v, %v", spec, err)
+			}
+			if err := inject.ValidateLaunchSpec(spec); (err != nil) != (tc.launch == "Direct") {
+				t.Fatalf("validation without a game = %v", err)
 			}
 		})
 	}

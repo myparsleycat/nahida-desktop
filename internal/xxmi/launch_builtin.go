@@ -82,6 +82,11 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		return fmt.Errorf("XXMI_PLATFORM_LAUNCH_UNSUPPORTED: %s launch is not available", cfg.GameLaunch)
 	}
 
+	// The question is asked before the pre-launch command so answering it does not run that command twice.
+	if wwmiResourceTierArgument(key, cfg) != "" && !cfg.WWMI.ResourceTierDecided {
+		return errWWMIResourceTierUndecided
+	}
+
 	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
 	// prepare drives, folders, or mods that the later steps read.
 	progress("pre-launch")
@@ -112,18 +117,20 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	}
 	progress("resolve-game")
 	game, err := validateGameFolder(ctx, key, cfg.GameFolder, packageSpec)
-	if err != nil {
+	switch {
+	case err == nil:
+		cfg.GameFolder = game.Path
+		if err := ValidateImporterSettings(key, cfg); err != nil {
+			return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
+		}
+		gameExe = game.ExePath
+	case cfg.GameLaunch == "Direct":
 		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
+	default:
+		// A custom command or a manual start does not run the executable from the game folder.
+		cfg.GameFolder = ""
 	}
-	cfg.GameFolder = game.Path
-	if err := ValidateImporterSettings(key, cfg); err != nil {
-		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
-	}
-	gameExe = game.ExePath
-	processName := filepath.Base(gameExe)
-	if len(packageSpec.processNames) > 0 {
-		processName = packageSpec.processNames[0]
-	}
+	processName := launchProcessName(cfg, packageSpec, gameExe)
 	progress("auto-update")
 	if err := x.autoUpdateForLaunch(ctx, key); err != nil {
 		if x.log != nil {
@@ -153,7 +160,11 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			return err
 		}
 	}
-	if err := x.rejectLaunchBlockers(ctx, key, gameExe, checkDCR); err != nil {
+	blockerTarget := gameExe
+	if blockerTarget == "" {
+		blockerTarget = processName
+	}
+	if err := x.rejectLaunchBlockers(ctx, key, blockerTarget, checkDCR); err != nil {
 		return err
 	}
 	progress("xcmd-prelaunch")
@@ -239,7 +250,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := initializeGameLaunch(ctx, key, cfg, migotoDLLUsed); err != nil {
 		return err
 	}
-	if key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
+	if usesFPSUnlocker(cfg) {
 		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
@@ -268,7 +279,10 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 
 	// The game is already running, so later failures are reported as warnings instead of a failed launch.
 	progress("post-load")
-	if err := runLaunchHook(ctx, cfg.RunPostLoad, filepath.Dir(gameExe)); err != nil {
+	if gameExe != "" {
+		hookDir = filepath.Dir(gameExe)
+	}
+	if err := runLaunchHook(ctx, cfg.RunPostLoad, hookDir); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			warn(fmt.Sprintf("Post-load command exited with code %d", exit.ExitCode()))
@@ -349,14 +363,26 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConf
 	height, _, _ := metric.Call(1)
 	doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
 	doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
-	applyMigotoINI(doc, key, cfg.Migoto)
+	applyMigotoINI(doc, key, cfg.Migoto, supportsLogLevel(cfg))
 	if !doc.Changed() {
 		return nil
 	}
 	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
 }
 
-func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
+// migotoLogLevelVersion is the first XXMI libraries release that reads log_level, the [Input] switches,
+// and clear_unknown_settings. Earlier releases and the legacy 3DMigoto runtime read only calls and debug.
+const migotoLogLevelVersion = "v1.1.7"
+
+func supportsLogLevel(cfg ImporterConfig) bool {
+	if cfg.Mode != RuntimeXXMI {
+		return false
+	}
+	version, ok := deployedLibsVersion(cfg.ImporterFolder)
+	return ok && semver.IsValid("v"+version) && semver.Compare("v"+version, migotoLogLevelVersion) >= 0
+}
+
+func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions, logLevel bool) {
 	if options.EnforceRendering {
 		values := map[string]string{
 			"texture_hash": "0", "track_texture_updates": "0", "track_region_hashes": "0",
@@ -385,10 +411,20 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
 		}
 		doc.SetOption(section, option, value, true)
 	}
-	// log_level supersedes calls and debug since XXMI libraries 1.1.7; older runtimes read only the switches.
-	boolean("Logging", "calls", options.LogLevel == "Info" || options.LogLevel == "Debug", "1", "0")
-	boolean("Logging", "debug", options.LogLevel == "Debug", "1", "0")
-	doc.SetOption("Logging", "log_level", strings.ToLower(options.LogLevel), true)
+	if logLevel {
+		doc.SetOption("Logging", "log_level", strings.ToLower(options.LogLevel), true)
+		boolean("System", "clear_unknown_settings", options.ClearUnknownSettings, "1", "0")
+		boolean("Input", "input", options.Input, "1", "0")
+		doc.SetOption("Input", "input_disable_mode", strings.ToLower(options.InputDisableMode), true)
+
+		// The hotkey is a default: one the user or the importer package already set in d3dx.ini wins.
+		if len(doc.optionIndexes("Input", "toggle_input")) == 0 && options.ToggleInput != "" {
+			doc.SetOption("Input", "toggle_input", options.ToggleInput, true)
+		}
+	} else {
+		boolean("Logging", "calls", options.LogLevel == "Info" || options.LogLevel == "Debug", "1", "0")
+		boolean("Logging", "debug", options.LogLevel == "Debug", "1", "0")
+	}
 	boolean("Logging", "show_warnings", options.MuteWarnings, "0", "1")
 	boolean("Hunting", "hunting", options.EnableHunting, "2", "0")
 	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
@@ -411,9 +447,15 @@ func (x *XXMI) builtinLaunchSpec(
 	if err := json.Unmarshal(data, &deployed); err != nil {
 		return inject.LaunchSpec{}, err
 	}
+	// The helper needs a working directory even when it starts nothing itself.
+	workDir := cfg.ImporterFolder
+	if gameExe != "" && key != "ZZMI" {
+		// Zenless Zone Zero crashes at the login screen when started from its own folder.
+		workDir = filepath.Dir(gameExe)
+	}
 	spec := inject.LaunchSpec{
 		Mode: inject.RuntimeMode(cfg.Mode), ProcessName: processName, StartExe: gameExe,
-		WorkDir: filepath.Dir(gameExe), StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
+		WorkDir: workDir, StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
 		InjectMode: cfg.XXMIDLLInjectMode, UseHook: cfg.XXMIDLLInjectMode == "Hook",
 		TimeoutSeconds:  cfg.ProcessTimeout,
 		InjectionMethod: cfg.InjectionMethod,
@@ -425,17 +467,22 @@ func (x *XXMI) builtinLaunchSpec(
 			return inject.LaunchSpec{}, fmt.Errorf("parse launch options: %w", err)
 		}
 	}
-	if strings.EqualFold(processName, "Client-Win64-Shipping.exe") {
-		if cfg.UseLaunchOptions {
-			spec.StartExe = filepath.Join(filepath.Dir(gameExe), "Client", "Binaries", "Win64", processName)
+	switch key {
+	case "WWMI":
+		if cfg.UseLaunchOptions && gameExe != "" {
+			spec.StartExe = filepath.Join(
+				filepath.Dir(gameExe), "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe",
+			)
 			spec.WorkDir = filepath.Dir(spec.StartExe)
 		}
 		spec.StartArgs = append([]string{"-dx11"}, spec.StartArgs...)
-	}
-	if strings.EqualFold(processName, "Endfield.exe") {
+		if tier := wwmiResourceTierArgument(key, cfg); tier != "" {
+			spec.StartArgs = append(spec.StartArgs, tier)
+		}
+	case "EFMI":
 		spec.StartArgs = append([]string{"-force-d3d11"}, spec.StartArgs...)
 	}
-	if cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
+	if usesFPSUnlocker(cfg) {
 		folder, err := fpsUnlockerFolder()
 		if err != nil {
 			return inject.LaunchSpec{}, err
@@ -516,6 +563,44 @@ func (x *XXMI) builtinLaunchSpec(
 		}
 	}
 	return spec, nil
+}
+
+// errWWMIResourceTierUndecided stops the first direct WWMI launch until the user picks the resource
+// quality. The renderer keys its dialog off this literal; keep it in sync with use-launch-guard.tsx.
+var errWWMIResourceTierUndecided = errors.New("WWMI_RESOURCE_TIER_DECISION_REQUIRED")
+
+// wwmiResourceTierArgument returns the resource quality argument Wuthering Waves needs to load, or ""
+// when the launch does not pass one. Launch options that already name a quality are left alone.
+func wwmiResourceTierArgument(key string, cfg ImporterConfig) string {
+	if key != "WWMI" || cfg.WWMI == nil || cfg.GameLaunch != "Direct" {
+		return ""
+	}
+	if cfg.UseLaunchOptions && strings.Contains(cfg.LaunchOptions, "krqlv") {
+		return ""
+	}
+	return "-krqlv=" + strings.ToLower(cfg.WWMI.ResourceTier)
+}
+
+// usesFPSUnlocker reports whether the launch starts the game through the Genshin FPS unlocker,
+// which can only wrap a game executable this app starts itself.
+func usesFPSUnlocker(cfg ImporterConfig) bool {
+	return cfg.GIMI != nil && cfg.GIMI.UnlockFPS && cfg.GameLaunch == "Direct"
+}
+
+// launchProcessName resolves the image name to inject into: the override, the importer's process
+// executable, the executable found in the game folder, and finally the importer's first game executable.
+func launchProcessName(cfg ImporterConfig, spec importerPackageSpec, gameExe string) string {
+	switch {
+	case cfg.GameProcessExe != "":
+		return cfg.GameProcessExe
+	case len(spec.processNames) > 0:
+		return spec.processNames[0]
+	case gameExe != "":
+		return filepath.Base(gameExe)
+	case len(spec.gameExeNames) > 0:
+		return spec.gameExeNames[0]
+	}
+	return ""
 }
 
 func (x *XXMI) resolveExtraDLLPaths(ctx context.Context, paths []string) ([]string, error) {

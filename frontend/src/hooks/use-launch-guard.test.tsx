@@ -76,6 +76,7 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("NVIDIA_SMOOTH_MOTION_ENABLED")).toBe("smooth-motion");
   expect(launchDialog("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED")).toBe("launch-blockers");
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
+  expect(launchDialog("WWMI_RESOURCE_TIER_DECISION_REQUIRED")).toBe("wwmi-resource-tier");
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI is not configured")).toBeNull();
@@ -172,6 +173,30 @@ it("saves the wounded effect choice before retrying launch", async () => {
     "WWMI",
     expect.objectContaining({ woundedFXDecided: true, wwmi: { disableWoundedFX: true } }),
   );
+});
+
+it("saves the resource quality and still asks about the wounded effect", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("WWMI_RESOURCE_TIER_DECISION_REQUIRED"));
+  xxmi.StartGame.mockRejectedValueOnce(new Error("WWMI_WOUNDED_FX_DECISION_REQUIRED"));
+  xxmi.GetImporterConfig.mockResolvedValue({ wwmi: { resourceTier: "HD" } });
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+
+  render(<Harness importer="WWMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "UHD" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.mod.dialog.wwmi-resource-tier.confirm" }),
+  );
+
+  expect(
+    await screen.findByRole("button", { name: "page.mod.dialog.wwmi-wounded.confirm" }),
+  ).toBeTruthy();
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+    "WWMI",
+    expect.objectContaining({ wwmi: { resourceTier: "UHD", resourceTierDecided: true } }),
+  );
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(2);
 });
 
 it("can keep the wounded effect when retrying launch", async () => {

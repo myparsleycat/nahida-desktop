@@ -79,7 +79,8 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if spec.CustomLaunchCmd != "" && spec.StartMethod == "Manual" {
 		return errors.New("custom launch cannot use manual start")
 	}
-	if spec.StartMethod != "Manual" {
+	// A custom command and a manual start launch the game without the start executable.
+	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" {
 		if err := validateRegularLocalFile(spec.StartExe); err != nil {
 			return fmt.Errorf("start executable: %w", err)
 		}

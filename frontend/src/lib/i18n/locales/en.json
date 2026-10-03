@@ -615,6 +615,11 @@
           "confirm": "Disable and start",
           "keep": "Keep enabled and start"
         },
+        "wwmi-resource-tier": {
+          "title": "Select resource quality",
+          "description": "Wuthering Waves crashes while loading unless this matches the resources it downloaded. Steam and Epic Games installs use HD. For the official launcher, pick the quality you downloaded, usually HD. You can change it later in the importer settings.",
+          "confirm": "Save and start"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."

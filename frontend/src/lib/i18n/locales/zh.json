@@ -595,6 +595,11 @@
           "confirm": "禁用并启动",
           "keep": "保持启用并启动"
         },
+        "wwmi-resource-tier": {
+          "title": "选择资源品质",
+          "description": "如果此项与已下载的资源不一致，鸣潮会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。使用官方启动器时，请选择实际下载的品质（通常为 HD）。之后可以在导入器设置中更改。",
+          "confirm": "保存并启动"
+        },
         "preset-management": {
           "description": "此预设包含 {{length}} 个模组。",
           "legacy-badge": "旧版",

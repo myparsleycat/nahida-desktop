@@ -16,6 +16,10 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if (key == "WWMI" || key == "ZZMI") && (cfg.GameLaunch == "Custom" || cfg.GameLaunch == "Manual") {
+		// These settings live in the game folder, which only a located install provides.
+		return nil
+	}
 	if key == "WWMI" && cfg.WWMI != nil {
 		if err := configureWWMIGame(ctx, cfg, migotoDLLUsed); err != nil {
 			return fmt.Errorf("WWMI_GAME_CONFIG_FAILED: %w", err)
