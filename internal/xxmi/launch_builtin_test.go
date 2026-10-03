@@ -295,6 +295,70 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 	}
 }
 
+func TestImportedGlobalInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"Hook", "Inject", "Bypass"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			for _, name := range []string{runtimeManifestName, "game.exe", "3DMigoto Loader.exe"} {
+				if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := DefaultImporterConfig("WWMI", root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Mode, cfg.ImporterFolder, cfg.XXMIDLLInjectMode = RuntimeLegacy, root, mode
+			x := New()
+			spec, err := x.builtinLaunchSpec(
+				context.Background(),
+				"WWMI",
+				cfg,
+				filepath.Join(root, "game.exe"),
+				"game.exe",
+			)
+			if err != nil || spec.InjectMode != mode || spec.UseHook != (mode == "Hook") {
+				t.Fatalf("launch spec = %+v, %v", spec, err)
+			}
+			used, err := x.migotoDLLUsed(context.Background(), cfg)
+			if err != nil || used != (mode != "Bypass") {
+				t.Fatalf("DLL used = %t, %v", used, err)
+			}
+			if mode == "Bypass" {
+				cfg.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{filepath.Join(root, "d3d11.dll")}}
+				used, err = x.migotoDLLUsed(context.Background(), cfg)
+				if err != nil || !used {
+					t.Fatalf("extra XXMI DLL used = %t, %v", used, err)
+				}
+			}
+		})
+	}
+}
+
+func TestImportedLogLevelReachesINI(t *testing.T) {
+	t.Parallel()
+	for _, level := range []string{"", "DISABLED", "WARNING", "INFO", "DEBUG"} {
+		t.Run("level="+level, func(t *testing.T) {
+			t.Parallel()
+			doc := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
+			applyMigotoINI(doc, "GIMI", MigotoOptions{LogLevel: level, CallsLogging: true})
+			data := string(doc.Bytes())
+			if level == "" {
+				if strings.Contains(data, "log_level") {
+					t.Fatalf("legacy INI gained an explicit log level: %s", data)
+				}
+			} else if !strings.Contains(data, "log_level = "+strings.ToLower(level)) {
+				t.Fatalf("INI did not retain %s: %s", level, data)
+			}
+			if !strings.Contains(data, "calls = 1") || !strings.Contains(data, "show_warnings = 1") {
+				t.Fatalf("legacy logging options changed: %s", data)
+			}
+		})
+	}
+}
+
 func TestNativeLaunchSpecDoesNotRequireLoader(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []RuntimeMode{RuntimeXXMI, RuntimeLegacy} {

@@ -261,7 +261,7 @@ func (x *XXMI) externalHuntingRuntime(ctx context.Context, importerKey string) (
 		folder := launcher.importerFolder(key)
 		return HuntingRuntime{
 			ImporterKey: key, ImporterFolder: folder, INIPath: filepath.Join(folder, "d3dx.ini"),
-			GameEXENames: slices.Clone(importer.Importer.GameEXENames),
+			GameEXENames: importer.Importer.processNames(),
 		}, nil
 	}
 	return HuntingRuntime{}, fmt.Errorf("unknown importer %q", importerKey)
@@ -276,9 +276,9 @@ func (x *XXMI) externalGameExecutable(ctx context.Context, importer string) (str
 	if !ok {
 		return "", fmt.Errorf("importer %s not found", importer)
 	}
-	executable := configuredGameExecutable(config.Importer.GameFolder, config.Importer.GameEXENames)
+	executable := config.Importer.gameExecutable()
 	if executable == "" {
-		executable = externalGameProcessName(importer, config.Importer.GameEXENames)
+		executable = config.Importer.processName()
 	}
 	return executable, nil
 }
@@ -299,11 +299,11 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
 	if _, disabled := launcher.disabled[importer]; disabled {
 		return fmt.Errorf("importer %s is disabled", importer)
 	}
-	processName := externalGameProcessName(importer, config.Importer.GameEXENames)
+	processName := config.Importer.processName()
 	if processName == "" {
 		return fmt.Errorf("game process is not configured for importer %s", importer)
 	}
-	gameExecutable := configuredGameExecutable(config.Importer.GameFolder, config.Importer.GameEXENames)
+	gameExecutable := config.Importer.gameExecutable()
 	if gameExecutable == "" {
 		gameExecutable = processName
 	}
@@ -383,20 +383,46 @@ func waitForVisibleProcessWith(
 	}
 }
 
-func externalGameProcessName(importer string, configured []string) string {
-	switch strings.ToUpper(importer) {
-	case "SRMI":
-		return "StarRail.exe"
-	case "WWMI":
-		return "Client-Win64-Shipping.exe"
-	case "ZZMI":
-		return "ZenlessZoneZero.exe"
-	default:
-		if len(configured) == 0 {
-			return ""
-		}
-		return configured[0]
+// processNames lists the image names the game can run under, in the launcher's own order:
+// an explicit override, then the process executables, then the game executables.
+func (i externalImporter) processNames() []string {
+	if name := strings.TrimSpace(i.GameProcessEXE); i.GameProcessEXEEnabled && name != "" {
+		return []string{name}
 	}
+	if len(i.ProcessEXENames) > 0 {
+		return slices.Clone(i.ProcessEXENames)
+	}
+	return slices.Clone(i.GameEXENames)
+}
+
+// launchesFromGameFolder reports whether the launcher starts the executable in game_folder itself.
+// Platform, custom, and manual launches do not need a valid game folder.
+func (i externalImporter) launchesFromGameFolder() bool {
+	return i.GameLaunch == "" || i.GameLaunch == "DIRECT"
+}
+
+// gameExecutable returns the configured game executable, or "" when the folder cannot provide one.
+func (i externalImporter) gameExecutable() string {
+	if !i.launchesFromGameFolder() {
+		return ""
+	}
+	return configuredGameExecutable(i.GameFolder, i.GameEXENames)
+}
+
+// processName returns the image name the launcher waits for after starting the game.
+func (i externalImporter) processName() string {
+	overridden := i.GameProcessEXEEnabled && strings.TrimSpace(i.GameProcessEXE) != ""
+	if !overridden && len(i.ProcessEXENames) == 0 {
+		// The launcher runs whichever configured executable exists, such as YuanShen.exe.
+		if executable := i.gameExecutable(); executable != "" {
+			return filepath.Base(executable)
+		}
+	}
+	names := i.processNames()
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
 }
 
 // EnsureLauncherClosed closes the external launcher before its DLLs are replaced.

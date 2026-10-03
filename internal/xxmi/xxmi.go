@@ -90,14 +90,22 @@ type parsedConfig struct {
 		Packages map[string]PackageInfo `json:"packages"`
 	} `json:"Packages"`
 	Importers map[string]struct {
-		Importer struct {
-			GameEXENames   []string `json:"game_exe_names"`
-			GameFolder     string   `json:"game_folder"`
-			ImporterFolder string   `json:"importer_folder"`
-			OverwriteINI   bool     `json:"overwrite_ini"`
-		} `json:"Importer"`
+		Importer externalImporter `json:"Importer"`
 	} `json:"Importers"`
 	Security map[string]any `json:"Security"`
+}
+
+// externalImporter holds the external launcher importer settings this app reads.
+// The process and launch fields exist only in XXMI Launcher 2.3 and later configs.
+type externalImporter struct {
+	GameEXENames          []string `json:"game_exe_names"`
+	ProcessEXENames       []string `json:"process_exe_names"`
+	GameProcessEXEEnabled bool     `json:"game_process_exe_enabled"`
+	GameProcessEXE        string   `json:"game_process_exe"`
+	GameLaunch            string   `json:"game_launch"`
+	GameFolder            string   `json:"game_folder"`
+	ImporterFolder        string   `json:"importer_folder"`
+	OverwriteINI          bool     `json:"overwrite_ini"`
 }
 
 type XXMI struct {

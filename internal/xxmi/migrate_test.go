@@ -180,7 +180,9 @@ func TestMapExternalImporterSettingsFixture(t *testing.T) {
 	}
 	want.GIMI = &GIMIOptions{UnlockFPS: true, UnlockFPSValue: 144, EnableHDR: true}
 
-	mapExternalImporterSettings(&cfg, fixture["Importer"], fixture["Migoto"])
+	if err := mapExternalImporterSettings(&cfg, fixture["Importer"], fixture["Migoto"]); err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("imported settings = %+v; want %+v", cfg, want)
 	}
@@ -192,7 +194,7 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mapExternalImporterSettings(&cfg, map[string]any{
+	if err := mapExternalImporterSettings(&cfg, map[string]any{
 		"deployed_migoto_signatures":        map[string]any{"d3d11.dll": "signed-by-external-launcher"},
 		"mesh_lod_distance_lod_base_fov":    180.0,
 		"mesh_lod_distance_scale":           0.75,
@@ -207,7 +209,9 @@ func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
 			"r.Streaming.HLODStrategy":                         3.0,
 			"wp.Runtime.KuroRuntimeStreamingRangeOverallScale": 0.75,
 		}},
-	}, nil)
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
 	got := cfg.WWMI
 	if got.MeshLODDistanceBaseFOV != 180 || got.MeshLODDistanceScale != 0.75 ||
 		got.MeshLODDistanceOffset != -8.5 || got.TextureStreamingBoost != 12.5 ||

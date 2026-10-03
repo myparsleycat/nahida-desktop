@@ -46,6 +46,12 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if !slices.Contains([]string{"", "Default", "Native"}, cfg.InjectionMethod) {
 		return fmt.Errorf("invalid injection method %q", cfg.InjectionMethod)
 	}
+	if !slices.Contains([]string{"", "Hook", "Inject", "Bypass"}, cfg.XXMIDLLInjectMode) {
+		return fmt.Errorf("invalid XXMI DLL injection mode %q", cfg.XXMIDLLInjectMode)
+	}
+	if !slices.Contains([]string{"", "DISABLED", "WARNING", "INFO", "DEBUG"}, cfg.Migoto.LogLevel) {
+		return fmt.Errorf("invalid Migoto log level %q", cfg.Migoto.LogLevel)
+	}
 	if !slices.Contains(
 		[]string{"Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"},
 		cfg.ProcessPriority,
@@ -130,7 +136,6 @@ var baseImporterConfigFields = []configField{
 	{"game_folder", configString},
 	{"use_launch_options", configBoolean},
 	{"overwrite_ini", configBoolean},
-	{"process_start_method", configString},
 	{"xxmi_dll_init_delay", configNumber},
 	{"process_priority", configString},
 	{"window_mode", configString},
@@ -138,13 +143,8 @@ var baseImporterConfigFields = []configField{
 	{"run_pre_launch", configString},
 	{"run_pre_launch_signature", configString},
 	{"run_pre_launch_wait", configBoolean},
-	{
-		"custom_launch_enabled",
-		configBoolean,
-	},
 	{"custom_launch", configString},
 	{"custom_launch_signature", configString},
-	{"custom_launch_inject_mode", configString},
 	{"run_post_load_enabled", configBoolean},
 	{"run_post_load", configString},
 	{"run_post_load_signature", configString},
@@ -162,8 +162,36 @@ var baseImporterConfigFields = []configField{
 
 var migotoConfigFields = []configField{
 	{"enforce_rendering", configBoolean}, {"enable_hunting", configBoolean}, {"dump_shaders", configBoolean},
-	{"mute_warnings", configBoolean}, {"calls_logging", configBoolean}, {"debug_logging", configBoolean},
+	{"mute_warnings", configBoolean},
 	{"unsafe_mode", configBoolean}, {"unsafe_mode_signature", configString},
+}
+
+var legacyLaunchConfigFields = []configField{
+	{"process_start_method", configString}, {"custom_launch_enabled", configBoolean},
+	{"custom_launch_inject_mode", configString},
+}
+
+var legacyLoggingConfigFields = []configField{
+	{"calls_logging", configBoolean}, {"debug_logging", configBoolean},
+}
+
+// The fields below are read when present, so only their types are checked.
+var optionalImporterConfigFields = []configField{
+	{"process_exe_names", configStringArray}, {"game_process_exe_enabled", configBoolean},
+	{"game_process_exe", configString}, {"process_timeout", configNumber},
+}
+
+var optionalMigotoConfigFields = []configField{
+	{"clear_unknown_settings", configBoolean}, {"input", configBoolean},
+	{"input_disable_mode", configString}, {"toggle_input", configString},
+}
+
+var legacyWWMIConfigFields = []configField{
+	{"apply_perf_tweaks", configBoolean}, {"perf_tweaks", configObject},
+	{"mesh_lod_distance_scale", configNumber}, {"mesh_lod_distance_offset", configNumber},
+	{"texture_streaming_boost", configNumber}, {"texture_streaming_min_boost", configNumber},
+	{"texture_streaming_use_all_mips", configBoolean}, {"texture_streaming_pool_size", configNumber},
+	{"texture_streaming_limit_to_vram", configBoolean}, {"texture_streaming_fixed_pool_size", configBoolean},
 }
 
 func validateXXMIConfig(config map[string]any) error {
@@ -236,14 +264,55 @@ func validateImporterConfig(name string, value any) error {
 	if err := requireConfigFields(importer, path+".Importer", baseImporterConfigFields); err != nil {
 		return err
 	}
-	if err := validateD3DXConfig(importer["d3dx_ini"], path+".Importer.d3dx_ini"); err != nil {
-		return err
-	}
 	migoto, err := requireConfigObject(wrapper, "Migoto", path+".Migoto")
 	if err != nil {
 		return err
 	}
 	if err := requireConfigFields(migoto, path+".Migoto", migotoConfigFields); err != nil {
+		return err
+	}
+
+	// Identify the shape by its fields: upgraded configs can retain obsolete values,
+	// and config_version is metadata rather than a schema contract.
+	modernLaunch := hasModernLaunchConfig(importer)
+	if modernLaunch {
+		for _, field := range []struct {
+			name   string
+			values []string
+		}{
+			{"game_launch", []string{"DIRECT", "CUSTOM", "MANUAL", "STEAM", "EPIC_GAMES"}},
+			{"start_method", []string{"NATIVE", "SHELL"}},
+			{"xxmi_dll_inject_mode", []string{"HOOK", "DIRECT", "SKIP"}},
+		} {
+			if err := requireConfigEnum(importer, path+".Importer", field.name, field.values); err != nil {
+				return err
+			}
+		}
+	}
+	if err := validateConfigFields(importer, path+".Importer", legacyLaunchConfigFields, !modernLaunch); err != nil {
+		return err
+	}
+	_, modernLogging := migoto["log_level"]
+	if modernLogging {
+		if err := requireConfigEnum(
+			migoto,
+			path+".Migoto",
+			"log_level",
+			[]string{"DISABLED", "WARNING", "INFO", "DEBUG"},
+		); err != nil {
+			return err
+		}
+	}
+	if err := validateConfigFields(migoto, path+".Migoto", legacyLoggingConfigFields, !modernLogging); err != nil {
+		return err
+	}
+	if err := validateD3DXConfig(importer["d3dx_ini"], path+".Importer.d3dx_ini", modernLogging); err != nil {
+		return err
+	}
+	if err := validateConfigFields(importer, path+".Importer", optionalImporterConfigFields, false); err != nil {
+		return err
+	}
+	if err := validateConfigFields(migoto, path+".Migoto", optionalMigotoConfigFields, false); err != nil {
 		return err
 	}
 
@@ -258,22 +327,17 @@ func validateImporterConfig(name string, value any) error {
 	case "SRMI":
 		return optionalConfigField(importer, path+".Importer", "unlock_fps", configBoolean)
 	case "WWMI":
-		if err := requireConfigFields(importer, path+".Importer", []configField{
-			{"apply_perf_tweaks", configBoolean}, {"perf_tweaks", configObject},
-			{"mesh_lod_distance_scale", configNumber}, {"mesh_lod_distance_offset", configNumber},
-			{"texture_streaming_boost", configNumber}, {"texture_streaming_min_boost", configNumber},
-			{"texture_streaming_use_all_mips", configBoolean}, {"texture_streaming_pool_size", configNumber},
-			{"texture_streaming_limit_to_vram", configBoolean}, {"texture_streaming_fixed_pool_size", configBoolean},
-		}); err != nil {
+		if err := validateConfigFields(importer, path+".Importer", legacyWWMIConfigFields, !modernLaunch); err != nil {
 			return err
 		}
-		perf, _ := importer["perf_tweaks"].(map[string]any)
-		if err := requireConfigFields(
-			perf,
-			path+".Importer.perf_tweaks",
-			[]configField{{"SystemSettings", configScalarRecord}},
-		); err != nil {
-			return err
+		if perf, ok := importer["perf_tweaks"].(map[string]any); ok {
+			if err := requireConfigFields(
+				perf,
+				path+".Importer.perf_tweaks",
+				[]configField{{"SystemSettings", configScalarRecord}},
+			); err != nil {
+				return err
+			}
 		}
 		for _, field := range []string{"unlock_fps", "force_max_lod_bias", "disable_wounded_fx", "disable_wounded_fx_warned"} {
 			if err := optionalConfigField(importer, path+".Importer", field, configBoolean); err != nil {
@@ -289,12 +353,21 @@ func validateImporterConfig(name string, value any) error {
 	return nil
 }
 
-func validateD3DXConfig(value any, path string) error {
+func hasModernLaunchConfig(importer map[string]any) bool {
+	for _, field := range []string{"game_launch", "start_method", "xxmi_dll_inject_mode"} {
+		if _, exists := importer[field]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func validateD3DXConfig(value any, path string, modernLogging bool) error {
 	d3dx, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("%s must be an object", path)
 	}
-	for _, field := range []string{"core", "enforce_rendering", "calls_logging", "debug_logging", "mute_warnings", "enable_hunting", "dump_shaders"} {
+	for _, field := range []string{"core", "enforce_rendering", "enable_hunting", "dump_shaders"} {
 		if _, ok := d3dx[field].(map[string]any); !ok {
 			return fmt.Errorf("%s.%s must be an object", path, field)
 		}
@@ -337,6 +410,13 @@ func validateD3DXConfig(value any, path string) error {
 		},
 	}
 	for _, check := range checks {
+		section := strings.TrimPrefix(check.path, path+".")
+		section, _, _ = strings.Cut(section, ".")
+		if modernLogging && slices.Contains([]string{"calls_logging", "debug_logging", "mute_warnings"}, section) {
+			if _, exists := d3dx[section]; !exists {
+				continue
+			}
+		}
 		object, ok := check.value.(map[string]any)
 		if !ok {
 			return fmt.Errorf("%s must be an object", check.path)
@@ -369,14 +449,32 @@ func requireConfigObject(parent map[string]any, name, path string) (map[string]a
 }
 
 func requireConfigFields(object map[string]any, path string, fields []configField) error {
+	return validateConfigFields(object, path, fields, true)
+}
+
+func validateConfigFields(object map[string]any, path string, fields []configField, required bool) error {
 	for _, field := range fields {
 		value, ok := object[field.name]
 		if !ok {
+			if !required {
+				continue
+			}
 			return fmt.Errorf("%s.%s is required", path, field.name)
 		}
 		if !configValueMatches(value, field.kind) {
 			return fmt.Errorf("%s.%s has an invalid type", path, field.name)
 		}
+	}
+	return nil
+}
+
+func requireConfigEnum(object map[string]any, path, name string, values []string) error {
+	if err := requireConfigFields(object, path, []configField{{name, configString}}); err != nil {
+		return err
+	}
+	value, _ := object[name].(string)
+	if !slices.Contains(values, value) {
+		return fmt.Errorf("%s.%s has an unsupported value %q", path, name, value)
 	}
 	return nil
 }

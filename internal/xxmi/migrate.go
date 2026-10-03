@@ -207,7 +207,9 @@ func (x *XXMI) ImportExternalLauncher(
 		wrapper, _ := config["Importers"].(map[string]any)[key].(map[string]any)
 		importer, _ := wrapper["Importer"].(map[string]any)
 		migoto, _ := wrapper["Migoto"].(map[string]any)
-		mapExternalImporterSettings(&cfg, importer, migoto)
+		if err := mapExternalImporterSettings(&cfg, importer, migoto); err != nil {
+			return nil, fmt.Errorf("import %s config: %w", key, err)
+		}
 		for i, library := range cfg.ExtraLibraries.Paths {
 			if !filepath.IsAbs(library) {
 				cfg.ExtraLibraries.Paths[i] = filepath.Join(path, library)
@@ -334,7 +336,7 @@ func (x *XXMI) ImportExternalLauncher(
 	return imported, nil
 }
 
-func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[string]any) {
+func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[string]any) error {
 	getString := func(key string) string { value, _ := importer[key].(string); return value }
 	getBool := func(key string, fallback bool) bool {
 		value, ok := importer[key].(bool)
@@ -358,24 +360,21 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		return value
 	}
 	if value := getString("process_start_method"); value != "" {
-		cfg.ProcessStartMethod = value
+		cfg.ProcessStartMethod = externalEnumValue(value, "Native", "Shell", "Manual")
 	}
 	if value := getString("process_priority"); value != "" {
-		cfg.ProcessPriority = value
+		cfg.ProcessPriority = externalEnumValue(
+			value,
+			"Low",
+			"BelowNormal",
+			"Normal",
+			"AboveNormal",
+			"High",
+			"Realtime",
+		)
 	}
 	if value := getString("window_mode"); value != "" {
-		switch strings.ToLower(strings.ReplaceAll(value, " ", "")) {
-		case "windowed":
-			cfg.WindowMode = "Windowed"
-		case "borderless":
-			cfg.WindowMode = "Borderless"
-		case "fullscreen":
-			cfg.WindowMode = "Fullscreen"
-		case "exclusivefullscreen":
-			cfg.WindowMode = "Exclusive Fullscreen"
-		default:
-			cfg.WindowMode = value
-		}
+		cfg.WindowMode = externalEnumValue(value, "Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen")
 	}
 	cfg.ProcessTimeout = getInt("process_timeout", cfg.ProcessTimeout)
 	cfg.XXMIDLLInitDelay = getInt("xxmi_dll_init_delay", cfg.XXMIDLLInitDelay)
@@ -401,6 +400,33 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 	if cfg.CustomLaunch.InjectMode == "" {
 		cfg.CustomLaunch.InjectMode = "Hook"
 	}
+	if hasModernLaunchConfig(importer) {
+		cfg.ProcessStartMethod = externalEnumValue(getString("start_method"), "Native", "Shell")
+		cfg.CustomLaunch.Enabled = false
+		cfg.CustomLaunch.InjectMode = "Hook"
+		switch getString("game_launch") {
+		case "DIRECT":
+		case "CUSTOM":
+			cfg.CustomLaunch.Enabled = true
+		case "MANUAL":
+			cfg.ProcessStartMethod = "Manual"
+		case "STEAM", "EPIC_GAMES":
+			return fmt.Errorf("game launch %q requires the external XXMI Launcher", getString("game_launch"))
+		default:
+			return fmt.Errorf("unsupported game launch %q", getString("game_launch"))
+		}
+		switch getString("xxmi_dll_inject_mode") {
+		case "HOOK":
+			cfg.XXMIDLLInjectMode = "Hook"
+		case "DIRECT":
+			cfg.XXMIDLLInjectMode = "Inject"
+		case "SKIP":
+			cfg.XXMIDLLInjectMode = "Bypass"
+		default:
+			return fmt.Errorf("unsupported XXMI DLL injection mode %q", getString("xxmi_dll_inject_mode"))
+		}
+		cfg.CustomLaunch.InjectMode = cfg.XXMIDLLInjectMode
+	}
 	cfg.ExtraLibraries.Enabled = getBool("extra_libraries_enabled", false)
 	if signatures, ok := importer["deployed_migoto_signatures"].(map[string]any); ok {
 		cfg.DeployedSignatures = make(map[string]string, len(signatures))
@@ -424,6 +450,9 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		if value, ok := migoto[key].(bool); ok {
 			*target = value
 		}
+	}
+	if value, ok := migoto["log_level"].(string); ok {
+		cfg.Migoto.LogLevel = value
 	}
 	if cfg.GIMI != nil {
 		cfg.GIMI.UnlockFPS = getBool("unlock_fps", cfg.GIMI.UnlockFPS)
@@ -469,6 +498,20 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 			}
 		}
 	}
+	return nil
+}
+
+func externalEnumValue(value string, choices ...string) string {
+	normalize := func(value string) string {
+		return strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(value, "_", ""), " ", ""))
+	}
+	normalized := normalize(value)
+	for _, choice := range choices {
+		if normalize(choice) == normalized {
+			return choice
+		}
+	}
+	return value
 }
 
 func fileExists(path string) bool {

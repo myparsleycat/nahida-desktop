@@ -62,13 +62,14 @@ type ExtraLibraries struct {
 }
 
 type MigotoOptions struct {
-	EnforceRendering bool `json:"enforceRendering"`
-	EnableHunting    bool `json:"enableHunting"`
-	DumpShaders      bool `json:"dumpShaders"`
-	MuteWarnings     bool `json:"muteWarnings"`
-	CallsLogging     bool `json:"callsLogging"`
-	DebugLogging     bool `json:"debugLogging"`
-	UnsafeMode       bool `json:"unsafeMode"`
+	LogLevel         string `json:"logLevel,omitempty"`
+	EnforceRendering bool   `json:"enforceRendering"`
+	EnableHunting    bool   `json:"enableHunting"`
+	DumpShaders      bool   `json:"dumpShaders"`
+	MuteWarnings     bool   `json:"muteWarnings"`
+	CallsLogging     bool   `json:"callsLogging"`
+	DebugLogging     bool   `json:"debugLogging"`
+	UnsafeMode       bool   `json:"unsafeMode"`
 }
 
 type IniOptimizerOptions struct {
@@ -125,6 +126,7 @@ type ImporterConfig struct {
 	ProcessPriority    string              `json:"processPriority"`
 	ProcessTimeout     int                 `json:"processTimeout"`
 	XXMIDLLInitDelay   int                 `json:"xxmiDLLInitDelay"`
+	XXMIDLLInjectMode  string              `json:"xxmiDLLInjectMode,omitempty"`
 	WindowMode         string              `json:"windowMode"`
 	RunPreLaunch       CommandHook         `json:"runPreLaunch"`
 	CustomLaunch       CustomLaunch        `json:"customLaunch"`

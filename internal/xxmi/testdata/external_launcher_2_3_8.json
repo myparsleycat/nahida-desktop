@@ -1,0 +1,669 @@
+{
+  "Launcher": {
+    "auto_update": true,
+    "pre_release": false,
+    "update_channel": "AUTO",
+    "auto_close": true,
+    "start_timeout": 30,
+    "gui_theme": "Default",
+    "theme_mode": "System",
+    "active_importer": "GIMI",
+    "enabled_importers": [
+      "GIMI",
+      "WWMI"
+    ],
+    "log_level": "DEBUG",
+    "config_version": "2.3.8",
+    "theme_dev_mode": false,
+    "github_token": "",
+    "verify_ssl": true,
+    "proxy": {
+      "enable": false,
+      "type": "HTTPS",
+      "host": "",
+      "port": "",
+      "use_credentials": false,
+      "user": "",
+      "password": "",
+      "proxy_dns_via_socks5": true
+    },
+    "credits_shown": false,
+    "locale": ""
+  },
+  "Packages": {
+    "packages": {
+      "GIMI": {
+        "latest_version": "1.2.3",
+        "skipped_version": "",
+        "deployed_version": "1.2.3",
+        "update_check_time": 0,
+        "latest_release_notes": "",
+        "deployed_release_notes": ""
+      },
+      "WWMI": {
+        "latest_version": "1.2.3",
+        "skipped_version": "",
+        "deployed_version": "1.2.3",
+        "update_check_time": 0,
+        "latest_release_notes": "",
+        "deployed_release_notes": ""
+      }
+    }
+  },
+  "Importers": {
+    "GIMI": {
+      "Importer": {
+        "game_exe_names": [
+          "GenshinImpact.exe",
+          "YuanShen.exe"
+        ],
+        "process_exe_names": [],
+        "game_folder_names": [
+          "Genshin Impact Game"
+        ],
+        "game_folder_children": [
+          "GenshinImpact_Data"
+        ],
+        "package_name": "",
+        "importer_folder": "GIMI/",
+        "game_folder": "",
+        "use_launch_options": true,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 30,
+        "xxmi_dll_inject_mode": "HOOK",
+        "xxmi_dll_init_delay": 0,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 0,
+              "track_texture_updates": 0,
+              "track_region_hashes": 0,
+              "allow_buffer_resize": 1
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "GENSHIN_IMPACT",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "GenshinImpact.exe",
+        "start_method": "SHELL",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": "",
+        "unlock_fps": false,
+        "unlock_fps_value": 120,
+        "disable_dcr": true,
+        "enable_hdr": false
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    },
+    "SRMI": {
+      "Importer": {
+        "game_exe_names": [
+          "StarRail.exe"
+        ],
+        "process_exe_names": [],
+        "game_folder_names": [
+          "Star Rail Games"
+        ],
+        "game_folder_children": [
+          "StarRail_Data"
+        ],
+        "package_name": "",
+        "importer_folder": "SRMI/",
+        "game_folder": "",
+        "use_launch_options": true,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 30,
+        "xxmi_dll_inject_mode": "HOOK",
+        "xxmi_dll_init_delay": 0,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 0,
+              "track_texture_updates": 0,
+              "track_region_hashes": 0,
+              "track_implicit_index_buffers": 1,
+              "allow_buffer_resize": 1
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "HONKAI_STAR_RAIL",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "StarRail.exe",
+        "start_method": "NATIVE",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": "",
+        "unlock_fps": false
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    },
+    "WWMI": {
+      "Importer": {
+        "game_exe_names": [
+          "Wuthering Waves.exe"
+        ],
+        "process_exe_names": [
+          "Client-Win64-Shipping.exe"
+        ],
+        "game_folder_names": [
+          "Wuthering Waves Game"
+        ],
+        "game_folder_children": [
+          "Client",
+          "Data"
+        ],
+        "package_name": "",
+        "importer_folder": "WWMI/",
+        "game_folder": "",
+        "use_launch_options": false,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 30,
+        "xxmi_dll_inject_mode": "DIRECT",
+        "xxmi_dll_init_delay": 500,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 1,
+              "track_texture_updates": 1,
+              "track_region_hashes": 0,
+              "allow_buffer_resize": 1
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "WUTHERING_WAVES",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "Client-Win64-Shipping.exe",
+        "start_method": "NATIVE",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "-dx11",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": "-SkipSplash",
+        "unlock_fps": false,
+        "force_max_lod_bias": false,
+        "disable_wounded_fx": false,
+        "disable_wounded_fx_warned": false,
+        "mesh_lod_distance_lod_base_fov": 165,
+        "resource_tier": "HD",
+        "resource_tier_warned": false
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    },
+    "ZZMI": {
+      "Importer": {
+        "game_exe_names": [
+          "ZenlessZoneZero.exe",
+          "ZenlessZoneZeroBeta.exe"
+        ],
+        "process_exe_names": [],
+        "game_folder_names": [
+          "ZenlessZoneZero Game"
+        ],
+        "game_folder_children": [
+          "ZenlessZoneZero_Data"
+        ],
+        "package_name": "",
+        "importer_folder": "ZZMI/",
+        "game_folder": "",
+        "use_launch_options": true,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 30,
+        "xxmi_dll_inject_mode": "HOOK",
+        "xxmi_dll_init_delay": 0,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 0,
+              "track_texture_updates": 0,
+              "track_region_hashes": 0,
+              "allow_buffer_resize": 1
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "ZENLESS_ZONE_ZERO",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "ZenlessZoneZero.exe",
+        "start_method": "NATIVE",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": ""
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    },
+    "EFMI": {
+      "Importer": {
+        "game_exe_names": [
+          "Endfield.exe"
+        ],
+        "process_exe_names": [],
+        "game_folder_names": [
+          "EndField Game"
+        ],
+        "game_folder_children": [
+          "Endfield_Data"
+        ],
+        "package_name": "",
+        "importer_folder": "EFMI/",
+        "game_folder": "",
+        "use_launch_options": true,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 60,
+        "xxmi_dll_inject_mode": "DIRECT",
+        "xxmi_dll_init_delay": 0,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 0,
+              "track_texture_updates": 0,
+              "track_region_hashes": 1,
+              "track_implicit_index_buffers": 1,
+              "allow_buffer_resize": 0
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "ARKNIGHTS_ENDFIELD",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "Endfield.exe",
+        "start_method": "NATIVE",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "-force-d3d11",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": ""
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    },
+    "HIMI": {
+      "Importer": {
+        "game_exe_names": [
+          "BH3.exe"
+        ],
+        "process_exe_names": [],
+        "game_folder_names": [
+          "Honkai Impact 3rd game"
+        ],
+        "game_folder_children": [
+          "BH3_Data"
+        ],
+        "package_name": "",
+        "importer_folder": "HIMI/",
+        "game_folder": "",
+        "use_launch_options": true,
+        "overwrite_ini": true,
+        "process_priority": "NORMAL",
+        "process_timeout": 30,
+        "xxmi_dll_inject_mode": "HOOK",
+        "xxmi_dll_init_delay": 0,
+        "window_mode": "BORDERLESS",
+        "run_pre_launch_enabled": false,
+        "run_pre_launch": "",
+        "run_pre_launch_signature": "",
+        "run_pre_launch_wait": true,
+        "custom_launch": "",
+        "custom_launch_signature": "",
+        "run_post_load_enabled": false,
+        "run_post_load": "",
+        "run_post_load_signature": "",
+        "run_post_load_wait": true,
+        "extra_libraries_enabled": false,
+        "extra_libraries": "",
+        "extra_libraries_signature": "",
+        "deployed_migoto_signatures": {},
+        "shortcut_deployed": false,
+        "d3dx_ini": {
+          "core": {
+            "Loader": {
+              "loader": "XXMI Launcher.exe"
+            }
+          },
+          "enforce_rendering": {
+            "Rendering": {
+              "texture_hash": 0,
+              "track_texture_updates": 0,
+              "track_region_hashes": 0,
+              "allow_buffer_resize": 1
+            }
+          },
+          "enable_hunting": {
+            "Hunting": {
+              "hunting": {
+                "on": 2,
+                "off": 0
+              }
+            }
+          },
+          "dump_shaders": {
+            "Hunting": {
+              "marking_actions": {
+                "on": "clipboard hlsl asm regex",
+                "off": "clipboard"
+              }
+            }
+          }
+        },
+        "configure_game": true,
+        "launch_count": -1,
+        "game": "HONKAI_IMPACT",
+        "game_launch": "DIRECT",
+        "game_process_exe_enabled": false,
+        "game_process_exe": "BH3.exe",
+        "start_method": "NATIVE",
+        "configure_platform_launch_options": true,
+        "skip_platform_game_launcher": true,
+        "d3d11_mode_cmd_args": "",
+        "d3d11_mode_cmd_args_warned": false,
+        "custom_launch_inject_mode": "OPTION_REMOVED",
+        "custom_launch_enabled": false,
+        "process_start_method": "OPTION_REMOVED",
+        "launch_options": "",
+        "unlock_fps": false,
+        "unlock_fps_value": 120,
+        "disable_dcr": true,
+        "enable_hdr": false
+      },
+      "Migoto": {
+        "enforce_rendering": true,
+        "enable_hunting": false,
+        "clear_unknown_settings": true,
+        "dump_shaders": false,
+        "mute_warnings": true,
+        "input": true,
+        "input_disable_mode": "MODS",
+        "toggle_input": "ctrl alt shift VK_END",
+        "log_level": "DISABLED",
+        "unsafe_mode": false,
+        "unsafe_mode_signature": ""
+      }
+    }
+  },
+  "Security": {
+    "user_signature": ""
+  }
+}

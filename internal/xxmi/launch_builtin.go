@@ -384,6 +384,9 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
 	}
 	boolean("Logging", "calls", options.CallsLogging, "1", "0")
 	boolean("Logging", "debug", options.DebugLogging, "1", "0")
+	if options.LogLevel != "" {
+		doc.SetOption("Logging", "log_level", strings.ToLower(options.LogLevel), true)
+	}
 	boolean("Logging", "show_warnings", options.MuteWarnings, "0", "1")
 	boolean("Hunting", "hunting", options.EnableHunting, "2", "0")
 	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
@@ -446,6 +449,10 @@ func (x *XXMI) builtinLaunchSpec(
 	if cfg.CustomLaunch.Enabled {
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command
 		spec.InjectMode = cfg.CustomLaunch.InjectMode
+	}
+	if cfg.XXMIDLLInjectMode != "" {
+		spec.InjectMode = cfg.XXMIDLLInjectMode
+		spec.UseHook = cfg.XXMIDLLInjectMode == "Hook"
 	}
 	if spec.InjectionMethod == "Native" {
 		spec.UseHook = false
@@ -534,7 +541,11 @@ func (x *XXMI) resolveExtraDLLPaths(ctx context.Context, paths []string) ([]stri
 }
 
 func (x *XXMI) migotoDLLUsed(ctx context.Context, cfg ImporterConfig) (bool, error) {
-	if !cfg.CustomLaunch.Enabled || cfg.CustomLaunch.InjectMode != "Bypass" {
+	mode := cfg.XXMIDLLInjectMode
+	if mode == "" && cfg.CustomLaunch.Enabled {
+		mode = cfg.CustomLaunch.InjectMode
+	}
+	if mode != "Bypass" {
 		return true, nil
 	}
 	if !cfg.ExtraLibraries.Enabled {
