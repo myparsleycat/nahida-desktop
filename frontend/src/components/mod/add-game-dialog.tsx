@@ -102,7 +102,16 @@ function AddGameDialogContent({
   });
 
   const enabledImporters = xxmiOverview?.importers ?? [];
-  const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
+  const importers = [
+    ...enabledImporters.map((importer) => ({
+      key: importer.key,
+      label: importer.installedVersion
+        ? importer.key
+        : `${importer.key} (${t("page.setting.xxmi.builtin.notInstalled")})`,
+      disabled: !importer.installedVersion,
+    })),
+    { key: NTE_IMPORTER_KEY, label: NTE_IMPORTER_KEY, disabled: false },
+  ];
   const isXXMIConfigured = xxmiOverview?.configured ?? false;
 
   const form = useForm({
@@ -261,7 +270,7 @@ function AddGameDialogContent({
                 value={field.state.value}
                 items={[
                   { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
-                  ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
+                  ...importers.map((importer) => ({ value: importer.key, label: importer.label })),
                 ]}
                 onValueChange={(value) => {
                   if (value === null) return;
@@ -277,8 +286,12 @@ function AddGameDialogContent({
                       {t("page.mod.dialog.edit-game.no_importer")}
                     </SelectItem>
                     {importers.map((importer) => (
-                      <SelectItem key={importer.key} value={importer.key}>
-                        {importer.key}
+                      <SelectItem
+                        key={importer.key}
+                        value={importer.key}
+                        disabled={importer.disabled}
+                      >
+                        {importer.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>
