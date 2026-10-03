@@ -819,6 +819,7 @@
             "duplicate-game-name": "该游戏名称已存在",
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
             "invalid-params": "请输入游戏名称和模组文件夹路径",
+            "invalid-mod-folder-path": "找不到模组文件夹，请检查路径",
             "failed": "添加游戏失败",
             "nte_mods_link_conflict": "游戏 Mods 文件夹和自定义模组文件夹都包含文件。链接前请先清空其中一个。",
             "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",

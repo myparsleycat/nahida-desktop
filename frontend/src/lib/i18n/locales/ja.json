@@ -820,6 +820,7 @@
             "duplicate-game-name": "そのゲーム名は既に存在します",
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
             "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
+            "invalid-mod-folder-path": "MODフォルダーが見つかりません。パスを確認してください",
             "failed": "ゲームの追加に失敗しました",
             "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
             "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",

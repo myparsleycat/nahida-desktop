@@ -254,7 +254,13 @@ func TestNamespaceIsolationBlocksUnsafeCopies(t *testing.T) {
 			source := m.xxmi.(namespaceTestImporterSource)
 			missing := filepath.Join(source.folder, "missing")
 			key := "GIMI"
+			if err := os.Mkdir(missing, 0o755); err != nil {
+				t.Fatal(err)
+			}
 			if err := m.AddGame(t.Context(), "Missing", missing, &key, nil, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(missing); err != nil {
 				t.Fatal(err)
 			}
 		}},

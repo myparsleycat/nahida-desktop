@@ -838,6 +838,7 @@
             "duplicate-game-name": "A game with that name already exists",
             "duplicate-mod-folder-path": "That mod folder path is already in use",
             "invalid-params": "Game name and mod folder path are required",
+            "invalid-mod-folder-path": "The mod folder could not be found. Check the path.",
             "failed": "Failed to add game",
             "nte_mods_link_conflict": "Both the game Mods folder and the custom mod folder contain files. Clear one before linking.",
             "nte_mods_link_path_occupied": "The game Mods folder path is occupied and cannot be linked.",
