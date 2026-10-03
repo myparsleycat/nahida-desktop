@@ -71,6 +71,7 @@ const (
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
 	KeyXXMIIncludePrereleases = "xxmi.includePrereleases"
 	KeyXXMIPersistToggles     = "xxmi.persistToggles"
+	KeyXXMINamespaceIsolation = "xxmi.namespaceIsolation"
 )
 
 const (
@@ -160,6 +161,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
+	{KeyXXMINamespaceIsolation, ScopeXXMI, "xxmi_namespace_isolation"},
 	{KeyXXMIRoot, ScopeXXMI, "xxmi_root"},
 	{KeyXXMIAutoUpdate, ScopeXXMI, "xxmi_auto_update"},
 	{KeyXXMIIncludePrereleases, ScopeXXMI, "xxmi_include_prereleases"},

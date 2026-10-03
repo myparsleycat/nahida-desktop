@@ -2207,7 +2207,7 @@
         "persistLogsEmpty": "暂无日志。",
         "namespaceIsolation": {
           "title": "namespace 冲突",
-          "description": "切换状态持久化也会在安全的情况下自动隔离模组之间重复的 namespace。",
+          "description": "在安全的情况下自动隔离模组之间重复的 namespace。启用期间会定期扫描模组文件夹。",
           "disabled": "启用切换状态持久化以隔离重复的 namespace。",
           "checking": "正在检查 namespace…",
           "empty": "未报告 namespace 冲突。",

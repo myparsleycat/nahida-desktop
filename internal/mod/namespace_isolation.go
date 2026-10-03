@@ -118,14 +118,28 @@ func (m *Mod) StartNamespaceIsolation(ctx context.Context) error {
 	if c.cancel != nil {
 		return nil
 	}
-	runCtx, cancel := context.WithCancel(ctx)
+	enabled, err := c.enabled(ctx)
 	c.failureEpoch.Add(1)
 	c.mu.Lock()
 	c.paused = false
-	c.watchEnabled = true
+	c.watchEnabled = err == nil && enabled
 	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		// Disabled isolation never walks the mod folders on its own: no startup
+		// pass, watcher, or worker. Admission stays open for manual rescans.
+		conflicts := m.GetNamespaceIsolationState().Conflicts
+		conflicts = slices.DeleteFunc(conflicts, func(conflict NamespaceIsolationConflict) bool {
+			return conflict.Reason != "unresolved_transaction"
+		})
+		c.publish(false, conflicts)
+		return nil
+	}
+	runCtx, cancel := context.WithCancel(ctx)
 	// Startup completes recovery and reconciliation before persist watching starts.
-	err := c.reconcile(runCtx, "", false)
+	err = c.reconcile(runCtx, "", false)
 	if err == nil {
 		err = runCtx.Err()
 	}

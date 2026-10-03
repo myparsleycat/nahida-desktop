@@ -133,7 +133,7 @@ func TestNamespaceIsolationRejectsLinksInsideMods(t *testing.T) {
 
 func TestNamespaceIsolationShortImporterPath(t *testing.T) {
 	t.Parallel()
-	m, mods, _ := newNamespaceTestMod(t)
+	m, mods, settings := newNamespaceTestMod(t)
 	original := namespaceFixture(t, mods, "Original")
 	namespaceWrite(t, filepath.Join(original, "second.ini"), namespaceMainINI)
 	folder, err := filepath.EvalSymlinks(m.xxmi.(namespaceTestImporterSource).folder)
@@ -199,5 +199,48 @@ func TestNamespaceIsolationShortImporterPath(t *testing.T) {
 			t.Fatalf("copy namespaces were not isolated together: %+v %+v %+v", main, gui, second)
 		}
 		names[main.Namespace] = true
+	}
+
+	settings.isolation.Store(false)
+	namespaceWrite(t, filepath.Join(original, ".nhd-namespace", "transactions", "broken", "journal.json"), "{")
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil {
+		t.Fatal("disabled launch missed the journal through the short importer alias")
+	}
+}
+
+func TestNamespaceIsolationDisabledLaunchChecksJournalsWithoutReadingINIs(t *testing.T) {
+	t.Parallel()
+	m, mods, settings := newNamespaceTestMod(t)
+	collection := filepath.Join(t.TempDir(), "External Mods")
+	if err := os.Rename(mods, collection); err != nil {
+		t.Fatal(err)
+	}
+	namespaceJunction(t, mods, collection)
+	path := namespaceFixture(t, collection, "Only")
+	d3dxPath := filepath.Join(filepath.Dir(mods), "d3dx_user.ini")
+	namespaceWrite(t, d3dxPath, "[Constants]\n")
+	settings.isolation.Store(false)
+	for _, lockedPath := range []string{filepath.Join(path, "main.ini"), d3dxPath} {
+		name, err := windows.UTF16FromString(lockedPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handle, err := windows.CreateFile(&name[0], windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = windows.CloseHandle(handle) })
+	}
+
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
+		t.Fatalf("launch read a locked INI: %v", err)
+	}
+	if state := m.GetNamespaceIsolationState(); len(state.Conflicts) != 0 {
+		t.Fatalf("locked INIs were scanned: %+v", state)
+	}
+	namespaceWrite(t, filepath.Join(path, ".nhd-namespace", "transactions", "broken", "journal.json"), "{")
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil ||
+		!strings.Contains(err.Error(), "NAMESPACE_ISOLATION_TRANSACTION_UNRESOLVED") {
+		t.Fatalf("journal through linked Mods root = %v", err)
 	}
 }

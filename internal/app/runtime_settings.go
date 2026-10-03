@@ -25,6 +25,46 @@ func runtimeSettingHooks(
 	modServices ...*mod.Mod,
 ) setting.Hooks {
 	var persistTransition sync.Mutex
+	// Persistence changes restart both services in order. Isolation changes keep
+	// queued toggle saves alive; reconciliation suspends persistence only to mutate.
+	restart := func(action string, restartWatcher bool) {
+		persistTransition.Lock()
+		defer persistTransition.Unlock()
+
+		if len(modServices) > 0 && modServices[0] != nil {
+			mods := modServices[0]
+			if err := mods.StopNamespaceIsolation(); err != nil {
+				_ = infra.ReportError(log, err, action, infra.Diagnostic{
+					Operation: "namespace-isolation", Stage: "stop",
+				})
+			}
+			if restartWatcher && toolsService != nil {
+				toolsService.StopPersistWatcher()
+			}
+			if err := mods.StartNamespaceIsolation(context.Background()); err != nil {
+				_ = infra.ReportError(log, err, action, infra.Diagnostic{
+					Operation: "namespace-isolation", Stage: "start",
+				})
+			}
+		}
+		if !restartWatcher || toolsService == nil {
+			return
+		}
+		// StartPersistWatcher reads the current stored setting. A delayed callback
+		// must not override a newer transition using its stale boolean argument.
+		if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
+			_ = infra.ReportError(
+				log,
+				err,
+				action,
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: action,
+					Stage:     "background",
+				},
+			)
+		}
+	}
 	return setting.Hooks{
 		AfterRunOnStartupChanged:   autostart,
 		AfterElevatedHelperChanged: elevatedHelperChanged,
@@ -84,42 +124,10 @@ func runtimeSettingHooks(
 			}
 		},
 		AfterPersistTogglesChanged: func(bool) {
-			persistTransition.Lock()
-			defer persistTransition.Unlock()
-
-			if len(modServices) > 0 && modServices[0] != nil {
-				mods := modServices[0]
-				if err := mods.StopNamespaceIsolation(); err != nil {
-					_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{
-						Operation: "namespace-isolation", Stage: "stop",
-					})
-				}
-				if toolsService != nil {
-					toolsService.StopPersistWatcher()
-				}
-				if err := mods.StartNamespaceIsolation(context.Background()); err != nil {
-					_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{
-						Operation: "namespace-isolation", Stage: "start",
-					})
-				}
-			}
-			if toolsService == nil {
-				return
-			}
-			// StartPersistWatcher reads the current stored setting. A delayed callback
-			// must not override a newer transition using its stale boolean argument.
-			if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
-				_ = infra.ReportError(
-					log,
-					err,
-					"Setting.xxmi.persistToggles",
-					infra.Diagnostic{
-						Severity:  infra.DiagnosticError,
-						Operation: "Setting.xxmi.persistToggles",
-						Stage:     "background",
-					},
-				)
-			}
+			restart("Setting.xxmi.persistToggles", true)
+		},
+		AfterNamespaceIsolationChanged: func(bool) {
+			restart("Setting.xxmi.namespaceIsolation", false)
 		},
 	}
 }

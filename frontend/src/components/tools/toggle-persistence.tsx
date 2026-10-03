@@ -5,6 +5,7 @@ import { XXMI } from "@bindings/xxmi";
 import { Badge } from "@renderer/components/ui/badge";
 import {
   Section,
+  SectionAction,
   SectionContent,
   SectionDescription,
   SectionHeader,
@@ -56,6 +57,7 @@ export default function TogglePersistence() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const titleId = useId();
+  const isolationTitleId = useId();
 
   const { data: xxmiData, isPending: isXXMIPending } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
@@ -65,6 +67,11 @@ export default function TogglePersistence() {
   const { data: enabled, isPending: isQueryPending } = useQuery({
     queryKey: ["setting:xxmi:getPersistToggles"],
     queryFn: () => Setting.GetPersistToggles(),
+  });
+
+  const { data: isolationEnabled, isPending: isIsolationQueryPending } = useQuery({
+    queryKey: ["setting:xxmi:getNamespaceIsolation"],
+    queryFn: () => Setting.GetNamespaceIsolation(),
   });
 
   const { data: logs = [] } = useQuery<string[]>({
@@ -118,6 +125,16 @@ export default function TogglePersistence() {
     mutationFn: (newEnabled: boolean) => Setting.SetPersistToggles(newEnabled),
     onSuccess: (_, newEnabled) => {
       queryClient.setQueryData(["setting:xxmi:getPersistToggles"], newEnabled);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const isolation = useMutation({
+    mutationFn: (newEnabled: boolean) => Setting.SetNamespaceIsolation(newEnabled),
+    onSuccess: (_, newEnabled) => {
+      queryClient.setQueryData(["setting:xxmi:getNamespaceIsolation"], newEnabled);
     },
     onError: (err) => {
       toast.error(err.message);
@@ -181,13 +198,24 @@ export default function TogglePersistence() {
 
       <Section>
         <SectionHeader>
-          <SectionTitle>{t("page.setting.xxmi.namespaceIsolation.title")}</SectionTitle>
+          <SectionTitle id={isolationTitleId}>
+            {t("page.setting.xxmi.namespaceIsolation.title")}
+          </SectionTitle>
           <SectionDescription>
             {t("page.setting.xxmi.namespaceIsolation.description")}
           </SectionDescription>
+          <SectionAction>
+            <Switch
+              aria-labelledby={isolationTitleId}
+              checked={!!isolationEnabled}
+              onCheckedChange={(c) => isolation.mutate(c)}
+              disabled={isIsolationQueryPending || isolation.isPending || isMutatePending}
+            />
+          </SectionAction>
         </SectionHeader>
         <SectionContent layout="flow">
-          {!enabled && !isQueryPending && (
+          {/* Isolation only runs alongside toggle persistence, so its switch alone does nothing. */}
+          {isolationEnabled && !enabled && !isQueryPending && (
             <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangleIcon className="mt-px size-3.5 shrink-0" />
               <p>{t("page.setting.xxmi.namespaceIsolation.disabled")}</p>
@@ -237,7 +265,12 @@ export default function TogglePersistence() {
                   className="font-mono"
                   aria-label={label}
                   title={label}
-                  disabled={isMutatePending || rescan.isPending || namespaceQuery.data?.checking}
+                  disabled={
+                    isMutatePending ||
+                    isolation.isPending ||
+                    rescan.isPending ||
+                    namespaceQuery.data?.checking
+                  }
                   onClick={() => rescan.mutate(importerKey)}
                 >
                   <RefreshCwIcon

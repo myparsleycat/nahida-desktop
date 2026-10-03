@@ -14,6 +14,8 @@ const backend = vi.hoisted(() => ({
   rescan: vi.fn(),
   getEnabled: vi.fn(),
   setEnabled: vi.fn(),
+  getIsolation: vi.fn(),
+  setIsolation: vi.fn(),
   getXXMI: vi.fn(),
   getLogs: vi.fn(),
   on: vi.fn(),
@@ -28,7 +30,12 @@ vi.mock("@bindings/mod", () => ({
   },
 }));
 vi.mock("@bindings/setting", () => ({
-  Setting: { GetPersistToggles: backend.getEnabled, SetPersistToggles: backend.setEnabled },
+  Setting: {
+    GetPersistToggles: backend.getEnabled,
+    SetPersistToggles: backend.setEnabled,
+    GetNamespaceIsolation: backend.getIsolation,
+    SetNamespaceIsolation: backend.setIsolation,
+  },
 }));
 vi.mock("@bindings/xxmi", () => ({ XXMI: { GetXXMIData: backend.getXXMI } }));
 vi.mock("@bindings/tools", () => ({ Tools: { GetPersistLogs: backend.getLogs } }));
@@ -89,6 +96,8 @@ beforeEach(() => {
   backend.rescan.mockResolvedValue(state(2));
   backend.getEnabled.mockResolvedValue(true);
   backend.setEnabled.mockResolvedValue(undefined);
+  backend.getIsolation.mockResolvedValue(true);
+  backend.setIsolation.mockResolvedValue(undefined);
   backend.getXXMI.mockResolvedValue({
     xxmiPath: "C:\\XXMI",
     enabledImporters: [{ key: "GIMI" }, { key: "WWMI" }, { key: "NTE" }],
@@ -114,12 +123,31 @@ describe("TogglePersistence namespace isolation", () => {
     for (const path of [...state().conflicts[0].modPaths, ...state().conflicts[0].iniPaths]) {
       expect(screen.getByText(path)).toBeTruthy();
     }
-    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    const [persistSwitch, isolationSwitch] = screen.getAllByRole("switch");
+    expect(screen.getAllByRole("switch")).toHaveLength(2);
     expect(screen.getByText("Latest log")).toBeTruthy();
     emit("setting:xxmi:persistLogs", ["Updated log"]);
     await screen.findByText("Updated log");
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(persistSwitch);
     await waitFor(() => expect(backend.setEnabled).toHaveBeenCalledWith(false));
+    expect(backend.setIsolation).not.toHaveBeenCalled();
+    await waitFor(() => expect(isolationSwitch.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(isolationSwitch);
+    await waitFor(() => expect(backend.setIsolation).toHaveBeenCalledWith(false));
+  });
+
+  it("leaves isolation off by default without the persistence hint", async () => {
+    backend.getIsolation.mockResolvedValue(false);
+    backend.getEnabled.mockResolvedValue(false);
+    backend.getState.mockResolvedValue({ revision: 1, checking: false, conflicts: [] });
+    renderScreen();
+    await screen.findByText(prefix + "empty");
+    const isolationSwitch = screen.getAllByRole("switch")[1];
+    expect(isolationSwitch.getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByText(prefix + "disabled")).toBeNull();
+    fireEvent.click(isolationSwitch);
+    await waitFor(() => expect(backend.setIsolation).toHaveBeenCalledWith(true));
+    await screen.findByText(prefix + "disabled");
   });
 
   it.each(["waiting_for_game_exit", "needs_review", "failed", "recovery_required"])(
@@ -159,7 +187,7 @@ describe("TogglePersistence namespace isolation", () => {
     renderScreen();
     await screen.findByText(prefix + "empty");
     const button = screen.getByRole("button", { name: prefix + "rescanImporter WWMI" });
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /rescanImporter/ })).toHaveLength(2);
     fireEvent.click(button);
     await waitFor(() => expect(backend.rescan).toHaveBeenCalledWith("WWMI"));
     await screen.findByText("shared_namespace");
