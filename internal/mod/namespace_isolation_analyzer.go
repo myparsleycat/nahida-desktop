@@ -25,12 +25,15 @@ type namespaceIsolationFile struct {
 	info     os.FileInfo
 	document namespace.Document
 	implicit bool
+	disabled bool
 }
 
 type namespaceIsolationInventory struct {
 	importer      xxmi.EnabledImporter
 	modsRoot      string
 	roots         []string
+	links         []string
+	linked        []string
 	mods          []string
 	files         []namespaceIsolationFile
 	issues        []NamespaceIsolationConflict
@@ -91,7 +94,7 @@ func (c *namespaceIsolationCoordinator) inventories(
 		// Windows TEMP paths may use 8.3 aliases for the same physical directory.
 		root, err := filepath.Abs(importer.ImporterFolder)
 		if err == nil {
-			root, err = filepath.EvalSymlinks(root)
+			root, err = namespacePhysicalPath(root)
 		}
 		if err != nil {
 			inventory.issue("inventory_error", importer.ImporterFolder, err)
@@ -112,7 +115,11 @@ func (c *namespaceIsolationCoordinator) inventories(
 			inventory.userSnapshots[name] = namespaceIsolationSnapshot{content: content, info: info}
 		}
 		trusted := []string{}
-		if root, err := resolveCompressionRoot(importer.ImporterFolder); err == nil {
+		root, err = resolveCompressionRoot(importer.ImporterFolder)
+		if err == nil {
+			root, err = namespacePhysicalPath(root)
+		}
+		if err == nil {
 			inventory.modsRoot = root
 			trusted = append(trusted, root)
 		} else {
@@ -122,7 +129,7 @@ func (c *namespaceIsolationCoordinator) inventories(
 			if game.Importer == nil || !strings.EqualFold(*game.Importer, importer.Key) {
 				continue
 			}
-			root, err := filepath.EvalSymlinks(game.ModFolderPath)
+			root, err := namespacePhysicalPath(game.ModFolderPath)
 			if err != nil {
 				inventory.issue("inventory_error", game.ModFolderPath, err)
 				continue
@@ -143,13 +150,39 @@ func (c *namespaceIsolationCoordinator) inventories(
 		}
 
 		// Core, d3dx.ini, and other importer INIs are part of reference inventory.
-		// Mods is traversed separately so only its trusted root junction is followed.
-		scanRoots := append(slices.Clone(inventory.roots), importer.ImporterFolder)
+		scanRoots := namespacePhysicalPaths(append(slices.Clone(inventory.roots), importer.ImporterFolder))
 		seen := map[[2]int64][]os.FileInfo{}
-		for _, root := range namespacePhysicalPaths(scanRoots) {
+		followed := []os.FileInfo{}
+		for _, root := range scanRoots {
+			if info, err := os.Stat(root); err == nil {
+				followed = append(followed, info)
+			}
 			err := inventory.walk(ctx, root, seen)
 			if err != nil {
 				inventory.issue("inventory_error", root, err)
+			}
+		}
+
+		// Links are followed after every root, so a physical path wins over its alias
+		// and mod ownership survives. Each directory is entered once, which ends loops.
+		for len(inventory.links) > 0 {
+			link := inventory.links[0]
+			inventory.links = inventory.links[1:]
+			info, err := os.Stat(link)
+			if err != nil {
+				inventory.issue("inventory_error", link, err)
+				continue
+			}
+			if slices.ContainsFunc(followed, func(old os.FileInfo) bool { return os.SameFile(old, info) }) {
+				continue
+			}
+			followed = append(followed, info)
+			if target, err := namespacePhysicalPath(link); err == nil {
+				inventory.linked = append(inventory.linked, target)
+			}
+			// WalkDir descends into a linked root only through a trailing separator.
+			if err := inventory.walk(ctx, link+string(os.PathSeparator), seen); err != nil {
+				inventory.issue("inventory_error", link, err)
 			}
 		}
 		slices.SortFunc(
@@ -181,6 +214,48 @@ func (c *namespaceIsolationCoordinator) inventories(
 		}
 	}
 	return inventories, nil
+}
+
+// namespacePhysicalPath resolves symbolic links and junctions. filepath.EvalSymlinks
+// leaves a Windows junction in place, WalkDir does not descend into one, and journaled
+// writes reject every reparse point ancestor.
+func namespacePhysicalPath(path string) (string, error) {
+	for range 32 {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return "", err
+		}
+
+		// Substitute the junction nearest the volume root, then resolve the result again.
+		link, target := "", ""
+		for current := resolved; ; current = filepath.Dir(current) {
+			info, err := os.Lstat(current)
+			if err != nil {
+				return "", err
+			}
+			// Reparse points without a link target, such as cloud placeholders, are physical.
+			if isReparsePoint(info) {
+				if next, err := os.Readlink(current); err == nil {
+					link, target = current, next
+				}
+			}
+			if filepath.Dir(current) == current {
+				break
+			}
+		}
+		if link == "" {
+			return resolved, nil
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(link), target)
+		}
+		relative, err := filepath.Rel(link, resolved)
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(target, relative)
+	}
+	return "", fmt.Errorf("too many links in %q", path)
 }
 
 func namespacePhysicalPaths(paths []string) []string {
@@ -285,17 +360,31 @@ func (i *namespaceIsolationInventory) walk(
 			return err
 		}
 		if path != root && (info.Mode()&os.ModeSymlink != 0 || isReparsePoint(info)) {
-			// A trusted Mods junction has already been inventoried through its target.
-			if !strings.EqualFold(path, filepath.Join(i.importer.ImporterFolder, "Mods")) {
-				i.issue("unsafe_path", path, errors.New("nested reparse point is not followed"))
+			target, err := os.Stat(path)
+			switch {
+			// Journaled writes reject reparse points, so a mod cannot own a link.
+			case slices.ContainsFunc(i.mods, func(mod string) bool { return pathWithin(mod, path) }):
+				i.issue("unsafe_path", path, errors.New("reparse point inside a mod is not followed"))
+			case err != nil:
+				i.issue("inventory_error", path, err)
+			case target.IsDir():
+				if !namespaceDisabledPath(root, path) {
+					i.links = append(i.links, path)
+				}
+			default:
+				info = target
 			}
-			if entry.IsDir() {
-				return filepath.SkipDir
+			if info != target {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
 			}
-			return nil
 		}
+		// desktop.ini is Windows folder metadata, usually in a legacy code page.
 		if !info.Mode().IsRegular() || !strings.EqualFold(filepath.Ext(path), ".ini") ||
 			strings.EqualFold(filepath.Base(path), "d3dx_user.ini") ||
+			strings.EqualFold(filepath.Base(path), "desktop.ini") ||
 			strings.HasPrefix(strings.ToLower(filepath.Base(path)), "disabled") {
 			return nil
 		}
@@ -310,25 +399,31 @@ func (i *namespaceIsolationInventory) walk(
 			return nil
 		}
 		seen[stamp] = append(seen[stamp], snapshot)
+		disabled := namespaceDisabledPath(root, path)
 		document, err := namespace.Parse(content)
 		if err != nil {
-			i.issue("unsupported_ini", path, err)
+			if !disabled {
+				i.issue("unsupported_ini", path, err)
+			}
 			return nil
 		}
 		for _, include := range append(slices.Clone(document.Includes), document.RecursiveIncludes...) {
-			if err := i.validateInclude(filepath.Dir(path), include); err != nil {
+			if err := i.validateInclude(filepath.Dir(path), include); err != nil && !disabled {
 				i.issue("include_outside_inventory", path, err)
 			}
 		}
-		file := namespaceIsolationFile{path: path, content: content, info: snapshot, document: document}
+		file := namespaceIsolationFile{
+			path: path, content: content, info: snapshot, document: document, disabled: disabled,
+		}
 		if document.Namespace == "" {
 			file.implicit = true
+			// A linked Mods root may live on another volume, where Rel to the importer fails.
 			relative, err := filepath.Rel(i.importer.ImporterFolder, path)
+			if i.modsRoot != "" && pathWithin(i.modsRoot, path) {
+				relative, err = filepath.Join("Mods", filepath.FromSlash(gameRelativePath(i.modsRoot, path))), nil
+			}
 			if err != nil {
 				return err
-			}
-			if i.modsRoot != "" && pathWithin(i.modsRoot, path) {
-				relative = filepath.Join("Mods", filepath.FromSlash(gameRelativePath(i.modsRoot, path)))
 			}
 			if !strings.EqualFold(relative, "d3dx.ini") {
 				file.document.Namespace = strings.ReplaceAll(filepath.ToSlash(relative), "/", `\`)
@@ -342,6 +437,19 @@ func (i *namespaceIsolationInventory) walk(
 		}
 		i.files = append(i.files, file)
 		return nil
+	})
+}
+
+// namespaceDisabledPath reports whether a folder below root carries the DISABLED prefix.
+// 3DMigoto loads nothing below such a folder, so its INIs stay inventoried for their
+// mod's manifest but neither collide with nor reference what the game actually loads.
+func namespaceDisabledPath(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(strings.Split(relative, string(os.PathSeparator)), func(part string) bool {
+		return strings.HasPrefix(strings.ToLower(part), "disabled")
 	})
 }
 
@@ -360,7 +468,7 @@ func namespaceConflictID(parts ...string) string {
 func analyzeNamespaceIsolation(i namespaceIsolationInventory) []namespaceIsolationPlan {
 	byKey := map[string][]namespaceIsolationFile{}
 	for _, file := range i.files {
-		if len(file.document.Persistent) == 0 {
+		if file.disabled || len(file.document.Persistent) == 0 {
 			continue
 		}
 		for _, variable := range file.document.Persistent {
@@ -455,6 +563,10 @@ func analyzeNamespaceIsolation(i namespaceIsolationInventory) []namespaceIsolati
 			}
 		}
 		for _, file := range i.files {
+			// A disabled INI matters only when its own mod is about to be rewritten.
+			if file.disabled && !component[file.modPath] {
+				continue
+			}
 			if file.document.Unsupported && (component[file.modPath] || len(file.document.References) > 0) {
 				plan.conflict.Reason = "unsupported_reference"
 				plan.conflict.Detail = "Unsupported INI syntax or references prevent safe isolation"
@@ -581,16 +693,19 @@ func (i *namespaceIsolationInventory) validateInclude(baseDir, include string) e
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(baseDir, path)
 	}
-	resolved, err := filepath.EvalSymlinks(path)
+	resolved, err := namespacePhysicalPath(path)
 	if err != nil {
 		return fmt.Errorf("resolve include %s: %w", path, err)
 	}
-	importerRoot, err := filepath.EvalSymlinks(i.importer.ImporterFolder)
+	importerRoot, err := namespacePhysicalPath(i.importer.ImporterFolder)
 	if err != nil {
 		return err
 	}
 	allowed := pathWithin(importerRoot, resolved) ||
-		slices.ContainsFunc(i.roots, func(root string) bool { return pathWithin(root, resolved) })
+		slices.ContainsFunc(
+			append(slices.Clone(i.roots), i.linked...),
+			func(root string) bool { return pathWithin(root, resolved) },
+		)
 	if !allowed {
 		return fmt.Errorf("include is outside importer inventory: %s", path)
 	}

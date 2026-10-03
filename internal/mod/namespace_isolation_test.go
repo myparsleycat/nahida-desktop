@@ -116,7 +116,7 @@ func TestNamespaceIsolationCopiesAllParticipantsAndGUI(t *testing.T) {
 	paths := []string{
 		namespaceFixture(t, mods, "Original"),
 		namespaceFixture(t, mods, "Copy"),
-		namespaceFixture(t, mods, "DISABLED Offline clone"),
+		namespaceFixture(t, mods, "Offline clone"),
 	}
 	namespaceWrite(t, filepath.Join(paths[0], "nhd.json"), `{"source":"custom","unknown":{"keep":true}}`)
 	// Formatting, comments, and persisted defaults do not make copies different.
@@ -154,6 +154,50 @@ func TestNamespaceIsolationCopiesAllParticipantsAndGUI(t *testing.T) {
 	}
 	if state.Checking || state.Revision == 0 {
 		t.Fatalf("invalid state: %+v", state)
+	}
+}
+
+// 3DMigoto loads nothing below a DISABLED name, so those copies are not duplicates.
+func TestNamespaceIsolationIgnoresDisabledCopies(t *testing.T) {
+	t.Parallel()
+	m, mods, _ := newNamespaceTestMod(t)
+	enabled := namespaceFixture(t, mods, "Original")
+	disabled := namespaceFixture(t, mods, "DISABLED Copy")
+	variant := filepath.Join(enabled, "DISABLED Variant")
+	namespaceWrite(t, filepath.Join(variant, "main.ini"), namespaceMainINI)
+	namespaceWrite(t, filepath.Join(variant, "broken.ini"), "not valid INI \xff")
+	// A disabled reference to the namespace must not pin it either.
+	namespaceWrite(
+		t,
+		filepath.Join(mods, "Character", "DISABLED User", "user.ini"),
+		"[Present]\nrun = CommandList\\Creator\\Dress\\Update\n",
+	)
+	importer := m.xxmi.(namespaceTestImporterSource).folder
+	namespaceWrite(t, filepath.Join(importer, "Core", "DISABLED Library", "main.ini"), namespaceMainINI)
+
+	state, err := m.RescanNamespaceIsolation(t.Context(), "")
+	if err != nil || len(state.Conflicts) != 0 {
+		t.Fatalf("disabled copies reported: %+v %v", state, err)
+	}
+	for _, path := range []string{enabled, disabled, variant} {
+		if namespaceDocument(t, filepath.Join(path, "main.ini")).Namespace != `Creator\Dress` {
+			t.Fatalf("namespace changed without an enabled duplicate: %s", path)
+		}
+	}
+
+	// Enabling the copy makes the collision real.
+	copied := filepath.Join(filepath.Dir(disabled), "Copy")
+	if err := os.Rename(disabled, copied); err != nil {
+		t.Fatal(err)
+	}
+	state, err = m.RescanNamespaceIsolation(t.Context(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := namespaceDocument(t, filepath.Join(enabled, "main.ini")).Namespace
+	if original == namespaceDocument(t, filepath.Join(copied, "main.ini")).Namespace &&
+		len(state.Conflicts) == 0 {
+		t.Fatalf("enabled duplicate was neither isolated nor reported: %+v", state)
 	}
 }
 
@@ -1122,5 +1166,27 @@ func TestNamespaceIsolationStoppedAdmissionAvoidsMaintenanceDeadlock(t *testing.
 	}
 	if len(m.GetNamespaceIsolationState().Conflicts) != 0 {
 		t.Fatalf("Start did not reopen admission: %+v", m.GetNamespaceIsolationState())
+	}
+}
+
+func TestNamespaceIsolationIgnoresFolderMetadata(t *testing.T) {
+	t.Parallel()
+	m, mods, _ := newNamespaceTestMod(t)
+	paths := []string{namespaceFixture(t, mods, "A"), namespaceFixture(t, mods, "B")}
+	// Explorer writes localized folder names in the system code page, which is not UTF-8.
+	namespaceWrite(
+		t,
+		filepath.Join(paths[0], "desktop.ini"),
+		"[.ShellClassInfo]\r\nLocalizedResourceName=\xb8\xf0\xb5\xe5\r\n",
+	)
+
+	state, err := m.RescanNamespaceIsolation(t.Context(), "")
+	if err != nil || len(state.Conflicts) != 0 {
+		t.Fatalf("folder metadata blocked isolation: %+v %v", state, err)
+	}
+	for _, path := range paths {
+		if name := namespaceDocument(t, filepath.Join(path, "main.ini")).Namespace; !strings.Contains(name, "__nhd_") {
+			t.Fatalf("copy was not isolated: %q", name)
+		}
 	}
 }

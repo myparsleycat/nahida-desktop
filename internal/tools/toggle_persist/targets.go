@@ -23,15 +23,14 @@ type persistTarget struct {
 	info        os.FileInfo
 	fingerprint string
 	persistent  bool
-	disabled    bool
 	blocked     string
 }
 
 type persistTargetIndex map[string][]persistTarget
 
 // Index declarations rather than interpreting namespaces as filesystem paths.
-// Disabled copies also participate: a value saved before F10 reloads a switched
-// mod cannot safely be attributed to the newly enabled copy of that namespace.
+// 3DMigoto loads nothing below a DISABLED name, so a disabled copy neither owns
+// a persisted value nor makes the enabled copy of its namespace ambiguous.
 func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 	root, err := filepath.Abs(importerFolder)
 	if err != nil {
@@ -46,7 +45,8 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if path != root && strings.HasPrefix(entry.Name(), ".") {
+			if path != root && (strings.HasPrefix(entry.Name(), ".") ||
+				strings.HasPrefix(strings.ToLower(entry.Name()), "disabled")) {
 				return fs.SkipDir
 			}
 			if _, err := os.Lstat(filepath.Join(path, ".nhd-namespace")); !errors.Is(err, os.ErrNotExist) {
@@ -93,12 +93,6 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		if strings.EqualFold(relative, "d3dx.ini") {
 			namespace = ""
 		}
-		disabled := false
-		for _, part := range strings.Split(relative, string(os.PathSeparator)) {
-			if strings.HasPrefix(strings.ToLower(part), "disabled") {
-				disabled = true
-			}
-		}
 		targets := parsePersistTargets(string(content), namespace)
 		fingerprint := ""
 		if len(targets) > 0 {
@@ -109,7 +103,6 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 			target.importer = root
 			target.info = info
 			target.fingerprint = fingerprint
-			target.disabled = disabled
 			for parent, reason := range blockedRoots {
 				if relative, err := filepath.Rel(parent, path); err == nil && relative != ".." &&
 					!strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
@@ -202,7 +195,7 @@ func (index persistTargetIndex) resolve(key string) (*persistTarget, error) {
 		}
 		return nil, fmt.Errorf("ambiguous persist variable %s declared in %s", key, strings.Join(paths, ", "))
 	}
-	if len(targets) == 0 || !targets[0].persistent || targets[0].disabled {
+	if len(targets) == 0 || !targets[0].persistent {
 		return nil, nil
 	}
 	target := targets[0]

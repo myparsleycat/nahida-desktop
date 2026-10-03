@@ -105,7 +105,7 @@ func TestPersistWatcherResolvesNamespaceDeclarations(t *testing.T) {
 			ambiguous: true,
 		},
 		{
-			name: "disabled copy prevents assigning old game state to new copy",
+			name: "disabled copy is not a duplicate",
 			files: map[string]string{
 				"Mods/DISABLED One/mod.ini": "namespace = Creator\\Outfit\n[Constants]\nglobal persist $Toggle = 1\n",
 				"Mods/Two/mod.ini":          "namespace = Creator\\Outfit\n[Constants]\nglobal persist $Toggle = 2\n",
@@ -113,9 +113,8 @@ func TestPersistWatcherResolvesNamespaceDeclarations(t *testing.T) {
 			state: `$\Creator\Outfit\Toggle = 9`,
 			want: map[string]string{
 				"Mods/DISABLED One/mod.ini": "$Toggle = 1",
-				"Mods/Two/mod.ini":          "$Toggle = 2",
+				"Mods/Two/mod.ini":          "$Toggle = 9",
 			},
-			ambiguous: true,
 		},
 		{
 			name: "unambiguous variables save alongside a conflict",
