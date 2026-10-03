@@ -174,17 +174,27 @@ function AddGameDialogContent({
     void navi({ to: "/xxmi" });
   };
 
+  const defaultModFolderPath = (importer: string) => {
+    const folder = enabledImporters.find((item) => item.key === importer)?.importerFolder;
+    return folder ? `${folder.replace(/[\\/]+$/, "")}\\Mods` : "";
+  };
+
   const handleImporterChange = (value: string, onChange: (value: string) => void) => {
     const wasNte = isNteImporter(selectedImporter);
     const nextIsNte = isNteImporter(value);
+    const path = form.getFieldValue("path");
     onChange(value);
     setSelectedImporter(value);
     setNteResolution(null);
     setIsNteNotFound(false);
 
     if (wasNte && !nextIsNte) {
-      form.setFieldValue("path", "");
       form.setFieldValue("customModFolderPath", "");
+    }
+
+    // A folder the user picked themselves survives importer changes; only the previous default is replaced.
+    if (wasNte || !path || path === defaultModFolderPath(selectedImporter)) {
+      form.setFieldValue("path", defaultModFolderPath(value));
     }
 
     if (nextIsNte) {
@@ -238,6 +248,59 @@ function AddGameDialogContent({
               {field.state.meta.isTouched && !field.state.meta.isValid ? (
                 <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
               ) : null}
+            </Field>
+          )}
+        />
+
+        <form.Field
+          name="importer"
+          children={(field) => (
+            <Field>
+              <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
+              <Select
+                value={field.state.value}
+                items={[
+                  { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
+                  ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
+                ]}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  handleImporterChange(value, field.handleChange);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("g.select")} />
+                </SelectTrigger>
+                <SelectContent aria-describedby={undefined}>
+                  <SelectGroup>
+                    <SelectItem value={NO_IMPORTER_VALUE}>
+                      {t("page.mod.dialog.edit-game.no_importer")}
+                    </SelectItem>
+                    {importers.map((importer) => (
+                      <SelectItem key={importer.key} value={importer.key}>
+                        {importer.key}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {!isXXMIConfigured && !isNteImporter(field.state.value) && (
+                <Alert>
+                  <AlertDescription>
+                    <div className="flex flex-col gap-3">
+                      <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-fit"
+                        onClick={handleOpenXXMISettings}
+                      >
+                        {t("page.mod.dialog.add-game.open_xxmi_settings")}
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
             </Field>
           )}
         />
@@ -343,59 +406,6 @@ function AddGameDialogContent({
         ) : null}
 
         <NteBootstrapProgressView active={isAddingGame && isNteSelected} />
-
-        <form.Field
-          name="importer"
-          children={(field) => (
-            <Field>
-              <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
-              <Select
-                value={field.state.value}
-                items={[
-                  { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
-                  ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
-                ]}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  handleImporterChange(value, field.handleChange);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("g.select")} />
-                </SelectTrigger>
-                <SelectContent aria-describedby={undefined}>
-                  <SelectGroup>
-                    <SelectItem value={NO_IMPORTER_VALUE}>
-                      {t("page.mod.dialog.edit-game.no_importer")}
-                    </SelectItem>
-                    {importers.map((importer) => (
-                      <SelectItem key={importer.key} value={importer.key}>
-                        {importer.key}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {!isXXMIConfigured && !isNteImporter(field.state.value) && (
-                <Alert>
-                  <AlertDescription>
-                    <div className="flex flex-col gap-3">
-                      <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-fit"
-                        onClick={handleOpenXXMISettings}
-                      >
-                        {t("page.mod.dialog.add-game.open_xxmi_settings")}
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
-            </Field>
-          )}
-        />
       </form>
       <DialogFooter>
         <DialogClose render={<Button type="button" variant="outline" />}>
