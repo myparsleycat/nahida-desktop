@@ -203,6 +203,75 @@ func TestImportExternalLauncherRestoresReusedFolderAfterCrossVolumeCopy(t *testi
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "built-in state")
 }
 
+func TestImporterFolderMigrationRestoresDisplacedFilesAfterCopyCleanupFails(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name         string
+		share        uint32
+		restoreFails bool
+	}{
+		{name: "restoration succeeds", share: windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE},
+		{name: "restoration fails", share: windows.FILE_SHARE_READ, restoreFails: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := t.TempDir()
+			target := t.TempDir()
+			for _, name := range []string{"d3dx.ini", "d3dx_user.ini"} {
+				if err := os.WriteFile(filepath.Join(source, name), []byte("external state"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(target, name), []byte("built-in state"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			migration := importerFolderMigration{mode: ImportUserDataMove, rename: crossVolumeRename}
+			if err := migration.prepare(t.Context(), "GIMI", source, target, false); err != nil {
+				t.Fatal(err)
+			}
+
+			// Deny deletion without relying on timing; one case still permits restoring the file in place.
+			path := filepath.Join(target, "d3dx_user.ini")
+			widePath, err := windows.UTF16PtrFromString(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			handle, err := windows.CreateFile(
+				widePath,
+				windows.GENERIC_READ,
+				test.share,
+				nil,
+				windows.OPEN_EXISTING,
+				windows.FILE_ATTRIBUTE_NORMAL,
+				0,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := windows.CloseHandle(handle); err != nil {
+					t.Error(err)
+				}
+			})
+
+			err = migration.rollback()
+			if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) || !strings.Contains(err.Error(), "remove copied ") {
+				t.Fatalf("rollback error = %v, want copy cleanup failure", err)
+			}
+			if strings.Contains(err.Error(), "restore ") != test.restoreFails {
+				t.Fatalf("rollback error = %v, want restoration failure = %v", err, test.restoreFails)
+			}
+			assertFile(t, filepath.Join(target, "d3dx.ini"), "built-in state")
+			if test.restoreFails {
+				assertFile(t, path, "external state")
+			} else {
+				assertFile(t, path, "built-in state")
+			}
+			assertFile(t, filepath.Join(source, "d3dx_user.ini"), "external state")
+		})
+	}
+}
+
 // TestImportExternalLauncherCopiesUserDataBetweenRealVolumes covers the real rename failure, which the injected one
 // only imitates. It needs a second writable volume and is skipped on machines and runners that have just one.
 func TestImportExternalLauncherCopiesUserDataBetweenRealVolumes(t *testing.T) {

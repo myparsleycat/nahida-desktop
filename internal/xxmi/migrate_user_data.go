@@ -235,9 +235,11 @@ func (m *importerFolderMigration) displace(path, from string) error {
 // never removed.
 func (m *importerFolderMigration) rollback() error {
 	var errs []error
+	var restoreBlocked bool
 	for _, link := range slices.Backward(m.links) {
 		if err := os.Remove(link); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
+			restoreBlocked = true
 		}
 	}
 	for _, move := range slices.Backward(m.moves) {
@@ -249,9 +251,12 @@ func (m *importerFolderMigration) rollback() error {
 		}
 		if err := m.rename(move.to, move.from); err != nil {
 			errs = append(errs, fmt.Errorf("restore %q to %q: %w", move.to, move.from, err))
+			restoreBlocked = true
 		}
 	}
-	if len(errs) > 0 {
+
+	// A failed copy cleanup still allows displaced files to be restored in place.
+	if restoreBlocked {
 		return errors.Join(errs...)
 	}
 	for _, entry := range slices.Backward(m.displaced) {
@@ -267,6 +272,9 @@ func (m *importerFolderMigration) rollback() error {
 		if err != nil {
 			errs = append(errs, fmt.Errorf("restore %q: %w", entry.path, err))
 		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	for _, folder := range slices.Backward(m.created) {
 		if err := os.RemoveAll(folder); err != nil {
