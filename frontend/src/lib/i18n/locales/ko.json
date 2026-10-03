@@ -1094,6 +1094,7 @@
           "XXMI_ERR_OBFUSCATE_NO_CANDIDATES": "d3d11.dll에서 안전하게 다양화할 패딩 후보를 찾지 못했습니다.",
           "XXMI_ERR_RESTORE_BACKUP_NOT_FOUND": "복원할 pe-padding-diversifier 백업 파일을 찾지 못했습니다.",
           "XXMI_ERR_RESTORE_FAILED": "백업 복원 중 예기치 않은 오류가 발생했습니다.",
+          "XXMI_DOWNLOAD_GIT": "포터블 Git 다운로드 중...",
           "XXMI_DOWNLOAD_REPO": "XXMI 소스 코드 다운로드 중...",
           "XXMI_EXTRACT_REPO": "소스 코드 압축 해제 중...",
           "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode 활성화 중..."

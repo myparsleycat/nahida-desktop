@@ -11,7 +11,7 @@
 
 이 기능은 DLL 빌드 과정의 상당 부분을 자동화하지만, DLL을 빌드하는 데 필요한 빌드 도구는 사용자가 직접 설치해야 합니다.
 
-[Git for Windows](https://git-scm.com/downloads/win)를 설치할 때 Git을 `PATH`에서 사용할 수 있도록 설정한 뒤 Nahida Desktop을 다시 실행하세요. 빌드는 버전 헤더 생성에 필요한 Git 정보를 포함하여 선택한 릴리스 태그를 체크아웃합니다.
+빌드는 버전 헤더 생성에 필요한 Git 정보를 포함하여 선택한 릴리스 태그를 체크아웃하므로 Git이 필요합니다. Nahida Desktop이 첫 빌드 때 포터블 Git(MinGit, 약 40MB)을 자동으로 내려받아 앱 데이터 폴더에서만 사용하므로 Git을 따로 설치할 필요가 없습니다. PC에 이미 설치된 Git은 사용하지 않습니다.
 
 1. [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe)를 다운로드한 뒤 실행합니다.
 2. 개별 구성 요소에서 다음 항목을 선택한 후 설치합니다.

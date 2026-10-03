@@ -9,18 +9,23 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"unicode/utf16"
 )
 
-func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath string) error {
+func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath, gitPath string) error {
 	script, err := d3dBuildCommand(vcvarsPath, projectPath)
 	if err != nil {
 		return err
 	}
 	cmd := cmdScript(ctx, script)
+
+	// The solution's version generator calls git from PATH, which the portable Git is not on.
+	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(gitPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

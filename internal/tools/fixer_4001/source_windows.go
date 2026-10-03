@@ -12,9 +12,8 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-func checkoutD3DSource(ctx context.Context, sourceURL, tag, projectPath string) (err error) {
-	stage := "find-git"
-	gitPath := ""
+func checkoutD3DSource(ctx context.Context, gitPath, sourceURL, tag, projectPath string) (err error) {
+	stage := "create-source-directory"
 	defer func() {
 		err = infra.AnnotateError(err, infra.Diagnostic{
 			Operation: "4001Fixer", Stage: stage,
@@ -24,14 +23,6 @@ func checkoutD3DSource(ctx context.Context, sourceURL, tag, projectPath string) 
 			},
 		})
 	}()
-	gitPath, err = exec.LookPath("git")
-	if err != nil {
-		return fmt.Errorf(
-			"building XXMI libraries requires Git for Windows; install Git and restart Nahida: %w",
-			err,
-		)
-	}
-	stage = "create-source-directory"
 	if err := os.MkdirAll(projectPath, 0o700); err != nil {
 		return fmt.Errorf("create XXMI source directory: %w", err)
 	}
