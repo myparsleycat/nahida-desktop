@@ -55,7 +55,7 @@ export function XXMIImportDialog({
   const hasUpdates = versions.some((version) => version.updateAvailable);
   const canPin = versions.every((version) => version.installedVersion !== "");
   const defaultMode =
-    checkFailed || hasUpdates
+    versions.length === 0 || checkFailed || hasUpdates
       ? ImportVersionMode.ImportVersionPinned
       : ImportVersionMode.ImportVersionLatest;
   const versionMode = checkFailed
@@ -64,7 +64,6 @@ export function XXMIImportDialog({
   const canImport =
     !preview.isFetching &&
     !preview.isError &&
-    versions.length > 0 &&
     (versionMode !== ImportVersionMode.ImportVersionPinned || canPin);
 
   const confirm = async () => {

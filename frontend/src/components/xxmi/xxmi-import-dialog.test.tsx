@@ -79,6 +79,40 @@ it("imports the displayed latest versions with the selected user data mode", asy
   );
 });
 
+it("allows the legacy import path when the preview has no packages", async () => {
+  backend.preview.mockResolvedValue([]);
+  const { onImport } = renderImport();
+  const confirm = screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" });
+  await waitFor(() => expect(confirm).toHaveProperty("disabled", false));
+
+  fireEvent.click(confirm);
+  await waitFor(() =>
+    expect(onImport).toHaveBeenCalledWith({
+      path: "C:\\External XXMI",
+      root: "C:\\Builtin XXMI",
+      userData: ImportUserDataMode.ImportUserDataKeep,
+      versionMode: ImportVersionMode.ImportVersionPinned,
+      versions: [],
+    }),
+  );
+});
+
+it("blocks pinning when a preview package has no installed version", async () => {
+  backend.preview.mockResolvedValue(
+    versions.map((version) => ({ ...version, installedVersion: "" })),
+  );
+  const { onImport } = renderImport();
+  await screen.findByText("1.3.0");
+
+  expect(
+    screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importPinInstalled" }),
+  ).toHaveProperty("disabled", true);
+  const confirm = screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" });
+  expect(confirm).toHaveProperty("disabled", true);
+  fireEvent.click(confirm);
+  expect(onImport).not.toHaveBeenCalled();
+});
+
 it("defaults to pinning installed versions when updates are available", async () => {
   const { onImport } = renderImport();
   await screen.findByText("1.8.0");
