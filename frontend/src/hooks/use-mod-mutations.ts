@@ -56,6 +56,13 @@ export function useGameMutations() {
                 return;
             }
 
+            if (errorMessage.includes("INVALID_MOD_FOLDER_PATH")) {
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-mod-folder-path"),
+                );
+                return;
+            }
+
             if (errorMessage.includes("DUPLICATE_MOD_FOLDER_PATH")) {
                 toast.warning(
                     t(

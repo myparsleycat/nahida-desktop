@@ -103,15 +103,35 @@ func TestGameCRUDRejectsDuplicateRootsAndInvalidOrder(t *testing.T) {
 	}
 }
 
-func TestAddAndUpdateGameDoNotRequireExistingConfiguredDirectory(t *testing.T) {
+func TestAddGameRequiresExistingModFolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})
-	initial := filepath.Join(root, "not-created-yet")
-	if err := service.AddGame(ctx, "Game", initial, nil, nil, nil, nil); err != nil {
+	file := filepath.Join(root, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(initial); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("AddGame created configured directory: %v", err)
+
+	for name, path := range map[string]string{"missing": filepath.Join(root, "not-created-yet"), "file": file} {
+		err := service.AddGame(ctx, "Game", path, nil, nil, nil, nil)
+		if err == nil || err.Error() != "INVALID_MOD_FOLDER_PATH" {
+			t.Fatalf("%s mod folder error = %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "not-created-yet")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("AddGame created mod folder: %v", err)
+	}
+	games, err := service.GetGames(ctx)
+	if err != nil || len(games) != 0 {
+		t.Fatalf("games = %#v, %v", games, err)
+	}
+}
+
+func TestUpdateGameDoesNotRequireExistingConfiguredDirectory(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	if err := service.AddGame(ctx, "Game", root, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
 	}
 	updated := filepath.Join(root, "also-not-created")
 	if err := service.UpdateGame(ctx, "Game", GameUpdates{ModFolderPath: updated}); err != nil {
@@ -129,6 +149,9 @@ func TestAddGameClassifiesCaseVariantNameOnSamePathAsPathDuplicate(t *testing.T)
 	first := filepath.Join(root, "first")
 	second := filepath.Join(root, "second")
 	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(second, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.AddGame(ctx, "Game", first, nil, nil, nil, nil); err != nil {

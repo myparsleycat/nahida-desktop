@@ -374,7 +374,12 @@ func (m *Mod) AddGame(
 	if game == "" || strings.TrimSpace(modFolderPath) == "" {
 		return errors.New("INVALID_PARAMS")
 	}
-	modFolderPath, err = configuredDirectory(modFolderPath)
+	if isNTEImporter(importer) {
+		// The NTE setup below creates the mod folder itself.
+		modFolderPath, err = configuredDirectory(modFolderPath)
+	} else {
+		modFolderPath, err = validDirectory(modFolderPath)
+	}
 	if err != nil {
 		return err
 	}
