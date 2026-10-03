@@ -1,12 +1,12 @@
 package xxmi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"nahida.live/desktop/internal/platform"
 )
@@ -25,15 +25,17 @@ const (
 var importerUserData = []string{"Mods", "ShaderFixes", "d3dx_user.ini"}
 
 var (
-	errImportFolderConflict    = errors.New("XXMI_IMPORT_FOLDER_CONFLICT")
-	errImportTargetNotEmpty    = errors.New("XXMI_IMPORT_TARGET_NOT_EMPTY")
-	errImportMoveAcrossVolumes = errors.New("XXMI_IMPORT_MOVE_CROSS_VOLUME")
-	errImportVersionUnknown    = errors.New("XXMI_IMPORT_VERSION_UNKNOWN")
+	errImportFolderConflict = errors.New("XXMI_IMPORT_FOLDER_CONFLICT")
+	errImportTargetNotEmpty = errors.New("XXMI_IMPORT_TARGET_NOT_EMPTY")
+	errImportNoSpace        = errors.New("XXMI_IMPORT_NO_SPACE")
+	errImportVersionUnknown = errors.New("XXMI_IMPORT_VERSION_UNKNOWN")
 )
 
+// importerFolderMove is user data carried from from to to. A copied move crossed volumes and still has its source.
 type importerFolderMove struct {
-	from string
-	to   string
+	from   string
+	to     string
+	copied bool
 }
 
 // importerDisplacedEntry is an entry of an existing importer folder that the import replaced: a link, an empty
@@ -47,14 +49,18 @@ type importerDisplacedEntry struct {
 
 // importerFolderMigration records every filesystem change made while importing so a failed import can be undone.
 type importerFolderMigration struct {
-	mode      ImportUserDataMode
+	mode ImportUserDataMode
+	// rename moves user data within a volume; tests replace it to exercise the cross-volume copy on one volume.
+	rename func(from, to string) error
+	// progress reports the bytes copied of one user data entry that is moved across volumes.
+	progress  func(importer, name string, copied, total int64)
 	created   []string
 	links     []string
 	moves     []importerFolderMove
 	displaced []importerDisplacedEntry
 }
 
-func checkImporterFolderMigration(mode ImportUserDataMode, key, source, target string) error {
+func checkImporterFolderMigration(key, source, target string) error {
 	if platform.SameOrChildPath(source, target) || platform.SameOrChildPath(target, source) {
 		return fmt.Errorf("%w: %s folder %q overlaps %q", errImportFolderConflict, key, target, source)
 	}
@@ -77,17 +83,6 @@ func checkImporterFolderMigration(mode ImportUserDataMode, key, source, target s
 			); err != nil {
 				return err
 			}
-		}
-	}
-
-	if mode != ImportUserDataMove || strings.EqualFold(filepath.VolumeName(source), filepath.VolumeName(target)) {
-		return nil
-	}
-	for _, name := range importerUserData {
-		if _, err := os.Lstat(filepath.Join(source, name)); err == nil {
-			return fmt.Errorf("%w: %s %q to %q", errImportMoveAcrossVolumes, key, source, target)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
 		}
 	}
 	return nil
@@ -139,7 +134,9 @@ func linksTo(link, target string) bool {
 
 // prepare creates target and carries the user data over from source before the package is installed into it. The
 // installer keeps Mods and top-level links, so the prepared entries survive installation and later updates.
-func (m *importerFolderMigration) prepare(source, target string, overwriteINI bool) error {
+func (m *importerFolderMigration) prepare(
+	ctx context.Context, key, source, target string, overwriteINI bool,
+) error {
 	entries, err := os.ReadDir(target)
 	switch {
 	case errors.Is(err, os.ErrNotExist) || err == nil && len(entries) == 0:
@@ -180,10 +177,9 @@ func (m *importerFolderMigration) prepare(source, target string, overwriteINI bo
 		}
 		switch {
 		case m.mode == ImportUserDataMove && name != "d3dx.ini":
-			if err := os.Rename(from, to); err != nil {
-				return fmt.Errorf("move %q to %q: %w", from, to, err)
+			if err := m.move(ctx, key, name, from, to); err != nil {
+				return err
 			}
-			m.moves = append(m.moves, importerFolderMove{from: from, to: to})
 		case info.IsDir():
 			if err := createJunction(to, from); err != nil {
 				return err
@@ -234,8 +230,9 @@ func (m *importerFolderMigration) displace(path, from string) error {
 	return nil
 }
 
-// rollback unlinks and moves the user data back before removing the folders the import created. A folder that
-// still holds moved user data is never removed.
+// rollback unlinks and moves the user data back before removing the folders the import created. User data copied
+// across volumes still has its source, so only the copy is removed. A folder that still holds moved user data is
+// never removed.
 func (m *importerFolderMigration) rollback() error {
 	var errs []error
 	for _, link := range slices.Backward(m.links) {
@@ -244,7 +241,13 @@ func (m *importerFolderMigration) rollback() error {
 		}
 	}
 	for _, move := range slices.Backward(m.moves) {
-		if err := os.Rename(move.to, move.from); err != nil {
+		if move.copied {
+			if err := os.RemoveAll(move.to); err != nil {
+				errs = append(errs, fmt.Errorf("remove copied %q: %w", move.to, err))
+			}
+			continue
+		}
+		if err := m.rename(move.to, move.from); err != nil {
 			errs = append(errs, fmt.Errorf("restore %q to %q: %w", move.to, move.from, err))
 		}
 	}

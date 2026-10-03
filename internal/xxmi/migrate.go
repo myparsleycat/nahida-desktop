@@ -100,7 +100,8 @@ func isValidConfig(path string) bool {
 
 // ImportExternalLauncher imports an external XXMI Launcher into the built-in runtime. Each importer gets its own
 // folder under root with a freshly installed package, and its user data is linked or moved there per
-// input.UserData. Every filesystem change is undone when the import fails.
+// input.UserData; a move to another volume copies the data and leaves the source for manual cleanup. Every
+// filesystem change is undone when the import fails.
 func (x *XXMI) ImportExternalLauncher(
 	ctx context.Context, input ImportExternalLauncherInput,
 ) (imported []ImportedImporter, returnErr error) {
@@ -227,9 +228,7 @@ func (x *XXMI) ImportExternalLauncher(
 	defer x.packageMu.Unlock()
 	stage = "check-importer-folders"
 	for _, plan := range plans {
-		if err := checkImporterFolderMigration(
-			input.UserData, plan.spec.key, plan.source, plan.cfg.ImporterFolder,
-		); err != nil {
+		if err := checkImporterFolderMigration(plan.spec.key, plan.source, plan.cfg.ImporterFolder); err != nil {
 			return nil, err
 		}
 		for _, name := range append(slices.Clone(plan.spec.gameExeNames), plan.spec.processNames...) {
@@ -268,7 +267,15 @@ func (x *XXMI) ImportExternalLauncher(
 		resume(nil)
 	}()
 
-	migration := &importerFolderMigration{mode: input.UserData}
+	migration := &importerFolderMigration{mode: input.UserData, rename: x.renameUserData}
+	if x.eventEmit != nil {
+		migration.progress = func(importer, name string, copied, total int64) {
+			x.eventEmit("xxmi:import-progress", map[string]any{
+				"importer": importer, "name": name, "stage": "copy", "copied": copied, "total": total,
+			})
+		}
+		defer x.eventEmit("xxmi:import-progress", map[string]any{"stage": "done"})
+	}
 	defer func() {
 		if returnErr == nil || rollbackState == "not-started" {
 			return
@@ -285,7 +292,9 @@ func (x *XXMI) ImportExternalLauncher(
 	for _, plan := range plans {
 		rollbackState = "pending"
 		stage = "prepare-" + plan.spec.key
-		if err := migration.prepare(plan.source, plan.cfg.ImporterFolder, plan.cfg.OverwriteINI); err != nil {
+		if err := migration.prepare(
+			ctx, plan.spec.key, plan.source, plan.cfg.ImporterFolder, plan.cfg.OverwriteINI,
+		); err != nil {
 			return nil, err
 		}
 		stage = "install-" + plan.spec.key

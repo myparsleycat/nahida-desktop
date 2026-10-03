@@ -53,7 +53,7 @@ export type XXMIData = Awaited<ReturnType<typeof XXMI.GetXXMIData>>;
 const importErrorCodes = [
   "XXMI_IMPORT_FOLDER_CONFLICT",
   "XXMI_IMPORT_TARGET_NOT_EMPTY",
-  "XXMI_IMPORT_MOVE_CROSS_VOLUME",
+  "XXMI_IMPORT_NO_SPACE",
   "XXMI_IMPORT_VERSION_UNKNOWN",
   "XXMI_GAME_RUNNING",
 ] as const;

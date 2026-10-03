@@ -127,6 +127,8 @@ type XXMI struct {
 	findProcess func(context.Context, string) (int, error)
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
+	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
+	renameUserData func(from, to string) error
 }
 
 func New() *XXMI {
@@ -149,6 +151,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	x.installImporter = x.installBuiltinImporterPackage
 	x.findProcess = findProcessPID
+	x.renameUserData = os.Rename
 	return x
 }
 
