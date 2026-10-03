@@ -238,7 +238,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       >
         {/* The header stays outside the scroll area; a matching gutter keeps it aligned with the body. */}
         <div className="shrink-0 scrollbar-gutter-stable overflow-hidden border-b">
-          <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-4 pb-3">
+          <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-4 pb-px">
             <div className="flex items-center gap-2">
               <GameIcon gameName={importer} className="size-7 rounded-md" />
               <span className="font-semibold">{importer}</span>
