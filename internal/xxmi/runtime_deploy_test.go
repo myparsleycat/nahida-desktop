@@ -591,6 +591,7 @@ func TestSelectLibsVersionRespectsSkippedAndVerifiedUpdates(t *testing.T) {
 		{name: "failed update", latest: "2.0.0", deployed: "1.0.0", want: "1.0.0", wantChecks: 1},
 		{name: "skipped cached update", latest: "2.0.0", skipped: "2.0.0", deployed: "1.0.0", verified: true, want: "1.0.0"},
 		{name: "initial install", latest: "2.0.0", want: "2.0.0"},
+		{name: "keep newer imported prerelease", latest: "1.9.0", deployed: "2.0.0-beta.1", verified: true, want: "2.0.0-beta.1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

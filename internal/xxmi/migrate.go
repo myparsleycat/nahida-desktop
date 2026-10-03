@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -21,9 +22,11 @@ type ExternalLauncher struct {
 }
 
 type ImportExternalLauncherInput struct {
-	Path     string             `json:"path"`
-	Root     string             `json:"root"`
-	UserData ImportUserDataMode `json:"userData"`
+	Path        string                 `json:"path"`
+	Root        string                 `json:"root"`
+	UserData    ImportUserDataMode     `json:"userData"`
+	VersionMode ImportVersionMode      `json:"versionMode"`
+	Versions    []ImportPackageVersion `json:"versions"`
 }
 
 // ImportedImporter maps an imported importer's external launcher folder to its new built-in folder.
@@ -123,6 +126,12 @@ func (x *XXMI) ImportExternalLauncher(
 	if input.UserData != ImportUserDataKeep && input.UserData != ImportUserDataMove {
 		return nil, fmt.Errorf("invalid user data mode %q", input.UserData)
 	}
+	if input.VersionMode == "" {
+		input.VersionMode = ImportVersionPinned
+	}
+	if input.VersionMode != ImportVersionLatest && input.VersionMode != ImportVersionPinned {
+		return nil, fmt.Errorf("invalid import version mode %q", input.VersionMode)
+	}
 	if err := validateLocalFolder("external launcher", path, true); err != nil {
 		return nil, err
 	}
@@ -149,9 +158,20 @@ func (x *XXMI) ImportExternalLauncher(
 	autoUpdate, _ := launcher["auto_update"].(bool)
 	includePrereleases, _ := launcher["pre_release"].(bool)
 	libsVersion := dllVersion(&path)
+	installedLibs := ""
+	if libsVersion != nil {
+		installedLibs = normalizeVersion(*libsVersion)
+	}
+	selectedLibs, err := selectImportVersion(input, "xxmi-libs", installedLibs)
+	if err != nil {
+		return nil, err
+	}
 	packageRows := []db.XXMIPackageRow{}
 	importPackageState := func(id string, pkg PackageInfo) {
-		if pkg.LatestVersion == "" && pkg.SkippedVersion == "" {
+		hasPreview := slices.ContainsFunc(input.Versions, func(version ImportPackageVersion) bool {
+			return version.Package == id && !version.CheckFailed && version.LatestVersion != ""
+		})
+		if pkg.LatestVersion == "" && pkg.SkippedVersion == "" && !hasPreview {
 			return
 		}
 		row := db.XXMIPackageRow{
@@ -165,6 +185,19 @@ func (x *XXMI) ImportExternalLauncher(
 		if pkg.SkippedVersion != "" {
 			skipped := normalizeVersion(pkg.SkippedVersion)
 			row.SkippedVersion = &skipped
+		}
+		for _, version := range input.Versions {
+			if version.Package != id || version.CheckFailed || version.LatestVersion == "" {
+				continue
+			}
+			latest := normalizeVersion(version.LatestVersion)
+			row.LatestVersion = &latest
+			row.LatestReleaseNotes = &version.LatestNotes
+			row.UpdateCheckTime = time.Now().Unix()
+			if input.VersionMode == ImportVersionLatest && row.SkippedVersion != nil &&
+				*row.SkippedVersion == latest {
+				row.SkippedVersion = nil
+			}
 		}
 		packageRows = append(packageRows, row)
 	}
@@ -201,7 +234,11 @@ func (x *XXMI) ImportExternalLauncher(
 		if installed == nil {
 			return nil, fmt.Errorf("%w: %s in %q", errImportVersionUnknown, key, folder)
 		}
-		if !autoUpdate {
+		selected, err := selectImportVersion(input, "importer:"+key, *installed)
+		if err != nil {
+			return nil, err
+		}
+		if input.VersionMode == ImportVersionPinned {
 			cfg.PackageVersion = VersionPin{Pinned: *installed}
 		}
 		wrapper, _ := config["Importers"].(map[string]any)[key].(map[string]any)
@@ -219,12 +256,27 @@ func (x *XXMI) ImportExternalLauncher(
 			return nil, fmt.Errorf("import %s config: %w", key, err)
 		}
 		plans = append(plans, importerImportPlan{
-			spec: spec, source: filepath.Clean(folder), cfg: cfg, installed: *installed,
+			spec: spec, source: filepath.Clean(folder), cfg: cfg, installed: selected,
 		})
 		importPackageState("importer:"+key, parsed.Packages.Packages[key])
 	}
 	importPackageState("xxmi-libs", parsed.Packages.Packages["XXMI"])
 	importPackageState("gi-fps-unlocker", parsed.Packages.Packages["GI-FPS-Unlocker"])
+	if len(input.Versions) > 0 {
+		expected := map[string]bool{"xxmi-libs": true}
+		for _, plan := range plans {
+			expected["importer:"+plan.spec.key] = true
+		}
+		for _, version := range input.Versions {
+			if !expected[version.Package] {
+				return nil, fmt.Errorf("XXMI_IMPORT_SOURCE_CHANGED: %s", version.Package)
+			}
+			delete(expected, version.Package)
+		}
+		if len(expected) > 0 {
+			return nil, errors.New("XXMI_IMPORT_SOURCE_CHANGED: importer list")
+		}
+	}
 
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
@@ -245,9 +297,9 @@ func (x *XXMI) ImportExternalLauncher(
 	}
 
 	stage = "import-shared-packages"
-	if libsVersion != nil {
-		if err := importExternalLibs(path, *libsVersion); err != nil {
-			return nil, fmt.Errorf("import XXMI libraries: %w", err)
+	if selectedLibs != "" {
+		if err := x.prepareImportLibraries(ctx, path, installedLibs, selectedLibs); err != nil {
+			return nil, fmt.Errorf("prepare XXMI libraries %s: %w", selectedLibs, err)
 		}
 	}
 	if fileExists(filepath.Join(path, "Resources", "Packages", "GI-FPS-Unlocker", "Manifest.json")) {
@@ -270,6 +322,7 @@ func (x *XXMI) ImportExternalLauncher(
 	}()
 
 	migration := &importerFolderMigration{mode: input.UserData, rename: x.renameUserData}
+	runtimeRollbacks := []func() error{}
 	if x.eventEmit != nil {
 		migration.progress = func(importer, name string, copied, total int64) {
 			x.eventEmit("xxmi:import-progress", map[string]any{
@@ -283,7 +336,11 @@ func (x *XXMI) ImportExternalLauncher(
 			return
 		}
 		rollbackState = "rolling-back"
-		if err := migration.rollback(); err != nil {
+		var rollbackErr error
+		for _, undo := range slices.Backward(runtimeRollbacks) {
+			rollbackErr = errors.Join(rollbackErr, undo())
+		}
+		if err := errors.Join(rollbackErr, migration.rollback()); err != nil {
 			rollbackState = "rollback-failed"
 			returnErr = errors.Join(returnErr, err)
 			return
@@ -299,11 +356,31 @@ func (x *XXMI) ImportExternalLauncher(
 		); err != nil {
 			return nil, err
 		}
+		if selectedLibs != "" {
+			stage = "snapshot-runtime-" + plan.spec.key
+			undo, err := snapshotImportRuntime(plan.cfg.ImporterFolder)
+			if err != nil {
+				return nil, err
+			}
+			runtimeRollbacks = append(runtimeRollbacks, undo)
+		}
 		stage = "install-" + plan.spec.key
 		if err := x.installImporter(ctx, plan.spec, plan.cfg, InstallImporterPackageInput{
 			Importer: plan.spec.key, Version: plan.installed,
 		}); err != nil {
 			return nil, fmt.Errorf("install %s %s: %w", plan.spec.key, plan.installed, err)
+		}
+		if selectedLibs != "" {
+			stage = "deploy-runtime-" + plan.spec.key
+			cacheRoot, err := xxmiCacheRoot()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := deployRuntimeFiles(ctx, plan.spec.key, plan.cfg,
+				filepath.Join(cacheRoot, "packages", "xxmi-libs", selectedLibs),
+				"xxmi-libs@"+selectedLibs, cacheRoot, false, x.findProcess); err != nil {
+				return nil, fmt.Errorf("deploy %s XXMI libraries: %w", plan.spec.key, err)
+			}
 		}
 		data, err := json.Marshal(plan.cfg)
 		if err != nil {
@@ -319,15 +396,16 @@ func (x *XXMI) ImportExternalLauncher(
 	rootValue := root
 	autoUpdateValue := strconv.FormatBool(autoUpdate)
 	prereleasesValue := strconv.FormatBool(includePrereleases)
+
+	sharedLibsValue := ""
+	if input.VersionMode == ImportVersionPinned {
+		sharedLibsValue = installedLibs
+	}
 	settings := map[string]*string{
 		"xxmi_root":                &rootValue,
 		"xxmi_auto_update":         &autoUpdateValue,
 		"xxmi_include_prereleases": &prereleasesValue,
-	}
-
-	// Every imported importer follows the shared version, which stays on the launcher's libraries.
-	if libsVersion != nil {
-		settings[sharedLibsVersionKey] = libsVersion
+		sharedLibsVersionKey:       &sharedLibsValue,
 	}
 	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, settings); err != nil {
 		return nil, err

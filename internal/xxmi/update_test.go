@@ -11,6 +11,26 @@ import (
 	"nahida.live/desktop/internal/db"
 )
 
+func TestUpdateAvailableDoesNotDowngradeImportedPackages(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, latest, installed string
+		want                    bool
+	}{
+		{name: "newer release", latest: "1.3.0", installed: "1.2.3", want: true},
+		{name: "same release", latest: "1.2.3", installed: "1.2.3"},
+		{name: "older stable release", latest: "1.9.0", installed: "2.0.0-beta.1"},
+		{name: "stable replaces prerelease", latest: "2.0.0", installed: "2.0.0-beta.1", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := updateAvailable(tc.latest, tc.installed, ""); got != tc.want {
+				t.Fatalf("update available = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSkipVersionPreservesPinnedImporter(t *testing.T) {
 	t.Parallel()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/semver"
+
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -136,6 +138,10 @@ func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(stri
 		return latest
 	}
 	if latest == "" || latest == skipped {
+		return deployed
+	}
+	if semver.IsValid("v"+latest) && semver.IsValid("v"+deployed) &&
+		semver.Compare("v"+latest, "v"+deployed) < 0 {
 		return deployed
 	}
 	if !cacheVerified(latest) {

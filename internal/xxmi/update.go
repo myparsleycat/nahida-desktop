@@ -226,7 +226,13 @@ func selectedLegacyInjectorVersion(pin string) string {
 }
 
 func updateAvailable(latest, installed, skipped string) bool {
-	return latest != "" && latest != installed && latest != skipped
+	if latest == "" || latest == installed || latest == skipped {
+		return false
+	}
+	if semver.IsValid("v"+latest) && semver.IsValid("v"+installed) {
+		return semver.Compare("v"+latest, "v"+installed) > 0
+	}
+	return true
 }
 
 func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
