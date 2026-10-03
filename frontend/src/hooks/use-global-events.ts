@@ -209,6 +209,25 @@ export function useGlobalEvents(
             );
         });
 
+        const removeXXMIImportListener = Events.On("xxmi:import-progress", (event) => {
+            const payload = Array.isArray(event.data) ? event.data[0] : event.data;
+            if (!payload || typeof payload !== "object") return;
+            const { importer, name, stage, copied, total } = payload as Record<string, unknown>;
+            const id = "xxmi-import-progress";
+            if (stage !== "copy" || typeof copied !== "number") {
+                toast.dismiss(id);
+                return;
+            }
+            const progress =
+                typeof total === "number" && total > 0
+                    ? `${Math.min(100, Math.round((copied / total) * 100))}%`
+                    : `${Math.round(copied / (1024 * 1024))} MiB`;
+            toast.loading(
+                `${String(importer)} ${String(name)} · ${i18n.t("page.setting.xxmi.builtin.movingUserData")} ${progress}`,
+                { id },
+            );
+        });
+
         return () => {
             removeToastListener();
             removeNaviListener();
@@ -220,6 +239,7 @@ export function useGlobalEvents(
             removeXXMIRunningListener();
             removeXXMILaunchListener();
             removeXXMIPackageListener();
+            removeXXMIImportListener();
         };
     }, [onPathSelectorModeSelect, i18n, queryClient]);
 }
