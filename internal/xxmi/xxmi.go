@@ -104,15 +104,22 @@ type XXMI struct {
 	mu        sync.RWMutex
 	packageMu sync.Mutex
 	// disabledMu serializes read-modify-write updates of the disabled external importer list.
-	disabledMu                 sync.Mutex
-	client                     *db.Client
-	log                        *infra.Log
-	github                     *github.Client
-	archive                    *infra.Archive
-	elevated                   elevatedLauncher
-	eventEmit                  func(string, ...any)
-	searchRoots                func() ([]string, error)
-	busy                       map[string]bool
+	disabledMu  sync.Mutex
+	client      *db.Client
+	log         *infra.Log
+	github      *github.Client
+	archive     *infra.Archive
+	elevated    elevatedLauncher
+	eventEmit   func(string, ...any)
+	searchRoots func() ([]string, error)
+	busy        map[string]bool
+	// launching holds importers whose game is being started; unlike busy, it is reported as running.
+	launching                  map[string]bool
+	runningWatchMu             sync.Mutex
+	runningCancel              context.CancelFunc
+	runningDone                chan struct{}
+	runningWake                chan struct{}
+	processSnapshot            func(context.Context) (map[string]bool, error)
 	externalImportersChanged   func(context.Context)
 	importerMaintenance        func(context.Context) (func([]ImportedImporter) error, error)
 	namespaceLaunchPreparation func(context.Context, string) error
@@ -138,6 +145,7 @@ func NewWithOptions(opts Options) *XXMI {
 	x := &XXMI{
 		log: opts.Log, github: githubClient, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
+		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
 	}
 	x.installImporter = x.installBuiltinImporterPackage
 	x.findProcess = findProcessPID

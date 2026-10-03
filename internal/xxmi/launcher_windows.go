@@ -221,37 +221,47 @@ func enumVisibleProcessWindow(hwnd, lparam uintptr) uintptr {
 }
 
 func findProcessPID(ctx context.Context, executable string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
 	imageName := filepath.Base(executable)
+	found := 0
+	err := forEachProcess(ctx, func(name string, pid int) (bool, error) {
+		if !strings.EqualFold(name, imageName) {
+			return false, nil
+		}
+		if filepath.IsAbs(executable) {
+			matches, err := processMatchesExecutable(pid, executable)
+			if err != nil || !matches {
+				return false, err
+			}
+		}
+		found = pid
+		return true, nil
+	})
+	return found, err
+}
+
+// forEachProcess visits the image name and PID of every process in one snapshot until visit reports done.
+func forEachProcess(ctx context.Context, visit func(name string, pid int) (bool, error)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer func() { _ = windows.CloseHandle(snapshot) }()
 
 	var entry windows.ProcessEntry32
 	entry.Size = uint32(unsafe.Sizeof(entry))
 	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
-		if !strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), imageName) {
-			continue
-		}
-		if !filepath.IsAbs(executable) {
-			return int(entry.ProcessID), nil
-		}
-		matches, matchErr := processMatchesExecutable(int(entry.ProcessID), executable)
-		if matchErr != nil {
-			return 0, matchErr
-		}
-		if matches {
-			return int(entry.ProcessID), nil
+		done, visitErr := visit(windows.UTF16ToString(entry.ExeFile[:]), int(entry.ProcessID))
+		if done || visitErr != nil {
+			return visitErr
 		}
 	}
 	if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
-		return 0, nil
+		return nil
 	}
-	return 0, err
+	return err
 }
 
 func processMatchesExecutable(pid int, executable string) (bool, error) {

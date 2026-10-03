@@ -213,6 +213,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 }
 
 func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfig, error) {
+	key = strings.ToUpper(strings.TrimSpace(key))
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
@@ -248,6 +249,8 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
+	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
+	key = strings.ToUpper(strings.TrimSpace(key))
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
 	}
@@ -294,7 +297,11 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if err != nil {
 		return err
 	}
-	return client.XXMIImporters.Upsert(ctx, key, string(data))
+	if err := client.XXMIImporters.Upsert(ctx, key, string(data)); err != nil {
+		return err
+	}
+	x.wakeRunningWatch()
+	return nil
 }
 
 func (x *XXMI) EnableImporter(ctx context.Context, key, folder string) error {

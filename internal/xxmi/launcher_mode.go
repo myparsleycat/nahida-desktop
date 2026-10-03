@@ -56,6 +56,7 @@ func (x *XXMI) SetLauncherMode(ctx context.Context, mode LauncherMode) error {
 	if err := client.Settings.Upsert(ctx, launcherModeKey, &value); err != nil {
 		return err
 	}
+	x.wakeRunningWatch()
 	if x.log != nil {
 		x.log.Info(fmt.Sprintf("Switched XXMI launcher mode from %s to %s", current, mode), "XXMI.setLauncherMode")
 	}
