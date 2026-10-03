@@ -232,6 +232,7 @@ export function XXMIDashboard() {
               <SectionContent>
                 <PathField
                   label={t("page.setting.xxmi.builtin.root")}
+                  description={t("page.setting.xxmi.builtin.rootDescription")}
                   value={root}
                   onValueChange={setEditedRoot}
                 >
@@ -279,6 +280,7 @@ export function XXMIDashboard() {
                 />
                 <ToggleRow
                   label={t("page.setting.xxmi.builtin.prereleases")}
+                  description={t("page.setting.xxmi.builtin.prereleasesDescription")}
                   checked={settings?.includePrereleases ?? false}
                   onCheckedChange={(value) => update("includePrereleases", value)}
                 />

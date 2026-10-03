@@ -1,6 +1,6 @@
 import type { WWMIOptions } from "@bindings/xxmi/models";
 import { Input } from "@renderer/components/ui/input";
-import { Switch } from "@renderer/components/ui/switch";
+import { NumberRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -23,17 +23,20 @@ export function WWMIGraphicsSettings({ options, onChange }: Props) {
           "textureStreamingPoolSize",
         ] as const
       ).map((field) => (
-        <label key={field} className="block space-y-1">
-          <span>{t(`page.setting.xxmi.builtin.${field}`)}</span>
-          <Input
-            type="number"
-            step={
-              field === "meshLODDistanceBaseFOV" || field === "textureStreamingPoolSize" ? 1 : "any"
-            }
-            value={options[field]}
-            onChange={(event) => onChange({ ...options, [field]: Number(event.target.value) })}
-          />
-        </label>
+        <NumberRow
+          key={field}
+          label={t(`page.setting.xxmi.builtin.${field}`)}
+          description={
+            field === "meshLODDistanceScale"
+              ? undefined
+              : t(`page.setting.xxmi.builtin.${field}Description`)
+          }
+          step={
+            field === "meshLODDistanceBaseFOV" || field === "textureStreamingPoolSize" ? 1 : "any"
+          }
+          value={options[field]}
+          onValueChange={(value) => onChange({ ...options, [field]: value })}
+        />
       ))}
       {(
         [
@@ -42,13 +45,13 @@ export function WWMIGraphicsSettings({ options, onChange }: Props) {
           "textureStreamingFixedPoolSize",
         ] as const
       ).map((field) => (
-        <label key={field} className="flex items-center justify-between gap-6">
-          <span>{t(`page.setting.xxmi.builtin.${field}`)}</span>
-          <Switch
-            checked={options[field]}
-            onCheckedChange={(value) => onChange({ ...options, [field]: value })}
-          />
-        </label>
+        <ToggleRow
+          key={field}
+          label={t(`page.setting.xxmi.builtin.${field}`)}
+          description={t(`page.setting.xxmi.builtin.${field}Description`)}
+          checked={options[field]}
+          onCheckedChange={(value) => onChange({ ...options, [field]: value })}
+        />
       ))}
       {options.applyPerfTweaks && (
         <div className="space-y-2">

@@ -314,11 +314,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     />
                     <PathField
                       label={t("page.setting.xxmi.builtin.importerFolder")}
+                      description={t("page.setting.xxmi.builtin.importerFolderDescription")}
                       value={config.importerFolder}
                       onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
                     />
                     <PathField
                       label={t("page.setting.xxmi.builtin.gameFolder")}
+                      description={t("page.setting.xxmi.builtin.gameFolderDescription")}
                       value={config.gameFolder}
                       onValueChange={(gameFolder) => setConfig({ ...config, gameFolder })}
                     >
@@ -336,7 +338,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         {t("page.setting.xxmi.builtin.detectGame")}
                       </Button>
                     </PathField>
-                    <SectionRow title={t("page.setting.xxmi.builtin.mode")}>
+                    <SectionRow
+                      title={t("page.setting.xxmi.builtin.mode")}
+                      description={t("page.setting.xxmi.builtin.modeDescription")}
+                    >
                       <ButtonGroup>
                         {(
                           [
@@ -392,12 +397,18 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <SectionContent>
                     <SelectRow
                       label={t("page.setting.xxmi.builtin.windowMode")}
+                      description={t("page.setting.xxmi.builtin.windowModeDescription")}
                       value={config.windowMode}
                       options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
                       onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
                     />
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.useLaunchOptions")}
+                      description={
+                        config.wwmi
+                          ? t("page.setting.xxmi.builtin.launchOptionsDescriptionWWMI")
+                          : undefined
+                      }
                       checked={config.useLaunchOptions}
                       onCheckedChange={(useLaunchOptions) =>
                         setConfig({ ...config, useLaunchOptions })
@@ -415,6 +426,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </ToggleRow>
                     <SelectRow
                       label={t("page.setting.xxmi.builtin.startMethod")}
+                      description={t("page.setting.xxmi.builtin.startMethodDescription")}
                       value={config.processStartMethod}
                       options={["Native", "Shell", "Manual"]}
                       onValueChange={(processStartMethod) =>
@@ -442,12 +454,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     />
                     <NumberRow
                       label={t("page.setting.xxmi.builtin.timeout")}
+                      description={t("page.setting.xxmi.builtin.timeoutDescription")}
                       min={0}
                       value={config.processTimeout}
                       onValueChange={(processTimeout) => setConfig({ ...config, processTimeout })}
                     />
                     <NumberRow
                       label={t("page.setting.xxmi.builtin.initDelay")}
+                      description={t("page.setting.xxmi.builtin.initDelayDescription")}
                       min={0}
                       value={config.xxmiDLLInitDelay}
                       onValueChange={(xxmiDLLInitDelay) =>
@@ -546,6 +560,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </div>
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.overwriteINI")}
+                      description={t("page.setting.xxmi.builtin.overwriteINIDescription")}
                       checked={config.overwriteINI}
                       onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
                     />
@@ -663,6 +678,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <SectionContent>
                       <ToggleRow
                         label={t("page.setting.xxmi.builtin.configureGame")}
+                        description={
+                          config.gimi
+                            ? t("page.setting.xxmi.builtin.configureGameDescriptionGIMI")
+                            : config.wwmi
+                              ? t("page.setting.xxmi.builtin.configureGameDescriptionWWMI")
+                              : undefined
+                        }
                         checked={config.configureGame}
                         onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
                       />
@@ -670,6 +692,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         <>
                           <ToggleRow
                             label={t("page.setting.xxmi.builtin.unlockFPS")}
+                            description={t("page.setting.xxmi.builtin.unlockFPSDescriptionGIMI")}
                             checked={config.gimi.unlockFPS}
                             onCheckedChange={(unlockFPS) =>
                               setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
@@ -677,6 +700,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           >
                             <NumberRow
                               label={t("page.setting.xxmi.builtin.fpsTarget")}
+                              description={t("page.setting.xxmi.builtin.fpsTargetDescriptionGIMI")}
                               min={30}
                               max={1000}
                               value={config.gimi.unlockFPSValue}
@@ -687,6 +711,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           </ToggleRow>
                           <ToggleRow
                             label={t("page.setting.xxmi.builtin.enableHDR")}
+                            description={t("page.setting.xxmi.builtin.enableHDRDescription")}
                             checked={config.gimi.enableHDR}
                             onCheckedChange={(enableHDR) =>
                               setConfig({ ...config, gimi: { ...config.gimi!, enableHDR } })
@@ -697,6 +722,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       {config.srmi && (
                         <ToggleRow
                           label={t("page.setting.xxmi.builtin.unlockFPS")}
+                          description={t("page.setting.xxmi.builtin.unlockFPSDescriptionSRMI")}
                           checked={config.srmi.unlockFPS}
                           onCheckedChange={(unlockFPS) =>
                             setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
@@ -706,6 +732,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       {config.himi && (
                         <ToggleRow
                           label={t("page.setting.xxmi.builtin.unlockFPS")}
+                          description={t("page.setting.xxmi.builtin.unlockFPSDescriptionHIMI")}
                           checked={config.himi.unlockFPS}
                           onCheckedChange={(unlockFPS) =>
                             setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
@@ -734,6 +761,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           <ToggleRow
                             key={field}
                             label={t(`page.setting.xxmi.builtin.${field}`)}
+                            description={t(
+                              field === "unlockFPS"
+                                ? "page.setting.xxmi.builtin.unlockFPSDescriptionWWMI"
+                                : `page.setting.xxmi.builtin.${field}Description`,
+                            )}
                             checked={config.wwmi![field]}
                             onCheckedChange={(value) =>
                               setConfig({
@@ -774,6 +806,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             ? "page.setting.xxmi.builtin.preLaunch"
                             : "page.setting.xxmi.builtin.postLoad",
                         )}
+                        description={t(
+                          field === "runPreLaunch"
+                            ? "page.setting.xxmi.builtin.preLaunchDescription"
+                            : "page.setting.xxmi.builtin.postLoadDescription",
+                        )}
                         checked={config[field].enabled}
                         onCheckedChange={(enabled) =>
                           setConfig({ ...config, [field]: { ...config[field], enabled } })
@@ -806,6 +843,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     ))}
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.customLaunch")}
+                      description={t("page.setting.xxmi.builtin.customLaunchDescription")}
                       checked={config.customLaunch.enabled}
                       onCheckedChange={(enabled) =>
                         setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
@@ -825,6 +863,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       />
                       <SelectRow
                         label={t("page.setting.xxmi.builtin.injectMode")}
+                        description={t("page.setting.xxmi.builtin.injectModeDescription")}
                         value={config.customLaunch.injectMode}
                         options={["Hook", "Inject", "Bypass"]}
                         onValueChange={(injectMode) =>
@@ -848,7 +887,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         config.injectionMethod !== "Native" &&
                         !cachedLibs?.length
                           ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
-                          : undefined
+                          : t("page.setting.xxmi.builtin.extraLibrariesDescription")
                       }
                       checked={config.extraLibraries.enabled}
                       disabled={
@@ -906,8 +945,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         label={t(`page.setting.xxmi.builtin.${field}`)}
                         description={
                           field === "unsafeMode" && config.migoto.unsafeMode
-                            ? t("page.setting.xxmi.builtin.unsafeWarning")
-                            : undefined
+                            ? `${t("page.setting.xxmi.builtin.unsafeModeDescription")} ${t("page.setting.xxmi.builtin.unsafeWarning")}`
+                            : t(`page.setting.xxmi.builtin.${field}Description`)
                         }
                         checked={config.migoto[field]}
                         onCheckedChange={(value) =>
@@ -927,6 +966,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <SectionContent>
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
+                      description={t("page.setting.xxmi.builtin.optimizeAtLaunchDescription")}
                       checked={config.iniOptimizer.enabled}
                       onCheckedChange={(enabled) =>
                         setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
@@ -934,6 +974,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     />
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.resetOptimizerCache")}
+                      description={t("page.setting.xxmi.builtin.resetOptimizerCacheDescription")}
                       checked={config.iniOptimizer.resetCache}
                       onCheckedChange={(resetCache) =>
                         setConfig({
@@ -1009,6 +1050,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"
+                        title={t("page.setting.xxmi.builtin.repairRuntimeDescription")}
                         onClickPromise={async () => {
                           try {
                             const warnings = await XXMI.RepairRuntime(importer);
@@ -1035,6 +1077,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </Button>
                       <Button
                         variant="outline"
+                        title={t("page.setting.xxmi.builtin.createShortcutDescription")}
                         onClickPromise={async () => {
                           try {
                             await XXMI.CreateShortcut(importer);

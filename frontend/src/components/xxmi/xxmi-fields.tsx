@@ -21,15 +21,6 @@ import { toast } from "sonner";
 // Base UI selects cannot represent an empty string as a regular option value.
 export const FOLLOW_LATEST = "__latest__";
 
-function FieldLabel({ label, description }: { label: ReactNode; description?: ReactNode }) {
-  return (
-    <span className="min-w-0 space-y-0.5">
-      <span className="block text-sm font-medium">{label}</span>
-      {description && <span className="block text-xs text-muted-foreground">{description}</span>}
-    </span>
-  );
-}
-
 // Nested options appear only while the parent toggle is on, so disabled inputs never pile up.
 export function ToggleRow({
   label,
@@ -161,15 +152,25 @@ export function PathField({
 }) {
   const { t } = useTranslation();
   const inputId = useId();
+  const descriptionId = useId();
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={inputId}>
-        <FieldLabel label={label} description={description} />
-      </label>
+      {/* The description sits outside the label so it describes the input instead of becoming part of its name. */}
+      <div className="min-w-0 space-y-0.5">
+        <label htmlFor={inputId} className="block text-sm font-medium">
+          {label}
+        </label>
+        {description && (
+          <p id={descriptionId} className="text-xs text-muted-foreground">
+            {description}
+          </p>
+        )}
+      </div>
       <div className="flex gap-2">
         <Input
           id={inputId}
+          aria-describedby={description ? descriptionId : undefined}
           value={value}
           spellCheck={false}
           onChange={(event) => onValueChange(event.target.value)}
