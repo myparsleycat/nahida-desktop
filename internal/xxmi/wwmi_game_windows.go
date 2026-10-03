@@ -25,7 +25,7 @@ func configureWWMIGame(ctx context.Context, cfg ImporterConfig, migotoDLLUsed bo
 			return err
 		}
 	}
-	if err := configureWWMIINIFiles(ctx, game, *cfg.WWMI); err != nil {
+	if err := configureWWMIINIFiles(ctx, game, *cfg.WWMI, migotoDLLUsed); err != nil {
 		return err
 	}
 	return nil

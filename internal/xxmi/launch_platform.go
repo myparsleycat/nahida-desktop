@@ -2,6 +2,8 @@ package xxmi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
@@ -77,7 +82,7 @@ func (x *XXMI) resolvePlatformLaunch(key string, cfg ImporterConfig) (platformLa
 }
 
 // apply turns a launch spec built for the game executable into one that asks the store client instead.
-func (p platformLaunch) apply(spec *inject.LaunchSpec, key string, cfg ImporterConfig, gameExe string) {
+func (p platformLaunch) apply(spec *inject.LaunchSpec, cfg ImporterConfig) {
 	spec.CustomLaunchCmd = ""
 	if cfg.GameLaunch == "Steam" {
 		// Steam applies the stored launch options itself, so none are passed on the command line.
@@ -85,8 +90,81 @@ func (p platformLaunch) apply(spec *inject.LaunchSpec, key string, cfg ImporterC
 		spec.WorkDir = filepath.Dir(p.steam.Exe)
 		return
 	}
+
+	// The Epic Games launch request is opened by launchWithURI, not by the helper.
 	spec.StartExe, spec.StartArgs = "", nil
-	spec.LaunchURI = p.epicApp.LaunchURI(platformCommandLine(key, cfg, gameExe))
+}
+
+// launchWithURI has the elevated helper wait for the game while this process opens uri, so the
+// store client that answers it does not start elevated. The helper signals when the game may
+// start, which for a hook launch is only after the hook is installed.
+func (x *XXMI) launchWithURI(ctx context.Context, spec inject.LaunchSpec, uri string) (inject.LaunchResult, error) {
+	var suffix [16]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return inject.LaunchResult{}, err
+	}
+	spec.ReadyEvent = inject.ReadyEventPrefix + hex.EncodeToString(suffix[:])
+	name, err := windows.UTF16PtrFromString(spec.ReadyEvent)
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+
+	// The helper may run under another administrator account, which the default access list of
+	// an event created here would lock out.
+	descriptor, err := windows.SecurityDescriptorFromString("D:(A;;0x100002;;;AU)")
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+	attributes := windows.SecurityAttributes{SecurityDescriptor: descriptor}
+	attributes.Length = uint32(unsafe.Sizeof(attributes))
+	event, err := windows.CreateEvent(&attributes, 1, 0, name)
+	if err != nil {
+		return inject.LaunchResult{}, fmt.Errorf("create launch ready event: %w", err)
+	}
+	defer func() { _ = windows.CloseHandle(event) }()
+
+	// Cancelling stops both sides: the helper when the request cannot be opened, and the wait
+	// below when the helper returns without asking for the game.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	opened := make(chan error, 1)
+	go func() {
+		for {
+			state, err := windows.WaitForSingleObject(event, 100)
+			switch {
+			case err != nil:
+				cancel()
+				opened <- err
+				return
+			case state == windows.WAIT_OBJECT_0:
+				if err = x.openLaunchURI(uri); err != nil {
+					cancel()
+				}
+				opened <- err
+				return
+			case ctx.Err() != nil:
+				opened <- nil
+				return
+			}
+		}
+	}()
+
+	result, err := x.elevated.LaunchXXMI(ctx, spec)
+	cancel()
+	if openErr := <-opened; openErr != nil {
+		return inject.LaunchResult{}, fmt.Errorf("open the store launch request: %w", openErr)
+	}
+	return result, err
+}
+
+// openShellURI hands a launch request to the program registered for its scheme.
+func openShellURI(uri string) error {
+	verb, _ := windows.UTF16PtrFromString("open")
+	target, err := windows.UTF16PtrFromString(uri)
+	if err != nil {
+		return err
+	}
+	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
 }
 
 // platformCommandLine builds the game arguments a store client passes on: the DirectX 11 switch

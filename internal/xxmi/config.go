@@ -103,6 +103,9 @@ type WWMIOptions struct {
 	// ResourceTier is the downloaded resource quality passed to the game: "UHD", "HD", or "SD".
 	ResourceTier        string `json:"resourceTier"`
 	ResourceTierDecided bool   `json:"resourceTierDecided"`
+	// RetiredEngineOptionsPending marks a config whose earlier performance tweaks are still in
+	// Engine.ini. The next launch that edits the game configuration removes them once.
+	RetiredEngineOptionsPending bool `json:"retiredEngineOptionsPending,omitempty"`
 }
 
 // importerConfigSchema is the stored ImporterConfig layout. Version 2 follows XXMI Launcher 2.3.
@@ -146,10 +149,13 @@ type ImporterConfig struct {
 	LaunchCount       int                 `json:"launchCount"`
 	ShortcutPath      string              `json:"shortcutPath"`
 	WoundedFXDecided  bool                `json:"woundedFXDecided"`
-	GIMI              *GIMIOptions        `json:"gimi,omitempty"`
-	SRMI              *SRMIOptions        `json:"srmi,omitempty"`
-	HIMI              *HIMIOptions        `json:"himi,omitempty"`
-	WWMI              *WWMIOptions        `json:"wwmi,omitempty"`
+	// D3D11ModeNoticeShown records that the user saw the reminder to turn on DirectX 11 in the
+	// game's own launcher, which an Epic Games launch cannot do for them.
+	D3D11ModeNoticeShown bool         `json:"d3d11ModeNoticeShown"`
+	GIMI                 *GIMIOptions `json:"gimi,omitempty"`
+	SRMI                 *SRMIOptions `json:"srmi,omitempty"`
+	HIMI                 *HIMIOptions `json:"himi,omitempty"`
+	WWMI                 *WWMIOptions `json:"wwmi,omitempty"`
 }
 
 func xxmiCacheRoot() (string, error) {
@@ -244,6 +250,10 @@ func decodeImporterConfig(key, root, stored string) (ImporterConfig, error) {
 			CallsLogging bool   `json:"callsLogging"`
 			DebugLogging bool   `json:"debugLogging"`
 		} `json:"migoto"`
+		WWMI struct {
+			ApplyPerfTweaks             bool  `json:"applyPerfTweaks"`
+			RetiredEngineOptionsPending *bool `json:"retiredEngineOptionsPending"`
+		} `json:"wwmi"`
 	}
 	if err := json.Unmarshal([]byte(stored), &legacy); err != nil {
 		return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
@@ -271,6 +281,15 @@ func decodeImporterConfig(key, root, stored string) (ImporterConfig, error) {
 		cfg.Migoto.LogLevel = "Info"
 	default:
 		cfg.Migoto.LogLevel = "Disabled"
+	}
+
+	// Schema 1 wrote performance tweaks to Engine.ini when asked to. A launch clears the flag in
+	// the stored row without upgrading it, so an explicit value wins over the old switch.
+	if cfg.WWMI != nil {
+		cfg.WWMI.RetiredEngineOptionsPending = legacy.WWMI.ApplyPerfTweaks
+		if pending := legacy.WWMI.RetiredEngineOptionsPending; pending != nil {
+			cfg.WWMI.RetiredEngineOptionsPending = *pending
+		}
 	}
 	return cfg, nil
 }

@@ -603,6 +603,11 @@
           "description": "명조는 내려받은 리소스와 이 값이 다르면 로딩 중 충돌합니다. Steam과 Epic Games 설치본은 HD를 사용합니다. 공식 런처에서는 실제로 내려받은 품질(보통 HD)을 선택하세요. 나중에 임포터 설정에서 바꿀 수 있습니다.",
           "confirm": "저장하고 시작"
         },
+        "d3d11-mode": {
+          "title": "DirectX 11 안내",
+          "description": "{{importer}}는 DirectX 11이 필요합니다. 공식 런처가 열리면 창 오른쪽 아래의 DirectX 11 모드 체크박스를 켜 주세요. 이 안내는 한 번만 표시됩니다.",
+          "confirm": "확인하고 시작"
+        },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
           "legacy-badge": "레거시",

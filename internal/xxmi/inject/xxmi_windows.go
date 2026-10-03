@@ -218,13 +218,17 @@ func startGameProcess(spec LaunchSpec) error {
 		}
 		return command.Process.Release()
 	}
-	if spec.LaunchURI != "" {
-		verb, _ := windows.UTF16PtrFromString("open")
-		uri, err := windows.UTF16PtrFromString(spec.LaunchURI)
+	if spec.ReadyEvent != "" {
+		name, err := windows.UTF16PtrFromString(spec.ReadyEvent)
 		if err != nil {
 			return err
 		}
-		return windows.ShellExecute(0, verb, uri, nil, nil, 1)
+		event, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, name)
+		if err != nil {
+			return fmt.Errorf("open launch ready event: %w", err)
+		}
+		defer func() { _ = windows.CloseHandle(event) }()
+		return windows.SetEvent(event)
 	}
 	if spec.StartMethod == "Shell" {
 		verb, _ := windows.UTF16PtrFromString("open")

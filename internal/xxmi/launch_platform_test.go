@@ -2,12 +2,15 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
@@ -220,16 +223,169 @@ func TestPlatformLaunchReplacesGameStart(t *testing.T) {
 	}
 
 	spec := direct
-	platform.apply(&spec, "WWMI", ImporterConfig{GameLaunch: "Steam"}, direct.StartExe)
+	platform.apply(&spec, ImporterConfig{GameLaunch: "Steam"})
 	if spec.StartExe != steam.Exe || strings.Join(spec.StartArgs, " ") != "-silent -applaunch 3513350" ||
-		spec.WorkDir != filepath.Dir(steam.Exe) || spec.CustomLaunchCmd != "" || spec.LaunchURI != "" {
+		spec.WorkDir != filepath.Dir(steam.Exe) || spec.CustomLaunchCmd != "" {
 		t.Fatalf("Steam launch spec = %+v", spec)
 	}
 
+	// The Epic Games request is opened by this process, so the helper is left nothing to start.
 	spec = direct
-	platform.apply(&spec, "WWMI", ImporterConfig{GameLaunch: "Epic"}, direct.StartExe)
-	want := gameplatform.EpicURIPrefix + `ns%3Aitem%3Aart?action=launch&silent=true&args="-dx11"`
-	if spec.StartExe != "" || spec.StartArgs != nil || spec.CustomLaunchCmd != "" || spec.LaunchURI != want {
+	platform.apply(&spec, ImporterConfig{GameLaunch: "Epic"})
+	if spec.StartExe != "" || spec.StartArgs != nil || spec.CustomLaunchCmd != "" {
 		t.Fatalf("Epic launch spec = %+v", spec)
+	}
+}
+
+// readyLaunchHelper stands in for the elevated helper of a caller-started launch: it signals the
+// ready event the way the helper does once the game may start.
+type readyLaunchHelper struct {
+	recordingLaunchHelper
+	fail error
+}
+
+func (h *readyLaunchHelper) LaunchXXMI(_ context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
+	h.spec = spec
+	h.calls++
+	if h.fail != nil {
+		return inject.LaunchResult{}, h.fail
+	}
+	name, err := windows.UTF16PtrFromString(spec.ReadyEvent)
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+	event, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, name)
+	if err != nil {
+		return inject.LaunchResult{}, err
+	}
+	defer func() { _ = windows.CloseHandle(event) }()
+	if err := windows.SetEvent(event); err != nil {
+		return inject.LaunchResult{}, err
+	}
+	return inject.LaunchResult{PID: 42}, nil
+}
+
+func TestLaunchWithURIWaitsForTheHelper(t *testing.T) {
+	t.Parallel()
+	const uri = gameplatform.EpicURIPrefix + "ns%3Aitem%3Aart?action=launch&silent=true"
+	spec := inject.LaunchSpec{ProcessName: "game.exe", StartMethod: "Native"}
+
+	helper := &readyLaunchHelper{}
+	service := NewWithOptions(Options{Elevated: helper})
+	var opened []string
+	service.openLaunchURI = func(uri string) error {
+		opened = append(opened, uri)
+		return nil
+	}
+	result, err := service.launchWithURI(context.Background(), spec, uri)
+	if err != nil || result.PID != 42 || !slices.Equal(opened, []string{uri}) {
+		t.Fatalf("result = %+v, %v; opened %v", result, err, opened)
+	}
+	if !strings.HasPrefix(helper.spec.ReadyEvent, inject.ReadyEventPrefix) {
+		t.Fatalf("ready event = %q", helper.spec.ReadyEvent)
+	}
+
+	// A helper that fails before the game may start leaves the store client alone.
+	refused := errors.New("XXMI_GAME_RUNNING")
+	service = NewWithOptions(Options{Elevated: &readyLaunchHelper{fail: refused}})
+	service.openLaunchURI = func(string) error {
+		t.Error("the launch request was opened although the helper never asked for the game")
+		return nil
+	}
+	if _, err := service.launchWithURI(context.Background(), spec, uri); !errors.Is(err, refused) {
+		t.Fatalf("error = %v", err)
+	}
+
+	// A request that cannot be opened is reported instead of the helper's start timeout.
+	unopened := errors.New("no program is registered")
+	service = NewWithOptions(Options{Elevated: &readyLaunchHelper{}})
+	service.openLaunchURI = func(string) error { return unopened }
+	if _, err := service.launchWithURI(context.Background(), spec, uri); !errors.Is(err, unopened) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+
+	// The importer folder sits inside the Epic Games install, and nothing is installed in it.
+	game := filepath.Join(t.TempDir(), "Arknights Endfield")
+	cfg, err := DefaultImporterConfig("EFMI", game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.GameLaunch, cfg.XXMIDLLInjectMode = true, "Epic", "Bypass"
+	cfg.GameProcessExe = "Renamed.exe"
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(game, "Endfield.exe"), []byte("test game"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(t.TempDir(), "LauncherInstalled.dat")
+	installed, err := json.Marshal(map[string]any{"InstallationList": []map[string]string{{
+		"InstallLocation": game, "NamespaceId": "ns", "ItemId": "item", "ArtifactId": "art",
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, installed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	helper := &readyLaunchHelper{}
+	var stages, opened []string
+	service := NewWithOptions(Options{Elevated: helper, EventEmit: func(name string, data ...any) {
+		if name == "xxmi:launch-progress" {
+			stages = append(stages, data[0].(map[string]any)["stage"].(string))
+		}
+	}})
+	client := newXXMITestClient(t)
+	service.UseClient(client)
+	disabled := "false"
+	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
+		t.Fatal(err)
+	}
+	service.findProcess = noGameProcess
+	service.epicManifest = func() string { return manifest }
+	service.openLaunchURI = func(uri string) error {
+		opened = append(opened, uri)
+		return nil
+	}
+
+	// The game's own launcher picks the renderer, so the first launch stops for the reminder.
+	if err := service.launchBuiltinGameLocked(ctx, "EFMI", cfg); !errors.Is(err, errD3D11ModeNoticeRequired) {
+		t.Fatalf("first launch error = %v", err)
+	}
+	if helper.calls != 0 || len(opened) != 0 {
+		t.Fatalf("the game was started before the reminder: %d helper calls, opened %v", helper.calls, opened)
+	}
+	cfg.D3D11ModeNoticeShown = true
+	stages = nil
+	if err := service.launchBuiltinGameLocked(ctx, "EFMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"pre-launch", "resolve-game", "auto-update", "launch-guard", "game-tweaks", "elevate",
+		"inject-launch", "post-load", "finish"}
+	if !slices.Equal(stages, want) {
+		t.Fatalf("launch stages = %v; want %v", stages, want)
+	}
+	wantURI := gameplatform.EpicURIPrefix + `ns%3Aitem%3Aart?action=launch&silent=true&args="-force-d3d11"`
+	if !slices.Equal(opened, []string{wantURI}) {
+		t.Fatalf("opened %v; want %s", opened, wantURI)
+	}
+	spec := helper.spec
+	if helper.calls != 1 || spec.StartExe != "" || spec.ModuleDLL != "" || spec.InjectMode != "Bypass" ||
+		spec.ProcessName != "Renamed.exe" || spec.WorkDir != cfg.ImporterFolder {
+		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, spec)
+	}
+	if err := inject.ValidateLaunchSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(cfg.ImporterFolder)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("importer folder entries = %v, %v", entries, err)
 	}
 }

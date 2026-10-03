@@ -77,6 +77,7 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED")).toBe("launch-blockers");
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
   expect(launchDialog("WWMI_RESOURCE_TIER_DECISION_REQUIRED")).toBe("wwmi-resource-tier");
+  expect(launchDialog("XXMI_D3D11_MODE_NOTICE_REQUIRED")).toBe("d3d11-mode");
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI is not configured")).toBeNull();
@@ -200,6 +201,24 @@ it("saves the resource quality and still asks about the wounded effect", async (
     expect.objectContaining({ wwmi: { resourceTier: "UHD", resourceTierDecided: true } }),
   );
   expect(xxmi.StartGame).toHaveBeenCalledTimes(2);
+});
+
+it("records the DirectX 11 reminder before retrying launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_D3D11_MODE_NOTICE_REQUIRED"));
+  xxmi.GetImporterConfig.mockResolvedValue({ gameLaunch: "Epic", d3d11ModeNoticeShown: false });
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+
+  render(<Harness importer="EFMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.mod.dialog.d3d11-mode.confirm" }));
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith("EFMI", {
+    gameLaunch: "Epic",
+    d3d11ModeNoticeShown: true,
+  });
 });
 
 it("can keep the wounded effect when retrying launch", async () => {

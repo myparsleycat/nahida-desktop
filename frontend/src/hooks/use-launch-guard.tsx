@@ -27,6 +27,8 @@ const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 // Keep in sync with errWWMIResourceTierUndecided in internal/xxmi/launch_builtin.go.
 const LAUNCH_BLOCKER_WWMI_RESOURCE_TIER = "WWMI_RESOURCE_TIER_DECISION_REQUIRED";
 const WWMI_RESOURCE_TIERS = ["UHD", "HD", "SD"] as const;
+// Keep in sync with errD3D11ModeNoticeRequired in internal/xxmi/launch_builtin.go.
+const LAUNCH_BLOCKER_D3D11_MODE = "XXMI_D3D11_MODE_NOTICE_REQUIRED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
 const launchErrorCodes = [
@@ -58,6 +60,7 @@ type LaunchDialog =
   | "launch-blockers"
   | "wwmi-wounded"
   | "wwmi-resource-tier"
+  | "d3d11-mode"
   | "game-folder"
   | "runtime-repair";
 
@@ -78,6 +81,9 @@ export function launchDialog(message: string): LaunchDialog | null {
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_RESOURCE_TIER)) {
     return "wwmi-resource-tier";
+  }
+  if (message.includes(LAUNCH_BLOCKER_D3D11_MODE)) {
+    return "d3d11-mode";
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
     return "wwmi-wounded";
@@ -235,6 +241,9 @@ export function useLaunchGuard() {
           ...config,
           wwmi: { ...config.wwmi, resourceTier, resourceTierDecided: true },
         });
+      } else if (dialog === "d3d11-mode") {
+        const config = await XXMI.GetImporterConfig(importer);
+        await XXMI.SaveImporterConfig(importer, { ...config, d3d11ModeNoticeShown: true });
       } else {
         await XXMI.ClearLaunchBlockers(importer);
       }
@@ -264,10 +273,10 @@ export function useLaunchGuard() {
 
     // The blockers were just cleared for this importer, so a rejection here means the fix did
     // not take effect. Surface it instead of reopening the dialog and looping forever.
-    // The resource quality is a saved answer that cannot be asked twice, and a first launch
-    // may still need the wounded effect question, so that one goes through the guard again.
+    // The resource quality and the DirectX 11 reminder are saved answers that cannot be asked
+    // twice, and a first launch may still need another question, so those go through the guard again.
     try {
-      if (dialog === "wwmi-resource-tier") {
+      if (dialog === "wwmi-resource-tier" || dialog === "d3d11-mode") {
         await launch(importer);
       } else {
         await XXMI.StartGame(importer);
@@ -327,6 +336,7 @@ export function useLaunchGuard() {
                   dialog === "runtime-repair"
                     ? "page.setting.xxmi.builtin.runtimeRepairPrompt"
                     : `page.mod.dialog.${dialog}.description`,
+                  { importer: pendingImporter },
                 )}
               </AlertDialogDescription>
             )}

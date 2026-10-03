@@ -89,6 +89,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if wwmiResourceTierArgument(key, cfg) != "" && !cfg.WWMI.ResourceTierDecided {
 		return errWWMIResourceTierUndecided
 	}
+	if d3d11ModeNoticeRequired(key, cfg) {
+		return errD3D11ModeNoticeRequired
+	}
 
 	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
 	// prepare drives, folders, or mods that the later steps read.
@@ -105,14 +108,24 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		warn(fmt.Sprintf("Pre-launch command exited with code %d", exit.ExitCode()))
 	}
 
-	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
-		return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
+	// Like the reference launcher, a launch that leaves the XXMI DLL out prepares none of the
+	// importer's files, so it also does not need them installed.
+	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	if migotoDLLUsed {
+		if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
+			return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
+		}
 	}
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(cfg.ImporterFolder, "Mods"), 0o700); err != nil {
-		return err
+	if migotoDLLUsed {
+		if err := os.MkdirAll(filepath.Join(cfg.ImporterFolder, "Mods"), 0o700); err != nil {
+			return err
+		}
 	}
 	packageSpec, ok := lookupImporterPackage(key)
 	if !ok {
@@ -130,18 +143,19 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		platform, cfg.GameFolder = resolved, resolved.installDir
 	}
 	game, err := validateGameFolder(ctx, key, cfg.GameFolder, packageSpec)
+	if err == nil {
+		cfg.GameFolder = game.Path
+		err = ValidateImporterSettings(key, cfg)
+	}
 	switch {
 	case err == nil:
-		cfg.GameFolder = game.Path
-		if err := ValidateImporterSettings(key, cfg); err != nil {
-			return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
-		}
 		gameExe = game.ExePath
 	case cfg.GameLaunch == "Direct":
 		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
 	default:
 		// Only a direct launch runs the executable from the game folder. A store install with an
-		// unexpected layout still launches; it just skips the steps that edit game files.
+		// unexpected layout, or one that overlaps the importer folder, still launches; it just
+		// skips the steps that edit game files.
 		cfg.GameFolder = ""
 	}
 	processName := launchProcessName(cfg, packageSpec, gameExe)
@@ -161,10 +175,6 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	}
 
 	progress("launch-guard")
-	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)
-	if err != nil {
-		return err
-	}
 	// Mods do not render with DCR on, so it is turned off without asking whenever the XXMI DLL is loaded.
 	// Unlike the reference launcher, this does not depend on ConfigureGame: DCR is all that option
 	// would control for GIMI, and leaving it on only breaks mods silently.
@@ -181,88 +191,106 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := x.rejectLaunchBlockers(ctx, key, blockerTarget, checkDCR); err != nil {
 		return err
 	}
-	progress("xcmd-prelaunch")
-	skipped, err := executeXcmdDeletes(cfg.ImporterFolder, cfg.ImporterFolder, "PreLaunch")
-	if err != nil {
-		return err
-	}
-	for _, target := range skipped {
-		warn("Skipped auto_update.xcmd delete through a symbolic link or junction: " + target)
-	}
-	progress("ensure-runtime")
-	progress("deploy-runtime")
-	rollbackState = "not-attempted"
-	warnings, err := x.deployRuntime(ctx, key, cfg, false)
-	if err != nil {
-		return err
-	}
-	if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
-		var deployed runtimeManifest
-		if json.Unmarshal(data, &deployed) == nil && deployed.Source != "" {
-			runtimeSource = deployed.Source
-		}
-	}
-	for _, warning := range warnings {
-		if x.log != nil {
-			x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
-		}
-	}
-	progress("validate-runtime")
-	if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
-		return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-	}
-	if cfg.Mode == RuntimeXXMI {
-		version, ok := strings.CutPrefix(runtimeSource, "xxmi-libs@")
-		if !ok || !semver.IsValid("v"+version) {
-			return errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
-		}
-		cacheRoot, err := xxmiCacheRoot()
-		if err != nil {
-			return err
-		}
-		cacheFolder := filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
-		if err := verifyXXMILibsCache(cacheFolder, version); err != nil {
-			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-		}
-		if err := validateXXMIRuntimeFiles(cfg.ImporterFolder, cacheFolder, cfg.Migoto.UnsafeMode); err != nil {
-			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-		}
-	} else if !cfg.Migoto.UnsafeMode {
-		id, ok := strings.CutPrefix(runtimeSource, "legacy@")
-		if !ok || len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
-			return errors.New("XXMI_RUNTIME_CORRUPTED: invalid legacy source")
-		}
-		cacheRoot, err := xxmiCacheRoot()
-		if err != nil {
-			return err
-		}
-		cacheFolder := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", id)
-		if err := validateLegacyRuntimeFiles(cfg.ImporterFolder, cacheFolder); err != nil {
-			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-		}
-	}
 	if x.elevated == nil {
 		return errors.New("XXMI_ELEVATION_DENIED: elevated helper is unavailable")
 	}
-	progress("update-ini")
-	if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
-		return err
-	}
-	if cfg.IniOptimizer.Enabled {
-		progress("ini-optimizer")
-		report, err := x.OptimizeMods(ctx, OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache})
+	if migotoDLLUsed {
+		progress("xcmd-prelaunch")
+		skipped, err := executeXcmdDeletes(cfg.ImporterFolder, cfg.ImporterFolder, "PreLaunch")
 		if err != nil {
-			return fmt.Errorf("optimize %s INI files: %w", key, err)
+			return err
 		}
-		if x.eventEmit != nil {
-			x.eventEmit("xxmi:launch-progress", map[string]any{
-				"importer": key, "stage": stage, "optimized": len(report.Changes),
-			})
+		for _, target := range skipped {
+			warn("Skipped auto_update.xcmd delete through a symbolic link or junction: " + target)
+		}
+		progress("ensure-runtime")
+		progress("deploy-runtime")
+		rollbackState = "not-attempted"
+		warnings, err := x.deployRuntime(ctx, key, cfg, false)
+		if err != nil {
+			return err
+		}
+		if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
+			var deployed runtimeManifest
+			if json.Unmarshal(data, &deployed) == nil && deployed.Source != "" {
+				runtimeSource = deployed.Source
+			}
+		}
+		for _, warning := range warnings {
+			if x.log != nil {
+				x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
+			}
+		}
+		progress("validate-runtime")
+		if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+		if cfg.Mode == RuntimeXXMI {
+			version, ok := strings.CutPrefix(runtimeSource, "xxmi-libs@")
+			if !ok || !semver.IsValid("v"+version) {
+				return errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
+			}
+			cacheRoot, err := xxmiCacheRoot()
+			if err != nil {
+				return err
+			}
+			cacheFolder := filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
+			if err := verifyXXMILibsCache(cacheFolder, version); err != nil {
+				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+			}
+			if err := validateXXMIRuntimeFiles(cfg.ImporterFolder, cacheFolder, cfg.Migoto.UnsafeMode); err != nil {
+				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+			}
+		} else if !cfg.Migoto.UnsafeMode {
+			id, ok := strings.CutPrefix(runtimeSource, "legacy@")
+			if !ok || len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
+				return errors.New("XXMI_RUNTIME_CORRUPTED: invalid legacy source")
+			}
+			cacheRoot, err := xxmiCacheRoot()
+			if err != nil {
+				return err
+			}
+			cacheFolder := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", id)
+			if err := validateLegacyRuntimeFiles(cfg.ImporterFolder, cacheFolder); err != nil {
+				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+			}
+		}
+		progress("update-ini")
+		if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
+			return err
+		}
+		if cfg.IniOptimizer.Enabled {
+			progress("ini-optimizer")
+			report, err := x.OptimizeMods(
+				ctx,
+				OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache},
+			)
+			if err != nil {
+				return fmt.Errorf("optimize %s INI files: %w", key, err)
+			}
+			if x.eventEmit != nil {
+				x.eventEmit("xxmi:launch-progress", map[string]any{
+					"importer": key, "stage": stage, "optimized": len(report.Changes),
+				})
+			}
 		}
 	}
 	progress("game-tweaks")
 	if err := initializeGameLaunch(ctx, key, cfg, migotoDLLUsed); err != nil {
 		return err
+	}
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if key == "WWMI" && cfg.WWMI != nil && cfg.WWMI.RetiredEngineOptionsPending && migotoDLLUsed &&
+		cfg.GameFolder != "" && cfg.GameLaunch != "Custom" && cfg.GameLaunch != "Manual" && client != nil {
+		// initializeGameLaunch just removed the retired Engine.ini options; later launches keep
+		// whatever the user adds there.
+		if err := client.XXMIImporters.SetConfigFlag(
+			ctx, key, "$.wwmi.retiredEngineOptionsPending", false,
+		); err != nil {
+			warn("Engine.ini cleanup was not recorded: " + err.Error())
+		}
 	}
 	if usesFPSUnlocker(cfg) {
 		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
@@ -282,18 +310,24 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		return fmt.Errorf("XXMI_ELEVATION_DENIED: %w", err)
 	}
 	defer release()
-	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName)
+	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, migotoDLLUsed)
 	if err != nil {
 		return err
 	}
 	if usesPlatform {
-		platform.apply(&launchSpec, key, cfg, gameExe)
+		platform.apply(&launchSpec, cfg)
 	}
 	if err := x.prepareNamespaceLaunch(ctx, key); err != nil {
 		return fmt.Errorf("final namespace preparation before launch: %w", err)
 	}
 	progress("inject-launch")
-	result, err := x.elevated.LaunchXXMI(ctx, launchSpec)
+	var result inject.LaunchResult
+	if cfg.GameLaunch == "Epic" {
+		uri := platform.epicApp.LaunchURI(platformCommandLine(key, cfg, gameExe))
+		result, err = x.launchWithURI(ctx, launchSpec, uri)
+	} else {
+		result, err = x.elevated.LaunchXXMI(ctx, launchSpec)
+	}
 	if err != nil {
 		return err
 	}
@@ -315,9 +349,6 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		}
 	}
 	progress("finish")
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
 	if client == nil {
 		warn("Launch count was not updated: XXMI settings store is not configured")
 	} else if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
@@ -459,17 +490,23 @@ func (x *XXMI) builtinLaunchSpec(
 	key string,
 	cfg ImporterConfig,
 	gameExe, processName string,
+	migotoDLLUsed bool,
 ) (inject.LaunchSpec, error) {
 	if _, ok := lookupImporterPackage(key); !ok {
 		return inject.LaunchSpec{}, fmt.Errorf("unknown importer %q", key)
 	}
-	data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
-	if err != nil {
-		return inject.LaunchSpec{}, err
-	}
+
+	// Nothing is deployed for a launch that leaves the XXMI DLL out, so it has no manifest to read.
 	var deployed runtimeManifest
-	if err := json.Unmarshal(data, &deployed); err != nil {
-		return inject.LaunchSpec{}, err
+	var err error
+	if migotoDLLUsed {
+		data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
+		if err != nil {
+			return inject.LaunchSpec{}, err
+		}
+		if err := json.Unmarshal(data, &deployed); err != nil {
+			return inject.LaunchSpec{}, err
+		}
 	}
 	// The helper needs a working directory even when it starts nothing itself.
 	workDir := cfg.ImporterFolder
@@ -483,7 +520,9 @@ func (x *XXMI) builtinLaunchSpec(
 		InjectMode: cfg.XXMIDLLInjectMode, UseHook: cfg.XXMIDLLInjectMode == "Hook",
 		TimeoutSeconds:  cfg.ProcessTimeout,
 		InjectionMethod: cfg.InjectionMethod,
-		ModuleDLL:       filepath.Join(cfg.ImporterFolder, "d3d11.dll"),
+	}
+	if migotoDLLUsed {
+		spec.ModuleDLL = filepath.Join(cfg.ImporterFolder, "d3d11.dll")
 	}
 	if cfg.UseLaunchOptions {
 		spec.StartArgs, err = splitLaunchOptions(cfg.LaunchOptions)
@@ -537,7 +576,7 @@ func (x *XXMI) builtinLaunchSpec(
 	if spec.InjectionMethod == "Native" {
 		return spec, nil
 	}
-	if cfg.Mode == RuntimeXXMI {
+	if cfg.Mode == RuntimeXXMI && migotoDLLUsed {
 		version := strings.TrimPrefix(deployed.Source, "xxmi-libs@")
 		if version == deployed.Source || version == "" {
 			return inject.LaunchSpec{}, errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
@@ -552,38 +591,40 @@ func (x *XXMI) builtinLaunchSpec(
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
-	} else {
-		if spec.InjectMode != "Bypass" {
-			spec.LegacyLoader, err = verifiedLaunchFile(filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
-			if err != nil {
-				return inject.LaunchSpec{}, err
-			}
+		return spec, nil
+	}
+	if cfg.Mode != RuntimeXXMI && spec.InjectMode != "Bypass" {
+		spec.LegacyLoader, err = verifiedLaunchFile(filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
+		if err != nil {
+			return inject.LaunchSpec{}, err
 		}
-		if len(spec.ExtraDLLs) > 0 {
-			pin, _, err := x.libsPin(ctx, cfg)
-			if err != nil {
-				return inject.LaunchSpec{}, err
-			}
-			version := selectedLegacyInjectorVersion(pin)
-			if version == "" {
-				return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
-			}
-			cacheRoot, err := xxmiCacheRoot()
-			if err != nil {
-				return inject.LaunchSpec{}, err
-			}
-			if err := verifyXXMILibsCache(
-				filepath.Join(cacheRoot, "packages", "xxmi-libs", version),
-				version,
-			); err != nil {
-				return inject.LaunchSpec{}, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-			}
-			spec.LoaderDLL, err = verifiedLaunchFile(
-				filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
-			)
-			if err != nil {
-				return inject.LaunchSpec{}, err
-			}
+	}
+
+	// Without a deployed XXMI runtime, extra DLLs go in through the cached XXMI injector.
+	if len(spec.ExtraDLLs) > 0 {
+		pin, _, err := x.libsPin(ctx, cfg)
+		if err != nil {
+			return inject.LaunchSpec{}, err
+		}
+		version := selectedLegacyInjectorVersion(pin)
+		if version == "" {
+			return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
+		}
+		cacheRoot, err := xxmiCacheRoot()
+		if err != nil {
+			return inject.LaunchSpec{}, err
+		}
+		if err := verifyXXMILibsCache(
+			filepath.Join(cacheRoot, "packages", "xxmi-libs", version),
+			version,
+		); err != nil {
+			return inject.LaunchSpec{}, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+		spec.LoaderDLL, err = verifiedLaunchFile(
+			filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
+		)
+		if err != nil {
+			return inject.LaunchSpec{}, err
 		}
 	}
 	return spec, nil
@@ -592,6 +633,17 @@ func (x *XXMI) builtinLaunchSpec(
 // errWWMIResourceTierUndecided stops the first direct WWMI launch until the user picks the resource
 // quality. The renderer keys its dialog off this literal; keep it in sync with use-launch-guard.tsx.
 var errWWMIResourceTierUndecided = errors.New("WWMI_RESOURCE_TIER_DECISION_REQUIRED")
+
+// errD3D11ModeNoticeRequired stops the first Epic Games launch of a game that needs DirectX 11
+// until the user has seen how to turn it on. The renderer keys its dialog off this literal; keep
+// it in sync with use-launch-guard.tsx.
+var errD3D11ModeNoticeRequired = errors.New("XXMI_D3D11_MODE_NOTICE_REQUIRED")
+
+// d3d11ModeNoticeRequired reports whether the launch still owes the DirectX 11 reminder. The games'
+// official launchers, which Epic Games opens first, pick the renderer themselves.
+func d3d11ModeNoticeRequired(key string, cfg ImporterConfig) bool {
+	return cfg.GameLaunch == "Epic" && (key == "WWMI" || key == "EFMI") && !cfg.D3D11ModeNoticeShown
+}
 
 // wwmiResourceTierArgument returns the resource quality argument Wuthering Waves needs to load, or ""
 // when the launch does not pass one. Launch options that already name a quality are left alone.
@@ -611,11 +663,12 @@ func usesFPSUnlocker(cfg ImporterConfig) bool {
 	return cfg.GIMI != nil && cfg.GIMI.UnlockFPS && cfg.GameLaunch == "Direct"
 }
 
-// launchProcessName resolves the image name to inject into: the override, the importer's process
-// executable, the executable found in the game folder, and finally the importer's first game executable.
+// launchProcessName resolves the image name to inject into: the importer's process executable,
+// the executable found in the game folder, and finally the importer's first game executable.
+// Like the reference launcher, the override only applies while no game executable is located.
 func launchProcessName(cfg ImporterConfig, spec importerPackageSpec, gameExe string) string {
 	switch {
-	case cfg.GameProcessExe != "":
+	case cfg.GameProcessExe != "" && gameExe == "":
 		return cfg.GameProcessExe
 	case len(spec.processNames) > 0:
 		return spec.processNames[0]

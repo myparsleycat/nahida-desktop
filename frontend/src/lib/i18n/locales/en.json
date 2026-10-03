@@ -620,6 +620,11 @@
           "description": "Wuthering Waves crashes while loading unless this matches the resources it downloaded. Steam and Epic Games installs use HD. For the official launcher, pick the quality you downloaded, usually HD. You can change it later in the importer settings.",
           "confirm": "Save and start"
         },
+        "d3d11-mode": {
+          "title": "DirectX 11 reminder",
+          "description": "{{importer}} requires DirectX 11. Once the official launcher opens, enable the DirectX 11 mode checkbox in the bottom-right corner of its window. This reminder is shown only once.",
+          "confirm": "OK, start"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."

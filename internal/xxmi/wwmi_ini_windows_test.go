@@ -13,6 +13,7 @@ import (
 func TestConfigureWWMIINIFiles(t *testing.T) {
 	game := t.TempDir()
 	options := WWMIOptions{UnlockFPS: true, MeshLODDistanceBaseFOV: 165}
+	fpsPath := filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini")
 	userPath := filepath.Join(game, "Client", "Config", "UserEngine.ini")
 	enginePath := filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "Engine.ini")
 	for path, content := range map[string]string{
@@ -28,7 +29,39 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := configureWWMIINIFiles(context.Background(), game, options); err != nil {
+	engineBefore, err := os.ReadFile(enginePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userBefore, err := os.ReadFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without the XXMI DLL only the frame rate limit is written; the engine files serve mods.
+	if err := configureWWMIINIFiles(context.Background(), game, options, false); err != nil {
+		t.Fatal(err)
+	}
+	for path, before := range map[string][]byte{enginePath: engineBefore, userPath: userBefore} {
+		if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
+			t.Fatalf("%s = %q, error = %v", filepath.Base(path), after, err)
+		}
+	}
+	if data, err := os.ReadFile(fpsPath); err != nil || !strings.Contains(string(data), "FrameRateLimit=120.000000") {
+		t.Fatalf("GameUserSettings.ini = %q, error = %v", data, err)
+	}
+
+	// The retired performance tweaks stay until a config that wrote them asks for their removal.
+	if err := configureWWMIINIFiles(context.Background(), game, options, true); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(enginePath); err != nil ||
+		!strings.Contains(string(data), "r.Streaming.HLODStrategy=2.0") ||
+		strings.Contains(string(data), "DistanceLODBaseFOV") {
+		t.Fatalf("Engine.ini = %q, error = %v", data, err)
+	}
+	options.RetiredEngineOptionsPending = true
+	if err := configureWWMIINIFiles(context.Background(), game, options, true); err != nil {
 		t.Fatal(err)
 	}
 	userData, err := os.ReadFile(userPath)
@@ -42,7 +75,6 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 		!strings.Contains(string(userData), "r.Streaming.Boost=20.0") {
 		t.Fatalf("UserEngine.ini = %q", userData)
 	}
-	fpsPath := filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini")
 	fpsData, err := os.ReadFile(fpsPath)
 	if err != nil || !strings.Contains(string(fpsData), "FrameRateLimit=120.000000") {
 		t.Fatalf("GameUserSettings.ini = %q, error = %v", fpsData, err)

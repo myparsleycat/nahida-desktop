@@ -103,6 +103,18 @@ SET "config" = json_set("config", '$.launchCount', MAX(COALESCE(json_extract("co
 WHERE "key" = ?`, time.Now().UTC().Format(time.RFC3339Nano), key)
 }
 
+// SetConfigFlag stores one boolean in an importer's config without rewriting the rest of it.
+// path is a JSON path such as "$.wwmi.unlockFPS"; a missing importer is left alone.
+func (s XXMIImportersStore) SetConfigFlag(ctx context.Context, key, path string, value bool) error {
+	flag := "false"
+	if value {
+		flag = "true"
+	}
+	return s.c.exec(ctx, `UPDATE "xxmi_importers"
+SET "config" = json_set("config", ?, json(?)), "updated_at" = ?
+WHERE "key" = ?`, path, flag, time.Now().UTC().Format(time.RFC3339Nano), key)
+}
+
 func (s XXMIImportersStore) Delete(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `DELETE FROM "xxmi_importers" WHERE "key" = ?`, key)
 }

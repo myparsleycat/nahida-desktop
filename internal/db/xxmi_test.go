@@ -143,3 +143,47 @@ BEGIN SELECT RAISE(ABORT, 'import failure'); END`); err != nil {
 		t.Fatalf("setting survived rollback: value = %v, err = %v", value, err)
 	}
 }
+
+func TestXXMISetConfigFlagKeepsTheRestOfTheConfig(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// A missing importer is not created.
+	if err := client.XXMIImporters.SetConfigFlag(ctx, "WWMI", "$.wwmi.pending", false); err != nil {
+		t.Fatal(err)
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "WWMI"); err != nil || row != nil {
+		t.Fatalf("importer = %+v, err = %v", row, err)
+	}
+
+	if err := client.XXMIImporters.Upsert(ctx, "WWMI", `{"mode":"xxmi","wwmi":{"unlockFPS":true}}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []bool{true, false} {
+		if err := client.XXMIImporters.SetConfigFlag(ctx, "WWMI", "$.wwmi.pending", value); err != nil {
+			t.Fatal(err)
+		}
+		row, err := client.XXMIImporters.Get(ctx, "WWMI")
+		if err != nil || row == nil {
+			t.Fatalf("importer = %+v, err = %v", row, err)
+		}
+		var settings struct {
+			Mode string `json:"mode"`
+			WWMI struct {
+				UnlockFPS bool  `json:"unlockFPS"`
+				Pending   *bool `json:"pending"`
+			} `json:"wwmi"`
+		}
+		if err := json.Unmarshal([]byte(row.Config), &settings); err != nil {
+			t.Fatal(err)
+		}
+		if settings.Mode != "xxmi" || !settings.WWMI.UnlockFPS || settings.WWMI.Pending == nil ||
+			*settings.WWMI.Pending != value {
+			t.Fatalf("config after setting %t = %s", value, row.Config)
+		}
+	}
+}

@@ -28,8 +28,8 @@ type VerifiedFile struct {
 	SHA256 string `json:"sha256"`
 }
 
-// launchURIPrefix is the Epic Games Launcher request that starts an installed application.
-const launchURIPrefix = "com.epicgames.launcher://apps/"
+// ReadyEventPrefix starts the name of every event a caller may pass as LaunchSpec.ReadyEvent.
+const ReadyEventPrefix = `Local\nahida-xxmi-launch-`
 
 type LaunchSpec struct {
 	Mode            RuntimeMode `json:"mode"`
@@ -40,8 +40,9 @@ type LaunchSpec struct {
 	StartMethod     string      `json:"startMethod"`
 	Priority        string      `json:"priority"`
 	CustomLaunchCmd string      `json:"customLaunchCmd"`
-	// LaunchURI asks a store client to start the game instead of running StartExe.
-	LaunchURI       string       `json:"launchURI"`
+	// ReadyEvent names an event the helper signals once the game may start. The caller then starts
+	// the game itself, which keeps a store client it opens from running elevated.
+	ReadyEvent      string       `json:"readyEvent"`
 	InjectMode      string       `json:"injectMode"`
 	InjectionMethod string       `json:"injectionMethod"`
 	UseHook         bool         `json:"useHook"`
@@ -84,20 +85,19 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if spec.CustomLaunchCmd != "" && spec.StartMethod == "Manual" {
 		return errors.New("custom launch cannot use manual start")
 	}
-	if spec.LaunchURI != "" {
-		// The URI is opened through the shell from an elevated process, so only the one scheme
-		// this app builds itself is accepted.
-		if !strings.HasPrefix(spec.LaunchURI, launchURIPrefix) ||
-			strings.ContainsFunc(spec.LaunchURI, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-			return errors.New("invalid launch URI")
+	if spec.ReadyEvent != "" {
+		// The helper only signals events this app names itself.
+		suffix, ok := strings.CutPrefix(spec.ReadyEvent, ReadyEventPrefix)
+		if !ok || suffix == "" || strings.Trim(suffix, "0123456789abcdef") != "" {
+			return errors.New("invalid ready event")
 		}
 		if spec.CustomLaunchCmd != "" || spec.StartMethod == "Manual" {
-			return errors.New("launch URI cannot be combined with another launch")
+			return errors.New("ready event cannot be combined with another launch")
 		}
 	}
 
-	// A custom command, a store client, and a manual start launch the game without the start executable.
-	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" && spec.LaunchURI == "" {
+	// A custom command, a caller-started game, and a manual start launch the game without the start executable.
+	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" && spec.ReadyEvent == "" {
 		if err := validateRegularLocalFile(spec.StartExe); err != nil {
 			return fmt.Errorf("start executable: %w", err)
 		}
@@ -105,8 +105,11 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if err := validateLocalDirectory(spec.WorkDir); err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
-	if err := validateRegularLocalFile(spec.ModuleDLL); err != nil {
-		return fmt.Errorf("module DLL: %w", err)
+	// A bypass launch that leaves the XXMI DLL out names no module.
+	if spec.InjectMode != "Bypass" || spec.ModuleDLL != "" {
+		if err := validateRegularLocalFile(spec.ModuleDLL); err != nil {
+			return fmt.Errorf("module DLL: %w", err)
+		}
 	}
 	if spec.InjectionMethod != "Native" && spec.Mode == ModeXXMI &&
 		(spec.InjectMode != "Bypass" || len(spec.ExtraDLLs) > 0) {

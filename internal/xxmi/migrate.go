@@ -486,6 +486,7 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		}
 		cfg.WWMI.ResourceTierDecided = getBool("resource_tier_warned", cfg.WWMI.ResourceTierDecided)
 	}
+	cfg.D3D11ModeNoticeShown = getBool("d3d11_mode_cmd_args_warned", cfg.D3D11ModeNoticeShown)
 	return nil
 }
 

@@ -247,8 +247,24 @@ func TestStoredSchema1ConfigUpgrades(t *testing.T) {
 			check: func(cfg ImporterConfig) bool {
 				return cfg.GameLaunch == "Direct" && cfg.XXMIDLLInjectMode == "Inject" &&
 					cfg.ProcessStartMethod == "Shell" && cfg.Migoto.LogLevel == "Info" &&
-					*cfg.WWMI == WWMIOptions{UnlockFPS: true, MeshLODDistanceBaseFOV: 170, ResourceTier: "HD"}
+					*cfg.WWMI == WWMIOptions{
+						UnlockFPS: true, MeshLODDistanceBaseFOV: 170, ResourceTier: "HD",
+						RetiredEngineOptionsPending: true,
+					}
 			},
+		},
+		{
+			name: "removed performance tweaks are not removed twice",
+			key:  "WWMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Native",` +
+				`"wwmi":{"applyPerfTweaks":true,"retiredEngineOptionsPending":false}}`,
+			check: func(cfg ImporterConfig) bool { return !cfg.WWMI.RetiredEngineOptionsPending },
+		},
+		{
+			name:   "unused performance tweaks leave nothing to remove",
+			key:    "WWMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Native","wwmi":{"applyPerfTweaks":false}}`,
+			check:  func(cfg ImporterConfig) bool { return !cfg.WWMI.RetiredEngineOptionsPending },
 		},
 		{
 			name:   "manual start becomes a manual launch",

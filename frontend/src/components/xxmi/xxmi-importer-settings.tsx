@@ -449,6 +449,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                               "page.setting.xxmi.builtin.skipPlatformGameLauncherDescription",
                             )}
                             checked={config.skipPlatformGameLauncher}
+                            disabled={!config.configurePlatformLaunchOptions}
                             onCheckedChange={(skipPlatformGameLauncher) =>
                               setConfig({ ...config, skipPlatformGameLauncher })
                             }
@@ -906,21 +907,23 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         />
                       </ToggleRow>
                     ))}
-                    <div className="space-y-1.5">
-                      <SectionRow
-                        title={t("page.setting.xxmi.builtin.gameProcessExe")}
-                        description={t("page.setting.xxmi.builtin.gameProcessExeDescription")}
-                      />
-                      <Input
-                        aria-label={t("page.setting.xxmi.builtin.gameProcessExe")}
-                        className="font-mono"
-                        spellCheck={false}
-                        value={config.gameProcessExe}
-                        onChange={(event) =>
-                          setConfig({ ...config, gameProcessExe: event.target.value.trim() })
-                        }
-                      />
-                    </div>
+                    {config.gameLaunch !== "Direct" && (
+                      <div className="space-y-1.5">
+                        <SectionRow
+                          title={t("page.setting.xxmi.builtin.gameProcessExe")}
+                          description={t("page.setting.xxmi.builtin.gameProcessExeDescription")}
+                        />
+                        <Input
+                          aria-label={t("page.setting.xxmi.builtin.gameProcessExe")}
+                          className="font-mono"
+                          spellCheck={false}
+                          value={config.gameProcessExe}
+                          onChange={(event) =>
+                            setConfig({ ...config, gameProcessExe: event.target.value.trim() })
+                          }
+                        />
+                      </div>
+                    )}
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.extraLibraries")}
                       description={

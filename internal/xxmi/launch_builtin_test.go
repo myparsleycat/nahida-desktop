@@ -342,7 +342,7 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 				GameLaunch: tc.launch, ProcessStartMethod: "Native", XXMIDLLInjectMode: "Inject",
 				WWMI: &WWMIOptions{ResourceTier: "UHD"},
 			}
-			spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
+			spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe", true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -369,7 +369,11 @@ func TestLaunchProcessNameResolution(t *testing.T) {
 		gameExe string
 		want    string
 	}{
-		{"override wins", ImporterConfig{GameProcessExe: "Custom.exe"}, wwmi, `C:\Game\Wuthering Waves.exe`, "Custom.exe"},
+		{"override without a located game", ImporterConfig{GameProcessExe: "Custom.exe"}, wwmi, "", "Custom.exe"},
+		{
+			"located game ignores the override", ImporterConfig{GameProcessExe: "Custom.exe"}, wwmi,
+			`C:\Game\Wuthering Waves.exe`, "Client-Win64-Shipping.exe",
+		},
 		{"importer process executable", ImporterConfig{}, wwmi, `C:\Game\Wuthering Waves.exe`, "Client-Win64-Shipping.exe"},
 		{"executable found in the game folder", ImporterConfig{}, gimi, `C:\Game\YuanShen.exe`, "YuanShen.exe"},
 		{"first game executable without a game folder", ImporterConfig{}, gimi, "", "GenshinImpact.exe"},
@@ -471,12 +475,22 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 		ImporterFolder: root, Mode: RuntimeLegacy, GameLaunch: "Custom", XXMIDLLInjectMode: "Bypass",
 		CustomLaunch: CustomLaunch{Command: "start game"},
 	}
-	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe")
+	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" || spec.CustomLaunchCmd != "start game" {
 		t.Fatalf("legacy bypass spec = %+v", spec)
+	}
+
+	// A bypass that leaves the XXMI DLL out reads no importer files at all.
+	cfg.ImporterFolder = filepath.Join(root, "not installed")
+	for _, mode := range []RuntimeMode{RuntimeLegacy, RuntimeXXMI} {
+		cfg.Mode = mode
+		spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", false)
+		if err != nil || spec.ModuleDLL != "" || spec.LoaderDLL.Path != "" || spec.LegacyLoader.Path != "" {
+			t.Fatalf("%s bypass spec without an importer = %+v, %v", mode, spec, err)
+		}
 	}
 }
 
@@ -503,6 +517,7 @@ func TestInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
 				cfg,
 				filepath.Join(root, "game.exe"),
 				"game.exe",
+				true,
 			)
 			if err != nil || spec.InjectMode != mode || spec.UseHook != (mode == "Hook") {
 				t.Fatalf("launch spec = %+v, %v", spec, err)
@@ -595,7 +610,7 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			cfg.Mode, cfg.ImporterFolder, cfg.GameLaunch = RuntimeLegacy, root, tc.launch
 			cfg.CustomLaunch.Command = "start game"
 			spec, err := New().builtinLaunchSpec(
-				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe",
+				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", true,
 			)
 			if err != nil || spec.StartMethod != tc.method || spec.CustomLaunchCmd != tc.command {
 				t.Fatalf("launch spec = %+v, %v", spec, err)
@@ -605,7 +620,7 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			}
 
 			// A custom command or a manual start works without a located game.
-			spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, "", "GenshinImpact.exe")
+			spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, "", "GenshinImpact.exe", true)
 			if err != nil || spec.WorkDir != root {
 				t.Fatalf("launch spec without a game = %+v, %v", spec, err)
 			}
@@ -641,7 +656,7 @@ func TestNativeLaunchSpecDoesNotRequireLoader(t *testing.T) {
 				if bypass {
 					cfg.XXMIDLLInjectMode = "Bypass"
 				}
-				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe")
+				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", true)
 				if err != nil {
 					t.Fatal(err)
 				}
