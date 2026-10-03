@@ -65,6 +65,7 @@ it("imports the displayed latest versions with the selected user data mode", asy
   fireEvent.click(
     screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importUpdateLatest" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "g.next" }));
   fireEvent.click(screen.getByRole("radio", { name: /importUserDataMove/ }));
   fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" }));
 
@@ -82,10 +83,14 @@ it("imports the displayed latest versions with the selected user data mode", asy
 it("allows the legacy import path when the preview has no packages", async () => {
   backend.preview.mockResolvedValue([]);
   const { onImport } = renderImport();
-  const confirm = screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" });
-  await waitFor(() => expect(confirm).toHaveProperty("disabled", false));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
 
-  fireEvent.click(confirm);
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" }));
   await waitFor(() =>
     expect(onImport).toHaveBeenCalledWith({
       path: "C:\\External XXMI",
@@ -107,9 +112,10 @@ it("blocks pinning when a preview package has no installed version", async () =>
   expect(
     screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importPinInstalled" }),
   ).toHaveProperty("disabled", true);
-  const confirm = screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" });
-  expect(confirm).toHaveProperty("disabled", true);
-  fireEvent.click(confirm);
+  const next = screen.getByRole("button", { name: "g.next" });
+  expect(next).toHaveProperty("disabled", true);
+  fireEvent.click(next);
+  expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.import" })).toBeNull();
   expect(onImport).not.toHaveBeenCalled();
 });
 
@@ -120,6 +126,7 @@ it("defaults to pinning installed versions when updates are available", async ()
   expect(
     screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importPinInstalled" }),
   ).toHaveProperty("checked", true);
+  fireEvent.click(screen.getByRole("button", { name: "g.next" }));
   fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" }));
 
   await waitFor(() =>
@@ -146,6 +153,7 @@ it("allows pinning after a partial release check failure and offers retry", asyn
   expect(
     screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importUpdateLatest" }),
   ).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "g.next" }));
   fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" }));
   await waitFor(() =>
     expect(onImport).toHaveBeenCalledWith(
@@ -161,6 +169,7 @@ it("allows pinning after a partial release check failure and offers retry", asyn
   );
   await screen.findByText("1.8.0");
   expect(backend.preview).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: "g.previous" }));
   expect(
     screen.getByRole("radio", { name: "page.setting.xxmi.builtin.importUpdateLatest" }),
   ).toHaveProperty("disabled", false);
@@ -179,10 +188,7 @@ it("blocks import when reading the source fails and recovers after retry", async
     screen.getByRole("button", { name: "page.setting.xxmi.builtin.importRetryVersions" }),
   );
   await screen.findByText("1.3.0");
-  expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" })).toHaveProperty(
-    "disabled",
-    false,
-  );
+  expect(screen.getByRole("button", { name: "g.next" })).toHaveProperty("disabled", false);
 });
 
 it("follows latest without asking when the source is already current", async () => {
@@ -213,6 +219,7 @@ it("blocks cancellation and duplicate submissions while importing", async () => 
   const onImport = vi.fn().mockReturnValue(new Promise(() => {}));
   const { onClose } = renderImport(onImport);
   await screen.findByText("1.3.0");
+  fireEvent.click(screen.getByRole("button", { name: "g.next" }));
 
   const confirm = screen.getByRole("button", { name: "page.setting.xxmi.builtin.import" });
   fireEvent.click(confirm);

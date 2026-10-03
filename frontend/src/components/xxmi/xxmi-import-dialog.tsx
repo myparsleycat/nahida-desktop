@@ -15,6 +15,18 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import {
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireChoiceDescription,
+  QuestionnaireChoices,
+  QuestionnaireItem,
+  QuestionnaireNext,
+  QuestionnairePrevious,
+  QuestionnaireProgress,
+  QuestionnaireSubmit,
+  QuestionnaireTitle,
+} from "@renderer/components/ui/questionnaire";
+import {
   Table,
   TableBody,
   TableCell,
@@ -61,10 +73,8 @@ export function XXMIImportDialog({
   const versionMode = checkFailed
     ? ImportVersionMode.ImportVersionPinned
     : (selectedMode ?? defaultMode);
-  const canImport =
-    !preview.isFetching &&
-    !preview.isError &&
-    (versionMode !== ImportVersionMode.ImportVersionPinned || canPin);
+  const ready = !preview.isFetching && !preview.isError;
+  const canImport = ready && (versionMode !== ImportVersionMode.ImportVersionPinned || canPin);
 
   const confirm = async () => {
     if (!canImport || importing) return;
@@ -76,141 +86,173 @@ export function XXMIImportDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
-      <DialogContent className="max-h-[85vh] sm:max-w-lg" showCloseButton={!importing}>
+      <DialogContent
+        className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg"
+        showCloseButton={!importing}
+      >
         <DialogHeader>
           <DialogTitle>{t("page.setting.xxmi.builtin.import")}</DialogTitle>
           <DialogDescription>
             {t("page.setting.xxmi.builtin.importUserDataDescription", { root })}
           </DialogDescription>
         </DialogHeader>
-        {preview.isFetching ? (
-          <p role="status" className="flex items-center gap-2 text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
-            {t("page.setting.xxmi.builtin.importCheckingVersions")}
-          </p>
-        ) : preview.isError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{toErrorMessage(preview.error)}</AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("page.setting.xxmi.builtin.importPackage")}</TableHead>
-                  <TableHead>{t("page.setting.xxmi.builtin.importInstalledVersion")}</TableHead>
-                  <TableHead>{t("page.setting.xxmi.builtin.importLatestVersion")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {versions.map((version) => (
-                  <TableRow key={version.package}>
-                    <TableCell>
-                      {version.package === "xxmi-libs"
-                        ? t("page.setting.xxmi.builtin.libs")
-                        : version.package.replace("importer:", "")}
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {version.installedVersion || t("page.setting.xxmi.builtin.notInstalled")}
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {version.checkFailed ? t("g.unknown") : version.latestVersion}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {checkFailed && (
-              <Alert>
-                <AlertDescription>
-                  {t("page.setting.xxmi.builtin.importVersionCheckFailed")}
-                </AlertDescription>
+        <Questionnaire
+          className="min-h-0 flex-1 gap-0"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void confirm();
+          }}
+        >
+          <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4 *:shrink-0">
+            {preview.isFetching ? (
+              <p role="status" className="flex items-center gap-2 text-muted-foreground">
+                <Loader2Icon className="size-4 animate-spin" />
+                {t("page.setting.xxmi.builtin.importCheckingVersions")}
+              </p>
+            ) : preview.isError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{toErrorMessage(preview.error)}</AlertDescription>
               </Alert>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("page.setting.xxmi.builtin.importPackage")}</TableHead>
+                      <TableHead>{t("page.setting.xxmi.builtin.importInstalledVersion")}</TableHead>
+                      <TableHead>{t("page.setting.xxmi.builtin.importLatestVersion")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {versions.map((version) => (
+                      <TableRow key={version.package}>
+                        <TableCell>
+                          {version.package === "xxmi-libs"
+                            ? t("page.setting.xxmi.builtin.libs")
+                            : version.package.replace("importer:", "")}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {version.installedVersion || t("page.setting.xxmi.builtin.notInstalled")}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {version.checkFailed ? t("g.unknown") : version.latestVersion}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {checkFailed && (
+                  <Alert>
+                    <AlertDescription>
+                      {t("page.setting.xxmi.builtin.importVersionCheckFailed")}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.xxmi.builtin.importVersionHint")}
+                </p>
+              </>
             )}
-            {(hasUpdates || checkFailed) && (
-              <fieldset disabled={importing} className="space-y-2">
-                <legend className="mb-2 font-medium">
+            {(preview.isError || checkFailed) && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={preview.isFetching || importing}
+                onClickPromise={() => preview.refetch()}
+              >
+                {t("page.setting.xxmi.builtin.importRetryVersions")}
+              </Button>
+            )}
+
+            {/* An item without an enabled answer blocks navigation, so the version step exists only when there is a choice to make. */}
+            {ready && (hasUpdates || checkFailed) && (
+              <QuestionnaireItem name="import-version-mode" required>
+                <QuestionnaireTitle className="text-sm">
                   {t("page.setting.xxmi.builtin.importVersionChoice")}
-                </legend>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="radio"
-                    name="import-version-mode"
+                </QuestionnaireTitle>
+                <QuestionnaireChoices>
+                  <QuestionnaireChoice
                     value={ImportVersionMode.ImportVersionLatest}
                     checked={versionMode === ImportVersionMode.ImportVersionLatest}
-                    disabled={checkFailed}
+                    disabled={importing || checkFailed}
                     onChange={() => setSelectedMode(ImportVersionMode.ImportVersionLatest)}
-                    className="mt-1 accent-primary"
-                  />
-                  {t("page.setting.xxmi.builtin.importUpdateLatest")}
-                </label>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="radio"
-                    name="import-version-mode"
+                  >
+                    {t("page.setting.xxmi.builtin.importUpdateLatest")}
+                  </QuestionnaireChoice>
+                  <QuestionnaireChoice
                     value={ImportVersionMode.ImportVersionPinned}
                     checked={versionMode === ImportVersionMode.ImportVersionPinned}
-                    disabled={!canPin}
+                    disabled={importing || !canPin}
                     onChange={() => setSelectedMode(ImportVersionMode.ImportVersionPinned)}
-                    className="mt-1 accent-primary"
-                  />
-                  {t("page.setting.xxmi.builtin.importPinInstalled")}
-                </label>
-              </fieldset>
+                  >
+                    {t("page.setting.xxmi.builtin.importPinInstalled")}
+                  </QuestionnaireChoice>
+                </QuestionnaireChoices>
+              </QuestionnaireItem>
             )}
-            <p className="text-xs text-muted-foreground">
-              {t("page.setting.xxmi.builtin.importVersionHint")}
-            </p>
-          </>
-        )}
-        {(preview.isError || checkFailed) && (
-          <Button
-            variant="outline"
-            disabled={preview.isFetching || importing}
-            onClickPromise={() => preview.refetch()}
-          >
-            {t("page.setting.xxmi.builtin.importRetryVersions")}
-          </Button>
-        )}
-        <fieldset disabled={importing} className="space-y-3">
-          <legend className="mb-2 font-medium">
-            {t("page.setting.xxmi.builtin.importUserDataTitle")}
-          </legend>
-          {[ImportUserDataMode.ImportUserDataKeep, ImportUserDataMode.ImportUserDataMove].map(
-            (mode) => (
-              <label key={mode} className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  name="import-user-data"
-                  value={mode}
-                  checked={userData === mode}
-                  onChange={() => setUserData(mode)}
-                  className="mt-1 accent-primary"
-                />
-                <span>
-                  <span className="font-medium">
-                    {t(
-                      `page.setting.xxmi.builtin.importUserData${mode === ImportUserDataMode.ImportUserDataKeep ? "Keep" : "Move"}`,
-                    )}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {t(
-                      `page.setting.xxmi.builtin.importUserData${mode === ImportUserDataMode.ImportUserDataKeep ? "Keep" : "Move"}Hint`,
-                    )}
-                  </span>
-                </span>
-              </label>
-            ),
-          )}
-        </fieldset>
-        <DialogFooter>
-          <Button variant="outline" disabled={importing} onClick={onClose}>
-            {t("g.cancel")}
-          </Button>
-          <Button disabled={!canImport} onClickPromise={confirm}>
-            {t("page.setting.xxmi.builtin.import")}
-          </Button>
-        </DialogFooter>
+            {ready && (
+              <QuestionnaireItem name="import-user-data" required>
+                <QuestionnaireTitle className="text-sm">
+                  {t("page.setting.xxmi.builtin.importUserDataTitle")}
+                </QuestionnaireTitle>
+                <QuestionnaireChoices>
+                  {[
+                    ImportUserDataMode.ImportUserDataKeep,
+                    ImportUserDataMode.ImportUserDataMove,
+                  ].map((mode) => (
+                    <QuestionnaireChoice
+                      key={mode}
+                      value={mode}
+                      checked={userData === mode}
+                      disabled={importing}
+                      onChange={() => setUserData(mode)}
+                    >
+                      {t(
+                        `page.setting.xxmi.builtin.importUserData${mode === ImportUserDataMode.ImportUserDataKeep ? "Keep" : "Move"}`,
+                      )}
+                      <QuestionnaireChoiceDescription className="text-xs">
+                        {t(
+                          `page.setting.xxmi.builtin.importUserData${mode === ImportUserDataMode.ImportUserDataKeep ? "Keep" : "Move"}Hint`,
+                        )}
+                      </QuestionnaireChoiceDescription>
+                    </QuestionnaireChoice>
+                  ))}
+                </QuestionnaireChoices>
+              </QuestionnaireItem>
+            )}
+          </div>
+          <DialogFooter className="sm:items-center">
+            <QuestionnaireProgress
+              className="sm:mr-auto"
+              render={(props, state) =>
+                state.total > 1 ? (
+                  <div {...props} aria-valuetext={`${state.current} / ${state.total}`}>
+                    {state.current} / {state.total}
+                  </div>
+                ) : null
+              }
+            />
+            <Button type="button" variant="outline" disabled={importing} onClick={onClose}>
+              {t("g.cancel")}
+            </Button>
+            {ready ? (
+              <>
+                <QuestionnairePrevious disabled={importing}>
+                  {t("g.previous")}
+                </QuestionnairePrevious>
+                <QuestionnaireNext disabled={!canImport}>{t("g.next")}</QuestionnaireNext>
+                <QuestionnaireSubmit disabled={!canImport || importing}>
+                  {importing && <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />}
+                  {t("page.setting.xxmi.builtin.import")}
+                </QuestionnaireSubmit>
+              </>
+            ) : (
+              <Button type="button" disabled>
+                {t("page.setting.xxmi.builtin.import")}
+              </Button>
+            )}
+          </DialogFooter>
+        </Questionnaire>
       </DialogContent>
     </Dialog>
   );

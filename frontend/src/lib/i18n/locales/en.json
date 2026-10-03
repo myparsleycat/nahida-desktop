@@ -5,6 +5,8 @@
     "date": "Date",
     "size": "Size",
     "cancel": "Cancel",
+    "previous": "Previous",
+    "next": "Next",
     "confirm": "Confirm",
     "select": "Select",
     "apply": "Apply",
