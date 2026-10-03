@@ -100,6 +100,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { data: releases } = useQuery({
     queryKey: ["xxmi:releases", importer],
     queryFn: () => XXMI.ListReleases(`importer:${importer}`),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const { data: packageVerification } = useQuery({
     queryKey: ["xxmi:package-verification", importer],
@@ -109,6 +111,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { data: libsReleases } = useQuery({
     queryKey: ["xxmi:libs-releases"],
     queryFn: () => XXMI.ListReleases("xxmi-libs"),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const { data: cachedLibs } = useQuery({
     queryKey: ["xxmi:libs-cache"],

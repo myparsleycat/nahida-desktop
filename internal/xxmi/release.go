@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 )
 
 var releaseSignaturePattern = regexp.MustCompile(
@@ -55,7 +56,14 @@ func releaseInfo(release github.Release) ReleaseInfo {
 }
 
 func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, error) {
-	return x.listReleases(ctx, pkg, false)
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-list-releases")
+	releases, err := x.listReleases(infra.WithGitHubStaleFallback(ctx), pkg, false)
+	if err != nil {
+		return nil, infra.ReportError(x.log, err, "XXMI.ListReleases", infra.Diagnostic{
+			Operation: "list-releases", Stage: "release-metadata", Fields: map[string]any{"package": pkg},
+		})
+	}
+	return releases, nil
 }
 
 func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]ReleaseInfo, error) {

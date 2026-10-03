@@ -171,10 +171,10 @@ func (t *Service) WuwaFixerPrepareRun(ctx context.Context, importer *string) (Wu
 	result.ConfigVersion = t.wuwaRefreshConfigVersion(ctx)
 	refresh, err := t.wuwaRefreshLatestRelease(ctx, false)
 	if err != nil {
+		t.logError(err, "WuwaModFixer:prepareRun")
 		if !base.Installed {
 			return WuwaFixerPrepareResult{}, err
 		}
-		t.logError(err, "WuwaModFixer:prepareRun")
 		return result, nil
 	}
 	if refresh.LatestRelease != nil {
@@ -190,13 +190,39 @@ func (t *Service) WuwaFixerPrepareRun(ctx context.Context, importer *string) (Wu
 }
 
 func (t *Service) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus, error) {
+	return t.wuwaInstallRelease(ctx, nil)
+}
+
+// A background check passes its resolved release so installation uses the same metadata.
+func (t *Service) wuwaInstallRelease(
+	ctx context.Context, release *wuwaLatestReleaseCache,
+) (status WuwaFixerStatus, returnErr error) {
+	ctx = infra.WithGitHubOperation(ctx, "wuwa-fixer-install")
 	t.wuwaInstallMu.Lock()
 	defer t.wuwaInstallMu.Unlock()
 
-	release, err := t.wuwaLatestReleaseForInstall(ctx)
-	if err != nil {
-		return WuwaFixerStatus{}, err
+	stage := "release-metadata"
+	defer func() {
+		if returnErr != nil {
+			fields := map[string]any{"repository": wuwaRepo.String()}
+			if release != nil {
+				fields["version"] = release.Version
+				fields["asset"] = release.Asset.Name
+				fields["url"] = infra.SanitizeLogURL(release.Asset.BrowserDownloadURL)
+			}
+			returnErr = infra.ReportError(t.log, returnErr, "Tools.WuwaFixerInstallOrUpdate", infra.Diagnostic{
+				Operation: "wuwa-fixer-install", Stage: stage, Fields: fields,
+			})
+		}
+	}()
+	if release == nil {
+		var err error
+		release, err = t.wuwaLatestReleaseForInstall(ctx)
+		if err != nil {
+			return WuwaFixerStatus{}, err
+		}
 	}
+	stage = "prepare"
 	toolDir, err := t.wuwaToolDir()
 	if err != nil {
 		return WuwaFixerStatus{}, err
@@ -215,14 +241,17 @@ func (t *Service) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus
 	if err != nil {
 		return WuwaFixerStatus{}, err
 	}
+	stage = "download"
 	body, err := t.github.FetchFile(ctx, wuwaRepo, release.Asset.BrowserDownloadURL, wuwaMaxDownloadSize)
 	if err != nil {
 		//nolint:staticcheck // Electron contract text.
 		return WuwaFixerStatus{}, fmt.Errorf("Failed to download Wuwa Mod Fixer: %w", err)
 	}
+	stage = "verify"
 	if sum := sha256.Sum256(body); expected != nil && subtle.ConstantTimeCompare(sum[:], expected) != 1 {
 		return WuwaFixerStatus{}, infra.ContractError("Wuwa Mod Fixer download digest mismatch")
 	}
+	stage = "install"
 	if err := os.WriteFile(tempPath, body, 0o700); err != nil {
 		return WuwaFixerStatus{}, fmt.Errorf("write Wuwa Mod Fixer: %w", err)
 	}
@@ -232,6 +261,7 @@ func (t *Service) WuwaFixerInstallOrUpdate(ctx context.Context) (WuwaFixerStatus
 	if err := t.wuwaCleanupOldBinaries(finalPath); err != nil {
 		return WuwaFixerStatus{}, err
 	}
+	stage = "persist"
 	if err := t.setAppState(ctx, wuwaInstalledVersionKey, release.Version); err != nil {
 		return WuwaFixerStatus{}, err
 	}
@@ -431,11 +461,12 @@ func (t *Service) stopWuwaAutoUpdateCheck() error {
 }
 
 func (t *Service) runWuwaAutomaticUpdateCheck(ctx context.Context) {
+	ctx = infra.WithGitHubOperation(ctx, "wuwa-fixer-auto-update")
 	installed, err := t.wuwaGetInstalledBinaryInfo(ctx)
 	if err != nil || !installed.Exists {
 		return
 	}
-	refresh, err := t.wuwaRefreshLatestRelease(ctx, true)
+	refresh, err := t.wuwaCheckLatestRelease(ctx, false, wuwaAutoUpdateEvery)
 	if err != nil || refresh.LatestRelease == nil || installed.Version == nil ||
 		compareToolVersions(refresh.LatestRelease.Version, *installed.Version) <= 0 {
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -444,7 +475,7 @@ func (t *Service) runWuwaAutomaticUpdateCheck(ctx context.Context) {
 		return
 	}
 	oldVersion, newVersion := *installed.Version, refresh.LatestRelease.Version
-	if _, err := t.WuwaFixerInstallOrUpdate(ctx); err != nil {
+	if _, err := t.wuwaInstallRelease(ctx, refresh.LatestRelease); err != nil {
 		t.logError(err, "WuwaModFixer:autoUpdate")
 		return
 	}
@@ -475,6 +506,32 @@ func (t *Service) notifyWuwaAutomaticUpdate(ctx context.Context, oldVersion, new
 }
 
 func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuwaRefreshResult, error) {
+	ctx = infra.WithGitHubOperation(ctx, "wuwa-fixer-prepare")
+	maxAge := wuwaCheckCooldown
+	if force {
+		maxAge = time.Minute
+	}
+	refresh, err := t.wuwaCheckLatestRelease(ctx, force, maxAge)
+	var rateErr *github.RateLimitError
+	if force || !errors.As(err, &rateErr) {
+		return refresh, err
+	}
+
+	// Preparing the UI may show the last known release; installation and automatic checks remain strict.
+	t.logError(err, "WuwaModFixer:prepareRun")
+	cached, cacheErr := t.wuwaGetCachedLatestRelease(ctx)
+	if cacheErr != nil {
+		return wuwaRefreshResult{}, cacheErr
+	}
+	next := mustRFC3339(rateErr.ResetAt())
+	return wuwaRefreshResult{
+		LatestRelease: cached, RateState: rateErr.State, RateLimited: true, NextCheckAt: &next,
+	}, nil
+}
+
+func (t *Service) wuwaCheckLatestRelease(
+	ctx context.Context, force bool, maxAge time.Duration,
+) (wuwaRefreshResult, error) {
 	cached, err := t.wuwaGetCachedLatestRelease(ctx)
 	if err != nil {
 		return wuwaRefreshResult{}, err
@@ -487,8 +544,8 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 	if err != nil {
 		return wuwaRefreshResult{}, err
 	}
-	if !force && cached != nil && lastCheck != nil && time.Since(parseRFC3339(*lastCheck)) < wuwaCheckCooldown {
-		next := mustRFC3339(parseRFC3339(*lastCheck).Add(wuwaCheckCooldown))
+	if !force && cached != nil && lastCheck != nil && time.Since(parseRFC3339(*lastCheck)) < maxAge {
+		next := mustRFC3339(parseRFC3339(*lastCheck).Add(maxAge))
 		return wuwaRefreshResult{
 			LatestRelease: cached,
 			RateState:     rate,
@@ -497,17 +554,11 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 		}, nil
 	}
 
+	var responseInfo infra.GitHubResponseInfo
+	ctx = infra.WithGitHubResponseInfo(ctx, &responseInfo)
+	ctx = infra.WithGitHubMaxAge(ctx, maxAge)
+	ctx = infra.WithGitHubRefresh(ctx, force)
 	release, err := t.github.LatestRelease(ctx, wuwaRepo)
-	var rateErr *github.RateLimitError
-	if errors.As(err, &rateErr) {
-		next := mustRFC3339(rateErr.ResetAt())
-		return wuwaRefreshResult{
-			LatestRelease: cached,
-			RateState:     rateErr.State,
-			RateLimited:   true,
-			NextCheckAt:   &next,
-		}, nil
-	}
 	if err != nil {
 		//nolint:staticcheck // Electron contract text.
 		return wuwaRefreshResult{}, fmt.Errorf(
@@ -522,21 +573,25 @@ func (t *Service) wuwaRefreshLatestRelease(ctx context.Context, force bool) (wuw
 	rate, err = t.github.RateState(ctx)
 	t.reportWuwaRecovery(err, "read-rate")
 
-	now := time.Now().UTC()
-	latest.CheckedAt = now.Format(time.RFC3339Nano)
-	raw, _ := json.Marshal(latest)
-	if err := t.setAppState(ctx, wuwaLastCheckKey, now.Format(time.RFC3339Nano)); err != nil {
-		return wuwaRefreshResult{}, err
+	fetchedAt := responseInfo.FetchedAt.UTC()
+	if !fetchedAt.IsZero() {
+		latest.CheckedAt = fetchedAt.Format(time.RFC3339Nano)
 	}
+	raw, _ := json.Marshal(latest)
 	if err := t.setAppState(ctx, wuwaLatestReleaseKey, string(raw)); err != nil {
 		return wuwaRefreshResult{}, err
 	}
-	next := now.Add(wuwaCheckCooldown).Format(time.RFC3339Nano)
+	if !fetchedAt.IsZero() {
+		if err := t.setAppState(ctx, wuwaLastCheckKey, latest.CheckedAt); err != nil {
+			return wuwaRefreshResult{}, err
+		}
+	}
+	next := fetchedAt.Add(maxAge).Format(time.RFC3339Nano)
 	return wuwaRefreshResult{
 		LatestRelease:   &latest,
 		RateState:       rate,
 		RateLimited:     t.github.IsRateLimited(rate),
-		CheckedRemotely: true,
+		CheckedRemotely: !responseInfo.Cached,
 		NextCheckAt:     &next,
 	}, nil
 }
@@ -556,24 +611,18 @@ func parseWuwaDigest(digest *string) ([]byte, error) {
 }
 
 func (t *Service) wuwaLatestReleaseForInstall(ctx context.Context) (*wuwaLatestReleaseCache, error) {
-	refresh, err := t.wuwaRefreshLatestRelease(ctx, true)
-	if err == nil && refresh.LatestRelease != nil {
-		return refresh.LatestRelease, nil
-	}
-	cached, cacheErr := t.wuwaGetCachedLatestRelease(ctx)
-	if cacheErr != nil {
-		return nil, cacheErr
-	}
-	if cached != nil {
-		return cached, nil
-	}
+	refresh, err := t.wuwaCheckLatestRelease(ctx, true, time.Minute)
 	if err != nil {
 		return nil, err
+	}
+	if refresh.LatestRelease != nil {
+		return refresh.LatestRelease, nil
 	}
 	return nil, infra.ContractError("Unable to fetch the latest Wuwa Mod Fixer release")
 }
 
 func (t *Service) wuwaEnsureLatestConfig(ctx context.Context) (string, error) {
+	ctx = infra.WithGitHubOperation(ctx, "wuwa-fixer-config")
 	configPath, err := t.wuwaConfigPath()
 	if err != nil {
 		return "", err

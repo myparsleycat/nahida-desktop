@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 )
 
 var xxmiLibraryFiles = []string{"3dmloader.dll", "d3d11.dll", "d3dcompiler_47.dll"}
@@ -30,6 +31,7 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 
 // ensureLibsVersionLocked shares the package lock with importer installation.
 func (x *XXMI) ensureLibsVersionLocked(ctx context.Context, version string) error {
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-libraries")
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid XXMI libraries version")

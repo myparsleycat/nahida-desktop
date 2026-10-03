@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -29,6 +31,12 @@ type GitHubRateState struct {
 	Used      int64  `json:"used"`
 	Resource  string `json:"resource"`
 	UpdatedAt string `json:"updatedAt"`
+	RetryAt   int64  `json:"retryAt,omitempty"`
+}
+
+type githubRateRecord struct {
+	GitHubRateState
+	SecondaryFailures int `json:"secondaryFailures,omitempty"`
 }
 
 type GitHubRateCheckOptions struct {
@@ -36,15 +44,70 @@ type GitHubRateCheckOptions struct {
 }
 
 type GitHubRateCoordinator struct {
-	mu         sync.Mutex
-	store      githubRateStore
-	http       *Client
-	log        *Log
-	diagnostic DiagnosticThrottle
+	mu                sync.Mutex
+	store             githubRateStore
+	http              *Client
+	log               *Log
+	diagnostic        DiagnosticThrottle
+	state             *GitHubRateState
+	gate              chan struct{}
+	now               func() time.Time
+	cache             map[string]githubCacheEntry
+	flights           singleflight.Group
+	refreshes         singleflight.Group
+	refreshAt         time.Time
+	secondaryFailures int
+	counts            map[string]githubRequestCounts
+	budgetDiagnostic  DiagnosticThrottle
+	ctx               context.Context
+	cancel            context.CancelFunc
+	workers           sync.WaitGroup
+	closed            bool
 }
 
 func NewGitHubRateCoordinator() *GitHubRateCoordinator {
-	return &GitHubRateCoordinator{}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &GitHubRateCoordinator{
+		now:  time.Now,
+		gate: make(chan struct{}, 1),
+		cache: make(
+			map[string]githubCacheEntry,
+		),
+		counts: make(map[string]githubRequestCounts),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+// Close cancels and joins GitHub requests before the store is closed.
+func (c *GitHubRateCoordinator) Close() {
+	c.mu.Lock()
+	c.closed = true
+	c.cancel()
+	c.mu.Unlock()
+	c.workers.Wait()
+}
+
+func (c *GitHubRateCoordinator) requestContext(ctx context.Context) (context.Context, func(), error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, nil, context.Canceled
+	}
+	c.workers.Add(1)
+	c.mu.Unlock()
+	shared, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(c.ctx, cancel)
+	return shared, func() { stop(); cancel(); c.workers.Done() }, nil
+}
+
+func (c *GitHubRateCoordinator) sharedContext(ctx context.Context) (context.Context, func(), error) {
+	parent, done, err := c.requestContext(context.WithoutCancel(ctx))
+	if err != nil {
+		return nil, nil, err
+	}
+	shared, cancel := context.WithTimeout(parent, 30*time.Second)
+	return shared, func() { cancel(); done() }, nil
 }
 
 func (c *GitHubRateCoordinator) UseAppState(store githubRateStore) {
@@ -53,6 +116,10 @@ func (c *GitHubRateCoordinator) UseAppState(store githubRateStore) {
 	}
 	c.mu.Lock()
 	c.store = store
+	c.state = nil
+	c.secondaryFailures = 0
+	c.refreshAt = time.Time{}
+	clear(c.cache)
 	c.mu.Unlock()
 }
 
@@ -80,6 +147,11 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 	}
 	c.mu.Lock()
 	store, log := c.store, c.log
+	if c.state != nil {
+		state := *c.state
+		c.mu.Unlock()
+		return &state, nil
+	}
 	c.mu.Unlock()
 	if store == nil {
 		return nil, nil
@@ -88,7 +160,21 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 	if err != nil || raw == nil {
 		return nil, err
 	}
-	return decodeGitHubRateState(*raw, func(err error) { c.warnRefresh(log, err) }), nil
+	state := decodeGitHubRateState(*raw, func(err error) { c.warnRefresh(log, err) })
+	var record githubRateRecord
+	_ = json.Unmarshal([]byte(*raw), &record)
+	c.mu.Lock()
+	if c.state == nil && state != nil {
+		copyState := *state
+		c.state = &copyState
+		c.secondaryFailures = min(max(record.SecondaryFailures, 0), 5)
+	}
+	if c.state != nil {
+		copyState := *c.state
+		state = &copyState
+	}
+	c.mu.Unlock()
+	return state, nil
 }
 
 func decodeGitHubRateState(raw string, reports ...func(error)) *GitHubRateState {
@@ -103,7 +189,29 @@ func decodeGitHubRateState(raw string, reports ...func(error)) *GitHubRateState 
 }
 
 func (c *GitHubRateCoordinator) IsRateLimited(state *GitHubRateState) bool {
-	return state != nil && state.Remaining <= 0 && time.Unix(state.Reset, 0).After(time.Now())
+	return state != nil && GitHubRetryTime(state).After(c.currentTime())
+}
+
+// GitHubRetryTime includes both the primary reset and secondary backoff.
+func GitHubRetryTime(state *GitHubRateState) time.Time {
+	if state == nil {
+		return time.Time{}
+	}
+	retry := state.RetryAt
+	if state.Remaining <= 0 {
+		retry = max(retry, state.Reset)
+	}
+	if retry == 0 {
+		return time.Time{}
+	}
+	return time.Unix(retry, 0).UTC()
+}
+
+func (c *GitHubRateCoordinator) currentTime() time.Time {
+	if c != nil && c.now != nil {
+		return c.now()
+	}
+	return time.Now()
 }
 
 func (c *GitHubRateCoordinator) CanUseGitHubAPI(
@@ -125,6 +233,37 @@ func (c *GitHubRateCoordinator) CanUseGitHubAPI(
 }
 
 func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRateState {
+	if c == nil || ctx.Err() != nil {
+		return nil
+	}
+	result := c.refreshes.DoChan("rate", func() (any, error) {
+		fetchCtx, done, err := c.sharedContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer done()
+		c.mu.Lock()
+		cooling := c.currentTime().Before(c.refreshAt)
+		c.mu.Unlock()
+		if cooling {
+			return c.GetRateState(fetchCtx)
+		}
+		state := c.refreshRateState(fetchCtx)
+		c.mu.Lock()
+		c.refreshAt = c.currentTime().Add(time.Minute)
+		c.mu.Unlock()
+		return state, nil
+	})
+	select {
+	case <-ctx.Done():
+		return nil
+	case value := <-result:
+		state, _ := value.Val.(*GitHubRateState)
+		return state
+	}
+}
+
+func (c *GitHubRateCoordinator) refreshRateState(ctx context.Context) *GitHubRateState {
 	if c == nil {
 		return nil
 	}
@@ -137,8 +276,10 @@ func (c *GitHubRateCoordinator) RefreshRateState(ctx context.Context) *GitHubRat
 		return state
 	}
 	response, err := httpClient.Fetch(ctx, githubRateLimitURL, FetchOptions{
-		Method: http.MethodGet,
-		Header: http.Header{"Accept": []string{"application/vnd.github+json"}},
+		Method:     http.MethodGet,
+		Header:     http.Header{"Accept": []string{"application/vnd.github+json"}},
+		RetryLimit: new(int),
+		HTTPClient: c.HTTPClient(httpClient.HTTPClient()),
 	})
 	if err != nil {
 		c.warnRefresh(log, err)
@@ -187,8 +328,15 @@ func (c *GitHubRateCoordinator) CaptureResponse(ctx context.Context, header http
 		return nil, nil
 	}
 	state := extractGitHubRateState(header)
-	if state == nil {
+	if state == nil || state.Resource != "core" {
 		return nil, nil
+	}
+	previous, err := c.GetRateState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if previous != nil {
+		state.RetryAt = previous.RetryAt
 	}
 	if err := c.saveRateState(ctx, state); err != nil {
 		return nil, err
@@ -202,15 +350,18 @@ func (c *GitHubRateCoordinator) saveRateState(ctx context.Context, state *GitHub
 	}
 	c.mu.Lock()
 	store := c.store
+	copyState := *state
+	c.state = &copyState
+	record := githubRateRecord{GitHubRateState: copyState, SecondaryFailures: c.secondaryFailures}
 	c.mu.Unlock()
 	if store == nil {
 		return nil
 	}
-	raw, err := json.Marshal(state)
+	raw, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	return store.Upsert(ctx, githubCoreRateKey, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	return store.Upsert(ctx, githubCoreRateKey, string(raw), c.currentTime().UTC().Format(time.RFC3339Nano))
 }
 
 func (c *GitHubRateCoordinator) warnRefresh(log *Log, err error) {
@@ -290,5 +441,5 @@ func formatGitHubRateReset(state *GitHubRateState) string {
 	if state == nil {
 		return "unknown"
 	}
-	return time.Unix(state.Reset, 0).UTC().Format("2006-01-02T15:04:05.000Z")
+	return GitHubRetryTime(state).Format("2006-01-02T15:04:05.000Z")
 }

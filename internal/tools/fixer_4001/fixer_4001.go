@@ -17,6 +17,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -116,6 +117,7 @@ func (t *Service) FourThousandOneFixerGetProviderReleases(ctx context.Context, p
 }
 
 func (t *Service) get4001ProviderReleases(ctx context.Context, provider string, refresh bool) ([]string, error) {
+	ctx = infra.WithGitHubOperation(ctx, "4001-fixer-releases")
 	repo := libsRepo(provider)
 	if repo.Validate() != nil {
 		return nil, errors.New("invalid GitHub provider")
