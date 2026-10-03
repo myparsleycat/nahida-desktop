@@ -2112,6 +2112,8 @@
           "updateModPathsDescription": "古い Mods フォルダーを参照するゲーム {{count}} 件のパスも更新しますか？",
           "keepModPaths": "現在のパスを維持",
           "packageVersion": "パッケージのバージョン",
+          "packageDetails": "パッケージの内容",
+          "noPackageNotes": "このバージョンのパッケージ説明はありません。",
           "overwriteINI": "パッケージのインストール時に d3dx.ini を上書きする",
           "currentPin": "選択中のパッケージ",
           "packageInstalled": "インストール済み",

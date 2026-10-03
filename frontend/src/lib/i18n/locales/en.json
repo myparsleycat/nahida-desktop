@@ -2196,6 +2196,8 @@
           "updateModPathsDescription": "Update {{count}} game entries that point to the old Mods folder?",
           "keepModPaths": "Keep existing paths",
           "packageVersion": "Package versions",
+          "packageDetails": "Package details",
+          "noPackageNotes": "No package notes are available for this version.",
           "overwriteINI": "Replace d3dx.ini when installing a package",
           "currentPin": "Selected package",
           "packageInstalled": "Installed",
