@@ -266,17 +266,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 </Button>
               </div>
             </div>
-            {dirty && (
-              <div
-                role="status"
-                className="flex items-center justify-between gap-3 rounded-md bg-primary/10 px-3 py-1.5 text-xs"
-              >
-                <span>{t("page.setting.xxmi.builtin.unsavedChanges")}</span>
-                <Button variant="ghost" size="xs" onClick={() => setConfig(null)}>
-                  {t("page.setting.xxmi.builtin.discard")}
-                </Button>
-              </div>
-            )}
             {packageNeedsInstall && (
               <Alert>
                 <TriangleAlertIcon />
@@ -297,812 +286,841 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
-          <div className="mx-auto w-full max-w-2xl p-4">
-            <TabsContent value="general" className="flex flex-col gap-6">
-              <Section>
-                <SectionContent>
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.enabled")}
-                    checked={config.enabled}
-                    onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
-                  />
-                  <PathField
-                    label={t("page.setting.xxmi.builtin.importerFolder")}
-                    value={config.importerFolder}
-                    onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
-                  />
-                  <PathField
-                    label={t("page.setting.xxmi.builtin.gameFolder")}
-                    value={config.gameFolder}
-                    onValueChange={(gameFolder) => setConfig({ ...config, gameFolder })}
-                  >
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          setDetectedFolders(await XXMI.DetectGameFolders(importer));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* The unsaved notice floats over the body so toggling it never resizes the header or the scroll area. */}
+          {dirty && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 scrollbar-gutter-stable overflow-hidden">
+              <div className="mx-auto w-full max-w-2xl px-4 pt-2 pb-4">
+                <div
+                  role="status"
+                  className="pointer-events-auto flex items-center justify-between gap-3 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md"
+                >
+                  <span>{t("page.setting.xxmi.builtin.unsavedChanges")}</span>
+                  <Button variant="ghost" size="xs" onClick={() => setConfig(null)}>
+                    {t("page.setting.xxmi.builtin.discard")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
+            {/* Extra bottom room while dirty keeps the last rows reachable above the floating notice. */}
+            <div className={cn("mx-auto w-full max-w-2xl p-4", dirty && "pb-16")}>
+              <TabsContent value="general" className="flex flex-col gap-6">
+                <Section>
+                  <SectionContent>
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.enabled")}
+                      checked={config.enabled}
+                      onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
+                    />
+                    <PathField
+                      label={t("page.setting.xxmi.builtin.importerFolder")}
+                      value={config.importerFolder}
+                      onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
+                    />
+                    <PathField
+                      label={t("page.setting.xxmi.builtin.gameFolder")}
+                      value={config.gameFolder}
+                      onValueChange={(gameFolder) => setConfig({ ...config, gameFolder })}
                     >
-                      <ScanSearchIcon />
-                      {t("page.setting.xxmi.builtin.detectGame")}
-                    </Button>
-                  </PathField>
-                  <SectionRow title={t("page.setting.xxmi.builtin.mode")}>
-                    <ButtonGroup>
-                      {(
-                        [
-                          [RuntimeMode.RuntimeXXMI, "XXMI"],
-                          [RuntimeMode.RuntimeLegacy, "3DMigoto"],
-                        ] as const
-                      ).map(([mode, label]) => (
-                        <Button
-                          key={mode}
-                          variant={config.mode === mode ? "default" : "outline"}
-                          aria-pressed={config.mode === mode}
-                          onClick={() => setConfig({ ...config, mode })}
+                      <Button
+                        variant="outline"
+                        onClickPromise={async () => {
+                          try {
+                            setDetectedFolders(await XXMI.DetectGameFolders(importer));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        <ScanSearchIcon />
+                        {t("page.setting.xxmi.builtin.detectGame")}
+                      </Button>
+                    </PathField>
+                    <SectionRow title={t("page.setting.xxmi.builtin.mode")}>
+                      <ButtonGroup>
+                        {(
+                          [
+                            [RuntimeMode.RuntimeXXMI, "XXMI"],
+                            [RuntimeMode.RuntimeLegacy, "3DMigoto"],
+                          ] as const
+                        ).map(([mode, label]) => (
+                          <Button
+                            key={mode}
+                            variant={config.mode === mode ? "default" : "outline"}
+                            aria-pressed={config.mode === mode}
+                            onClick={() => setConfig({ ...config, mode })}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </ButtonGroup>
+                    </SectionRow>
+                    {config.mode === RuntimeMode.RuntimeLegacy && (
+                      <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                        <SelectRow
+                          label={t("page.setting.xxmi.builtin.legacy")}
+                          value={config.legacyRuntime || FOLLOW_LATEST}
+                          options={[
+                            {
+                              value: FOLLOW_LATEST,
+                              label: t("page.setting.xxmi.builtin.newestCached"),
+                            },
+                            ...(legacyRuntimes?.map((runtime) => runtime.id) ?? []),
+                          ]}
+                          onValueChange={(value) =>
+                            setConfig({
+                              ...config,
+                              legacyRuntime: value === FOLLOW_LATEST ? "" : value,
+                            })
+                          }
+                        />
+                        <Alert>
+                          <TriangleAlertIcon />
+                          <AlertDescription>
+                            {t("page.setting.xxmi.builtin.legacyWarning")}
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+                  </SectionContent>
+                </Section>
+
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.launchOptions")}</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.windowMode")}
+                      value={config.windowMode}
+                      options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
+                      onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
+                    />
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.useLaunchOptions")}
+                      checked={config.useLaunchOptions}
+                      onCheckedChange={(useLaunchOptions) =>
+                        setConfig({ ...config, useLaunchOptions })
+                      }
+                    >
+                      <Input
+                        aria-label={t("page.setting.xxmi.builtin.useLaunchOptions")}
+                        className="font-mono"
+                        spellCheck={false}
+                        value={config.launchOptions}
+                        onChange={(event) =>
+                          setConfig({ ...config, launchOptions: event.target.value })
+                        }
+                      />
+                    </ToggleRow>
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.startMethod")}
+                      value={config.processStartMethod}
+                      options={["Native", "Shell", "Manual"]}
+                      onValueChange={(processStartMethod) =>
+                        setConfig({ ...config, processStartMethod })
+                      }
+                    />
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.priority")}
+                      value={config.processPriority}
+                      options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
+                      onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
+                    />
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.injectionMethod")}
+                      description={t("page.setting.xxmi.builtin.injectionMethodDescription")}
+                      value={config.injectionMethod || "Default"}
+                      options={[
+                        {
+                          value: "Default",
+                          label: t("page.setting.xxmi.builtin.injectionDefault"),
+                        },
+                        { value: "Native", label: t("page.setting.xxmi.builtin.injectionNative") },
+                      ]}
+                      onValueChange={(injectionMethod) => setConfig({ ...config, injectionMethod })}
+                    />
+                    <NumberRow
+                      label={t("page.setting.xxmi.builtin.timeout")}
+                      min={0}
+                      value={config.processTimeout}
+                      onValueChange={(processTimeout) => setConfig({ ...config, processTimeout })}
+                    />
+                    <NumberRow
+                      label={t("page.setting.xxmi.builtin.initDelay")}
+                      min={0}
+                      value={config.xxmiDLLInitDelay}
+                      onValueChange={(xxmiDLLInitDelay) =>
+                        setConfig({ ...config, xxmiDLLInitDelay })
+                      }
+                    />
+                  </SectionContent>
+                </Section>
+              </TabsContent>
+
+              <TabsContent value="package" className="flex flex-col gap-6">
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>
+                        {t("page.setting.xxmi.builtin.currentPin")}:{" "}
+                        <span className="font-medium text-foreground">
+                          {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
+                        </span>
+                      </span>
+                      <span>
+                        {t("page.setting.xxmi.packageVersionCurrent", {
+                          version: packageInstalledInFolder
+                            ? installedVersion
+                            : t("page.setting.xxmi.packageVersionUnknown"),
+                        })}
+                      </span>
+                      {packageVerification && (
+                        <span>
+                          {t("page.setting.xxmi.builtin.installedVerification", {
+                            version: packageVerification.version,
+                            method:
+                              packageVerification.method === "ecdsa"
+                                ? t("page.setting.xxmi.builtin.verificationECDSA")
+                                : packageVerification.method === "digest"
+                                  ? t("page.setting.xxmi.builtin.verificationDigest")
+                                  : t("page.setting.xxmi.builtin.verificationNone"),
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-72 space-y-0.5 overflow-y-auto">
+                      <VersionOption
+                        selected={!config.packageVersion.pinned}
+                        onSelect={() => {
+                          setAllowUnsigned(false);
+                          setConfig({ ...config, packageVersion: { follow: "latest" } });
+                        }}
+                        actions={
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            aria-label={t("g.save")}
+                            title={t("g.save")}
+                            disabled={!dirty && !config.packageVersion.pinned}
+                            onClickPromise={async () => {
+                              const next = { ...config, packageVersion: { follow: "latest" } };
+                              setConfig(next);
+                              await save(next);
+                            }}
+                          >
+                            <SaveIcon />
+                          </Button>
+                        }
+                      >
+                        {t("page.setting.xxmi.builtin.latest")}
+                      </VersionOption>
+                      {releases?.map((release) => (
+                        <VersionOption
+                          key={release.version}
+                          selected={config.packageVersion.pinned === release.version}
+                          onSelect={() => {
+                            setAllowUnsigned(false);
+                            setConfig({ ...config, packageVersion: { pinned: release.version } });
+                          }}
+                          actions={
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`${t("page.setting.xxmi.builtin.packageDetails")} ${release.version}`}
+                                title={t("page.setting.xxmi.builtin.packageDetails")}
+                                onClick={() => {
+                                  setAllowUnsigned(false);
+                                  setPackageDialogVersion(release.version);
+                                }}
+                              >
+                                <FileTextIcon />
+                              </Button>
+                              {isInstalledPackageVersion(release.version) ? (
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label={t("g.save")}
+                                  title={t("g.save")}
+                                  disabled={!dirty && selectedPackage === release.version}
+                                  onClickPromise={async () => {
+                                    const next = {
+                                      ...config,
+                                      packageVersion: { pinned: release.version },
+                                    };
+                                    setConfig(next);
+                                    await save(next);
+                                  }}
+                                >
+                                  <SaveIcon />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label={t("page.setting.xxmi.builtin.install")}
+                                  title={t("page.setting.xxmi.builtin.install")}
+                                  onClick={() => {
+                                    setAllowUnsigned(false);
+                                    setConfig({
+                                      ...config,
+                                      packageVersion: { pinned: release.version },
+                                    });
+                                    setPackageDialogVersion(release.version);
+                                  }}
+                                >
+                                  <DownloadIcon />
+                                </Button>
+                              )}
+                            </>
+                          }
                         >
-                          {label}
-                        </Button>
+                          <span className="font-mono">{release.version}</span>
+                          {isInstalledPackageVersion(release.version) && (
+                            <span className="text-xs text-muted-foreground">
+                              {t("page.setting.xxmi.builtin.packageInstalled")}
+                            </span>
+                          )}
+                          {!release.signed && (
+                            <Badge variant="destructive">
+                              {t("page.setting.xxmi.builtin.unsigned")}
+                            </Badge>
+                          )}
+                        </VersionOption>
                       ))}
-                    </ButtonGroup>
-                  </SectionRow>
-                  {config.mode === RuntimeMode.RuntimeLegacy && (
-                    <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                    </div>
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.overwriteINI")}
+                      checked={config.overwriteINI}
+                      onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
+                    />
+                  </SectionContent>
+                </Section>
+
+                <Section>
+                  <SectionContent>
+                    <SelectRow
+                      label={
+                        <span className="flex items-center gap-1.5">
+                          {t("page.setting.xxmi.builtin.libs")}
+                          {customDll && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {t("page.setting.xxmi.builtin.customDll")}
+                            </span>
+                          )}
+                        </span>
+                      }
+                      description={
+                        followsSharedLibs
+                          ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
+                              version: sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
+                            })
+                          : undefined
+                      }
+                      value={followsSharedLibs ? "shared" : "own"}
+                      options={[
+                        { value: "shared", label: t("page.setting.xxmi.builtin.libsFollowShared") },
+                        { value: "own", label: t("page.setting.xxmi.builtin.libsOwnVersion") },
+                      ]}
+                      onValueChange={(value) => {
+                        if ((value === "shared") === followsSharedLibs) return;
+                        setConfig({
+                          ...config,
+                          xxmiVersion: { follow: value === "shared" ? "shared" : "latest" },
+                        });
+                      }}
+                    />
+                    {!followsSharedLibs && (
                       <SelectRow
-                        label={t("page.setting.xxmi.builtin.legacy")}
-                        value={config.legacyRuntime || FOLLOW_LATEST}
+                        label={t("page.setting.xxmi.builtin.libsVersion")}
+                        value={config.xxmiVersion.pinned || FOLLOW_LATEST}
                         options={[
-                          {
-                            value: FOLLOW_LATEST,
-                            label: t("page.setting.xxmi.builtin.newestCached"),
-                          },
-                          ...(legacyRuntimes?.map((runtime) => runtime.id) ?? []),
+                          { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                          ...(libsReleases?.map((release) => release.version) ?? []),
                         ]}
                         onValueChange={(value) =>
                           setConfig({
                             ...config,
-                            legacyRuntime: value === FOLLOW_LATEST ? "" : value,
+                            xxmiVersion:
+                              value === FOLLOW_LATEST
+                                ? { follow: "latest" }
+                                : {
+                                    pinned: value,
+                                    // A new pin starts fixed; picking another version keeps the notices the user chose.
+                                    notify: config.xxmiVersion.pinned
+                                      ? config.xxmiVersion.notify
+                                      : false,
+                                  },
                           })
                         }
                       />
+                    )}
+                    {!followsSharedLibs && config.xxmiVersion.pinned && (
+                      <ToggleRow
+                        label={t("page.setting.xxmi.builtin.libsNotify")}
+                        description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
+                        checked={!!config.xxmiVersion.notify}
+                        onCheckedChange={(notify) =>
+                          setConfig({
+                            ...config,
+                            xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
+                          })
+                        }
+                      />
+                    )}
+                    {customDll && (
                       <Alert>
-                        <TriangleAlertIcon />
-                        <AlertDescription>
-                          {t("page.setting.xxmi.builtin.legacyWarning")}
+                        <ShieldAlertIcon />
+                        <AlertDescription className="flex items-center justify-between gap-4">
+                          <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
+                          {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            disabled={dirty}
+                            title={
+                              dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined
+                            }
+                            onClickPromise={async () => {
+                              try {
+                                const warnings = await XXMI.RestoreOfficialDLL(importer);
+                                refresh();
+                                toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
+                                warnings?.forEach((warning) => toast.warning(warning));
+                              } catch (error) {
+                                toast.error(toErrorMessage(error));
+                              }
+                            }}
+                          >
+                            {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                          </Button>
                         </AlertDescription>
                       </Alert>
-                    </div>
-                  )}
-                </SectionContent>
-              </Section>
-
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>{t("page.setting.xxmi.builtin.launchOptions")}</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  <SelectRow
-                    label={t("page.setting.xxmi.builtin.windowMode")}
-                    value={config.windowMode}
-                    options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
-                    onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
-                  />
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.useLaunchOptions")}
-                    checked={config.useLaunchOptions}
-                    onCheckedChange={(useLaunchOptions) =>
-                      setConfig({ ...config, useLaunchOptions })
-                    }
-                  >
-                    <Input
-                      aria-label={t("page.setting.xxmi.builtin.useLaunchOptions")}
-                      className="font-mono"
-                      spellCheck={false}
-                      value={config.launchOptions}
-                      onChange={(event) =>
-                        setConfig({ ...config, launchOptions: event.target.value })
-                      }
-                    />
-                  </ToggleRow>
-                  <SelectRow
-                    label={t("page.setting.xxmi.builtin.startMethod")}
-                    value={config.processStartMethod}
-                    options={["Native", "Shell", "Manual"]}
-                    onValueChange={(processStartMethod) =>
-                      setConfig({ ...config, processStartMethod })
-                    }
-                  />
-                  <SelectRow
-                    label={t("page.setting.xxmi.builtin.priority")}
-                    value={config.processPriority}
-                    options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
-                    onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
-                  />
-                  <SelectRow
-                    label={t("page.setting.xxmi.builtin.injectionMethod")}
-                    description={t("page.setting.xxmi.builtin.injectionMethodDescription")}
-                    value={config.injectionMethod || "Default"}
-                    options={[
-                      { value: "Default", label: t("page.setting.xxmi.builtin.injectionDefault") },
-                      { value: "Native", label: t("page.setting.xxmi.builtin.injectionNative") },
-                    ]}
-                    onValueChange={(injectionMethod) => setConfig({ ...config, injectionMethod })}
-                  />
-                  <NumberRow
-                    label={t("page.setting.xxmi.builtin.timeout")}
-                    min={0}
-                    value={config.processTimeout}
-                    onValueChange={(processTimeout) => setConfig({ ...config, processTimeout })}
-                  />
-                  <NumberRow
-                    label={t("page.setting.xxmi.builtin.initDelay")}
-                    min={0}
-                    value={config.xxmiDLLInitDelay}
-                    onValueChange={(xxmiDLLInitDelay) => setConfig({ ...config, xxmiDLLInitDelay })}
-                  />
-                </SectionContent>
-              </Section>
-            </TabsContent>
-
-            <TabsContent value="package" className="flex flex-col gap-6">
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>
-                      {t("page.setting.xxmi.builtin.currentPin")}:{" "}
-                      <span className="font-medium text-foreground">
-                        {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
-                      </span>
-                    </span>
-                    <span>
-                      {t("page.setting.xxmi.packageVersionCurrent", {
-                        version: packageInstalledInFolder
-                          ? installedVersion
-                          : t("page.setting.xxmi.packageVersionUnknown"),
-                      })}
-                    </span>
-                    {packageVerification && (
-                      <span>
-                        {t("page.setting.xxmi.builtin.installedVerification", {
-                          version: packageVerification.version,
-                          method:
-                            packageVerification.method === "ecdsa"
-                              ? t("page.setting.xxmi.builtin.verificationECDSA")
-                              : packageVerification.method === "digest"
-                                ? t("page.setting.xxmi.builtin.verificationDigest")
-                                : t("page.setting.xxmi.builtin.verificationNone"),
-                        })}
-                      </span>
                     )}
-                  </div>
-                  <div className="max-h-72 space-y-0.5 overflow-y-auto">
-                    <VersionOption
-                      selected={!config.packageVersion.pinned}
-                      onSelect={() => {
-                        setAllowUnsigned(false);
-                        setConfig({ ...config, packageVersion: { follow: "latest" } });
-                      }}
-                      actions={
-                        <Button
-                          variant="outline"
-                          size="icon-sm"
-                          aria-label={t("g.save")}
-                          title={t("g.save")}
-                          disabled={!dirty && !config.packageVersion.pinned}
-                          onClickPromise={async () => {
-                            const next = { ...config, packageVersion: { follow: "latest" } };
-                            setConfig(next);
-                            await save(next);
-                          }}
-                        >
-                          <SaveIcon />
-                        </Button>
-                      }
-                    >
-                      {t("page.setting.xxmi.builtin.latest")}
-                    </VersionOption>
-                    {releases?.map((release) => (
-                      <VersionOption
-                        key={release.version}
-                        selected={config.packageVersion.pinned === release.version}
-                        onSelect={() => {
-                          setAllowUnsigned(false);
-                          setConfig({ ...config, packageVersion: { pinned: release.version } });
-                        }}
-                        actions={
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`${t("page.setting.xxmi.builtin.packageDetails")} ${release.version}`}
-                              title={t("page.setting.xxmi.builtin.packageDetails")}
-                              onClick={() => {
-                                setAllowUnsigned(false);
-                                setPackageDialogVersion(release.version);
-                              }}
-                            >
-                              <FileTextIcon />
-                            </Button>
-                            {isInstalledPackageVersion(release.version) ? (
-                              <Button
-                                variant="outline"
-                                size="icon-sm"
-                                aria-label={t("g.save")}
-                                title={t("g.save")}
-                                disabled={!dirty && selectedPackage === release.version}
-                                onClickPromise={async () => {
-                                  const next = {
-                                    ...config,
-                                    packageVersion: { pinned: release.version },
-                                  };
-                                  setConfig(next);
-                                  await save(next);
-                                }}
-                              >
-                                <SaveIcon />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="icon-sm"
-                                aria-label={t("page.setting.xxmi.builtin.install")}
-                                title={t("page.setting.xxmi.builtin.install")}
-                                onClick={() => {
-                                  setAllowUnsigned(false);
-                                  setConfig({
-                                    ...config,
-                                    packageVersion: { pinned: release.version },
-                                  });
-                                  setPackageDialogVersion(release.version);
-                                }}
-                              >
-                                <DownloadIcon />
-                              </Button>
-                            )}
-                          </>
-                        }
-                      >
-                        <span className="font-mono">{release.version}</span>
-                        {isInstalledPackageVersion(release.version) && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("page.setting.xxmi.builtin.packageInstalled")}
-                          </span>
-                        )}
-                        {!release.signed && (
-                          <Badge variant="destructive">
-                            {t("page.setting.xxmi.builtin.unsigned")}
-                          </Badge>
-                        )}
-                      </VersionOption>
-                    ))}
-                  </div>
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.overwriteINI")}
-                    checked={config.overwriteINI}
-                    onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
-                  />
-                </SectionContent>
-              </Section>
+                  </SectionContent>
+                </Section>
+              </TabsContent>
 
-              <Section>
-                <SectionContent>
-                  <SelectRow
-                    label={
-                      <span className="flex items-center gap-1.5">
-                        {t("page.setting.xxmi.builtin.libs")}
-                        {customDll && (
-                          <span className="text-xs font-normal text-muted-foreground">
-                            {t("page.setting.xxmi.builtin.customDll")}
-                          </span>
-                        )}
-                      </span>
-                    }
-                    description={
-                      followsSharedLibs
-                        ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
-                            version: sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
-                          })
-                        : undefined
-                    }
-                    value={followsSharedLibs ? "shared" : "own"}
-                    options={[
-                      { value: "shared", label: t("page.setting.xxmi.builtin.libsFollowShared") },
-                      { value: "own", label: t("page.setting.xxmi.builtin.libsOwnVersion") },
-                    ]}
-                    onValueChange={(value) => {
-                      if ((value === "shared") === followsSharedLibs) return;
-                      setConfig({
-                        ...config,
-                        xxmiVersion: { follow: value === "shared" ? "shared" : "latest" },
-                      });
-                    }}
-                  />
-                  {!followsSharedLibs && (
-                    <SelectRow
-                      label={t("page.setting.xxmi.builtin.libsVersion")}
-                      value={config.xxmiVersion.pinned || FOLLOW_LATEST}
-                      options={[
-                        { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                        ...(libsReleases?.map((release) => release.version) ?? []),
-                      ]}
-                      onValueChange={(value) =>
-                        setConfig({
-                          ...config,
-                          xxmiVersion:
-                            value === FOLLOW_LATEST
-                              ? { follow: "latest" }
-                              : {
-                                  pinned: value,
-                                  // A new pin starts fixed; picking another version keeps the notices the user chose.
-                                  notify: config.xxmiVersion.pinned
-                                    ? config.xxmiVersion.notify
-                                    : false,
-                                },
-                        })
-                      }
-                    />
-                  )}
-                  {!followsSharedLibs && config.xxmiVersion.pinned && (
-                    <ToggleRow
-                      label={t("page.setting.xxmi.builtin.libsNotify")}
-                      description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
-                      checked={!!config.xxmiVersion.notify}
-                      onCheckedChange={(notify) =>
-                        setConfig({
-                          ...config,
-                          xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
-                        })
-                      }
-                    />
-                  )}
-                  {customDll && (
-                    <Alert>
-                      <ShieldAlertIcon />
-                      <AlertDescription className="flex items-center justify-between gap-4">
-                        <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
-                        {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          disabled={dirty}
-                          title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
-                          onClickPromise={async () => {
-                            try {
-                              const warnings = await XXMI.RestoreOfficialDLL(importer);
-                              refresh();
-                              toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
-                              warnings?.forEach((warning) => toast.warning(warning));
-                            } catch (error) {
-                              toast.error(toErrorMessage(error));
+              {hasGameTweaks && (
+                <TabsContent value="game" className="flex flex-col gap-6">
+                  <Section>
+                    <SectionContent>
+                      <ToggleRow
+                        label={t("page.setting.xxmi.builtin.configureGame")}
+                        checked={config.configureGame}
+                        onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
+                      />
+                      {config.gimi && (
+                        <>
+                          <ToggleRow
+                            label={t("page.setting.xxmi.builtin.unlockFPS")}
+                            checked={config.gimi.unlockFPS}
+                            onCheckedChange={(unlockFPS) =>
+                              setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
                             }
-                          }}
-                        >
-                          {t("page.setting.xxmi.builtin.restoreOfficialDll")}
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </SectionContent>
-              </Section>
-            </TabsContent>
-
-            {hasGameTweaks && (
-              <TabsContent value="game" className="flex flex-col gap-6">
-                <Section>
-                  <SectionContent>
-                    <ToggleRow
-                      label={t("page.setting.xxmi.builtin.configureGame")}
-                      checked={config.configureGame}
-                      onCheckedChange={(configureGame) => setConfig({ ...config, configureGame })}
-                    />
-                    {config.gimi && (
-                      <>
+                          >
+                            <NumberRow
+                              label={t("page.setting.xxmi.builtin.fpsTarget")}
+                              min={30}
+                              max={1000}
+                              value={config.gimi.unlockFPSValue}
+                              onValueChange={(unlockFPSValue) =>
+                                setConfig({ ...config, gimi: { ...config.gimi!, unlockFPSValue } })
+                              }
+                            />
+                          </ToggleRow>
+                          {(["enableHDR", "disableDCR"] as const).map((field) => (
+                            <ToggleRow
+                              key={field}
+                              label={t(`page.setting.xxmi.builtin.${field}`)}
+                              checked={config.gimi![field]}
+                              onCheckedChange={(value) =>
+                                setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
+                              }
+                            />
+                          ))}
+                        </>
+                      )}
+                      {config.srmi && (
                         <ToggleRow
                           label={t("page.setting.xxmi.builtin.unlockFPS")}
-                          checked={config.gimi.unlockFPS}
+                          checked={config.srmi.unlockFPS}
                           onCheckedChange={(unlockFPS) =>
-                            setConfig({ ...config, gimi: { ...config.gimi!, unlockFPS } })
+                            setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
+                          }
+                        />
+                      )}
+                      {config.himi && (
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.unlockFPS")}
+                          checked={config.himi.unlockFPS}
+                          onCheckedChange={(unlockFPS) =>
+                            setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
                           }
                         >
                           <NumberRow
                             label={t("page.setting.xxmi.builtin.fpsTarget")}
                             min={30}
                             max={1000}
-                            value={config.gimi.unlockFPSValue}
+                            value={config.himi.unlockFPSValue}
                             onValueChange={(unlockFPSValue) =>
-                              setConfig({ ...config, gimi: { ...config.gimi!, unlockFPSValue } })
+                              setConfig({ ...config, himi: { ...config.himi!, unlockFPSValue } })
                             }
                           />
                         </ToggleRow>
-                        {(["enableHDR", "disableDCR"] as const).map((field) => (
+                      )}
+                      {config.wwmi &&
+                        (
+                          [
+                            "unlockFPS",
+                            "forceMaxLODBias",
+                            "applyPerfTweaks",
+                            "disableWoundedFX",
+                          ] as const
+                        ).map((field) => (
                           <ToggleRow
                             key={field}
                             label={t(`page.setting.xxmi.builtin.${field}`)}
-                            checked={config.gimi![field]}
+                            checked={config.wwmi![field]}
                             onCheckedChange={(value) =>
-                              setConfig({ ...config, gimi: { ...config.gimi!, [field]: value } })
+                              setConfig({
+                                ...config,
+                                woundedFXDecided:
+                                  field === "disableWoundedFX" ? true : config.woundedFXDecided,
+                                wwmi: { ...config.wwmi!, [field]: value },
+                              })
                             }
                           />
                         ))}
-                      </>
-                    )}
-                    {config.srmi && (
-                      <ToggleRow
-                        label={t("page.setting.xxmi.builtin.unlockFPS")}
-                        checked={config.srmi.unlockFPS}
-                        onCheckedChange={(unlockFPS) =>
-                          setConfig({ ...config, srmi: { ...config.srmi!, unlockFPS } })
-                        }
-                      />
-                    )}
-                    {config.himi && (
-                      <ToggleRow
-                        label={t("page.setting.xxmi.builtin.unlockFPS")}
-                        checked={config.himi.unlockFPS}
-                        onCheckedChange={(unlockFPS) =>
-                          setConfig({ ...config, himi: { ...config.himi!, unlockFPS } })
-                        }
-                      >
-                        <NumberRow
-                          label={t("page.setting.xxmi.builtin.fpsTarget")}
-                          min={30}
-                          max={1000}
-                          value={config.himi.unlockFPSValue}
-                          onValueChange={(unlockFPSValue) =>
-                            setConfig({ ...config, himi: { ...config.himi!, unlockFPSValue } })
-                          }
-                        />
-                      </ToggleRow>
-                    )}
-                    {config.wwmi &&
-                      (
-                        [
-                          "unlockFPS",
-                          "forceMaxLODBias",
-                          "applyPerfTweaks",
-                          "disableWoundedFX",
-                        ] as const
-                      ).map((field) => (
-                        <ToggleRow
-                          key={field}
-                          label={t(`page.setting.xxmi.builtin.${field}`)}
-                          checked={config.wwmi![field]}
-                          onCheckedChange={(value) =>
-                            setConfig({
-                              ...config,
-                              woundedFXDecided:
-                                field === "disableWoundedFX" ? true : config.woundedFXDecided,
-                              wwmi: { ...config.wwmi!, [field]: value },
-                            })
-                          }
-                        />
-                      ))}
-                  </SectionContent>
-                </Section>
-                {config.wwmi && (
-                  <Section>
-                    <SectionContent>
-                      <WWMIGraphicsSettings
-                        options={config.wwmi}
-                        onChange={(wwmi) => setConfig({ ...config, wwmi })}
-                      />
                     </SectionContent>
                   </Section>
-                )}
-              </TabsContent>
-            )}
+                  {config.wwmi && (
+                    <Section>
+                      <SectionContent>
+                        <WWMIGraphicsSettings
+                          options={config.wwmi}
+                          onChange={(wwmi) => setConfig({ ...config, wwmi })}
+                        />
+                      </SectionContent>
+                    </Section>
+                  )}
+                </TabsContent>
+              )}
 
-            <TabsContent value="advanced" className="flex flex-col gap-6">
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>{t("page.setting.xxmi.builtin.commands")}</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  {(["runPreLaunch", "runPostLoad"] as const).map((field) => (
-                    <ToggleRow
-                      key={field}
-                      label={t(
-                        field === "runPreLaunch"
-                          ? "page.setting.xxmi.builtin.preLaunch"
-                          : "page.setting.xxmi.builtin.postLoad",
-                      )}
-                      checked={config[field].enabled}
-                      onCheckedChange={(enabled) =>
-                        setConfig({ ...config, [field]: { ...config[field], enabled } })
-                      }
-                    >
-                      <Input
-                        aria-label={t(
+              <TabsContent value="advanced" className="flex flex-col gap-6">
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.commands")}</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
+                    {(["runPreLaunch", "runPostLoad"] as const).map((field) => (
+                      <ToggleRow
+                        key={field}
+                        label={t(
                           field === "runPreLaunch"
                             ? "page.setting.xxmi.builtin.preLaunch"
                             : "page.setting.xxmi.builtin.postLoad",
                         )}
+                        checked={config[field].enabled}
+                        onCheckedChange={(enabled) =>
+                          setConfig({ ...config, [field]: { ...config[field], enabled } })
+                        }
+                      >
+                        <Input
+                          aria-label={t(
+                            field === "runPreLaunch"
+                              ? "page.setting.xxmi.builtin.preLaunch"
+                              : "page.setting.xxmi.builtin.postLoad",
+                          )}
+                          className="font-mono"
+                          spellCheck={false}
+                          value={config[field].command}
+                          onChange={(event) =>
+                            setConfig({
+                              ...config,
+                              [field]: { ...config[field], command: event.target.value },
+                            })
+                          }
+                        />
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.waitForCommand")}
+                          checked={config[field].wait}
+                          onCheckedChange={(wait) =>
+                            setConfig({ ...config, [field]: { ...config[field], wait } })
+                          }
+                        />
+                      </ToggleRow>
+                    ))}
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.customLaunch")}
+                      checked={config.customLaunch.enabled}
+                      onCheckedChange={(enabled) =>
+                        setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
+                      }
+                    >
+                      <Input
+                        aria-label={t("page.setting.xxmi.builtin.customLaunch")}
                         className="font-mono"
                         spellCheck={false}
-                        value={config[field].command}
+                        value={config.customLaunch.command}
                         onChange={(event) =>
                           setConfig({
                             ...config,
-                            [field]: { ...config[field], command: event.target.value },
+                            customLaunch: { ...config.customLaunch, command: event.target.value },
                           })
                         }
                       />
-                      <ToggleRow
-                        label={t("page.setting.xxmi.builtin.waitForCommand")}
-                        checked={config[field].wait}
-                        onCheckedChange={(wait) =>
-                          setConfig({ ...config, [field]: { ...config[field], wait } })
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.injectMode")}
+                        value={config.customLaunch.injectMode}
+                        options={["Hook", "Inject", "Bypass"]}
+                        onValueChange={(injectMode) =>
+                          setConfig({
+                            ...config,
+                            customLaunch: { ...config.customLaunch, injectMode },
+                          })
+                        }
+                      />
+                      <Alert>
+                        <ShieldAlertIcon />
+                        <AlertDescription>
+                          {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
+                        </AlertDescription>
+                      </Alert>
+                    </ToggleRow>
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.extraLibraries")}
+                      description={
+                        config.mode === RuntimeMode.RuntimeLegacy &&
+                        config.injectionMethod !== "Native" &&
+                        !cachedLibs?.length
+                          ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
+                          : undefined
+                      }
+                      checked={config.extraLibraries.enabled}
+                      disabled={
+                        config.mode === RuntimeMode.RuntimeLegacy &&
+                        config.injectionMethod !== "Native" &&
+                        !cachedLibs?.some((entry) => !libsPin || entry.version === libsPin)
+                      }
+                      onCheckedChange={(enabled) =>
+                        setConfig({
+                          ...config,
+                          extraLibraries: { ...config.extraLibraries, enabled },
+                        })
+                      }
+                    >
+                      <Input
+                        aria-label={t("page.setting.xxmi.builtin.extraLibraries")}
+                        className="font-mono"
+                        spellCheck={false}
+                        value={config.extraLibraries.paths?.join(";") ?? ""}
+                        onChange={(event) =>
+                          setConfig({
+                            ...config,
+                            extraLibraries: {
+                              ...config.extraLibraries,
+                              paths: event.target.value
+                                .split(";")
+                                .map((path) => path.trim())
+                                .filter(Boolean),
+                            },
+                          })
                         }
                       />
                     </ToggleRow>
-                  ))}
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.customLaunch")}
-                    checked={config.customLaunch.enabled}
-                    onCheckedChange={(enabled) =>
-                      setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
-                    }
-                  >
-                    <Input
-                      aria-label={t("page.setting.xxmi.builtin.customLaunch")}
-                      className="font-mono"
-                      spellCheck={false}
-                      value={config.customLaunch.command}
-                      onChange={(event) =>
-                        setConfig({
-                          ...config,
-                          customLaunch: { ...config.customLaunch, command: event.target.value },
-                        })
-                      }
-                    />
-                    <SelectRow
-                      label={t("page.setting.xxmi.builtin.injectMode")}
-                      value={config.customLaunch.injectMode}
-                      options={["Hook", "Inject", "Bypass"]}
-                      onValueChange={(injectMode) =>
-                        setConfig({
-                          ...config,
-                          customLaunch: { ...config.customLaunch, injectMode },
-                        })
-                      }
-                    />
-                    <Alert>
-                      <ShieldAlertIcon />
-                      <AlertDescription>
-                        {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
-                      </AlertDescription>
-                    </Alert>
-                  </ToggleRow>
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.extraLibraries")}
-                    description={
-                      config.mode === RuntimeMode.RuntimeLegacy &&
-                      config.injectionMethod !== "Native" &&
-                      !cachedLibs?.length
-                        ? `${t("page.setting.xxmi.builtin.libs")}: ${t("page.setting.xxmi.builtin.notInstalled")}`
-                        : undefined
-                    }
-                    checked={config.extraLibraries.enabled}
-                    disabled={
-                      config.mode === RuntimeMode.RuntimeLegacy &&
-                      config.injectionMethod !== "Native" &&
-                      !cachedLibs?.some((entry) => !libsPin || entry.version === libsPin)
-                    }
-                    onCheckedChange={(enabled) =>
-                      setConfig({
-                        ...config,
-                        extraLibraries: { ...config.extraLibraries, enabled },
-                      })
-                    }
-                  >
-                    <Input
-                      aria-label={t("page.setting.xxmi.builtin.extraLibraries")}
-                      className="font-mono"
-                      spellCheck={false}
-                      value={config.extraLibraries.paths?.join(";") ?? ""}
-                      onChange={(event) =>
-                        setConfig({
-                          ...config,
-                          extraLibraries: {
-                            ...config.extraLibraries,
-                            paths: event.target.value
-                              .split(";")
-                              .map((path) => path.trim())
-                              .filter(Boolean),
-                          },
-                        })
-                      }
-                    />
-                  </ToggleRow>
-                </SectionContent>
-              </Section>
+                  </SectionContent>
+                </Section>
 
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>3DMigoto</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  {(
-                    [
-                      "enforceRendering",
-                      "enableHunting",
-                      "dumpShaders",
-                      "muteWarnings",
-                      "callsLogging",
-                      "debugLogging",
-                      "unsafeMode",
-                    ] as const
-                  ).map((field) => (
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>3DMigoto</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
+                    {(
+                      [
+                        "enforceRendering",
+                        "enableHunting",
+                        "dumpShaders",
+                        "muteWarnings",
+                        "callsLogging",
+                        "debugLogging",
+                        "unsafeMode",
+                      ] as const
+                    ).map((field) => (
+                      <ToggleRow
+                        key={field}
+                        label={t(`page.setting.xxmi.builtin.${field}`)}
+                        description={
+                          field === "unsafeMode" && config.migoto.unsafeMode
+                            ? t("page.setting.xxmi.builtin.unsafeWarning")
+                            : undefined
+                        }
+                        checked={config.migoto[field]}
+                        onCheckedChange={(value) =>
+                          setConfig({ ...config, migoto: { ...config.migoto, [field]: value } })
+                        }
+                      />
+                    ))}
+                  </SectionContent>
+                </Section>
+              </TabsContent>
+
+              <TabsContent value="tools" className="flex flex-col gap-6">
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
                     <ToggleRow
-                      key={field}
-                      label={t(`page.setting.xxmi.builtin.${field}`)}
-                      description={
-                        field === "unsafeMode" && config.migoto.unsafeMode
-                          ? t("page.setting.xxmi.builtin.unsafeWarning")
-                          : undefined
-                      }
-                      checked={config.migoto[field]}
-                      onCheckedChange={(value) =>
-                        setConfig({ ...config, migoto: { ...config.migoto, [field]: value } })
+                      label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
+                      checked={config.iniOptimizer.enabled}
+                      onCheckedChange={(enabled) =>
+                        setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
                       }
                     />
-                  ))}
-                </SectionContent>
-              </Section>
-            </TabsContent>
-
-            <TabsContent value="tools" className="flex flex-col gap-6">
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>{t("page.setting.xxmi.builtin.iniOptimizer")}</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.optimizeAtLaunch")}
-                    checked={config.iniOptimizer.enabled}
-                    onCheckedChange={(enabled) =>
-                      setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, enabled } })
-                    }
-                  />
-                  <ToggleRow
-                    label={t("page.setting.xxmi.builtin.resetOptimizerCache")}
-                    checked={config.iniOptimizer.resetCache}
-                    onCheckedChange={(resetCache) =>
-                      setConfig({ ...config, iniOptimizer: { ...config.iniOptimizer, resetCache } })
-                    }
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          setOptimizationPreview(
-                            await XXMI.OptimizeMods({
-                              importer,
-                              dryRun: true,
-                              resetCache: config.iniOptimizer.resetCache,
-                            }),
-                          );
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.previewOptimization")}
-                    </Button>
-                    <Button
-                      disabled={!optimizationPreview?.changes?.length}
-                      onClickPromise={async () => {
-                        try {
-                          const report = await XXMI.OptimizeMods({
-                            importer,
-                            dryRun: false,
-                            resetCache: config.iniOptimizer.resetCache,
-                          });
-                          setOptimizationPreview(undefined);
-                          toast.success(
-                            t("page.setting.xxmi.builtin.optimized", {
-                              count: report?.changes?.length ?? 0,
-                            }),
-                          );
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.applyOptimization")}
-                    </Button>
-                  </div>
-                  {optimizationPreview && (
-                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-muted/50 p-2 font-mono text-xs">
-                      {optimizationPreview.changes?.length ? (
-                        optimizationPreview.changes.map((change, index) => (
-                          <p key={`${change.path}:${change.line}:${index}`} className="break-all">
-                            {change.action}: {change.path}
-                            {change.line ? `:${change.line}` : ""} · {change.reason}
-                          </p>
-                        ))
-                      ) : (
-                        <p>{t("page.setting.xxmi.builtin.noOptimizationChanges")}</p>
-                      )}
-                    </div>
-                  )}
-                </SectionContent>
-              </Section>
-
-              <Section>
-                <SectionHeader>
-                  <SectionTitle>{t("page.setting.xxmi.builtin.maintenance")}</SectionTitle>
-                </SectionHeader>
-                <SectionContent>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          const warnings = await XXMI.RepairRuntime(importer);
-                          toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
-                          warnings?.forEach((warning) => toast.warning(warning));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.repairRuntime")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.OpenImporterFolder(importer);
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.openImporterFolder")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClickPromise={async () => {
-                        try {
-                          await XXMI.CreateShortcut(importer);
-                          refresh();
-                          toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
-                        } catch (error) {
-                          toast.error(toErrorMessage(error));
-                        }
-                      }}
-                    >
-                      {t("page.setting.xxmi.builtin.createShortcut")}
-                    </Button>
-                    {saved?.shortcutPath && (
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.resetOptimizerCache")}
+                      checked={config.iniOptimizer.resetCache}
+                      onCheckedChange={(resetCache) =>
+                        setConfig({
+                          ...config,
+                          iniOptimizer: { ...config.iniOptimizer, resetCache },
+                        })
+                      }
+                    />
+                    <div className="flex gap-2">
                       <Button
                         variant="outline"
                         onClickPromise={async () => {
                           try {
-                            await XXMI.DeleteShortcut(importer);
-                            refresh();
+                            setOptimizationPreview(
+                              await XXMI.OptimizeMods({
+                                importer,
+                                dryRun: true,
+                                resetCache: config.iniOptimizer.resetCache,
+                              }),
+                            );
                           } catch (error) {
                             toast.error(toErrorMessage(error));
                           }
                         }}
                       >
-                        {t("page.setting.xxmi.builtin.deleteShortcut")}
+                        {t("page.setting.xxmi.builtin.previewOptimization")}
                       </Button>
+                      <Button
+                        disabled={!optimizationPreview?.changes?.length}
+                        onClickPromise={async () => {
+                          try {
+                            const report = await XXMI.OptimizeMods({
+                              importer,
+                              dryRun: false,
+                              resetCache: config.iniOptimizer.resetCache,
+                            });
+                            setOptimizationPreview(undefined);
+                            toast.success(
+                              t("page.setting.xxmi.builtin.optimized", {
+                                count: report?.changes?.length ?? 0,
+                              }),
+                            );
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.applyOptimization")}
+                      </Button>
+                    </div>
+                    {optimizationPreview && (
+                      <div className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-muted/50 p-2 font-mono text-xs">
+                        {optimizationPreview.changes?.length ? (
+                          optimizationPreview.changes.map((change, index) => (
+                            <p key={`${change.path}:${change.line}:${index}`} className="break-all">
+                              {change.action}: {change.path}
+                              {change.line ? `:${change.line}` : ""} · {change.reason}
+                            </p>
+                          ))
+                        ) : (
+                          <p>{t("page.setting.xxmi.builtin.noOptimizationChanges")}</p>
+                        )}
+                      </div>
                     )}
-                  </div>
-                </SectionContent>
-              </Section>
-            </TabsContent>
+                  </SectionContent>
+                </Section>
+
+                <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.maintenance")}</SectionTitle>
+                  </SectionHeader>
+                  <SectionContent>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClickPromise={async () => {
+                          try {
+                            const warnings = await XXMI.RepairRuntime(importer);
+                            toast.success(t("page.setting.xxmi.builtin.runtimeRepaired"));
+                            warnings?.forEach((warning) => toast.warning(warning));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.repairRuntime")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.OpenImporterFolder(importer);
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.openImporterFolder")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.CreateShortcut(importer);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
+                          } catch (error) {
+                            toast.error(toErrorMessage(error));
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.createShortcut")}
+                      </Button>
+                      {saved?.shortcutPath && (
+                        <Button
+                          variant="outline"
+                          onClickPromise={async () => {
+                            try {
+                              await XXMI.DeleteShortcut(importer);
+                              refresh();
+                            } catch (error) {
+                              toast.error(toErrorMessage(error));
+                            }
+                          }}
+                        >
+                          {t("page.setting.xxmi.builtin.deleteShortcut")}
+                        </Button>
+                      )}
+                    </div>
+                  </SectionContent>
+                </Section>
+              </TabsContent>
+            </div>
           </div>
         </div>
       </Tabs>
