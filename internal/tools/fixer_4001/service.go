@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
@@ -40,10 +41,12 @@ type Service struct {
 	emit          func(string, ...any)
 	fs            *platform.FS
 	github        *github.Client
+	download      *infra.Download
 	archive       *infra.Archive
 	xxmi          *xxmi.XXMI
 	peDiversifier PEDiversifier
 	client        *db.Client
+	appData       *appdata.Store
 
 	fixerMu       sync.Mutex
 	fixerTask     *string
@@ -65,6 +68,7 @@ func NewWithOptions(opts Options) *Service {
 		emit:          opts.EventEmit,
 		fs:            opts.FS,
 		github:        opts.GitHub,
+		download:      opts.Download,
 		archive:       opts.Archive,
 		xxmi:          opts.XXMI,
 		peDiversifier: opts.PEDiversifier,
@@ -74,6 +78,11 @@ func NewWithOptions(opts Options) *Service {
 //wails:ignore
 func (t *Service) UseClient(client *db.Client) {
 	t.client = client
+}
+
+//wails:ignore
+func (t *Service) UseAppData(data *appdata.Store) {
+	t.appData = data
 }
 
 func (t *Service) requireClient() (*db.Client, error) {

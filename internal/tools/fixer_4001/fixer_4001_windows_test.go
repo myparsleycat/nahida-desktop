@@ -72,17 +72,35 @@ func TestExecuteD3DBuildIgnoresVCVarsExitCode(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	msbuild := "@echo off\r\necho ran> msbuild-ran.txt\r\n"
+	msbuild := "@echo off\r\necho ran> msbuild-ran.txt\r\ncall git\r\n"
 	if err := os.WriteFile(filepath.Join(binDir, "msbuild.cmd"), []byte(msbuild), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	if err := executeD3DBuild(context.Background(), vcvarsPath, projectDir); err != nil {
+	// The portable Git directory is not on PATH; the build must put it first so the version generator finds it.
+	gitDir := filepath.Join(root, "portable git", "cmd")
+	if err := os.MkdirAll(gitDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	git := "@echo off\r\necho ran> git-ran.txt\r\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "git.cmd"), []byte(git), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := executeD3DBuild(
+		context.Background(),
+		vcvarsPath,
+		projectDir,
+		filepath.Join(gitDir, "git.exe"),
+	); err != nil {
 		t.Fatalf("executeD3DBuild() = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(projectDir, "msbuild-ran.txt")); err != nil {
 		t.Fatalf("msbuild did not run after vcvars failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, "git-ran.txt")); err != nil {
+		t.Fatalf("build did not resolve git from the supplied Git directory: %v", err)
 	}
 }
 

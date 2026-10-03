@@ -1075,6 +1075,7 @@
           "XXMI_ERR_OBFUSCATE_NO_CANDIDATES": "在 d3d11.dll 中没有找到可安全多样化的填充候选项。",
           "XXMI_ERR_RESTORE_BACKUP_NOT_FOUND": "未找到可恢复的 pe-padding-diversifier 备份。",
           "XXMI_ERR_RESTORE_FAILED": "恢复备份时发生意外错误。",
+          "XXMI_DOWNLOAD_GIT": "正在下载便携版 Git...",
           "XXMI_DOWNLOAD_REPO": "正在下载 XXMI 源代码...",
           "XXMI_EXTRACT_REPO": "正在解压源代码压缩包...",
           "XXMI_ENABLE_UNSAFE_MODE": "正在启用 Unsafe Mode..."

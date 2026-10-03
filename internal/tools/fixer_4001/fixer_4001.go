@@ -237,6 +237,10 @@ func (t *Service) FourThousandOneFixerBuildDll(
 	if libsRepo(input.Provider).Validate() != nil || strings.TrimSpace(input.Version) == "" {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", errors.New("invalid provider or version"))
 	}
+	gitPath, err := t.locateGit(ctx, pinnedMinGit)
+	if err != nil {
+		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
+	}
 	buildID, err := newID()
 	if err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
@@ -254,12 +258,12 @@ func (t *Service) FourThousandOneFixerBuildDll(
 	if err := os.MkdirAll(tempDir, 0o700); err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
-	projectPath, err := t.prepareD3DSource(ctx, tempDir, input.Provider, input.Version)
+	projectPath, err := t.prepareD3DSource(ctx, gitPath, tempDir, input.Provider, input.Version)
 	if err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
 	t.update4001Progress("XXMI_BUILDING", "")
-	if err := executeD3DBuild(ctx, vcvarsPath, projectPath); err != nil {
+	if err := executeD3DBuild(ctx, vcvarsPath, projectPath, gitPath); err != nil {
 		return t.failed4001Build(err)
 	}
 	builtDLL := filepath.Join(projectPath, "x64", "Release", targetD3D11DLL)
@@ -574,7 +578,7 @@ func existingImporterPath(input *string) (string, bool) {
 	return path, err == nil && info.IsDir()
 }
 
-func (t *Service) prepareD3DSource(ctx context.Context, tempDir, provider, version string) (string, error) {
+func (t *Service) prepareD3DSource(ctx context.Context, gitPath, tempDir, provider, version string) (string, error) {
 	repo := libsRepo(provider)
 	if err := repo.Validate(); err != nil {
 		return "", err
@@ -583,6 +587,7 @@ func (t *Service) prepareD3DSource(ctx context.Context, tempDir, provider, versi
 	projectPath := filepath.Join(tempDir, "source")
 	if err := checkoutD3DSource(
 		ctx,
+		gitPath,
 		"https://github.com/"+repo.String()+".git",
 		strings.TrimSpace(version),
 		projectPath,

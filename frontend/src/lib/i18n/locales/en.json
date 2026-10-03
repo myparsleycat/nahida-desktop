@@ -1110,6 +1110,7 @@
           "XXMI_ERR_OBFUSCATE_NO_CANDIDATES": "No safe padding diversification candidates were found in d3d11.dll.",
           "XXMI_ERR_RESTORE_BACKUP_NOT_FOUND": "Could not find a pe-padding-diversifier backup to restore.",
           "XXMI_ERR_RESTORE_FAILED": "An unexpected error occurred while restoring the backup.",
+          "XXMI_DOWNLOAD_GIT": "Downloading portable Git...",
           "XXMI_DOWNLOAD_REPO": "Downloading XXMI source code...",
           "XXMI_EXTRACT_REPO": "Extracting source code archive...",
           "XXMI_ENABLE_UNSAFE_MODE": "Enabling Unsafe Mode..."
