@@ -17,7 +17,14 @@ import {
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { ButtonGroup } from "@renderer/components/ui/button-group";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import {
   Section,
@@ -29,7 +36,13 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
-import { NumberRow, PathField, SelectRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
+import {
+  FOLLOW_LATEST,
+  NumberRow,
+  PathField,
+  SelectRow,
+  ToggleRow,
+} from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
@@ -38,7 +51,10 @@ import { useBlocker } from "@tanstack/react-router";
 import { isEqual } from "es-toolkit";
 import {
   CheckIcon,
+  DownloadIcon,
+  FileTextIcon,
   PlayIcon,
+  SaveIcon,
   ScanSearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
@@ -46,9 +62,6 @@ import {
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-
-// Base UI selects cannot represent an empty string as a regular option value.
-const FOLLOW_LATEST = "__latest__";
 
 type PendingImporterFolderChange = {
   next: ImporterConfig;
@@ -105,6 +118,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   });
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
+  const sharedLibsVersion = overview?.sharedLibsVersion;
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
@@ -114,8 +128,20 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     enabled: config?.mode === RuntimeMode.RuntimeLegacy,
   });
   const [tab, setTab] = useState("general");
-  const [selectedPackage, setSelectedPackage] = useState("");
-  const selectedRelease = releases?.find((release) => release.version === selectedPackage);
+  const selectedPackage = config?.packageVersion.pinned ?? "";
+  const [packageDialogVersion, setPackageDialogVersion] = useState<string | null>(null);
+  const dialogRelease = releases?.find((release) => release.version === packageDialogVersion);
+  const installedImporter = overview?.importers?.find((entry) => entry.key === importer);
+  const installedVersion = installedImporter?.installedVersion ?? packageVerification?.version;
+  const packageInstalledInFolder =
+    !!installedVersion &&
+    normalizedFolder(config?.importerFolder ?? "") ===
+      normalizedFolder(installedImporter?.importerFolder ?? saved?.importerFolder ?? "");
+  const isInstalledPackageVersion = (version: string) =>
+    packageInstalledInFolder &&
+    version.trim().replace(/^v/i, "") === installedVersion?.trim().replace(/^v/i, "");
+  const packageNeedsInstall = !!selectedPackage && !isInstalledPackageVersion(selectedPackage);
+  const [isSaving, setIsSaving] = useState(false);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
     Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
@@ -132,12 +158,21 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
-  const persist = async (next: ImporterConfig, games: GameConfig[] = []) => {
+  const persist = async (
+    next: ImporterConfig,
+    games: GameConfig[] = [],
+    install?: PendingImporterFolderChange["install"],
+  ) => {
+    setIsSaving(true);
     try {
-      if (next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
-        await XXMI.SetImporterVersions(importer, { xxmi: next.xxmiVersion });
+      if (install) {
+        await XXMI.InstallImporterPackage({ importer, ...install, config: next });
+      } else {
+        if (next.xxmiVersion.pinned && next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
+          await XXMI.EnsureLibsVersion(next.xxmiVersion.pinned);
+        }
+        await XXMI.SaveImporterConfig(importer, next);
       }
-      await XXMI.SaveImporterConfig(importer, next);
       for (const game of games) {
         await Mod.UpdateGame(game.game, {
           modFolderPath: `${next.importerFolder}\\Mods`,
@@ -148,20 +183,21 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
         });
       }
       setPendingFolderChange(null);
+      setPackageDialogVersion(null);
       setConfig(null);
       refresh();
       return true;
     } catch (error) {
       toast.error(toErrorMessage(error));
       return false;
+    } finally {
+      setIsSaving(false);
     }
   };
-  const finishInstall = async (version: string, allowUnsigned: boolean) => {
-    await XXMI.InstallImporterPackage({ importer, version, allowUnsigned });
-    refresh();
-  };
   const save = async (next = config) => {
-    if (!next) return;
+    if (!next || isSaving) return;
+    if (next.packageVersion.pinned && !isInstalledPackageVersion(next.packageVersion.pinned))
+      return;
     try {
       const resolved = await resolveImporterGameFolder(importer, next);
       const games = await linkedGamesForImporterMove(saved?.importerFolder, next.importerFolder);
@@ -177,17 +213,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const confirmPendingFolderChange = async (updateGames: boolean) => {
     if (!pendingFolderChange) return;
     const pending = pendingFolderChange;
-    const savedOk = await persist(pending.next, updateGames ? pending.games : []);
-    if (!savedOk || !pending.install) return;
-    try {
-      await finishInstall(pending.install.version, pending.install.allowUnsigned);
-    } catch (error) {
-      toast.error(toErrorMessage(error));
-    }
+    await persist(pending.next, updateGames ? pending.games : [], pending.install);
   };
   // Switching importers or pages drops the draft, so leaving with unsaved changes asks first.
   const leave = useBlocker({
-    shouldBlockFn: () => dirty,
+    shouldBlockFn: () => dirty || isSaving,
     enableBeforeUnload: false,
     withResolver: true,
   });
@@ -195,10 +225,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
+  const followsSharedLibs = config.xxmiVersion.follow === "shared";
+  const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <Tabs
+        inert={isSaving}
         value={tab}
         onValueChange={(value) => setTab(String(value))}
         className="min-h-0 flex-1 gap-0"
@@ -212,7 +245,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <div className="ml-auto flex gap-2">
                 <Button
                   variant="outline"
-                  disabled={dirty}
+                  disabled={dirty || packageNeedsInstall || isSaving}
                   title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
                   onClickPromise={async () => {
                     try {
@@ -225,7 +258,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <PlayIcon />
                   {t("page.setting.xxmi.builtin.launch")}
                 </Button>
-                <Button disabled={!dirty} onClickPromise={() => save()}>
+                <Button
+                  disabled={!dirty || packageNeedsInstall || isSaving}
+                  onClickPromise={() => save()}
+                >
                   {t("g.save")}
                 </Button>
               </div>
@@ -240,6 +276,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   {t("page.setting.xxmi.builtin.discard")}
                 </Button>
               </div>
+            )}
+            {packageNeedsInstall && (
+              <Alert>
+                <TriangleAlertIcon />
+                <AlertDescription>
+                  {t("page.setting.xxmi.builtin.packageInstallRequired")}
+                </AlertDescription>
+              </Alert>
             )}
             <TabsList variant="line" className="w-full justify-start">
               <TabsTrigger value="general">{t("page.setting.xxmi.builtin.general")}</TabsTrigger>
@@ -410,13 +454,22 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
                 </SectionHeader>
                 <SectionContent>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>
                       {t("page.setting.xxmi.builtin.currentPin")}:{" "}
-                      {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
-                    </Badge>
+                      <span className="font-medium text-foreground">
+                        {config.packageVersion.pinned || t("page.setting.xxmi.builtin.latest")}
+                      </span>
+                    </span>
+                    <span>
+                      {t("page.setting.xxmi.packageVersionCurrent", {
+                        version: packageInstalledInFolder
+                          ? installedVersion
+                          : t("page.setting.xxmi.packageVersionUnknown"),
+                      })}
+                    </span>
                     {packageVerification && (
-                      <span className="text-xs text-muted-foreground">
+                      <span>
                         {t("page.setting.xxmi.builtin.installedVerification", {
                           version: packageVerification.version,
                           method:
@@ -433,10 +486,25 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <VersionOption
                       selected={!config.packageVersion.pinned}
                       onSelect={() => {
-                        setSelectedPackage("");
                         setAllowUnsigned(false);
                         setConfig({ ...config, packageVersion: { follow: "latest" } });
                       }}
+                      actions={
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          aria-label={t("g.save")}
+                          title={t("g.save")}
+                          disabled={!dirty && !config.packageVersion.pinned}
+                          onClickPromise={async () => {
+                            const next = { ...config, packageVersion: { follow: "latest" } };
+                            setConfig(next);
+                            await save(next);
+                          }}
+                        >
+                          <SaveIcon />
+                        </Button>
+                      }
                     >
                       {t("page.setting.xxmi.builtin.latest")}
                     </VersionOption>
@@ -445,68 +513,76 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         key={release.version}
                         selected={config.packageVersion.pinned === release.version}
                         onSelect={() => {
-                          setSelectedPackage(release.version);
                           setAllowUnsigned(false);
                           setConfig({ ...config, packageVersion: { pinned: release.version } });
                         }}
+                        actions={
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`${t("page.setting.xxmi.builtin.packageDetails")} ${release.version}`}
+                              title={t("page.setting.xxmi.builtin.packageDetails")}
+                              onClick={() => {
+                                setAllowUnsigned(false);
+                                setPackageDialogVersion(release.version);
+                              }}
+                            >
+                              <FileTextIcon />
+                            </Button>
+                            {isInstalledPackageVersion(release.version) ? (
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label={t("g.save")}
+                                title={t("g.save")}
+                                disabled={!dirty && selectedPackage === release.version}
+                                onClickPromise={async () => {
+                                  const next = {
+                                    ...config,
+                                    packageVersion: { pinned: release.version },
+                                  };
+                                  setConfig(next);
+                                  await save(next);
+                                }}
+                              >
+                                <SaveIcon />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label={t("page.setting.xxmi.builtin.install")}
+                                title={t("page.setting.xxmi.builtin.install")}
+                                onClick={() => {
+                                  setAllowUnsigned(false);
+                                  setConfig({
+                                    ...config,
+                                    packageVersion: { pinned: release.version },
+                                  });
+                                  setPackageDialogVersion(release.version);
+                                }}
+                              >
+                                <DownloadIcon />
+                              </Button>
+                            )}
+                          </>
+                        }
                       >
                         <span className="font-mono">{release.version}</span>
-                        <Badge variant={release.signed ? "secondary" : "destructive"}>
-                          {release.signed
-                            ? t("page.setting.xxmi.builtin.signed")
-                            : t("page.setting.xxmi.builtin.unsigned")}
-                        </Badge>
+                        {isInstalledPackageVersion(release.version) && (
+                          <span className="text-xs text-muted-foreground">
+                            {t("page.setting.xxmi.builtin.packageInstalled")}
+                          </span>
+                        )}
+                        {!release.signed && (
+                          <Badge variant="destructive">
+                            {t("page.setting.xxmi.builtin.unsigned")}
+                          </Badge>
+                        )}
                       </VersionOption>
                     ))}
                   </div>
-                  {selectedPackage && (
-                    <div className="space-y-3 rounded-lg bg-muted/50 p-3">
-                      {selectedRelease?.notes && (
-                        <p className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap text-muted-foreground">
-                          {selectedRelease.notes}
-                        </p>
-                      )}
-                      {selectedRelease && !selectedRelease.signed && (
-                        <label className="flex items-center gap-2 text-destructive">
-                          <ShieldAlertIcon className="size-4 shrink-0" />
-                          <span className="flex-1">
-                            {t("page.setting.xxmi.builtin.allowUnsigned")}
-                          </span>
-                          <Switch checked={allowUnsigned} onCheckedChange={setAllowUnsigned} />
-                        </label>
-                      )}
-                      <Button
-                        className="w-full"
-                        disabled={!selectedRelease || (!selectedRelease.signed && !allowUnsigned)}
-                        onClickPromise={async () => {
-                          if (!selectedRelease || (!selectedRelease.signed && !allowUnsigned))
-                            return;
-                          const allowPackage = !selectedRelease.signed && allowUnsigned;
-                          try {
-                            const resolved = await resolveImporterGameFolder(importer, config);
-                            const games = await linkedGamesForImporterMove(
-                              saved?.importerFolder,
-                              config.importerFolder,
-                            );
-                            if (games.length) {
-                              setPendingFolderChange({
-                                next: resolved,
-                                games,
-                                install: { version: selectedPackage, allowUnsigned: allowPackage },
-                              });
-                              return;
-                            }
-                            if (!(await persist(resolved))) return;
-                            await finishInstall(selectedPackage, allowPackage);
-                          } catch (error) {
-                            toast.error(toErrorMessage(error));
-                          }
-                        }}
-                      >
-                        {t("page.setting.xxmi.builtin.install")}
-                      </Button>
-                    </div>
-                  )}
                   <ToggleRow
                     label={t("page.setting.xxmi.builtin.overwriteINI")}
                     checked={config.overwriteINI}
@@ -522,25 +598,70 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       <span className="flex items-center gap-1.5">
                         {t("page.setting.xxmi.builtin.libs")}
                         {customDll && (
-                          <Badge variant="outline">
+                          <span className="text-xs font-normal text-muted-foreground">
                             {t("page.setting.xxmi.builtin.customDll")}
-                          </Badge>
+                          </span>
                         )}
                       </span>
                     }
-                    value={config.xxmiVersion.pinned || FOLLOW_LATEST}
+                    description={
+                      followsSharedLibs
+                        ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
+                            version: sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
+                          })
+                        : undefined
+                    }
+                    value={followsSharedLibs ? "shared" : "own"}
                     options={[
-                      { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                      ...(libsReleases?.map((release) => release.version) ?? []),
+                      { value: "shared", label: t("page.setting.xxmi.builtin.libsFollowShared") },
+                      { value: "own", label: t("page.setting.xxmi.builtin.libsOwnVersion") },
                     ]}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      if ((value === "shared") === followsSharedLibs) return;
                       setConfig({
                         ...config,
-                        xxmiVersion:
-                          value === FOLLOW_LATEST ? { follow: "latest" } : { pinned: value },
-                      })
-                    }
+                        xxmiVersion: { follow: value === "shared" ? "shared" : "latest" },
+                      });
+                    }}
                   />
+                  {!followsSharedLibs && (
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.libsVersion")}
+                      value={config.xxmiVersion.pinned || FOLLOW_LATEST}
+                      options={[
+                        { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                        ...(libsReleases?.map((release) => release.version) ?? []),
+                      ]}
+                      onValueChange={(value) =>
+                        setConfig({
+                          ...config,
+                          xxmiVersion:
+                            value === FOLLOW_LATEST
+                              ? { follow: "latest" }
+                              : {
+                                  pinned: value,
+                                  // A new pin starts fixed; picking another version keeps the notices the user chose.
+                                  notify: config.xxmiVersion.pinned
+                                    ? config.xxmiVersion.notify
+                                    : false,
+                                },
+                        })
+                      }
+                    />
+                  )}
+                  {!followsSharedLibs && config.xxmiVersion.pinned && (
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.libsNotify")}
+                      description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
+                      checked={!!config.xxmiVersion.notify}
+                      onCheckedChange={(notify) =>
+                        setConfig({
+                          ...config,
+                          xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
+                        })
+                      }
+                    />
+                  )}
                   {customDll && (
                     <Alert>
                       <ShieldAlertIcon />
@@ -773,10 +894,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     disabled={
                       config.mode === RuntimeMode.RuntimeLegacy &&
                       config.injectionMethod !== "Native" &&
-                      !cachedLibs?.some(
-                        (entry) =>
-                          !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,
-                      )
+                      !cachedLibs?.some((entry) => !libsPin || entry.version === libsPin)
                     }
                     onCheckedChange={(enabled) =>
                       setConfig({
@@ -990,6 +1108,101 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       </Tabs>
 
       <Dialog
+        open={packageDialogVersion !== null}
+        onOpenChange={(open) => {
+          if (open || isSaving) return;
+          setPackageDialogVersion(null);
+          setAllowUnsigned(false);
+        }}
+      >
+        <DialogContent className="max-h-[80vh] sm:max-w-lg" showCloseButton={!isSaving}>
+          <DialogHeader>
+            <DialogTitle>
+              {importer} · {packageDialogVersion}
+            </DialogTitle>
+            <DialogDescription>{t("page.setting.xxmi.builtin.packageDetails")}</DialogDescription>
+          </DialogHeader>
+          {dialogRelease && (
+            <>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {isInstalledPackageVersion(dialogRelease.version) && (
+                  <span>{t("page.setting.xxmi.builtin.packageInstalled")}</span>
+                )}
+                {dialogRelease.signed ? (
+                  <span>{t("page.setting.xxmi.builtin.signed")}</span>
+                ) : (
+                  <Badge variant="destructive">{t("page.setting.xxmi.builtin.unsigned")}</Badge>
+                )}
+              </div>
+              <p className="max-h-80 overflow-y-auto text-sm whitespace-pre-wrap text-muted-foreground">
+                {dialogRelease.notes || t("page.setting.xxmi.builtin.noPackageNotes")}
+              </p>
+              {!isInstalledPackageVersion(dialogRelease.version) && !dialogRelease.signed && (
+                <label className="flex items-center gap-2 text-destructive">
+                  <ShieldAlertIcon className="size-4 shrink-0" />
+                  <span className="flex-1">{t("page.setting.xxmi.builtin.allowUnsigned")}</span>
+                  <Switch
+                    checked={allowUnsigned}
+                    onCheckedChange={setAllowUnsigned}
+                    disabled={isSaving}
+                  />
+                </label>
+              )}
+            </>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isSaving}
+              onClick={() => {
+                setPackageDialogVersion(null);
+                setAllowUnsigned(false);
+              }}
+            >
+              {t("g.cancel")}
+            </Button>
+            {dialogRelease && !isInstalledPackageVersion(dialogRelease.version) && (
+              <Button
+                disabled={isSaving || (!dialogRelease.signed && !allowUnsigned)}
+                onClickPromise={async () => {
+                  if (isSaving || (!dialogRelease.signed && !allowUnsigned)) return;
+                  const next = {
+                    ...config,
+                    packageVersion: { pinned: dialogRelease.version },
+                  };
+                  const install = {
+                    version: dialogRelease.version,
+                    allowUnsigned: !dialogRelease.signed && allowUnsigned,
+                  };
+                  setConfig(next);
+                  setIsSaving(true);
+                  try {
+                    const resolved = await resolveImporterGameFolder(importer, next);
+                    const games = await linkedGamesForImporterMove(
+                      saved?.importerFolder,
+                      next.importerFolder,
+                    );
+                    if (games.length) {
+                      setPackageDialogVersion(null);
+                      setPendingFolderChange({ next: resolved, games, install });
+                      return;
+                    }
+                    await persist(resolved, [], install);
+                  } catch (error) {
+                    toast.error(toErrorMessage(error));
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+              >
+                {t("page.setting.xxmi.builtin.install")}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={detectedFolders !== undefined}
         onOpenChange={(open) => !open && setDetectedFolders(undefined)}
       >
@@ -1071,23 +1284,25 @@ function VersionOption({
   selected,
   onSelect,
   children,
+  actions,
 }: {
   selected: boolean;
   onSelect: () => void;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
-        selected && "bg-muted",
-      )}
-    >
-      <CheckIcon className={cn("size-4 shrink-0", !selected && "invisible")} />
-      {children}
-    </button>
+    <div className={cn("flex items-center gap-2 rounded-md text-sm", selected && "bg-muted")}>
+      <button
+        type="button"
+        aria-pressed={selected}
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted/60"
+      >
+        <CheckIcon className={cn("size-4 shrink-0", !selected && "invisible")} />
+        {children}
+      </button>
+      {actions && <div className="flex shrink-0 items-center gap-1 pr-2">{actions}</div>}
+    </div>
   );
 }

@@ -11,7 +11,9 @@ import {
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { toErrorMessage } from "@shared/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,7 +55,7 @@ type LaunchDialog =
 
 export type LaunchGuardResult =
   | { status: "started" }
-  | { status: "blocked"; kind: LaunchDialog | "importer-setup" | "launch-error" };
+  | { status: "blocked"; kind: LaunchDialog | "importer-setup" | "launch-error" | "update" };
 
 export function launchErrorCode(message: string): (typeof launchErrorCodes)[number] | null {
   return launchErrorCodes.find((code) => message.includes(code)) ?? null;
@@ -95,8 +97,13 @@ export function useLaunchGuard() {
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
   const confirmGeneration = useRef(0);
+  const queryClient = useQueryClient();
+  const [pendingUpdate, setPendingUpdate] = useState<{
+    importer: string;
+    updates: UpdateStatus[];
+  } | null>(null);
 
-  const startImporter = useCallback(
+  const launch = useCallback(
     async (importer: string): Promise<LaunchGuardResult> => {
       try {
         await XXMI.StartGame(importer);
@@ -130,6 +137,47 @@ export function useLaunchGuard() {
     },
     [navigate, t],
   );
+
+  const startImporter = useCallback(
+    async (importer: string): Promise<LaunchGuardResult> => {
+      // A failed update check must not keep the game from launching.
+      const updates = await XXMI.LaunchUpdates(importer).catch(() => null);
+      if (updates?.length) {
+        setPendingUpdate({ importer, updates });
+        return { status: "blocked", kind: "update" };
+      }
+      return launch(importer);
+    },
+    [launch],
+  );
+
+  const handleUpdateConfirm = useCallback(async () => {
+    if (!pendingUpdate) return;
+    const { importer, updates } = pendingUpdate;
+
+    // Like the automatic update, a failed install falls back to launching with the current files.
+    try {
+      await XXMI.InstallUpdates(
+        importer,
+        updates.map((entry) => entry.package),
+      );
+    } catch (error) {
+      toast.warning(t("page.setting.xxmi.builtin.launchUpdateFailed", { importer }), {
+        description: toErrorMessage(error),
+      });
+    }
+    setPendingUpdate(null);
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("xxmi:"),
+    });
+
+    try {
+      await launch(importer);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  }, [launch, pendingUpdate, queryClient, t]);
 
   // Bumping the generation cancels any in-flight confirmation, so dismissing the dialog
   // while ClearLaunchBlockers is still running does not launch the game afterwards.
@@ -346,5 +394,19 @@ export function useLaunchGuard() {
     ],
   );
 
-  return { startImporter, launchGuardDialog: alert };
+  return {
+    startImporter,
+    launchGuardDialog: (
+      <>
+        {alert}
+        <XXMIUpdateDialog
+          importer={pendingUpdate?.importer ?? null}
+          updates={pendingUpdate?.updates ?? []}
+          confirmLabel={t("page.setting.xxmi.builtin.launchUpdateConfirm")}
+          onConfirm={handleUpdateConfirm}
+          onClose={() => setPendingUpdate(null)}
+        />
+      </>
+    ),
+  };
 }

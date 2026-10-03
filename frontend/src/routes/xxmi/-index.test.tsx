@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   overview: {
     configured: true,
     root: "C:\\XXMI",
-    libsCache: [],
+    libsCache: [] as Array<{ version: string; referenced: boolean; inUse: boolean }>,
     legacyRuntimes: [],
     fpsVersions: [],
     cacheIssues: ["legacy 3DMigoto: missing source.json"],
@@ -37,17 +37,20 @@ const state = vi.hoisted(() => ({
     latestVersion: string;
     pinned: boolean;
     available: boolean;
+    shared?: boolean;
   }>,
 }));
 
-vi.mock("@bindings/xxmi", () => ({ XXMI: {} }));
+const xxmi = vi.hoisted(() => ({ SetSharedLibsVersion: vi.fn() }));
+
+vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("@bindings/platform", () => ({ Dialog: {} }));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
   useLaunchGuard: () => ({ startImporter: vi.fn(), launchGuardDialog: null }),
 }));
 vi.mock("@renderer/hooks/use-settings", () => ({
   useSettings: () => ({
-    settings: { autoUpdate: false, includePrereleases: false },
+    settings: { autoUpdateMode: "off", includePrereleases: false },
     update: vi.fn(),
   }),
 }));
@@ -58,7 +61,9 @@ vi.mock("@tanstack/react-query", () => ({
         ? { ...state.overview, launcherMode: state.launcherMode }
         : queryKey[0] === "xxmi:getXXMIData"
           ? state.xxmiData
-          : state.updates,
+          : queryKey[0] === "xxmi:libs-releases"
+            ? [{ version: "1.7.5" }, { version: "1.7.6" }]
+            : state.updates,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -82,6 +87,25 @@ afterEach(() => {
   cleanup();
   state.updates = [];
   state.launcherMode = undefined;
+  state.overview.importers[0].running = true;
+  state.overview.libsCache = [];
+});
+
+it("marks only the selected libraries as in use while protecting the previous deployment", () => {
+  state.overview.libsCache = [
+    { version: "1.2.0", referenced: true, inUse: true },
+    { version: "1.1.7", referenced: true, inUse: false },
+  ];
+
+  render(<XXMIDashboard />);
+
+  expect(screen.getByText("1.2.0 · page.setting.xxmi.builtin.inUse")).toBeTruthy();
+  expect(screen.getByText("1.1.7")).toBeTruthy();
+  expect(screen.queryByText("1.1.7 · page.setting.xxmi.builtin.inUse")).toBeNull();
+  expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.prune" })).toHaveProperty(
+    "disabled",
+    true,
+  );
 });
 
 it("shows the external launcher settings instead of the built-in runtime in external mode", () => {
@@ -130,13 +154,92 @@ it("lists importer status next to the page and disables a running importer", () 
 
   render(<XXMIImporterList />);
 
-  expect(screen.getByText("page.setting.xxmi.builtin.updateAvailable")).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "page.setting.xxmi.builtin.updateAvailable" }),
+  ).toBeNull();
   expect(screen.getByText("page.setting.xxmi.builtin.running")).toBeTruthy();
   expect(screen.getByText("page.setting.xxmi.builtin.customDll")).toBeTruthy();
   expect(screen.getByRole("button", { name: "page.setting.xxmi.builtin.launch" })).toHaveProperty(
     "disabled",
     true,
   );
+});
+
+it("offers an importer's installable updates in a dialog before the launch button", () => {
+  state.overview.importers[0].running = false;
+  state.updates = [
+    {
+      importer: "GIMI",
+      package: "importer:GIMI",
+      installed: "1.2.3",
+      latestVersion: "1.3.0",
+      pinned: false,
+      available: true,
+    },
+    {
+      importer: "GIMI",
+      package: "xxmi-libs",
+      installed: "1.7.5",
+      latestVersion: "1.7.6",
+      pinned: true,
+      available: true,
+    },
+  ];
+
+  render(<XXMIImporterList />);
+
+  const update = screen.getByRole("button", { name: "page.setting.xxmi.builtin.updateAvailable" });
+  const launch = screen.getByRole("button", { name: "page.setting.xxmi.builtin.launch" });
+  expect(update.compareDocumentPosition(launch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByText("page.setting.xxmi.builtin.updateDialogTitle")).toBeNull();
+
+  fireEvent.click(update);
+
+  expect(screen.getByText("page.setting.xxmi.builtin.updateDialogTitle")).toBeTruthy();
+  expect(screen.getByText(/importer:GIMI: 1\.2\.3.*1\.3\.0/)).toBeTruthy();
+  expect(screen.queryByText(/xxmi-libs/)).toBeNull();
+});
+
+it("offers a shared library update on the manage page only", () => {
+  state.overview.importers[0].running = false;
+  state.updates = [
+    {
+      importer: "GIMI",
+      package: "xxmi-libs",
+      installed: "1.7.5",
+      latestVersion: "1.7.6",
+      pinned: false,
+      available: true,
+      shared: true,
+    },
+  ];
+
+  render(<XXMIImporterList />);
+
+  expect(
+    screen.queryByRole("button", { name: "page.setting.xxmi.builtin.updateAvailable" }),
+  ).toBeNull();
+  cleanup();
+
+  render(<XXMIDashboard />);
+
+  expect(screen.getByText(/xxmi-libs: 1\.7\.5.*1\.7\.6/)).toBeTruthy();
+});
+
+it("selects the shared XXMI libraries version from the dashboard", async () => {
+  xxmi.SetSharedLibsVersion.mockResolvedValue(undefined);
+  render(<XXMIDashboard />);
+
+  const shared = screen.getByRole("combobox", {
+    name: /page.setting.xxmi.builtin.sharedLibsVersion/,
+  });
+  expect(shared.textContent).toContain("page.setting.xxmi.builtin.latest");
+  fireEvent.click(shared);
+  const version = await screen.findByRole("option", { name: "1.7.5" });
+  fireEvent.pointerDown(version, { pointerType: "mouse" });
+  fireEvent.click(version);
+
+  expect(xxmi.SetSharedLibsVersion).toHaveBeenCalledWith("1.7.5");
 });
 
 it("collapses importers that are not installed", () => {

@@ -48,6 +48,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 					"importer": key, "mode": cfg.Mode, "source": runtimeSource, "rollback": rollbackState,
 					"importerFolder": cfg.ImporterFolder, "gameFolder": cfg.GameFolder, "gameExe": gameExe,
 					"injectionMethod": cfg.InjectionMethod,
+					"packageVersion":  cfg.PackageVersion.Pinned,
 				},
 			})
 		}
@@ -74,6 +75,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
 	}
+	if err := validateInstalledImporterPackage(key, cfg); err != nil {
+		return err
+	}
 
 	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
 	// prepare drives, folders, or mods that the later steps read.
@@ -92,6 +96,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 
 	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
 		return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
+	}
+	if err := validateInstalledImporterPackage(key, cfg); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Join(cfg.ImporterFolder, "Mods"), 0o700); err != nil {
 		return err
@@ -476,7 +483,11 @@ func (x *XXMI) builtinLaunchSpec(
 			}
 		}
 		if len(spec.ExtraDLLs) > 0 {
-			version := selectedLegacyInjectorVersion(cfg)
+			pin, _, err := x.libsPin(ctx, cfg)
+			if err != nil {
+				return inject.LaunchSpec{}, err
+			}
+			version := selectedLegacyInjectorVersion(pin)
 			if version == "" {
 				return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
 			}

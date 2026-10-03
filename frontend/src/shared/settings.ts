@@ -76,7 +76,7 @@ export interface AppSettings {
 
     "xxmi.persistToggles": boolean;
     "xxmi.root": string;
-    "xxmi.autoUpdate": boolean;
+    "xxmi.autoUpdate": AutoUpdateMode;
     "xxmi.includePrereleases": boolean;
 }
 

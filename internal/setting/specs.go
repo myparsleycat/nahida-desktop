@@ -546,7 +546,17 @@ func buildSpecs() map[string]spec {
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },
 		},
-		KeyXXMIAutoUpdate:         boolSpec(definitionsByKey[KeyXXMIAutoUpdate], true),
+		// The stored value used to be a boolean, which the update mode codec still reads as auto or off.
+		KeyXXMIAutoUpdate: {
+			def:        definitionsByKey[KeyXXMIAutoUpdate],
+			getDefault: func(*Setting) any { return defaultAutoUpdateMode },
+			fromStored: func(_ *Setting, value *string) any {
+				return normalizeAutoUpdateMode(lo.FromPtr(value))
+			},
+			normalize: func(_ *Setting, value any) any {
+				return normalizeAutoUpdateMode(asString(value))
+			},
+		},
 		KeyXXMIIncludePrereleases: boolSpec(definitionsByKey[KeyXXMIIncludePrereleases], false),
 	}
 	return specs

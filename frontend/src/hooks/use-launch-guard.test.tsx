@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const xxmi = vi.hoisted(() => ({
   StartGame: vi.fn(),
@@ -11,10 +11,16 @@ const xxmi = vi.hoisted(() => ({
   DetectGameFolders: vi.fn(),
   ValidateGameFolder: vi.fn(),
   RepairRuntime: vi.fn(),
+  LaunchUpdates: vi.fn(),
+  InstallUpdates: vi.fn(),
 }));
 const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: undefined }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
@@ -24,9 +30,17 @@ import { toast } from "sonner";
 import { launchDialog, launchErrorCode, useLaunchGuard } from "./use-launch-guard";
 
 const toastError = vi.mocked(toast.error);
+const toastWarning = vi.mocked(toast.warning);
+
+beforeEach(() => {
+  xxmi.LaunchUpdates.mockResolvedValue([]);
+});
 
 afterEach(() => {
   cleanup();
+  xxmi.LaunchUpdates.mockReset();
+  xxmi.InstallUpdates.mockReset();
+  toastWarning.mockClear();
   xxmi.StartGame.mockReset();
   xxmi.ClearLaunchBlockers.mockReset();
   xxmi.GetImporterConfig.mockReset();
@@ -188,6 +202,71 @@ function Harness({ importer = "GIMI" }: { importer?: string }) {
     </div>
   );
 }
+
+const pendingUpdates = [
+  { importer: "GIMI", package: "importer:GIMI", installed: "1.2.3", latestVersion: "1.3.0" },
+  { importer: "GIMI", package: "xxmi-libs", installed: "1.7.5", latestVersion: "1.7.6" },
+];
+
+it("asks before launching with pending updates and launches after installing them", async () => {
+  xxmi.LaunchUpdates.mockResolvedValue(pendingUpdates);
+  xxmi.InstallUpdates.mockResolvedValue(["importer:GIMI", "xxmi-libs"]);
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+
+  expect(await screen.findByText(/importer:GIMI: 1\.2\.3.*1\.3\.0/)).toBeTruthy();
+  expect(screen.getByText(/xxmi-libs: 1\.7\.5.*1\.7\.6/)).toBeTruthy();
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.setting.xxmi.builtin.launchUpdateConfirm" }),
+  );
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledWith("GIMI"));
+  expect(xxmi.InstallUpdates).toHaveBeenCalledWith("GIMI", ["importer:GIMI", "xxmi-libs"]);
+});
+
+it("does not launch or update when the update dialog is cancelled", async () => {
+  xxmi.LaunchUpdates.mockResolvedValue(pendingUpdates);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByText(/importer:GIMI/);
+  fireEvent.click(screen.getByRole("button", { name: "g.cancel" }));
+
+  await waitFor(() => expect(screen.queryByText(/importer:GIMI/)).toBeNull());
+  expect(xxmi.InstallUpdates).not.toHaveBeenCalled();
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+});
+
+it("launches with the current files when the confirmed update fails", async () => {
+  xxmi.LaunchUpdates.mockResolvedValue(pendingUpdates);
+  xxmi.InstallUpdates.mockRejectedValue(new Error("download failed"));
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByText(/importer:GIMI/);
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.setting.xxmi.builtin.launchUpdateConfirm" }),
+  );
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledWith("GIMI"));
+  expect(toastWarning).toHaveBeenCalledWith("page.setting.xxmi.builtin.launchUpdateFailed", {
+    description: "download failed",
+  });
+});
+
+it("launches when the update check itself fails", async () => {
+  xxmi.LaunchUpdates.mockRejectedValue(new Error("offline"));
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledWith("GIMI"));
+});
 
 it("closes the launch dialog before StartGame finishes", async () => {
   const pending = Promise.withResolvers<void>();

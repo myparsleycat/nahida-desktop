@@ -13,9 +13,10 @@ import (
 )
 
 type InstallImporterPackageInput struct {
-	Importer      string `json:"importer"`
-	Version       string `json:"version"`
-	AllowUnsigned bool   `json:"allowUnsigned"`
+	Importer      string          `json:"importer"`
+	Version       string          `json:"version"`
+	AllowUnsigned bool            `json:"allowUnsigned"`
+	Config        *ImporterConfig `json:"config,omitempty"`
 }
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) (returnErr error) {
@@ -47,6 +48,9 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 		return err
 	}
 	if external {
+		if input.Config != nil {
+			return errors.New("importer config is only supported by the built-in launcher")
+		}
 		stage = "pause-importer-watchers"
 		resume, err := x.beginImporterMaintenance(ctx)
 		if err != nil {
@@ -60,6 +64,21 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	cfg, err := x.GetImporterConfig(ctx, spec.key)
 	if err != nil {
 		return err
+	}
+	if input.Config != nil {
+		cfg = *input.Config
+		if err := ValidateImporterSettings(spec.key, cfg); err != nil {
+			return err
+		}
+		if cfg.PackageVersion.Pinned != "" && normalizeVersion(cfg.PackageVersion.Pinned) != normalizeVersion(version) {
+			return errors.New("selected package differs from installation version")
+		}
+		if cfg.XXMIVersion.Pinned != "" {
+			stage = "ensure-libraries"
+			if err := x.ensureLibsVersionLocked(ctx, cfg.XXMIVersion.Pinned); err != nil {
+				return err
+			}
+		}
 	}
 	stage = "pause-importer-watchers"
 	resume, err := x.beginImporterMaintenance(ctx)

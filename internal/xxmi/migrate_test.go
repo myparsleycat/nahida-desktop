@@ -91,6 +91,9 @@ func TestImportExternalLauncherInstallsImporterIntoBuiltinRoot(t *testing.T) {
 	if cfg.PackageVersion.Pinned != "1.2.3" {
 		t.Fatalf("package pin = %+v", cfg.PackageVersion)
 	}
+	if cfg.XXMIVersion != (VersionPin{Follow: followShared}) {
+		t.Fatalf("imported XXMI libraries selection = %+v", cfg.XXMIVersion)
+	}
 
 	// Kept user data stays in the external folder and is reached through junctions.
 	for _, name := range []string{"Mods", "ShaderFixes"} {

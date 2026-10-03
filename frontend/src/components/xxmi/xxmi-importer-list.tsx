@@ -3,6 +3,7 @@ import { XXMI } from "@bindings/xxmi";
 import { GameIcon } from "@renderer/components/game-icon";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
+import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
@@ -20,8 +21,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-type UpdateStatus = NonNullable<Awaited<ReturnType<typeof XXMI.CheckUpdates>>>[number];
-
 const importerKeys = ["GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI"] as const;
 
 export function XXMIImporterList() {
@@ -34,6 +33,20 @@ export function XXMIImporterList() {
   const updates = useXXMIUpdates(overview?.configured ?? false);
   const pendingUpdates = installableUpdates(updates);
   const [showUninstalled, setShowUninstalled] = useState(false);
+  const [updateTarget, setUpdateTarget] = useState<string | null>(null);
+  // Pinned packages are left out because the backend skips them when installing updates. Shared libraries
+  // update every importer following them at once, so only the manage page offers that update.
+  const importerUpdates = (key: string | null) =>
+    updates?.filter(
+      (entry) => entry.importer === key && entry.available && !entry.pinned && !entry.shared,
+    ) ?? [];
+  const targetUpdates = importerUpdates(updateTarget);
+  const refresh = () => {
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("xxmi:"),
+    });
+  };
   const [installedKeys, uninstalledKeys] = partition(importerKeys, (key) =>
     Boolean(overview?.importers?.some((entry) => entry.key === key)),
   );
@@ -43,9 +56,6 @@ export function XXMIImporterList() {
 
   const renderImporter = (key: (typeof importerKeys)[number]) => {
     const importer = overview?.importers?.find((entry) => entry.key === key);
-    const available =
-      updates?.some((entry) => entry.importer === key && entry.available) ||
-      importer?.updateAvailable;
     const active = pathname === `/xxmi/${key}`;
     return (
       <li
@@ -75,12 +85,6 @@ export function XXMIImporterList() {
                   <span className="sr-only">{t("page.setting.xxmi.builtin.running")}</span>
                 </span>
               )}
-              {available && (
-                <span title={t("page.setting.xxmi.builtin.updateAvailable")} className="shrink-0">
-                  <CircleArrowUpIcon className="size-3.5 text-primary" aria-hidden />
-                  <span className="sr-only">{t("page.setting.xxmi.builtin.updateAvailable")}</span>
-                </span>
-              )}
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {importer && `${importer.mode === "legacy" ? "3DMigoto" : "XXMI"} · `}
@@ -97,6 +101,18 @@ export function XXMIImporterList() {
             </p>
           </div>
         </button>
+        {importer && importerUpdates(key).length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("page.setting.xxmi.builtin.updateAvailable")}
+            title={t("page.setting.xxmi.builtin.updateAvailable")}
+            disabled={importer.running}
+            onClick={() => setUpdateTarget(key)}
+          >
+            <CircleArrowUpIcon className="text-primary" />
+          </Button>
+        )}
         {importer && (
           <Button
             variant="ghost"
@@ -151,11 +167,7 @@ export function XXMIImporterList() {
               onClickPromise={async () => {
                 try {
                   const result = await XXMI.CheckUpdates(true);
-                  void queryClient.invalidateQueries({
-                    predicate: (query) =>
-                      typeof query.queryKey[0] === "string" &&
-                      query.queryKey[0].startsWith("xxmi:"),
-                  });
+                  refresh();
                   if (installableUpdates(result).length === 0) {
                     toast.success(t("page.setting.xxmi.builtin.noUpdates"));
                   }
@@ -188,6 +200,24 @@ export function XXMIImporterList() {
           )}
         </div>
       </nav>
+      <XXMIUpdateDialog
+        importer={updateTarget}
+        updates={targetUpdates}
+        confirmLabel={t("page.setting.xxmi.builtin.installUpdates")}
+        onClose={() => setUpdateTarget(null)}
+        onConfirm={async () => {
+          try {
+            await XXMI.InstallUpdates(
+              updateTarget ?? "",
+              targetUpdates.map((entry) => entry.package),
+            );
+            setUpdateTarget(null);
+            refresh();
+          } catch (error) {
+            toast.error(toErrorMessage(error));
+          }
+        }}
+      />
       {launchGuardDialog}
     </aside>
   );

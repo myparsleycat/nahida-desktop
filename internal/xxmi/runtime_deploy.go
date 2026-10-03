@@ -93,8 +93,9 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
-	if version := normalizeVersion(cfg.XXMIVersion.Pinned); version != "" {
-		return version, nil
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil || pin != "" {
+		return pin, err
 	}
 	deployed, _ := deployedLibsVersion(cfg.ImporterFolder)
 	x.mu.RLock()

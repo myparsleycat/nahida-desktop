@@ -40,7 +40,8 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 			return actionOK(deps.XXMI.StartGame(ctx, input.Importer))
 		}))
 	registry.add(
-		simpleAction("xxmi.set_xxmi_version", "Pin an importer's XXMI libraries version or follow latest.", "xxmi",
+		simpleAction("xxmi.set_xxmi_version",
+			"Pin an importer's XXMI libraries version, or follow \"latest\" or the \"shared\" version.", "xxmi",
 			RiskConfirm, objectSchema(map[string]any{"importer": stringSchema(), "version": stringSchema()},
 				"importer", "version"),
 			func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
@@ -52,8 +53,8 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 					return nil, err
 				}
 				pin := xxmi.VersionPin{Pinned: input.Version}
-				if input.Version == "latest" {
-					pin = xxmi.VersionPin{Follow: "latest"}
+				if input.Version == "latest" || input.Version == "shared" {
+					pin = xxmi.VersionPin{Follow: input.Version}
 				}
 				return actionOK(deps.XXMI.SetImporterVersions(ctx, input.Importer, xxmi.ImporterVersions{XXMI: &pin}))
 			}),

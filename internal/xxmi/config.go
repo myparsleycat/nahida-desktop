@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/infra"
 )
 
 type RuntimeMode string
@@ -19,9 +20,17 @@ const (
 	RuntimeLegacy RuntimeMode = "legacy"
 )
 
+const (
+	// followShared makes an importer use the XXMI libraries version selected for the whole runtime.
+	followShared         = "shared"
+	sharedLibsVersionKey = "xxmi_libs_version"
+)
+
 type VersionPin struct {
 	Follow string `json:"follow,omitempty"`
 	Pinned string `json:"pinned,omitempty"`
+	// Notify keeps announcing newer releases for a pinned XXMI libraries version; installing one moves the pin.
+	Notify bool `json:"notify,omitempty"`
 }
 
 // UnmarshalJSON replaces the whole pin so a stored pin cannot merge with a default follow value.
@@ -163,7 +172,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	}
 	cfg := ImporterConfig{
 		SchemaVersion: 1, Mode: RuntimeXXMI,
-		PackageVersion: VersionPin{Follow: "latest"}, XXMIVersion: VersionPin{Follow: "latest"},
+		PackageVersion: VersionPin{Follow: "latest"}, XXMIVersion: VersionPin{Follow: followShared},
 		ImporterFolder: filepath.Join(root, key), ProcessStartMethod: "Native", InjectionMethod: "Default",
 		ProcessPriority: "Normal", ProcessTimeout: 30, WindowMode: "Borderless",
 		UseLaunchOptions: true, OverwriteINI: true, ConfigureGame: true,
@@ -241,6 +250,13 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
+	}
+	if err := validateInstalledImporterPackage(key, cfg); err != nil {
+		return infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
+			Operation: "save-importer-config", Stage: "validate-package",
+			Fields: map[string]any{"importer": key, "version": cfg.PackageVersion.Pinned,
+				"importerFolder": cfg.ImporterFolder},
+		})
 	}
 	x.mu.RLock()
 	client := x.client
@@ -333,4 +349,37 @@ func (x *XXMI) SetImporterVersions(ctx context.Context, key string, versions Imp
 		cfg.PackageVersion = *versions.Package
 	}
 	return x.SaveImporterConfig(ctx, key, cfg)
+}
+
+// SetSharedLibsVersion selects the XXMI libraries version for importers that follow the shared version.
+// An empty version follows the latest release.
+func (x *XXMI) SetSharedLibsVersion(ctx context.Context, version string) error {
+	client, err := x.settingsClient()
+	if err != nil {
+		return err
+	}
+	version = normalizeVersion(version)
+	if version != "" {
+		if err := x.EnsureLibsVersion(ctx, version); err != nil {
+			return err
+		}
+	}
+	return client.Settings.Upsert(ctx, sharedLibsVersionKey, &version)
+}
+
+// libsPin returns the XXMI libraries version an importer is held to, or "" when it follows the latest release.
+// notify reports whether newer releases are still announced for that version.
+func (x *XXMI) libsPin(ctx context.Context, cfg ImporterConfig) (version string, notify bool, err error) {
+	if cfg.XXMIVersion.Follow != followShared {
+		return normalizeVersion(cfg.XXMIVersion.Pinned), cfg.XXMIVersion.Notify, nil
+	}
+	client, err := x.settingsClient()
+	if err != nil {
+		return "", false, err
+	}
+	shared, err := client.Settings.GetValue(ctx, sharedLibsVersionKey)
+	if err != nil || shared == nil {
+		return "", false, err
+	}
+	return normalizeVersion(*shared), false, nil
 }

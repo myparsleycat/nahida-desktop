@@ -27,6 +27,9 @@ type UpdateStatus struct {
 	SkippedVersion string `json:"skippedVersion"`
 	Pinned         bool   `json:"pinned"`
 	Available      bool   `json:"available"`
+	// Shared marks the XXMI libraries of an importer that follows the shared version, whose update belongs to
+	// the runtime as a whole rather than to that importer.
+	Shared bool `json:"shared"`
 }
 
 func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, error) {
@@ -117,18 +120,34 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		statuses = append(statuses, status)
 
 		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
+			pin, notify, err := x.libsPin(ctx, cfg)
+			if err != nil {
+				return nil, err
+			}
 			libs := updateStatus(row.Key, "xxmi-libs", states["xxmi-libs"])
-			libs.Pinned = cfg.XXMIVersion.Pinned != ""
+			libs.Pinned = pin != "" && !notify
+			libs.Shared = cfg.XXMIVersion.Follow == followShared
 			if cfg.Mode == RuntimeXXMI {
 				libs.Installed, _ = deployedLibsVersion(cfg.ImporterFolder)
+				if pin == "" {
+					libs.Installed = cachedLibsVersion(
+						libs.LatestVersion, libs.SkippedVersion, libs.Installed, verifiedCachedLibsVersion,
+					)
+				}
 			}
 
 			// A runtime not deployed since migration, or an adopted custom DLL whose manifest has no source,
 			// reports no version; the next launch deploys the selected cached libraries without downloading.
 			if libs.Installed == "" && (cfg.Mode == RuntimeXXMI || legacyUsesXXMIInjector(cfg)) {
-				if version := selectedLegacyInjectorVersion(cfg); version != "" && verifiedCachedLibsVersion(version) {
+				if version := selectedLegacyInjectorVersion(pin); version != "" && verifiedCachedLibsVersion(version) {
 					libs.Installed = version
 				}
+			}
+
+			// A pin that still announces releases is compared by the pinned version itself, so moving the pin
+			// clears the notice before the next launch deploys it.
+			if notify {
+				libs.Installed = pin
 			}
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
 			statuses = append(statuses, libs)
@@ -165,6 +184,18 @@ func updateStatus(importer, pkg string, state *db.XXMIPackageRow) UpdateStatus {
 	return status
 }
 
+// cachedLibsVersion reports libraries ready for the next launch. Downloads are installed in the shared
+// cache before the next launch deploys them, so an older importer manifest must not announce them again.
+func cachedLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {
+	if deployed != "" {
+		return selectLibsVersion(latest, skipped, deployed, cacheVerified)
+	}
+	if latest != "" && cacheVerified(latest) {
+		return latest
+	}
+	return ""
+}
+
 func newestCachedPackageVersion(pkg string) string {
 	root, err := xxmiCacheRoot()
 	if err != nil {
@@ -187,8 +218,8 @@ func newestCachedPackageVersion(pkg string) string {
 	return latest
 }
 
-func selectedLegacyInjectorVersion(cfg ImporterConfig) string {
-	if version := normalizeVersion(cfg.XXMIVersion.Pinned); version != "" {
+func selectedLegacyInjectorVersion(pin string) string {
+	if version := normalizeVersion(pin); version != "" {
 		return version
 	}
 	return newestCachedPackageVersion("xxmi-libs")
@@ -230,7 +261,9 @@ func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
 	return client.XXMIPackages.Upsert(ctx, *state)
 }
 
-func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, error) {
+// InstallUpdates installs the requested packages' available updates. A non-empty importer limits the install
+// to that importer's packages; an empty one covers every importer.
+func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []string) ([]string, error) {
 	statuses, err := x.CheckUpdates(ctx, false)
 	if err != nil {
 		return nil, err
@@ -244,7 +277,8 @@ func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, 
 		if err := ctx.Err(); err != nil {
 			return installed, err
 		}
-		if !requested[status.Package] || !status.Available || status.Pinned {
+		if !requested[status.Package] || !status.Available || status.Pinned ||
+			importer != "" && status.Importer != importer {
 			continue
 		}
 		switch {
@@ -253,7 +287,7 @@ func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, 
 				Importer: status.Importer, Version: status.LatestVersion,
 			})
 		case status.Package == "xxmi-libs":
-			err = x.EnsureLibsVersion(ctx, status.LatestVersion)
+			err = x.installLibsUpdate(ctx, status.Importer, status.LatestVersion)
 		case status.Package == "gi-fps-unlocker":
 			err = x.EnsureFPSUnlockerVersion(ctx, status.LatestVersion)
 		default:
@@ -262,37 +296,100 @@ func (x *XXMI) InstallUpdates(ctx context.Context, targets []string) ([]string, 
 		if err != nil {
 			return installed, fmt.Errorf("install %s update: %w", status.Package, err)
 		}
-		installed = append(installed, status.Package)
-		delete(requested, status.Package)
+
+		// The shared libraries report one status per importer, and each one may hold its own pin to move.
+		if !slices.Contains(installed, status.Package) {
+			installed = append(installed, status.Package)
+		}
 	}
 	for pkg := range requested {
-		if pkg != "" {
+		if pkg != "" && !slices.Contains(installed, pkg) {
 			return installed, fmt.Errorf("update target %s is not available", pkg)
 		}
 	}
 	return installed, nil
 }
 
-func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
-	x.mu.RLock()
-	client := x.client
-	x.mu.RUnlock()
-	if client == nil {
-		return errors.New("XXMI settings store is not configured")
-	}
-	enabled, err := client.Settings.GetValue(ctx, "xxmi_auto_update")
-	if err != nil {
+// installLibsUpdate caches the release and moves the pin of an importer that announces updates for its own
+// pinned version. Importers following a release pick the cached version up at their next launch.
+func (x *XXMI) installLibsUpdate(ctx context.Context, importer, version string) error {
+	if err := x.EnsureLibsVersion(ctx, version); err != nil {
 		return err
 	}
-	if enabled != nil && *enabled != "true" {
-		return nil
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil || cfg.XXMIVersion.Pinned == "" {
+		return err
+	}
+	cfg.XXMIVersion.Pinned = version
+	return x.SaveImporterConfig(ctx, importer, cfg)
+}
+
+// Launch update modes. Keep the stored values in sync with the xxmi.autoUpdate setting.
+const (
+	launchUpdateAuto   = "auto"
+	launchUpdateNotify = "notify"
+	launchUpdateOff    = "off"
+)
+
+// launchUpdateMode reports how a launch treats available updates: installing them silently, asking first,
+// or launching without them. The setting used to be a boolean, so "false" still reads as off.
+func (x *XXMI) launchUpdateMode(ctx context.Context) (string, error) {
+	client, err := x.settingsClient()
+	if err != nil {
+		return "", err
+	}
+	value, err := client.Settings.GetValue(ctx, "xxmi_auto_update")
+	if err != nil || value == nil {
+		return launchUpdateAuto, err
+	}
+	switch *value {
+	case launchUpdateNotify:
+		return launchUpdateNotify, nil
+	case launchUpdateOff, "false":
+		return launchUpdateOff, nil
+	}
+	return launchUpdateAuto, nil
+}
+
+// LaunchUpdates returns the importer's updates that the user confirms before a launch. It is empty unless
+// launches are set to ask, and leaves out packages held at a version without update notices.
+func (x *XXMI) LaunchUpdates(ctx context.Context, importer string) ([]UpdateStatus, error) {
+	mode, err := x.launchUpdateMode(ctx)
+	if err != nil || mode != launchUpdateNotify {
+		return []UpdateStatus{}, err
+	}
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	pending := []UpdateStatus{}
+	for _, status := range statuses {
+		if status.Importer == importer && status.Available && !status.Pinned {
+			pending = append(pending, status)
+		}
+	}
+	return pending, nil
+}
+
+func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
+	mode, err := x.launchUpdateMode(ctx)
+	if err != nil || mode != launchUpdateAuto {
+		return err
 	}
 	statuses, err := x.CheckUpdates(ctx, false)
 	if err != nil {
 		return err
 	}
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil {
+		return err
+	}
 	targets := []string{}
 	for _, status := range statuses {
+		// A pinned XXMI libraries version only announces its update; moving the pin stays a manual choice.
+		if status.Package == "xxmi-libs" && cfg.XXMIVersion.Pinned != "" {
+			continue
+		}
 		if status.Importer == importer && status.Available && !status.Pinned {
 			targets = append(targets, status.Package)
 		}
@@ -300,6 +397,6 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	_, err = x.InstallUpdates(ctx, targets)
+	_, err = x.InstallUpdates(ctx, importer, targets)
 	return err
 }

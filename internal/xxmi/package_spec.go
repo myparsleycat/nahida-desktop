@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -89,6 +90,28 @@ func readImporterVersion(folder string, spec importerPackageSpec) *string {
 		return nil
 	}
 	return &version
+}
+
+func validateInstalledImporterPackage(key string, cfg ImporterConfig) error {
+	if cfg.PackageVersion.Pinned == "" {
+		return nil
+	}
+	spec, ok := lookupImporterPackage(key)
+	if !ok {
+		return fmt.Errorf("unknown importer %q", key)
+	}
+	installed := readImporterVersion(cfg.ImporterFolder, spec)
+	if installed == nil {
+		return fmt.Errorf(
+			"XXMI_IMPORTER_NOT_INSTALLED: selected package %s is not installed",
+			cfg.PackageVersion.Pinned,
+		)
+	}
+	if normalizeVersion(*installed) != normalizeVersion(cfg.PackageVersion.Pinned) {
+		return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: selected package %s differs from installed package %s",
+			cfg.PackageVersion.Pinned, *installed)
+	}
+	return nil
 }
 
 func parseImporterVersionFile(path string, pattern *regexp.Regexp) (string, error) {

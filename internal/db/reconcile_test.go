@@ -378,6 +378,110 @@ VALUES
 	}
 }
 
+func TestReconcileMovesLatestXXMILibsFollowersToSharedOnce(t *testing.T) {
+	t.Parallel()
+
+	client, err := New(filepath.Join(t.TempDir(), "xxmi.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	// Clear the one-shot flag and plant importer rows as an existing file would look before this migration ran.
+	if _, err := client.db.Exec(
+		`DELETE FROM "_schema_state" WHERE "key" = ?`,
+		SchemaKeyXXMILibsSharedDefault,
+	); err != nil {
+		t.Fatalf("clear flag: %v", err)
+	}
+	for key, config := range map[string]string{
+		"GIMI": `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"follow":"latest"}}`,
+		"SRMI": `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"pinned":"1.7.6"}}`,
+	} {
+		if err := client.XXMIImporters.Upsert(ctx, key, config); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("migrate reconcile: %v", err)
+	}
+	for key, want := range map[string]string{
+		"GIMI": `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"follow":"shared"}}`,
+		"SRMI": `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"pinned":"1.7.6"}}`,
+	} {
+		row, err := client.XXMIImporters.Get(ctx, key)
+		if err != nil || row == nil || row.Config != want {
+			t.Fatalf("%s after migration = %+v, err = %v", key, row, err)
+		}
+	}
+	if shared, err := client.Settings.GetValue(ctx, "xxmi_libs_version"); err != nil || shared != nil {
+		t.Fatalf("differing pins set a shared version: %v, err = %v", shared, err)
+	}
+
+	// Second pass must be one-shot: an importer that chose its own latest track afterwards keeps it.
+	own := `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"follow":"latest"}}`
+	if err := client.XXMIImporters.Upsert(ctx, "GIMI", own); err != nil {
+		t.Fatalf("reset row: %v", err)
+	}
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row == nil || row.Config != own {
+		t.Fatalf("one-shot migration ran twice: %+v, err = %v", row, err)
+	}
+}
+
+func TestReconcileMovesCommonXXMILibsPinToSharedVersion(t *testing.T) {
+	t.Parallel()
+
+	client, err := New(filepath.Join(t.TempDir(), "xxmi.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	// An external launcher import pinned every importer to the launcher's libraries.
+	if _, err := client.db.Exec(
+		`DELETE FROM "_schema_state" WHERE "key" = ?`,
+		SchemaKeyXXMILibsSharedDefault,
+	); err != nil {
+		t.Fatalf("clear flag: %v", err)
+	}
+	for _, key := range []string{"GIMI", "SRMI"} {
+		if err := client.XXMIImporters.Upsert(
+			ctx,
+			key,
+			`{"packageVersion":{"follow":"latest"},"xxmiVersion":{"pinned":"1.7.6"}}`,
+		); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("migrate reconcile: %v", err)
+	}
+	for _, key := range []string{"GIMI", "SRMI"} {
+		row, err := client.XXMIImporters.Get(ctx, key)
+		if err != nil || row == nil ||
+			row.Config != `{"packageVersion":{"follow":"latest"},"xxmiVersion":{"follow":"shared"}}` {
+			t.Fatalf("%s after migration = %+v, err = %v", key, row, err)
+		}
+	}
+	if shared, err := client.Settings.GetValue(ctx, "xxmi_libs_version"); err != nil || shared == nil ||
+		*shared != "1.7.6" {
+		t.Fatalf("shared version after migration = %v, err = %v", shared, err)
+	}
+}
+
 func TestReconcileSeedsBuiltInBlenderMCPServerOnce(t *testing.T) {
 	t.Parallel()
 
