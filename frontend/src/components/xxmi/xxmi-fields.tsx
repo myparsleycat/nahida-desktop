@@ -18,6 +18,9 @@ import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+// Base UI selects cannot represent an empty string as a regular option value.
+export const FOLLOW_LATEST = "__latest__";
+
 function FieldLabel({ label, description }: { label: ReactNode; description?: ReactNode }) {
   return (
     <span className="min-w-0 space-y-0.5">

@@ -29,7 +29,13 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
-import { NumberRow, PathField, SelectRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
+import {
+  FOLLOW_LATEST,
+  NumberRow,
+  PathField,
+  SelectRow,
+  ToggleRow,
+} from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
@@ -46,9 +52,6 @@ import {
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-
-// Base UI selects cannot represent an empty string as a regular option value.
-const FOLLOW_LATEST = "__latest__";
 
 type PendingImporterFolderChange = {
   next: ImporterConfig;
@@ -105,6 +108,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   });
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
+  const sharedLibsVersion = overview?.sharedLibsVersion;
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
@@ -195,6 +199,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
+  const followsSharedLibs = config.xxmiVersion.follow === "shared";
+  const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
@@ -528,19 +534,64 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         )}
                       </span>
                     }
-                    value={config.xxmiVersion.pinned || FOLLOW_LATEST}
+                    description={
+                      followsSharedLibs
+                        ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
+                            version: sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
+                          })
+                        : undefined
+                    }
+                    value={followsSharedLibs ? "shared" : "own"}
                     options={[
-                      { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                      ...(libsReleases?.map((release) => release.version) ?? []),
+                      { value: "shared", label: t("page.setting.xxmi.builtin.libsFollowShared") },
+                      { value: "own", label: t("page.setting.xxmi.builtin.libsOwnVersion") },
                     ]}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      if ((value === "shared") === followsSharedLibs) return;
                       setConfig({
                         ...config,
-                        xxmiVersion:
-                          value === FOLLOW_LATEST ? { follow: "latest" } : { pinned: value },
-                      })
-                    }
+                        xxmiVersion: { follow: value === "shared" ? "shared" : "latest" },
+                      });
+                    }}
                   />
+                  {!followsSharedLibs && (
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.libsVersion")}
+                      value={config.xxmiVersion.pinned || FOLLOW_LATEST}
+                      options={[
+                        { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                        ...(libsReleases?.map((release) => release.version) ?? []),
+                      ]}
+                      onValueChange={(value) =>
+                        setConfig({
+                          ...config,
+                          xxmiVersion:
+                            value === FOLLOW_LATEST
+                              ? { follow: "latest" }
+                              : {
+                                  pinned: value,
+                                  // A new pin starts fixed; picking another version keeps the notices the user chose.
+                                  notify: config.xxmiVersion.pinned
+                                    ? config.xxmiVersion.notify
+                                    : false,
+                                },
+                        })
+                      }
+                    />
+                  )}
+                  {!followsSharedLibs && config.xxmiVersion.pinned && (
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.libsNotify")}
+                      description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
+                      checked={!!config.xxmiVersion.notify}
+                      onCheckedChange={(notify) =>
+                        setConfig({
+                          ...config,
+                          xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
+                        })
+                      }
+                    />
+                  )}
                   {customDll && (
                     <Alert>
                       <ShieldAlertIcon />
@@ -773,10 +824,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     disabled={
                       config.mode === RuntimeMode.RuntimeLegacy &&
                       config.injectionMethod !== "Native" &&
-                      !cachedLibs?.some(
-                        (entry) =>
-                          !config.xxmiVersion.pinned || entry.version === config.xxmiVersion.pinned,
-                      )
+                      !cachedLibs?.some((entry) => !libsPin || entry.version === libsPin)
                     }
                     onCheckedChange={(enabled) =>
                       setConfig({

@@ -19,7 +19,8 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	}
 	for name, pin := range map[string]VersionPin{"packageVersion": cfg.PackageVersion, "xxmiVersion": cfg.XXMIVersion} {
 		normalized := normalizeVersion(pin.Pinned)
-		if (pin.Follow == "latest") == (pin.Pinned != "") ||
+		follows := pin.Follow == "latest" || name == "xxmiVersion" && pin.Follow == followShared
+		if follows == (pin.Pinned != "") || pin.Notify && pin.Pinned == "" ||
 			pin.Pinned != "" && (normalized == "" || normalized == "." || normalized == "..") ||
 			strings.ContainsAny(pin.Pinned, `\/:*?"<>|`) {
 			return fmt.Errorf("invalid %s", name)

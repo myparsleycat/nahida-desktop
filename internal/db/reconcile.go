@@ -117,6 +117,9 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.seedBlenderMCPDefault(ctx); err != nil {
 		return err
 	}
+	if err := c.migrateXXMILibsSharedDefault(ctx); err != nil {
+		return err
+	}
 	return c.dropToggleViewerArtifactTable(ctx)
 }
 
@@ -670,6 +673,54 @@ WHERE "importer" = ?
 	}
 
 	return c.SchemaState.Upsert(ctx, SchemaKeyGamePathsNTELauncher, "1", time.Now().UTC().Format(time.RFC3339Nano))
+}
+
+// migrateXXMILibsSharedDefault moves importers saved before the shared XXMI libraries version existed onto it.
+// "latest" was the only non-pinned choice, so it carried that meaning. A pin that every importer agrees on,
+// as an external launcher import wrote, becomes the shared version; differing pins stay per importer so no
+// importer changes the libraries it runs.
+func (c *Client) migrateXXMILibsSharedDefault(ctx context.Context) error {
+	migrated, err := c.SchemaState.Get(ctx, SchemaKeyXXMILibsSharedDefault)
+	if err != nil {
+		return err
+	}
+	if migrated != nil && migrated.Value == "1" {
+		return nil
+	}
+
+	if err := c.withImmediate(ctx, func(q queryExec) error {
+		if _, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.xxmiVersion.follow', 'shared')
+WHERE json_extract("config", '$.xxmiVersion.follow') = 'latest'`); err != nil {
+			return err
+		}
+
+		var pins int
+		var pin sql.NullString
+		if err := q.QueryRowContext(ctx, `
+SELECT COUNT(DISTINCT COALESCE(json_extract("config", '$.xxmiVersion.pinned'), '')),
+       MIN(COALESCE(json_extract("config", '$.xxmiVersion.pinned'), ''))
+FROM "xxmi_importers"`).Scan(&pins, &pin); err != nil {
+			return err
+		}
+		if pins != 1 || pin.String == "" {
+			return nil
+		}
+		if _, err := q.ExecContext(ctx, `INSERT INTO "setting" ("key", "value") VALUES (?, ?)
+ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, "xxmi_libs_version", pin.String); err != nil {
+			return err
+		}
+		_, err := q.ExecContext(
+			ctx,
+			`UPDATE "xxmi_importers" SET "config" = json_set("config", '$.xxmiVersion', json('{"follow":"shared"}'))`,
+		)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migrate xxmi libraries shared default: %w", err)
+	}
+
+	return c.SchemaState.Upsert(ctx, SchemaKeyXXMILibsSharedDefault, "1", time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func (c *Client) dropToggleViewerArtifactTable(ctx context.Context) error {

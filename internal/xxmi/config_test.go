@@ -17,7 +17,7 @@ func TestDefaultImporterSettings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s default: %v", key, err)
 		}
-		if cfg.PackageVersion.Follow != "latest" || cfg.XXMIVersion.Follow != "latest" {
+		if cfg.PackageVersion.Follow != "latest" || cfg.XXMIVersion.Follow != followShared {
 			t.Fatalf("%s pins = %+v, %+v", key, cfg.PackageVersion, cfg.XXMIVersion)
 		}
 		if err := ValidateImporterSettings(key, cfg); err != nil {
@@ -50,6 +50,22 @@ func TestImporterSettingsRejectNestedGameFolderAndInvalidPin(t *testing.T) {
 		if err := ValidateImporterSettings("GIMI", cfg); err == nil {
 			t.Fatalf("dot version pin %q accepted", version)
 		}
+	}
+
+	for _, pin := range []VersionPin{{Follow: "latest"}, {Pinned: "1.7.6"}, {Pinned: "1.7.6", Notify: true}} {
+		cfg.XXMIVersion = pin
+		if err := ValidateImporterSettings("GIMI", cfg); err != nil {
+			t.Fatalf("XXMI version %+v rejected: %v", pin, err)
+		}
+	}
+	cfg.XXMIVersion = VersionPin{Follow: "latest", Notify: true}
+	if err := ValidateImporterSettings("GIMI", cfg); err == nil {
+		t.Fatal("update notice without a pinned version accepted")
+	}
+	cfg.XXMIVersion = VersionPin{Follow: followShared}
+	cfg.PackageVersion = VersionPin{Follow: followShared}
+	if err := ValidateImporterSettings("GIMI", cfg); err == nil {
+		t.Fatal("importer package following the shared libraries version accepted")
 	}
 }
 

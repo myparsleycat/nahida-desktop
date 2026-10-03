@@ -16,6 +16,8 @@ import (
 type CachedLibs struct {
 	Version    string `json:"version"`
 	Referenced bool   `json:"referenced"`
+	// InUse marks the version selected for a launch; Referenced also protects older deployed versions.
+	InUse bool `json:"inUse"`
 }
 
 type LegacyRuntimeInfo struct {
@@ -38,7 +40,11 @@ func (x *XXMI) ListCachedLibs(ctx context.Context) ([]CachedLibs, error) {
 	result := make([]CachedLibs, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() && !strings.Contains(entry.Name(), ".tmp-") {
-			result = append(result, CachedLibs{Version: entry.Name(), Referenced: referenced[entry.Name()]})
+			result = append(result, CachedLibs{
+				Version:    entry.Name(),
+				Referenced: referenced[entry.Name()].Referenced,
+				InUse:      referenced[entry.Name()].InUse,
+			})
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -71,7 +77,7 @@ func (x *XXMI) PruneLibsCache(ctx context.Context) ([]string, error) {
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		if !entry.IsDir() || referenced[entry.Name()] || strings.Contains(entry.Name(), ".tmp-") {
+		if !entry.IsDir() || referenced[entry.Name()].Referenced || strings.Contains(entry.Name(), ".tmp-") {
 			continue
 		}
 		target := filepath.Join(parent, entry.Name())
@@ -94,7 +100,7 @@ func (x *XXMI) PruneLibsCache(ctx context.Context) ([]string, error) {
 	return removed, nil
 }
 
-func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]bool, error) {
+func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]CachedLibs, error) {
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return "", nil, err
@@ -113,29 +119,47 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]bool
 	if err != nil {
 		return "", nil, err
 	}
-	referenced := map[string]bool{}
+	latest, skipped := "", ""
+	if pkg != nil {
+		if pkg.LatestVersion != nil {
+			latest = normalizeVersion(*pkg.LatestVersion)
+		}
+		if pkg.SkippedVersion != nil {
+			skipped = normalizeVersion(*pkg.SkippedVersion)
+		}
+	}
+	referenced := map[string]CachedLibs{}
 	for _, row := range rows {
 		var cfg ImporterConfig
 		if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
 			return "", nil, err
 		}
-		if cfg.XXMIVersion.Pinned != "" {
-			referenced[normalizeVersion(cfg.XXMIVersion.Pinned)] = true
-		} else if cfg.Mode == RuntimeXXMI && pkg != nil && pkg.LatestVersion != nil {
-			referenced[normalizeVersion(*pkg.LatestVersion)] = true
-		} else if legacyUsesXXMIInjector(cfg) {
-			if version := newestCachedPackageVersion("xxmi-libs"); version != "" {
-				referenced[version] = true
-			}
+		pin, _, err := x.libsPin(ctx, cfg)
+		if err != nil {
+			return "", nil, err
 		}
+		deployedVersion := ""
 		data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
 		if err == nil {
 			var deployed runtimeManifest
 			if json.Unmarshal(data, &deployed) == nil && strings.HasPrefix(deployed.Source, "xxmi-libs@") {
-				referenced[strings.TrimPrefix(deployed.Source, "xxmi-libs@")] = true
+				deployedVersion = strings.TrimPrefix(deployed.Source, "xxmi-libs@")
+				reference := referenced[deployedVersion]
+				reference.Referenced = true
+				referenced[deployedVersion] = reference
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", nil, err
+		}
+
+		selected := pin
+		if selected == "" && cfg.Mode == RuntimeXXMI {
+			selected = cachedLibsVersion(latest, skipped, deployedVersion, verifiedCachedLibsVersion)
+		} else if selected == "" && legacyUsesXXMIInjector(cfg) {
+			selected = newestCachedPackageVersion("xxmi-libs")
+		}
+		if selected != "" {
+			referenced[selected] = CachedLibs{Version: selected, Referenced: true, InUse: true}
 		}
 	}
 	return filepath.Join(cacheRoot, "packages", "xxmi-libs"), referenced, nil

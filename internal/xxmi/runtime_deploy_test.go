@@ -548,7 +548,15 @@ func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.
 	if err != nil || version != "1.0.0" {
 		t.Fatalf("skipped update selected %q, err = %v", version, err)
 	}
-	cfg.XXMIVersion.Pinned = "2.0.0"
+	shared := "v1.5.0"
+	if err := client.Settings.Upsert(ctx, sharedLibsVersionKey, &shared); err != nil {
+		t.Fatal(err)
+	}
+	version, err = x.resolveLibsVersion(ctx, cfg)
+	if err != nil || version != "1.5.0" {
+		t.Fatalf("shared version selected %q, err = %v", version, err)
+	}
+	cfg.XXMIVersion = VersionPin{Pinned: "2.0.0"}
 	version, err = x.resolveLibsVersion(ctx, cfg)
 	if err != nil || version != "2.0.0" {
 		t.Fatalf("pinned version selected %q, err = %v", version, err)

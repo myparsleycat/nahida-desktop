@@ -22,7 +22,12 @@ import {
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
-import { PathField, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
+import {
+  FOLLOW_LATEST,
+  PathField,
+  SelectRow,
+  ToggleRow,
+} from "@renderer/components/xxmi/xxmi-fields";
 import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { toErrorMessage } from "@shared/utils";
@@ -53,9 +58,10 @@ const importErrorCodes = [
   "XXMI_GAME_RUNNING",
 ] as const;
 const settingsConfig = {
-  autoUpdate: "xxmi.autoUpdate",
+  autoUpdateMode: "xxmi.autoUpdate",
   includePrereleases: "xxmi.includePrereleases",
 } as const;
+const launchUpdateModes = ["auto", "notify", "off"] as const;
 
 export function XXMIDashboard() {
   const { t } = useTranslation();
@@ -70,6 +76,10 @@ export function XXMIDashboard() {
     queryKey: ["xxmi:fps-releases"],
     queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
     staleTime: 60 * 60 * 1000,
+  });
+  const { data: libsReleases } = useQuery({
+    queryKey: ["xxmi:libs-releases"],
+    queryFn: () => XXMI.ListReleases("xxmi-libs"),
   });
   const updates = useXXMIUpdates(!external && (overview?.configured ?? false));
   const [editedRoot, setEditedRoot] = useState<string | null>(null);
@@ -172,7 +182,10 @@ export function XXMIDashboard() {
                       size="sm"
                       onClickPromise={async () => {
                         try {
-                          await XXMI.InstallUpdates(pendingUpdates.map((entry) => entry.package));
+                          await XXMI.InstallUpdates(
+                            "",
+                            pendingUpdates.map((entry) => entry.package),
+                          );
                           refresh();
                         } catch (error) {
                           toast.error(toErrorMessage(error));
@@ -252,15 +265,37 @@ export function XXMIDashboard() {
                     </AlertDescription>
                   </Alert>
                 )}
-                <ToggleRow
-                  label={t("page.setting.xxmi.builtin.autoUpdate")}
-                  checked={settings?.autoUpdate ?? false}
-                  onCheckedChange={(value) => update("autoUpdate", value)}
+                <SelectRow
+                  label={t("page.setting.xxmi.builtin.launchUpdate")}
+                  value={settings?.autoUpdateMode ?? "auto"}
+                  options={launchUpdateModes.map((mode) => ({
+                    value: mode,
+                    label: t(`page.setting.xxmi.builtin.launchUpdateModes.${mode}`),
+                  }))}
+                  onValueChange={(value) => {
+                    const mode = launchUpdateModes.find((mode) => mode === value);
+                    if (mode) void update("autoUpdateMode", mode);
+                  }}
                 />
                 <ToggleRow
                   label={t("page.setting.xxmi.builtin.prereleases")}
                   checked={settings?.includePrereleases ?? false}
                   onCheckedChange={(value) => update("includePrereleases", value)}
+                />
+                <SelectRow
+                  label={t("page.setting.xxmi.builtin.sharedLibsVersion")}
+                  description={t("page.setting.xxmi.builtin.sharedLibsVersionDescription")}
+                  value={overview?.sharedLibsVersion || FOLLOW_LATEST}
+                  options={[
+                    { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                    ...(libsReleases?.map((release) => release.version) ?? []),
+                  ]}
+                  onValueChange={(value) => {
+                    void XXMI.SetSharedLibsVersion(value === FOLLOW_LATEST ? "" : value).then(
+                      refresh,
+                      (error: unknown) => toast.error(toErrorMessage(error)),
+                    );
+                  }}
                 />
               </SectionContent>
             </Section>
@@ -281,10 +316,10 @@ export function XXMIDashboard() {
                   title={t("page.setting.xxmi.builtin.libs")}
                   versions={libs?.map((entry) => ({
                     key: entry.version,
-                    label: entry.referenced
+                    label: entry.inUse
                       ? `${entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
                       : entry.version,
-                    active: entry.referenced,
+                    active: entry.inUse,
                   }))}
                 >
                   <Button

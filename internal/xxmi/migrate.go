@@ -203,9 +203,6 @@ func (x *XXMI) ImportExternalLauncher(
 		if !autoUpdate {
 			cfg.PackageVersion = VersionPin{Pinned: *installed}
 		}
-		if libsVersion != nil {
-			cfg.XXMIVersion = VersionPin{Pinned: *libsVersion}
-		}
 		wrapper, _ := config["Importers"].(map[string]any)[key].(map[string]any)
 		importer, _ := wrapper["Importer"].(map[string]any)
 		migoto, _ := wrapper["Migoto"].(map[string]any)
@@ -311,11 +308,17 @@ func (x *XXMI) ImportExternalLauncher(
 	rootValue := root
 	autoUpdateValue := strconv.FormatBool(autoUpdate)
 	prereleasesValue := strconv.FormatBool(includePrereleases)
-	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, map[string]*string{
+	settings := map[string]*string{
 		"xxmi_root":                &rootValue,
 		"xxmi_auto_update":         &autoUpdateValue,
 		"xxmi_include_prereleases": &prereleasesValue,
-	}); err != nil {
+	}
+
+	// Every imported importer follows the shared version, which stays on the launcher's libraries.
+	if libsVersion != nil {
+		settings[sharedLibsVersionKey] = libsVersion
+	}
+	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, settings); err != nil {
 		return nil, err
 	}
 	rollbackState = "committed"

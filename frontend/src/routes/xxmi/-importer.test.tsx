@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const xxmi = vi.hoisted(() => ({
   SaveImporterConfig: vi.fn(),
+  SetImporterVersions: vi.fn(),
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
 }));
@@ -76,7 +77,9 @@ vi.mock("@tanstack/react-query", () => ({
                 { version: "1.0.0", signed: false, notes: "Old unsigned release" },
                 { version: "2.0.0", signed: true, notes: "Signed release" },
               ]
-            : [],
+            : queryKey[0] === "xxmi:libs-releases"
+              ? [{ version: "1.7.5" }, { version: "1.7.6" }]
+              : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -96,6 +99,7 @@ import { XXMIImporterSettings } from "@renderer/components/xxmi/xxmi-importer-se
 afterEach(() => {
   cleanup();
   xxmi.SaveImporterConfig.mockReset();
+  xxmi.SetImporterVersions.mockReset();
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
   mod.GetGames.mockReset();
@@ -124,6 +128,77 @@ it("defaults old configs to the existing injector and saves the native selection
     expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
       "GIMI",
       expect.objectContaining({ injectionMethod: "Native" }),
+    ),
+  );
+});
+
+async function chooseOption(combobox: RegExp, option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: combobox }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item, { pointerType: "mouse" });
+  fireEvent.click(item);
+}
+
+it("pins the importer's own XXMI version without update notices by default", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.SetImporterVersions.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  expect(screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.libsNotify" })).toBeNull();
+
+  await chooseOption(/page.setting.xxmi.builtin.libsVersion/, "1.7.6");
+  const notify = screen.getByRole("switch", { name: "page.setting.xxmi.builtin.libsNotify" });
+  expect(notify.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ xxmiVersion: { pinned: "1.7.6", notify: false } }),
+    ),
+  );
+});
+
+it("keeps switched-on update notices when another pinned XXMI version is chosen", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  config.xxmiVersion = { pinned: "1.7.5", notify: true };
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    await chooseOption(/page.setting.xxmi.builtin.libsVersion/, "1.7.6");
+    expect(
+      screen
+        .getByRole("switch", { name: "page.setting.xxmi.builtin.libsNotify" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  } finally {
+    config.xxmiVersion = { follow: "latest" };
+  }
+});
+
+it("hides the importer's own XXMI version while it follows the shared version", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  await chooseOption(
+    /page.setting.xxmi.builtin.libs$/,
+    "page.setting.xxmi.builtin.libsFollowShared",
+  );
+  expect(
+    screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ xxmiVersion: { follow: "shared" } }),
     ),
   );
 });

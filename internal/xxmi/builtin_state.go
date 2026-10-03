@@ -63,15 +63,17 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 }
 
 type Overview struct {
-	LauncherMode     LauncherMode        `json:"launcherMode"`
-	Configured       bool                `json:"configured"`
-	Root             string              `json:"root"`
-	Importers        []EnabledImporter   `json:"importers"`
-	LibsCache        []CachedLibs        `json:"libsCache"`
-	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
-	FPSVersions      []string            `json:"fpsVersions"`
-	CacheIssues      []string            `json:"cacheIssues,omitempty"`
-	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
+	LauncherMode LauncherMode `json:"launcherMode"`
+	Configured   bool         `json:"configured"`
+	Root         string       `json:"root"`
+	// SharedLibsVersion is empty while importers following the shared version use the latest release.
+	SharedLibsVersion string              `json:"sharedLibsVersion"`
+	Importers         []EnabledImporter   `json:"importers"`
+	LibsCache         []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes    []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions       []string            `json:"fpsVersions"`
+	CacheIssues       []string            `json:"cacheIssues,omitempty"`
+	ExternalLauncher  *ExternalLauncher   `json:"externalLauncher,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -101,6 +103,10 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		if err != nil {
 			return Overview{}, err
 		}
+	}
+	sharedLibs, err := client.Settings.GetValue(ctx, sharedLibsVersionKey)
+	if err != nil {
+		return Overview{}, err
 	}
 	importers, err := x.builtinEnabledImporters(ctx)
 	if err != nil {
@@ -135,6 +141,9 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		Root:         filepath.Clean(rootPath),
 		Importers:    importers,
 	}
+	if sharedLibs != nil {
+		overview.SharedLibsVersion = normalizeVersion(*sharedLibs)
+	}
 	if overview.LibsCache, err = x.ListCachedLibs(ctx); err != nil {
 		overview.CacheIssues = append(overview.CacheIssues, "XXMI libraries: "+err.Error())
 	}
@@ -159,7 +168,9 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 }
 
 // builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them.
-var builtinSettingKeys = []string{"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases"}
+var builtinSettingKeys = []string{
+	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey,
+}
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,
 // package update state, and the root and update preferences. Files stay on disk: importer folders hold user
