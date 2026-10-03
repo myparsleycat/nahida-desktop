@@ -116,11 +116,16 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 ### GitHub Actions test compatibility
 
 - When writing or changing tests, inspect the relevant `.github/workflows` and `.github/actions` validation steps and account for the Windows runner environment, not just the local workstation.
+- Treat the CI runner as a clean machine: do not assume games, launchers, optional executables, GPUs or vendor drivers, registry keys, user settings, credentials, or caches exist. Identify every host dependency reached before the assertion, including earlier validation and preparation stages.
+- Unit and service-flow tests must inject per-instance fakes or isolated fixtures for host dependencies, including Windows registry access, driver APIs, installed-program discovery, process lists, and external services. `t.TempDir()` and temporary profile environment variables do not isolate `HKEY_CURRENT_USER`, machine-wide state, or driver settings.
+- Never read or modify the developer's real game settings, registry records, driver profiles, or installed applications to make a test pass. Test native OS access separately with disposable resources owned by the test; use an isolated subprocess for process-wide registry overrides or other global state.
+- Cover the relevant absent, unavailable, enabled, and failing dependency states explicitly. A test that expects a later-stage result must provide deterministic earlier-stage dependencies; do not bypass product checks, weaken assertions, seed real user settings, or skip a test because optional software or hardware is missing.
 - Do not assume `t.TempDir()`, `TEMP`, `TMP`, the checkout, or the user profile uses a particular drive, username, spelling, or long path name. GitHub Actions may provide Windows 8.3 aliases such as `RUNNER~1`; the same physical path can have different textual representations.
 - For filesystem behavior, use isolated temporary fixtures and cover relevant path aliases, spaces, case differences, and supported junctions. Normalize paths consistently before lexical comparisons, and use physical file identity when testing whether aliases refer to the same file.
 - Reproduce environment-dependent failures with a regression test that exercises the CI condition locally. Use Windows APIs to obtain real short path aliases instead of hard-coding runner paths; skip only when the filesystem lacks the required capability, with an explicit reason.
 - Keep tests independent of workstation state and execution order. Avoid process-wide environment changes in parallel tests; use per-test inputs, or an isolated subprocess when environment changes are necessary. Use synchronization for concurrent behavior instead of relying on the runner matching local timing.
 - Validate with the project commands used by CI. A local pass under default environment settings alone does not verify a fix for a runner-specific failure.
+- For a host-dependent CI regression, verify both the reported clean-runner condition and deterministic fixture behavior locally. Keep concurrent tests isolated with per-instance dependencies; do not replace package-global functions or registry roots in parallel tests.
 
 ## Error Logging
 

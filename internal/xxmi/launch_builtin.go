@@ -180,7 +180,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	// would control for GIMI, and leaving it on only breaks mods silently.
 	checkDCR := key == "GIMI" && migotoDLLUsed
 	if checkDCR {
-		if err := x.disableGIMIDCR(ctx); err != nil {
+		if err := x.launchSettings.disableGIMIDCR(ctx); err != nil {
 			return err
 		}
 	}

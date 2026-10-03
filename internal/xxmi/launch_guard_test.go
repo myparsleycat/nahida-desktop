@@ -34,6 +34,9 @@ func (f *fakeLaunch) smoothMotionEnabled(context.Context, string) (bool, error) 
 
 func (f *fakeLaunch) disableGIMIDCR(context.Context) error {
 	f.dcrDisabled++
+	if f.disableDCRErr == nil {
+		f.dcr = false
+	}
 	return f.disableDCRErr
 }
 

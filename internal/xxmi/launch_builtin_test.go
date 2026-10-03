@@ -386,44 +386,96 @@ func TestLaunchProcessNameResolution(t *testing.T) {
 
 func TestLaunchWithoutGameFolder(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		launch string
-		key    string
-		want   string
+	registryMissing := errors.New("genshin impact registry key is not found")
+	registryDenied := errors.New("registry write denied")
+	states := []struct {
+		name     string
+		settings fakeLaunch
+		want     string
+		wantErr  error
 	}{
-		{"Direct", "GIMI", "XXMI_GAME_FOLDER_NOT_CONFIGURED"},
-		{"Custom", "GIMI", "XXMI_ELEVATION_DENIED"},
-		{"Manual", "GIMI", "XXMI_ELEVATION_DENIED"},
-	} {
-		t.Run(tc.launch, func(t *testing.T) {
-			t.Parallel()
-			cfg, err := DefaultImporterConfig(tc.key, t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
-			cfg.Enabled, cfg.Mode, cfg.GameLaunch = true, RuntimeLegacy, tc.launch
-			cfg.CustomLaunch.Command = "start game"
-			cfg.Migoto.UnsafeMode = true
-			if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			manifest := fmt.Sprintf(`{"mode":%q,"source":"legacy@abcdef123456"}`, RuntimeLegacy)
-			for name, content := range map[string]string{
-				"d3dx.ini": "[Loader]\n", runtimeManifestName: manifest, "d3d11.dll": "dll",
-				"3DMigoto Loader.exe": "loader",
-			} {
-				if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, name), []byte(content), 0o600); err != nil {
+		{name: "settings off", want: "XXMI_ELEVATION_DENIED"},
+		{name: "DCR enabled", settings: fakeLaunch{dcr: true}, want: "XXMI_ELEVATION_DENIED"},
+		{
+			name: "registry missing", settings: fakeLaunch{disableDCRErr: registryMissing},
+			want: registryMissing.Error(), wantErr: registryMissing,
+		},
+		{
+			name: "registry write denied", settings: fakeLaunch{dcr: true, disableDCRErr: registryDenied},
+			want: registryDenied.Error(), wantErr: registryDenied,
+		},
+		{
+			name: "driver unavailable", settings: fakeLaunch{smoothErr: errNVIDIAUnavailable},
+			want: "XXMI_ELEVATION_DENIED",
+		},
+		{
+			name: "smooth motion enabled", settings: fakeLaunch{smooth: true},
+			want: errSmoothMotionEnabled.Error(), wantErr: errSmoothMotionEnabled,
+		},
+	}
+	for _, launch := range []string{"Direct", "Custom", "Manual"} {
+		for _, state := range states {
+			t.Run(launch+"/"+state.name, func(t *testing.T) {
+				t.Parallel()
+				cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+				if err != nil {
 					t.Fatal(err)
 				}
-			}
-			service := New()
-			service.UseClient(newXXMITestClient(t))
-			service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
-			err = service.launchBuiltinGameLocked(context.Background(), tc.key, cfg)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("launch error = %v; want %s", err, tc.want)
-			}
-		})
+				cfg.Enabled, cfg.Mode, cfg.GameLaunch = true, RuntimeLegacy, launch
+				cfg.CustomLaunch.Command = "start game"
+				cfg.Migoto.UnsafeMode = true
+				if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				manifest := fmt.Sprintf(`{"mode":%q,"source":"legacy@abcdef123456"}`, RuntimeLegacy)
+				for name, content := range map[string]string{
+					"d3dx.ini": "[Loader]\n", runtimeManifestName: manifest, "d3d11.dll": "dll",
+					"3DMigoto Loader.exe": "loader",
+				} {
+					if err := os.WriteFile(
+						filepath.Join(cfg.ImporterFolder, name),
+						[]byte(content),
+						0o600,
+					); err != nil {
+						t.Fatal(err)
+					}
+				}
+				service := New()
+				service.UseClient(newXXMITestClient(t))
+				service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
+				settings := state.settings
+				service.launchSettings = &settings
+				err = service.launchBuiltinGameLocked(t.Context(), "GIMI", cfg)
+				want := state.want
+				if launch == "Direct" {
+					want = "XXMI_GAME_FOLDER_NOT_CONFIGURED"
+				}
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("launch error = %v; want %s", err, want)
+				}
+				if launch == "Direct" {
+					if settings.dcrDisabled != 0 || settings.dcrReads != 0 || settings.smoothReads != 0 {
+						t.Fatalf("host settings were accessed before game folder validation: %+v", settings)
+					}
+					return
+				}
+				if state.wantErr != nil && !errors.Is(err, state.wantErr) {
+					t.Fatalf("launch error = %v; want original error %v", err, state.wantErr)
+				}
+				if settings.dcrDisabled != 1 {
+					t.Fatalf("DCR disable calls = %d; want 1 even without a game folder", settings.dcrDisabled)
+				}
+				if state.settings.disableDCRErr != nil {
+					if settings.dcrReads != 0 || settings.smoothReads != 0 {
+						t.Fatalf("launch continued after DCR failure: %+v", settings)
+					}
+					return
+				}
+				if settings.dcrReads != 1 || settings.smoothReads != 1 || settings.smoothDisabled != 0 {
+					t.Fatalf("launch settings = %+v; want blocker checks without disabling smooth motion", settings)
+				}
+			})
+		}
 	}
 }
 

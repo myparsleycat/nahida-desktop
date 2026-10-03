@@ -2,6 +2,7 @@ package fixer4001
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 )
 
 func TestEnsureXXMIModeRejectsUnmanagedBuiltinImporters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -40,7 +42,17 @@ func TestEnsureXXMIModeRejectsUnmanagedBuiltinImporters(t *testing.T) {
 		t.Fatalf("disabled importer code = %q", code)
 	}
 
-	if err := runtime.EnableImporter(ctx, "GIMI", folder); err != nil {
+	// Seed the fixture directly: runtime mode switches inspect real game processes.
+	cfg, err := xxmi.DefaultImporterConfig("GIMI", filepath.Dir(folder))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIImporters.Upsert(ctx, "GIMI", string(data)); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.ensureXXMIMode(ctx, "GIMI", folder); err != nil {
@@ -51,12 +63,12 @@ func TestEnsureXXMIModeRejectsUnmanagedBuiltinImporters(t *testing.T) {
 		t.Fatalf("mismatched folder error = %v", err)
 	}
 
-	cfg, err := runtime.GetImporterConfig(ctx, "GIMI")
+	cfg.Mode = xxmi.RuntimeLegacy
+	data, err = json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Mode = xxmi.RuntimeLegacy
-	if err := runtime.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+	if err := client.XXMIImporters.Upsert(ctx, "GIMI", string(data)); err != nil {
 		t.Fatal(err)
 	}
 	err = service.ensureXXMIMode(ctx, "GIMI", folder)

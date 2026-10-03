@@ -348,6 +348,7 @@ func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.findProcess = noGameProcess
+	service.launchSettings = &fakeLaunch{}
 	service.epicManifest = func() string { return manifest }
 	service.openLaunchURI = func(uri string) error {
 		opened = append(opened, uri)

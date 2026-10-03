@@ -100,6 +100,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		}
 	}})
 	service.UseClient(client)
+	service.launchSettings = &fakeLaunch{}
 	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)
 	if err := service.SaveImporterConfig(ctx, "EFMI", cfg); err != nil {

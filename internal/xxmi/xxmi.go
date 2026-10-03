@@ -134,6 +134,8 @@ type XXMI struct {
 	namespaceLaunchPreparation func(context.Context, string) error
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
+	// launchSettings accesses registry and driver settings; tests replace it to isolate host state.
+	launchSettings launchFixer
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
@@ -166,6 +168,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	x.installImporter = x.installBuiltinImporterPackage
 	x.findProcess = findProcessPID
+	x.launchSettings = x
 	x.renameUserData = os.Rename
 	x.findSteam = gameplatform.FindSteam
 	x.epicManifest = gameplatform.EpicManifestPath
