@@ -1,7 +1,11 @@
 import { Mod } from "@bindings/mod";
 import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
-import { ImportUserDataMode, LauncherMode } from "@bindings/xxmi/models";
+import {
+  ImportUserDataMode,
+  LauncherMode,
+  type ImportExternalLauncherInput,
+} from "@bindings/xxmi/models";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
   AlertDialog,
@@ -27,6 +31,7 @@ import {
   SelectRow,
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
+import { XXMIImportDialog } from "@renderer/components/xxmi/xxmi-import-dialog";
 import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { cn } from "@renderer/lib/utils";
@@ -55,6 +60,8 @@ const importErrorCodes = [
   "XXMI_IMPORT_TARGET_NOT_EMPTY",
   "XXMI_IMPORT_NO_SPACE",
   "XXMI_IMPORT_VERSION_UNKNOWN",
+  "XXMI_IMPORT_SOURCE_CHANGED",
+  "XXMI_IMPORT_PREVIEW_REQUIRED",
   "XXMI_GAME_RUNNING",
 ] as const;
 const settingsConfig = {
@@ -98,13 +105,10 @@ export function XXMIDashboard() {
     });
   };
 
-  const importExternal = async (userData: ImportUserDataMode) => {
+  const importExternal = async (input: ImportExternalLauncherInput) => {
     if (!overview?.externalLauncher) return;
-    const imported = await XXMI.ImportExternalLauncher({
-      path: overview.externalLauncher.path,
-      root: importRoot,
-      userData,
-    }).catch((error: unknown) => {
+    const userData = input.userData;
+    const imported = await XXMI.ImportExternalLauncher(input).catch((error: unknown) => {
       const message = toErrorMessage(error);
       const code = importErrorCodes.find((code) => message.includes(code));
       toast.error(code ? t(`page.setting.xxmi.builtin.importErrors.${code}`) : message);
@@ -451,34 +455,14 @@ export function XXMIDashboard() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <AlertDialog open={importOpen} onOpenChange={setImportOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("page.setting.xxmi.builtin.importUserDataTitle")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("page.setting.xxmi.builtin.importUserDataDescription", { root: importRoot })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              <li>{t("page.setting.xxmi.builtin.importUserDataKeepHint")}</li>
-              <li>{t("page.setting.xxmi.builtin.importUserDataMoveHint")}</li>
-            </ul>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-              <Button
-                variant="outline"
-                onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataKeep)}
-              >
-                {t("page.setting.xxmi.builtin.importUserDataKeep")}
-              </Button>
-              <Button onClickPromise={() => importExternal(ImportUserDataMode.ImportUserDataMove)}>
-                {t("page.setting.xxmi.builtin.importUserDataMove")}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {importOpen && overview?.externalLauncher && (
+          <XXMIImportDialog
+            path={overview.externalLauncher.path}
+            root={importRoot}
+            onImport={importExternal}
+            onClose={() => setImportOpen(false)}
+          />
+        )}
       </div>
     </main>
   );

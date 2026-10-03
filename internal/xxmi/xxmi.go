@@ -138,6 +138,8 @@ type XXMI struct {
 	launchSettings launchFixer
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
+	// prepareImportLibraries prepares a verified cache; tests replace it to avoid signed GitHub releases.
+	prepareImportLibraries func(context.Context, string, string, string) error
 	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
 	renameUserData func(from, to string) error
 	// findSteam, epicManifest, runPlatformClient, and openLaunchURI reach the store clients; tests
@@ -167,6 +169,7 @@ func NewWithOptions(opts Options) *XXMI {
 		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
 	}
 	x.installImporter = x.installBuiltinImporterPackage
+	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
 	x.launchSettings = x
 	x.renameUserData = os.Rename

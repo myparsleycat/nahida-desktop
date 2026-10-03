@@ -56,12 +56,23 @@ func TestImportExternalLauncherInstallsImporterIntoBuiltinRoot(t *testing.T) {
 	service := New()
 	service.UseClient(client)
 	installs := fakeImportInstaller(t, service, nil)
+	staleShared := "1.0.0"
+	if err := client.Settings.Upsert(ctx, sharedLibsVersionKey, &staleShared); err != nil {
+		t.Fatal(err)
+	}
 
 	imported, err := service.ImportExternalLauncher(ctx, ImportExternalLauncherInput{
 		Path: external, Root: root, UserData: ImportUserDataKeep,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if shared, err := client.Settings.GetValue(
+		ctx,
+		sharedLibsVersionKey,
+	); err != nil ||
+		shared != nil && *shared != "" {
+		t.Fatalf("imported shared libraries version = %v, err = %v", shared, err)
 	}
 	want := []ImportedImporter{{Key: "GIMI", PreviousFolder: source, ImporterFolder: target}}
 	if !reflect.DeepEqual(imported, want) {
@@ -88,8 +99,8 @@ func TestImportExternalLauncherInstallsImporterIntoBuiltinRoot(t *testing.T) {
 		cfg.ExtraLibraries.Paths[0] != filepath.Join(external, "extensions", "sample.dll") {
 		t.Fatalf("imported extra libraries = %q", cfg.ExtraLibraries.Paths)
 	}
-	if cfg.PackageVersion.Pinned != "1.2.3" {
-		t.Fatalf("package pin = %+v", cfg.PackageVersion)
+	if cfg.PackageVersion != (VersionPin{Pinned: "1.2.3"}) {
+		t.Fatalf("imported package selection = %+v", cfg.PackageVersion)
 	}
 	if cfg.XXMIVersion != (VersionPin{Follow: followShared}) {
 		t.Fatalf("imported XXMI libraries selection = %+v", cfg.XXMIVersion)
