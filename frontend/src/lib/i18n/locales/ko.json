@@ -2175,6 +2175,8 @@
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
         "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
+        "persistLogs": "로그",
+        "persistLogsEmpty": "아직 로그가 없습니다.",
         "namespaceIsolation": {
           "title": "namespace 충돌",
           "description": "토글 영구 저장은 모드 간 중복 namespace도 안전한 경우 자동으로 분리합니다.",

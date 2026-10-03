@@ -2157,6 +2157,8 @@
         "persistToggles": "トグルの永続保存",
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
+        "persistLogs": "ログ",
+        "persistLogsEmpty": "まだログはありません。",
         "namespaceIsolation": {
           "title": "namespace の競合",
           "description": "トグル状態の永続保存は、MOD 間の重複 namespace も安全な場合に自動で分離します。",

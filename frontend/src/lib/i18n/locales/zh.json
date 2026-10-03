@@ -2156,6 +2156,8 @@
         "persistToggles": "持久保存切换状态",
         "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
         "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
+        "persistLogs": "日志",
+        "persistLogsEmpty": "暂无日志。",
         "namespaceIsolation": {
           "title": "namespace 冲突",
           "description": "切换状态持久化也会在安全的情况下自动隔离模组之间重复的 namespace。",

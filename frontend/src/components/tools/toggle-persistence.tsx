@@ -2,26 +2,48 @@ import { Mod } from "@bindings/mod";
 import { Setting } from "@bindings/setting";
 import { Tools } from "@bindings/tools";
 import { XXMI } from "@bindings/xxmi";
+import { Badge } from "@renderer/components/ui/badge";
 import {
   Section,
   SectionContent,
+  SectionDescription,
   SectionHeader,
-  SectionRow,
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
+import { cn } from "@renderer/lib/utils";
 import type { NamespaceIsolationState } from "@shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Events } from "@wailsio/runtime";
 import { groupBy } from "es-toolkit";
-import { useEffect } from "react";
+import {
+  AlertTriangleIcon,
+  ArrowRightIcon,
+  ChevronRightIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  FolderSearchIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+} from "lucide-react";
+import { useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Button } from "../ui/button";
-import { ScrollArea } from "../ui/scroll-area";
 
 const namespaceStateKey = ["mod:getNamespaceIsolationState"];
+
+// Backend entries look like "[Jan 2, 2006, 3:04:05 PM] [INFO] message".
+const logPattern = /^\[(.+?)\] \[(INFO|ERROR)\] ([\s\S]*)$/;
+
+const conflictStatusClass: Record<string, string> = {
+  waiting_for_game_exit: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  needs_review: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  failed: "bg-destructive/10 text-destructive dark:bg-destructive/20",
+  recovery_required: "bg-destructive/10 text-destructive dark:bg-destructive/20",
+};
 
 function newerNamespaceState(
   previous: NamespaceIsolationState | undefined,
@@ -33,8 +55,9 @@ function newerNamespaceState(
 export default function TogglePersistence() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const titleId = useId();
 
-  const { data: xxmiData } = useQuery({
+  const { data: xxmiData, isPending: isXXMIPending } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
     queryFn: () => XXMI.GetXXMIData(),
   });
@@ -111,136 +134,231 @@ export default function TogglePersistence() {
       ...Object.keys(conflictsByImporter),
     ]),
   ].filter((key) => key.toUpperCase() !== "NTE");
+  const visibleConflicts = importerKeys.flatMap((key) => conflictsByImporter[key] ?? []);
+  const isChecking = namespaceQuery.data?.checking || namespaceQuery.isPending;
+
+  if (isXXMIPending) return null;
 
   if (!xxmiData?.xxmiPath) {
     return (
-      <div className="flex w-full flex-col items-center justify-center p-2 text-center">
-        <h3 className="text-lg font-semibold text-muted-foreground">
-          {t("page.setting.xxmi.persistToggles")}
-        </h3>
-        <p className="text-sm text-muted-foreground italic">
-          {t("page.setting.xxmi.persistNotFoundXXMI")}
-        </p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
+        <FolderSearchIcon className="size-8 text-muted-foreground" />
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium text-foreground">
+            {t("page.setting.xxmi.persistToggles")}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {t("page.setting.xxmi.persistNotFoundXXMI")}
+          </p>
+        </div>
+        <Button render={<Link to="/xxmi" />} variant="outline" size="sm">
+          {t("page.setting.xxmi.xxmiPath")}
+          <ArrowRightIcon />
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col space-y-4 p-4">
-      <SectionContent>
-        <SectionRow
-          title={t("page.setting.xxmi.persistToggles")}
-          description={t("page.setting.xxmi.persistTogglesDescription")}
-        >
-          <Switch
-            checked={!!enabled}
-            onCheckedChange={(c) => mutate(c)}
-            disabled={isQueryPending || isMutatePending}
-          />
-        </SectionRow>
-      </SectionContent>
+    <div className="h-full space-y-6 overflow-y-auto p-4">
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0 space-y-1">
+          <h2 id={titleId} className="text-lg font-semibold text-foreground">
+            {t("page.setting.xxmi.persistToggles")}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {t("page.setting.xxmi.persistTogglesDescription")}
+          </p>
+        </div>
+        <Switch
+          aria-labelledby={titleId}
+          className="mt-1"
+          checked={!!enabled}
+          onCheckedChange={(c) => mutate(c)}
+          disabled={isQueryPending || isMutatePending}
+        />
+      </div>
 
       <Section>
         <SectionHeader>
           <SectionTitle>{t("page.setting.xxmi.namespaceIsolation.title")}</SectionTitle>
+          <SectionDescription>
+            {t("page.setting.xxmi.namespaceIsolation.description")}
+          </SectionDescription>
         </SectionHeader>
         <SectionContent layout="flow">
-          <p className="text-xs text-muted-foreground">
-            {t("page.setting.xxmi.namespaceIsolation.description")}
-          </p>
           {!enabled && !isQueryPending && (
-            <p className="text-xs text-muted-foreground">
-              {t("page.setting.xxmi.namespaceIsolation.disabled")}
-            </p>
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangleIcon className="mt-px size-3.5 shrink-0" />
+              <p>{t("page.setting.xxmi.namespaceIsolation.disabled")}</p>
+            </div>
           )}
-          <div role="status" className="text-xs text-muted-foreground">
-            {namespaceQuery.data?.checking || namespaceQuery.isPending
-              ? t("page.setting.xxmi.namespaceIsolation.checking")
-              : namespaceQuery.isError
-                ? t("page.setting.xxmi.namespaceIsolation.queryFailed")
-                : (namespaceQuery.data?.conflicts ?? []).length === 0
-                  ? t("page.setting.xxmi.namespaceIsolation.empty")
-                  : null}
+
+          <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+            {isChecking ? (
+              <>
+                <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
+                <span>{t("page.setting.xxmi.namespaceIsolation.checking")}</span>
+              </>
+            ) : namespaceQuery.isError ? (
+              <>
+                <CircleXIcon className="size-3.5 shrink-0 text-destructive" />
+                <span className="text-destructive">
+                  {t("page.setting.xxmi.namespaceIsolation.queryFailed")}
+                </span>
+              </>
+            ) : (namespaceQuery.data?.conflicts ?? []).length === 0 ? (
+              <>
+                <CircleCheckIcon className="size-3.5 shrink-0 text-green-600 dark:text-green-400" />
+                <span>{t("page.setting.xxmi.namespaceIsolation.empty")}</span>
+              </>
+            ) : null}
           </div>
           {namespaceQuery.isError && (
-            <p className="text-xs break-all whitespace-pre-wrap text-destructive">
+            <p className="rounded-md bg-destructive/10 p-2 font-mono text-xs break-all whitespace-pre-wrap text-destructive">
               {namespaceQuery.error.message}
             </p>
           )}
-          {importerKeys.map((importerKey) => (
-            <div key={importerKey} className="min-w-0 space-y-2">
-              <SectionRow title={importerKey}>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-xs text-muted-foreground">
+              {t("page.setting.xxmi.namespaceIsolation.rescan")}
+            </span>
+            {importerKeys.map((importerKey) => {
+              const label = t("page.setting.xxmi.namespaceIsolation.rescanImporter", {
+                importer: importerKey,
+              });
+
+              return (
                 <Button
+                  key={importerKey}
                   size="xs"
                   variant="outline"
-                  aria-label={t("page.setting.xxmi.namespaceIsolation.rescanImporter", {
-                    importer: importerKey,
-                  })}
+                  className="font-mono"
+                  aria-label={label}
+                  title={label}
                   disabled={isMutatePending || rescan.isPending || namespaceQuery.data?.checking}
                   onClick={() => rescan.mutate(importerKey)}
                 >
-                  {t("page.setting.xxmi.namespaceIsolation.rescan")}
+                  <RefreshCwIcon
+                    className={cn(
+                      rescan.isPending && rescan.variables === importerKey && "animate-spin",
+                    )}
+                  />
+                  {importerKey}
                 </Button>
-              </SectionRow>
-              {(conflictsByImporter[importerKey] ?? []).map((conflict) => (
-                <div key={conflict.id} className="space-y-1 rounded-md bg-muted/50 p-2 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono break-all">{conflict.namespace}</span>
-                    <span className="font-medium">
+              );
+            })}
+          </div>
+
+          {visibleConflicts.length > 0 && (
+            // One list for every importer, scrolling on its own, so neither the importer count nor the conflict
+            // count can stretch the page.
+            <div className="max-h-64 divide-y divide-border/60 overflow-y-auto rounded-md border border-border/60 bg-muted/30 text-xs">
+              {visibleConflicts.map((conflict) => (
+                // Collapsed by default: paths make each conflict tall, and a native details element keeps the
+                // content in the DOM without per-row state.
+                <details key={conflict.id} className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1 hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+                    <span className="w-10 shrink-0 font-mono text-muted-foreground">
+                      {conflict.importerKey}
+                    </span>
+                    {/* Issues such as invalid metadata carry no namespace; the reason names them instead. */}
+                    <span
+                      className="min-w-0 flex-1 truncate font-mono font-medium group-open:break-all group-open:whitespace-normal"
+                      title={conflict.namespace || conflict.reason}
+                    >
+                      {conflict.namespace || conflict.reason}
+                    </span>
+                    <Badge variant="secondary" className={conflictStatusClass[conflict.status]}>
                       {t(`page.setting.xxmi.namespaceIsolation.status.${conflict.status}`, {
                         defaultValue: conflict.status,
                       })}
-                    </span>
-                  </div>
-                  {conflict.reason && (
-                    <p className="break-all whitespace-pre-wrap">
-                      {t("page.setting.xxmi.namespaceIsolation.reason")}: {conflict.reason}
-                    </p>
-                  )}
-                  {conflict.detail && (
-                    <p className="break-all whitespace-pre-wrap">{conflict.detail}</p>
-                  )}
-                  {(
-                    [
-                      ["modPaths", conflict.modPaths],
-                      ["iniPaths", conflict.iniPaths],
-                    ] as const
-                  ).map(([label, paths]) => (
-                    <div key={label}>
-                      <p className="text-muted-foreground">
-                        {t(`page.setting.xxmi.namespaceIsolation.${label}`)}
+                    </Badge>
+                  </summary>
+                  <div className="space-y-2 border-t border-border/60 p-3">
+                    {conflict.namespace && conflict.reason && (
+                      <p className="break-all whitespace-pre-wrap text-muted-foreground">
+                        {t("page.setting.xxmi.namespaceIsolation.reason")}:{" "}
+                        <span className="font-mono text-foreground">{conflict.reason}</span>
                       </p>
-                      <ul className="space-y-0.5 font-mono break-all">
-                        {(paths ?? []).map((path) => (
-                          <li key={path}>{path}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ))}
-        </SectionContent>
-      </Section>
-
-      <Section className="h-80">
-        <SectionHeader>
-          <SectionTitle>Logs</SectionTitle>
-        </SectionHeader>
-        <ScrollArea className="min-h-0 flex-1 overflow-auto rounded-md bg-muted/50 p-2">
-          {logs.length === 0 ? (
-            <div className="text-sm text-muted-foreground italic">No logs yet.</div>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {[...logs].reverse().map((log, index) => (
-                <div key={`${log}-${index}`} className="font-mono text-xs break-all">
-                  {log}
-                </div>
+                    )}
+                    {conflict.detail && (
+                      <p className="break-all whitespace-pre-wrap">{conflict.detail}</p>
+                    )}
+                    {(
+                      [
+                        ["modPaths", conflict.modPaths],
+                        ["iniPaths", conflict.iniPaths],
+                      ] as const
+                    ).map(([label, paths]) => (
+                      <div key={label} className="space-y-1">
+                        <p className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+                          {t(`page.setting.xxmi.namespaceIsolation.${label}`)}
+                        </p>
+                        <ul className="space-y-0.5 font-mono break-all">
+                          {(paths ?? []).map((path) => (
+                            <li key={path}>{path}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               ))}
             </div>
           )}
-        </ScrollArea>
+        </SectionContent>
+      </Section>
+
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.xxmi.persistLogs")}</SectionTitle>
+        </SectionHeader>
+        <SectionContent layout="flow">
+          {logs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {t("page.setting.xxmi.persistLogsEmpty")}
+            </p>
+          ) : (
+            <ol className="space-y-1.5 rounded-md bg-muted/50 p-2 font-mono text-xs">
+              {[...logs].reverse().map((log, index) => {
+                const match = logPattern.exec(log);
+                if (!match) {
+                  return (
+                    <li key={`${log}-${index}`} className="break-all">
+                      {log}
+                    </li>
+                  );
+                }
+
+                const isError = match[2] === "ERROR";
+                return (
+                  <li key={`${log}-${index}`} className="flex flex-col gap-x-2 sm:flex-row">
+                    <span className="shrink-0 text-muted-foreground">{match[1]}</span>
+                    <span
+                      className={cn(
+                        "w-10 shrink-0 font-medium",
+                        isError ? "text-destructive" : "text-muted-foreground",
+                      )}
+                    >
+                      {match[2]}
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 break-all whitespace-pre-wrap",
+                        isError && "text-destructive",
+                      )}
+                    >
+                      {match[3]}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </SectionContent>
       </Section>
     </div>
   );

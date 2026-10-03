@@ -2241,6 +2241,8 @@
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "persistLogs": "Logs",
+        "persistLogsEmpty": "No logs yet.",
         "namespaceIsolation": {
           "title": "Namespace collisions",
           "description": "Persist Toggles also automatically isolates safe duplicate namespaces across mods.",
