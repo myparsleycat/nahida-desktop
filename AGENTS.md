@@ -94,6 +94,15 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - For `.ts`, `.tsx`, `.js`, and `.jsx` files, use the existing `pnpm lint` and `pnpm fmt` scripts from `frontend/`; do not invoke `tsc`, Oxlint, or Oxfmt directly.
 - Run `task vuln` when dependencies, networking, archive handling, process execution, or other security-sensitive code changes.
 
+### GitHub Actions test compatibility
+
+- When writing or changing tests, inspect the relevant `.github/workflows` and `.github/actions` validation steps and account for the Windows runner environment, not just the local workstation.
+- Do not assume `t.TempDir()`, `TEMP`, `TMP`, the checkout, or the user profile uses a particular drive, username, spelling, or long path name. GitHub Actions may provide Windows 8.3 aliases such as `RUNNER~1`; the same physical path can have different textual representations.
+- For filesystem behavior, use isolated temporary fixtures and cover relevant path aliases, spaces, case differences, and supported junctions. Normalize paths consistently before lexical comparisons, and use physical file identity when testing whether aliases refer to the same file.
+- Reproduce environment-dependent failures with a regression test that exercises the CI condition locally. Use Windows APIs to obtain real short path aliases instead of hard-coding runner paths; skip only when the filesystem lacks the required capability, with an explicit reason.
+- Keep tests independent of workstation state and execution order. Avoid process-wide environment changes in parallel tests; use per-test inputs, or an isolated subprocess when environment changes are necessary. Use synchronization for concurrent behavior instead of relying on the runner matching local timing.
+- Validate with the project commands used by CI. A local pass under default environment settings alone does not verify a fix for a runner-specific failure.
+
 ## Error Logging
 
 - For Wails-backed user actions, log the original backend error before returning it when the renderer will show only a generic fallback message.

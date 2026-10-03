@@ -86,6 +86,20 @@ func (c *namespaceIsolationCoordinator) inventories(
 			issues:        []NamespaceIsolationConflict{},
 			userSnapshots: map[string]namespaceIsolationSnapshot{},
 		}
+
+		// Match the resolved game roots before walking or deriving implicit namespaces.
+		// Windows TEMP paths may use 8.3 aliases for the same physical directory.
+		root, err := filepath.Abs(importer.ImporterFolder)
+		if err == nil {
+			root, err = filepath.EvalSymlinks(root)
+		}
+		if err != nil {
+			inventory.issue("inventory_error", importer.ImporterFolder, err)
+		} else {
+			importer.ImporterFolder = root
+			inventory.importer = importer
+		}
+
 		scanned := key == "" || strings.EqualFold(key, importer.Key)
 		for _, name := range []string{"d3dx_user.ini", "d3dx.ini"} {
 			if !scanned {

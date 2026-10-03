@@ -340,9 +340,14 @@ func TestNamespaceIsolationRefreshFailuresAllowUnrelatedIsolation(t *testing.T) 
 			if len(state.Conflicts) != 1 || state.Conflicts[0].Reason != reason {
 				t.Fatalf("expected only refresh failure %s: %+v", reason, state)
 			}
+			resolved, err := filepath.EvalSymlinks(a)
+			if err != nil {
+				t.Fatal(err)
+			}
 			conflict := state.Conflicts[0]
 			if conflict.ImporterKey != "GIMI" || conflict.Status != "needs_review" || conflict.Detail == "" ||
-				conflict.ID != namespaceConflictID("GIMI", reason, a) || !slices.Equal(conflict.INIPaths, []string{a}) {
+				conflict.ID != namespaceConflictID("GIMI", reason, resolved) ||
+				!slices.Equal(conflict.INIPaths, []string{resolved}) {
 				t.Fatalf("refresh failure lost context: %+v", conflict)
 			}
 			cNamespace := namespaceDocument(t, filepath.Join(c, "main.ini")).Namespace
