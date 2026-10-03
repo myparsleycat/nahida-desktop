@@ -25,7 +25,11 @@ type xxmiLibraryManifest struct {
 func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
+	return x.ensureLibsVersionLocked(ctx, version)
+}
 
+// ensureLibsVersionLocked shares the package lock with importer installation.
+func (x *XXMI) ensureLibsVersionLocked(ctx context.Context, version string) error {
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid XXMI libraries version")

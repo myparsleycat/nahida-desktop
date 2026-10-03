@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/infra"
 )
 
 type RuntimeMode string
@@ -249,6 +250,13 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
+	}
+	if err := validateInstalledImporterPackage(key, cfg); err != nil {
+		return infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
+			Operation: "save-importer-config", Stage: "validate-package",
+			Fields: map[string]any{"importer": key, "version": cfg.PackageVersion.Pinned,
+				"importerFolder": cfg.ImporterFolder},
+		})
 	}
 	x.mu.RLock()
 	client := x.client

@@ -2120,6 +2120,7 @@
           "latest": "跟随最新版本",
           "allowUnsigned": "允许未签名的发布",
           "install": "安装软件包",
+          "packageInstallRequired": "所选软件包版本尚未安装。请先在软件包选项卡中完成安装，再保存或启动。",
           "installed": "软件包已安装",
           "launchOptions": "启动选项",
           "useLaunchOptions": "使用启动参数",

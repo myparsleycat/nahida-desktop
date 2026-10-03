@@ -2121,6 +2121,7 @@
           "latest": "最新版に追従",
           "allowUnsigned": "署名のないリリースを許可",
           "install": "パッケージをインストール",
+          "packageInstallRequired": "選択したパッケージバージョンは未インストールです。保存または起動する前に、パッケージタブでインストールを完了してください。",
           "installed": "パッケージをインストールしました",
           "launchOptions": "起動オプション",
           "useLaunchOptions": "起動引数を使う",

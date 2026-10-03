@@ -239,6 +239,12 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if _, _, err := transaction.commit(ctx, nil); err != nil {
 		return err
 	}
+	if input.Config != nil {
+		stage = "save-config"
+		if err := x.SaveImporterConfig(ctx, spec.key, cfg); err != nil {
+			return err
+		}
+	}
 	committed = true
 	rollbackState = "committed"
 	x.reportCleanup(transaction.finish(), "InstallImporterPackage")

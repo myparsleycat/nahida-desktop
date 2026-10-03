@@ -88,6 +88,7 @@ func TestPinnedVersionsSurviveReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.PackageVersion = VersionPin{Pinned: "1.2.3"}
+	writeInstalledImporterPackage(t, "GIMI", cfg.ImporterFolder, "1.2.3")
 	cfg.XXMIVersion = VersionPin{Pinned: "1.1.7"}
 	cfg.InjectionMethod = "Native"
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {

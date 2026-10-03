@@ -62,6 +62,8 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 			body = []byte(releases)
 		case assetURL:
 			body = zipBody
+		case "https://api.github.com/repos/SpectrumQT/XXMI-Libs-Package/releases":
+			body = []byte(`[]`)
 		default:
 			t.Fatalf("unexpected request %s", request.URL)
 		}
@@ -83,7 +85,9 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
-	input := InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3"}
+	cfg.PackageVersion = VersionPin{Pinned: "1.2.3"}
+	cfg.ProcessTimeout = 40
+	input := InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3", Config: &cfg}
 	watch, err := watcher.WatchTree([]string{filepath.Join(importerFolder, "Mods")},
 		watcher.TreeConfig{Depth: -1, Ops: watcher.All}, func(watcher.Event) {})
 	if err != nil {
@@ -108,9 +112,17 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 		!strings.Contains(err.Error(), "XXMI_UNSIGNED_RELEASE") {
 		t.Fatalf("unsigned release accepted without confirmation: %v", err)
 	}
+	stored, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.PackageVersion.Pinned != "" || stored.ProcessTimeout == 40 {
+		t.Fatalf("failed install persisted the draft: %+v, err = %v", stored, err)
+	}
 	input.AllowUnsigned = true
 	if err := service.InstallImporterPackage(ctx, input); err != nil {
 		t.Fatal(err)
+	}
+	stored, err = service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.PackageVersion != cfg.PackageVersion || stored.ProcessTimeout != 40 {
+		t.Fatalf("successful install did not persist the draft: %+v, err = %v", stored, err)
 	}
 	assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(importerFolder, "d3dx.ini"), "user ini")
@@ -137,6 +149,42 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	gotConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
 	if err != nil || !bytes.Equal(gotConfig, externalConfig) {
 		t.Fatalf("external config changed: %v", err)
+	}
+
+	// Importer installation already owns the package lock when preparing pinned libraries.
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := service.InstallImporterPackage(ctx, input); err == nil ||
+		!strings.Contains(err.Error(), "XXMI libraries release 1.7.6 not found") {
+		t.Fatalf("library preparation failure was not returned: %v", err)
+	}
+	stored, err = service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.XXMIVersion.Pinned != "" {
+		t.Fatalf("library failure persisted the draft: %+v, err = %v", stored, err)
+	}
+	cfg.XXMIVersion = stored.XXMIVersion
+
+	// A settings write failure must restore the installed tree and keep the previous settings.
+	if _, err := client.SQL().ExecContext(ctx, `CREATE TRIGGER reject_importer_update
+		BEFORE UPDATE ON xxmi_importers BEGIN SELECT RAISE(ABORT, 'settings write failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	shader := filepath.Join(importerFolder, "ShaderFixes", "new.hlsl")
+	if err := os.WriteFile(shader, []byte("previous shader"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.ProcessTimeout = 41
+	if err := service.InstallImporterPackage(
+		ctx,
+		input,
+	); err == nil ||
+		!strings.Contains(err.Error(), "settings write failed") {
+		t.Fatalf("settings failure was not returned: %v", err)
+	}
+	assertFile(t, shader, "previous shader")
+	assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
+	stored, err = service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.ProcessTimeout != 40 {
+		t.Fatalf("settings failure changed the draft: %+v, err = %v", stored, err)
 	}
 }
 

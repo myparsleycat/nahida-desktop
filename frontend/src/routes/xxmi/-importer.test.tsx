@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const xxmi = vi.hoisted(() => ({
   SaveImporterConfig: vi.fn(),
-  SetImporterVersions: vi.fn(),
+  EnsureLibsVersion: vi.fn(),
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
 }));
@@ -14,7 +14,12 @@ const mod = vi.hoisted(() => ({
   UpdateGame: vi.fn(),
 }));
 const overview = vi.hoisted(() => ({
-  importers: [] as Array<{ key: string; customDll: boolean }>,
+  importers: [] as Array<{
+    key: string;
+    customDll: boolean;
+    importerFolder?: string;
+    installedVersion?: string;
+  }>,
 }));
 
 const config = {
@@ -96,10 +101,83 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 
 import { XXMIImporterSettings } from "@renderer/components/xxmi/xxmi-importer-settings";
 
+it("blocks saving an uninstalled package selection", () => {
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  expect(screen.getByRole("button", { name: "g.save" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
+});
+
+it("keeps the selected package as an unsaved draft when installation fails", async () => {
+  xxmi.InstallImporterPackage.mockRejectedValue(new Error("download failed"));
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
+  await waitFor(() => expect(xxmi.InstallImporterPackage).toHaveBeenCalled());
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
+  expect(screen.getByRole("status").textContent).toContain(
+    "page.setting.xxmi.builtin.unsavedChanges",
+  );
+});
+
+it("saves a package pin only when that version is already installed in the selected folder", async () => {
+  overview.importers = [
+    {
+      key: "GIMI",
+      customDll: false,
+      importerFolder: config.importerFolder,
+      installedVersion: "2.0.0",
+    },
+  ];
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  expect(screen.getByRole("button", { name: "g.save" })).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getByRole("button", { name: "g.save" }));
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ packageVersion: { pinned: "2.0.0" } }),
+    ),
+  );
+  expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
+});
+
+it("requires installation again when the selected importer folder changes", () => {
+  overview.importers = [
+    {
+      key: "GIMI",
+      customDll: false,
+      importerFolder: config.importerFolder,
+      installedVersion: "2.0.0",
+    },
+  ];
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.change(screen.getByLabelText("page.setting.xxmi.builtin.importerFolder"), {
+    target: { value: "D:\\New\\GIMI" },
+  });
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  expect(screen.getByRole("button", { name: "g.save" })).toHaveProperty("disabled", true);
+});
+
+it("discards the pending package selection together with the draft", () => {
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.discard" }));
+  expect(screen.queryByRole("button", { name: "page.setting.xxmi.builtin.install" })).toBeNull();
+  expect(screen.queryByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeNull();
+});
+
 afterEach(() => {
   cleanup();
   xxmi.SaveImporterConfig.mockReset();
-  xxmi.SetImporterVersions.mockReset();
+  xxmi.EnsureLibsVersion.mockReset();
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
   mod.GetGames.mockReset();
@@ -141,7 +219,7 @@ async function chooseOption(combobox: RegExp, option: string) {
 
 it("pins the importer's own XXMI version without update notices by default", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  xxmi.SetImporterVersions.mockResolvedValue(undefined);
+  xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
   mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
@@ -229,19 +307,22 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
       importer: "GIMI",
       version: "1.0.0",
       allowUnsigned: true,
+      config: expect.objectContaining({ packageVersion: { pinned: "1.0.0" } }),
     }),
   );
 
   fireEvent.click(screen.getByRole("button", { name: /^2\.0\.0/ }));
-  fireEvent.click(install);
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
   await waitFor(() =>
     expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
       importer: "GIMI",
       version: "2.0.0",
       allowUnsigned: false,
+      config: expect.objectContaining({ packageVersion: { pinned: "2.0.0" } }),
     }),
   );
   expect(mod.GetGames).not.toHaveBeenCalled();
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
 });
 
 const linkedGame = {
@@ -292,15 +373,13 @@ it("confirms a linked mod folder before installing into a new importer folder", 
       importer: "GIMI",
       version: "1.0.0",
       allowUnsigned: true,
+      config: expect.objectContaining({
+        importerFolder: "D:\\New\\GIMI",
+        packageVersion: { pinned: "1.0.0" },
+      }),
     }),
   );
-  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
-    "GIMI",
-    expect.objectContaining({
-      importerFolder: "D:\\New\\GIMI",
-      packageVersion: { pinned: "1.0.0" },
-    }),
-  );
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
   expect(mod.UpdateGame).toHaveBeenCalledTimes(1);
   expect(mod.UpdateGame).toHaveBeenCalledWith("Genshin", {
     modFolderPath: "D:\\New\\GIMI\\Mods",
@@ -324,12 +403,10 @@ it("installs without moving mod folders when that choice is confirmed", async ()
       importer: "GIMI",
       version: "1.0.0",
       allowUnsigned: true,
+      config: expect.objectContaining({ importerFolder: "D:\\New\\GIMI" }),
     }),
   );
-  expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
-    "GIMI",
-    expect.objectContaining({ importerFolder: "D:\\New\\GIMI" }),
-  );
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
   expect(mod.UpdateGame).not.toHaveBeenCalled();
 });
 

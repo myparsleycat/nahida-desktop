@@ -29,6 +29,7 @@ func TestSkipVersionPreservesPinnedImporter(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.PackageVersion = VersionPin{Pinned: "1.0.0"}
+	writeInstalledImporterPackage(t, "GIMI", cfg.ImporterFolder, "1.0.0")
 	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -380,6 +381,7 @@ func TestAutoUpdateLeavesNotifyingXXMILibrariesPinInPlace(t *testing.T) {
 	}
 	cfg.Enabled = true
 	cfg.PackageVersion = VersionPin{Pinned: "1.0.0"}
+	writeInstalledImporterPackage(t, "GIMI", cfg.ImporterFolder, "1.0.0")
 	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6", Notify: true}
 	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
@@ -533,6 +535,7 @@ func TestLaunchUpdatesAsksOnlyForInstallablePackagesWhenNotifying(t *testing.T) 
 		}
 		cfg.Enabled = true
 		cfg.PackageVersion = VersionPin{Pinned: "1.0.0"}
+		writeInstalledImporterPackage(t, key, cfg.ImporterFolder, "1.0.0")
 		cfg.XXMIVersion = pin
 		if err := x.SaveImporterConfig(ctx, key, cfg); err != nil {
 			t.Fatal(err)
@@ -583,6 +586,7 @@ func TestAutoUpdateLeavesPinnedPackagesUntouched(t *testing.T) {
 	}
 	cfg.Enabled = true
 	cfg.PackageVersion = VersionPin{Pinned: "1.0.0"}
+	writeInstalledImporterPackage(t, "GIMI", cfg.ImporterFolder, "1.0.0")
 	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
 	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)

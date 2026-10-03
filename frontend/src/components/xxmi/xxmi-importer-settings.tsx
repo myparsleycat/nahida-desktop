@@ -118,8 +118,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     enabled: config?.mode === RuntimeMode.RuntimeLegacy,
   });
   const [tab, setTab] = useState("general");
-  const [selectedPackage, setSelectedPackage] = useState("");
+  const selectedPackage = config?.packageVersion.pinned ?? "";
   const selectedRelease = releases?.find((release) => release.version === selectedPackage);
+  const installedImporter = overview?.importers?.find((entry) => entry.key === importer);
+  const packageNeedsInstall =
+    !!selectedPackage &&
+    (normalizedFolder(config?.importerFolder ?? "") !==
+      normalizedFolder(installedImporter?.importerFolder ?? "") ||
+      selectedPackage.replace(/^v/i, "") !==
+        installedImporter?.installedVersion?.replace(/^v/i, ""));
+  const [isSaving, setIsSaving] = useState(false);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
     Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
@@ -136,12 +144,21 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
-  const persist = async (next: ImporterConfig, games: GameConfig[] = []) => {
+  const persist = async (
+    next: ImporterConfig,
+    games: GameConfig[] = [],
+    install?: PendingImporterFolderChange["install"],
+  ) => {
+    setIsSaving(true);
     try {
-      if (next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
-        await XXMI.SetImporterVersions(importer, { xxmi: next.xxmiVersion });
+      if (install) {
+        await XXMI.InstallImporterPackage({ importer, ...install, config: next });
+      } else {
+        if (next.xxmiVersion.pinned && next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
+          await XXMI.EnsureLibsVersion(next.xxmiVersion.pinned);
+        }
+        await XXMI.SaveImporterConfig(importer, next);
       }
-      await XXMI.SaveImporterConfig(importer, next);
       for (const game of games) {
         await Mod.UpdateGame(game.game, {
           modFolderPath: `${next.importerFolder}\\Mods`,
@@ -158,14 +175,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     } catch (error) {
       toast.error(toErrorMessage(error));
       return false;
+    } finally {
+      setIsSaving(false);
     }
   };
-  const finishInstall = async (version: string, allowUnsigned: boolean) => {
-    await XXMI.InstallImporterPackage({ importer, version, allowUnsigned });
-    refresh();
-  };
   const save = async (next = config) => {
-    if (!next) return;
+    if (!next || packageNeedsInstall || isSaving) return;
     try {
       const resolved = await resolveImporterGameFolder(importer, next);
       const games = await linkedGamesForImporterMove(saved?.importerFolder, next.importerFolder);
@@ -181,17 +196,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const confirmPendingFolderChange = async (updateGames: boolean) => {
     if (!pendingFolderChange) return;
     const pending = pendingFolderChange;
-    const savedOk = await persist(pending.next, updateGames ? pending.games : []);
-    if (!savedOk || !pending.install) return;
-    try {
-      await finishInstall(pending.install.version, pending.install.allowUnsigned);
-    } catch (error) {
-      toast.error(toErrorMessage(error));
-    }
+    await persist(pending.next, updateGames ? pending.games : [], pending.install);
   };
   // Switching importers or pages drops the draft, so leaving with unsaved changes asks first.
   const leave = useBlocker({
-    shouldBlockFn: () => dirty,
+    shouldBlockFn: () => dirty || isSaving,
     enableBeforeUnload: false,
     withResolver: true,
   });
@@ -205,6 +214,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <Tabs
+        inert={isSaving}
         value={tab}
         onValueChange={(value) => setTab(String(value))}
         className="min-h-0 flex-1 gap-0"
@@ -218,7 +228,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <div className="ml-auto flex gap-2">
                 <Button
                   variant="outline"
-                  disabled={dirty}
+                  disabled={dirty || packageNeedsInstall || isSaving}
                   title={dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined}
                   onClickPromise={async () => {
                     try {
@@ -231,7 +241,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <PlayIcon />
                   {t("page.setting.xxmi.builtin.launch")}
                 </Button>
-                <Button disabled={!dirty} onClickPromise={() => save()}>
+                <Button
+                  disabled={!dirty || packageNeedsInstall || isSaving}
+                  onClickPromise={() => save()}
+                >
                   {t("g.save")}
                 </Button>
               </div>
@@ -246,6 +259,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   {t("page.setting.xxmi.builtin.discard")}
                 </Button>
               </div>
+            )}
+            {packageNeedsInstall && (
+              <Alert>
+                <TriangleAlertIcon />
+                <AlertDescription>
+                  {t("page.setting.xxmi.builtin.packageInstallRequired")}
+                </AlertDescription>
+              </Alert>
             )}
             <TabsList variant="line" className="w-full justify-start">
               <TabsTrigger value="general">{t("page.setting.xxmi.builtin.general")}</TabsTrigger>
@@ -439,7 +460,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <VersionOption
                       selected={!config.packageVersion.pinned}
                       onSelect={() => {
-                        setSelectedPackage("");
                         setAllowUnsigned(false);
                         setConfig({ ...config, packageVersion: { follow: "latest" } });
                       }}
@@ -451,7 +471,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         key={release.version}
                         selected={config.packageVersion.pinned === release.version}
                         onSelect={() => {
-                          setSelectedPackage(release.version);
                           setAllowUnsigned(false);
                           setConfig({ ...config, packageVersion: { pinned: release.version } });
                         }}
@@ -502,8 +521,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                               });
                               return;
                             }
-                            if (!(await persist(resolved))) return;
-                            await finishInstall(selectedPackage, allowPackage);
+                            await persist(resolved, [], {
+                              version: selectedPackage,
+                              allowUnsigned: allowPackage,
+                            });
                           } catch (error) {
                             toast.error(toErrorMessage(error));
                           }

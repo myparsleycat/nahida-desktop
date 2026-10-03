@@ -2205,6 +2205,7 @@
           "latest": "Follow latest",
           "allowUnsigned": "Allow unsigned release",
           "install": "Install package",
+          "packageInstallRequired": "The selected package version is not installed. Complete installation in the Package tab before saving or launching.",
           "installed": "Package installed",
           "launchOptions": "Launch options",
           "useLaunchOptions": "Use launch arguments",
