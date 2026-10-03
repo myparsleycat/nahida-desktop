@@ -50,10 +50,9 @@ type CommandHook struct {
 	Wait    bool   `json:"wait"`
 }
 
+// CustomLaunch is the command that starts the game when GameLaunch is "Custom".
 type CustomLaunch struct {
-	Enabled    bool   `json:"enabled"`
-	Command    string `json:"command"`
-	InjectMode string `json:"injectMode"`
+	Command string `json:"command"`
 }
 
 type ExtraLibraries struct {
@@ -62,13 +61,17 @@ type ExtraLibraries struct {
 }
 
 type MigotoOptions struct {
-	LogLevel         string `json:"logLevel,omitempty"`
-	EnforceRendering bool   `json:"enforceRendering"`
-	EnableHunting    bool   `json:"enableHunting"`
-	DumpShaders      bool   `json:"dumpShaders"`
-	MuteWarnings     bool   `json:"muteWarnings"`
-	CallsLogging     bool   `json:"callsLogging"`
-	DebugLogging     bool   `json:"debugLogging"`
+	// LogLevel is one of "Disabled", "Warning", "Info", or "Debug".
+	LogLevel             string `json:"logLevel"`
+	EnforceRendering     bool   `json:"enforceRendering"`
+	EnableHunting        bool   `json:"enableHunting"`
+	DumpShaders          bool   `json:"dumpShaders"`
+	MuteWarnings         bool   `json:"muteWarnings"`
+	ClearUnknownSettings bool   `json:"clearUnknownSettings"`
+	Input                bool   `json:"input"`
+	// InputDisableMode selects what turning Input off disables: "Mods" or "All".
+	InputDisableMode string `json:"inputDisableMode"`
+	ToggleInput      string `json:"toggleInput"`
 	UnsafeMode       bool   `json:"unsafeMode"`
 }
 
@@ -93,56 +96,60 @@ type HIMIOptions struct {
 }
 
 type WWMIOptions struct {
-	UnlockFPS                 bool               `json:"unlockFPS"`
-	ApplyPerfTweaks           bool               `json:"applyPerfTweaks"`
-	PerfTweaks                map[string]float64 `json:"perfTweaks"`
-	ForceMaxLODBias           bool               `json:"forceMaxLODBias"`
-	DisableWoundedFX          bool               `json:"disableWoundedFX"`
-	MeshLODDistanceScale      float64            `json:"meshLODDistanceScale"`
-	MeshLODDistanceBaseFOV    int                `json:"meshLODDistanceBaseFOV"`
-	MeshLODDistanceOffset     float64            `json:"meshLODDistanceOffset"`
-	TextureStreamingBoost     float64            `json:"textureStreamingBoost"`
-	TextureStreamingMinBoost  float64            `json:"textureStreamingMinBoost"`
-	TextureStreamingUseAll    bool               `json:"textureStreamingUseAllMips"`
-	TextureStreamingPoolSize  int                `json:"textureStreamingPoolSize"`
-	TextureStreamingLimitVRAM bool               `json:"textureStreamingLimitToVRAM"`
-	TextureStreamingFixedPool bool               `json:"textureStreamingFixedPoolSize"`
+	UnlockFPS              bool `json:"unlockFPS"`
+	ForceMaxLODBias        bool `json:"forceMaxLODBias"`
+	DisableWoundedFX       bool `json:"disableWoundedFX"`
+	MeshLODDistanceBaseFOV int  `json:"meshLODDistanceBaseFOV"`
+	// ResourceTier is the downloaded resource quality passed to the game: "UHD", "HD", or "SD".
+	ResourceTier        string `json:"resourceTier"`
+	ResourceTierDecided bool   `json:"resourceTierDecided"`
 }
 
+// importerConfigSchema is the stored ImporterConfig layout. Version 2 follows XXMI Launcher 2.3.
+const importerConfigSchema = 2
+
 type ImporterConfig struct {
-	SchemaVersion      int                 `json:"schemaVersion"`
-	Enabled            bool                `json:"enabled"`
-	Mode               RuntimeMode         `json:"mode"`
-	PackageVersion     VersionPin          `json:"packageVersion"`
-	XXMIVersion        VersionPin          `json:"xxmiVersion"`
-	LegacyRuntime      string              `json:"legacyRuntime"`
-	DeployedSignatures map[string]string   `json:"deployedSignatures,omitempty"`
-	ImporterFolder     string              `json:"importerFolder"`
-	GameFolder         string              `json:"gameFolder"`
-	UseLaunchOptions   bool                `json:"useLaunchOptions"`
-	LaunchOptions      string              `json:"launchOptions"`
-	ProcessStartMethod string              `json:"processStartMethod"`
-	InjectionMethod    string              `json:"injectionMethod"`
-	ProcessPriority    string              `json:"processPriority"`
-	ProcessTimeout     int                 `json:"processTimeout"`
-	XXMIDLLInitDelay   int                 `json:"xxmiDLLInitDelay"`
-	XXMIDLLInjectMode  string              `json:"xxmiDLLInjectMode,omitempty"`
-	WindowMode         string              `json:"windowMode"`
-	RunPreLaunch       CommandHook         `json:"runPreLaunch"`
-	CustomLaunch       CustomLaunch        `json:"customLaunch"`
-	RunPostLoad        CommandHook         `json:"runPostLoad"`
-	ExtraLibraries     ExtraLibraries      `json:"extraLibraries"`
-	OverwriteINI       bool                `json:"overwriteINI"`
-	ConfigureGame      bool                `json:"configureGame"`
-	Migoto             MigotoOptions       `json:"migoto"`
-	IniOptimizer       IniOptimizerOptions `json:"iniOptimizer"`
-	LaunchCount        int                 `json:"launchCount"`
-	ShortcutPath       string              `json:"shortcutPath"`
-	WoundedFXDecided   bool                `json:"woundedFXDecided"`
-	GIMI               *GIMIOptions        `json:"gimi,omitempty"`
-	SRMI               *SRMIOptions        `json:"srmi,omitempty"`
-	HIMI               *HIMIOptions        `json:"himi,omitempty"`
-	WWMI               *WWMIOptions        `json:"wwmi,omitempty"`
+	SchemaVersion      int               `json:"schemaVersion"`
+	Enabled            bool              `json:"enabled"`
+	Mode               RuntimeMode       `json:"mode"`
+	PackageVersion     VersionPin        `json:"packageVersion"`
+	XXMIVersion        VersionPin        `json:"xxmiVersion"`
+	LegacyRuntime      string            `json:"legacyRuntime"`
+	DeployedSignatures map[string]string `json:"deployedSignatures,omitempty"`
+	ImporterFolder     string            `json:"importerFolder"`
+	GameFolder         string            `json:"gameFolder"`
+	// GameLaunch selects what starts the game: "Direct", "Steam", "Epic", "Custom", or "Manual".
+	GameLaunch string `json:"gameLaunch"`
+	// GameProcessExe overrides the image name of the game process; empty resolves it from the game folder.
+	GameProcessExe                 string `json:"gameProcessExe"`
+	ConfigurePlatformLaunchOptions bool   `json:"configurePlatformLaunchOptions"`
+	SkipPlatformGameLauncher       bool   `json:"skipPlatformGameLauncher"`
+	UseLaunchOptions               bool   `json:"useLaunchOptions"`
+	LaunchOptions                  string `json:"launchOptions"`
+	// ProcessStartMethod is "Native" or "Shell".
+	ProcessStartMethod string `json:"processStartMethod"`
+	InjectionMethod    string `json:"injectionMethod"`
+	ProcessPriority    string `json:"processPriority"`
+	ProcessTimeout     int    `json:"processTimeout"`
+	XXMIDLLInitDelay   int    `json:"xxmiDLLInitDelay"`
+	// XXMIDLLInjectMode is "Hook", "Inject", or "Bypass" and applies to every GameLaunch.
+	XXMIDLLInjectMode string              `json:"xxmiDLLInjectMode"`
+	WindowMode        string              `json:"windowMode"`
+	RunPreLaunch      CommandHook         `json:"runPreLaunch"`
+	CustomLaunch      CustomLaunch        `json:"customLaunch"`
+	RunPostLoad       CommandHook         `json:"runPostLoad"`
+	ExtraLibraries    ExtraLibraries      `json:"extraLibraries"`
+	OverwriteINI      bool                `json:"overwriteINI"`
+	ConfigureGame     bool                `json:"configureGame"`
+	Migoto            MigotoOptions       `json:"migoto"`
+	IniOptimizer      IniOptimizerOptions `json:"iniOptimizer"`
+	LaunchCount       int                 `json:"launchCount"`
+	ShortcutPath      string              `json:"shortcutPath"`
+	WoundedFXDecided  bool                `json:"woundedFXDecided"`
+	GIMI              *GIMIOptions        `json:"gimi,omitempty"`
+	SRMI              *SRMIOptions        `json:"srmi,omitempty"`
+	HIMI              *HIMIOptions        `json:"himi,omitempty"`
+	WWMI              *WWMIOptions        `json:"wwmi,omitempty"`
 }
 
 func xxmiCacheRoot() (string, error) {
@@ -168,21 +175,29 @@ func (x *XXMI) SetRoot(ctx context.Context, path string) error {
 }
 
 func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
-	if _, ok := lookupImporterPackage(key); !ok {
+	spec, ok := lookupImporterPackage(key)
+	if !ok {
 		return ImporterConfig{}, fmt.Errorf("unknown importer %q", key)
 	}
 	cfg := ImporterConfig{
-		SchemaVersion: 1, Mode: RuntimeXXMI,
+		SchemaVersion: importerConfigSchema, Mode: RuntimeXXMI,
 		PackageVersion: VersionPin{Follow: "latest"}, XXMIVersion: VersionPin{Follow: followShared},
-		ImporterFolder: filepath.Join(root, key), ProcessStartMethod: "Native", InjectionMethod: "Default",
+		ImporterFolder: filepath.Join(root, key), GameLaunch: "Direct",
+		ConfigurePlatformLaunchOptions: true, SkipPlatformGameLauncher: true,
+		ProcessStartMethod: "Native", InjectionMethod: "Default", XXMIDLLInjectMode: "Inject",
 		ProcessPriority: "Normal", ProcessTimeout: 30, WindowMode: "Borderless",
 		UseLaunchOptions: true, OverwriteINI: true, ConfigureGame: true,
 		RunPreLaunch: CommandHook{Wait: true}, RunPostLoad: CommandHook{Wait: true},
-		CustomLaunch: CustomLaunch{InjectMode: "Hook"},
-		Migoto:       MigotoOptions{EnforceRendering: true, MuteWarnings: true},
-		LaunchCount:  -1,
+		Migoto: MigotoOptions{
+			LogLevel: "Disabled", EnforceRendering: true, MuteWarnings: true, ClearUnknownSettings: true,
+			Input: true, InputDisableMode: "Mods", ToggleInput: "ctrl alt shift VK_END",
+		},
+		LaunchCount: -1,
 	}
-	switch key {
+	if spec.useHook {
+		cfg.XXMIDLLInjectMode = "Hook"
+	}
+	switch spec.key {
 	case "GIMI":
 		cfg.ProcessStartMethod = "Shell"
 		cfg.GIMI = &GIMIOptions{UnlockFPSValue: 120}
@@ -191,24 +206,71 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	case "HIMI":
 		cfg.HIMI = &HIMIOptions{UnlockFPSValue: 120}
 	case "WWMI":
-		cfg.WWMI = &WWMIOptions{
-			PerfTweaks: map[string]float64{
-				"r.Streaming.HLODStrategy": 2, "r.Streaming.PoolSizeForMeshes": -1,
-				"r.XGEShaderCompile": 0, "FX.BatchAsync": 1, "FX.EarlyScheduleAsync": 1,
-				"fx.Niagara.ForceAutoPooling":                      1,
-				"wp.Runtime.KuroRuntimeStreamingRangeOverallScale": 0.5,
-				"tick.AllowAsyncTickCleanup":                       1, "tick.AllowAsyncTickDispatch": 1,
-			},
-			MeshLODDistanceBaseFOV: 165, MeshLODDistanceScale: 1, MeshLODDistanceOffset: -10,
-			TextureStreamingBoost: 20, TextureStreamingUseAll: true,
-			TextureStreamingLimitVRAM: true, TextureStreamingFixedPool: true,
-		}
+		cfg.WWMI = &WWMIOptions{MeshLODDistanceBaseFOV: 165, ResourceTier: "HD"}
 		cfg.XXMIDLLInitDelay = 500
 		cfg.UseLaunchOptions = false
 		cfg.LaunchOptions = "-SkipSplash"
 	case "EFMI":
 		cfg.ProcessTimeout = 60
-		cfg.CustomLaunch.InjectMode = "Inject"
+	}
+	return cfg, nil
+}
+
+// decodeImporterConfig applies a stored config over the importer defaults and upgrades older layouts.
+func decodeImporterConfig(key, root, stored string) (ImporterConfig, error) {
+	cfg, err := DefaultImporterConfig(key, root)
+	if err != nil {
+		return ImporterConfig{}, err
+	}
+	defaults := cfg
+	if err := json.Unmarshal([]byte(stored), &cfg); err != nil {
+		return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
+	}
+	if cfg.SchemaVersion != 1 {
+		return cfg, nil
+	}
+
+	// Schema 1 tied the injection mode to custom launches, used a "Manual" start method,
+	// and stored logging as two switches. The mapping follows the launcher's own 2.3.0 config patch.
+	var legacy struct {
+		ProcessStartMethod string `json:"processStartMethod"`
+		XXMIDLLInjectMode  string `json:"xxmiDLLInjectMode"`
+		CustomLaunch       struct {
+			Enabled    bool   `json:"enabled"`
+			InjectMode string `json:"injectMode"`
+		} `json:"customLaunch"`
+		Migoto struct {
+			LogLevel     string `json:"logLevel"`
+			CallsLogging bool   `json:"callsLogging"`
+			DebugLogging bool   `json:"debugLogging"`
+		} `json:"migoto"`
+	}
+	if err := json.Unmarshal([]byte(stored), &legacy); err != nil {
+		return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
+	}
+	cfg.SchemaVersion = importerConfigSchema
+	cfg.GameLaunch = "Direct"
+	if legacy.CustomLaunch.Enabled {
+		if strings.TrimSpace(cfg.CustomLaunch.Command) != "" {
+			cfg.GameLaunch = "Custom"
+		}
+		if legacy.XXMIDLLInjectMode == "" && legacy.CustomLaunch.InjectMode != "" {
+			cfg.XXMIDLLInjectMode = legacy.CustomLaunch.InjectMode
+		}
+	}
+	if legacy.ProcessStartMethod == "Manual" {
+		cfg.GameLaunch = "Manual"
+		cfg.ProcessStartMethod = defaults.ProcessStartMethod
+	}
+	switch {
+	case legacy.Migoto.LogLevel != "":
+		cfg.Migoto.LogLevel = externalEnumValue(legacy.Migoto.LogLevel, "Disabled", "Warning", "Info", "Debug")
+	case legacy.Migoto.DebugLogging:
+		cfg.Migoto.LogLevel = "Debug"
+	case legacy.Migoto.CallsLogging:
+		cfg.Migoto.LogLevel = "Info"
+	default:
+		cfg.Migoto.LogLevel = "Disabled"
 	}
 	return cfg, nil
 }
@@ -239,14 +301,10 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 			return ImporterConfig{}, err
 		}
 	}
-	cfg, err := DefaultImporterConfig(key, rootPath)
-	if err != nil || row == nil {
-		return cfg, err
+	if row == nil {
+		return DefaultImporterConfig(key, rootPath)
 	}
-	if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
-		return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
-	}
-	return cfg, nil
+	return decodeImporterConfig(key, rootPath, row.Config)
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
@@ -284,7 +342,7 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 			defer x.releaseImporter(key)
 			spec, _ := lookupImporterPackage(key)
 			for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
-				pid, err := findProcessPID(ctx, name)
+				pid, err := x.findProcess(ctx, name)
 				if err != nil {
 					return err
 				}

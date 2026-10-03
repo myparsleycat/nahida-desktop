@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -159,12 +158,13 @@ func TestMapModernExternalLaunchSettings(t *testing.T) {
 	for _, tc := range []struct {
 		launch string
 		mode   string
-		start  string
-		custom bool
+		want   string
 	}{
-		{"DIRECT", "HOOK", "Shell", false},
-		{"CUSTOM", "DIRECT", "Shell", true},
-		{"MANUAL", "SKIP", "Manual", false},
+		{"DIRECT", "HOOK", "Direct"},
+		{"CUSTOM", "DIRECT", "Custom"},
+		{"MANUAL", "SKIP", "Manual"},
+		{"STEAM", "HOOK", "Steam"},
+		{"EPIC_GAMES", "DIRECT", "Epic"},
 	} {
 		t.Run(tc.launch, func(t *testing.T) {
 			t.Parallel()
@@ -172,9 +172,12 @@ func TestMapModernExternalLaunchSettings(t *testing.T) {
 			importer := wrapper["Importer"].(map[string]any)
 			importer["game_launch"], importer["start_method"], importer["xxmi_dll_inject_mode"] = tc.launch, "SHELL", tc.mode
 			importer["process_priority"], importer["window_mode"] = "ABOVE_NORMAL", "EXCLUSIVE_FULLSCREEN"
-			importer["custom_launch"], importer["custom_launch_enabled"] = "custom-command", true
+			importer["custom_launch"] = "custom-command"
+			importer["game_process_exe_enabled"], importer["game_process_exe"] = true, "Custom.exe"
+			importer["configure_platform_launch_options"], importer["skip_platform_game_launcher"] = false, false
 			migoto := wrapper["Migoto"].(map[string]any)
-			migoto["log_level"] = "INFO"
+			migoto["log_level"], migoto["input"], migoto["input_disable_mode"] = "INFO", false, "ALL"
+			migoto["clear_unknown_settings"], migoto["toggle_input"] = false, "VK_F9"
 			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 			if err != nil {
 				t.Fatal(err)
@@ -183,15 +186,42 @@ func TestMapModernExternalLaunchSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantMode := map[string]string{"HOOK": "Hook", "DIRECT": "Inject", "SKIP": "Bypass"}[tc.mode]
-			if cfg.ProcessStartMethod != tc.start || cfg.ProcessPriority != "AboveNormal" ||
-				cfg.WindowMode != "Exclusive Fullscreen" || cfg.CustomLaunch.Enabled != tc.custom ||
-				cfg.XXMIDLLInjectMode != wantMode || cfg.CustomLaunch.InjectMode != wantMode || cfg.Migoto.LogLevel != "INFO" {
+			wantMigoto := MigotoOptions{
+				LogLevel: "Info", EnforceRendering: true, MuteWarnings: true,
+				InputDisableMode: "All", ToggleInput: "VK_F9",
+			}
+			if cfg.GameLaunch != tc.want || cfg.ProcessStartMethod != "Shell" || cfg.ProcessPriority != "AboveNormal" ||
+				cfg.WindowMode != "Exclusive Fullscreen" || cfg.CustomLaunch.Command != "custom-command" ||
+				cfg.XXMIDLLInjectMode != wantMode || cfg.GameProcessExe != "Custom.exe" ||
+				cfg.ConfigurePlatformLaunchOptions || cfg.SkipPlatformGameLauncher || cfg.Migoto != wantMigoto {
 				t.Fatalf("mapped config = %+v", cfg)
 			}
 			if err := ValidateImporterSettings("GIMI", cfg); err != nil {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestMapModernExternalWWMIResourceTier(t *testing.T) {
+	t.Parallel()
+	wrapper := modernXXMITestConfig(t)["Importers"].(map[string]any)["WWMI"].(map[string]any)
+	importer := wrapper["Importer"].(map[string]any)
+	importer["resource_tier"], importer["resource_tier_warned"] = "UHD", true
+	importer["mesh_lod_distance_lod_base_fov"] = 180.0
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mapExternalImporterSettings(&cfg, importer, wrapper["Migoto"].(map[string]any)); err != nil {
+		t.Fatal(err)
+	}
+	want := WWMIOptions{MeshLODDistanceBaseFOV: 180, ResourceTier: "UHD", ResourceTierDecided: true}
+	if *cfg.WWMI != want || cfg.XXMIDLLInjectMode != "Inject" || cfg.GameLaunch != "Direct" {
+		t.Fatalf("mapped WWMI config = %+v, %+v", cfg, *cfg.WWMI)
+	}
+	if err := ValidateImporterSettings("WWMI", cfg); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -222,40 +252,13 @@ func TestImportModernExternalLauncherPersistsSettings(t *testing.T) {
 	}
 	cfg, err := x.GetImporterConfig(ctx, "GIMI")
 	if err != nil || cfg.ProcessStartMethod != "Shell" || cfg.ProcessPriority != "BelowNormal" ||
-		cfg.XXMIDLLInjectMode != "Hook" || cfg.Migoto.LogLevel != "DISABLED" {
+		cfg.XXMIDLLInjectMode != "Hook" || cfg.Migoto.LogLevel != "Disabled" || cfg.GameLaunch != "Direct" ||
+		cfg.SchemaVersion != importerConfigSchema {
 		t.Fatalf("persisted config = %+v, %v", cfg, err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != string(raw) {
 		t.Fatalf("source config changed: %v", err)
-	}
-}
-
-func TestModernPlatformLaunchRemainsExternal(t *testing.T) {
-	t.Parallel()
-	for _, launch := range []string{"STEAM", "EPIC_GAMES"} {
-		t.Run(launch, func(t *testing.T) {
-			t.Parallel()
-			config := modernXXMITestConfig(t)
-			wrapper := config["Importers"].(map[string]any)["GIMI"].(map[string]any)
-			importer := wrapper["Importer"].(map[string]any)
-			importer["game_launch"] = launch
-			if err := validateXXMIConfig(config); err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := mapExternalImporterSettings(
-				&cfg,
-				importer,
-				wrapper["Migoto"].(map[string]any),
-			); err == nil ||
-				!strings.Contains(err.Error(), "requires the external XXMI Launcher") {
-				t.Fatalf("platform launch import error = %v", err)
-			}
-		})
 	}
 }
 

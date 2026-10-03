@@ -396,6 +396,67 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   </SectionHeader>
                   <SectionContent>
                     <SelectRow
+                      label={t("page.setting.xxmi.builtin.gameLaunch")}
+                      description={t("page.setting.xxmi.builtin.gameLaunchDescription")}
+                      value={config.gameLaunch}
+                      options={(["Direct", "Steam", "Epic", "Custom", "Manual"] as const).map(
+                        (value) => ({
+                          value,
+                          label: t(`page.setting.xxmi.builtin.gameLaunch${value}`),
+                        }),
+                      )}
+                      onValueChange={(gameLaunch) => setConfig({ ...config, gameLaunch })}
+                    />
+                    {config.gameLaunch === "Custom" && (
+                      <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                        <SectionRow
+                          title={t("page.setting.xxmi.builtin.customLaunch")}
+                          description={t("page.setting.xxmi.builtin.customLaunchDescription")}
+                        />
+                        <Input
+                          aria-label={t("page.setting.xxmi.builtin.customLaunch")}
+                          className="font-mono"
+                          spellCheck={false}
+                          value={config.customLaunch.command}
+                          onChange={(event) =>
+                            setConfig({ ...config, customLaunch: { command: event.target.value } })
+                          }
+                        />
+                        <Alert>
+                          <ShieldAlertIcon />
+                          <AlertDescription>
+                            {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+                    {config.gameLaunch === "Steam" && (
+                      <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.configurePlatformLaunchOptions")}
+                          description={t(
+                            "page.setting.xxmi.builtin.configurePlatformLaunchOptionsDescription",
+                          )}
+                          checked={config.configurePlatformLaunchOptions}
+                          onCheckedChange={(configurePlatformLaunchOptions) =>
+                            setConfig({ ...config, configurePlatformLaunchOptions })
+                          }
+                        />
+                        {importer === "ZZMI" && (
+                          <ToggleRow
+                            label={t("page.setting.xxmi.builtin.skipPlatformGameLauncher")}
+                            description={t(
+                              "page.setting.xxmi.builtin.skipPlatformGameLauncherDescription",
+                            )}
+                            checked={config.skipPlatformGameLauncher}
+                            onCheckedChange={(skipPlatformGameLauncher) =>
+                              setConfig({ ...config, skipPlatformGameLauncher })
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                    <SelectRow
                       label={t("page.setting.xxmi.builtin.windowMode")}
                       description={t("page.setting.xxmi.builtin.windowModeDescription")}
                       value={config.windowMode}
@@ -428,7 +489,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       label={t("page.setting.xxmi.builtin.startMethod")}
                       description={t("page.setting.xxmi.builtin.startMethodDescription")}
                       value={config.processStartMethod}
-                      options={["Native", "Shell", "Manual"]}
+                      options={["Native", "Shell"]}
                       onValueChange={(processStartMethod) =>
                         setConfig({ ...config, processStartMethod })
                       }
@@ -438,6 +499,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       value={config.processPriority}
                       options={["Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"]}
                       onValueChange={(processPriority) => setConfig({ ...config, processPriority })}
+                    />
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.injectMode")}
+                      description={t("page.setting.xxmi.builtin.injectModeDescription")}
+                      value={config.xxmiDLLInjectMode}
+                      options={["Hook", "Inject", "Bypass"]}
+                      onValueChange={(xxmiDLLInjectMode) =>
+                        setConfig({ ...config, xxmiDLLInjectMode })
+                      }
                     />
                     <SelectRow
                       label={t("page.setting.xxmi.builtin.injectionMethod")}
@@ -750,33 +820,28 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         </ToggleRow>
                       )}
                       {config.wwmi &&
-                        (
-                          [
-                            "unlockFPS",
-                            "forceMaxLODBias",
-                            "applyPerfTweaks",
-                            "disableWoundedFX",
-                          ] as const
-                        ).map((field) => (
-                          <ToggleRow
-                            key={field}
-                            label={t(`page.setting.xxmi.builtin.${field}`)}
-                            description={t(
-                              field === "unlockFPS"
-                                ? "page.setting.xxmi.builtin.unlockFPSDescriptionWWMI"
-                                : `page.setting.xxmi.builtin.${field}Description`,
-                            )}
-                            checked={config.wwmi![field]}
-                            onCheckedChange={(value) =>
-                              setConfig({
-                                ...config,
-                                woundedFXDecided:
-                                  field === "disableWoundedFX" ? true : config.woundedFXDecided,
-                                wwmi: { ...config.wwmi!, [field]: value },
-                              })
-                            }
-                          />
-                        ))}
+                        (["unlockFPS", "forceMaxLODBias", "disableWoundedFX"] as const).map(
+                          (field) => (
+                            <ToggleRow
+                              key={field}
+                              label={t(`page.setting.xxmi.builtin.${field}`)}
+                              description={t(
+                                field === "unlockFPS"
+                                  ? "page.setting.xxmi.builtin.unlockFPSDescriptionWWMI"
+                                  : `page.setting.xxmi.builtin.${field}Description`,
+                              )}
+                              checked={config.wwmi![field]}
+                              onCheckedChange={(value) =>
+                                setConfig({
+                                  ...config,
+                                  woundedFXDecided:
+                                    field === "disableWoundedFX" ? true : config.woundedFXDecided,
+                                  wwmi: { ...config.wwmi!, [field]: value },
+                                })
+                              }
+                            />
+                          ),
+                        )}
                     </SectionContent>
                   </Section>
                   {config.wwmi && (
@@ -841,45 +906,21 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         />
                       </ToggleRow>
                     ))}
-                    <ToggleRow
-                      label={t("page.setting.xxmi.builtin.customLaunch")}
-                      description={t("page.setting.xxmi.builtin.customLaunchDescription")}
-                      checked={config.customLaunch.enabled}
-                      onCheckedChange={(enabled) =>
-                        setConfig({ ...config, customLaunch: { ...config.customLaunch, enabled } })
-                      }
-                    >
+                    <div className="space-y-1.5">
+                      <SectionRow
+                        title={t("page.setting.xxmi.builtin.gameProcessExe")}
+                        description={t("page.setting.xxmi.builtin.gameProcessExeDescription")}
+                      />
                       <Input
-                        aria-label={t("page.setting.xxmi.builtin.customLaunch")}
+                        aria-label={t("page.setting.xxmi.builtin.gameProcessExe")}
                         className="font-mono"
                         spellCheck={false}
-                        value={config.customLaunch.command}
+                        value={config.gameProcessExe}
                         onChange={(event) =>
-                          setConfig({
-                            ...config,
-                            customLaunch: { ...config.customLaunch, command: event.target.value },
-                          })
+                          setConfig({ ...config, gameProcessExe: event.target.value.trim() })
                         }
                       />
-                      <SelectRow
-                        label={t("page.setting.xxmi.builtin.injectMode")}
-                        description={t("page.setting.xxmi.builtin.injectModeDescription")}
-                        value={config.customLaunch.injectMode}
-                        options={["Hook", "Inject", "Bypass"]}
-                        onValueChange={(injectMode) =>
-                          setConfig({
-                            ...config,
-                            customLaunch: { ...config.customLaunch, injectMode },
-                          })
-                        }
-                      />
-                      <Alert>
-                        <ShieldAlertIcon />
-                        <AlertDescription>
-                          {t("page.setting.xxmi.builtin.elevatedCommandWarning")}
-                        </AlertDescription>
-                      </Alert>
-                    </ToggleRow>
+                    </div>
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.extraLibraries")}
                       description={
@@ -935,25 +976,81 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         "enableHunting",
                         "dumpShaders",
                         "muteWarnings",
-                        "callsLogging",
-                        "debugLogging",
-                        "unsafeMode",
+                        "clearUnknownSettings",
                       ] as const
                     ).map((field) => (
                       <ToggleRow
                         key={field}
                         label={t(`page.setting.xxmi.builtin.${field}`)}
-                        description={
-                          field === "unsafeMode" && config.migoto.unsafeMode
-                            ? `${t("page.setting.xxmi.builtin.unsafeModeDescription")} ${t("page.setting.xxmi.builtin.unsafeWarning")}`
-                            : t(`page.setting.xxmi.builtin.${field}Description`)
-                        }
+                        description={t(`page.setting.xxmi.builtin.${field}Description`)}
                         checked={config.migoto[field]}
                         onCheckedChange={(value) =>
                           setConfig({ ...config, migoto: { ...config.migoto, [field]: value } })
                         }
                       />
                     ))}
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.logLevel")}
+                      description={t("page.setting.xxmi.builtin.logLevelDescription")}
+                      value={config.migoto.logLevel}
+                      options={(["Disabled", "Warning", "Info", "Debug"] as const).map((value) => ({
+                        value,
+                        label: t(`page.setting.xxmi.builtin.logLevel${value}`),
+                      }))}
+                      onValueChange={(logLevel) =>
+                        setConfig({ ...config, migoto: { ...config.migoto, logLevel } })
+                      }
+                    />
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.input")}
+                      description={t("page.setting.xxmi.builtin.inputDescription")}
+                      checked={config.migoto.input}
+                      onCheckedChange={(input) =>
+                        setConfig({ ...config, migoto: { ...config.migoto, input } })
+                      }
+                    />
+                    <SelectRow
+                      label={t("page.setting.xxmi.builtin.inputDisableMode")}
+                      description={t("page.setting.xxmi.builtin.inputDisableModeDescription")}
+                      value={config.migoto.inputDisableMode}
+                      options={(["Mods", "All"] as const).map((value) => ({
+                        value,
+                        label: t(`page.setting.xxmi.builtin.inputDisableMode${value}`),
+                      }))}
+                      onValueChange={(inputDisableMode) =>
+                        setConfig({ ...config, migoto: { ...config.migoto, inputDisableMode } })
+                      }
+                    />
+                    <div className="space-y-1.5">
+                      <SectionRow
+                        title={t("page.setting.xxmi.builtin.toggleInput")}
+                        description={t("page.setting.xxmi.builtin.toggleInputDescription")}
+                      />
+                      <Input
+                        aria-label={t("page.setting.xxmi.builtin.toggleInput")}
+                        className="font-mono"
+                        spellCheck={false}
+                        value={config.migoto.toggleInput}
+                        onChange={(event) =>
+                          setConfig({
+                            ...config,
+                            migoto: { ...config.migoto, toggleInput: event.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.unsafeMode")}
+                      description={
+                        config.migoto.unsafeMode
+                          ? `${t("page.setting.xxmi.builtin.unsafeModeDescription")} ${t("page.setting.xxmi.builtin.unsafeWarning")}`
+                          : t("page.setting.xxmi.builtin.unsafeModeDescription")
+                      }
+                      checked={config.migoto.unsafeMode}
+                      onCheckedChange={(unsafeMode) =>
+                        setConfig({ ...config, migoto: { ...config.migoto, unsafeMode } })
+                      }
+                    />
                   </SectionContent>
                 </Section>
               </TabsContent>

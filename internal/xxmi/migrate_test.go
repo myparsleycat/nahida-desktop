@@ -171,13 +171,14 @@ func TestMapExternalImporterSettingsFixture(t *testing.T) {
 	want.LaunchCount = 9
 	want.RunPreLaunch = CommandHook{Enabled: true, Command: "pre-command", Wait: false}
 	want.RunPostLoad = CommandHook{Enabled: true, Command: "post-command", Wait: false}
-	want.CustomLaunch = CustomLaunch{Enabled: true, Command: "custom-command", InjectMode: "Inject"}
+	want.GameLaunch = "Custom"
+	want.XXMIDLLInjectMode = "Inject"
+	want.CustomLaunch = CustomLaunch{Command: "custom-command"}
 	want.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{`C:\DLLs\first.dll`, `C:\DLLs\second.dll`}}
 	want.DeployedSignatures = map[string]string{"d3d11.dll": "sample-signature"}
-	want.Migoto = MigotoOptions{
-		EnforceRendering: false, EnableHunting: true, DumpShaders: true,
-		MuteWarnings: false, CallsLogging: true, DebugLogging: true, UnsafeMode: true,
-	}
+	want.Migoto.LogLevel = "Debug"
+	want.Migoto.EnforceRendering, want.Migoto.EnableHunting, want.Migoto.DumpShaders = false, true, true
+	want.Migoto.MuteWarnings, want.Migoto.UnsafeMode = false, true
 	want.GIMI = &GIMIOptions{UnlockFPS: true, UnlockFPSValue: 144, EnableHDR: true}
 
 	if err := mapExternalImporterSettings(&cfg, fixture["Importer"], fixture["Migoto"]); err != nil {
@@ -188,39 +189,33 @@ func TestMapExternalImporterSettingsFixture(t *testing.T) {
 	}
 }
 
-func TestMapExternalWWMIGraphicsSettings(t *testing.T) {
+// Settings XXMI Launcher 2.3 retired are dropped on import instead of rejected.
+func TestMapExternalWWMIDropsRetiredGraphicsSettings(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := mapExternalImporterSettings(&cfg, map[string]any{
-		"deployed_migoto_signatures":        map[string]any{"d3d11.dll": "signed-by-external-launcher"},
-		"mesh_lod_distance_lod_base_fov":    180.0,
-		"mesh_lod_distance_scale":           0.75,
-		"mesh_lod_distance_offset":          -8.5,
-		"texture_streaming_boost":           12.5,
-		"texture_streaming_min_boost":       1.25,
-		"texture_streaming_use_all_mips":    false,
-		"texture_streaming_pool_size":       1024.0,
-		"texture_streaming_limit_to_vram":   false,
-		"texture_streaming_fixed_pool_size": false,
+		"deployed_migoto_signatures":     map[string]any{"d3d11.dll": "signed-by-external-launcher"},
+		"mesh_lod_distance_lod_base_fov": 180.0,
+		"mesh_lod_distance_scale":        0.75,
+		"texture_streaming_boost":        12.5,
+		"apply_perf_tweaks":              true,
 		"perf_tweaks": map[string]any{"SystemSettings": map[string]any{
-			"r.Streaming.HLODStrategy":                         3.0,
-			"wp.Runtime.KuroRuntimeStreamingRangeOverallScale": 0.75,
+			"r.Streaming.HLODStrategy": 3.0,
 		}},
-	}, nil); err != nil {
+		"process_start_method": "Manual",
+	}, map[string]any{"calls_logging": true}); err != nil {
 		t.Fatal(err)
 	}
-	got := cfg.WWMI
-	if got.MeshLODDistanceBaseFOV != 180 || got.MeshLODDistanceScale != 0.75 ||
-		got.MeshLODDistanceOffset != -8.5 || got.TextureStreamingBoost != 12.5 ||
-		got.TextureStreamingMinBoost != 1.25 || got.TextureStreamingUseAll ||
-		got.TextureStreamingPoolSize != 1024 || got.TextureStreamingLimitVRAM || got.TextureStreamingFixedPool ||
-		len(got.PerfTweaks) != 2 || got.PerfTweaks["r.Streaming.HLODStrategy"] != 3 ||
-		got.PerfTweaks["wp.Runtime.KuroRuntimeStreamingRangeOverallScale"] != 0.75 ||
-		cfg.DeployedSignatures["d3d11.dll"] != "signed-by-external-launcher" {
-		t.Fatalf("imported WWMI settings = %+v", got)
+	want := WWMIOptions{MeshLODDistanceBaseFOV: 180, ResourceTier: "HD"}
+	if *cfg.WWMI != want || cfg.DeployedSignatures["d3d11.dll"] != "signed-by-external-launcher" ||
+		cfg.GameLaunch != "Manual" || cfg.ProcessStartMethod != "Native" || cfg.Migoto.LogLevel != "Info" {
+		t.Fatalf("imported WWMI settings = %+v, %+v", cfg, *cfg.WWMI)
+	}
+	if err := ValidateImporterSettings("WWMI", cfg); err != nil {
+		t.Fatal(err)
 	}
 }
 

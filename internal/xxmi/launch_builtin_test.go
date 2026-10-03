@@ -56,14 +56,14 @@ func TestImporterInjectionDefaults(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		key  string
-		hook bool
+		mode string
 	}{
-		{"GIMI", true}, {"SRMI", true}, {"HIMI", true}, {"ZZMI", true},
-		{"WWMI", false}, {"EFMI", false},
+		{"GIMI", "Hook"}, {"SRMI", "Hook"}, {"HIMI", "Hook"}, {"ZZMI", "Hook"},
+		{"WWMI", "Inject"}, {"EFMI", "Inject"},
 	} {
-		spec, ok := lookupImporterPackage(tc.key)
-		if !ok || spec.useHook != tc.hook {
-			t.Errorf("%s: useHook = %t, found = %t", tc.key, spec.useHook, ok)
+		cfg, err := DefaultImporterConfig(tc.key, t.TempDir())
+		if err != nil || cfg.XXMIDLLInjectMode != tc.mode {
+			t.Errorf("%s: inject mode = %q, %v", tc.key, cfg.XXMIDLLInjectMode, err)
 		}
 	}
 }
@@ -115,7 +115,7 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	}
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
 	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
-		Migoto: MigotoOptions{EnforceRendering: true, EnableHunting: true, MuteWarnings: true}}
+		Migoto: MigotoOptions{LogLevel: "Info", EnforceRendering: true, EnableHunting: true, MuteWarnings: true}}
 	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe"); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,8 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	}
 	for _, want := range []string{"; user comment\r\n", "target = Game.exe\r\n", "custom = keep\r\n",
 		"loader = nahida-elevated-helper-test.exe\r\n",
-		"texture_hash = 0\r\n", "hunting = 2\r\n", "show_warnings = 0\r\n"} {
+		"texture_hash = 0\r\n", "hunting = 2\r\n", "show_warnings = 0\r\n",
+		"log_level = info\r\n", "calls = 1\r\n", "debug = 0\r\n"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("updated INI is missing %q: %q", want, data)
 		}
@@ -257,7 +258,10 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, direct := range []bool{false, true} {
-		cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct}
+		cfg := ImporterConfig{
+			ImporterFolder: folder, Mode: RuntimeLegacy, UseLaunchOptions: direct,
+			ProcessStartMethod: "Native", XXMIDLLInjectMode: "Inject",
+		}
 		spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe")
 		if err != nil {
 			t.Fatal(err)
@@ -283,19 +287,19 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := ImporterConfig{
-		ImporterFolder: root, Mode: RuntimeLegacy,
-		CustomLaunch: CustomLaunch{Enabled: true, Command: "start game", InjectMode: "Bypass"},
+		ImporterFolder: root, Mode: RuntimeLegacy, GameLaunch: "Custom", XXMIDLLInjectMode: "Bypass",
+		CustomLaunch: CustomLaunch{Command: "start game"},
 	}
 	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" {
+	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" || spec.CustomLaunchCmd != "start game" {
 		t.Fatalf("legacy bypass spec = %+v", spec)
 	}
 }
 
-func TestImportedGlobalInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
+func TestInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"Hook", "Inject", "Bypass"} {
 		t.Run(mode, func(t *testing.T) {
@@ -337,23 +341,66 @@ func TestImportedGlobalInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
 	}
 }
 
-func TestImportedLogLevelReachesINI(t *testing.T) {
+func TestLogLevelReachesINI(t *testing.T) {
 	t.Parallel()
-	for _, level := range []string{"", "DISABLED", "WARNING", "INFO", "DEBUG"} {
-		t.Run("level="+level, func(t *testing.T) {
+	for _, tc := range []struct {
+		level string
+		calls string
+		debug string
+	}{
+		{"Disabled", "0", "0"}, {"Warning", "0", "0"}, {"Info", "1", "0"}, {"Debug", "1", "1"},
+	} {
+		t.Run(tc.level, func(t *testing.T) {
 			t.Parallel()
 			doc := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
-			applyMigotoINI(doc, "GIMI", MigotoOptions{LogLevel: level, CallsLogging: true})
+			applyMigotoINI(doc, "GIMI", MigotoOptions{LogLevel: tc.level})
 			data := string(doc.Bytes())
-			if level == "" {
-				if strings.Contains(data, "log_level") {
-					t.Fatalf("legacy INI gained an explicit log level: %s", data)
+			for _, want := range []string{
+				"log_level = " + strings.ToLower(tc.level), "calls = " + tc.calls, "debug = " + tc.debug,
+				"show_warnings = 1",
+			} {
+				if !strings.Contains(data, want) {
+					t.Fatalf("INI is missing %q: %s", want, data)
 				}
-			} else if !strings.Contains(data, "log_level = "+strings.ToLower(level)) {
-				t.Fatalf("INI did not retain %s: %s", level, data)
 			}
-			if !strings.Contains(data, "calls = 1") || !strings.Contains(data, "show_warnings = 1") {
-				t.Fatalf("legacy logging options changed: %s", data)
+		})
+	}
+}
+
+func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		launch  string
+		method  string
+		command string
+	}{
+		{"Direct", "Shell", ""}, {"Custom", "Shell", "start game"}, {"Manual", "Manual", ""},
+	} {
+		t.Run(tc.launch, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			for _, name := range []string{runtimeManifestName, "game.exe", "3DMigoto Loader.exe"} {
+				if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := DefaultImporterConfig("GIMI", root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "d3d11.dll"), []byte("test"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg.Mode, cfg.ImporterFolder, cfg.GameLaunch = RuntimeLegacy, root, tc.launch
+			cfg.CustomLaunch.Command = "start game"
+			spec, err := New().builtinLaunchSpec(
+				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe",
+			)
+			if err != nil || spec.StartMethod != tc.method || spec.CustomLaunchCmd != tc.command {
+				t.Fatalf("launch spec = %+v, %v", spec, err)
+			}
+			if err := inject.ValidateLaunchSpec(spec); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
@@ -380,9 +427,9 @@ func TestNativeLaunchSpecDoesNotRequireLoader(t *testing.T) {
 				}
 				cfg.ImporterFolder, cfg.Mode, cfg.InjectionMethod = root, mode, "Native"
 				cfg.ExtraLibraries = ExtraLibraries{Enabled: true, Paths: []string{filepath.Join(root, "extra.dll")}}
-				cfg.CustomLaunch = CustomLaunch{Enabled: true, Command: "start game", InjectMode: "Hook"}
+				cfg.GameLaunch, cfg.CustomLaunch = "Custom", CustomLaunch{Command: "start game"}
 				if bypass {
-					cfg.CustomLaunch.InjectMode = "Bypass"
+					cfg.XXMIDLLInjectMode = "Bypass"
 				}
 				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe")
 				if err != nil {
@@ -442,7 +489,7 @@ func TestMigotoDLLUsedBypassExtraLibraries(t *testing.T) {
 	if err != nil || !used {
 		t.Fatalf("default DLL use = %t, error = %v", used, err)
 	}
-	cfg.CustomLaunch = CustomLaunch{Enabled: true, InjectMode: "Bypass"}
+	cfg.XXMIDLLInjectMode = "Bypass"
 	used, err = x.migotoDLLUsed(ctx, cfg)
 	if err != nil || used {
 		t.Fatalf("bypass DLL use = %t, error = %v", used, err)

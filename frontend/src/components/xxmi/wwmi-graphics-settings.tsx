@@ -1,6 +1,5 @@
 import type { WWMIOptions } from "@bindings/xxmi/models";
-import { Input } from "@renderer/components/ui/input";
-import { NumberRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
+import { NumberRow, SelectRow } from "@renderer/components/xxmi/xxmi-fields";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -13,67 +12,23 @@ export function WWMIGraphicsSettings({ options, onChange }: Props) {
 
   return (
     <>
-      {(
-        [
-          "meshLODDistanceBaseFOV",
-          "meshLODDistanceScale",
-          "meshLODDistanceOffset",
-          "textureStreamingBoost",
-          "textureStreamingMinBoost",
-          "textureStreamingPoolSize",
-        ] as const
-      ).map((field) => (
-        <NumberRow
-          key={field}
-          label={t(`page.setting.xxmi.builtin.${field}`)}
-          description={
-            field === "meshLODDistanceScale"
-              ? undefined
-              : t(`page.setting.xxmi.builtin.${field}Description`)
-          }
-          step={
-            field === "meshLODDistanceBaseFOV" || field === "textureStreamingPoolSize" ? 1 : "any"
-          }
-          value={options[field]}
-          onValueChange={(value) => onChange({ ...options, [field]: value })}
-        />
-      ))}
-      {(
-        [
-          "textureStreamingUseAllMips",
-          "textureStreamingLimitToVRAM",
-          "textureStreamingFixedPoolSize",
-        ] as const
-      ).map((field) => (
-        <ToggleRow
-          key={field}
-          label={t(`page.setting.xxmi.builtin.${field}`)}
-          description={t(`page.setting.xxmi.builtin.${field}Description`)}
-          checked={options[field]}
-          onCheckedChange={(value) => onChange({ ...options, [field]: value })}
-        />
-      ))}
-      {options.applyPerfTweaks && (
-        <div className="space-y-2">
-          <p>{t("page.setting.xxmi.builtin.perfTweakValues")}</p>
-          {Object.entries(options.perfTweaks ?? {}).map(([name, value]) => (
-            <label key={name} className="block space-y-1">
-              <span className="break-all">{name}</span>
-              <Input
-                type="number"
-                step="any"
-                value={value ?? ""}
-                onChange={(event) =>
-                  onChange({
-                    ...options,
-                    perfTweaks: { ...options.perfTweaks, [name]: Number(event.target.value) },
-                  })
-                }
-              />
-            </label>
-          ))}
-        </div>
-      )}
+      <SelectRow
+        label={t("page.setting.xxmi.builtin.resourceTier")}
+        description={t("page.setting.xxmi.builtin.resourceTierDescription")}
+        value={options.resourceTier}
+        options={["UHD", "HD", "SD"]}
+        // Picking a tier here answers the question the first launch would otherwise ask.
+        onValueChange={(resourceTier) =>
+          onChange({ ...options, resourceTier, resourceTierDecided: true })
+        }
+      />
+      <NumberRow
+        label={t("page.setting.xxmi.builtin.meshLODDistanceBaseFOV")}
+        description={t("page.setting.xxmi.builtin.meshLODDistanceBaseFOVDescription")}
+        step={1}
+        value={options.meshLODDistanceBaseFOV}
+        onValueChange={(meshLODDistanceBaseFOV) => onChange({ ...options, meshLODDistanceBaseFOV })}
+      />
     </>
   );
 }

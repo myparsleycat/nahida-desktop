@@ -1,6 +1,7 @@
 package xxmi
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -11,7 +12,7 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if _, ok := lookupImporterPackage(key); !ok {
 		return fmt.Errorf("unknown importer %q", key)
 	}
-	if cfg.SchemaVersion != 1 {
+	if cfg.SchemaVersion != importerConfigSchema {
 		return fmt.Errorf("unsupported importer config schema version %d", cfg.SchemaVersion)
 	}
 	if cfg.Mode != RuntimeXXMI && cfg.Mode != RuntimeLegacy {
@@ -40,17 +41,33 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 			return fmt.Errorf("importer and game folders must not contain each other")
 		}
 	}
-	if !slices.Contains([]string{"Native", "Shell", "Manual"}, cfg.ProcessStartMethod) {
-		return fmt.Errorf("invalid process start method %q", cfg.ProcessStartMethod)
+	for _, field := range []struct {
+		name, value string
+		values      []string
+	}{
+		{"game launch", cfg.GameLaunch, []string{"Direct", "Steam", "Epic", "Custom", "Manual"}},
+		{"process start method", cfg.ProcessStartMethod, []string{"Native", "Shell"}},
+		{"injection method", cfg.InjectionMethod, []string{"", "Default", "Native"}},
+		{"XXMI DLL injection mode", cfg.XXMIDLLInjectMode, []string{"Hook", "Inject", "Bypass"}},
+		{"Migoto log level", cfg.Migoto.LogLevel, []string{"Disabled", "Warning", "Info", "Debug"}},
+		{"Migoto input disable mode", cfg.Migoto.InputDisableMode, []string{"Mods", "All"}},
+	} {
+		if !slices.Contains(field.values, field.value) {
+			return fmt.Errorf("invalid %s %q", field.name, field.value)
+		}
 	}
-	if !slices.Contains([]string{"", "Default", "Native"}, cfg.InjectionMethod) {
-		return fmt.Errorf("invalid injection method %q", cfg.InjectionMethod)
+	if cfg.GameLaunch == "Custom" && strings.TrimSpace(cfg.CustomLaunch.Command) == "" {
+		return errors.New("custom launch requires a command")
 	}
-	if !slices.Contains([]string{"", "Hook", "Inject", "Bypass"}, cfg.XXMIDLLInjectMode) {
-		return fmt.Errorf("invalid XXMI DLL injection mode %q", cfg.XXMIDLLInjectMode)
+	if name := cfg.GameProcessExe; name != "" &&
+		(filepath.Base(name) != name || strings.ContainsAny(name, `<>:"|?*`)) {
+		return fmt.Errorf("invalid game process executable %q", name)
 	}
-	if !slices.Contains([]string{"", "DISABLED", "WARNING", "INFO", "DEBUG"}, cfg.Migoto.LogLevel) {
-		return fmt.Errorf("invalid Migoto log level %q", cfg.Migoto.LogLevel)
+	if strings.ContainsAny(cfg.Migoto.ToggleInput, "\r\n") {
+		return errors.New("invalid Migoto input toggle hotkey")
+	}
+	if cfg.WWMI != nil && !slices.Contains([]string{"UHD", "HD", "SD"}, cfg.WWMI.ResourceTier) {
+		return fmt.Errorf("invalid WWMI resource tier %q", cfg.WWMI.ResourceTier)
 	}
 	if !slices.Contains(
 		[]string{"Low", "BelowNormal", "Normal", "AboveNormal", "High", "Realtime"},
@@ -66,9 +83,6 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	}
 	if !slices.Contains([]string{"Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"}, cfg.WindowMode) {
 		return fmt.Errorf("invalid window mode %q", cfg.WindowMode)
-	}
-	if !slices.Contains([]string{"Hook", "Inject", "Bypass"}, cfg.CustomLaunch.InjectMode) {
-		return fmt.Errorf("invalid custom launch injection mode %q", cfg.CustomLaunch.InjectMode)
 	}
 	return nil
 }

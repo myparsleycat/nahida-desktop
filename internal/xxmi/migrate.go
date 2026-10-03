@@ -352,16 +352,6 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		}
 		return int(value)
 	}
-	getFloat := func(key string, fallback float64) float64 {
-		value, ok := importer[key].(float64)
-		if !ok {
-			return fallback
-		}
-		return value
-	}
-	if value := getString("process_start_method"); value != "" {
-		cfg.ProcessStartMethod = externalEnumValue(value, "Native", "Shell", "Manual")
-	}
 	if value := getString("process_priority"); value != "" {
 		cfg.ProcessPriority = externalEnumValue(
 			value,
@@ -392,28 +382,12 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		Command: getString("run_post_load"),
 		Wait:    getBool("run_post_load_wait", true),
 	}
-	cfg.CustomLaunch = CustomLaunch{
-		Enabled:    getBool("custom_launch_enabled", false),
-		Command:    getString("custom_launch"),
-		InjectMode: getString("custom_launch_inject_mode"),
-	}
-	if cfg.CustomLaunch.InjectMode == "" {
-		cfg.CustomLaunch.InjectMode = "Hook"
-	}
+	cfg.CustomLaunch = CustomLaunch{Command: getString("custom_launch")}
 	if hasModernLaunchConfig(importer) {
 		cfg.ProcessStartMethod = externalEnumValue(getString("start_method"), "Native", "Shell")
-		cfg.CustomLaunch.Enabled = false
-		cfg.CustomLaunch.InjectMode = "Hook"
-		switch getString("game_launch") {
-		case "DIRECT":
-		case "CUSTOM":
-			cfg.CustomLaunch.Enabled = true
-		case "MANUAL":
-			cfg.ProcessStartMethod = "Manual"
-		case "STEAM", "EPIC_GAMES":
-			return fmt.Errorf("game launch %q requires the external XXMI Launcher", getString("game_launch"))
-		default:
-			return fmt.Errorf("unsupported game launch %q", getString("game_launch"))
+		cfg.GameLaunch = externalEnumValue(getString("game_launch"), "Direct", "Steam", "Custom", "Manual")
+		if getString("game_launch") == "EPIC_GAMES" {
+			cfg.GameLaunch = "Epic"
 		}
 		switch getString("xxmi_dll_inject_mode") {
 		case "HOOK":
@@ -425,7 +399,32 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		default:
 			return fmt.Errorf("unsupported XXMI DLL injection mode %q", getString("xxmi_dll_inject_mode"))
 		}
-		cfg.CustomLaunch.InjectMode = cfg.XXMIDLLInjectMode
+		if getBool("game_process_exe_enabled", false) {
+			cfg.GameProcessExe = strings.TrimSpace(getString("game_process_exe"))
+		}
+		cfg.ConfigurePlatformLaunchOptions = getBool(
+			"configure_platform_launch_options",
+			cfg.ConfigurePlatformLaunchOptions,
+		)
+		cfg.SkipPlatformGameLauncher = getBool("skip_platform_game_launcher", cfg.SkipPlatformGameLauncher)
+	} else {
+		// Launchers before 2.3 picked the injection mode only for custom launches
+		// and treated a manual start as a start method.
+		if getBool("custom_launch_enabled", false) {
+			if cfg.CustomLaunch.Command != "" {
+				cfg.GameLaunch = "Custom"
+			}
+			if mode := getString("custom_launch_inject_mode"); mode != "" {
+				cfg.XXMIDLLInjectMode = externalEnumValue(mode, "Hook", "Inject", "Bypass")
+			}
+		}
+		switch method := externalEnumValue(getString("process_start_method"), "Native", "Shell", "Manual"); method {
+		case "":
+		case "Manual":
+			cfg.GameLaunch = "Manual"
+		default:
+			cfg.ProcessStartMethod = method
+		}
 	}
 	cfg.ExtraLibraries.Enabled = getBool("extra_libraries_enabled", false)
 	if signatures, ok := importer["deployed_migoto_signatures"].(map[string]any); ok {
@@ -444,7 +443,7 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 	for key, target := range map[string]*bool{
 		"enforce_rendering": &cfg.Migoto.EnforceRendering, "enable_hunting": &cfg.Migoto.EnableHunting,
 		"dump_shaders": &cfg.Migoto.DumpShaders, "mute_warnings": &cfg.Migoto.MuteWarnings,
-		"calls_logging": &cfg.Migoto.CallsLogging, "debug_logging": &cfg.Migoto.DebugLogging,
+		"clear_unknown_settings": &cfg.Migoto.ClearUnknownSettings, "input": &cfg.Migoto.Input,
 		"unsafe_mode": &cfg.Migoto.UnsafeMode,
 	} {
 		if value, ok := migoto[key].(bool); ok {
@@ -452,7 +451,17 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 		}
 	}
 	if value, ok := migoto["log_level"].(string); ok {
-		cfg.Migoto.LogLevel = value
+		cfg.Migoto.LogLevel = externalEnumValue(value, "Disabled", "Warning", "Info", "Debug")
+	} else if debug, _ := migoto["debug_logging"].(bool); debug {
+		cfg.Migoto.LogLevel = "Debug"
+	} else if calls, _ := migoto["calls_logging"].(bool); calls {
+		cfg.Migoto.LogLevel = "Info"
+	}
+	if value, ok := migoto["input_disable_mode"].(string); ok {
+		cfg.Migoto.InputDisableMode = externalEnumValue(value, "Mods", "All")
+	}
+	if value, ok := migoto["toggle_input"].(string); ok && strings.TrimSpace(value) != "" {
+		cfg.Migoto.ToggleInput = value
 	}
 	if cfg.GIMI != nil {
 		cfg.GIMI.UnlockFPS = getBool("unlock_fps", cfg.GIMI.UnlockFPS)
@@ -468,35 +477,14 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 	}
 	if cfg.WWMI != nil {
 		cfg.WWMI.UnlockFPS = getBool("unlock_fps", cfg.WWMI.UnlockFPS)
-		cfg.WWMI.ApplyPerfTweaks = getBool("apply_perf_tweaks", cfg.WWMI.ApplyPerfTweaks)
 		cfg.WWMI.ForceMaxLODBias = getBool("force_max_lod_bias", cfg.WWMI.ForceMaxLODBias)
 		cfg.WWMI.DisableWoundedFX = getBool("disable_wounded_fx", cfg.WWMI.DisableWoundedFX)
 		cfg.WoundedFXDecided = getBool("disable_wounded_fx_warned", cfg.WoundedFXDecided)
 		cfg.WWMI.MeshLODDistanceBaseFOV = getInt("mesh_lod_distance_lod_base_fov", cfg.WWMI.MeshLODDistanceBaseFOV)
-		cfg.WWMI.MeshLODDistanceScale = getFloat("mesh_lod_distance_scale", cfg.WWMI.MeshLODDistanceScale)
-		cfg.WWMI.MeshLODDistanceOffset = getFloat("mesh_lod_distance_offset", cfg.WWMI.MeshLODDistanceOffset)
-		cfg.WWMI.TextureStreamingBoost = getFloat("texture_streaming_boost", cfg.WWMI.TextureStreamingBoost)
-		cfg.WWMI.TextureStreamingMinBoost = getFloat("texture_streaming_min_boost", cfg.WWMI.TextureStreamingMinBoost)
-		cfg.WWMI.TextureStreamingUseAll = getBool("texture_streaming_use_all_mips", cfg.WWMI.TextureStreamingUseAll)
-		cfg.WWMI.TextureStreamingPoolSize = getInt("texture_streaming_pool_size", cfg.WWMI.TextureStreamingPoolSize)
-		cfg.WWMI.TextureStreamingLimitVRAM = getBool(
-			"texture_streaming_limit_to_vram",
-			cfg.WWMI.TextureStreamingLimitVRAM,
-		)
-		cfg.WWMI.TextureStreamingFixedPool = getBool(
-			"texture_streaming_fixed_pool_size",
-			cfg.WWMI.TextureStreamingFixedPool,
-		)
-		if perf, ok := importer["perf_tweaks"].(map[string]any); ok {
-			if settings, ok := perf["SystemSettings"].(map[string]any); ok {
-				cfg.WWMI.PerfTweaks = make(map[string]float64, len(settings))
-				for name, value := range settings {
-					if number, ok := value.(float64); ok {
-						cfg.WWMI.PerfTweaks[name] = number
-					}
-				}
-			}
+		if value := getString("resource_tier"); value != "" {
+			cfg.WWMI.ResourceTier = externalEnumValue(value, "UHD", "HD", "SD")
 		}
+		cfg.WWMI.ResourceTierDecided = getBool("resource_tier_warned", cfg.WWMI.ResourceTierDecided)
 	}
 	return nil
 }

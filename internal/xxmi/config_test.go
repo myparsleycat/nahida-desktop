@@ -191,6 +191,7 @@ func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	cfg, err := DefaultImporterConfig("EFMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -212,5 +213,103 @@ func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
 	}
 	if err := service.SetImporterMode(ctx, "EFMI", RuntimeLegacy); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStoredSchema1ConfigUpgrades(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, tc := range []struct {
+		name   string
+		key    string
+		stored string
+		check  func(ImporterConfig) bool
+	}{
+		{
+			name: "custom launch carries its injection mode",
+			key:  "GIMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Native",` +
+				`"customLaunch":{"enabled":true,"command":"start game","injectMode":"Bypass"},` +
+				`"migoto":{"enforceRendering":true,"callsLogging":true,"debugLogging":true}}`,
+			check: func(cfg ImporterConfig) bool {
+				return cfg.GameLaunch == "Custom" && cfg.CustomLaunch.Command == "start game" &&
+					cfg.XXMIDLLInjectMode == "Bypass" && cfg.ProcessStartMethod == "Native" &&
+					cfg.Migoto.LogLevel == "Debug"
+			},
+		},
+		{
+			name: "disabled custom launch keeps the importer default",
+			key:  "WWMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Shell",` +
+				`"customLaunch":{"enabled":false,"command":"start game","injectMode":"Hook"},` +
+				`"migoto":{"callsLogging":true},` +
+				`"wwmi":{"unlockFPS":true,"applyPerfTweaks":true,"meshLODDistanceBaseFOV":170}}`,
+			check: func(cfg ImporterConfig) bool {
+				return cfg.GameLaunch == "Direct" && cfg.XXMIDLLInjectMode == "Inject" &&
+					cfg.ProcessStartMethod == "Shell" && cfg.Migoto.LogLevel == "Info" &&
+					*cfg.WWMI == WWMIOptions{UnlockFPS: true, MeshLODDistanceBaseFOV: 170, ResourceTier: "HD"}
+			},
+		},
+		{
+			name:   "manual start becomes a manual launch",
+			key:    "GIMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Manual","customLaunch":{"injectMode":"Hook"}}`,
+			check: func(cfg ImporterConfig) bool {
+				return cfg.GameLaunch == "Manual" && cfg.ProcessStartMethod == "Shell" &&
+					cfg.XXMIDLLInjectMode == "Hook" && cfg.Migoto.LogLevel == "Disabled"
+			},
+		},
+		{
+			name: "imported overrides win",
+			key:  "GIMI",
+			stored: `{"schemaVersion":1,"processStartMethod":"Native","xxmiDLLInjectMode":"Inject",` +
+				`"customLaunch":{"enabled":true,"command":"","injectMode":"Hook"},"migoto":{"logLevel":"WARNING"}}`,
+			check: func(cfg ImporterConfig) bool {
+				return cfg.GameLaunch == "Direct" && cfg.XXMIDLLInjectMode == "Inject" &&
+					cfg.Migoto.LogLevel == "Warning"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := decodeImporterConfig(tc.key, root, tc.stored)
+			if err != nil || cfg.SchemaVersion != importerConfigSchema || !tc.check(cfg) {
+				t.Fatalf("upgraded config = %+v, %v", cfg, err)
+			}
+			if !cfg.Migoto.Input || !cfg.Migoto.ClearUnknownSettings || cfg.Migoto.InputDisableMode != "Mods" {
+				t.Fatalf("upgraded config lost the new defaults: %+v", cfg.Migoto)
+			}
+			if err := ValidateImporterSettings(tc.key, cfg); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestImporterSettingsRejectInvalidLaunchFields(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*ImporterConfig){
+		"unknown game launch":           func(cfg *ImporterConfig) { cfg.GameLaunch = "Portal" },
+		"manual start method":           func(cfg *ImporterConfig) { cfg.ProcessStartMethod = "Manual" },
+		"missing inject mode":           func(cfg *ImporterConfig) { cfg.XXMIDLLInjectMode = "" },
+		"upper-case log level":          func(cfg *ImporterConfig) { cfg.Migoto.LogLevel = "DEBUG" },
+		"unknown input mode":            func(cfg *ImporterConfig) { cfg.Migoto.InputDisableMode = "None" },
+		"custom launch without command": func(cfg *ImporterConfig) { cfg.GameLaunch = "Custom" },
+		"process path":                  func(cfg *ImporterConfig) { cfg.GameProcessExe = `folder\game.exe` },
+		"multi-line hotkey":             func(cfg *ImporterConfig) { cfg.Migoto.ToggleInput = "VK_F9\nhunting = 2" },
+		"unknown resource tier":         func(cfg *ImporterConfig) { cfg.WWMI.ResourceTier = "4K" },
+		"old schema":                    func(cfg *ImporterConfig) { cfg.SchemaVersion = 1 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutate(&cfg)
+			if err := ValidateImporterSettings("WWMI", cfg); err == nil {
+				t.Fatal("invalid config was accepted")
+			}
+		})
 	}
 }

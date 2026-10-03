@@ -78,6 +78,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return err
 	}
+	if cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic" {
+		return fmt.Errorf("XXMI_PLATFORM_LAUNCH_UNSUPPORTED: %s launch is not available", cfg.GameLaunch)
+	}
 
 	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
 	// prepare drives, folders, or mods that the later steps read.
@@ -382,11 +385,10 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions) {
 		}
 		doc.SetOption(section, option, value, true)
 	}
-	boolean("Logging", "calls", options.CallsLogging, "1", "0")
-	boolean("Logging", "debug", options.DebugLogging, "1", "0")
-	if options.LogLevel != "" {
-		doc.SetOption("Logging", "log_level", strings.ToLower(options.LogLevel), true)
-	}
+	// log_level supersedes calls and debug since XXMI libraries 1.1.7; older runtimes read only the switches.
+	boolean("Logging", "calls", options.LogLevel == "Info" || options.LogLevel == "Debug", "1", "0")
+	boolean("Logging", "debug", options.LogLevel == "Debug", "1", "0")
+	doc.SetOption("Logging", "log_level", strings.ToLower(options.LogLevel), true)
 	boolean("Logging", "show_warnings", options.MuteWarnings, "0", "1")
 	boolean("Hunting", "hunting", options.EnableHunting, "2", "0")
 	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
@@ -398,8 +400,7 @@ func (x *XXMI) builtinLaunchSpec(
 	cfg ImporterConfig,
 	gameExe, processName string,
 ) (inject.LaunchSpec, error) {
-	packageSpec, ok := lookupImporterPackage(key)
-	if !ok {
+	if _, ok := lookupImporterPackage(key); !ok {
 		return inject.LaunchSpec{}, fmt.Errorf("unknown importer %q", key)
 	}
 	data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
@@ -410,14 +411,11 @@ func (x *XXMI) builtinLaunchSpec(
 	if err := json.Unmarshal(data, &deployed); err != nil {
 		return inject.LaunchSpec{}, err
 	}
-	injectMode := "Inject"
-	if packageSpec.useHook {
-		injectMode = "Hook"
-	}
 	spec := inject.LaunchSpec{
 		Mode: inject.RuntimeMode(cfg.Mode), ProcessName: processName, StartExe: gameExe,
 		WorkDir: filepath.Dir(gameExe), StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
-		InjectMode: injectMode, UseHook: packageSpec.useHook, TimeoutSeconds: cfg.ProcessTimeout,
+		InjectMode: cfg.XXMIDLLInjectMode, UseHook: cfg.XXMIDLLInjectMode == "Hook",
+		TimeoutSeconds:  cfg.ProcessTimeout,
 		InjectionMethod: cfg.InjectionMethod,
 		ModuleDLL:       filepath.Join(cfg.ImporterFolder, "d3d11.dll"),
 	}
@@ -446,13 +444,12 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.WorkDir = folder
 		spec.StartArgs = nil
 	}
-	if cfg.CustomLaunch.Enabled {
+	switch cfg.GameLaunch {
+	case "Custom":
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command
-		spec.InjectMode = cfg.CustomLaunch.InjectMode
-	}
-	if cfg.XXMIDLLInjectMode != "" {
-		spec.InjectMode = cfg.XXMIDLLInjectMode
-		spec.UseHook = cfg.XXMIDLLInjectMode == "Hook"
+	case "Manual":
+		// The helper starts nothing and waits for the user to launch the game.
+		spec.StartMethod = "Manual"
 	}
 	if spec.InjectionMethod == "Native" {
 		spec.UseHook = false
@@ -541,11 +538,7 @@ func (x *XXMI) resolveExtraDLLPaths(ctx context.Context, paths []string) ([]stri
 }
 
 func (x *XXMI) migotoDLLUsed(ctx context.Context, cfg ImporterConfig) (bool, error) {
-	mode := cfg.XXMIDLLInjectMode
-	if mode == "" && cfg.CustomLaunch.Enabled {
-		mode = cfg.CustomLaunch.InjectMode
-	}
-	if mode != "Bypass" {
+	if cfg.XXMIDLLInjectMode != "Bypass" {
 		return true, nil
 	}
 	if !cfg.ExtraLibraries.Enabled {
