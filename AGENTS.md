@@ -64,6 +64,19 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - Concurrent runs race on shared state: the shell working directory, the `.task` checksum and tool cache, generated bindings, `node_modules`, and build outputs.
 - Parallel tool calls remain appropriate for read-only work such as reading files and searching.
 
+### Command time limit
+
+- No `task` command takes more than two minutes locally, including `task build`. A run that passes two minutes is hung, not slow.
+- Run every `task` command under a hard two-minute limit that kills the whole process tree. A tool-level timeout is not enough: it can move the command to the background, where it keeps holding the shared state above.
+- Use this PowerShell form from the repository root, replacing `build` with the task and its arguments:
+
+  ```powershell
+  $p = Start-Process task -ArgumentList 'build' -NoNewWindow -PassThru; $null = $p.Handle; if (-not $p.WaitForExit(120000)) { taskkill /T /F /PID $p.Id; exit 124 }; exit $p.ExitCode
+  ```
+
+- After a timeout, confirm that no `task`, `go`, or `node` process from the run is left, then retry once. Investigate the cause instead of retrying again if it hangs a second time.
+- Leave processes that belong to another checkout or worktree alone.
+
 ### Go formatting
 
 - Format changed Go files with `task fmt -- <files...>` and check them with `task fmt:check -- <files...>`.
