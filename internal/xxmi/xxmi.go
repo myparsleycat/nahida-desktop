@@ -14,6 +14,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -137,6 +138,11 @@ type XXMI struct {
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
 	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
 	renameUserData func(from, to string) error
+	// findSteam, epicManifest, and runPlatformClient reach the store clients; tests replace them
+	// with fixtures so no installed client is read or started.
+	findSteam         func() (gameplatform.Steam, bool)
+	epicManifest      func() string
+	runPlatformClient func(exe string, args ...string) error
 }
 
 func New() *XXMI {
@@ -160,6 +166,9 @@ func NewWithOptions(opts Options) *XXMI {
 	x.installImporter = x.installBuiltinImporterPackage
 	x.findProcess = findProcessPID
 	x.renameUserData = os.Rename
+	x.findSteam = gameplatform.FindSteam
+	x.epicManifest = gameplatform.EpicManifestPath
+	x.runPlatformClient = startPlatformClient
 	return x
 }
 

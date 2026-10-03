@@ -45,8 +45,14 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			returnErr = infra.ReportError(x.log, returnErr, "XXMI.StartGame", infra.Diagnostic{
 				Operation: "launch-game", Stage: stage,
 				Fields: map[string]any{
-					"importer": key, "mode": cfg.Mode, "source": runtimeSource, "rollback": rollbackState,
-					"importerFolder": cfg.ImporterFolder, "gameFolder": cfg.GameFolder, "gameExe": gameExe,
+					"importer":        key,
+					"mode":            cfg.Mode,
+					"source":          runtimeSource,
+					"rollback":        rollbackState,
+					"importerFolder":  cfg.ImporterFolder,
+					"gameFolder":      cfg.GameFolder,
+					"gameExe":         gameExe,
+					"gameLaunch":      cfg.GameLaunch,
 					"injectionMethod": cfg.InjectionMethod,
 					"packageVersion":  cfg.PackageVersion.Pinned,
 				},
@@ -77,9 +83,6 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	}
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return err
-	}
-	if cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic" {
-		return fmt.Errorf("XXMI_PLATFORM_LAUNCH_UNSUPPORTED: %s launch is not available", cfg.GameLaunch)
 	}
 
 	// The question is asked before the pre-launch command so answering it does not run that command twice.
@@ -116,6 +119,16 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		return fmt.Errorf("unknown importer %q", key)
 	}
 	progress("resolve-game")
+	usesPlatform := cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic"
+	var platform platformLaunch
+	if usesPlatform {
+		// A store client knows where it installed the game, so the configured game folder is not consulted.
+		resolved, err := x.resolvePlatformLaunch(key, cfg)
+		if err != nil {
+			return err
+		}
+		platform, cfg.GameFolder = resolved, resolved.installDir
+	}
 	game, err := validateGameFolder(ctx, key, cfg.GameFolder, packageSpec)
 	switch {
 	case err == nil:
@@ -127,7 +140,8 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	case cfg.GameLaunch == "Direct":
 		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
 	default:
-		// A custom command or a manual start does not run the executable from the game folder.
+		// Only a direct launch runs the executable from the game folder. A store install with an
+		// unexpected layout still launches; it just skips the steps that edit game files.
 		cfg.GameFolder = ""
 	}
 	processName := launchProcessName(cfg, packageSpec, gameExe)
@@ -255,6 +269,13 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
+	if cfg.GameLaunch == "Steam" {
+		progress("platform-options")
+		options := platformCommandLine(key, cfg, gameExe)
+		if err := x.prepareSteamLaunch(ctx, platform, options, cfg.ConfigurePlatformLaunchOptions); err != nil {
+			return err
+		}
+	}
 	progress("elevate")
 	release, err := x.elevated.Acquire(ctx)
 	if err != nil {
@@ -264,6 +285,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName)
 	if err != nil {
 		return err
+	}
+	if usesPlatform {
+		platform.apply(&launchSpec, key, cfg, gameExe)
 	}
 	if err := x.prepareNamespaceLaunch(ctx, key); err != nil {
 		return fmt.Errorf("final namespace preparation before launch: %w", err)

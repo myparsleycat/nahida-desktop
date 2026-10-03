@@ -28,15 +28,20 @@ type VerifiedFile struct {
 	SHA256 string `json:"sha256"`
 }
 
+// launchURIPrefix is the Epic Games Launcher request that starts an installed application.
+const launchURIPrefix = "com.epicgames.launcher://apps/"
+
 type LaunchSpec struct {
-	Mode            RuntimeMode  `json:"mode"`
-	ProcessName     string       `json:"processName"`
-	StartExe        string       `json:"startExe"`
-	StartArgs       []string     `json:"startArgs"`
-	WorkDir         string       `json:"workDir"`
-	StartMethod     string       `json:"startMethod"`
-	Priority        string       `json:"priority"`
-	CustomLaunchCmd string       `json:"customLaunchCmd"`
+	Mode            RuntimeMode `json:"mode"`
+	ProcessName     string      `json:"processName"`
+	StartExe        string      `json:"startExe"`
+	StartArgs       []string    `json:"startArgs"`
+	WorkDir         string      `json:"workDir"`
+	StartMethod     string      `json:"startMethod"`
+	Priority        string      `json:"priority"`
+	CustomLaunchCmd string      `json:"customLaunchCmd"`
+	// LaunchURI asks a store client to start the game instead of running StartExe.
+	LaunchURI       string       `json:"launchURI"`
 	InjectMode      string       `json:"injectMode"`
 	InjectionMethod string       `json:"injectionMethod"`
 	UseHook         bool         `json:"useHook"`
@@ -79,8 +84,20 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if spec.CustomLaunchCmd != "" && spec.StartMethod == "Manual" {
 		return errors.New("custom launch cannot use manual start")
 	}
-	// A custom command and a manual start launch the game without the start executable.
-	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" {
+	if spec.LaunchURI != "" {
+		// The URI is opened through the shell from an elevated process, so only the one scheme
+		// this app builds itself is accepted.
+		if !strings.HasPrefix(spec.LaunchURI, launchURIPrefix) ||
+			strings.ContainsFunc(spec.LaunchURI, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return errors.New("invalid launch URI")
+		}
+		if spec.CustomLaunchCmd != "" || spec.StartMethod == "Manual" {
+			return errors.New("launch URI cannot be combined with another launch")
+		}
+	}
+
+	// A custom command, a store client, and a manual start launch the game without the start executable.
+	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" && spec.LaunchURI == "" {
 		if err := validateRegularLocalFile(spec.StartExe); err != nil {
 			return fmt.Errorf("start executable: %w", err)
 		}

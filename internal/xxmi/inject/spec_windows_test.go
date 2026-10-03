@@ -77,6 +77,43 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	}
 }
 
+func TestValidateLaunchSpecLimitsLaunchURI(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "d3d11.dll"), []byte("dll"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := LaunchSpec{
+		Mode: ModeXXMI, ProcessName: "game.exe", WorkDir: root, StartMethod: "Native", Priority: "Normal",
+		InjectMode: "Bypass", TimeoutSeconds: 30, ModuleDLL: filepath.Join(root, "d3d11.dll"),
+		LaunchURI: launchURIPrefix + `ns%3Aitem%3Aart?action=launch&silent=true&args="-dx11"`,
+	}
+	if err := ValidateLaunchSpec(spec); err != nil {
+		t.Fatalf("store launch without a start executable was rejected: %v", err)
+	}
+
+	for _, uri := range []string{
+		"https://example.com/", `C:\Windows\System32\cmd.exe`, "file:///C:/game.exe",
+		launchURIPrefix + "a\nb", "COM.EPICGAMES.LAUNCHER://apps/a",
+	} {
+		other := spec
+		other.LaunchURI = uri
+		if err := ValidateLaunchSpec(other); err == nil {
+			t.Errorf("launch URI %q was accepted", uri)
+		}
+	}
+	for name, change := range map[string]func(*LaunchSpec){
+		"custom command": func(s *LaunchSpec) { s.CustomLaunchCmd = "start game" },
+		"manual start":   func(s *LaunchSpec) { s.StartMethod = "Manual" },
+	} {
+		combined := spec
+		change(&combined)
+		if err := ValidateLaunchSpec(combined); err == nil {
+			t.Errorf("launch URI was accepted together with a %s", name)
+		}
+	}
+}
+
 func TestValidateLaunchSpecAcceptsLinkedFolders(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

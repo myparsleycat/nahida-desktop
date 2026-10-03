@@ -16,7 +16,8 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if (key == "WWMI" || key == "ZZMI") && (cfg.GameLaunch == "Custom" || cfg.GameLaunch == "Manual") {
+	if (key == "WWMI" || key == "ZZMI") &&
+		(cfg.GameLaunch == "Custom" || cfg.GameLaunch == "Manual" || cfg.GameFolder == "") {
 		// These settings live in the game folder, which only a located install provides.
 		return nil
 	}

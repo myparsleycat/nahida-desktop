@@ -218,6 +218,14 @@ func startGameProcess(spec LaunchSpec) error {
 		}
 		return command.Process.Release()
 	}
+	if spec.LaunchURI != "" {
+		verb, _ := windows.UTF16PtrFromString("open")
+		uri, err := windows.UTF16PtrFromString(spec.LaunchURI)
+		if err != nil {
+			return err
+		}
+		return windows.ShellExecute(0, verb, uri, nil, nil, 1)
+	}
 	if spec.StartMethod == "Shell" {
 		verb, _ := windows.UTF16PtrFromString("open")
 		file, _ := windows.UTF16PtrFromString(spec.StartExe)
