@@ -2226,7 +2226,7 @@
         "persistLogsEmpty": "아직 로그가 없습니다.",
         "namespaceIsolation": {
           "title": "namespace 충돌",
-          "description": "토글 영구 저장은 모드 간 중복 namespace도 안전한 경우 자동으로 분리합니다.",
+          "description": "모드 간 중복 namespace를 안전한 경우 자동으로 분리합니다. 켜져 있는 동안 모드 폴더를 수시로 검사합니다.",
           "disabled": "중복 namespace를 분리하려면 토글 영구 저장을 활성화하세요.",
           "checking": "namespace 확인 중…",
           "empty": "보고된 namespace 충돌이 없습니다.",

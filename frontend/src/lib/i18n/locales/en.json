@@ -2292,7 +2292,7 @@
         "persistLogsEmpty": "No logs yet.",
         "namespaceIsolation": {
           "title": "Namespace collisions",
-          "description": "Persist Toggles also automatically isolates safe duplicate namespaces across mods.",
+          "description": "Automatically isolates safe duplicate namespaces across mods. Mod folders are scanned regularly while this is on.",
           "disabled": "Enable Persist Toggles to isolate duplicate namespaces.",
           "checking": "Checking namespaces…",
           "empty": "No namespace collisions reported.",

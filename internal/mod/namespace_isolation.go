@@ -118,14 +118,24 @@ func (m *Mod) StartNamespaceIsolation(ctx context.Context) error {
 	if c.cancel != nil {
 		return nil
 	}
-	runCtx, cancel := context.WithCancel(ctx)
+	enabled, err := c.enabled(ctx)
 	c.failureEpoch.Add(1)
 	c.mu.Lock()
 	c.paused = false
-	c.watchEnabled = true
+	c.watchEnabled = err == nil && enabled
 	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		// Disabled isolation never walks the mod folders on its own: no startup
+		// pass, watcher, or worker. Admission stays open for manual rescans.
+		c.publish(false, []NamespaceIsolationConflict{})
+		return nil
+	}
+	runCtx, cancel := context.WithCancel(ctx)
 	// Startup completes recovery and reconciliation before persist watching starts.
-	err := c.reconcile(runCtx, "", false)
+	err = c.reconcile(runCtx, "", false)
 	if err == nil {
 		err = runCtx.Err()
 	}
@@ -188,6 +198,11 @@ func (m *Mod) RefreshNamespaceIsolationImporters(ctx context.Context) {
 
 //wails:ignore
 func (m *Mod) PrepareNamespaceIsolationLaunch(ctx context.Context, key string) error {
+	// Disabled isolation must not read every INI of the importer on each launch.
+	enabled, err := m.namespaceIsolation.enabled(ctx)
+	if err != nil || !enabled {
+		return err
+	}
 	m.namespaceIsolation.failureEpoch.Add(1)
 	// The caller owns the importer gate; acquiring it here would deadlock.
 	if err := m.namespaceIsolation.reconcile(ctx, key, true); err != nil {

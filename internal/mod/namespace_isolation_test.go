@@ -43,6 +43,10 @@ func (s *namespaceTestSettings) GetPersistToggles(context.Context) (bool, error)
 	return s.enabled.Load(), nil
 }
 
+func (s *namespaceTestSettings) GetNamespaceIsolation(context.Context) (bool, error) {
+	return s.enabled.Load(), nil
+}
+
 type namespaceTestImporterSource struct{ folder string }
 
 func (s namespaceTestImporterSource) GetEnabledImporters(context.Context) ([]xxmi.EnabledImporter, error) {
@@ -450,8 +454,15 @@ func TestNamespaceIsolationWaitSettingRestartAndGetter(t *testing.T) {
 	if err := m.StartNamespaceIsolation(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if m.GetNamespaceIsolationState().Conflicts[0].Reason != "automatic_isolation_disabled" {
-		t.Fatal("setting ignored")
+	if c.cancel != nil || c.watcher != nil || len(m.GetNamespaceIsolationState().Conflicts) != 0 {
+		t.Fatalf("disabled start scanned or kept a worker: %+v", m.GetNamespaceIsolationState())
+	}
+	state, err := m.RescanNamespaceIsolation(t.Context(), "")
+	if err != nil || len(state.Conflicts) != 1 || state.Conflicts[0].Reason != "automatic_isolation_disabled" {
+		t.Fatalf("setting ignored: %+v %v", state, err)
+	}
+	if c.watcher != nil {
+		t.Fatal("manual rescan installed a watcher while disabled")
 	}
 	if err := m.StopNamespaceIsolation(); err != nil {
 		t.Fatal(err)
@@ -524,6 +535,10 @@ func TestNamespaceIsolationRecoveryStatusAndLaunch(t *testing.T) {
 		state.Conflicts[0].Reason != "unresolved_transaction" {
 		t.Fatalf("recovery not blocked: %+v %v", state, err)
 	}
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
+		t.Fatalf("disabled isolation checked the launch: %v", err)
+	}
+	settings.enabled.Store(true)
 	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil {
 		t.Fatal("unresolved launch allowed")
 	}
@@ -609,11 +624,10 @@ func TestNamespaceIsolationCaseOnlyNamespaceDifferences(t *testing.T) {
 	}
 }
 
-func TestNamespaceIsolationPendingRecoveryPollsWhileSettingOff(t *testing.T) {
+func TestNamespaceIsolationPendingRecoveryPollsForGameExit(t *testing.T) {
 	t.Parallel()
-	m, mods, settings := newNamespaceTestMod(t)
+	m, mods, _ := newNamespaceTestMod(t)
 	path := namespaceFixture(t, mods, "Only")
-	settings.enabled.Store(false)
 	content, info, err := readNamespaceFile(filepath.Join(path, "main.ini"))
 	if err != nil {
 		t.Fatal(err)

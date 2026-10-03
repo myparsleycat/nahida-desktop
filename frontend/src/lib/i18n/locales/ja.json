@@ -2208,7 +2208,7 @@
         "persistLogsEmpty": "まだログはありません。",
         "namespaceIsolation": {
           "title": "namespace の競合",
-          "description": "トグル状態の永続保存は、MOD 間の重複 namespace も安全な場合に自動で分離します。",
+          "description": "MOD 間の重複 namespace を、安全な場合に自動で分離します。有効な間は MOD フォルダーを定期的にスキャンします。",
           "disabled": "重複 namespace を分離するには、トグル状態の永続保存を有効にしてください。",
           "checking": "namespace を確認中…",
           "empty": "namespace の競合は報告されていません。",

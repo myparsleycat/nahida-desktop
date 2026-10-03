@@ -74,14 +74,9 @@ func (c *namespaceIsolationCoordinator) reconcile(ctx context.Context, key strin
 	c.mu.Lock()
 	hooks := c.hooks
 	c.mu.Unlock()
-	auto := false
-	if setting, ok := c.owner.settings.(interface {
-		GetPersistToggles(context.Context) (bool, error)
-	}); ok {
-		auto, err = setting.GetPersistToggles(ctx)
-		if err != nil {
-			return err
-		}
+	auto, err := c.enabled(ctx)
+	if err != nil {
+		return err
 	}
 	for _, inventory := range inventories {
 		if key != "" && !strings.EqualFold(key, inventory.importer.Key) {
@@ -242,7 +237,7 @@ func (c *namespaceIsolationCoordinator) reconcile(ctx context.Context, key strin
 			}
 			if !auto {
 				conflict.Reason = "automatic_isolation_disabled"
-				conflict.Detail = "Toggle persistence is disabled; transaction recovery remains enabled"
+				conflict.Detail = "Automatic namespace isolation is disabled; the collision is only reported"
 				conflicts = append(conflicts, conflict)
 				continue
 			}
@@ -612,14 +607,25 @@ func (c *namespaceIsolationCoordinator) stabilize(ctx context.Context, inventory
 	return nil
 }
 
-func (c *namespaceIsolationCoordinator) requireAutoEnabled(ctx context.Context) error {
+// enabled reports whether isolation may scan and rewrite mods on its own.
+// Isolation only serves toggle persistence, so both settings must be on.
+func (c *namespaceIsolationCoordinator) enabled(ctx context.Context) (bool, error) {
 	setting, ok := c.owner.settings.(interface {
 		GetPersistToggles(context.Context) (bool, error)
+		GetNamespaceIsolation(context.Context) (bool, error)
 	})
 	if !ok {
-		return errors.New("automatic isolation setting is unavailable")
+		return false, nil
 	}
-	enabled, err := setting.GetPersistToggles(ctx)
+	persist, err := setting.GetPersistToggles(ctx)
+	if err != nil || !persist {
+		return false, err
+	}
+	return setting.GetNamespaceIsolation(ctx)
+}
+
+func (c *namespaceIsolationCoordinator) requireAutoEnabled(ctx context.Context) error {
+	enabled, err := c.enabled(ctx)
 	if err != nil {
 		return err
 	}
