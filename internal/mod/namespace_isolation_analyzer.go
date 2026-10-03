@@ -57,6 +57,16 @@ func (c *namespaceIsolationCoordinator) inventories(
 	ctx context.Context,
 	key string,
 ) ([]namespaceIsolationInventory, error) {
+	return c.collectInventories(ctx, key, true)
+}
+
+// collectInventories can restrict launch checks to directory boundaries and journals,
+// without opening INIs or following their references while automatic isolation is off.
+func (c *namespaceIsolationCoordinator) collectInventories(
+	ctx context.Context,
+	key string,
+	scanINIs bool,
+) ([]namespaceIsolationInventory, error) {
 	if c.owner.xxmi == nil {
 		return []namespaceIsolationInventory{}, nil
 	}
@@ -105,7 +115,7 @@ func (c *namespaceIsolationCoordinator) inventories(
 
 		scanned := key == "" || strings.EqualFold(key, importer.Key)
 		for _, name := range []string{"d3dx_user.ini", "d3dx.ini"} {
-			if !scanned {
+			if !scanned || !scanINIs {
 				continue
 			}
 			content, info, readErr := readNamespaceFile(filepath.Join(importer.ImporterFolder, name))
@@ -144,7 +154,7 @@ func (c *namespaceIsolationCoordinator) inventories(
 		}
 		inventory.mods = namespacePhysicalPaths(inventory.mods)
 		inventory.roots = namespacePhysicalPaths(trusted)
-		if !scanned {
+		if !scanned || !scanINIs {
 			inventories = append(inventories, inventory)
 			continue
 		}

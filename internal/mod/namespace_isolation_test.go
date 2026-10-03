@@ -36,7 +36,8 @@ $\Creator\Dress\dress = 1
 
 type namespaceTestSettings struct {
 	testSettings
-	enabled atomic.Bool
+	enabled   atomic.Bool
+	isolation atomic.Bool
 }
 
 func (s *namespaceTestSettings) GetPersistToggles(context.Context) (bool, error) {
@@ -44,7 +45,7 @@ func (s *namespaceTestSettings) GetPersistToggles(context.Context) (bool, error)
 }
 
 func (s *namespaceTestSettings) GetNamespaceIsolation(context.Context) (bool, error) {
-	return s.enabled.Load(), nil
+	return s.isolation.Load(), nil
 }
 
 type namespaceTestImporterSource struct{ folder string }
@@ -67,6 +68,7 @@ func newNamespaceTestMod(t *testing.T) (*Mod, string, *namespaceTestSettings) {
 	}
 	settings := &namespaceTestSettings{}
 	settings.enabled.Store(true)
+	settings.isolation.Store(true)
 	m.settings = settings
 	m.xxmi = namespaceTestImporterSource{folder: folder}
 	m.namespaceIsolation.settle = 5 * time.Millisecond
@@ -535,8 +537,8 @@ func TestNamespaceIsolationRecoveryStatusAndLaunch(t *testing.T) {
 		state.Conflicts[0].Reason != "unresolved_transaction" {
 		t.Fatalf("recovery not blocked: %+v %v", state, err)
 	}
-	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
-		t.Fatalf("disabled isolation checked the launch: %v", err)
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil {
+		t.Fatal("disabled isolation allowed an unresolved launch")
 	}
 	settings.enabled.Store(true)
 	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil {
@@ -553,6 +555,51 @@ func TestNamespaceIsolationRecoveryStatusAndLaunch(t *testing.T) {
 	}
 	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNamespaceIsolationDisabledLaunchDiscoversUnresolvedTransactions(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		persist   bool
+		isolation bool
+	}{
+		{name: "persistence off", isolation: true},
+		{name: "isolation off", persist: true},
+		{name: "both off"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			m, mods, settings := newNamespaceTestMod(t)
+			path := namespaceFixture(t, mods, "Only")
+			settings.enabled.Store(test.persist)
+			settings.isolation.Store(test.isolation)
+			namespaceWrite(t, filepath.Join(path, ".nhd-namespace", "transactions", "broken", "journal.json"), "{")
+			if err := m.StartNamespaceIsolation(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "gimi"); err == nil ||
+				!strings.Contains(err.Error(), "NAMESPACE_ISOLATION_TRANSACTION_UNRESOLVED") {
+				t.Fatalf("unresolved launch = %v", err)
+			}
+			if err := m.StopNamespaceIsolation(); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.StartNamespaceIsolation(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			state := m.GetNamespaceIsolationState()
+			if len(state.Conflicts) != 1 || state.Conflicts[0].Reason != "unresolved_transaction" {
+				t.Fatalf("disabled restart cleared recovery state: %+v", state)
+			}
+			if err := os.RemoveAll(filepath.Join(path, ".nhd-namespace")); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
+				t.Fatalf("resolved launch = %v", err)
+			}
+		})
 	}
 }
 
@@ -624,10 +671,8 @@ func TestNamespaceIsolationCaseOnlyNamespaceDifferences(t *testing.T) {
 	}
 }
 
-func TestNamespaceIsolationPendingRecoveryPollsForGameExit(t *testing.T) {
-	t.Parallel()
-	m, mods, _ := newNamespaceTestMod(t)
-	path := namespaceFixture(t, mods, "Only")
+func namespacePendingTransaction(t *testing.T, path string) []byte {
+	t.Helper()
 	content, info, err := readNamespaceFile(filepath.Join(path, "main.ini"))
 	if err != nil {
 		t.Fatal(err)
@@ -636,7 +681,7 @@ func TestNamespaceIsolationPendingRecoveryPollsForGameExit(t *testing.T) {
 		ModPath:      path,
 		RelativePath: "main.ini",
 		Before:       content,
-		After:        append(slices.Clone(content), []byte("; pending\n")...),
+		After:        []byte(strings.ReplaceAll(string(content), `Creator\Dress`, `Creator\Pending`)),
 		Exists:       true,
 		Info:         info,
 	}
@@ -661,6 +706,39 @@ func TestNamespaceIsolationPendingRecoveryPollsForGameExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	namespaceWrite(t, journals[0], string(encoded))
+	return change.Before
+}
+
+func TestNamespaceIsolationDisabledLaunchRequiresManualRecovery(t *testing.T) {
+	t.Parallel()
+	m, mods, settings := newNamespaceTestMod(t)
+	path := namespaceFixture(t, mods, "Only")
+	before := namespacePendingTransaction(t, path)
+	settings.isolation.Store(false)
+	if err := m.StartNamespaceIsolation(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err == nil {
+		t.Fatal("partially changed mod was allowed to launch")
+	}
+	state, err := m.RescanNamespaceIsolation(t.Context(), "GIMI")
+	if err != nil || len(state.Conflicts) != 0 {
+		t.Fatalf("manual recovery = %+v, %v", state, err)
+	}
+	content, err := os.ReadFile(filepath.Join(path, "main.ini"))
+	if err != nil || string(content) != string(before) {
+		t.Fatalf("recovered INI = %q, %v", content, err)
+	}
+	if err := m.PrepareNamespaceIsolationLaunch(t.Context(), "GIMI"); err != nil {
+		t.Fatalf("recovered launch = %v", err)
+	}
+}
+
+func TestNamespaceIsolationPendingRecoveryPollsForGameExit(t *testing.T) {
+	t.Parallel()
+	m, mods, _ := newNamespaceTestMod(t)
+	path := namespaceFixture(t, mods, "Only")
+	namespacePendingTransaction(t, path)
 	var running atomic.Bool
 	running.Store(true)
 	hooks := m.namespaceIsolation.hooks

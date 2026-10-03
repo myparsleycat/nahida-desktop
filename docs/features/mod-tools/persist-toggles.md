@@ -24,6 +24,8 @@ When the game is running, changes are deferred until it exits. The collision sec
 
 Namespace mappings are recorded in the mod's `nhd` metadata. Backups and recovery information protect the INI changes. If recovery is required, review the reported paths and details before changing files. Nahida Desktop does not transfer old `d3dx_user.ini` values when their ownership is uncertain; ambiguous persistent variables are skipped and logged rather than assigned to a copy. Other unambiguous variables continue to save.
 
+Even with automatic isolation off, launching a game checks mod folder boundaries and transaction journals without reading the INIs. Unfinished or unreadable journals block launch until resolved. Use **Rescan** to recover an interrupted transaction; recovery remains available while automatic isolation is off.
+
 ## Before You Use It
 
 ::: warning

@@ -25,29 +25,29 @@ func runtimeSettingHooks(
 	modServices ...*mod.Mod,
 ) setting.Hooks {
 	var persistTransition sync.Mutex
-	// Namespace isolation and the persist watcher restart together: isolation
-	// must finish recovery and reconciliation before persist watching resumes.
-	restartPersist := func(bool) {
+	// Persistence changes restart both services in order. Isolation changes keep
+	// queued toggle saves alive; reconciliation suspends persistence only to mutate.
+	restart := func(action string, restartWatcher bool) {
 		persistTransition.Lock()
 		defer persistTransition.Unlock()
 
 		if len(modServices) > 0 && modServices[0] != nil {
 			mods := modServices[0]
 			if err := mods.StopNamespaceIsolation(); err != nil {
-				_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{
+				_ = infra.ReportError(log, err, action, infra.Diagnostic{
 					Operation: "namespace-isolation", Stage: "stop",
 				})
 			}
-			if toolsService != nil {
+			if restartWatcher && toolsService != nil {
 				toolsService.StopPersistWatcher()
 			}
 			if err := mods.StartNamespaceIsolation(context.Background()); err != nil {
-				_ = infra.ReportError(log, err, "Setting.xxmi.persistToggles", infra.Diagnostic{
+				_ = infra.ReportError(log, err, action, infra.Diagnostic{
 					Operation: "namespace-isolation", Stage: "start",
 				})
 			}
 		}
-		if toolsService == nil {
+		if !restartWatcher || toolsService == nil {
 			return
 		}
 		// StartPersistWatcher reads the current stored setting. A delayed callback
@@ -56,10 +56,10 @@ func runtimeSettingHooks(
 			_ = infra.ReportError(
 				log,
 				err,
-				"Setting.xxmi.persistToggles",
+				action,
 				infra.Diagnostic{
 					Severity:  infra.DiagnosticError,
-					Operation: "Setting.xxmi.persistToggles",
+					Operation: action,
 					Stage:     "background",
 				},
 			)
@@ -123,8 +123,12 @@ func runtimeSettingHooks(
 				windowService.SetConsoleWindowEnabled(enabled)
 			}
 		},
-		AfterPersistTogglesChanged:     restartPersist,
-		AfterNamespaceIsolationChanged: restartPersist,
+		AfterPersistTogglesChanged: func(bool) {
+			restart("Setting.xxmi.persistToggles", true)
+		},
+		AfterNamespaceIsolationChanged: func(bool) {
+			restart("Setting.xxmi.namespaceIsolation", false)
+		},
 	}
 }
 
