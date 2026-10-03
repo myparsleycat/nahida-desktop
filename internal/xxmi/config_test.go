@@ -147,6 +147,37 @@ func TestImporterSettingsRejectInvalidWindowMode(t *testing.T) {
 	}
 }
 
+func TestImporterConfigIsStoredUnderCanonicalKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	cfg, err := DefaultImporterConfig("EFMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	if err := service.SaveImporterConfig(ctx, " efmi ", cfg); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil || len(rows) != 1 || rows[0].Key != "EFMI" {
+		t.Fatalf("stored rows = %+v, err = %v", rows, err)
+	}
+	stored, err := service.GetImporterConfig(ctx, "efmi")
+	if err != nil || !stored.Enabled {
+		t.Fatalf("config read through a non-canonical key = %+v, err = %v", stored, err)
+	}
+}
+
 func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

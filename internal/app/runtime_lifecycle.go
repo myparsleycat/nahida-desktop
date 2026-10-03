@@ -210,6 +210,9 @@ func (rt *runtime) Close() error {
 	if rt.backup != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
 	}
+	if rt.xxmi != nil {
+		err = errors.Join(err, infra.AnnotateError(rt.xxmi.ServiceShutdown(), infra.Diagnostic{Stage: "xxmi"}))
+	}
 	if rt.mod != nil {
 		err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
 	}

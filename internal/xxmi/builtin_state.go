@@ -116,24 +116,16 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	keys := make([]string, 0, len(importers))
+	for _, importer := range importers {
+		keys = append(keys, importer.Key)
+	}
+	running, err := x.runningImporters(ctx, keys)
+	if err != nil {
+		return Overview{}, err
+	}
 	for i := range importers {
-		x.mu.RLock()
-		importers[i].Running = x.busy[importers[i].Key]
-		x.mu.RUnlock()
-		if importers[i].Running {
-			continue
-		}
-		spec, _ := lookupImporterPackage(importers[i].Key)
-		for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
-			pid, err := findProcessPID(ctx, name)
-			if err != nil {
-				return Overview{}, err
-			}
-			if pid != 0 {
-				importers[i].Running = true
-				break
-			}
-		}
+		importers[i].Running = running[importers[i].Key]
 	}
 	overview := Overview{
 		LauncherMode: LauncherBuiltin,

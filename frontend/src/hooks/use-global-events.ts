@@ -1,5 +1,5 @@
 import { Auth } from "@bindings/auth";
-import type { UpdateStatus } from "@bindings/xxmi";
+import type { Overview, UpdateStatus } from "@bindings/xxmi";
 import { Logger } from "@renderer/lib/logger";
 import type { BackendStatus } from "@shared/backend";
 import type { DownloadSource } from "@shared/mod";
@@ -120,6 +120,33 @@ export function useGlobalEvents(
             }
         });
 
+        const removeXXMIRunningListener = Events.On("xxmi:running-changed", (event) => {
+            const payload = Array.isArray(event.data) ? event.data[0] : event.data;
+            const running: Record<string, unknown> =
+                payload && typeof payload === "object" ? payload : {};
+            const queryKey = ["xxmi:overview"];
+            const overview = queryClient.getQueryData<Overview>(queryKey);
+            if (!overview) return;
+
+            // The event carries only the running flags, so a different importer set needs the whole
+            // overview, and so does a fetch in flight that may resolve with an older snapshot.
+            const importers = overview.importers ?? [];
+            const sameImporters =
+                importers.length === Object.keys(running).length &&
+                importers.every((importer) => typeof running[importer.key] === "boolean");
+            if (!sameImporters || queryClient.isFetching({ queryKey }) > 0) {
+                void queryClient.invalidateQueries({ queryKey });
+                return;
+            }
+            queryClient.setQueryData<Overview>(queryKey, {
+                ...overview,
+                importers: importers.map((importer) => ({
+                    ...importer,
+                    running: running[importer.key] === true,
+                })),
+            });
+        });
+
         const removeXXMILaunchListener = Events.On("xxmi:launch-progress", (event) => {
             const payload = Array.isArray(event.data) ? event.data[0] : event.data;
             if (!payload || typeof payload !== "object") return;
@@ -190,6 +217,7 @@ export function useGlobalEvents(
             removeBackendStatusListener();
             removeLanguageListener();
             removeXXMIUpdatesListener();
+            removeXXMIRunningListener();
             removeXXMILaunchListener();
             removeXXMIPackageListener();
         };

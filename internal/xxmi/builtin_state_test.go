@@ -61,10 +61,8 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	if err != nil || state.XXMIPath == nil || *state.XXMIPath != root || len(state.EnabledImporters) != 1 {
 		t.Fatalf("XXMI data = %+v, err = %v", state, err)
 	}
-	if !service.acquireImporter("GIMI") {
-		t.Fatal("GIMI launch lock is unavailable")
-	}
-	defer service.releaseImporter("GIMI")
+	service.setLaunching("GIMI", true)
+	defer service.setLaunching("GIMI", false)
 	overview, err := service.GetOverview(ctx)
 	if err != nil || len(overview.Importers) != 1 || !overview.Importers[0].Running ||
 		!overview.Importers[0].UpdateAvailable || overview.Importers[0].PackageInfo.DeployedVersion != "1.2.3" {

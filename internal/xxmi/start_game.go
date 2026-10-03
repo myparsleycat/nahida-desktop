@@ -17,6 +17,9 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 		return errors.New("XXMI_BUSY")
 	}
 	defer x.releaseImporter(importer)
+	x.setLaunching(importer, true)
+	defer x.setLaunching(importer, false)
+
 	x.mu.RLock()
 	prepare := x.namespaceLaunchPreparation
 	x.mu.RUnlock()
