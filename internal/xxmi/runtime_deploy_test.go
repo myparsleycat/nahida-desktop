@@ -24,6 +24,9 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+// noGameProcess reports that no game is running, keeping deploy tests independent of the host process list.
+func noGameProcess(context.Context, string) (int, error) { return 0, nil }
+
 func TestBootstrapExternalRuntimeUsesVerifiedSignatures(t *testing.T) {
 	t.Parallel()
 	folder := t.TempDir()
@@ -117,14 +120,14 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
 	ctx := context.Background()
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
 		t.Fatal(err)
 	}
 	cfg.Mode = RuntimeLegacy
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, legacy, "legacy@abc", base, false); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, legacy, "legacy@abc", base, false, noGameProcess); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeLegacy); err != nil {
@@ -136,7 +139,7 @@ func TestDeployRuntimeSwitchesModesWithoutReplacingContent(t *testing.T) {
 		t.Fatalf("old compiler still deployed: %v", err)
 	}
 	cfg.Mode = RuntimeXXMI
-	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
+	if _, err := deployRuntimeFiles(ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
@@ -214,7 +217,9 @@ func TestValidateDeployedRuntimeDetectsChangedFile(t *testing.T) {
 		}
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
+	if _, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(importer, "d3d11.dll"), []byte("changed"), 0o600); err != nil {
@@ -340,7 +345,9 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 		}
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
-	warnings, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false)
+	warnings, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,13 +361,17 @@ func TestDeployRuntimeUnsafePreservesThirdPartyDLL(t *testing.T) {
 	if !usesCustomDLL(importer) {
 		t.Fatal("preserved third-party DLL is not reported as custom")
 	}
-	warnings, err = deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false)
+	warnings, err = deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false, noGameProcess,
+	)
 	if err != nil || len(warnings) == 0 {
 		t.Fatalf("repeat deployment warnings = %v, error = %v", warnings, err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 	cfg.Migoto.UnsafeMode = false
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false); err != nil {
+	if _, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@2", base, false, noGameProcess,
+	); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
@@ -403,12 +414,16 @@ func TestDeployRuntimeModeSwitchBacksUpUserManagedDLLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
+	if _, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess,
+	); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fixer")
 	cfg.Mode = RuntimeLegacy
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, legacy, "legacy@abc", base, false); err != nil {
+	if _, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, legacy, "legacy@abc", base, false, noGameProcess,
+	); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "legacy")
@@ -429,7 +444,9 @@ func TestDeployRuntimeModeSwitchBacksUpUserManagedDLLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Mode = RuntimeXXMI
-	if _, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false); err != nil {
+	if _, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess,
+	); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
@@ -596,7 +613,9 @@ func TestDeployRuntimeFilesRejectsCorruptManifest(t *testing.T) {
 	t.Parallel()
 	base, importer, legacy, corrupt := corruptLegacyRuntime(t)
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeLegacy}
-	_, err := deployRuntimeFiles(context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, false)
+	_, err := deployRuntimeFiles(
+		context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, false, noGameProcess,
+	)
 	if err == nil || !strings.HasPrefix(err.Error(), "XXMI_RUNTIME_CORRUPTED:") {
 		t.Fatalf("deploy = %v, want XXMI_RUNTIME_CORRUPTED first", err)
 	}
@@ -618,7 +637,7 @@ func TestDeployRuntimeFilesRepairsCorruptManifest(t *testing.T) {
 	base, importer, legacy, corrupt := corruptLegacyRuntime(t)
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeLegacy}
 	warnings, err := deployRuntimeFiles(
-		context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, true,
+		context.Background(), "GIMI", cfg, legacy, "legacy@abcdef123456", base, true, noGameProcess,
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -368,6 +368,7 @@ func TestInstallDLLVersionStagesAndValidatesBeforeCopy(t *testing.T) {
 	download.UseClient(infraClient)
 	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
 	service.UseClient(newXXMITestClient(t))
+	service.findProcess = noGameProcess
 	useExternalLauncher(t, service, root)
 
 	if err := service.InstallDLLVersion(context.Background(), InstallDLLVersionInput{Version: "v1.2.3"}); err != nil {

@@ -70,6 +70,7 @@ func TestRestoreOfficialDLLRejectsUnmanagedImporters(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)
 	if _, err := service.RestoreOfficialDLL(ctx, "GIMI"); err == nil || err.Error() != "XXMI_NOT_CONFIGURED" {
 		t.Fatalf("disabled importer error = %v", err)

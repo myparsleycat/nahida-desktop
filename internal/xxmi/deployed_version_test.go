@@ -25,6 +25,7 @@ func TestDeployedLibsVersionUsesImporterManifest(t *testing.T) {
 	}
 	service := New()
 	service.UseClient(client)
+	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)
 	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)

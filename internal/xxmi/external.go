@@ -429,7 +429,7 @@ func (i externalImporter) processName() string {
 //
 //wails:ignore
 func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
-	return ensureLauncherClosed(ctx)
+	return ensureLauncherClosed(ctx, x.findProcess)
 }
 
 type InstallDLLVersionInput struct {
@@ -470,7 +470,7 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	}
 
 	stage = "close-launcher"
-	if err := ensureLauncherClosed(ctx); err != nil {
+	if err := ensureLauncherClosed(ctx, x.findProcess); err != nil {
 		return err
 	}
 

@@ -132,7 +132,7 @@ type XXMI struct {
 	externalImportersChanged   func(context.Context)
 	importerMaintenance        func(context.Context) (func([]ImportedImporter) error, error)
 	namespaceLaunchPreparation func(context.Context, string) error
-	// findProcess queries running games; filesystem migration tests replace it independently of the host.
+	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error

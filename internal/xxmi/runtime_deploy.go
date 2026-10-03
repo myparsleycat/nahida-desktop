@@ -89,7 +89,7 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
-	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair)
+	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess)
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
@@ -180,6 +180,7 @@ func deployRuntimeFiles(
 	cfg ImporterConfig,
 	sourceFolder, sourceID, cacheRoot string,
 	repair bool,
+	findProcess func(context.Context, string) (int, error),
 ) ([]string, error) {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
@@ -259,7 +260,7 @@ func deployRuntimeFiles(
 			return nil, fmt.Errorf("unknown importer %q", key)
 		}
 		if err := waitForGameProcesses(ctx, append(append([]string{}, spec.gameExeNames...), spec.processNames...),
-			5*time.Second, findProcessPID); err != nil {
+			5*time.Second, findProcess); err != nil {
 			return nil, err
 		}
 	}

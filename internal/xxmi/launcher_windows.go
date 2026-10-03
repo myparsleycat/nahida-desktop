@@ -64,9 +64,9 @@ type visibleWindowSearch struct {
 	found bool
 }
 
-func ensureLauncherClosed(ctx context.Context) error {
+func ensureLauncherClosed(ctx context.Context, find func(context.Context, string) (int, error)) error {
 	return ensureLauncherClosedWith(
-		ctx, launcherImageName, 5*time.Second, 100*time.Millisecond, findProcessPID, killProcess,
+		ctx, launcherImageName, 5*time.Second, 100*time.Millisecond, find, killProcess,
 	)
 }
 
