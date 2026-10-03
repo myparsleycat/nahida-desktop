@@ -168,6 +168,9 @@ func (rt *runtime) Close() error {
 		return nil
 	}
 	var err error
+	if rt.githubRate != nil {
+		rt.githubRate.Close()
+	}
 	if rt.startup != nil {
 		rt.startup.stop()
 	}

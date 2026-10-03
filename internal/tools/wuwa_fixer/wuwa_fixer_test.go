@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -617,7 +618,10 @@ func TestWuwaRefreshReturnsCachedReleaseWhileRateLimited(t *testing.T) {
 	service := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
 	service.UseClient(client)
 
-	refresh, err := service.wuwaRefreshLatestRelease(ctx, true)
+	if _, err := service.wuwaRefreshLatestRelease(ctx, true); !errors.Is(err, github.ErrRateLimited) {
+		t.Fatalf("forced refresh error = %v", err)
+	}
+	refresh, err := service.wuwaRefreshLatestRelease(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -625,5 +629,182 @@ func TestWuwaRefreshReturnsCachedReleaseWhileRateLimited(t *testing.T) {
 		refresh.LatestRelease.Version != "v1.0.0" || refresh.NextCheckAt == nil ||
 		!parseRFC3339(*refresh.NextCheckAt).Equal(time.Unix(reset, 0)) {
 		t.Fatalf("refresh = %+v", refresh)
+	}
+}
+
+func TestWuwaAutomaticCheckUsesSuccessfulPersistentCacheAcrossRestarts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := openToolsTestDB(t)
+	home := t.TempDir()
+	lastCheck := time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339Nano)
+	cached, err := json.Marshal(wuwaLatestReleaseCache{
+		Version: "v1.0.0", CheckedAt: lastCheck,
+		Asset: wuwaLatestAsset{Name: "Wuwa_Mod_Fixer_v1.0.0.exe", BrowserDownloadURL: "https://example.test/a.exe"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{wuwaLastCheckKey: lastCheck, wuwaLatestReleaseKey: string(cached)} {
+		if err := client.AppState.Upsert(ctx, key, value, lastCheck); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: &http.Client{Transport: wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+				t.Errorf("recent successful check reached network: %s", request.URL)
+				return nil, errors.New("network unavailable")
+			})},
+		})})
+		service.UseClient(client)
+		userData := useToolsTestAppData(t, service, home)
+		if err := writeWuwaInstalledTestFiles(userData, `{}`); err != nil {
+			t.Fatal(err)
+		}
+		service.runWuwaAutomaticUpdateCheck(ctx)
+		stored, err := client.AppState.GetValue(ctx, wuwaLastCheckKey)
+		if err != nil || stored == nil || *stored != lastCheck {
+			t.Fatalf("skipped check advanced time: %v, %v", stored, err)
+		}
+	}
+}
+
+func TestWuwaAutomaticCheckInstallsResolvedMetadataWithDigestValidation(t *testing.T) {
+	t.Parallel()
+	for _, mismatch := range []bool{false, true} {
+		t.Run(fmt.Sprintf("digest-mismatch=%t", mismatch), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			client := openToolsTestDB(t)
+			binary := []byte("new portable executable")
+			sum := sha256.Sum256(binary)
+			digest := "sha256:" + hex.EncodeToString(sum[:])
+			if mismatch {
+				digest = "sha256:" + strings.Repeat("0", 64)
+			}
+			latestRequests, downloads := 0, 0
+			service := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+				HTTPClient: &http.Client{
+					Transport: wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+						var body string
+						switch request.URL.String() {
+						case "https://api.github.com/repos/Moonholder/Wuwa_Mod_Fixer/releases/latest":
+							latestRequests++
+							body = fmt.Sprintf(
+								`{"tag_name":"v1.2.3","assets":[{"name":"Wuwa_Mod_Fixer_v1.2.3.exe","browser_download_url":"https://example.test/a.exe","digest":%q}]}`,
+								digest,
+							)
+						case "https://example.test/a.exe":
+							downloads++
+							body = string(binary)
+						default:
+							return nil, fmt.Errorf("unexpected request: %s", request.URL)
+						}
+						return &http.Response{
+							StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
+							Body: io.NopCloser(strings.NewReader(body)),
+						}, nil
+					}),
+				},
+			})})
+			service.UseClient(client)
+			userData := useToolsTestAppData(t, service, t.TempDir())
+			if err := writeWuwaInstalledTestFiles(userData, `{}`); err != nil {
+				t.Fatal(err)
+			}
+			service.runWuwaAutomaticUpdateCheck(ctx)
+			status, err := service.WuwaFixerGetStatus(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "v1.2.3"
+			if mismatch {
+				want = "v1.0.0"
+			}
+			if status.InstalledVersion == nil || *status.InstalledVersion != want {
+				t.Fatalf("installed version = %v, want %q", status.InstalledVersion, want)
+			}
+			if latestRequests != 1 || downloads != 1 {
+				t.Fatalf("latest/download requests = %d/%d, want 1/1", latestRequests, downloads)
+			}
+			if mismatch {
+				body, err := os.ReadFile(*status.BinaryPath)
+				if err != nil || string(body) != "exe" {
+					t.Fatalf("digest failure changed installed binary: %q, %v", body, err)
+				}
+			}
+		})
+	}
+}
+
+func TestWuwaInstallRejectsFailedRefreshWithPersistentRelease(t *testing.T) {
+	t.Parallel()
+	for _, limited := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rate-limited=%t", limited), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			client := openToolsTestDB(t)
+			lastCheck := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339Nano)
+			cached, err := json.Marshal(wuwaLatestReleaseCache{
+				Version: "v1.2.3", CheckedAt: lastCheck,
+				Asset: wuwaLatestAsset{
+					Name: "Wuwa_Mod_Fixer_v1.2.3.exe", BrowserDownloadURL: "https://example.test/a.exe",
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, value := range map[string]string{wuwaLatestReleaseKey: string(cached), wuwaLastCheckKey: lastCheck} {
+				if err := client.AppState.Upsert(ctx, key, value, lastCheck); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rate := infra.NewGitHubRateCoordinator()
+			rate.UseAppState(client.AppState)
+			if limited {
+				raw, err := json.Marshal(GitHubRateState{
+					Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Resource: "core",
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := client.AppState.Upsert(ctx, "github:core-rate", string(raw), ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+				HTTPClient: &http.Client{
+					Transport: wuwaRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+						if limited || request.URL.Host != "api.github.com" {
+							t.Errorf("failed refresh downloaded or bypassed rate limit: %s", request.URL)
+						}
+						return &http.Response{
+							StatusCode: http.StatusServiceUnavailable, Header: make(http.Header), Request: request,
+							Body: io.NopCloser(strings.NewReader("unavailable")),
+						}, nil
+					}),
+				},
+			})
+			service := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
+			service.UseClient(client)
+			userData := useToolsTestAppData(t, service, t.TempDir())
+			if err := writeWuwaInstalledTestFiles(userData, `{}`); err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.WuwaFixerInstallOrUpdate(ctx)
+			if err == nil || limited && !errors.Is(err, github.ErrRateLimited) {
+				t.Fatalf("install refresh error = %v", err)
+			}
+			service.runWuwaAutomaticUpdateCheck(ctx)
+			stored, err := client.AppState.GetValue(ctx, wuwaLastCheckKey)
+			if err != nil || stored == nil || *stored != lastCheck {
+				t.Fatalf("failed check advanced time: %v, %v", stored, err)
+			}
+			status, err := service.WuwaFixerGetStatus(ctx, nil)
+			if err != nil || status.InstalledVersion == nil || *status.InstalledVersion != "v1.0.0" {
+				t.Fatalf("failed refresh changed install: %+v, %v", status, err)
+			}
+		})
 	}
 }

@@ -3,12 +3,19 @@ package xxmi
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 )
 
 func TestUpdateAvailableDoesNotDowngradeImportedPackages(t *testing.T) {
@@ -111,6 +118,163 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 	}
 	if _, err := x.CheckUpdates(ctx, true); err == nil {
 		t.Fatal("force update check did not attempt a release refresh")
+	}
+}
+
+func TestCheckUpdatesRateLimitPreservesAutomaticStateAndFailsManualCheck(t *testing.T) {
+	t.Parallel()
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprintf("force=%t", force), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = client.Close() })
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatal(err)
+			}
+			rate := infra.NewGitHubRateCoordinator()
+			rate.UseAppState(client.AppState)
+			raw, err := json.Marshal(infra.GitHubRateState{
+				Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Resource: "core",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := client.AppState.Upsert(ctx, "github:core-rate", string(raw), ""); err != nil {
+				t.Fatal(err)
+			}
+			httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+				HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					t.Errorf("rate-limited check reached network: %s", request.URL)
+					return nil, errors.New("network unavailable")
+				})},
+			})
+			x := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
+			x.UseClient(client)
+			useBuiltinLauncher(t, x)
+			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Enabled, cfg.Mode = true, RuntimeLegacy
+			if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+				t.Fatal(err)
+			}
+			latest := "1.2.3"
+			checkedAt := time.Now().Add(-2 * time.Hour).Unix()
+			if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+				Package: "importer:GIMI", LatestVersion: &latest, UpdateCheckTime: checkedAt,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			statuses, err := x.CheckUpdates(ctx, force)
+			if force {
+				if !errors.Is(err, github.ErrRateLimited) {
+					t.Fatalf("manual check error = %v", err)
+				}
+			} else if err != nil || len(statuses) != 1 || statuses[0].LatestVersion != latest {
+				t.Fatalf("automatic statuses = %+v, error = %v", statuses, err)
+			}
+			stored, err := client.XXMIPackages.Get(ctx, "importer:GIMI")
+			if err != nil || stored == nil || stored.UpdateCheckTime != checkedAt ||
+				stored.LatestVersion == nil || *stored.LatestVersion != latest {
+				t.Fatalf("failed check changed state: %+v, %v", stored, err)
+			}
+		})
+	}
+}
+
+func TestCheckUpdatesReusesReleaseFetchTime(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	store := &releaseCacheTestStore{values: make(map[string]string)}
+	httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			requests++
+			body := `[{"tag_name":"v1.2.3"}]`
+			if strings.Contains(request.URL.Path, "XXMI-Libs-Package") {
+				body = `[{"tag_name":"v1.7.7"}]`
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
+				Body: io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})},
+	})
+	newGitHubClient := func() *github.Client {
+		rate := infra.NewGitHubRateCoordinator()
+		rate.UseAppState(store)
+		return github.New(github.Options{HTTP: httpClient, Rate: rate})
+	}
+	x := NewWithOptions(Options{GitHub: newGitHubClient()})
+	x.UseClient(client)
+	useBuiltinLauncher(t, x)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.Mode = true, RuntimeLegacy
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	spec, _ := lookupImporterPackage("GIMI")
+	if _, err := x.github.CachedReleases(ctx, spec.repo, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := x.github.CachedReleases(ctx, libsRepo, false); err != nil {
+		t.Fatal(err)
+	}
+	fetchedAt := map[string]time.Time{
+		"importer:GIMI": time.Now().Add(-10 * time.Minute).UTC(),
+		"xxmi-libs":     time.Now().Add(-25 * time.Minute).UTC(),
+	}
+	store.backdate(t, "v1.2.3", fetchedAt["importer:GIMI"])
+	store.backdate(t, "v1.7.7", fetchedAt["xxmi-libs"])
+	x.github = newGitHubClient()
+
+	statuses, err := x.CheckUpdates(ctx, false)
+	if err != nil || len(statuses) != 2 {
+		t.Fatalf("statuses = %+v, err = %v", statuses, err)
+	}
+	for pkg, wantTime := range fetchedAt {
+		stored, err := client.XXMIPackages.Get(ctx, pkg)
+		if err != nil || stored == nil || stored.UpdateCheckTime != wantTime.Unix() {
+			t.Fatalf("cache changed %s fetch time: %+v, %v; want %v", pkg, stored, err, wantTime)
+		}
+	}
+	if requests != 2 {
+		t.Fatalf("automatic release requests = %d, want 2 warmup requests", requests)
+	}
+
+	manualStarted := time.Now().Unix()
+	for range 2 {
+		statuses, err := x.CheckUpdates(ctx, true)
+		if err != nil || len(statuses) != 2 {
+			t.Fatalf("manual statuses = %+v, err = %v", statuses, err)
+		}
+		for pkg := range fetchedAt {
+			stored, err := client.XXMIPackages.Get(ctx, pkg)
+			if err != nil || stored == nil || stored.UpdateCheckTime < manualStarted {
+				t.Fatalf("manual check did not refresh %s: %+v, %v", pkg, stored, err)
+			}
+		}
+	}
+	if requests != 4 {
+		t.Fatalf("manual release requests = %d, want 4 including warmup and bounded refresh", requests)
 	}
 }
 

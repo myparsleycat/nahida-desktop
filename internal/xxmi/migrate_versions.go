@@ -40,6 +40,7 @@ func (x *XXMI) PreviewExternalLauncherImport(
 	ctx context.Context,
 	path string,
 ) (versions []ImportPackageVersion, returnErr error) {
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-preview-import")
 	path = strings.TrimSpace(path)
 	defer func() {
 		if returnErr != nil {
@@ -94,7 +95,7 @@ func (x *XXMI) PreviewExternalLauncherImport(
 	defer cancel()
 	for i := range versions {
 		version := &versions[i]
-		releases, err := x.github.CachedReleases(checkCtx, repositories[version.Package], true)
+		releases, err := x.github.CachedReleases(checkCtx, repositories[version.Package], false)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

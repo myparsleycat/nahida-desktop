@@ -110,6 +110,23 @@ export function useGlobalEvents(
             void i18n.changeLanguage(event.data as string);
         });
 
+        const removeXXMIReleaseSettingListener = Events.On("setting:update", (event) => {
+            const payload: unknown = Array.isArray(event.data) ? event.data[0] : event.data;
+            if (!payload || typeof payload !== "object" || !("key" in payload)) return;
+            if (payload.key !== "xxmi.includePrereleases") return;
+
+            // The backend filters cached metadata using the newly persisted setting.
+            void queryClient.invalidateQueries({
+                predicate: (query) =>
+                    [
+                        "xxmi:releases",
+                        "xxmi:libs-releases",
+                        "xxmi:fps-releases",
+                        "xxmi:package-releases",
+                    ].includes(String(query.queryKey[0])),
+            });
+        });
+
         const removeXXMIUpdatesListener = Events.On("xxmi:updates", (event) => {
             const payload =
                 Array.isArray(event.data) && event.data.length === 1 && Array.isArray(event.data[0])
@@ -235,6 +252,7 @@ export function useGlobalEvents(
             removeAuthListener();
             removeBackendStatusListener();
             removeLanguageListener();
+            removeXXMIReleaseSettingListener();
             removeXXMIUpdatesListener();
             removeXXMIRunningListener();
             removeXXMILaunchListener();

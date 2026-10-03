@@ -61,6 +61,8 @@ function XXMIImporterPackageRow({
   const query = useQuery({
     queryKey: ["xxmi:getImporterReleases", importer.key],
     queryFn: () => XXMI.GetImporterReleases(importer.key),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const versions = query.data?.map((release) => release.tag);
   const version = selectedVersion ?? versions?.[0] ?? "";

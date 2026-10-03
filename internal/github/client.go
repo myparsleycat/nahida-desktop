@@ -42,12 +42,9 @@ func (e *RateLimitError) Error() string { return ErrRateLimited.Error() }
 
 func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
 
-// ResetAt is when GitHub restores the core-rate budget.
+// ResetAt is when both the primary and secondary GitHub limits allow retrying.
 func (e *RateLimitError) ResetAt() time.Time {
-	if e.State == nil {
-		return time.Time{}
-	}
-	return time.Unix(e.State.Reset, 0).UTC()
+	return infra.GitHubRetryTime(e.State)
 }
 
 // StatusError reports a non-2xx GitHub response.
@@ -61,7 +58,7 @@ type Options struct {
 	HTTP *infra.Client
 	// Download is used for release files; nil downloads through HTTP directly.
 	Download *infra.Download
-	// Rate gates and records GitHub API calls; nil disables gating.
+	// Rate shares GitHub API policy; nil creates a coordinator with an in-memory cache.
 	Rate *infra.GitHubRateCoordinator
 	Log  *infra.Log
 }
@@ -71,9 +68,6 @@ type Client struct {
 	download *infra.Download
 	rate     *infra.GitHubRateCoordinator
 	log      *infra.Log
-	tags     tagCache
-
-	diagnostic infra.DiagnosticThrottle
 }
 
 func New(opts Options) *Client {
@@ -82,10 +76,12 @@ func New(opts Options) *Client {
 		download = infra.NewDownload()
 		download.UseClient(opts.HTTP)
 	}
-	client := &Client{http: opts.HTTP, download: download, rate: opts.Rate, log: opts.Log}
-	client.tags.entries = make(map[Repo]tagEntry)
-	client.tags.now = time.Now
-	return client
+	rate := opts.Rate
+	if rate == nil {
+		rate = infra.NewGitHubRateCoordinator()
+		rate.UseLog(opts.Log)
+	}
+	return &Client{http: opts.HTTP, download: download, rate: rate, log: opts.Log}
 }
 
 // Configured reports whether c can call the API, fetch files and download files.
@@ -236,14 +232,6 @@ func (c *Client) GetBytes(ctx context.Context, apiURL string, limit int64) ([]by
 	if c == nil || c.http == nil {
 		return nil, errHTTPNotConfigured
 	}
-	allowed, state, err := c.rate.CanUseGitHubAPI(ctx, infra.GitHubRateCheckOptions{RefreshIfMissing: true})
-	if err != nil {
-		return nil, err
-	}
-	if !allowed {
-		return nil, &RateLimitError{State: state}
-	}
-
 	header := make(http.Header)
 	header.Set("Accept", "application/vnd.github+json")
 	header.Set("X-GitHub-Api-Version", apiVersion)
@@ -251,18 +239,18 @@ func (c *Client) GetBytes(ctx context.Context, apiURL string, limit int64) ([]by
 	response, err := c.http.Fetch(
 		ctx,
 		apiURL,
-		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
+		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true,
+			RetryLimit: new(int), HTTPClient: c.rate.HTTPClient(c.http.HTTPClient())},
 	)
 	if err != nil {
+		var rateErr *infra.GitHubRateError
+		if errors.As(err, &rateErr) {
+			return nil, infra.AnnotateError(&RateLimitError{State: rateErr.State},
+				infra.HTTPDiagnostic(http.MethodGet, apiURL, "rate-limit", nil))
+		}
 		return nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
-
-	if _, rateErr := c.rate.CaptureResponse(ctx, response.Header); rateErr != nil {
-		c.diagnostic.Report(c.log, rateErr, "GitHub", infra.Diagnostic{
-			Severity: infra.DiagnosticWarn, Operation: "github-rate", Stage: "capture",
-		})
-	}
 	return readResponse(response, apiURL, limit)
 }
 

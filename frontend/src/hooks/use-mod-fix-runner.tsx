@@ -3,8 +3,8 @@ import type { ZZMIFixerRestoreConflict } from "@bindings/tools/zzmi_fixer";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import { getFixToolPresets, getFixToolScripts } from "@renderer/wails/fix-tools";
+import { formatRateResetText } from "@shared/github-rate";
 import {
-  type GitHubRateState,
   type WuwaBackupGroup,
   type WuwaBackupSize,
   type WuwaFixerOptions,
@@ -561,12 +561,4 @@ export function useModFixRunner() {
       logTitle: t("page.mod.log-dialog.title"),
     },
   };
-}
-
-function formatRateResetText(rateState: GitHubRateState | null) {
-  if (!rateState) {
-    return null;
-  }
-
-  return new Date(rateState.reset * 1000).toLocaleString();
 }

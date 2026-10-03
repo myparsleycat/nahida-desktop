@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 )
 
 var fpsUnlockerRepo = github.Repo{Owner: "SpectrumQT", Name: "GI-FPS-Unlocker-Package"}
@@ -54,6 +55,7 @@ func (x *XXMI) ListCachedFPSUnlocker(ctx context.Context) ([]string, error) {
 }
 
 func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) error {
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-fps-unlocker")
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
 

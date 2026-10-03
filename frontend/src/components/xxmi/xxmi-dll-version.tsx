@@ -30,6 +30,8 @@ export function XXMIDllVersion({
   const query = useQuery({
     queryKey: ["xxmi:getLibsReleases"],
     queryFn: () => XXMI.GetLibsReleases(),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
 
   const versions = query.data?.map((release) => release.tag);

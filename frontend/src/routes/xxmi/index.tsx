@@ -83,10 +83,13 @@ export function XXMIDashboard() {
     queryKey: ["xxmi:fps-releases"],
     queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
     staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const { data: libsReleases } = useQuery({
     queryKey: ["xxmi:libs-releases"],
     queryFn: () => XXMI.ListReleases("xxmi-libs"),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const updates = useXXMIUpdates(!external && (overview?.configured ?? false));
   const [editedRoot, setEditedRoot] = useState<string | null>(null);

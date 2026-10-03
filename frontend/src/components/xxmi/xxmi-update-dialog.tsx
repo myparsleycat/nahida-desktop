@@ -65,6 +65,7 @@ function UpdateEntry({ entry }: { entry: UpdateStatus }) {
     queryKey: ["xxmi:package-releases", entry.package],
     queryFn: () => XXMI.ListReleases(entry.package),
     staleTime: 60 * 60 * 1000,
+    retry: false,
   });
   const notes = releases?.find((release) => release.version === entry.latestVersion)?.notes;
 
