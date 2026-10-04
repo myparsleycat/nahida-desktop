@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -164,30 +163,8 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, rawURL, archiv
 		return err
 	}
 	m.emitNteBootstrapProgress("downloading", nil, archiveName, "")
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return err
-	}
-	response, err := m.http.HTTPClient().Do(request)
-	if err != nil {
+	if err := m.download.File(ctx, infra.DownloadRequest{URL: rawURL, Destination: archivePath}); err != nil {
 		return fmt.Errorf("NTE_BOOTSTRAP_DOWNLOAD_FAILED:%s: %w", rawURL, err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, response.Body)
-		return fmt.Errorf("NTE_BOOTSTRAP_DOWNLOAD_FAILED:%s (HTTP %d)", rawURL, response.StatusCode)
-	}
-	output, err := os.OpenFile(archivePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(output, response.Body)
-	closeErr := output.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	if closeErr != nil {
-		return closeErr
 	}
 
 	m.emitNteBootstrapProgress("extracting", nil, archiveName, "")
