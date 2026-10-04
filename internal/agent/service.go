@@ -400,14 +400,18 @@ func (s *Service) GetSession(ctx context.Context, id string) (AgentSessionSnapsh
 		snapshot.SupportsImages = settings.SupportsImages
 		if scopeErr == nil {
 			messages := s.messagesFromEvents(contextEvents, settings.SupportsImages, false)
-			system := s.systemPrompt(ctx, contextRow, roots, settings.SupportsImages)
+			system := s.systemPrompt(ctx, contextRow, roots, settings.SupportsImages, patchTextModel(settings.Model))
 			// Tools are priced from the built-in set alone, which under-counts the MCP definitions a
 			// request may also carry. A matching anchor overrides the figure, so only the no-anchor
 			// fallback is approximate; rebuilding the MCP set here would open provider connections on
 			// a read path.
 			if usage, ok := buildContextUsage(
-				settings.ContextWindowSize, contextRouteKey(settings),
-				system, messages, builtInToolDefinitions(), parseContextAnchor(contextEvents),
+				settings.ContextWindowSize,
+				contextRouteKey(settings),
+				system,
+				messages,
+				builtInToolDefinitions(patchTextModel(settings.Model)),
+				parseContextAnchor(contextEvents),
 			); ok {
 				snapshot.ContextUsage = &usage
 			}
@@ -1244,8 +1248,9 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 		sandbox: sandbox, skills: s.skills, desktop: s.actions,
 		scope: rowScope(*row), mcp: mcpRuntime, sessionID: sessionID, supportsImages: settings.SupportsImages,
 	}
-	toolDefinitions := append(builtInToolDefinitions(), mcpDefinitions...)
-	system := s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
+	patchText := patchTextModel(settings.Model)
+	toolDefinitions := append(builtInToolDefinitions(patchText), mcpDefinitions...)
+	system := s.systemPrompt(ctx, *row, roots, settings.SupportsImages, patchText)
 	requestBudget := contextInputBudget(settings.ContextWindowSize, settings.MaxOutputTokens)
 	if estimateTokens(system, messages, toolDefinitions) > requestBudget {
 		messages, row.DurableSummary, err = s.compactMessages(
@@ -1255,7 +1260,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 			s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{"error": err.Error()})
 			return
 		}
-		system = s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
+		system = s.systemPrompt(ctx, *row, roots, settings.SupportsImages, patchText)
 		if estimateTokens(system, messages, toolDefinitions) > requestBudget {
 			s.finishRunDetached(sessionID, run.id, "turn/error", map[string]any{
 				"error": "agent context is too large after compaction; start a new conversation or reduce tool output",
@@ -1299,7 +1304,7 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 				modelErr = err
 				break
 			}
-			system = s.systemPrompt(ctx, *row, roots, settings.SupportsImages)
+			system = s.systemPrompt(ctx, *row, roots, settings.SupportsImages, patchText)
 			if len(messages) >= before {
 				modelErr = errors.New("provider context overflow could not be compacted")
 				break
@@ -1977,7 +1982,7 @@ func (s *Service) systemPrompt(
 	ctx context.Context,
 	row db.AgentSessionRow,
 	roots []SandboxRoot,
-	supportsImages bool,
+	supportsImages, patchText bool,
 ) string {
 	rootData, _ := json.Marshal(roots)
 	skillData, _ := json.Marshal(s.ListSkills())
@@ -1996,6 +2001,7 @@ func (s *Service) systemPrompt(
 		string(actionData),
 		language,
 		supportsImages,
+		patchText,
 	)
 }
 

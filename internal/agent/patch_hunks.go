@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -23,8 +25,9 @@ type textLine struct {
 	terminator string
 }
 
-// Match passes run from the strictest comparison to the loosest. A pass is accepted only when it
-// has exactly one candidate, so a file with repeated blocks never resolves to a guess.
+// Match passes run from the strictest comparison to the loosest. A hunk takes the first match after
+// the previous hunk, as the codex apply_patch format does, so hunks listed in file order pick
+// repeated blocks one after another. Every other lookup needs a pass with exactly one candidate.
 const (
 	linePassExact = iota + 1
 	linePassTrimRight
@@ -43,7 +46,9 @@ var punctuationNormalizer = strings.NewReplacer(
 )
 
 type hunkResolution struct {
+	number     int
 	start, end int
+	context    int
 	lines      []string
 	warning    string
 }
@@ -55,9 +60,10 @@ type lineMatch struct {
 	candidates []int
 }
 
-// applyPatchHunks resolves every hunk against the decoded file text in file order and returns the
-// rewritten text. Lines outside the hunks keep their own terminators, and a file without a
-// trailing newline stays that way.
+// applyPatchHunks resolves every hunk against the decoded file text and returns the rewritten text.
+// Hunks must not overlap. Every hunk that fails to resolve is reported, so one retry can fix them
+// all. Lines outside the hunks keep their own terminators, and a file without a trailing newline
+// stays that way.
 func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (string, []string, error) {
 	if len(hunks) == 0 {
 		return "", nil, errors.New("update requires at least one hunk")
@@ -74,6 +80,7 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 
 	resolutions := make([]hunkResolution, 0, len(hunks))
 	warnings := make([]string, 0)
+	var failures []error
 	cursor := 0
 	for index, hunk := range hunks {
 		reusePreviousBoundary := false
@@ -82,13 +89,49 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 		}
 		resolution, next, err := resolveHunk(content, hunk, cursor, reusePreviousBoundary, path, index+1)
 		if err != nil {
-			return "", nil, err
+			failures = append(failures, err)
+			continue
 		}
+		resolution.number = index + 1
 		resolutions = append(resolutions, resolution)
 		if resolution.warning != "" {
 			warnings = append(warnings, resolution.warning)
 		}
 		cursor = next
+	}
+	if len(failures) > 0 {
+		return "", nil, errors.Join(failures...)
+	}
+
+	// A context line must survive the patch: another hunk may only cover it as the final old line it
+	// keeps unchanged.
+	for _, resolution := range resolutions {
+		for _, other := range resolutions {
+			if resolution.context < other.start || resolution.context >= other.end {
+				continue
+			}
+			if resolution.context != other.end-1 || !keepsBoundary(content, other) {
+				return "", nil, fmt.Errorf(
+					"hunk %d: context %q not found in %q: hunk %d replaces that line",
+					resolution.number, hunks[resolution.number-1].Context, path, other.number,
+				)
+			}
+		}
+	}
+
+	// An insertion sorts ahead of a replacement starting at the same line, so it lands before the
+	// replaced block instead of counting as an overlap.
+	slices.SortStableFunc(resolutions, func(a, b hunkResolution) int {
+		return cmp.Or(cmp.Compare(a.start, b.start), cmp.Compare(a.end, b.end))
+	})
+	for index := 1; index < len(resolutions); index++ {
+		previous, current := resolutions[index-1], resolutions[index]
+		if current.start < previous.end {
+			return "", nil, fmt.Errorf(
+				"hunk %d overlaps hunk %d at line %d of %q; merge them into one hunk",
+				current.number, previous.number, current.start+1, path,
+			)
+		}
 	}
 
 	edited := append([]textLine(nil), lines...)
@@ -118,10 +161,15 @@ func applyPatchHunks(text string, hunks []PatchHunk, path, fallback string) (str
 
 // applySearchReplace substitutes oldString with newString in decoded file text. Newlines in the
 // search and replacement are rewritten to the file's existing style first, so a model that emits
-// LF still matches a CRLF INI. A non-replaceAll call requires exactly one match.
-func applySearchReplace(text, oldString, newString, path, newline string, replaceAll bool) (string, error) {
+// LF still matches a CRLF INI. A non-replaceAll call requires exactly one match. When the exact
+// text is absent, whole lines are compared with the relaxed hunk passes and a unique block is
+// replaced, which is reported as a warning.
+func applySearchReplace(
+	text, oldString, newString, path, newline string,
+	replaceAll bool,
+) (string, string, error) {
 	if oldString == "" {
-		return "", fmt.Errorf("update %q: oldString must not be empty", path)
+		return "", "", fmt.Errorf("update %q: oldString must not be empty", path)
 	}
 	old, next := oldString, newString
 	if newline != "" {
@@ -129,26 +177,68 @@ func applySearchReplace(text, oldString, newString, path, newline string, replac
 		next = normalizeNewlines(newString, newline)
 	}
 	if old == next {
-		return "", fmt.Errorf("update %q: oldString and newString are identical", path)
+		return "", "", fmt.Errorf("update %q: oldString and newString are identical", path)
 	}
 	count := strings.Count(text, old)
-	if count == 0 {
-		return "", fmt.Errorf(
-			"update %q: oldString not found; include a unique nearby section header or more surrounding lines, then retry this update",
-			path,
-		)
-	}
 	if count > 1 && !replaceAll {
-		return "", fmt.Errorf(
+		return "", "", fmt.Errorf(
 			"update %q: oldString matches %d times; include a unique nearby section header or more surrounding lines, or set replaceAll",
 			path,
 			count,
 		)
 	}
-	if replaceAll {
-		return strings.ReplaceAll(text, old, next), nil
+	if replaceAll && count > 0 {
+		return strings.ReplaceAll(text, old, next), "", nil
 	}
-	return strings.Replace(text, old, next, 1), nil
+	if count == 1 {
+		return strings.Replace(text, old, next, 1), "", nil
+	}
+
+	// The relaxed match covers whole lines. A trailing newline in oldString decides whether the
+	// last matched line's terminator belongs to the replaced range.
+	lines := splitTextLines(text)
+	content := make([]string, len(lines))
+	for index := range lines {
+		content[index] = lines[index].text
+	}
+	pattern := strings.Split(strings.ReplaceAll(oldString, "\r\n", "\n"), "\n")
+	coversTerminator := len(pattern) > 1 && pattern[len(pattern)-1] == ""
+	if coversTerminator {
+		pattern = pattern[:len(pattern)-1]
+	}
+	match := findLineBlock(content, pattern, 0)
+	if len(match.candidates) > 1 {
+		return "", "", fmt.Errorf(
+			"update %q: oldString is not in the file verbatim and resembles lines %s; copy the exact text with a unique nearby section header",
+			path,
+			lineNumberList(match.candidates),
+		)
+	}
+	if !match.found {
+		return "", "", fmt.Errorf(
+			"update %q: oldString not found (it starts with %s); copy the exact text from the file, then retry this update",
+			path,
+			hunkPreview(pattern[:1]),
+		)
+	}
+
+	start := 0
+	for _, line := range lines[:match.index] {
+		start += len(line.text) + len(line.terminator)
+	}
+	end := start
+	for offset, line := range lines[match.index : match.index+len(pattern)] {
+		end += len(line.text)
+		if offset < len(pattern)-1 || coversTerminator {
+			end += len(line.terminator)
+		}
+	}
+	label := passLabel(match.pass)
+	if label == "" {
+		label = "line endings ignored"
+	}
+	warning := fmt.Sprintf("oldString matched at line %d with %s", match.index+1, label)
+	return text[:start] + next + text[end:], warning, nil
 }
 
 func resolveHunk(
@@ -159,17 +249,14 @@ func resolveHunk(
 	path string,
 	number int,
 ) (hunkResolution, int, error) {
-	if hunk.EOF && len(hunk.OldLines) > 0 {
-		return hunkResolution{}, 0, fmt.Errorf("hunk %d: eof: true requires empty oldLines", number)
-	}
 	if len(hunk.OldLines) == 0 && !hunk.EOF && hunk.Context == "" {
 		return hunkResolution{}, 0, fmt.Errorf("hunk %d: empty oldLines requires a context line or eof: true", number)
 	}
 
-	cursor := start
+	cursor, contextIndex := start, -1
 	if hunk.Context != "" {
-		match := findLineBlock(lines, []string{hunk.Context}, cursor)
-		if !match.found && len(match.candidates) == 0 && reusePreviousBoundary && cursor > 0 {
+		match := seekLineBlock(lines, []string{hunk.Context}, cursor)
+		if !match.found && reusePreviousBoundary && cursor > 0 {
 			// Adjacent hunks commonly keep the next section header as the final old line, then reuse
 			// that unchanged boundary as the following hunk's context. Include only that boundary in
 			// the fallback so a context farther behind the cursor cannot make hunks overlap.
@@ -178,9 +265,12 @@ func resolveHunk(
 				match = lineMatch{found: true, index: cursor - 1, pass: boundary.pass}
 			}
 		}
+		if !match.found && cursor > 0 {
+			match = findLineBlock(lines, []string{hunk.Context}, 0)
+		}
 		switch {
 		case match.found:
-			cursor = match.index + 1
+			cursor, contextIndex = match.index+1, match.index
 		case len(match.candidates) > 1:
 			return hunkResolution{}, 0, fmt.Errorf("hunk %d: ambiguous context %q in %q at lines %s; add more oldLines",
 				number, hunk.Context, path, lineNumberList(match.candidates))
@@ -194,10 +284,36 @@ func resolveHunk(
 		if hunk.EOF || index > len(lines) {
 			index = len(lines)
 		}
-		return hunkResolution{start: index, end: index, lines: hunk.NewLines}, index, nil
+		return hunkResolution{start: index, end: index, context: contextIndex, lines: hunk.NewLines}, index, nil
 	}
 
-	match := findLineBlock(lines, hunk.OldLines, cursor)
+	// The first block after the previous hunk wins, with or without its trailing blank line: a blank
+	// line that separates patch sections is read as trailing context.
+	pattern, replacement := hunk.OldLines, hunk.NewLines
+	shorter, shorterReplacement := pattern, replacement
+	if last := len(pattern) - 1; last > 0 && pattern[last] == "" {
+		shorter = pattern[:last]
+		if len(replacement) > 0 && replacement[len(replacement)-1] == "" {
+			shorterReplacement = replacement[:len(replacement)-1]
+		}
+	}
+	match := seekHunk(lines, pattern, cursor, hunk.EOF)
+	if !match.found && len(shorter) < len(pattern) {
+		if match = seekHunk(lines, shorter, cursor, hunk.EOF); match.found {
+			pattern, replacement = shorter, shorterReplacement
+		}
+	}
+
+	// Hunks may also arrive out of file order, so a block that only exists before the cursor is
+	// accepted when it is unique in the whole file; the caller rejects overlapping hunks afterwards.
+	if !match.found && cursor > 0 {
+		match = findLineBlock(lines, pattern, 0)
+		if !match.found && len(match.candidates) == 0 && len(shorter) < len(pattern) {
+			if match = findLineBlock(lines, shorter, 0); match.found {
+				pattern, replacement = shorter, shorterReplacement
+			}
+		}
+	}
 	if !match.found {
 		if len(match.candidates) > 1 {
 			return hunkResolution{}, 0, fmt.Errorf(
@@ -206,15 +322,6 @@ func resolveHunk(
 				path,
 				lineNumberList(match.candidates),
 			)
-		}
-		if cursor > 0 {
-			if earlier := findLineBlock(lines, hunk.OldLines, 0); earlier.found {
-				return hunkResolution{}, 0, fmt.Errorf(
-					"hunk %d: hunks must be ordered by file position; these lines already match at line %d",
-					number,
-					earlier.index+1,
-				)
-			}
 		}
 		return hunkResolution{}, 0, fmt.Errorf(
 			"hunk %d: expected lines not found in %q: %s; copy the exact text and retry this update",
@@ -226,8 +333,22 @@ func resolveHunk(
 	if label := passLabel(match.pass); label != "" {
 		warning = fmt.Sprintf("hunk %d: matched at line %d with %s", number, match.index+1, label)
 	}
-	end := match.index + len(hunk.OldLines)
-	return hunkResolution{start: match.index, end: end, lines: hunk.NewLines, warning: warning}, end, nil
+	end := match.index + len(pattern)
+	resolution := hunkResolution{
+		start: match.index, end: end, context: contextIndex, lines: replacement, warning: warning,
+	}
+	return resolution, end, nil
+}
+
+// seekHunk finds the old lines of one hunk at or after the cursor: anchored to the end of the file
+// when the hunk asks for it, else the first matching block.
+func seekHunk(lines, pattern []string, cursor int, eof bool) lineMatch {
+	if tail := len(lines) - len(pattern); eof && tail >= cursor {
+		if match := seekLineBlock(lines[tail:], pattern, 0); match.found {
+			return lineMatch{found: true, index: tail, pass: match.pass}
+		}
+	}
+	return seekLineBlock(lines, pattern, cursor)
 }
 
 func keepsBoundary(lines []string, resolution hunkResolution) bool {
@@ -237,20 +358,31 @@ func keepsBoundary(lines []string, resolution hunkResolution) bool {
 	return lines[resolution.end-1] == resolution.lines[len(resolution.lines)-1]
 }
 
+var lineComparisons = []func(a, b string) bool{
+	func(a, b string) bool { return a == b },
+	func(a, b string) bool { return strings.TrimRight(a, " \t") == strings.TrimRight(b, " \t") },
+	func(a, b string) bool { return strings.TrimSpace(a) == strings.TrimSpace(b) },
+	func(a, b string) bool {
+		return punctuationNormalizer.Replace(strings.TrimSpace(a)) ==
+			punctuationNormalizer.Replace(strings.TrimSpace(b))
+	},
+}
+
+// seekLineBlock locates the first line range equal to pattern at or after start, in the strictest
+// pass that matches at all.
+func seekLineBlock(lines []string, pattern []string, start int) lineMatch {
+	for index, equal := range lineComparisons {
+		if candidates := candidateLines(lines, pattern, start, equal); len(candidates) > 0 {
+			return lineMatch{found: true, index: candidates[0], pass: index + 1}
+		}
+	}
+	return lineMatch{}
+}
+
 // findLineBlock locates the single line range equal to pattern at or after start.
 func findLineBlock(lines []string, pattern []string, start int) lineMatch {
-	comparisons := []func(a, b string) bool{
-		func(a, b string) bool { return a == b },
-		func(a, b string) bool { return strings.TrimRight(a, " \t") == strings.TrimRight(b, " \t") },
-		func(a, b string) bool { return strings.TrimSpace(a) == strings.TrimSpace(b) },
-		func(a, b string) bool {
-			return punctuationNormalizer.Replace(strings.TrimSpace(a)) ==
-				punctuationNormalizer.Replace(strings.TrimSpace(b))
-		},
-	}
-
 	var strictest []int
-	for index, equal := range comparisons {
+	for index, equal := range lineComparisons {
 		candidates := candidateLines(lines, pattern, start, equal)
 		if len(candidates) == 0 {
 			continue

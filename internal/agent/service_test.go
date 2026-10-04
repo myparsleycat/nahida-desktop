@@ -23,7 +23,7 @@ func TestSystemPromptRoutesRequestsToMatchingSkills(t *testing.T) {
 	t.Parallel()
 	prompt := New(Options{}).systemPrompt(t.Context(), db.AgentSessionRow{ScopeType: "mod"}, []SandboxRoot{{
 		ID: "selected", Name: "Selected Mod", Path: `C:\Mods\Character\Selected`, Importer: "ZZMI",
-	}}, false)
+	}}, false, false)
 	requiredInstructions := []string{
 		"call `load_skill` for every skill whose description matches the request",
 		"Load `mod-diagnosis` before diagnosing or repairing a broken or conflicting mod",
@@ -136,6 +136,7 @@ func TestSystemPromptUsesAppLanguage(t *testing.T) {
 		db.AgentSessionRow{ScopeType: "global"},
 		[]SandboxRoot{},
 		true,
+		false,
 	)
 	if !strings.Contains(prompt, "Respond in Japanese (ja), the language selected in Nahida Desktop") {
 		t.Fatalf("system prompt does not use app language: %q", prompt)
@@ -762,9 +763,9 @@ func TestServiceRevertStagesHidesAndUnreverts(t *testing.T) {
 	effectiveEvents := storedEvents[:3]
 	wantUsage, ok := buildContextUsage(
 		settings.ContextWindowSize, contextRouteKey(settings),
-		service.systemPrompt(ctx, session, roots, settings.SupportsImages),
+		service.systemPrompt(ctx, session, roots, settings.SupportsImages, patchTextModel(settings.Model)),
 		service.messagesFromEvents(effectiveEvents, settings.SupportsImages, false),
-		builtInToolDefinitions(), parseContextAnchor(effectiveEvents),
+		builtInToolDefinitions(patchTextModel(settings.Model)), parseContextAnchor(effectiveEvents),
 	)
 	if !ok {
 		t.Fatal("expected context usage for the staged conversation")
@@ -883,7 +884,9 @@ func TestServiceRevertContextUsageUsesSurvivingSummary(t *testing.T) {
 	}
 	effectiveRow := session
 	effectiveRow.DurableSummary = survivingSummary
-	wantSystemTokens := estimateTextTokens(service.systemPrompt(ctx, effectiveRow, roots, settings.SupportsImages))
+	wantSystemTokens := estimateTextTokens(
+		service.systemPrompt(ctx, effectiveRow, roots, settings.SupportsImages, patchTextModel(settings.Model)),
+	)
 	if staged.ContextUsage.SystemTokens != wantSystemTokens {
 		t.Fatalf(
 			"systemTokens = %d, want %d from the surviving summary",
@@ -893,7 +896,9 @@ func TestServiceRevertContextUsageUsesSurvivingSummary(t *testing.T) {
 	}
 	staleRow := session
 	staleRow.DurableSummary = staleSummary
-	staleSystemTokens := estimateTextTokens(service.systemPrompt(ctx, staleRow, roots, settings.SupportsImages))
+	staleSystemTokens := estimateTextTokens(
+		service.systemPrompt(ctx, staleRow, roots, settings.SupportsImages, patchTextModel(settings.Model)),
+	)
 	if staged.ContextUsage.SystemTokens == staleSystemTokens {
 		t.Fatal("staged context usage retained the reverted summary")
 	}

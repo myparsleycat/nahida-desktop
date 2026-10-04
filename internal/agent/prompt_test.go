@@ -15,6 +15,7 @@ func TestRenderSystemPromptReplacesRuntimeContext(t *testing.T) {
 		`[{"id":"mod.update_toggle_key","description":"Update a mod toggle key.","risk":"confirm"}]`,
 		"ko",
 		true,
+		false,
 	)
 	for _, expected := range []string{
 		"Respond in Korean (ko), the language selected in Nahida Desktop",
@@ -31,7 +32,7 @@ func TestRenderSystemPromptReplacesRuntimeContext(t *testing.T) {
 		"Never create or modify probe files merely to discover tool semantics",
 		"An `update` in `apply_patch` is how an existing file is changed",
 		"Never use `write` for a targeted edit",
-		"enlarge `oldString` or add hunk `context` and retry that `update` instead of resending the whole file",
+		"correct the operations the error names and resend it instead of resending the whole file",
 		"Every approval request must directly advance the user's requested outcome",
 		"Use locally available application state before asking the user to retype a configured path",
 		"A delivered key or launched process is not proof of the expected game state",
@@ -43,6 +44,20 @@ func TestRenderSystemPromptReplacesRuntimeContext(t *testing.T) {
 	}
 	if strings.Contains(prompt, "{{") {
 		t.Fatalf("rendered system prompt contains an unresolved placeholder: %q", prompt)
+	}
+}
+
+// A model that edits through the patch envelope must not be told about JSON operation fields.
+func TestRenderSystemPromptDescribesPatchTextEditing(t *testing.T) {
+	t.Parallel()
+	prompt := renderSystemPrompt("mod", "[]", "", "[]", "[]", "en", false, true)
+	if !strings.Contains(prompt, "send one `patchText` envelope carrying every edit") {
+		t.Fatalf("rendered system prompt is missing the patch text contract: %q", prompt)
+	}
+	for _, unexpected := range []string{"`oldString`", "`expectedContent`", "{{"} {
+		if strings.Contains(prompt, unexpected) {
+			t.Fatalf("rendered system prompt mentions %q", unexpected)
+		}
 	}
 }
 

@@ -207,7 +207,7 @@ func TestBuiltInSkillsStopAfterSufficientLocalEvidence(t *testing.T) {
 			want: []string{
 				"known, deterministic local pattern",
 				"re-read the changed region, and stop",
-				"never replace the whole INI with `write`",
+				"never replace the whole INI",
 				"A specialized skill's exact rule takes precedence",
 			},
 		},
