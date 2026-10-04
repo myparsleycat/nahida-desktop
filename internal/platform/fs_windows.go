@@ -80,8 +80,8 @@ func FinalPath(path string) (string, error) {
 	}
 
 	final := windows.UTF16ToString(buffer)
-	if rest, ok := strings.CutPrefix(final, `\?\UNC\`); ok {
-		return `\` + rest, nil
+	if rest, ok := strings.CutPrefix(final, `\\?\UNC\`); ok {
+		return `\\` + rest, nil
 	}
-	return strings.TrimPrefix(final, `\?\`), nil
+	return strings.TrimPrefix(final, `\\?\`), nil
 }
