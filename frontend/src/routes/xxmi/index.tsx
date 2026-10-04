@@ -178,17 +178,21 @@ export function XXMIDashboard() {
   };
 
   const enableUnsafeMode = async () => {
-    try {
-      for (const { key, config } of unsafePrompt) {
-        await XXMI.SaveImporterConfig(key, {
+    const failed: typeof unsafePrompt = [];
+    for (const entry of unsafePrompt) {
+      try {
+        const config = await XXMI.GetImporterConfig(entry.key);
+        await XXMI.SaveImporterConfig(entry.key, {
           ...config,
           migoto: { ...config.migoto, unsafeMode: true },
         });
+      } catch (error) {
+        toast.error(`${entry.key}: ${toErrorMessage(error)}`);
+        failed.push(entry);
       }
-    } catch (error) {
-      toast.error(toErrorMessage(error));
     }
-    setUnsafePrompt([]);
+
+    setUnsafePrompt(failed);
     refresh();
   };
 

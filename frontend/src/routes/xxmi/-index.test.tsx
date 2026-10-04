@@ -106,6 +106,7 @@ afterEach(() => {
   cleanup();
   state.updates = [];
   state.launcherMode = undefined;
+  state.overview.importers.splice(1);
   state.overview.importers[0].running = true;
   state.overview.libsCache = [];
   state.overview.sharedCustomDll = "";
@@ -119,7 +120,7 @@ function sharedImporterConfig(unsafeMode: boolean) {
   return { mode: "xxmi", xxmiVersion: { follow: "shared" }, migoto: { unsafeMode } };
 }
 
-it("selects a dropped DLL as the shared custom DLL and offers unsafe mode to importers that need it", async () => {
+it("selects a shared DLL and enables unsafe mode without overwriting newer importer settings", async () => {
   xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
   xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
   render(<XXMIDashboard />);
@@ -128,18 +129,66 @@ it("selects a dropped DLL as the shared custom DLL and offers unsafe mode to imp
 
   await waitFor(() => expect(xxmi.SetSharedCustomDLL).toHaveBeenCalledWith("abcdef123456"));
   expect(xxmi.ImportCustomDLL).toHaveBeenCalledWith("C:\\Builds\\d3d11.dll");
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+  const confirm = await screen.findByRole("button", {
+    name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+  });
+  const current = {
+    ...sharedImporterConfig(false),
+    importerFolder: "D:\\Updated\\GIMI",
+    migoto: { unsafeMode: false, logLevel: "Debug" },
+  };
+  xxmi.GetImporterConfig.mockResolvedValue(current);
+  fireEvent.click(confirm);
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith("GIMI", {
+      ...current,
+      migoto: { ...current.migoto, unsafeMode: true },
     }),
   );
-  await waitFor(() =>
-    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
-      "GIMI",
-      expect.objectContaining({ migoto: { unsafeMode: true } }),
-    ),
-  );
+  expect(xxmi.GetImporterConfig).toHaveBeenCalledTimes(2);
 });
+
+it.each(["GetImporterConfig", "SaveImporterConfig"] as const)(
+  "continues after a %s failure and retries only failed importers with fresh settings",
+  async (operation) => {
+    state.overview.importers.push({ ...state.overview.importers[0], key: "WWMI" });
+    xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
+    xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
+    xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+    render(<XXMIDashboard />);
+    fileDrop.drop({ paths: ["C:\\Builds\\d3d11.dll"], target: { id: "shared-dll" } });
+    const confirm = await screen.findByRole("button", {
+      name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+    });
+
+    xxmi[operation].mockRejectedValueOnce(new Error("settings unavailable"));
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+        "WWMI",
+        expect.objectContaining({ migoto: { unsafeMode: true } }),
+      ),
+    );
+    expect(toast.error).toHaveBeenCalledWith("GIMI: settings unavailable");
+    await waitFor(() => expect(confirm).toHaveProperty("disabled", false));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    xxmi.GetImporterConfig.mockClear();
+    xxmi.SaveImporterConfig.mockClear();
+    const current = { ...sharedImporterConfig(false), importerFolder: "D:\\Retry\\GIMI" };
+    xxmi.GetImporterConfig.mockResolvedValue(current);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(xxmi.GetImporterConfig).toHaveBeenCalledExactlyOnceWith("GIMI");
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledExactlyOnceWith("GIMI", {
+      ...current,
+      migoto: { ...current.migoto, unsafeMode: true },
+    });
+  },
+);
 
 it("selects the shared custom DLL through the file dialog without asking when unsafe mode is on", async () => {
   dialog.ShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["D:\\custom.dll"] });
