@@ -87,40 +87,28 @@ func (m *Mod) GetManualSubGroups(
 			result = append(result, group)
 		}
 	}
-	return result, nil
+	client, err := m.requireClient()
+	if err != nil {
+		return nil, err
+	}
+	return m.loadCharacterClassifications(ctx, client, game.Game, result, diagnostics.Add), nil
 }
 
-func (m *Mod) decorateGroups(
-	ctx context.Context,
-	gameName, parentRelative string,
+func decorateGroups(
+	game GameConfig,
+	manual manualSubGroups,
+	parentRelative string,
 	groups []FolderGroup,
 ) []FolderGroup {
-	games, err := m.GetGames(ctx)
-	if err != nil {
-		m.logShaderError(err, "manual-subgroups:games")
-		return groups
-	}
-	var game *GameConfig
-	for i := range games {
-		if games[i].Game == gameName {
-			game = &games[i]
-			break
-		}
-	}
-	if game == nil {
-		return groups
-	}
-	children, childErr := m.manualChildPaths(ctx, *game, parentRelative)
-	m.logShaderError(childErr, "manual-subgroups:read")
+	children := manualChildren(manual, game, parentRelative)
 	for i := range groups {
 		relative := joinManualPath(parentRelative, filepath.Base(groups[i].Path))
 		_, groups[i].IsManualSubGroup = children[relative]
-		ownChildren, childErr := m.manualChildPaths(ctx, *game, relative)
-		m.logShaderError(childErr, "manual-subgroups:read")
+		ownChildren := manualChildren(manual, game, relative)
 		groups[i].HasManualSubGroups = len(ownChildren) > 0
 		for manualPath := range ownChildren {
 			for _, diskPath := range resolveManualDiskPaths(game.ModFolderPath, manualPath) {
-				if !hasAnyFile(diskPath) {
+				if !hasModContent(diskPath) {
 					continue
 				}
 				if groups[i].ModCount > 0 {
@@ -175,6 +163,10 @@ func (m *Mod) manualChildPaths(
 	if err != nil {
 		return nil, err
 	}
+	return manualChildren(groups, game, parentRelative), nil
+}
+
+func manualChildren(groups manualSubGroups, game GameConfig, parentRelative string) map[string]struct{} {
 	parentRelative = manualRelativePath(parentRelative)
 	prefix := ""
 	if parentRelative != "" {
@@ -189,7 +181,7 @@ func (m *Mod) manualChildPaths(
 			result[candidate] = struct{}{}
 		}
 	}
-	return result, nil
+	return result
 }
 
 func (m *Mod) loadManualSubGroups(ctx context.Context) (manualSubGroups, error) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"nahida.live/desktop/internal/mod/metadata"
@@ -42,6 +43,19 @@ func characterClassifications(t *testing.T, service *Mod, game string) map[strin
 	result := map[string]map[string]string{}
 	for _, character := range characters {
 		result[character.Name] = character.Classifications
+	}
+	return result
+}
+
+func classifiedSubGroups(t *testing.T, service *Mod, game string) map[string][]FolderGroup {
+	t.Helper()
+	characters, err := service.GetCharacters(context.Background(), game, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := map[string][]FolderGroup{}
+	for _, character := range characters {
+		result[character.Name] = character.ClassifiedSubGroups
 	}
 	return result
 }
@@ -210,6 +224,186 @@ func TestCharacterClassificationFollowsRenamedFolder(t *testing.T) {
 	}
 }
 
+func TestCharacterClassificationInSubGroups(t *testing.T) {
+	t.Parallel()
+	for _, manual := range []bool{false, true} {
+		name := "expanded"
+		if manual {
+			name = "manual"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			service, root := newClassificationFixture(t)
+			parent := filepath.Join(root, "mods", "Diluc")
+			child := filepath.Join(parent, "Costume")
+			if manual {
+				if err := service.SetManualSubGroup(ctx, child, true); err != nil {
+					t.Fatal(err)
+				}
+			}
+			classification, err := service.SaveClassification(
+				ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			groupID := classification.Groups[0].ID
+			if err := service.SetCharacterClassification(ctx, child, classification.ID, &groupID); err != nil {
+				t.Fatalf("assign nested folder: %v", err)
+			}
+
+			read := service.GetSubGroups
+			if manual {
+				read = service.GetManualSubGroups
+			}
+			groups, err := read(ctx, parent, nil)
+			if err != nil || len(groups) != 1 || groups[0].Classifications[classification.ID] != groupID {
+				t.Fatalf("nested classifications = %#v, err = %v", groups, err)
+			}
+			if got := characterClassifications(t, service, "Game"); got["Diluc"] != nil {
+				t.Fatalf("child assignment changed parent: %#v", got)
+			}
+			if got := classifiedSubGroups(t, service, "Game"); len(got["Diluc"]) != 1 ||
+				got["Diluc"][0].Path != child || got["Diluc"][0].Classifications[classification.ID] != groupID ||
+				got["Diluc"][0].IsManualSubGroup != manual || len(got["Furina"]) != 0 {
+				t.Fatalf("classified sub groups = %#v", got)
+			}
+
+			if err := service.SetCharacterClassification(ctx, child, classification.ID, nil); err != nil {
+				t.Fatal(err)
+			}
+			if got := classifiedSubGroups(t, service, "Game"); len(got["Diluc"]) != 0 {
+				t.Fatalf("cleared classified sub groups = %#v", got)
+			}
+			groups, err = read(ctx, parent, nil)
+			if err != nil || len(groups) != 1 || groups[0].Classifications != nil {
+				t.Fatalf("cleared nested classifications = %#v, err = %v", groups, err)
+			}
+		})
+	}
+}
+
+func TestCharacterClassificationPreservesModDetection(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		content bool
+	}{
+		{name: "empty folder"},
+		{name: "folder with mod content", content: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			service, root := newClassificationFixture(t)
+			parent := filepath.Join(root, "mods", "Diluc")
+			child := filepath.Join(parent, "Costume")
+			want := 0
+			if test.content {
+				writeModFile(t, child, "nested/buffer.buf", "mod content")
+				want = 1
+			}
+			classification, err := service.SaveClassification(
+				ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			check := func(stage string) {
+				t.Helper()
+				characters, err := service.GetCharacters(ctx, "Game", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, character := range characters {
+					if character.Path != parent {
+						continue
+					}
+					found = true
+					if character.ModCount != want || character.EnabledModCount != want {
+						t.Errorf("%s: character counts = %d/%d, want %d/%d",
+							stage, character.ModCount, character.EnabledModCount, want, want)
+					}
+				}
+				if !found {
+					t.Fatalf("%s: parent folder missing from characters", stage)
+				}
+				for _, read := range []func(context.Context, string) (FolderGroup, error){
+					service.GetMods, service.GetModsLight,
+				} {
+					group, err := read(ctx, parent)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(group.Mods) != want || group.ModCount != want || group.EnabledModCount != want {
+						t.Errorf("%s: mod list = %#v, want %d mods", stage, group, want)
+					}
+				}
+			}
+			check("before assignment")
+			groupID := classification.Groups[0].ID
+			if err := service.SetCharacterClassification(ctx, child, classification.ID, &groupID); err != nil {
+				t.Fatal(err)
+			}
+			check("assigned")
+			if err := service.SetCharacterClassification(ctx, child, classification.ID, nil); err != nil {
+				t.Fatal(err)
+			}
+			check("cleared")
+			if raw, err := metadata.Read(child); err != nil || string(raw) != `{}` {
+				t.Fatalf("cleared metadata = %s, err = %v", raw, err)
+			}
+		})
+	}
+}
+
+func TestClassifiedSubGroupsReachTheDepthLimit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newClassificationFixture(t)
+	costume := filepath.Join(root, "mods", "Diluc", "Costume")
+	deepest := filepath.Join(costume, "Red")
+	tooDeep := filepath.Join(deepest, "Textures")
+	if err := os.MkdirAll(tooDeep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Assignments left in folders before any classification exists must not be listed.
+	if err := metadata.Write(costume, []byte(`{"classifications":{"stale":"group"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := classifiedSubGroups(t, service, "Game"); len(got["Diluc"]) != 0 {
+		t.Fatalf("sub groups without definitions = %#v", got)
+	}
+
+	element, err := service.SaveClassification(ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pyro := element.Groups[0].ID
+	if err := service.SetCharacterClassification(ctx, deepest, element.ID, &pyro); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCharacterClassification(ctx, tooDeep, element.ID, &pyro); err == nil ||
+		err.Error() != "INVALID_CLASSIFICATION_PATH" {
+		t.Fatalf("assignment below the depth limit: %v", err)
+	}
+	if err := service.SetCharacterClassification(ctx, tooDeep, element.ID, nil); err != nil {
+		t.Fatalf("clear below the depth limit: %v", err)
+	}
+
+	got := classifiedSubGroups(t, service, "Game")["Diluc"]
+	paths := map[string]string{}
+	for _, group := range got {
+		paths[group.Path] = group.Classifications[element.ID]
+	}
+	if len(got) != 2 || paths[costume] != "" || paths[deepest] != pyro {
+		t.Fatalf("classified sub groups = %#v", got)
+	}
+}
+
 func TestSetCharacterClassificationRejectsInvalidTargets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -228,7 +422,6 @@ func TestSetCharacterClassificationRejectsInvalidTargets(t *testing.T) {
 	for _, test := range []struct {
 		name, path, classification, group, want string
 	}{
-		{"nested folder", filepath.Join(modsRoot, "Diluc", "Costume"), element.ID, pyro, "INVALID_CLASSIFICATION_PATH"},
 		{"game root", modsRoot, element.ID, pyro, "INVALID_CLASSIFICATION_PATH"},
 		{"outside managed roots", root, element.ID, pyro, "INVALID_CLASSIFICATION_PATH"},
 		{"missing folder", filepath.Join(modsRoot, "Missing"), element.ID, pyro, "INVALID_CLASSIFICATION_PATH"},
@@ -245,5 +438,92 @@ func TestSetCharacterClassificationRejectsInvalidTargets(t *testing.T) {
 	}
 	if got := characterClassifications(t, service, "Game"); got["Diluc"] != nil || got["Furina"] != nil {
 		t.Fatalf("rejected assignments were written: %#v", got)
+	}
+}
+
+func TestClassifiedSubGroupsFollowFolderChanges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newClassificationFixture(t)
+	parent := filepath.Join(root, "mods", "Diluc")
+	child := filepath.Join(parent, "Costume")
+	plain := filepath.Join(parent, "Plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	element, err := service.SaveClassification(ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pyro := element.Groups[0].ID
+	paths := func() []string {
+		t.Helper()
+		found := []string{}
+		for _, group := range classifiedSubGroups(t, service, "Game")["Diluc"] {
+			found = append(found, group.Path)
+		}
+		slices.Sort(found)
+		return found
+	}
+
+	// The first listing builds the index, so every later step runs against indexed folders.
+	if got := paths(); len(got) != 0 {
+		t.Fatalf("sub groups before assignment = %v", got)
+	}
+	if err := service.SetCharacterClassification(ctx, child, element.ID, &pyro); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{child}) {
+		t.Fatalf("assigned sub groups = %v", got)
+	}
+
+	disabled := filepath.Join(parent, "DISABLED Costume")
+	if err := os.Rename(child, disabled); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{disabled}) {
+		t.Fatalf("sub groups after disabling = %v", got)
+	}
+
+	renamed := filepath.Join(parent, "Outfit")
+	if err := os.Rename(disabled, renamed); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{renamed}) {
+		t.Fatalf("sub groups after renaming = %v", got)
+	}
+
+	// An assignment that arrives outside the service is indexed once its parent is listed.
+	if err := metadata.Write(plain, []byte(`{"classifications":{"`+element.ID+`":"`+pyro+`"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetSubGroups(ctx, parent, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{renamed, plain}) {
+		t.Fatalf("sub groups after an external assignment = %v", got)
+	}
+
+	if err := service.SetCharacterClassification(ctx, renamed, element.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{plain}) {
+		t.Fatalf("sub groups after clearing = %v", got)
+	}
+}
+
+func TestListGroupsWhereSkipsRejectedFolders(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, name := range []string{"Costume", "Plain"} {
+		writeModFile(t, filepath.Join(root, name), "mod/mod.ini", "")
+	}
+
+	groups := listGroupsWhere(root, false, func(name string) bool { return name == "Costume" })
+	if len(groups) != 1 || groups[0].Name != "Costume" || groups[0].ModCount != 1 {
+		t.Fatalf("filtered groups = %#v", groups)
+	}
+	if all := listGroups(root, false); len(all) != 2 {
+		t.Fatalf("unfiltered groups = %#v", all)
 	}
 }

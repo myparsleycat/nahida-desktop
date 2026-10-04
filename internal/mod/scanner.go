@@ -38,6 +38,11 @@ type walkedMod struct {
 }
 
 func listGroups(root string, fallback bool, reports ...func(error)) []FolderGroup {
+	return listGroupsWhere(root, fallback, nil, reports...)
+}
+
+// listGroupsWhere skips the folders keep rejects before any of their contents are read. A nil keep lists them all.
+func listGroupsWhere(root string, fallback bool, keep func(name string) bool, reports ...func(error)) []FolderGroup {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		reportScanFailure(err, reports)
@@ -45,7 +50,7 @@ func listGroups(root string, fallback bool, reports ...func(error)) []FolderGrou
 	}
 	groups := make([]FolderGroup, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || (keep != nil && !keep(entry.Name())) {
 			continue
 		}
 		path := filepath.Join(root, entry.Name())
@@ -67,7 +72,7 @@ func countChildMods(root string, reports ...func(error)) (int, int) {
 	}
 	total, enabled := 0, 0
 	for _, entry := range entries {
-		if !entry.IsDir() || !hasAnyFile(filepath.Join(root, entry.Name()), reports...) {
+		if !entry.IsDir() || !hasModContent(filepath.Join(root, entry.Name()), reports...) {
 			continue
 		}
 		total++
@@ -78,14 +83,15 @@ func countChildMods(root string, reports ...func(error)) (int, int) {
 	return total, enabled
 }
 
-func hasAnyFile(root string, reports ...func(error)) bool {
+// hasModContent ignores folder metadata when deciding whether a directory contains a mod.
+func hasModContent(root string, reports ...func(error)) bool {
 	found := false
 	_ = filepath.WalkDir(root, func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			reportScanFailure(err, reports)
 			return err
 		}
-		if entry.Type().IsRegular() {
+		if entry.Type().IsRegular() && !strings.EqualFold(entry.Name(), "nhd.json") {
 			found = true
 			return fs.SkipAll
 		}
@@ -228,7 +234,7 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 }
 
 func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
-	if !hasAnyFile(modPath, reports...) {
+	if !hasModContent(modPath, reports...) {
 		return nil
 	}
 	name := filepath.Base(modPath)
@@ -261,7 +267,11 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		found = true
+
+		// Metadata still contributes to size and mtime, but cannot make an empty folder a mod.
+		if !strings.EqualFold(entry.Name(), "nhd.json") {
+			found = true
+		}
 		metadata, statErr := entry.Info()
 		reportScanFailure(statErr, reports)
 		if statErr == nil {

@@ -6,21 +6,30 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@renderer/components/ui/context-menu";
-import { useClassifications } from "@renderer/hooks/use-mod-data";
+import { useClassifications, useGames } from "@renderer/hooks/use-mod-data";
 import { useClassificationMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { TagsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-// Context-menu entries that assign a top-level character folder to one group per classification.
+import { canAssignClassification } from "./character-sidebar-visible-rows";
+
+// Context-menu entries that assign a character folder to one group per classification.
 export function CharacterSidebarClassificationMenu({ group }: { group: FolderGroup }) {
   const { t } = useTranslation();
   const selectedGame = useModStore((s) => s.selectedGame);
   const { data: classifications = [] } = useClassifications(selectedGame);
+  const { data: games = [] } = useGames();
   const { setCharacterClassificationMutation } = useClassificationMutations();
+  const modRoot = games.find((game) => game.game === selectedGame)?.modFolderPath;
+  const canAssign = !modRoot || canAssignClassification(modRoot, group.path);
 
-  if (classifications.length === 0) {
+  // A folder too deep to assign still offers the menu while it carries an assignment, so it can be cleared.
+  const hasAssignment = classifications.some(
+    (classification) => group.classifications?.[classification.id],
+  );
+  if (classifications.length === 0 || (!canAssign && !hasAssignment)) {
     return null;
   }
 
@@ -58,6 +67,7 @@ export function CharacterSidebarClassificationMenu({ group }: { group: FolderGro
                       <ContextMenuRadioItem
                         key={item.id}
                         value={item.id}
+                        disabled={!canAssign}
                         onClick={() => assign(item.id)}
                       >
                         {item.name}

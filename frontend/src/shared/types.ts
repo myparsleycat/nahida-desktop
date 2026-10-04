@@ -1,4 +1,4 @@
-import type { Mod } from "@bindings/mod";
+import type { FolderGroup as BoundFolderGroup, Mod } from "@bindings/mod";
 import type { GitHubRateState } from "@bindings/tools";
 // oxlint-disable typescript/no-explicit-any
 import type { Snapshot as TransferSnapshot } from "@bindings/transfer";
@@ -277,17 +277,17 @@ export interface ModInfo {
     }[];
 }
 
-export interface FolderGroup {
-    name: string;
-    path: string;
+// The renderer's view of the bound model. Only the fields listed here differ from it: mods carry
+// renderer-only download state, and folders built in the renderer omit the preview and the counts.
+export interface FolderGroup extends Omit<
+    BoundFolderGroup,
+    "mods" | "preview" | "modCount" | "enabledModCount" | "classifiedSubGroups"
+> {
     mods: ModInfo[];
     preview?: string;
     modCount?: number;
     enabledModCount?: number;
-    isManualSubGroup?: boolean;
-    hasSubGroups?: boolean;
-    hasManualSubGroups?: boolean;
-    classifications?: Record<string, string>;
+    classifiedSubGroups?: FolderGroup[] | null;
 }
 
 export interface ClassificationGroup {

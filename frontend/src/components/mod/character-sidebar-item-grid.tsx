@@ -21,6 +21,8 @@ export function CharacterSidebarItemGrid({
   parentGroupName,
   previewCacheKey,
 }: CharacterSidebarItemGridProps) {
+  // A sub folder listed in a classification section sits at depth 0, so its parent is named on the preview.
+  const listedParentName = depth === 0 ? parentGroupName : undefined;
   const isNestedGridItem = depth > 0;
 
   return (
@@ -47,6 +49,11 @@ export function CharacterSidebarItemGrid({
             }
             allowPlay={true}
           />
+          {listedParentName && (
+            <span className="absolute top-1.5 left-1.5 max-w-[calc(100%-2.75rem)] truncate rounded bg-background/85 px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm">
+              {listedParentName}
+            </span>
+          )}
           <CharacterSidebarModCountBadge
             group={group}
             className="absolute right-1.5 bottom-1.5 gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[11px] shadow-sm backdrop-blur-sm"

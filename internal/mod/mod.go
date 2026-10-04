@@ -103,6 +103,8 @@ type Mod struct {
 	compression        *compressionCoordinator
 	namespaceIsolation *namespaceIsolationCoordinator
 	operationMu        sync.RWMutex
+	classifiedMu       sync.Mutex
+	classifiedFolders  map[string]classifiedFolderIndex
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -278,8 +280,10 @@ type FolderGroup struct {
 	IsManualSubGroup   bool      `json:"isManualSubGroup,omitempty"`
 	HasSubGroups       bool      `json:"hasSubGroups,omitempty"`
 	HasManualSubGroups bool      `json:"hasManualSubGroups,omitempty"`
-	// Classifications maps a classification ID to the group ID this top-level folder is assigned to.
+	// Classifications maps a classification ID to the group ID this folder is assigned to.
 	Classifications map[string]string `json:"classifications,omitempty"`
+	// ClassifiedSubGroups lists the nested folders that carry an assignment. Only top-level folders fill it.
+	ClassifiedSubGroups []FolderGroup `json:"classifiedSubGroups,omitempty"`
 }
 
 func gameConfig(row db.GamePathRow) GameConfig {
@@ -662,14 +666,9 @@ func (m *Mod) GetCharacters(
 	if err != nil {
 		return nil, err
 	}
-	if isNTEImporter(row.Importer) {
-		gameConfig := gameConfig(*row)
-		roots := nteRootsFor(gameConfig)
-		groups := nteListGroups(roots, roots.modRoot, search, diagnostics.Add)
-		return m.loadCharacterClassifications(ctx, client, game, groups, diagnostics.Add), nil
-	}
-	groups := m.decorateGroups(ctx, game, "", listGroups(row.ModFolderPath, search, diagnostics.Add))
-	return m.loadCharacterClassifications(ctx, client, game, groups, diagnostics.Add), nil
+	listing := m.newGroupListing(ctx, client, gameConfig(*row), search, diagnostics.Add)
+	groups := m.listSubGroups(listing, row.ModFolderPath, nil, diagnostics.Add)
+	return m.loadClassifiedSubGroups(listing, groups, diagnostics.Add), nil
 }
 
 func (m *Mod) GetSubGroups(
@@ -688,11 +687,76 @@ func (m *Mod) GetSubGroups(
 	if err != nil {
 		return nil, err
 	}
-	if isNTEImporter(game.Importer) {
-		return nteListGroups(nteRootsFor(*game), folderPath, search, diagnostics.Add), nil
+	client, err := m.requireClient()
+	if err != nil {
+		return nil, err
 	}
-	groups := listGroups(folderPath, search, diagnostics.Add)
-	return m.decorateGroups(ctx, game.Game, gameRelativePath(game.ModFolderPath, folderPath), groups), nil
+	listing := m.newGroupListing(ctx, client, *game, search, diagnostics.Add)
+	return m.listSubGroups(listing, folderPath, nil, diagnostics.Add), nil
+}
+
+// groupListing holds the per-game lookups shared by every folder listed within one request.
+type groupListing struct {
+	game       GameConfig
+	search     bool
+	manual     manualSubGroups
+	classified bool
+}
+
+func (m *Mod) newGroupListing(
+	ctx context.Context,
+	client *db.Client,
+	game GameConfig,
+	search bool,
+	reports ...func(error),
+) groupListing {
+	listing := groupListing{game: game, search: search}
+	classifications, err := client.ModClassifications.ListByGame(ctx, game.Game)
+	if err != nil {
+		reportScanFailure(fmt.Errorf("list classifications for %s: %w", game.Game, err), reports)
+	}
+	listing.classified = len(classifications) > 0
+
+	if !isNTEImporter(game.Importer) {
+		manual, err := m.loadManualSubGroups(ctx)
+		m.logShaderError(err, "manual-subgroups:read")
+		listing.manual = manual
+	}
+	return listing
+}
+
+// listSubGroups lists the folders directly inside folderPath, which may be the game's mod root.
+// A non-nil keep limits the listing to the folder names it accepts.
+func (m *Mod) listSubGroups(
+	listing groupListing,
+	folderPath string,
+	keep func(name string) bool,
+	reports ...func(error),
+) []FolderGroup {
+	game := listing.game
+	var groups []FolderGroup
+	if isNTEImporter(game.Importer) {
+		groups = nteListGroupsWhere(nteRootsFor(game), folderPath, listing.search, keep, reports...)
+	} else {
+		relative := gameRelativePath(game.ModFolderPath, folderPath)
+		if relative == "." {
+			relative = ""
+		}
+		groups = decorateGroups(
+			game, listing.manual, relative, listGroupsWhere(folderPath, listing.search, keep, reports...),
+		)
+	}
+	if !listing.classified {
+		return groups
+	}
+
+	groups = attachClassifications(groups, reports...)
+	for _, group := range groups {
+		if len(group.Classifications) > 0 {
+			m.rememberClassifiedFolder(game, group.Path)
+		}
+	}
+	return groups
 }
 
 func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error) {

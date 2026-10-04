@@ -33,18 +33,7 @@ export interface ModInfo {
     }[];
 }
 
-export interface FolderGroup {
-    name: string;
-    path: string;
-    mods: ModInfo[];
-    preview?: string;
-    modCount?: number;
-    enabledModCount?: number;
-    isManualSubGroup?: boolean;
-    hasSubGroups?: boolean;
-    hasManualSubGroups?: boolean;
-    classifications?: Record<string, string>;
-}
+export type { FolderGroup } from "@shared/types";
 
 export interface Preset {
     id: string;

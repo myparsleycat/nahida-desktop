@@ -10,14 +10,19 @@ interface CharacterSidebarItemRowProps {
     mods: { isEnabled: boolean }[];
   };
   depth: number;
+  parentGroupName?: string;
   previewCacheKey?: number;
 }
 
 export function CharacterSidebarItemRow({
   group,
   depth,
+  parentGroupName,
   previewCacheKey,
 }: CharacterSidebarItemRowProps) {
+  // A sub folder listed in a classification section sits at depth 0, so its parent is named instead of indented.
+  const listedParentName = depth === 0 ? parentGroupName : undefined;
+
   return (
     <>
       {depth > 0 && (
@@ -38,7 +43,14 @@ export function CharacterSidebarItemRow({
         />
       </div>
 
-      <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
+      {listedParentName ? (
+        <span className="flex min-w-0 flex-col text-left">
+          <span className="truncate text-sm text-foreground">{group.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{listedParentName}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
+      )}
       <CharacterSidebarModCountBadge group={group} />
     </>
   );

@@ -57,7 +57,7 @@ export function getVisibleGroups(
         });
 }
 
-// Splits top-level folders into one section per classification group, in the classification's order.
+// Splits folders into one section per classification group, in the classification's order.
 // Folders without an assignment, or assigned to a group that no longer exists, land in the last section.
 export function partitionByClassification(
     groups: FolderGroup[],
@@ -79,6 +79,44 @@ export function partitionByClassification(
     return [...sections.values(), unassigned];
 }
 
+// Nested folders assigned to one of the classification's groups. They are listed in that group's
+// section next to the top-level folders instead of under their parent.
+export function collectClassifiedSubGroups(groups: FolderGroup[], classification: Classification) {
+    const groupIds = new Set(classification.groups.map((group) => group.id));
+    return groups.flatMap((group) =>
+        (group.classifiedSubGroups ?? []).filter((sub) =>
+            groupIds.has(sub.classifications?.[classification.id] ?? ""),
+        ),
+    );
+}
+
+export function parentFolderName(path: string) {
+    return path.split(/[\\/]/).at(-2);
+}
+
+// Mirrors classifiedSubGroupDepth in internal/mod/classifications.go: how many levels below a
+// top-level folder can carry an assignment.
+const classifiedSubGroupDepth = 2;
+
+// Whether the backend accepts an assignment for the folder. The rendered depth cannot answer this,
+// because a classified sub folder is listed at depth 0 whatever its place below the mod root.
+export function canAssignClassification(modRoot: string, path: string) {
+    const segments = (value: string) =>
+        value
+            .toLowerCase()
+            .split(/[\\/]+/)
+            .filter(Boolean);
+    const root = segments(modRoot);
+    const target = segments(path);
+    const levels = target.length - root.length;
+
+    return (
+        levels >= 1 &&
+        levels <= classifiedSubGroupDepth + 1 &&
+        root.every((segment, index) => target[index] === segment)
+    );
+}
+
 export function buildVisibleSidebarRows(
     groups: FolderGroup[],
     options: {
@@ -97,6 +135,10 @@ export function buildVisibleSidebarRows(
     const normalizedSearch = options.searchTerm.trim().toLowerCase();
     const isSearching = normalizedSearch.length > 0;
     const rows: VisibleSidebarRow[] = [];
+    const classifiedSubGroups = options.classification
+        ? collectClassifiedSubGroups(groups, options.classification)
+        : [];
+    const classifiedPaths = new Set(classifiedSubGroups.map((group) => group.path));
 
     const visit = (
         group: FolderGroup,
@@ -115,7 +157,9 @@ export function buildVisibleSidebarRows(
                 ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
                 : childGroups;
         const groupsToRender = getVisibleGroups(
-            showSubGroups ? childGroups : visibleChildGroups,
+            (showSubGroups ? childGroups : visibleChildGroups).filter(
+                (sub) => !classifiedPaths.has(sub.path),
+            ),
             options.sortKey,
             options.sortDirection,
             options.hideEmptyGroups,
@@ -153,7 +197,10 @@ export function buildVisibleSidebarRows(
         return rows;
     }
 
-    for (const section of partitionByClassification(groups, options.classification)) {
+    for (const section of partitionByClassification(
+        [...groups, ...classifiedSubGroups],
+        options.classification,
+    )) {
         const visibleGroups = getVisibleGroups(
             section.groups,
             options.sortKey,
@@ -179,7 +226,12 @@ export function buildVisibleSidebarRows(
         }
 
         for (const group of visibleGroups) {
-            visit(group, 0, undefined, undefined);
+            visit(
+                group,
+                0,
+                classifiedPaths.has(group.path) ? parentFolderName(group.path) : undefined,
+                undefined,
+            );
         }
         if (isSearching && rows.length === headerIndex + 1) {
             rows.pop();
