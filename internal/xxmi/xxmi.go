@@ -113,7 +113,12 @@ type XXMI struct {
 	mu        sync.RWMutex
 	packageMu sync.Mutex
 	// disabledMu serializes read-modify-write updates of the disabled external importer list.
-	disabledMu  sync.Mutex
+	disabledMu sync.Mutex
+	// customDLLMu serializes imports, selection writes, and cleanup of the custom DLL cache.
+	customDLLMu sync.Mutex
+	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
+	importedCustomDLLs map[string]bool
+
 	client      *db.Client
 	log         *infra.Log
 	github      *github.Client

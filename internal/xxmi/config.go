@@ -112,11 +112,14 @@ type WWMIOptions struct {
 const importerConfigSchema = 2
 
 type ImporterConfig struct {
-	SchemaVersion      int               `json:"schemaVersion"`
-	Enabled            bool              `json:"enabled"`
-	Mode               RuntimeMode       `json:"mode"`
-	PackageVersion     VersionPin        `json:"packageVersion"`
-	XXMIVersion        VersionPin        `json:"xxmiVersion"`
+	SchemaVersion  int         `json:"schemaVersion"`
+	Enabled        bool        `json:"enabled"`
+	Mode           RuntimeMode `json:"mode"`
+	PackageVersion VersionPin  `json:"packageVersion"`
+	XXMIVersion    VersionPin  `json:"xxmiVersion"`
+	// CustomDLL is the cached custom d3d11.dll used in unsafe mode when XXMIVersion does not follow the
+	// shared libraries; importers that follow them use the shared custom DLL instead.
+	CustomDLL          string            `json:"customDll"`
 	LegacyRuntime      string            `json:"legacyRuntime"`
 	DeployedSignatures map[string]string `json:"deployedSignatures,omitempty"`
 	ImporterFolder     string            `json:"importerFolder"`
@@ -345,15 +348,20 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if client == nil {
 		return errors.New("XXMI settings store is not configured")
 	}
+	x.customDLLMu.Lock()
+	defer x.customDLLMu.Unlock()
+
 	previous, err := client.XXMIImporters.Get(ctx, key)
 	if err != nil {
 		return err
 	}
+	previousCustomDLL := ""
 	if previous != nil {
 		var old ImporterConfig
 		if err := json.Unmarshal([]byte(previous.Config), &old); err != nil {
 			return err
 		}
+		previousCustomDLL = old.CustomDLL
 		if old.Mode != cfg.Mode {
 			if !x.acquireImporter(key) {
 				return errors.New("XXMI_GAME_RUNNING")
@@ -371,12 +379,21 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 			}
 		}
 	}
+	// Only a newly selected custom DLL has to exist, so a config whose cached DLL is gone can still be saved.
+	if cfg.CustomDLL != "" && cfg.CustomDLL != previousCustomDLL {
+		if err := x.requireCustomDLL(cfg.CustomDLL); err != nil {
+			return err
+		}
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return err
 	}
 	if err := client.XXMIImporters.Upsert(ctx, key, string(data)); err != nil {
 		return err
+	}
+	if cfg.CustomDLL != previousCustomDLL {
+		x.reportCleanup(x.pruneCustomDLLsLocked(ctx), "prune-custom-dll")
 	}
 	x.wakeRunningWatch()
 	return nil
