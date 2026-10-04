@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -70,6 +71,7 @@ type Service struct {
 	emitEvent        func(string, ...any)
 	shell            *platform.Shell
 	settings         *setting.Setting
+	importers        importerRuntime
 	skills           *skillCatalog
 	actions          *agentactions.Registry
 	hunting          *hunting.Service
@@ -96,6 +98,11 @@ type Service struct {
 	cancelRun    context.CancelFunc
 	closing      atomic.Bool
 	wg           sync.WaitGroup
+}
+
+// importerRuntime resolves where an enabled importer is installed.
+type importerRuntime interface {
+	ResolveHuntingRuntime(context.Context, string) (xxmi.HuntingRuntime, error)
 }
 
 type queuedRun struct {
@@ -143,6 +150,11 @@ func New(options Options) *Service {
 			},
 		})
 	}
+	// A nil *xxmi.XXMI must stay a nil interface so the Core roots are simply left out.
+	var importers importerRuntime
+	if options.XXMI != nil {
+		importers = options.XXMI
+	}
 	return &Service{
 		http:      httpClient,
 		remote:    options.Remote,
@@ -151,6 +163,7 @@ func New(options Options) *Service {
 		emitEvent: options.EventEmit,
 		shell:     options.Shell,
 		settings:  options.Setting,
+		importers: importers,
 		hunting:   huntingService,
 		actions: agentactions.NewRegistry(agentactions.Dependencies{
 			Mod: options.Mod, Tools: options.Tools, Settings: options.Setting, Transfer: options.Transfer,
@@ -1954,7 +1967,14 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 		if len(gameRoots) == 0 {
 			return AgentScope{}, nil, errors.New("no available game Mods folders are configured")
 		}
-		return AgentScope{Type: "global"}, gameRoots, nil
+		coreRoots := make([]SandboxRoot, 0, len(gameRoots))
+		for _, gameRoot := range gameRoots {
+			core, ok := s.importerCoreRoot(ctx, gameRoot.Importer)
+			if ok && !slices.ContainsFunc(coreRoots, func(root SandboxRoot) bool { return root.ID == core.ID }) {
+				coreRoots = append(coreRoots, core)
+			}
+		}
+		return AgentScope{Type: "global"}, append(gameRoots, coreRoots...), nil
 	case "mod":
 		canonical, err := canonicalExistingDir(scope.ModPath)
 		if err != nil {
@@ -1967,15 +1987,40 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 					name = filepath.Base(canonical)
 				}
 				validated := AgentScope{Type: "mod", ModPath: canonical, ModName: name}
-				return validated, []SandboxRoot{
+				roots := []SandboxRoot{
 					{ID: rootID(name, canonical), Name: name, Path: canonical, Importer: gameRoot.Importer},
-				}, nil
+				}
+				if core, ok := s.importerCoreRoot(ctx, gameRoot.Importer); ok {
+					roots = append(roots, core)
+				}
+				return validated, roots, nil
 			}
 		}
 		return AgentScope{}, nil, errors.New("selected mod folder is outside configured game Mods folders")
 	default:
 		return AgentScope{}, nil, fmt.Errorf("invalid agent scope %q", scope.Type)
 	}
+}
+
+// importerCoreRoot exposes the importer's Core folder, which holds the shared INI and shader
+// sources that mods build on, as read-only reference material. A Mods folder can live anywhere, so
+// the folder comes from the importer's own configuration rather than from the mod path.
+func (s *Service) importerCoreRoot(ctx context.Context, importer string) (SandboxRoot, bool) {
+	if s.importers == nil || importer == "" {
+		return SandboxRoot{}, false
+	}
+	runtime, err := s.importers.ResolveHuntingRuntime(ctx, importer)
+	if err != nil || runtime.ImporterFolder == "" {
+		return SandboxRoot{}, false
+	}
+	canonical, err := canonicalExistingDir(filepath.Join(runtime.ImporterFolder, "Core"))
+	if err != nil {
+		return SandboxRoot{}, false
+	}
+	name := importer + " Core"
+	return SandboxRoot{
+		ID: rootID(name, canonical), Name: name, Path: canonical, Importer: importer, ReadOnly: true,
+	}, true
 }
 
 func (s *Service) systemPrompt(

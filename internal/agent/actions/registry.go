@@ -70,6 +70,18 @@ type Resolver interface {
 	ResolveTarget(rootID, relativePath string) (string, error)
 }
 
+// writeGuarded is implemented by a resolver that also covers read-only locations. Every action
+// except a read-risk one binds to the view it returns, so it cannot touch those locations.
+type writeGuarded interface {
+	Writable() Resolver
+}
+
+// storedPathGuard is implemented by a writable view. An action that changes a folder it did not
+// resolve itself, such as the mod a session was opened on, vets that folder through it.
+type storedPathGuard interface {
+	CheckWritable(path string) error
+}
+
 type actionContext struct {
 	resolver       Resolver
 	scope          string
@@ -95,6 +107,24 @@ func (c actionContext) resolveTarget(rootID, relativePath string) (string, error
 		return "", errors.New("agent sandbox is unavailable")
 	}
 	return c.resolver.ResolveTarget(rootID, relativePath)
+}
+
+// checkWritable refuses stored paths the current sandbox keeps read-only. A session is opened by a
+// read action, which may resolve a read-only folder, so its paths are checked again before a change.
+func (c actionContext) checkWritable(paths []string) error {
+	if c.resolver == nil {
+		return errors.New("agent sandbox is unavailable")
+	}
+	guard, ok := c.resolver.(storedPathGuard)
+	if !ok {
+		return nil
+	}
+	for _, path := range paths {
+		if err := guard.CheckWritable(path); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type action struct {
@@ -296,19 +326,23 @@ func (r *Registry) PrepareWithContext(
 			return Plan{}, err
 		}
 	}
+	risk := action.definition.Risk
+	if action.risk != nil {
+		risk = action.risk(canonical)
+	}
+	if guarded, ok := resolver.(writeGuarded); ok && risk != RiskRead {
+		resolver = guarded.Writable()
+	}
 	actionCtx := actionContext{
 		resolver: resolver, scope: scope, sessionID: execution.SessionID,
 		supportsImages: execution.SupportsImages,
 	}
 	plan := Plan{
 		Definition: action.definition,
-		Risk:       action.definition.Risk,
+		Risk:       risk,
 		run: func(ctx context.Context) (any, error) {
 			return action.execute(ctx, actionCtx, canonical)
 		},
-	}
-	if action.risk != nil {
-		plan.Risk = action.risk(canonical)
 	}
 	if plan.Risk != RiskConfirm {
 		return plan, nil

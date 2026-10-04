@@ -39,7 +39,7 @@ func builtInToolDefinitions(patchText bool) []ToolDefinition {
 	return []ToolDefinition{
 		{
 			Name:        "list_files",
-			Description: "List files inside one authorized sandbox root.",
+			Description: "List files inside one authorized sandbox root, including read-only roots.",
 			InputSchema: objectSchema(map[string]any{
 				"rootId": map[string]any{"type": "string"}, "relativePath": map[string]any{"type": "string"},
 				"recursive": map[string]any{"type": "boolean"}, "limit": map[string]any{"type": "integer"},
@@ -110,6 +110,7 @@ func applyPatchDefinition(patchText bool) ToolDefinition {
 		return ToolDefinition{
 			Name: "apply_patch",
 			Description: "Atomically create, update, or delete text files with one patch; put every edit in a single call. " +
+				"Creating and editing apply immediately; a patch that deletes a file pauses for user approval. " +
 				"patchText is this envelope:\n" +
 				"*** Begin Patch\n" +
 				"*** Update File: <path relative to the root>\n" +
@@ -135,7 +136,7 @@ func applyPatchDefinition(patchText bool) ToolDefinition {
 	}
 	return ToolDefinition{
 		Name:        "apply_patch",
-		Description: "Atomically create, update, or delete text files after preflight validation. For an existing file, use type update with oldString/newString; oldString must match exactly one place unless replaceAll is true, so include a unique nearby section header when the snippet repeats. Put every edit to a file in one call: several update operations may target the same path and apply in order, each to the result of the previous one. A rejection names every operation that failed; correct those and resend the call — do not switch to write. type write replaces an entire file and must not be used for a targeted edit. Existing encoding, BOM, and newline style are preserved.",
+		Description: "Atomically create, update, or delete text files after preflight validation. Creating and editing apply immediately; a call that deletes a file pauses for user approval. For an existing file, use type update with oldString/newString; oldString must match exactly one place unless replaceAll is true, so include a unique nearby section header when the snippet repeats. Put every edit to a file in one call: several update operations may target the same path and apply in order, each to the result of the previous one. A rejection names every operation that failed; correct those and resend the call — do not switch to write. type write replaces an entire file and must not be used for a targeted edit. Existing encoding, BOM, and newline style are preserved.",
 		InputSchema: objectSchema(map[string]any{
 			"rootId": map[string]any{
 				"type": "string",
@@ -280,9 +281,9 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 				return toolExecution{Approval: &agentactions.Proposal{
 					ActionID:  "sandbox.apply_patch",
 					Arguments: canonical,
-					Summary:   "Modify or delete sandbox files.",
+					Summary:   "Delete sandbox files.",
 					Target:    input.RootID + ": " + strings.Join(targets, ", "),
-					Impact:    "This patch rewrites, edits, or deletes existing local files.",
+					Impact:    "This patch deletes existing local files.",
 					Kind:      "sandbox",
 				}}, nil
 			}
@@ -311,17 +312,21 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		if !pathWithin(root.view.Path, target) {
 			return toolExecution{}, errSandboxPath
 		}
+		if err := e.sandbox.checkMove(source, target); err != nil {
+			return toolExecution{}, err
+		}
 		if _, statErr := os.Lstat(target); statErr == nil {
 			return toolExecution{}, fmt.Errorf("move target already exists: %s", input.To)
 		} else if !errors.Is(statErr, os.ErrNotExist) {
 			return toolExecution{}, statErr
 		}
-		canonical, _ := json.Marshal(input)
-		return toolExecution{Approval: &agentactions.Proposal{
-			ActionID: "sandbox.move_path", Arguments: canonical, Summary: "Move or rename a sandbox path.",
-			Target: source + " → " + target, Impact: "This changes local file paths and may affect mod loading.",
-			Kind: "sandbox",
-		}}, nil
+		if err := e.sandbox.MovePath(input.RootID, input.From, input.To); err != nil {
+			return toolExecution{}, err
+		}
+		return toolExecution{
+			Output:       map[string]any{"moved": true},
+			ChangedFiles: []string{input.From, input.To},
+		}, nil
 	case "load_skill":
 		var input struct{ Name, Reference string }
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
@@ -430,6 +435,7 @@ func (e *toolExecutor) ExecuteApproved(
 			}
 			result, err := e.sandbox.ApplyPatch(input.RootID, input.Operations)
 			return toolExecution{Output: result, ChangedFiles: result.ChangedFiles}, err
+		// move_path no longer pauses; this runs approvals requested before that change.
 		case "sandbox.move_path":
 			var input struct{ RootID, From, To string }
 			if err := json.Unmarshal(arguments, &input); err != nil {

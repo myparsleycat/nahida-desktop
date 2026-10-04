@@ -183,17 +183,53 @@ func idAction(
 
 func sessionApplyAction(
 	id, description string,
+	sessionPaths func(string) ([]string, error),
 	execute func(context.Context, tools.TouchProfileApplyInput) (tools.TouchApplyResult, error),
 ) action {
-	return simpleAction(id, description, "tools", RiskConfirm,
+	action := simpleAction(id, description, "tools", RiskConfirm,
 		objectSchema(map[string]any{"sessionId": stringSchema(), "force": booleanSchema()}, "sessionId"),
-		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+		func(ctx context.Context, actionCtx actionContext, raw json.RawMessage) (any, error) {
 			var input tools.TouchProfileApplyInput
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
+			if _, err := checkSessionPaths(actionCtx, raw, sessionPaths); err != nil {
+				return nil, err
+			}
 			return execute(ctx, input)
 		})
+	action.describe = sessionDescription(description, sessionPaths)
+	return action
+}
+
+// checkSessionPaths vets the folders a session stored before an action changes them. The session was
+// opened by a read action, so nothing has yet refused a read-only folder.
+func checkSessionPaths(
+	actionCtx actionContext,
+	raw json.RawMessage,
+	sessionPaths func(string) ([]string, error),
+) ([]string, error) {
+	var input struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return nil, err
+	}
+	paths, err := sessionPaths(input.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	return paths, actionCtx.checkWritable(paths)
+}
+
+func sessionDescription(
+	summary string,
+	sessionPaths func(string) ([]string, error),
+) func(actionContext, json.RawMessage) (string, string, error) {
+	return func(actionCtx actionContext, raw json.RawMessage) (string, string, error) {
+		paths, err := checkSessionPaths(actionCtx, raw, sessionPaths)
+		return summary, strings.Join(paths, ", "), err
+	}
 }
 
 func menuMakerSaveAction(

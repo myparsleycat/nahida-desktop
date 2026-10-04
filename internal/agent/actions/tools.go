@@ -360,9 +360,9 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			return deps.Tools.TouchProfileUpdateZoneSettingsBatch(ctx, input)
 		}))
 	registry.add(sessionApplyAction("tools.touch_apply", "Apply a touch profile to local mod files.",
-		deps.Tools.TouchProfileApply))
+		deps.Tools.TouchProfileSessionPaths, deps.Tools.TouchProfileApply))
 	registry.add(sessionApplyAction("tools.touch_regenerate", "Regenerate local mod files from a touch profile.",
-		deps.Tools.TouchProfileRegenerate))
+		deps.Tools.TouchProfileSessionPaths, deps.Tools.TouchProfileRegenerate))
 	registry.add(idAction("tools.touch_discard", "Discard a touch-profile draft.", "sessionId", RiskWrite,
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.TouchProfileDiscardDraft(ctx, id) }))
 	registry.add(idAction("tools.touch_close", "Close a touch-profile session.", "sessionId", RiskWrite,
@@ -431,19 +431,27 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			}
 			return deps.Tools.BodyShapeBeginExport(ctx, input)
 		}))
-	registry.add(simpleAction("tools.body_shape_commit_export", "Commit uploaded body-shape changes to mod files.",
+	bodyShapeCommit := simpleAction(
+		"tools.body_shape_commit_export", "Commit uploaded body-shape changes to mod files.",
 		"tools", RiskConfirm, objectSchema(map[string]any{
 			"sessionId": stringSchema(), "exportId": stringSchema(),
 			"amount": map[string]any{}, "axisScale": map[string]any{"type": "array"},
 			"writeChangeLog": map[string]any{}, "changeSummary": map[string]any{"type": "object"},
 		}, "sessionId", "exportId"),
-		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+		func(ctx context.Context, actionCtx actionContext, raw json.RawMessage) (any, error) {
 			var input tools.BodyShapeCommitExportInput
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
+			if _, err := checkSessionPaths(actionCtx, raw, deps.Tools.BodyShapeSessionPaths); err != nil {
+				return nil, err
+			}
 			return deps.Tools.BodyShapeCommitExport(ctx, input)
-		}))
+		})
+	bodyShapeCommit.describe = sessionDescription(
+		bodyShapeCommit.definition.Description, deps.Tools.BodyShapeSessionPaths,
+	)
+	registry.add(bodyShapeCommit)
 	registry.add(idAction("tools.model_viewer_cleanup", "Close a model-viewer session.", "sessionId", RiskWrite,
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.CleanupModelViewer(ctx, id) }))
 	registry.add(simpleAction("tools.model_viewer_ineffective_values", "Inspect ineffective model-viewer values.",

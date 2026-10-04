@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -679,6 +680,80 @@ func TestSessionScopesResolveCurrentGameRoots(t *testing.T) {
 	}
 	if _, err := service.CreateSession(ctx, AgentScope{Type: "mod", ModPath: t.TempDir()}); err == nil {
 		t.Fatal("outside mod scope unexpectedly succeeded")
+	}
+}
+
+// The importer's Core folder joins the sandbox read-only, resolved from the importer's own folder
+// because a configured Mods folder does not have to live beside it.
+func TestSessionScopesExposeImporterCoreReadOnly(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	importerFolder := t.TempDir()
+	core := filepath.Join(importerFolder, "Core")
+	mods := filepath.Join(t.TempDir(), "Mods")
+	selectedMod := filepath.Join(mods, "Selected Mod")
+	plainMods := filepath.Join(t.TempDir(), "Mods")
+	for _, path := range []string{core, selectedMod, plainMods} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	importer := "GIMI"
+	for _, row := range []db.GamePathRow{
+		{Game: "Game One", ModFolderPath: mods, Importer: &importer},
+		{Game: "Game Two", ModFolderPath: plainMods},
+	} {
+		if err := client.GamePaths.Insert(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	canonicalCore, err := canonicalExistingDir(core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreRoots := func(roots []SandboxRoot) []SandboxRoot {
+		return slices.DeleteFunc(slices.Clone(roots), func(root SandboxRoot) bool { return !root.ReadOnly })
+	}
+
+	_, roots, err := service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
+	if err != nil || len(roots) != 1 {
+		t.Fatalf("roots without an importer runtime = %#v, %v", roots, err)
+	}
+
+	service.importers = fakeHuntingImporter{root: importerFolder}
+	_, roots, err = service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
+	if err != nil || len(roots) != 2 || roots[0].ReadOnly {
+		t.Fatalf("mod roots = %#v, %v", roots, err)
+	}
+	if got := coreRoots(roots); len(got) != 1 || got[0].Path != canonicalCore || got[0].Name != "GIMI Core" {
+		t.Fatalf("mod core roots = %#v, want %q", got, canonicalCore)
+	}
+	_, roots, err = service.resolveScope(ctx, AgentScope{Type: "global"})
+	if err != nil || len(roots) != 3 {
+		t.Fatalf("global roots = %#v, %v", roots, err)
+	}
+	if got := coreRoots(roots); len(got) != 1 || got[0].Path != canonicalCore {
+		t.Fatalf("global core roots = %#v, want %q", got, canonicalCore)
+	}
+
+	if err := os.Remove(core); err != nil {
+		t.Fatal(err)
+	}
+	_, roots, err = service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
+	if err != nil || len(roots) != 1 {
+		t.Fatalf("roots without a Core folder = %#v, %v", roots, err)
 	}
 }
 
