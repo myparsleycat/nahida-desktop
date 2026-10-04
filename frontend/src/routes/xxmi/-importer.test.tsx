@@ -8,6 +8,10 @@ const xxmi = vi.hoisted(() => ({
   EnsureLibsVersion: vi.fn(),
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
+  ImportCustomDLL: vi.fn(),
+}));
+const fileDrop = vi.hoisted(() => ({
+  drop: (_drop: { paths: string[]; target: { id: string } }) => {},
 }));
 const mod = vi.hoisted(() => ({
   GetGames: vi.fn(),
@@ -20,6 +24,8 @@ const overview = vi.hoisted(() => ({
     importerFolder?: string;
     installedVersion?: string;
   }>,
+  sharedCustomDll: "",
+  customDlls: [] as Array<{ id: string; name: string }>,
 }));
 const packageVerification = vi.hoisted(() => ({
   data: null as { version: string; method: string } | null,
@@ -32,6 +38,7 @@ const config = {
   mode: "xxmi",
   packageVersion: { follow: "latest" },
   xxmiVersion: { follow: "latest" },
+  customDll: "",
   legacyRuntime: "",
   overwriteINI: true,
   useLaunchOptions: false,
@@ -74,6 +81,12 @@ const config = {
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("@bindings/mod", () => ({ Mod: mod }));
 vi.mock("@bindings/platform", () => ({ Dialog: {} }));
+vi.mock("@renderer/wails/file-drop", () => ({
+  FileDropTargetID: { xxmiSharedCustomDll: "shared-dll", xxmiImporterCustomDll: "importer-dll" },
+  useWindowFileDrop: (listener: typeof fileDrop.drop) => {
+    fileDrop.drop = listener;
+  },
+}));
 vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
   useLaunchGuard: () => ({ startImporter: vi.fn(), launchGuardDialog: null }),
@@ -326,9 +339,12 @@ afterEach(() => {
   xxmi.EnsureLibsVersion.mockReset();
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
+  xxmi.ImportCustomDLL.mockReset();
   mod.GetGames.mockReset();
   mod.UpdateGame.mockReset();
   overview.importers = [];
+  overview.sharedCustomDll = "";
+  overview.customDlls = [];
   packageVerification.data = null;
 });
 
@@ -571,7 +587,8 @@ it("offers restoring the official DLL when the importer uses a custom DLL", asyn
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
-  expect(screen.getByText("page.setting.xxmi.builtin.customDll")).toBeTruthy();
+  // The label appears on the libraries row as the badge and on the custom DLL row as its title.
+  expect(screen.getAllByText("page.setting.xxmi.builtin.customDll")).toHaveLength(2);
   fireEvent.click(
     screen.getByRole("button", { name: "page.setting.xxmi.builtin.restoreOfficialDll" }),
   );
@@ -638,5 +655,68 @@ it("keeps Configure game settings for WWMI, whose game-side options are optional
     expect(toggle.getAttribute("aria-checked")).toBe("false");
   } finally {
     config.wwmi = null;
+  }
+});
+
+async function dropImporterCustomDLL() {
+  xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "custom.dll" });
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  fileDrop.drop({ paths: ["C:\\Builds\\custom.dll"], target: { id: "importer-dll" } });
+  await waitFor(() => expect(xxmi.ImportCustomDLL).toHaveBeenCalledWith("C:\\Builds\\custom.dll"));
+  return screen.findByRole("button", {
+    name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+  });
+}
+
+it("saves a dropped custom DLL together with unsafe mode once the prompt is confirmed", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  fireEvent.click(await dropImporterCustomDLL());
+
+  expect(await screen.findByText("custom.dll · abcdef123456")).toBeTruthy();
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({
+        customDll: "abcdef123456",
+        migoto: expect.objectContaining({ unsafeMode: true }),
+      }),
+    ),
+  );
+});
+
+it("leaves the draft untouched when the unsafe mode prompt is cancelled", async () => {
+  await dropImporterCustomDLL();
+  fireEvent.click(screen.getByRole("button", { name: "g.cancel" }));
+
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", {
+        name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+      }),
+    ).toBeNull(),
+  );
+  expect(screen.getByText("page.setting.xxmi.builtin.customDllDropHint")).toBeTruthy();
+  expect(screen.queryByText("custom.dll · abcdef123456")).toBeNull();
+});
+
+it("shows the shared custom DLL read-only and warns while unsafe mode is off", () => {
+  config.xxmiVersion = { follow: "shared" };
+  overview.sharedCustomDll = "abcdef123456";
+  overview.customDlls = [{ id: "abcdef123456", name: "shared.dll" }];
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    expect(screen.getByText("page.setting.xxmi.builtin.customDllShared")).toBeTruthy();
+    expect(screen.getByText("page.setting.xxmi.builtin.customDllInactive")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
+    ).toBeNull();
+  } finally {
+    config.xxmiVersion = { follow: "latest" };
   }
 });

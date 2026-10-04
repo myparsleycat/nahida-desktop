@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
     legacyRuntimes: [],
     fpsVersions: [],
     cacheIssues: ["legacy 3DMigoto: missing source.json"],
+    sharedCustomDll: "",
+    customDlls: [] as Array<{ id: string; name: string }>,
     importers: [
       {
         key: "GIMI",
@@ -41,10 +43,26 @@ const state = vi.hoisted(() => ({
   }>,
 }));
 
-const xxmi = vi.hoisted(() => ({ SetSharedLibsVersion: vi.fn() }));
+const xxmi = vi.hoisted(() => ({
+  SetSharedLibsVersion: vi.fn(),
+  ImportCustomDLL: vi.fn(),
+  SetSharedCustomDLL: vi.fn(),
+  GetImporterConfig: vi.fn(),
+  SaveImporterConfig: vi.fn(),
+}));
+const dialog = vi.hoisted(() => ({ ShowOpenDialog: vi.fn() }));
+const fileDrop = vi.hoisted(() => ({
+  drop: (_drop: { paths: string[]; target: { id: string } }) => {},
+}));
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
-vi.mock("@bindings/platform", () => ({ Dialog: {} }));
+vi.mock("@bindings/platform", () => ({ Dialog: dialog }));
+vi.mock("@renderer/wails/file-drop", () => ({
+  FileDropTargetID: { xxmiSharedCustomDll: "shared-dll", xxmiImporterCustomDll: "importer-dll" },
+  useWindowFileDrop: (listener: typeof fileDrop.drop) => {
+    fileDrop.drop = listener;
+  },
+}));
 vi.mock("@renderer/hooks/use-launch-guard", () => ({
   useLaunchGuard: () => ({ startImporter: vi.fn(), launchGuardDialog: null }),
 }));
@@ -79,6 +97,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { XXMIImporterList } from "@renderer/components/xxmi/xxmi-importer-list";
+import { toast } from "sonner";
 
 import { XXMIDashboard } from "./index";
 import { XXMILayout } from "./route";
@@ -87,8 +106,133 @@ afterEach(() => {
   cleanup();
   state.updates = [];
   state.launcherMode = undefined;
+  state.overview.importers.splice(1);
   state.overview.importers[0].running = true;
   state.overview.libsCache = [];
+  state.overview.sharedCustomDll = "";
+  state.overview.customDlls = [];
+  Object.values(xxmi).forEach((mock) => mock.mockReset());
+  dialog.ShowOpenDialog.mockReset();
+  vi.mocked(toast.error).mockReset();
+});
+
+function sharedImporterConfig(unsafeMode: boolean) {
+  return { mode: "xxmi", xxmiVersion: { follow: "shared" }, migoto: { unsafeMode } };
+}
+
+it("selects a shared DLL and enables unsafe mode without overwriting newer importer settings", async () => {
+  xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
+  xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
+  render(<XXMIDashboard />);
+
+  fileDrop.drop({ paths: ["C:\\Builds\\d3d11.dll"], target: { id: "shared-dll" } });
+
+  await waitFor(() => expect(xxmi.SetSharedCustomDLL).toHaveBeenCalledWith("abcdef123456"));
+  expect(xxmi.ImportCustomDLL).toHaveBeenCalledWith("C:\\Builds\\d3d11.dll");
+  const confirm = await screen.findByRole("button", {
+    name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+  });
+  const current = {
+    ...sharedImporterConfig(false),
+    importerFolder: "D:\\Updated\\GIMI",
+    migoto: { unsafeMode: false, logLevel: "Debug" },
+  };
+  xxmi.GetImporterConfig.mockResolvedValue(current);
+  fireEvent.click(confirm);
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith("GIMI", {
+      ...current,
+      migoto: { ...current.migoto, unsafeMode: true },
+    }),
+  );
+  expect(xxmi.GetImporterConfig).toHaveBeenCalledTimes(2);
+});
+
+it.each(["GetImporterConfig", "SaveImporterConfig"] as const)(
+  "continues after a %s failure and retries only failed importers with fresh settings",
+  async (operation) => {
+    state.overview.importers.push({ ...state.overview.importers[0], key: "WWMI" });
+    xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
+    xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
+    xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+    render(<XXMIDashboard />);
+    fileDrop.drop({ paths: ["C:\\Builds\\d3d11.dll"], target: { id: "shared-dll" } });
+    const confirm = await screen.findByRole("button", {
+      name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+    });
+
+    xxmi[operation].mockRejectedValueOnce(new Error("settings unavailable"));
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+        "WWMI",
+        expect.objectContaining({ migoto: { unsafeMode: true } }),
+      ),
+    );
+    expect(toast.error).toHaveBeenCalledWith("GIMI: settings unavailable");
+    await waitFor(() => expect(confirm).toHaveProperty("disabled", false));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    xxmi.GetImporterConfig.mockClear();
+    xxmi.SaveImporterConfig.mockClear();
+    const current = { ...sharedImporterConfig(false), importerFolder: "D:\\Retry\\GIMI" };
+    xxmi.GetImporterConfig.mockResolvedValue(current);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(xxmi.GetImporterConfig).toHaveBeenCalledExactlyOnceWith("GIMI");
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledExactlyOnceWith("GIMI", {
+      ...current,
+      migoto: { ...current.migoto, unsafeMode: true },
+    });
+  },
+);
+
+it("selects the shared custom DLL through the file dialog without asking when unsafe mode is on", async () => {
+  dialog.ShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["D:\\custom.dll"] });
+  xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "custom.dll" });
+  xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(true));
+  render(<XXMIDashboard />);
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
+  );
+
+  await waitFor(() => expect(xxmi.GetImporterConfig).toHaveBeenCalledWith("GIMI"));
+  expect(dialog.ShowOpenDialog).toHaveBeenCalledWith(
+    expect.objectContaining({ filters: [{ name: "DLL", extensions: ["dll"] }] }),
+  );
+  expect(xxmi.SetSharedCustomDLL).toHaveBeenCalledWith("abcdef123456");
+  expect(
+    screen.queryByRole("button", {
+      name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+    }),
+  ).toBeNull();
+});
+
+it("rejects dropped files that are not a single DLL", () => {
+  render(<XXMIDashboard />);
+
+  fileDrop.drop({ paths: ["C:\\Builds\\d3d11.zip"], target: { id: "shared-dll" } });
+  fileDrop.drop({ paths: ["C:\\a.dll", "C:\\b.dll"], target: { id: "shared-dll" } });
+  fileDrop.drop({ paths: ["C:\\a.dll"], target: { id: "another-target" } });
+
+  expect(toast.error).toHaveBeenCalledTimes(2);
+  expect(xxmi.ImportCustomDLL).not.toHaveBeenCalled();
+});
+
+it("shows the shared custom DLL and clears it", async () => {
+  state.overview.sharedCustomDll = "abcdef123456";
+  state.overview.customDlls = [{ id: "abcdef123456", name: "custom.dll" }];
+  xxmi.SetSharedCustomDLL.mockResolvedValue(undefined);
+  render(<XXMIDashboard />);
+
+  expect(screen.getByText("custom.dll · abcdef123456")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.customDllClear" }));
+
+  await waitFor(() => expect(xxmi.SetSharedCustomDLL).toHaveBeenCalledWith(""));
 });
 
 it("marks only the selected libraries as in use while protecting the previous deployment", () => {

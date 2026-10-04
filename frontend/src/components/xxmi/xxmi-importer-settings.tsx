@@ -1,7 +1,7 @@
 import { Mod } from "@bindings/mod";
 import type { GameConfig } from "@bindings/mod/models";
 import { XXMI } from "@bindings/xxmi";
-import { RuntimeMode, type ImporterConfig } from "@bindings/xxmi/models";
+import { RuntimeMode, type CustomDLL, type ImporterConfig } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
 import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import {
@@ -36,6 +36,7 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
+import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import {
   FOLLOW_LATEST,
   NumberRow,
@@ -45,6 +46,7 @@ import {
 } from "@renderer/components/xxmi/xxmi-fields";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
+import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
@@ -140,6 +142,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     version.trim().replace(/^v/i, "") === installedVersion?.trim().replace(/^v/i, "");
   const packageNeedsInstall = !!selectedPackage && !isInstalledPackageVersion(selectedPackage);
   const [isSaving, setIsSaving] = useState(false);
+  // A picked DLL is only in the draft until the config is saved, so the overview does not list it yet.
+  const [importedDll, setImportedDll] = useState<CustomDLL | null>(null);
+  const [pendingCustomDll, setPendingCustomDll] = useState<CustomDLL | null>(null);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
     Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
@@ -225,6 +230,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
+  const selectedCustomDll =
+    config.mode !== RuntimeMode.RuntimeXXMI
+      ? ""
+      : followsSharedLibs
+        ? (overview?.sharedCustomDll ?? "")
+        : config.customDll;
+  const selectedCustomDllName = [importedDll, ...(overview?.customDlls ?? [])].find(
+    (dll) => dll?.id === selectedCustomDll,
+  )?.name;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
@@ -708,6 +722,52 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           })
                         }
                       />
+                    )}
+                    {config.mode === RuntimeMode.RuntimeXXMI && !followsSharedLibs && (
+                      <CustomDLLField
+                        dropTargetId={FileDropTargetID.xxmiImporterCustomDll}
+                        selected={
+                          selectedCustomDll
+                            ? { id: selectedCustomDll, name: selectedCustomDllName }
+                            : undefined
+                        }
+                        onPick={async (path) => {
+                          const dll = await XXMI.ImportCustomDLL(path);
+                          setImportedDll(dll);
+                          if (config.migoto.unsafeMode) setConfig({ ...config, customDll: dll.id });
+                          else setPendingCustomDll(dll);
+                        }}
+                        onClear={() => setConfig({ ...config, customDll: "" })}
+                      />
+                    )}
+                    {followsSharedLibs && selectedCustomDll && (
+                      <SectionRow
+                        title={t("page.setting.xxmi.builtin.customDll")}
+                        description={t("page.setting.xxmi.builtin.customDllShared", {
+                          name: selectedCustomDllName ?? selectedCustomDll,
+                        })}
+                      />
+                    )}
+                    {selectedCustomDll && !config.migoto.unsafeMode && (
+                      <Alert>
+                        <TriangleAlertIcon />
+                        <AlertDescription className="flex items-center justify-between gap-4">
+                          <span>{t("page.setting.xxmi.builtin.customDllInactive")}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() =>
+                              setConfig({
+                                ...config,
+                                migoto: { ...config.migoto, unsafeMode: true },
+                              })
+                            }
+                          >
+                            {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
                     )}
                     {customDll && (
                       <Alert>
@@ -1382,6 +1442,37 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => leave.proceed?.()}>
               {t("page.setting.xxmi.builtin.leaveConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={pendingCustomDll !== null}
+        onOpenChange={(open) => !open && setPendingCustomDll(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.setting.xxmi.builtin.customDllEnableUnsafeTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.setting.xxmi.builtin.customDllEnableUnsafeDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingCustomDll) return;
+                setConfig({
+                  ...config,
+                  customDll: pendingCustomDll.id,
+                  migoto: { ...config.migoto, unsafeMode: true },
+                });
+                setPendingCustomDll(null);
+              }}
+            >
+              {t("page.setting.xxmi.builtin.customDllEnableUnsafeConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

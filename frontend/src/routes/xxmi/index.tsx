@@ -4,7 +4,9 @@ import { XXMI } from "@bindings/xxmi";
 import {
   ImportUserDataMode,
   LauncherMode,
+  RuntimeMode,
   type ImportExternalLauncherInput,
+  type ImporterConfig,
 } from "@bindings/xxmi/models";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
@@ -24,6 +26,7 @@ import {
   SectionHeader,
   SectionTitle,
 } from "@renderer/components/ui/section";
+import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
 import {
   FOLLOW_LATEST,
@@ -35,6 +38,7 @@ import { XXMIImportDialog } from "@renderer/components/xxmi/xxmi-import-dialog";
 import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { cn } from "@renderer/lib/utils";
+import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -92,6 +96,9 @@ export function XXMIDashboard() {
   const [editedRoot, setEditedRoot] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  // Importers that follow the shared libraries but would ignore the shared custom DLL until unsafe mode is on.
+  const [unsafePrompt, setUnsafePrompt] = useState<{ key: string; config: ImporterConfig }[]>([]);
+  const sharedCustomDll = overview?.sharedCustomDll;
   const root = editedRoot ?? overview?.root ?? "";
   // A cleared root field imports into the saved root, which the overview already resolves to the default.
   const importRoot = root.trim() || overview?.root || "";
@@ -146,6 +153,47 @@ export function XXMIDashboard() {
     }
     void queryClient.invalidateQueries({ queryKey: ["games"] });
     if (failed) toast.warning(t("page.setting.xxmi.builtin.importGamesFailed"));
+  };
+
+  const selectSharedCustomDll = async (path: string) => {
+    const dll = await XXMI.ImportCustomDLL(path);
+    await XXMI.SetSharedCustomDLL(dll.id);
+    refresh();
+    toast.success(t("page.setting.xxmi.builtin.customDllSet"));
+
+    const configs = await Promise.all(
+      (overview?.importers ?? []).map(async (entry) => ({
+        key: entry.key,
+        config: await XXMI.GetImporterConfig(entry.key),
+      })),
+    );
+    setUnsafePrompt(
+      configs.filter(
+        ({ config }) =>
+          config.mode === RuntimeMode.RuntimeXXMI &&
+          config.xxmiVersion.follow === "shared" &&
+          !config.migoto.unsafeMode,
+      ),
+    );
+  };
+
+  const enableUnsafeMode = async () => {
+    const failed: typeof unsafePrompt = [];
+    for (const entry of unsafePrompt) {
+      try {
+        const config = await XXMI.GetImporterConfig(entry.key);
+        await XXMI.SaveImporterConfig(entry.key, {
+          ...config,
+          migoto: { ...config.migoto, unsafeMode: true },
+        });
+      } catch (error) {
+        toast.error(`${entry.key}: ${toErrorMessage(error)}`);
+        failed.push(entry);
+      }
+    }
+
+    setUnsafePrompt(failed);
+    refresh();
   };
 
   const resetBuiltin = async () => {
@@ -327,6 +375,26 @@ export function XXMIDashboard() {
                       : entry.version,
                     active: entry.inUse,
                   }))}
+                  footer={
+                    <CustomDLLField
+                      dropTargetId={FileDropTargetID.xxmiSharedCustomDll}
+                      selected={
+                        sharedCustomDll
+                          ? {
+                              id: sharedCustomDll,
+                              name: overview?.customDlls?.find((dll) => dll.id === sharedCustomDll)
+                                ?.name,
+                            }
+                          : undefined
+                      }
+                      onPick={selectSharedCustomDll}
+                      onClear={async () => {
+                        await XXMI.SetSharedCustomDLL("");
+                        refresh();
+                        toast.success(t("page.setting.xxmi.builtin.customDllCleared"));
+                      }}
+                    />
+                  }
                 >
                   <Button
                     variant="outline"
@@ -455,6 +523,31 @@ export function XXMIDashboard() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        <AlertDialog
+          open={unsafePrompt.length > 0}
+          onOpenChange={(open) => {
+            if (!open) setUnsafePrompt([]);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("page.setting.xxmi.builtin.customDllEnableUnsafeTitle")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("page.setting.xxmi.builtin.customDllEnableUnsafeShared", {
+                  importers: unsafePrompt.map((entry) => entry.key).join(", "),
+                })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+              <Button onClickPromise={enableUnsafeMode}>
+                {t("page.setting.xxmi.builtin.customDllEnableUnsafeConfirm")}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {importOpen && overview?.externalLauncher && (
           <XXMIImportDialog
             path={overview.externalLauncher.path}
@@ -471,10 +564,12 @@ export function XXMIDashboard() {
 function PackageRow({
   title,
   versions,
+  footer,
   children,
 }: {
   title: string;
   versions?: { key: string; label: string; active?: boolean }[];
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -504,6 +599,7 @@ function PackageRow({
           </span>
         )}
       </div>
+      {footer}
     </div>
   );
 }

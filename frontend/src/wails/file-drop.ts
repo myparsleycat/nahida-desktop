@@ -5,6 +5,8 @@ export const FileDropTargetID = {
     modContent: "mod-content-file-drop",
     driveContent: "drive-content-file-drop",
     fixToolList: "fix-tool-list-file-drop",
+    xxmiSharedCustomDll: "xxmi-shared-custom-dll-file-drop",
+    xxmiImporterCustomDll: "xxmi-importer-custom-dll-file-drop",
 } as const;
 
 export const FILE_DROP_GROUP_PATH_ATTRIBUTE = "data-file-drop-group-path";

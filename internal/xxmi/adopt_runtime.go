@@ -103,6 +103,7 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	// DLL and writes the signed one in its place.
 	stage = "deploy-runtime"
 	cfg.Migoto.UnsafeMode = false
+	cfg.CustomDLL = ""
 	warnings, err = x.deployRuntime(ctx, importer, cfg, false)
 	if err != nil {
 		return nil, err

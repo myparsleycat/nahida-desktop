@@ -27,6 +27,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 			return fmt.Errorf("invalid %s", name)
 		}
 	}
+	if cfg.CustomDLL != "" && !isCustomDLLID(cfg.CustomDLL) {
+		return fmt.Errorf("invalid custom DLL %q", cfg.CustomDLL)
+	}
 	if err := validateLocalFolder("importerFolder", cfg.ImporterFolder, true); err != nil {
 		return err
 	}

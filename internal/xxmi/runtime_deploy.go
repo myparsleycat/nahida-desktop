@@ -27,7 +27,39 @@ type runtimeManifest struct {
 	Source      string            `json:"source"`
 	Files       map[string]string `json:"files"`
 	UserManaged map[string]string `json:"userManaged,omitempty"`
-	DeployedAt  string            `json:"deployedAt"`
+	// Custom is the cached custom d3d11.dll this deployment wrote. The file is listed in UserManaged.
+	Custom     string `json:"custom,omitempty"`
+	DeployedAt string `json:"deployedAt"`
+}
+
+// deployedCustomDLL reports whether hash still belongs to the custom DLL the manifest recorded, as opposed
+// to a file the user changed afterwards. A custom DLL ID is the start of its hash.
+func (m runtimeManifest) deployedCustomDLL(name, hash string) bool {
+	return name == customDLLName && m.Custom != "" && strings.HasPrefix(hash, m.Custom)
+}
+
+// preservesUserFile reports whether unsafe mode keeps the file in the importer folder instead of writing the
+// desired one. A custom DLL is written once per selection, so later changes to it are kept like any other
+// third-party file, and clearing the selection only replaces the file while it is still that custom DLL.
+func preservesUserFile(
+	cfg ImporterConfig,
+	previous runtimeManifest,
+	custom *customRuntimeDLL,
+	name, currentHash string,
+) bool {
+	if !cfg.Migoto.UnsafeMode || previous.Mode != "" && previous.Mode != cfg.Mode {
+		return false
+	}
+	if previous.UserManaged[name] == "" && currentHash == previous.Files[name] {
+		return false
+	}
+	if name != customDLLName {
+		return true
+	}
+	if custom != nil {
+		return previous.Custom == custom.id
+	}
+	return !previous.deployedCustomDLL(name, currentHash)
 }
 
 func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) {
@@ -46,6 +78,7 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 		return nil, err
 	}
 	var sourceFolder, sourceID string
+	var custom *customRuntimeDLL
 	switch cfg.Mode {
 	case RuntimeXXMI:
 		version, err := x.resolveLibsVersion(ctx, cfg)
@@ -60,6 +93,18 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 			return nil, err
 		}
 		sourceID = "xxmi-libs@" + version
+
+		id, err := x.customDLLID(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			_, data, err := readCustomDLL(cacheRoot, id)
+			if err != nil {
+				return nil, fmt.Errorf("XXMI_CUSTOM_DLL_MISSING: %w", err)
+			}
+			custom = &customRuntimeDLL{id: id, data: data}
+		}
 	case RuntimeLegacy:
 		id := cfg.LegacyRuntime
 		parent := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto")
@@ -91,7 +136,7 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
-	return deployRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess)
+	return deployCustomRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess, custom)
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
@@ -188,6 +233,19 @@ func deployRuntimeFiles(
 	repair bool,
 	findProcess func(context.Context, string) (int, error),
 ) ([]string, error) {
+	return deployCustomRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, findProcess, nil)
+}
+
+// deployCustomRuntimeFiles deploys the runtime with custom in place of the signed d3d11.dll when it is set.
+func deployCustomRuntimeFiles(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	sourceFolder, sourceID, cacheRoot string,
+	repair bool,
+	findProcess func(context.Context, string) (int, error),
+	custom *customRuntimeDLL,
+) ([]string, error) {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
 		return nil, err
@@ -223,6 +281,9 @@ func deployRuntimeFiles(
 			}
 			desired[name] = data
 		}
+		if custom != nil {
+			desired[customDLLName] = custom.data
+		}
 	} else {
 		data, err := os.ReadFile(filepath.Join(sourceFolder, "source.json"))
 		if err != nil {
@@ -256,7 +317,10 @@ func deployRuntimeFiles(
 		UserManaged: map[string]string{},
 		DeployedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	changing, err := runtimeFilesNeedDeployment(root, previous, desired, cfg)
+	if custom != nil {
+		manifest.Custom = custom.id
+	}
+	changing, err := runtimeFilesNeedDeployment(root, previous, desired, cfg, custom)
 	if err != nil {
 		return nil, err
 	}
@@ -356,16 +420,21 @@ func deployRuntimeFiles(
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
+		// A custom DLL is user-managed even though this deployment wrote it: it is not a signed runtime file.
+		deployed := manifest.Files
+		if custom != nil && name == customDLLName {
+			deployed = manifest.UserManaged
+		}
 		if err == nil && hashBytes(current) == wantedHash {
-			manifest.Files[name] = wantedHash
+			deployed[name] = wantedHash
 			continue
 		}
-		if err == nil && cfg.Migoto.UnsafeMode && (previous.Mode == "" || previous.Mode == cfg.Mode) &&
-			(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
+		if err == nil && preservesUserFile(cfg, previous, custom, name, hashBytes(current)) {
 			warnings = append(warnings, "Preserved third-party runtime file "+name)
 			manifest.UserManaged[name] = hashBytes(current)
 			continue
 		}
+		// Custom DLLs are user-managed; their cached copies may be pruned after a selection change.
 		if err == nil && hashBytes(current) != previous.Files[name] {
 			if err := backup(name, current); err != nil {
 				return nil, err
@@ -375,7 +444,7 @@ func deployRuntimeFiles(
 		if err := root.writeFileAtomic(ctx, name, bytes.NewReader(desiredBytes), 0o600, info); err != nil {
 			return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, name))
 		}
-		manifest.Files[name] = wantedHash
+		deployed[name] = wantedHash
 	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -433,6 +502,7 @@ func runtimeFilesNeedDeployment(
 	previous runtimeManifest,
 	desired map[string][]byte,
 	cfg ImporterConfig,
+	custom *customRuntimeDLL,
 ) (bool, error) {
 	for name := range previous.Files {
 		if _, keep := desired[name]; keep {
@@ -470,8 +540,7 @@ func runtimeFilesNeedDeployment(
 			return false, err
 		}
 		if hashBytes(current) == hashBytes(wanted) ||
-			cfg.Migoto.UnsafeMode && (previous.Mode == "" || previous.Mode == cfg.Mode) &&
-				(previous.UserManaged[name] != "" || hashBytes(current) != previous.Files[name]) {
+			preservesUserFile(cfg, previous, custom, name, hashBytes(current)) {
 			continue
 		}
 		return true, nil

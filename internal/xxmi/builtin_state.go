@@ -67,13 +67,16 @@ type Overview struct {
 	Configured   bool         `json:"configured"`
 	Root         string       `json:"root"`
 	// SharedLibsVersion is empty while importers following the shared version use the latest release.
-	SharedLibsVersion string              `json:"sharedLibsVersion"`
-	Importers         []EnabledImporter   `json:"importers"`
-	LibsCache         []CachedLibs        `json:"libsCache"`
-	LegacyRuntimes    []LegacyRuntimeInfo `json:"legacyRuntimes"`
-	FPSVersions       []string            `json:"fpsVersions"`
-	CacheIssues       []string            `json:"cacheIssues,omitempty"`
-	ExternalLauncher  *ExternalLauncher   `json:"externalLauncher,omitempty"`
+	SharedLibsVersion string `json:"sharedLibsVersion"`
+	// SharedCustomDLL is the custom d3d11.dll for importers that follow the shared libraries, or empty.
+	SharedCustomDLL  string              `json:"sharedCustomDll"`
+	CustomDLLs       []CustomDLL         `json:"customDlls"`
+	Importers        []EnabledImporter   `json:"importers"`
+	LibsCache        []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions      []string            `json:"fpsVersions"`
+	CacheIssues      []string            `json:"cacheIssues,omitempty"`
+	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -108,6 +111,10 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	sharedCustomDLL, err := client.Settings.GetValue(ctx, sharedCustomDLLKey)
+	if err != nil {
+		return Overview{}, err
+	}
 	importers, err := x.builtinEnabledImporters(ctx)
 	if err != nil {
 		return Overview{}, err
@@ -136,6 +143,16 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if sharedLibs != nil {
 		overview.SharedLibsVersion = normalizeVersion(*sharedLibs)
 	}
+	if sharedCustomDLL != nil {
+		overview.SharedCustomDLL = strings.TrimSpace(*sharedCustomDLL)
+	}
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		return Overview{}, err
+	}
+	if overview.CustomDLLs, err = listCustomDLLs(cacheRoot); err != nil {
+		overview.CacheIssues = append(overview.CacheIssues, "custom DLL: "+err.Error())
+	}
 	if overview.LibsCache, err = x.ListCachedLibs(ctx); err != nil {
 		overview.CacheIssues = append(overview.CacheIssues, "XXMI libraries: "+err.Error())
 	}
@@ -161,7 +178,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 
 // builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them.
 var builtinSettingKeys = []string{
-	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey,
+	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
 }
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,
