@@ -863,9 +863,9 @@
           },
           "start-nte-launcher": {
             "not-set": "尚未设置启动器路径。",
-          "reorder-games-mutation": {
-            "failed": "无法保存游戏顺序。"
-          },
+            "reorder-games-mutation": {
+              "failed": "无法保存游戏顺序。"
+            },
             "not-found": "保存的启动器路径已不存在。",
             "failed": "启动启动器失败。"
           },
@@ -1050,16 +1050,16 @@
       "no_files": "没有可下载的文件。",
       "file_downloads": "{{count}} 次下载",
       "narrow_window": {
-      "no_preview_image": "没有预览图片。",
-      "comments": "评论",
-      "comment_sort": {
-        "popular": "热门",
-        "newest": "最新"
-      },
-      "comment_replies": "{{count}} 条回复",
-      "comment_stamps": "{{count}} 个印章",
-      "load_more_comments": "加载更多评论",
-      "no_comments": "没有可显示的评论。",
+        "no_preview_image": "没有预览图片。",
+        "comments": "评论",
+        "comment_sort": {
+          "popular": "热门",
+          "newest": "最新"
+        },
+        "comment_replies": "{{count}} 条回复",
+        "comment_stamps": "{{count}} 个印章",
+        "load_more_comments": "加载更多评论",
+        "no_comments": "没有可显示的评论。",
         "title": "窗口过窄",
         "description": "请加宽窗口以浏览 GameBanana 内容。"
       }
