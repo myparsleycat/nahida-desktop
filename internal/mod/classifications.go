@@ -289,6 +289,7 @@ func (m *Mod) loadCharacterClassifications(
 
 func attachClassifications(groups []FolderGroup, reports ...func(error)) []FolderGroup {
 	assignments := mapParallel(groups, func(group FolderGroup) map[string]string {
+		defer holdScanDisk(group.Path)()
 		return readClassificationAssignments(group.Path, reports...)
 	})
 	for i := range groups {
@@ -467,6 +468,7 @@ func (m *Mod) loadClassifiedSubGroups(
 // findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json.
 func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []string {
 	return lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
+		defer holdScanDisk(group.Path)()
 		var found []string
 		var walk func(dir string, remaining int)
 		walk = func(dir string, remaining int) {

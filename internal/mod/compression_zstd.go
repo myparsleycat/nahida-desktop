@@ -14,6 +14,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -322,6 +323,12 @@ func zstdPathIsDisabled(path string, roots []string) bool {
 }
 
 func compressZstdFile(ctx context.Context, sourcePath string, mark compressionMutationMarker) error {
+	release, err := diskio.Acquire(ctx, sourcePath)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	info, err := os.Stat(sourcePath)
 	if err != nil {
 		return err
@@ -370,6 +377,12 @@ func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark c
 	if !isManagedZstdPath(targetPath) {
 		return fmt.Errorf("not a managed zstd path: %s", targetPath)
 	}
+	release, err := diskio.Acquire(ctx, targetPath)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	targetInfo, err := os.Stat(targetPath)
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package mod
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -108,6 +110,15 @@ func scanWorkers() int {
 	return workers
 }
 
+// holdScanDisk takes a disk slot for one leaf scan of dir. The functions run by
+// mapParallel nest, so each takes the slot around its own file work and never
+// around a call that takes one again.
+func holdScanDisk(dir string) func() {
+	// A background context never fails the wait.
+	release, _ := diskio.AcquireDir(context.Background(), dir)
+	return release
+}
+
 func mapParallel[T, R any](items []T, fn func(T) R) []R {
 	out := make([]R, len(items))
 	if len(items) == 0 {
@@ -159,6 +170,7 @@ func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		defer holdScanDisk(groupPath)()
 		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
 	}()
 	go func() {
@@ -203,6 +215,7 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		defer holdScanDisk(groupPath)()
 		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
 	}()
 	go func() {
@@ -234,6 +247,7 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 }
 
 func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
+	defer holdScanDisk(modPath)()
 	if !hasModContent(modPath, reports...) {
 		return nil
 	}
@@ -250,6 +264,7 @@ func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
 }
 
 func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
+	defer holdScanDisk(modPath)()
 	name := filepath.Base(modPath)
 	info := &ModInfo{
 		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
@@ -356,6 +371,7 @@ func sortINIs(inis []IniResult) []IniResult {
 
 func parseINI(path string, reports ...func(error)) IniResult {
 	result := IniResult{Name: filepath.Base(path), Path: path, ToggleKeys: []ToggleKey{}}
+	defer holdScanDisk(filepath.Dir(path))()
 	file, err := os.Open(path)
 	if err != nil {
 		reportScanFailure(err, reports)

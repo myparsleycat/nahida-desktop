@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/myparsleycat/ddsutil"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 const (
@@ -445,6 +447,12 @@ func modelViewerTextureFormatFor(materialProfile, role, requested string) string
 }
 
 func modelViewerTextureFileHash(ctx context.Context, path string) (string, int64, error) {
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer release()
+
 	if err := ctx.Err(); err != nil {
 		return "", 0, err
 	}
@@ -520,13 +528,21 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
 		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
+	// Only the file reads hold the disk slot; decoding the bytes is CPU work.
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return nil, err
+	}
 	extension := filepath.Ext(path)
 	var rgba *image.NRGBA
 	if strings.EqualFold(extension, ".dds") {
+		// The DDS reader pulls the selected mip from the file while it decodes.
 		rgba, err = decodeModelViewerDDSFile(path, info.Size())
+		release()
 	} else {
 		var raw []byte
 		raw, err = os.ReadFile(path)
+		release()
 		if err == nil {
 			_, _, err = modelViewerTextureDimensions(raw, extension)
 		}

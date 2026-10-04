@@ -228,6 +228,7 @@ func nteScanGroupWith(
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		defer holdScanDisk(groupDir)()
 		preview = findPreview(groupDir, searchPreview, reports...)
 	}()
 	go func() {
@@ -249,6 +250,7 @@ func nteScanGroupWith(
 }
 
 func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
+	defer holdScanDisk(entry.path)()
 	info := ModInfo{
 		ID: entry.path, Name: entry.name, Path: entry.path,
 		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},
@@ -287,6 +289,7 @@ func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 }
 
 func nteModInfoLight(entry nteModEntry, reports ...func(error)) ModInfo {
+	defer holdScanDisk(entry.path)()
 	info := ModInfo{
 		ID: entry.path, Name: entry.name, Path: entry.path,
 		IsEnabled: isNteModEnabled(entry.path, reports...), Inis: []IniResult{},

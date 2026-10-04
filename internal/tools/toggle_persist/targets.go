@@ -1,6 +1,7 @@
 package togglepersist
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/mod/namespace"
 )
 
@@ -203,6 +205,11 @@ func (index persistTargetIndex) resolve(key string) (*persistTarget, error) {
 }
 
 func readPersistINI(path string) ([]byte, os.FileInfo, error) {
+	// The walk that indexes declarations is sequential, but it overlaps scans and
+	// uploads on the same disk. A background context never fails the wait.
+	release, _ := diskio.Acquire(context.Background(), path)
+	defer release()
+
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
