@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"nahida.live/desktop/internal/mod/metadata"
+	"nahida.live/desktop/internal/watcher"
 )
 
 func newClassificationFixture(t *testing.T) (*Mod, string) {
@@ -526,4 +527,198 @@ func TestListGroupsWhereSkipsRejectedFolders(t *testing.T) {
 	if all := listGroups(root, false); len(all) != 2 {
 		t.Fatalf("unfiltered groups = %#v", all)
 	}
+}
+
+// newIndexedClassificationFixture lists the characters once, so every later step runs against a built index.
+func newIndexedClassificationFixture(t *testing.T) (*Mod, string, Classification, func() []string) {
+	t.Helper()
+	service, root := newClassificationFixture(t)
+	element, err := service.SaveClassification(
+		context.Background(), "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := func() []string {
+		t.Helper()
+		found := []string{}
+		for _, groups := range classifiedSubGroups(t, service, "Game") {
+			for _, group := range groups {
+				found = append(found, group.Path)
+			}
+		}
+		slices.Sort(found)
+		return found
+	}
+	if got := paths(); len(got) != 0 {
+		t.Fatalf("sub groups before assignment = %v", got)
+	}
+	return service, root, element, paths
+}
+
+func TestClassifiedSubGroupsFollowWatchedFolderChanges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root, element, paths := newIndexedClassificationFixture(t)
+	pyro := element.Groups[0].ID
+	furina := filepath.Join(root, "mods", "Furina")
+	if err := service.SetCharacterClassification(ctx, furina, element.ID, &pyro); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.WatchGame(ctx, "Game"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		service.watchMu.Lock()
+		defer service.watchMu.Unlock()
+		if err := service.replaceWatcher(true, nil); err != nil {
+			t.Error(err)
+		}
+	})
+
+	// A top-level folder has no place in the index, so only the watcher can announce that it became nested.
+	moved := filepath.Join(root, "mods", "Diluc", "Furina")
+	if err := os.Rename(furina, moved); err != nil {
+		t.Fatal(err)
+	}
+	service.gameWatcher.schedule(watcher.Event{Path: furina, Op: watcher.Remove})
+	if got := paths(); !slices.Equal(got, []string{moved}) {
+		t.Fatalf("sub groups after moving a classified folder = %v", got)
+	}
+
+	// The search that followed rebuilt the index, so an unrelated listing does not lose the folder.
+	if got := paths(); !slices.Equal(got, []string{moved}) {
+		t.Fatalf("sub groups from the rebuilt index = %v", got)
+	}
+}
+
+func TestClassifiedFolderIndexKeepsAssignmentsMadeDuringSearch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root, element, paths := newIndexedClassificationFixture(t)
+	pyro := element.Groups[0].ID
+	child := filepath.Join(root, "mods", "Diluc", "Costume")
+	game := classificationGame(t, service)
+
+	// The search read the folders before the assignment landed and finishes after it.
+	_, since, _ := service.classifiedFolderKeys(game)
+	if err := service.SetCharacterClassification(ctx, child, element.ID, &pyro); err != nil {
+		t.Fatal(err)
+	}
+	service.finishClassifiedSearch(game, since)
+	if got := paths(); !slices.Equal(got, []string{child}) {
+		t.Fatalf("sub groups after an assignment during a search = %v", got)
+	}
+
+	// A change announced during a search leaves the index unbuilt, so the next listing searches again.
+	_, since, _ = service.classifiedFolderKeys(game)
+	service.invalidateClassifiedFolders("Game")
+	service.finishClassifiedSearch(game, since)
+	if _, _, indexed := service.classifiedFolderKeys(game); indexed {
+		t.Fatal("index was built from a search that a folder change overtook")
+	}
+}
+
+func TestClassifiedSubGroupsKeepFolderNamedByDisabledPrefix(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root, element, paths := newIndexedClassificationFixture(t)
+	pyro := element.Groups[0].ID
+	parent := filepath.Join(root, "mods", "Diluc")
+	child := filepath.Join(parent, "DISABLED_")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{parent, child} {
+		if err := service.SetCharacterClassification(ctx, path, element.ID, &pyro); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The second listing resolves the folder from its index key instead of finding it by search.
+	for range 2 {
+		if got := paths(); !slices.Equal(got, []string{child}) {
+			t.Fatalf("sub groups for a folder named by the prefix = %v", got)
+		}
+	}
+}
+
+func TestClearingLastClassificationForgetsIndexedFolder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root, _, paths := newIndexedClassificationFixture(t)
+	weapon, err := service.SaveClassification(ctx, "Game", nil, "Weapon", []ClassificationGroup{{Name: "Claymore"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	role, err := service.SaveClassification(ctx, "Game", nil, "Role", []ClassificationGroup{{Name: "DPS"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(root, "mods", "Diluc", "Costume")
+	game := classificationGame(t, service)
+	for _, classification := range []Classification{weapon, role} {
+		if err := service.SetCharacterClassification(
+			ctx, child, classification.ID, &classification.Groups[0].ID,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := paths(); !slices.Equal(got, []string{child}) {
+		t.Fatalf("assigned sub groups = %v", got)
+	}
+
+	if err := service.SetCharacterClassification(ctx, child, weapon.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if keys, _, indexed := service.classifiedFolderKeys(game); !indexed || len(keys) != 1 {
+		t.Fatalf("index after clearing one of two assignments = %v, indexed = %v", keys, indexed)
+	}
+	if err := service.SetCharacterClassification(ctx, child, role.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if keys, _, indexed := service.classifiedFolderKeys(game); !indexed || len(keys) != 0 {
+		t.Fatalf("index after clearing the last assignment = %v, indexed = %v", keys, indexed)
+	}
+	if got := paths(); len(got) != 0 {
+		t.Fatalf("sub groups after clearing = %v", got)
+	}
+}
+
+func TestManualSubGroupListingIndexesClassifiedFolders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root, element, paths := newIndexedClassificationFixture(t)
+	pyro := element.Groups[0].ID
+	parent := filepath.Join(root, "mods", "Diluc")
+	child := filepath.Join(parent, "Costume")
+	if err := service.SetManualSubGroup(ctx, child, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// The assignment arrives outside the service, so only a listing that reads the folder can index it.
+	if err := metadata.Write(child, []byte(`{"classifications":{"`+element.ID+`":"`+pyro+`"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetManualSubGroups(ctx, parent, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); !slices.Equal(got, []string{child}) {
+		t.Fatalf("sub groups after listing a classified manual sub group = %v", got)
+	}
+}
+
+func classificationGame(t *testing.T, service *Mod) GameConfig {
+	t.Helper()
+	games, err := service.GetGames(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, game := range games {
+		if game.Game == "Game" {
+			return game
+		}
+	}
+	t.Fatal("fixture game is missing")
+	return GameConfig{}
 }

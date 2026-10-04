@@ -54,6 +54,7 @@ func (m *Mod) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.Imported
 					resumeErr = errors.Join(resumeErr, fmt.Errorf("resume mod watcher %q: %w", path, err))
 					continue
 				}
+				restored.onChange(saved.previous.changed)
 				*saved.current = restored
 			}
 			c.opMu.Unlock()

@@ -53,6 +53,8 @@ type managedWatcher struct {
 	eventName string
 	emit      func(string, ...any)
 	report    func(error)
+	// changed runs for every raw event, before the settled event is emitted.
+	changed func()
 }
 
 func (m *Mod) WatchGame(ctx context.Context, game string) error {
@@ -70,6 +72,7 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
+	watcher.onChange(func() { m.invalidateClassifiedFolders(game) })
 	return m.replaceWatcher(true, watcher)
 }
 
@@ -77,7 +80,8 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	m.watchMu.Lock()
 	defer m.watchMu.Unlock()
 
-	if _, err := m.ownedPath(ctx, characterPath); err != nil {
+	game, err := m.ownedPath(ctx, characterPath)
+	if err != nil {
 		return err
 	}
 	watcher, err := newManagedWatcher(
@@ -90,6 +94,7 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	if err != nil {
 		return err
 	}
+	watcher.onChange(func() { m.invalidateClassifiedFolders(game.Game) })
 	return m.replaceWatcher(false, watcher)
 }
 
@@ -162,11 +167,20 @@ func newManagedWatcher(
 	return managed, nil
 }
 
+func (m *managedWatcher) onChange(changed func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.changed = changed
+}
+
 func (m *managedWatcher) schedule(event watcher.Event) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
 		return
+	}
+	if m.changed != nil {
+		m.changed()
 	}
 	m.token++
 	token := m.token

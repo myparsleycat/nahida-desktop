@@ -91,7 +91,13 @@ func (m *Mod) GetManualSubGroups(
 	if err != nil {
 		return nil, err
 	}
-	return m.loadCharacterClassifications(ctx, client, game.Game, result, diagnostics.Add), nil
+	result = m.loadCharacterClassifications(ctx, client, game.Game, result, diagnostics.Add)
+	for _, group := range result {
+		if len(group.Classifications) > 0 {
+			m.rememberClassifiedFolder(*game, group.Path)
+		}
+	}
+	return result, nil
 }
 
 func decorateGroups(

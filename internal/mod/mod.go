@@ -104,7 +104,8 @@ type Mod struct {
 	namespaceIsolation *namespaceIsolationCoordinator
 	operationMu        sync.RWMutex
 	classifiedMu       sync.Mutex
-	classifiedFolders  map[string]classifiedFolderIndex
+	classifiedFolders  map[string]*classifiedFolderIndex
+	classifiedChanges  uint64
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
