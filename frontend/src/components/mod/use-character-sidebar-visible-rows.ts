@@ -7,6 +7,7 @@ import { useMemo } from "react";
 
 import {
     buildVisibleSidebarRows,
+    collectClassifiedSubGroups,
     collectManualSubGroupPaths,
     type VisibleSidebarRow,
 } from "./character-sidebar-visible-rows";
@@ -54,7 +55,11 @@ export function useCharacterSidebarVisibleRows(
         return map;
     }, [subGroupPaths, subGroupQueries]);
 
-    const collectedManualPaths = collectManualSubGroupPaths(groups, {
+    // Classified sub folders are listed without their parent being expanded, so they are walked as roots too.
+    const roots = classification
+        ? [...groups, ...collectClassifiedSubGroups(groups, classification)]
+        : groups;
+    const collectedManualPaths = collectManualSubGroupPaths(roots, {
         isSearching,
         expandedGroups,
         persistentGroups,

@@ -147,6 +147,17 @@ func nteRelative(roots nteRoots, target string) string {
 }
 
 func nteListGroups(roots nteRoots, groupPath string, searchPreview bool, reports ...func(error)) []FolderGroup {
+	return nteListGroupsWhere(roots, groupPath, searchPreview, nil, reports...)
+}
+
+// nteListGroupsWhere skips the folders keep rejects before any of their contents are read. A nil keep lists them all.
+func nteListGroupsWhere(
+	roots nteRoots,
+	groupPath string,
+	searchPreview bool,
+	keep func(name string) bool,
+	reports ...func(error),
+) []FolderGroup {
 	relative := nteRelative(roots, groupPath)
 	groupDir := filepath.Join(roots.modRoot, relative)
 	entries, err := os.ReadDir(groupDir)
@@ -156,7 +167,7 @@ func nteListGroups(roots nteRoots, groupPath string, searchPreview bool, reports
 	}
 	result := []FolderGroup{}
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || (keep != nil && !keep(entry.Name())) {
 			continue
 		}
 		path := filepath.Join(groupDir, entry.Name())

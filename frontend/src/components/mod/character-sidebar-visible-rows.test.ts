@@ -6,6 +6,7 @@ import { describe, it } from "vitest";
 
 import {
     buildVisibleSidebarRows,
+    canAssignClassification,
     partitionByClassification,
     type VisibleSidebarRow,
 } from "./character-sidebar-visible-rows";
@@ -163,5 +164,101 @@ describe("buildVisibleSidebarRows", () => {
             "[unassigned 1]",
             "Bare",
         ]);
+    });
+
+    it("lists classified sub folders in their section instead of under the parent", () => {
+        const parent = folder("Collection");
+        const pyro = folder("Diluc", "pyro", { path: `${parent.path}/Diluc` });
+        const hydro = folder("Furina", "hydro", { path: "mods\\Collection\\Furina" });
+        const removed = folder("Removed", "deleted-group", { path: `${parent.path}/Removed` });
+        const plain = folder("Plain", undefined, { path: `${parent.path}/Plain` });
+        const variant = folder("Variant", undefined, { path: `${pyro.path}/Variant` });
+        const collection = { ...parent, classifiedSubGroups: [pyro, hydro, removed] };
+        const options = {
+            classification: element,
+            expandedGroups: new Set([parent.path, pyro.path]),
+            subGroupsByPath: new Map([
+                [parent.path, [pyro, hydro, removed, plain]],
+                [pyro.path, [variant]],
+            ]),
+        };
+
+        // The parent stays collapsed here, so the sections rely on classifiedSubGroups alone.
+        const collapsed = build({ classification: element }, [collection, folder("Klee", "pyro")]);
+        assert.deepEqual(describeRows(collapsed), [
+            "[Pyro 2]",
+            "Diluc",
+            "Klee",
+            "[Hydro 1]",
+            "Furina",
+            "[Cryo 0]",
+            "[unassigned 1]",
+            "Collection",
+        ]);
+        assert.deepEqual(
+            collapsed.flatMap((row) => (row.kind === "group" ? [row.parentGroupName] : [])),
+            ["Collection", undefined, "Collection", undefined],
+        );
+
+        assert.deepEqual(describeRows(build(options, [collection])), [
+            "[Pyro 1]",
+            "Diluc",
+            "  Variant",
+            "[Hydro 1]",
+            "Furina",
+            "[Cryo 0]",
+            "[unassigned 1]",
+            "Collection",
+            "  Plain",
+            "  Removed",
+        ]);
+        assert.deepEqual(describeRows(build({ ...options, classification: null }, [collection])), [
+            "Collection",
+            "  Diluc",
+            "    Variant",
+            "  Furina",
+            "  Plain",
+            "  Removed",
+        ]);
+        assert.deepEqual(
+            describeRows(
+                build(
+                    {
+                        ...options,
+                        searchTerm: "furina",
+                        collapsedSections: new Set(["element:hydro"]),
+                    },
+                    [collection],
+                ),
+            ),
+            ["[Hydro 1]", "Furina"],
+        );
+    });
+});
+
+describe("canAssignClassification", () => {
+    const root = String.raw`C:\Games\Mods`;
+
+    it("accepts folders down to two levels below a top-level folder", () => {
+        for (const path of ["Diluc", String.raw`Diluc\Costume`, String.raw`Diluc\Costume\Red`]) {
+            assert.equal(canAssignClassification(root, `${root}\\${path}`), true, path);
+        }
+    });
+
+    it("rejects the mod root, deeper folders and folders outside the root", () => {
+        for (const path of [
+            root,
+            String.raw`C:\Games\Mods\Diluc\Costume\Red\Textures`,
+            String.raw`C:\Games\Other\Diluc`,
+        ]) {
+            assert.equal(canAssignClassification(root, path), false, path);
+        }
+    });
+
+    it("ignores case, separator style and trailing separators", () => {
+        assert.equal(
+            canAssignClassification("C:/Games/Mods/", String.raw`c:\games\mods\Diluc`),
+            true,
+        );
     });
 });

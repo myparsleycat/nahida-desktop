@@ -91,6 +91,57 @@ func TestScanGroupScansModsInParallel(t *testing.T) {
 	}
 }
 
+func TestScannerRequiresContentBeyondFolderMetadata(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		files    []string
+		wantMods int
+		disabled bool
+	}{
+		{name: "empty folder"},
+		{name: "metadata only", files: []string{"nhd.json"}},
+		{name: "nested metadata only", files: []string{"nested/nhd.json"}},
+		{name: "mixed case metadata only", files: []string{"NhD.JsOn"}},
+		{name: "ini content", files: []string{"nhd.json", "mod.ini"}, wantMods: 1},
+		{name: "buffer content", files: []string{"nhd.json", "nested/buffer.buf"}, wantMods: 1},
+		{name: "other json content", files: []string{"manifest.json"}, wantMods: 1},
+		{name: "disabled content", files: []string{"nhd.json", "mod.ini"}, wantMods: 1, disabled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			name := "Costume"
+			if test.disabled {
+				name = "DISABLED " + name
+			}
+			modPath := filepath.Join(root, name)
+			if err := os.MkdirAll(modPath, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range test.files {
+				writeModFile(t, modPath, file, "{}")
+			}
+
+			wantEnabled := test.wantMods
+			if test.disabled {
+				wantEnabled = 0
+			}
+			count, enabled := countChildMods(root)
+			if count != test.wantMods || enabled != wantEnabled {
+				t.Errorf("counts = %d/%d, want %d/%d", count, enabled, test.wantMods, wantEnabled)
+			}
+			for _, scan := range []func(string, ...func(error)) FolderGroup{scanGroup, scanGroupLight} {
+				group := scan(root)
+				if len(group.Mods) != test.wantMods || group.ModCount != test.wantMods ||
+					group.EnabledModCount != wantEnabled {
+					t.Errorf("scan = %#v, want %d/%d", group, test.wantMods, wantEnabled)
+				}
+			}
+		})
+	}
+}
+
 func TestScannerAndNteUseTheirSeparateElectronCollations(t *testing.T) {
 	t.Parallel()
 

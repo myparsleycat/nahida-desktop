@@ -9,7 +9,12 @@ import { memo, useCallback, useMemo } from "react";
 
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { CharacterSidebarSectionHeader } from "./character-sidebar-section-header";
-import { getVisibleGroups, partitionByClassification } from "./character-sidebar-visible-rows";
+import {
+  collectClassifiedSubGroups,
+  getVisibleGroups,
+  parentFolderName,
+  partitionByClassification,
+} from "./character-sidebar-visible-rows";
 
 export interface CharacterSidebarContentProps {
   groups: FolderGroup[];
@@ -87,6 +92,8 @@ interface CharacterSidebarItemWithChildrenProps {
   previewCacheKey: number;
   modFixer?: ModFixerAction | null;
   onOpenModFixer?: (path: string) => Promise<void>;
+  // Sub folders listed in a classification section instead of under their parent.
+  classifiedPaths?: Set<string>;
 }
 
 const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithChildren({
@@ -114,6 +121,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   collapseGroupPath,
   modFixer,
   onOpenModFixer,
+  classifiedPaths,
 }: CharacterSidebarItemWithChildrenProps) {
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
@@ -135,7 +143,9 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
       ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
       : childGroups;
   const groupsToRender = getVisibleGroups(
-    showSubGroups ? childGroups : visibleChildGroups,
+    (showSubGroups ? childGroups : visibleChildGroups).filter(
+      (sub) => !classifiedPaths?.has(sub.path),
+    ),
     sortKey,
     sortDirection,
     hideEmptyGroups,
@@ -210,6 +220,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             parentGroupName={group.name}
             modFixer={modFixer}
             onOpenModFixer={onOpenModFixer}
+            classifiedPaths={classifiedPaths}
           />
         ))}
     </>
@@ -244,6 +255,14 @@ export function CharacterSidebarContent({
   const collapsedSections = useModStore((s) => s.collapsedSections);
   const toggleCollapsedSection = useModStore((s) => s.toggleCollapsedSection);
   const isSearching = searchTerm.trim().length > 0;
+  const classifiedSubGroups = useMemo(
+    () => (classification ? collectClassifiedSubGroups(groups, classification) : []),
+    [classification, groups],
+  );
+  const classifiedPaths = useMemo(
+    () => new Set(classifiedSubGroups.map((group) => group.path)),
+    [classifiedSubGroups],
+  );
 
   const renderGroups = (topLevelGroups: FolderGroup[]) =>
     topLevelGroups.map((group) => (
@@ -271,6 +290,8 @@ export function CharacterSidebarContent({
         itemStyle={itemStyle}
         modFixer={modFixer}
         onOpenModFixer={onOpenModFixer}
+        parentGroupName={classifiedPaths.has(group.path) ? parentFolderName(group.path) : undefined}
+        classifiedPaths={classifiedPaths}
       />
     ));
 
@@ -294,34 +315,36 @@ export function CharacterSidebarContent({
 
   return (
     <div className={listClassName} style={listStyle}>
-      {partitionByClassification(groups, classification).map((section) => {
-        const visibleGroups = getVisibleGroups(
-          section.groups,
-          sortKey,
-          sortDirection,
-          hideEmptyGroups,
-        );
-        if (section.name === null && visibleGroups.length === 0) {
-          return null;
-        }
+      {partitionByClassification([...groups, ...classifiedSubGroups], classification).map(
+        (section) => {
+          const visibleGroups = getVisibleGroups(
+            section.groups,
+            sortKey,
+            sortDirection,
+            hideEmptyGroups,
+          );
+          if (section.name === null && visibleGroups.length === 0) {
+            return null;
+          }
 
-        // Searching ignores collapse so matches inside a collapsed section stay reachable.
-        const collapsed = !isSearching && collapsedSections.has(section.key);
-        return (
-          // `contents` keeps the folders in the parent grid while giving each section its own child scope.
-          <div key={section.key} className="contents">
-            <CharacterSidebarSectionHeader
-              name={section.name}
-              count={visibleGroups.length}
-              collapsed={collapsed}
-              onToggle={() => toggleCollapsedSection(section.key)}
-              // Matches are resolved inside each item, so a section without any is hidden once it renders alone.
-              className={cn("col-span-full", isSearching && "only:hidden")}
-            />
-            {!collapsed && renderGroups(visibleGroups)}
-          </div>
-        );
-      })}
+          // Searching ignores collapse so matches inside a collapsed section stay reachable.
+          const collapsed = !isSearching && collapsedSections.has(section.key);
+          return (
+            // `contents` keeps the folders in the parent grid while giving each section its own child scope.
+            <div key={section.key} className="contents">
+              <CharacterSidebarSectionHeader
+                name={section.name}
+                count={visibleGroups.length}
+                collapsed={collapsed}
+                onToggle={() => toggleCollapsedSection(section.key)}
+                // Matches are resolved inside each item, so a section without any is hidden once it renders alone.
+                className={cn("col-span-full", isSearching && "only:hidden")}
+              />
+              {!collapsed && renderGroups(visibleGroups)}
+            </div>
+          );
+        },
+      )}
     </div>
   );
 }

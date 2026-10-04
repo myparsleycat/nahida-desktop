@@ -236,6 +236,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
             <CharacterSidebarItemRow
               group={group}
               depth={depth}
+              parentGroupName={parentGroupName}
               previewCacheKey={previewCacheKey}
             />
           )}
@@ -332,7 +333,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
           </ContextMenuItem>
         )}
 
-        {depth === 0 && <CharacterSidebarClassificationMenu group={group} />}
+        <CharacterSidebarClassificationMenu group={group} />
 
         {modFixer && onOpenModFixer && (
           <>

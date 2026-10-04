@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/samber/lo"
@@ -16,6 +18,10 @@ import (
 )
 
 const classificationsMetadataKey = "classifications"
+
+// classifiedSubGroupDepth is how many levels below a top-level folder can carry an assignment.
+// The bound keeps the character listing from walking into mod contents.
+const classifiedSubGroupDepth = 2
 
 // ClassificationGroup is one bucket of a classification. An empty ID in a save request creates the group.
 type ClassificationGroup struct {
@@ -163,7 +169,7 @@ func (m *Mod) SetActiveClassification(ctx context.Context, game string, id *stri
 	return client.ModClassifications.SetActive(ctx, game, id)
 }
 
-// SetCharacterClassification assigns a top-level character folder to a group, or clears the assignment
+// SetCharacterClassification assigns a character folder to a group, or clears the assignment
 // when groupID is nil. The assignment lives in the folder's nhd.json so it survives renames.
 func (m *Mod) SetCharacterClassification(
 	ctx context.Context,
@@ -193,7 +199,11 @@ func (m *Mod) SetCharacterClassification(
 	}
 	gameName = game.Game
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, folderPath))
-	if relative == "" || relative == "." || relative == ".." || strings.Contains(relative, "/") {
+	if relative == "" || relative == "." || relative == ".." || strings.HasPrefix(relative, "../") {
+		return errors.New("INVALID_CLASSIFICATION_PATH")
+	}
+	// A deeper assignment would never be found by the listing, so it is refused rather than silently lost.
+	if groupID != nil && strings.Count(relative, "/") > classifiedSubGroupDepth {
 		return errors.New("INVALID_CLASSIFICATION_PATH")
 	}
 	info, err := os.Stat(folderPath)
@@ -243,16 +253,21 @@ func (m *Mod) SetCharacterClassification(
 		return json.Marshal(document)
 	}
 	if groupID != nil {
-		return metadata.Upsert(folderPath, change)
+		if err := metadata.Upsert(folderPath, change); err != nil {
+			return err
+		}
+		m.rememberClassifiedFolder(*game, folderPath)
+		return nil
 	}
 	// Clearing an assignment must not create metadata for a folder that never had any.
 	if err := metadata.Update(folderPath, change); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	m.forgetClassifiedFolder(*game, folderPath)
 	return nil
 }
 
-// loadCharacterClassifications fills each top-level folder's assignments from its nhd.json.
+// loadCharacterClassifications fills each folder's assignments from its nhd.json.
 // Games without classifications skip the per-folder reads entirely.
 func (m *Mod) loadCharacterClassifications(
 	ctx context.Context,
@@ -269,26 +284,255 @@ func (m *Mod) loadCharacterClassifications(
 	if len(classifications) == 0 {
 		return groups
 	}
+	return attachClassifications(groups, reports...)
+}
+
+func attachClassifications(groups []FolderGroup, reports ...func(error)) []FolderGroup {
 	assignments := mapParallel(groups, func(group FolderGroup) map[string]string {
-		raw, err := metadata.Read(group.Path)
-		if err != nil {
-			reportScanFailure(fmt.Errorf("read classifications for %s: %w", group.Path, err), reports)
-			return nil
-		}
-		var document map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &document); err != nil {
-			reportScanFailure(fmt.Errorf("decode classifications for %s: %w", group.Path, err), reports)
-			return nil
-		}
-		if found := decodeClassificationAssignments(document[classificationsMetadataKey]); len(found) > 0 {
-			return found
-		}
-		return nil
+		return readClassificationAssignments(group.Path, reports...)
 	})
 	for i := range groups {
 		groups[i].Classifications = assignments[i]
 	}
 	return groups
+}
+
+// classifiedFolderIndex remembers which nested folders of a game carry an assignment, so listing the
+// characters does not search every folder for them again. It lives for the session only; nhd.json stays
+// the source of truth.
+type classifiedFolderIndex struct {
+	root string
+	// keys maps a folder to the change count at which it was last seen with an assignment.
+	keys map[string]uint64
+	// built stays false until a search of the folders finishes without the folders changing under it.
+	built       bool
+	invalidated uint64
+}
+
+// classifiedFolderKey identifies a nested folder across case changes and the DISABLED prefix.
+// Top-level folders and folders below the depth limit have no key.
+func classifiedFolderKey(root, folderPath string) string {
+	parts := strings.Split(manualRelativePath(gameRelativePath(root, folderPath)), "/")
+	if len(parts) < 2 || len(parts) > classifiedSubGroupDepth+1 || parts[0] == ".." {
+		return ""
+	}
+	for i := range parts {
+		// A name that is nothing but the prefix keeps it, or the key would name the parent folder.
+		if stripped := stripDisabled(parts[i]); stripped != "" {
+			parts[i] = stripped
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// classifiedIndex returns the game's index for its current mod root. Callers hold classifiedMu.
+func (m *Mod) classifiedIndex(game GameConfig) *classifiedFolderIndex {
+	if m.classifiedFolders == nil {
+		m.classifiedFolders = map[string]*classifiedFolderIndex{}
+	}
+	index := m.classifiedFolders[game.Game]
+	if index == nil {
+		index = &classifiedFolderIndex{}
+		m.classifiedFolders[game.Game] = index
+	}
+	if index.keys == nil || index.root != game.ModFolderPath {
+		index.root, index.keys, index.built = game.ModFolderPath, map[string]uint64{}, false
+	}
+	return index
+}
+
+// classifiedFolderKeys returns the indexed folders and the change count they were read at.
+// The index is unusable until a search has built it.
+func (m *Mod) classifiedFolderKeys(game GameConfig) ([]string, uint64, bool) {
+	m.classifiedMu.Lock()
+	defer m.classifiedMu.Unlock()
+	index := m.classifiedIndex(game)
+	if !index.built {
+		return nil, m.classifiedChanges, false
+	}
+	return lo.Keys(index.keys), m.classifiedChanges, true
+}
+
+// finishClassifiedSearch drops the folders that were not seen with an assignment since the search began.
+// Folders remembered meanwhile stay, and an invalidation meanwhile leaves the index unbuilt.
+func (m *Mod) finishClassifiedSearch(game GameConfig, since uint64) {
+	m.classifiedMu.Lock()
+	defer m.classifiedMu.Unlock()
+	index := m.classifiedIndex(game)
+	for key, seen := range index.keys {
+		if seen <= since {
+			delete(index.keys, key)
+		}
+	}
+	index.built = index.invalidated <= since
+}
+
+// rememberClassifiedFolder records a folder seen with an assignment.
+func (m *Mod) rememberClassifiedFolder(game GameConfig, folderPath string) {
+	key := classifiedFolderKey(game.ModFolderPath, folderPath)
+	if key == "" {
+		return
+	}
+
+	m.classifiedMu.Lock()
+	defer m.classifiedMu.Unlock()
+	m.classifiedChanges++
+	m.classifiedIndex(game).keys[key] = m.classifiedChanges
+}
+
+// forgetClassifiedFolder removes a folder whose last assignment was cleared, so the next character listing
+// does not search every folder for where the assignment went.
+func (m *Mod) forgetClassifiedFolder(game GameConfig, folderPath string) {
+	key := classifiedFolderKey(game.ModFolderPath, folderPath)
+	if key == "" {
+		return
+	}
+	// An enabled and a disabled folder of the same name share a key.
+	for _, path := range resolveManualDiskPaths(game.ModFolderPath, key) {
+		if len(readClassificationAssignments(path)) > 0 {
+			return
+		}
+	}
+
+	m.classifiedMu.Lock()
+	defer m.classifiedMu.Unlock()
+	delete(m.classifiedIndex(game).keys, key)
+}
+
+// invalidateClassifiedFolders makes the next character listing search the folders again. Folders that were
+// moved, copied or edited outside SetCharacterClassification can carry assignments the index never saw.
+func (m *Mod) invalidateClassifiedFolders(game string) {
+	m.classifiedMu.Lock()
+	defer m.classifiedMu.Unlock()
+	if m.classifiedFolders == nil {
+		m.classifiedFolders = map[string]*classifiedFolderIndex{}
+	}
+	index := m.classifiedFolders[game]
+	if index == nil {
+		index = &classifiedFolderIndex{}
+		m.classifiedFolders[game] = index
+	}
+	m.classifiedChanges++
+	index.built, index.invalidated = false, m.classifiedChanges
+}
+
+// loadClassifiedSubGroups attaches to each top-level folder the nested folders that carry an assignment,
+// so the sidebar can list them under their classification group without expanding the parent.
+func (m *Mod) loadClassifiedSubGroups(
+	listing groupListing,
+	groups []FolderGroup,
+	reports ...func(error),
+) []FolderGroup {
+	if !listing.classified {
+		return groups
+	}
+	game := listing.game
+
+	keys, since, indexed := m.classifiedFolderKeys(game)
+	candidates := lo.FlatMap(keys, func(key string, _ int) []string {
+		return resolveManualDiskPaths(game.ModFolderPath, key)
+	})
+	folders := m.listClassifiedFolders(listing, candidates, reports...)
+	live := lo.UniqBy(folders, func(folder FolderGroup) string {
+		return classifiedFolderKey(game.ModFolderPath, folder.Path)
+	})
+
+	// An indexed folder without an assignment was renamed, moved or cleared since it was indexed,
+	// so the assignment may now live in a folder the index does not know.
+	if !indexed || len(live) < len(keys) {
+		listed := lo.SliceToMap(folders, func(folder FolderGroup) (string, struct{}) {
+			return strings.ToLower(folder.Path), struct{}{}
+		})
+		missed := lo.Reject(findClassifiedFolders(groups, reports...), func(path string, _ int) bool {
+			_, ok := listed[strings.ToLower(path)]
+			return ok
+		})
+		folders = append(folders, m.listClassifiedFolders(listing, missed, reports...)...)
+		m.finishClassifiedSearch(game, since)
+	}
+
+	topLevel := make(map[string]int, len(groups))
+	for i := range groups {
+		topLevel[strings.ToLower(filepath.Base(groups[i].Path))] = i
+	}
+	for _, folder := range folders {
+		name, _, _ := strings.Cut(gameRelativePath(game.ModFolderPath, folder.Path), "/")
+		if i, ok := topLevel[strings.ToLower(name)]; ok {
+			groups[i].ClassifiedSubGroups = append(groups[i].ClassifiedSubGroups, folder)
+		}
+	}
+	return groups
+}
+
+// findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json.
+func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []string {
+	return lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
+		var found []string
+		var walk func(dir string, remaining int)
+		walk = func(dir string, remaining int) {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				reportScanFailure(err, reports)
+				return
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				child := filepath.Join(dir, entry.Name())
+				if len(readClassificationAssignments(child, reports...)) > 0 {
+					found = append(found, child)
+				}
+				if remaining > 1 {
+					walk(child, remaining-1)
+				}
+			}
+		}
+		walk(group.Path, classifiedSubGroupDepth)
+		return found
+	}))
+}
+
+// listClassifiedFolders builds the sidebar entries for the given folders only, leaving their siblings unread,
+// and drops the ones that carry no assignment.
+func (m *Mod) listClassifiedFolders(listing groupListing, paths []string, reports ...func(error)) []FolderGroup {
+	names := map[string]map[string]struct{}{}
+	for _, path := range paths {
+		parent := filepath.Dir(path)
+		if names[parent] == nil {
+			names[parent] = map[string]struct{}{}
+		}
+		names[parent][strings.ToLower(filepath.Base(path))] = struct{}{}
+	}
+	parents := lo.Keys(names)
+	slices.Sort(parents)
+
+	return lo.Flatten(mapParallel(parents, func(parent string) []FolderGroup {
+		listed := m.listSubGroups(listing, parent, func(name string) bool {
+			_, ok := names[parent][strings.ToLower(name)]
+			return ok
+		}, reports...)
+		return lo.Filter(listed, func(folder FolderGroup, _ int) bool {
+			return len(folder.Classifications) > 0
+		})
+	}))
+}
+
+func readClassificationAssignments(folderPath string, reports ...func(error)) map[string]string {
+	raw, err := metadata.Read(folderPath)
+	if err != nil {
+		reportScanFailure(fmt.Errorf("read classifications for %s: %w", folderPath, err), reports)
+		return nil
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &document); err != nil {
+		reportScanFailure(fmt.Errorf("decode classifications for %s: %w", folderPath, err), reports)
+		return nil
+	}
+	if found := decodeClassificationAssignments(document[classificationsMetadataKey]); len(found) > 0 {
+		return found
+	}
+	return nil
 }
 
 func decodeClassificationAssignments(raw json.RawMessage) map[string]string {

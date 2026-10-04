@@ -628,7 +628,12 @@ export function useClassificationMutations() {
             classificationId: string;
             groupId: string | null;
         }) => Mod.SetCharacterClassification(folderPath, classificationId, groupId),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+        onSuccess: () =>
+            Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+                queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
+                queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
+            ]),
         onError: showError,
     });
 
