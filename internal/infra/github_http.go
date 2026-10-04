@@ -497,8 +497,7 @@ func (c *GitHubRateCoordinator) githubRoundTrip(request *http.Request, base http
 	if response != nil {
 		status = response.StatusCode
 		state, err = c.captureGitHubResponse(request.Context(), response)
-		var rateErr *GitHubRateError
-		if errors.As(err, &rateErr) {
+		if err != nil {
 			_ = response.Body.Close()
 			response = nil
 		}

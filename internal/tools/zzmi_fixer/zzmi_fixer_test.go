@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"nahida.live/desktop/internal/db"
@@ -386,6 +387,54 @@ func TestZZMIFixerPrepareForceRefreshBypassesCache(t *testing.T) {
 	if !result.Rules.CheckedRemotely || result.Rules.LatestTag == nil || *result.Rules.LatestTag != remote.Tag {
 		t.Fatalf("force refresh did not use remote release: %+v", result.Rules)
 	}
+}
+
+func TestZZMIFixerPrepareForceRefreshHonorsTransportCooldown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := openToolsTestDB(t)
+		root := insertZZMITestTarget(t, client)
+		oldRelease := sampleZZMILatestRelease(time.Time{})
+		oldHandler := zzmiRemoteReleaseHandler(oldRelease.Tag, oldRelease.Commit, nil)
+		remote := oldRelease
+		latestRequests := 0
+		service := newZZMIFixerTestService(t, client, func(request *http.Request) (int, string, error) {
+			if strings.HasSuffix(request.URL.Path, "/releases/latest") {
+				latestRequests++
+			}
+			if strings.HasSuffix(request.URL.Path, "/git/ref/tags/"+oldRelease.Tag) ||
+				strings.HasSuffix(request.URL.Path, "/git/trees/"+oldRelease.Commit) {
+				return oldHandler(request)
+			}
+			return zzmiRemoteReleaseHandler(remote.Tag, remote.Commit, nil)(request)
+		})
+		first, err := service.ZZMIFixerPrepare(t.Context(), root, false)
+		if err != nil || first.Rules.LatestTag == nil || *first.Rules.LatestTag != oldRelease.Tag {
+			t.Fatalf("initial prepare = %+v, %v", first.Rules, err)
+		}
+
+		remote.Tag = "v2.0.0"
+		remote.Commit = "fedcba9876543210fedcba9876543210fedcba98"
+		immediate, err := service.ZZMIFixerPrepare(t.Context(), root, true)
+		if err != nil || immediate.Rules.LatestTag == nil || *immediate.Rules.LatestTag != oldRelease.Tag ||
+			latestRequests != 1 {
+			t.Fatalf("refresh cooldown = %+v, %v, latest requests = %d", immediate.Rules, err, latestRequests)
+		}
+
+		time.Sleep(2 * time.Minute)
+		ordinary, err := service.ZZMIFixerPrepare(t.Context(), root, false)
+		if err != nil || ordinary.Rules.LatestTag == nil || *ordinary.Rules.LatestTag != oldRelease.Tag ||
+			latestRequests != 1 {
+			t.Fatalf("ordinary cache = %+v, %v, latest requests = %d", ordinary.Rules, err, latestRequests)
+		}
+		refreshed, err := service.ZZMIFixerPrepare(t.Context(), root, true)
+		if err != nil || refreshed.Rules.LatestTag == nil || *refreshed.Rules.LatestTag != remote.Tag ||
+			refreshed.Rules.LatestCommit == nil || *refreshed.Rules.LatestCommit != remote.Commit || latestRequests != 2 {
+			t.Fatalf("forced refresh = %+v, %v, latest requests = %d", refreshed.Rules, err, latestRequests)
+		}
+		if stored := readZZMILatestRelease(t, client); stored.Tag != remote.Tag || stored.Commit != remote.Commit {
+			t.Fatalf("persisted release = %+v", stored)
+		}
+	})
 }
 
 func TestZZMIFixerPrepareFallsBackAndRefreshesCooldown(t *testing.T) {

@@ -373,6 +373,50 @@ func TestGitHubTransportClassifiesLimitsAndPreservesBody(t *testing.T) {
 	}
 }
 
+func TestGitHubResponseReadFailureReleasesRequest(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusForbidden, http.StatusTooManyRequests} {
+		for _, readErr := range []error{io.ErrUnexpectedEOF, context.DeadlineExceeded} {
+			t.Run(fmt.Sprintf("%d/%s", status, readErr), func(t *testing.T) {
+				t.Parallel()
+				synctest.Test(t, func(t *testing.T) {
+					rate := NewGitHubRateCoordinator()
+					body := &githubReadFailureBody{err: readErr}
+					var response *http.Response
+					client := rate.HTTPClient(&http.Client{Transport: roundTripFunc(
+						func(request *http.Request) (*http.Response, error) {
+							response = githubTestResponse(request, status, make(http.Header), "")
+							response.Body = body
+							return response, nil
+						},
+					)})
+					_, err := githubTestGet(t.Context(), client,
+						"https://api.github.com/repos/test/project/git/ref/tags/v1")
+					if !errors.Is(err, readErr) {
+						t.Errorf("request error = %v, want %v", err, readErr)
+					}
+					if !body.closed {
+						t.Error("failed response body was not closed")
+					}
+
+					closed := make(chan struct{})
+					go func() { rate.Close(); close(closed) }()
+					synctest.Wait()
+					select {
+					case <-closed:
+					default:
+						t.Error("Close remained blocked after the failed request returned")
+					}
+
+					// Release a discarded response so a regression cannot hang the test itself.
+					_ = response.Body.Close()
+					<-closed
+				})
+			})
+		}
+	}
+}
+
 func TestGitHubGateRechecksQueuedRequestAndAllowsCancellation(t *testing.T) {
 	t.Parallel()
 	rate := NewGitHubRateCoordinator()
@@ -1246,6 +1290,18 @@ type githubTestResult struct {
 	body string
 	err  error
 	info GitHubResponseInfo
+}
+
+type githubReadFailureBody struct {
+	err    error
+	closed bool
+}
+
+func (b *githubReadFailureBody) Read([]byte) (int, error) { return 0, b.err }
+
+func (b *githubReadFailureBody) Close() error {
+	b.closed = true
+	return nil
 }
 
 type githubContextReadCloser struct {
