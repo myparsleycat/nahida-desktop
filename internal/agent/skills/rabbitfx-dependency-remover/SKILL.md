@@ -1,6 +1,6 @@
 ---
 name: rabbitfx-dependency-remover
-description: Remove active RabbitFX texture-binding dependencies from XXMI/3DMigoto mod INIs by reproducing their direct shader-slot bindings and state lifetime. Use for requests to make a mod work without RabbitFX; requires evidence for the affected channel-to-slot mapping.
+description: Remove active RabbitFX texture-binding dependencies from XXMI/3DMigoto mod INIs by reproducing their direct shader-slot bindings and state lifetime. Use for requests to make a mod work without RabbitFX; requires evidence for the affected channel-to-slot mapping and retires RabbitFX-only effects that cannot be reproduced.
 ---
 
 # RabbitFX dependency removal
@@ -19,7 +19,9 @@ Retain the exact original text of every changed region and any added sections in
 
 Find every INI in the selected mod, including sibling INIs that may prove slot meaning. For case-insensitive `search_text`, set `regex: true` and use patterns such as `(?i)rabbitfx`; also inspect `SetTextures`, direct `ps-t*` bindings, and temporary resource save/restore patterns. Search results are bounded and text search skips files larger than 1 MiB. Cross-check the INI inventory with `list_files` in narrower directories and bounded `read_file` ranges when search coverage is incomplete. A truncated read cannot expose a large file's unread tail by changing line numbers. If available tools cannot cover the full active INI scope, report the missing coverage and do not declare complete dependency removal.
 
-For every active RabbitFX group, record its file, section, conditions, assigned channels, exact referenced resources, external command, covered draw calls, and next texture-state change. Trace local command-list callers when a group lives outside its draw section. A mention only in comments or documentation does not warrant rendering edits. Assignments without an identifiable consumer require tracing before removal. Commands other than a proven texture setter, non-texture values, shader effects, and unsupported channels require inspecting their implementation rather than applying this recipe.
+For every active RabbitFX group, record its file, section, conditions, assigned channels, exact referenced resources, external command, covered draw calls, and next texture-state change. Trace local command-list callers when a group lives outside its draw section. A mention only in comments or documentation does not warrant rendering edits. Assignments without an identifiable consumer require tracing before removal.
+
+Classify each group as a texture setter (semantic channel assignments consumed by `SetTextures`) or an effect call (any other RabbitFX command list such as `CommandList\RabbitFX\Run`, with the channels, non-texture values, or shader inputs it consumes, for example `FXMap`). The setter recipe below never applies to an effect call; handle effect calls under "Retire effects that cannot be reproduced". The two kinds are independent: an effect call that cannot be reproduced does not block converting the setter groups, and the reverse.
 
 ## Prove the slot mapping
 
@@ -27,7 +29,7 @@ Read [references/rabbitfx-removal-playbook.md](references/rabbitfx-removal-playb
 
 Prefer equivalent direct bindings in a sibling INI, then consistent bindings or save/bind/restore paths in the same INI or package. An installed RabbitFX implementation is useful only when it is the actual affected consumer and is accessible through an exposed root; do not assume a machine path, installed version, or permission outside those roots. Filename suffixes alone are weak evidence.
 
-One observed WWMI package mapped Normal/Lightmap/Material/Diffuse to `ps-t0`/`ps-t1`/`ps-t2`/`ps-t3`. This is an example, not a universal XXMI mapping, and must not be copied to GIMI or another importer without matching evidence. If the mapping or setter behavior is ambiguous, report the specific missing file or behavior before editing; do not guess.
+One observed WWMI package mapped Normal/Lightmap/Material/Diffuse to `ps-t0`/`ps-t1`/`ps-t2`/`ps-t3`. This is an example, not a universal XXMI mapping, and must not be copied to GIMI or another importer without matching evidence. If the mapping or setter behavior is ambiguous for a group, leave that group unconverted and report the specific missing file or behavior; do not guess. Still convert every group whose mapping is proven.
 
 ## Replace each texture-state transition
 
@@ -39,11 +41,23 @@ Direct slot assignments change graphics state. Reuse equivalent existing save/re
 
 Every path that saves must restore, including conditional paths. Never save in one override and restore in another. Nested regions must use distinct temporary resources or avoid nesting; reusing one set would overwrite the saved state. If control flow prevents establishing a safe lifetime, stop before an uncertain conversion and explain the missing evidence.
 
+## Retire effects that cannot be reproduced
+
+An effect call runs shader logic that lives inside RabbitFX. When its implementation is accessible through an exposed root, inspect it and reproduce it locally if that is a bounded INI change. Otherwise the request to work without RabbitFX accepts losing that effect, so retire it instead of asking for the RabbitFX files:
+
+- Comment out the effect's channel assignments and its `run` line, including the paired call that resets the effect after the covered draws. Do not delete them, and do not invent a substitute shader or slot binding.
+- Keep every draw the effect wrapped, with its condition, arguments, and position unchanged, so the mesh still renders.
+- Leave the local resources and texture files the effect referenced in place, even when nothing references them afterwards.
+- Determine which texture state those draws now receive (an earlier converted group in the same section, or the game's own bindings) and include it in the report.
+
+Ask the user for the RabbitFX implementation only when retiring the call would stop a mesh from rendering: no local draw sits between the effect call and its reset, so the external command list may issue the draw itself. Losing a visual effect alone is not a reason to stop or ask.
+
 ## Validate and report
 
 After patching, re-read changed regions and compare them with the recorded inventory:
 
-- No active RabbitFX dependency remains in the selected mod. Ignore pure comments and comment text when classifying active commands; report unrelated active RabbitFX functionality as unresolved rather than deleting it.
+- No active RabbitFX dependency remains in the selected mod: proven setter groups are converted and effect calls are reproduced or retired. Ignore pure comments and comment text when classifying active commands. Any group left active because its mapping was unproven is reported as unresolved, and the mod is not described as RabbitFX-free.
+- Each retired effect keeps its covered draws intact, and no active line still reads or writes its RabbitFX channels.
 - Each replaced group binds the same textures at the same conditional draw boundary. Draw commands and their arguments, hashes, ranges, mesh bindings, and toggle logic are preserved.
 - New local resource and command-list targets resolve in the correct namespace. Check section-name collisions and any referenced texture filenames. Understand intentional external targets rather than treating same-file absence as proof of failure.
 - Save/restore pairs cover every affected execution path, protect the changed slots, and restore before unrelated rendering. Matching invocation counts alone do not prove control-flow safety.
@@ -51,4 +65,4 @@ After patching, re-read changed regions and compare them with the recorded inven
 
 Stop after sufficient static checks; do not broaden into unrelated textures or fixers. Static checks cannot establish visual equivalence. If runtime verification is requested or a trial fails, use `mod-diagnosis` and available targeted reload/capture actions. For ordinary INI changes use the established `F10` reload workflow and compare affected parts and later unrelated draws under the same pose and lighting. Claim runtime success only for behavior actually observed.
 
-Report the modified files and group count, slot mapping with concrete evidence, save/restore strategy, static checks, remaining dependencies, runtime verification status, and recovery information.
+Report the modified files and group count, slot mapping with concrete evidence, save/restore strategy, each retired effect with the affected draws and the visual effect that is lost, static checks, remaining dependencies, runtime verification status, and recovery information.
