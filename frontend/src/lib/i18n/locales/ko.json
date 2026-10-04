@@ -2608,7 +2608,10 @@
         "uploading": "업로드 중",
         "transferring": "전송 중",
         "finalizing": "마무리 중",
-        "paused": "일시정지"
+        "paused": "일시정지",
+        "download_error": "다운로드 오류",
+        "upload_error": "업로드 오류",
+        "transfer_error": "전송 오류"
       },
       "fixer4001": {
         "building": "DLL 빌드 중",

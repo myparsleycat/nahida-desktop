@@ -141,12 +141,67 @@ describe("buildTransferTitlebarActivity", () => {
         expect(activity?.label).toBe("titlebar.activity.transfer.paused");
     });
 
-    it("returns null when no transfers are active", () => {
+    it("returns null when no transfers are active or failed", () => {
         const activity = buildTransferTitlebarActivity(
-            [transfer({ status: "completed" }), transfer({ status: "error" })],
+            [transfer({ status: "completed" }), transfer({ status: "canceled" })],
             t,
         );
         expect(activity).toBeNull();
+    });
+
+    it("keeps an error badge naming the single failed transfer after the queue drains", () => {
+        const activity = buildTransferTitlebarActivity(
+            [
+                transfer({ status: "completed" }),
+                transfer({ pid: "2", type: "download", status: "error", name: "mod.zip" }),
+            ],
+            t,
+        );
+        expect(activity).toMatchObject({
+            id: "transfer",
+            status: "error",
+            label: "titlebar.activity.transfer.download_error",
+            detail: "mod.zip",
+            href: "/transfer",
+        });
+        expect(activity?.progress).toBeUndefined();
+    });
+
+    it("labels failures by transfer type and counts several of them", () => {
+        expect(buildTransferTitlebarActivity([transfer({ status: "error" })], t)?.label).toBe(
+            "titlebar.activity.transfer.upload_error",
+        );
+        const activity = buildTransferTitlebarActivity(
+            [
+                transfer({ pid: "1", type: "upload", status: "error" }),
+                transfer({ pid: "2", type: "download", status: "error" }),
+            ],
+            t,
+        );
+        expect(activity?.label).toBe("titlebar.activity.transfer.transfer_error");
+        expect(activity?.detail).toBe("page.transfer.item.failed_files");
+    });
+
+    it("treats a completed transfer with failed files as an error", () => {
+        const activity = buildTransferTitlebarActivity(
+            [transfer({ status: "completed", failedFiles: 2 })],
+            t,
+        );
+        expect(activity?.status).toBe("error");
+    });
+
+    it("flags failures while other transfers are still running", () => {
+        const activity = buildTransferTitlebarActivity(
+            [
+                transfer({ pid: "1", progress: 50, transferedSize: 50, speed: 500 }),
+                transfer({ pid: "2", status: "error" }),
+            ],
+            t,
+        );
+        expect(activity?.status).toBe("error");
+        expect(activity?.label).toBe("titlebar.activity.transfer.uploading");
+        expect(activity?.detail).toContain("/s");
+        expect(activity?.detail).toContain("page.transfer.item.failed_files");
     });
 });
 

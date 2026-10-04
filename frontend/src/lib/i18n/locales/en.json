@@ -2624,7 +2624,10 @@
         "uploading": "Uploading",
         "transferring": "Transferring",
         "finalizing": "Finalizing",
-        "paused": "Paused"
+        "paused": "Paused",
+        "download_error": "Download error",
+        "upload_error": "Upload error",
+        "transfer_error": "Transfer error"
       },
       "fixer4001": {
         "building": "Building DLL",

@@ -23,6 +23,7 @@ import {
 type Translate = {
     (key: string): string;
     (key: string, defaultValue: string): string;
+    (key: string, options: Record<string, unknown>): string;
 };
 
 type FixerTask = NonNullable<FourThousandOneFixerProgressEvent["task"]>;
@@ -31,6 +32,10 @@ function getActiveTransfers(transfers: TransferWithoutData[]) {
     return transfers.filter(
         (transfer) => isOpenTransferQueueStatus(transfer.status) || transfer.status === "paused",
     );
+}
+
+function isFailedTransfer(transfer: TransferWithoutData) {
+    return transfer.status === "error" || transfer.failedFiles > 0;
 }
 
 function isFinalizingTransfer(transfer: TransferWithoutData) {
@@ -42,7 +47,30 @@ export function buildTransferTitlebarActivity(
     t: Translate,
 ): TitlebarActivity | null {
     const activeTransfers = getActiveTransfers(transfers);
-    if (activeTransfers.length === 0) return null;
+    const failedTransfers = transfers.filter(isFailedTransfer);
+    if (activeTransfers.length === 0) {
+        if (failedTransfers.length === 0) return null;
+
+        const hasDownload = failedTransfers.some((transfer) => transfer.type === "download");
+        const hasUpload = failedTransfers.some((transfer) => transfer.type === "upload");
+        return {
+            id: "transfer",
+            label:
+                hasDownload && hasUpload
+                    ? t("titlebar.activity.transfer.transfer_error")
+                    : hasDownload
+                      ? t("titlebar.activity.transfer.download_error")
+                      : t("titlebar.activity.transfer.upload_error"),
+            status: "error",
+            icon: ArrowUpDownIcon,
+            detail:
+                failedTransfers.length === 1
+                    ? truncateModName(failedTransfers[0].name, 16) || undefined
+                    : t("page.transfer.item.failed_files", { count: failedTransfers.length }),
+            order: 0,
+            href: "/transfer",
+        };
+    }
 
     const activeDownloads = activeTransfers.filter((transfer) => transfer.type === "download");
     const activeUploads = activeTransfers.filter((transfer) => transfer.type === "upload");
@@ -89,12 +117,15 @@ export function buildTransferTitlebarActivity(
     const detailParts = [
         speed > 0 ? `${formatSize(speed)}/s` : null,
         progress !== null ? `${Math.round(progress)}%` : null,
+        failedTransfers.length > 0
+            ? t("page.transfer.item.failed_files", { count: failedTransfers.length })
+            : null,
     ].filter((part): part is string => part !== null);
 
     return {
         id: "transfer",
         label,
-        status: allPaused ? "paused" : "running",
+        status: failedTransfers.length > 0 ? "error" : allPaused ? "paused" : "running",
         icon: ArrowUpDownIcon,
         detail: detailParts.length > 0 ? detailParts.join(" · ") : undefined,
         progress: progress ?? undefined,

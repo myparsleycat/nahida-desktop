@@ -57,6 +57,8 @@ export function TitlebarActivityBadges() {
               "h-5 max-w-56 gap-1 truncate border-border/60 bg-muted/70 px-1.5 text-[11px] font-medium text-muted-foreground",
               (isInteractive || !!activity.popover) &&
                 "no-drag cursor-pointer hover:bg-muted hover:text-foreground",
+              activity.status === "error" &&
+                "border-destructive/40 text-destructive hover:text-destructive",
             )}
             render={isInteractive ? <button type="button" onClick={activate} /> : undefined}
           >

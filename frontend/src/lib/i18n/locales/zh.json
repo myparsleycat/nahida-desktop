@@ -2589,7 +2589,10 @@
         "uploading": "上传中",
         "transferring": "传输中",
         "finalizing": "收尾中",
-        "paused": "已暂停"
+        "paused": "已暂停",
+        "download_error": "下载出错",
+        "upload_error": "上传出错",
+        "transfer_error": "传输出错"
       },
       "fixer4001": {
         "building": "正在构建 DLL",
