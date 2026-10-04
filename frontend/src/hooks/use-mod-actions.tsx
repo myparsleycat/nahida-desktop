@@ -30,6 +30,7 @@ import { useGames } from "@renderer/hooks/use-mod-data";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
+import { Logger } from "@renderer/lib/logger";
 import type { ModInfo } from "@renderer/types/mod";
 import { isNteImporter, stripDisabledPrefix } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
@@ -58,7 +59,7 @@ async function cleanupModelViewerSource(source: ModelViewerDialogSource | null) 
   try {
     await Tools.CleanupModelViewer(source.memorySessionId);
   } catch (error) {
-    console.warn("Failed to clean up model viewer file", error);
+    Logger.warn({ error, memorySessionId: source.memorySessionId }, "cleanupModelViewerSource");
   }
 }
 
