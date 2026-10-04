@@ -11,15 +11,31 @@ const store = vi.hoisted(() => ({
   expandedGroups: new Set<string>(),
   persistentGroups: new Set<string>(),
   setExpandedGroup: vi.fn(),
+  toggleCollapsedSection: vi.fn(),
+}));
+const sectionRows = vi.hoisted(() => ({
+  current: [] as {
+    kind: "section";
+    key: string;
+    name: string;
+    count: number;
+    collapsed: boolean;
+  }[],
 }));
 
 vi.mock("@renderer/store/mod", () => ({
   useModStore: (select: (state: typeof store) => unknown) => select(store),
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
 vi.mock("./use-character-sidebar-visible-rows", () => ({
-  useCharacterSidebarVisibleRows: (groups: FolderGroup[]) =>
-    groups.map((group) => ({ group, depth: 0 })),
+  useCharacterSidebarVisibleRows: (groups: FolderGroup[]) => [
+    ...sectionRows.current,
+    ...groups.map((group) => ({ kind: "group", group, depth: 0 })),
+  ],
 }));
 
 vi.mock("./character-sidebar-item", () => ({
@@ -87,6 +103,7 @@ function createProps(): CharacterSidebarRowProps {
 
 beforeEach(() => {
   store.selectedGroup = null;
+  sectionRows.current = [];
   vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 });
 
@@ -142,5 +159,29 @@ describe("CharacterSidebarRow", () => {
     act(() => frames.forEach((frame) => frame(0)));
 
     expect(viewport.scrollTo).toHaveBeenCalledWith({ top: 1932, behavior: "auto" });
+  });
+
+  it("renders section headers as shorter rows that toggle and stay out of the visible groups", () => {
+    const props = createProps();
+    props.onVisibleRowsChange = vi.fn();
+    const viewport = props.viewport!;
+    sectionRows.current = [
+      { kind: "section", key: "element:pyro", name: "Pyro", count: 40, collapsed: false },
+    ];
+    document.body.appendChild(viewport);
+    const view = render(<CharacterSidebarRow {...props} />, { container: viewport });
+
+    expect(props.onVisibleRowsChange).toHaveBeenCalledWith(
+      groups.map((group) => ({ path: group.path, group })),
+    );
+    const header = screen.getByRole("button", { name: /Pyro/ });
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(header.textContent).toBe("Pyro40");
+    expect(view.container.querySelector<HTMLElement>("[data-index='1']")?.style.transform).toBe(
+      "translateY(32px)",
+    );
+
+    fireEvent.click(header);
+    expect(store.toggleCollapsedSection).toHaveBeenCalledWith("element:pyro");
   });
 });

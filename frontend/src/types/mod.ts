@@ -43,6 +43,7 @@ export interface FolderGroup {
     isManualSubGroup?: boolean;
     hasSubGroups?: boolean;
     hasManualSubGroups?: boolean;
+    classifications?: Record<string, string>;
 }
 
 export interface Preset {
