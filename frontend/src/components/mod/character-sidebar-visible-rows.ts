@@ -1,11 +1,30 @@
 import type { FolderSortDirection, FolderSortKey } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import type { Classification } from "@shared/types";
 
-export interface VisibleSidebarRow {
+export interface VisibleGroupRow {
+    kind: "group";
     group: FolderGroup;
     depth: number;
     parentGroupName?: string;
     collapseGroupPath?: string;
+}
+
+export interface VisibleSectionRow {
+    kind: "section";
+    key: string;
+    // null marks the section of folders that are not assigned to any group.
+    name: string | null;
+    count: number;
+    collapsed: boolean;
+}
+
+export type VisibleSidebarRow = VisibleGroupRow | VisibleSectionRow;
+
+export interface SidebarSection {
+    key: string;
+    name: string | null;
+    groups: FolderGroup[];
 }
 
 export function getVisibleGroups(
@@ -38,6 +57,28 @@ export function getVisibleGroups(
         });
 }
 
+// Splits top-level folders into one section per classification group, in the classification's order.
+// Folders without an assignment, or assigned to a group that no longer exists, land in the last section.
+export function partitionByClassification(
+    groups: FolderGroup[],
+    classification: Classification,
+): SidebarSection[] {
+    const sections = new Map<string, SidebarSection>(
+        classification.groups.map((group) => [
+            group.id,
+            { key: `${classification.id}:${group.id}`, name: group.name, groups: [] },
+        ]),
+    );
+    const unassigned: SidebarSection = { key: `${classification.id}:`, name: null, groups: [] };
+
+    for (const group of groups) {
+        const section = sections.get(group.classifications?.[classification.id] ?? "");
+        (section ?? unassigned).groups.push(group);
+    }
+
+    return [...sections.values(), unassigned];
+}
+
 export function buildVisibleSidebarRows(
     groups: FolderGroup[],
     options: {
@@ -49,6 +90,8 @@ export function buildVisibleSidebarRows(
         persistentGroups: Set<string>;
         subGroupsByPath: Map<string, FolderGroup[]>;
         manualSubGroupsByPath: Map<string, FolderGroup[]>;
+        classification?: Classification | null;
+        collapsedSections?: Set<string>;
     },
 ): VisibleSidebarRow[] {
     const normalizedSearch = options.searchTerm.trim().toLowerCase();
@@ -86,7 +129,7 @@ export function buildVisibleSidebarRows(
         }
 
         if (shouldShowParent) {
-            rows.push({ group, depth, parentGroupName, collapseGroupPath });
+            rows.push({ kind: "group", group, depth, parentGroupName, collapseGroupPath });
         }
 
         if (!showChildGroups) {
@@ -98,13 +141,49 @@ export function buildVisibleSidebarRows(
         }
     };
 
-    for (const group of getVisibleGroups(
-        groups,
-        options.sortKey,
-        options.sortDirection,
-        options.hideEmptyGroups,
-    )) {
-        visit(group, 0, undefined, undefined);
+    if (!options.classification) {
+        for (const group of getVisibleGroups(
+            groups,
+            options.sortKey,
+            options.sortDirection,
+            options.hideEmptyGroups,
+        )) {
+            visit(group, 0, undefined, undefined);
+        }
+        return rows;
+    }
+
+    for (const section of partitionByClassification(groups, options.classification)) {
+        const visibleGroups = getVisibleGroups(
+            section.groups,
+            options.sortKey,
+            options.sortDirection,
+            options.hideEmptyGroups,
+        );
+        if (section.name === null && visibleGroups.length === 0) {
+            continue;
+        }
+
+        // Searching ignores collapse so matches inside a collapsed section stay reachable.
+        const collapsed = !isSearching && !!options.collapsedSections?.has(section.key);
+        const headerIndex = rows.length;
+        rows.push({
+            kind: "section",
+            key: section.key,
+            name: section.name,
+            count: visibleGroups.length,
+            collapsed,
+        });
+        if (collapsed) {
+            continue;
+        }
+
+        for (const group of visibleGroups) {
+            visit(group, 0, undefined, undefined);
+        }
+        if (isSearching && rows.length === headerIndex + 1) {
+            rows.pop();
+        }
     }
 
     return rows;

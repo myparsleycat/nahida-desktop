@@ -516,6 +516,13 @@
         "unpersist-subgroups": "Unpersist subgroups",
         "persist-subgroups": "Persist subgroups",
         "unmark-manual-subgroup": "Unmark manual subgroup",
+        "classification": {
+          "label": "Group by",
+          "none": "Folders",
+          "manage": "Manage classifications…",
+          "assign": "Classify",
+          "unassigned": "Unclassified"
+        },
         "tools": "Tools",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer"
@@ -654,6 +661,20 @@
         "texture-resize": {
           "title": "Resize mod textures",
           "description": "Scan \"{{name}}\" for DDS files and resize them in place."
+        },
+        "classification": {
+          "title": "Manage Classifications",
+          "description": "Create a classification and its groups, then right-click a character folder in the sidebar to assign it to a group.",
+          "new": "New classification",
+          "name-label": "Classification name",
+          "name-placeholder": "e.g. Element",
+          "groups-label": "Groups",
+          "group-placeholder": "Group name",
+          "add-group": "Add group",
+          "move-up": "Move up",
+          "move-down": "Move down",
+          "delete-title": "Delete Classification",
+          "delete-description": "\"{{name}}\" and all of its groups will be deleted. Character folders are not deleted."
         },
         "create-folder": {
           "title": "Create New Folder",
@@ -834,6 +855,14 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "classification": {
+            "INVALID_CLASSIFICATION_NAME": "Enter a name.",
+            "CLASSIFICATION_NAME_EXISTS": "A classification with that name already exists.",
+            "CLASSIFICATION_GROUP_NAME_EXISTS": "A group with that name already exists.",
+            "CLASSIFICATION_NOT_FOUND": "The classification or group could not be found.",
+            "INVALID_CLASSIFICATION_PATH": "This folder cannot be classified.",
+            "failed": "Failed to update the classification."
+          },
           "add-game-mutation": {
             "duplicate-game-name": "A game with that name already exists",
             "duplicate-mod-folder-path": "That mod folder path is already in use",

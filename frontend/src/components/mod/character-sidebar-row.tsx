@@ -6,6 +6,7 @@ import { type CSSProperties, useCallback, useEffect, useRef } from "react";
 import type { CharacterSidebarContentProps } from "./character-sidebar-content";
 
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
+import { CharacterSidebarSectionHeader } from "./character-sidebar-section-header";
 import { useCharacterSidebarVisibleRows } from "./use-character-sidebar-visible-rows";
 
 const containerStyle: CSSProperties = {
@@ -16,6 +17,7 @@ const itemClassName =
   "relative grid h-14 items-center gap-3 overflow-hidden py-2 pr-4 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]";
 const selectedItemClassName = "bg-[#cecece] dark:bg-[#2a2a2a]";
 const rowHeight = 56;
+const sectionHeight = 32;
 const itemStyles = new Map<number, CSSProperties>();
 
 function getItemStyle(depth: number): CSSProperties {
@@ -57,8 +59,10 @@ export function CharacterSidebarRow({
   previewCacheKey,
   modFixer,
   onOpenModFixer,
+  classification,
 }: CharacterSidebarRowProps) {
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
+  const toggleCollapsedSection = useModStore((s) => s.toggleCollapsedSection);
   const expandedGroups = useModStore((s) => s.expandedGroups);
   const persistentGroups = useModStore((s) => s.persistentGroups);
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
@@ -72,12 +76,19 @@ export function CharacterSidebarRow({
     sortKey,
     sortDirection,
     hideEmptyGroups,
+    classification,
   );
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewport,
-    estimateSize: () => rowHeight,
-    getItemKey: (index) => rows[index]?.group.path ?? index,
+    estimateSize: (index) => (rows[index]?.kind === "section" ? sectionHeight : rowHeight),
+    getItemKey: (index) => {
+      const row = rows[index];
+      if (!row) {
+        return index;
+      }
+      return row.kind === "section" ? `section:${row.key}` : row.group.path;
+    },
     overscan: 4,
     initialRect: viewport
       ? { width: viewport.clientWidth, height: viewport.clientHeight }
@@ -85,12 +96,16 @@ export function CharacterSidebarRow({
   });
 
   useEffect(() => {
-    onVisibleRowsChange?.(rows.map((row) => ({ path: row.group.path, group: row.group })));
+    onVisibleRowsChange?.(
+      rows.flatMap((row) =>
+        row.kind === "group" ? [{ path: row.group.path, group: row.group }] : [],
+      ),
+    );
   }, [onVisibleRowsChange, rows]);
 
   const scrollToPath = useCallback(
     (path: string) => {
-      const index = rows.findIndex((row) => row.group.path === path);
+      const index = rows.findIndex((row) => row.kind === "group" && row.group.path === path);
       if (!viewport || index < 0) {
         return false;
       }
@@ -174,27 +189,36 @@ export function CharacterSidebarRow({
             className="absolute top-0 left-0 w-full"
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <CharacterSidebarItem
-              itemRefs={itemRefs}
-              group={row.group}
-              onClick={handleItemClick}
-              collapseGroupPath={row.collapseGroupPath}
-              onDrop={onItemDrop}
-              onCreateFolder={onCreateFolder}
-              onDeleteFolder={onDeleteFolder}
-              onManualSubGroupChange={onManualSubGroupChange}
-              depth={row.depth}
-              previewCacheKey={previewCacheKey}
-              layout="row"
-              parentGroupName={row.parentGroupName}
-              itemClassName={itemClassName}
-              selectedItemClassName={selectedItemClassName}
-              itemStyle={getItemStyle(row.depth)}
-              modFixer={modFixer}
-              onOpenModFixer={onOpenModFixer}
-              forceSelectOnClick={isSearching}
-              autoScrollOnSelect={false}
-            />
+            {row.kind === "section" ? (
+              <CharacterSidebarSectionHeader
+                name={row.name}
+                count={row.count}
+                collapsed={row.collapsed}
+                onToggle={() => toggleCollapsedSection(row.key)}
+              />
+            ) : (
+              <CharacterSidebarItem
+                itemRefs={itemRefs}
+                group={row.group}
+                onClick={handleItemClick}
+                collapseGroupPath={row.collapseGroupPath}
+                onDrop={onItemDrop}
+                onCreateFolder={onCreateFolder}
+                onDeleteFolder={onDeleteFolder}
+                onManualSubGroupChange={onManualSubGroupChange}
+                depth={row.depth}
+                previewCacheKey={previewCacheKey}
+                layout="row"
+                parentGroupName={row.parentGroupName}
+                itemClassName={itemClassName}
+                selectedItemClassName={selectedItemClassName}
+                itemStyle={getItemStyle(row.depth)}
+                modFixer={modFixer}
+                onOpenModFixer={onOpenModFixer}
+                forceSelectOnClick={isSearching}
+                autoScrollOnSelect={false}
+              />
+            )}
           </div>
         );
       })}
