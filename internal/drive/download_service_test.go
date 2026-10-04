@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
@@ -54,7 +55,7 @@ func TestStartDownloadUsesParallelRangesAndSharedLinkToken(t *testing.T) {
 	defer server.Close()
 
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	metadata := DownloadMetadata{
 		Root:       transfer.Root{ID: "file", Name: "parallel.bin"},
 		TotalBytes: size,
@@ -98,7 +99,7 @@ func TestCanceledDownloadDoesNotCreateQueuedEmptyDirectories(t *testing.T) {
 	defer server.Close()
 
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	drive.settings = fixedDownloadSettings{concurrency: 1}
 	target := t.TempDir()
 	rootID := "root"
@@ -168,7 +169,7 @@ func TestDownloadDriveFileKeepsSuccessfulProgress(t *testing.T) {
 	}))
 	defer server.Close()
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	destination := filepath.Join(t.TempDir(), "progress.bin")
 	var progress int64
 	err := drive.downloadDriveFile(context.Background(), transfers, transfer.DownloadFile{
@@ -203,7 +204,7 @@ func TestDownloadDriveFileRollsBackCompressedAttemptProgressBeforeRetry(t *testi
 	}))
 	defer server.Close()
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	drive.sleep = func(context.Context, time.Duration) error { return nil }
 	destination := filepath.Join(t.TempDir(), "compressed.bin")
 	algorithm := "gzip"
@@ -229,7 +230,7 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}))
 	defer server.Close()
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	var completedEvent map[string]any
 	drive.eventEmit = func(name string, data ...any) {
 		if name == "download:completed" && len(data) == 1 {
@@ -274,6 +275,51 @@ func TestStartDownloadRunsProvidedMetadataThroughTransferQueue(t *testing.T) {
 	}
 }
 
+func TestStartDownloadKeepsUnnamedBatchRootInTheTarget(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = w.Write([]byte(request.URL.Path))
+	}))
+	defer server.Close()
+	transfers := transfer.New()
+	drive := downloadServiceTestDrive(t, server, transfers)
+	batchID := downloadBatchRootID
+	metadata := DownloadMetadata{
+		Root:       transfer.Root{ID: batchID},
+		TotalBytes: int64(len("/a") + len("/b")),
+		Files: []transfer.DownloadFile{
+			{ID: "a", FileID: "a", ParentID: &batchID, Name: "a.bin", Size: 2, URL: server.URL + "/a"},
+			{ID: "b", FileID: "b", ParentID: &batchID, Name: "b.bin", Size: 2, URL: server.URL + "/b"},
+		},
+		Dirs: []transfer.Directory{},
+	}
+	target := t.TempDir()
+	result, err := drive.StartDownload(context.Background(), StartDownloadParams{
+		Items:      []DownloadItem{{ID: "a", Name: "a.bin"}, {ID: "b", Name: "b.bin"}},
+		TargetPath: target,
+		Data:       &metadata,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"a.bin", "b.bin"} {
+		if _, err := os.Stat(filepath.Join(target, name)); err != nil {
+			t.Fatalf("%s was not saved in the target: %v", name, err)
+		}
+	}
+	record, _ := transfers.Get(result.PID)
+	want := []transfer.DestinationTarget{
+		{Path: filepath.Join(target, "a.bin"), Kind: transfer.DestinationFile},
+		{Path: filepath.Join(target, "b.bin"), Kind: transfer.DestinationFile},
+	}
+	if record.Status != transfer.StatusCompleted || !slices.Equal(record.DestinationTargets, want) {
+		t.Fatalf("record = %+v", record)
+	}
+}
+
 func TestDownloadWriteFailureLogsStageAndTransferContext(t *testing.T) {
 	t.Parallel()
 
@@ -282,7 +328,7 @@ func TestDownloadWriteFailureLogsStageAndTransferContext(t *testing.T) {
 	var output bytes.Buffer
 	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
 	transfers := transfer.NewWithOptions(transfer.Options{Log: log})
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	drive.UseLog(log)
 	target := t.TempDir()
 	if err := os.Mkdir(filepath.Join(target, "blocked.bin"), 0o755); err != nil {
@@ -365,7 +411,7 @@ func TestFolderDownloadCompletionUsesCreatedDirectoryForInspection(t *testing.T)
 	defer server.Close()
 
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	var inspectionPaths []string
 	drive.UseFixInspection(func(paths []string) {
 		inspectionPaths = slices.Clone(paths)
@@ -412,7 +458,7 @@ func TestQueuedDownloadReservesDestinationBeforeRunnerStarts(t *testing.T) {
 	defer server.Close()
 
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	metadata := DownloadMetadata{
 		Root:       transfer.Root{ID: "file", Name: "mod.bin"},
 		TotalBytes: int64(len(content)),
@@ -485,7 +531,7 @@ func TestDownloadFallsBackToFreshPresignedURLAfterForbidden(t *testing.T) {
 	}))
 	defer server.Close()
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	metadata := DownloadMetadata{
 		Root:       transfer.Root{ID: "file", Name: "file.bin"},
 		TotalBytes: int64(len(content)),
@@ -523,7 +569,7 @@ func TestDownloadSkipsAnExistingFileWithoutComparingItsSize(t *testing.T) {
 	}))
 	defer server.Close()
 	transfers := transfer.New()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	target := t.TempDir()
 	existing := filepath.Join(target, "file.bin")
 	if err := os.WriteFile(existing, []byte("already here"), 0o644); err != nil {
@@ -567,7 +613,7 @@ func TestStartDownloadPromptsPathSelectorWhenTargetMissing(t *testing.T) {
 	defer server.Close()
 	transfers := transfer.New()
 	target := t.TempDir()
-	drive := downloadServiceTestDrive(server, transfers)
+	drive := downloadServiceTestDrive(t, server, transfers)
 	drive.UsePathSelector(staticPathSelector{path: target, fileName: "picked.bin"})
 	result, err := drive.StartDownload(context.Background(), StartDownloadParams{
 		Items: []DownloadItem{{ID: "file", Name: "original.bin"}},
@@ -638,14 +684,14 @@ func TestStartDownloadRequiresPathWhenSelectorMissing(t *testing.T) {
 
 func TestResolveDownloadPathsRejectsDuplicateDirectoryID(t *testing.T) {
 	rootID := "root"
-	metadata := DownloadMetadata{
-		Root: transfer.Root{ID: rootID, Name: "Root"},
-		Dirs: []transfer.Directory{
+	plan := &downloadPlan{
+		root: transfer.Root{ID: rootID, Name: "Root"},
+		dirs: []transfer.Directory{
 			{ID: "duplicate", ParentID: &rootID, Name: "one"},
 			{ID: "duplicate", ParentID: &rootID, Name: "two"},
 		},
 	}
-	if _, _, err := resolveDownloadPaths(metadata, t.TempDir()); err == nil {
+	if _, _, err := resolveDownloadPaths(plan, t.TempDir()); err == nil {
 		t.Fatal("expected duplicate directory error")
 	}
 }
@@ -656,15 +702,16 @@ func TestResolveDownloadDestinationTargets(t *testing.T) {
 	batchID := "batch-root"
 
 	tests := []struct {
-		name     string
-		metadata DownloadMetadata
-		want     []transfer.DestinationTarget
+		name string
+		plan *downloadPlan
+		want []transfer.DestinationTarget
 	}{
 		{
 			name: "single file",
-			metadata: DownloadMetadata{
-				Root:  transfer.Root{ID: "file", Name: "mod.zip"},
-				Files: []transfer.DownloadFile{{ID: "file", Name: "mod.zip"}},
+			plan: &downloadPlan{
+				root:      transfer.Root{ID: "file", Name: "mod.zip"},
+				fileCount: 1,
+				rootFiles: []string{"mod.zip"},
 			},
 			want: []transfer.DestinationTarget{{
 				Path: filepath.Join(target, "mod.zip"),
@@ -673,9 +720,9 @@ func TestResolveDownloadDestinationTargets(t *testing.T) {
 		},
 		{
 			name: "single renamed folder",
-			metadata: DownloadMetadata{
-				Root: transfer.Root{ID: rootID, Name: "Mod (2)"},
-				Dirs: []transfer.Directory{{ID: rootID, Name: "Mod (2)"}},
+			plan: &downloadPlan{
+				root: transfer.Root{ID: rootID, Name: "Mod (2)"},
+				dirs: []transfer.Directory{{ID: rootID, Name: "Mod (2)"}},
 			},
 			want: []transfer.DestinationTarget{{
 				Path: filepath.Join(target, "Mod (2)"),
@@ -684,14 +731,15 @@ func TestResolveDownloadDestinationTargets(t *testing.T) {
 		},
 		{
 			name: "batch folders and file",
-			metadata: DownloadMetadata{
-				Root: transfer.Root{ID: batchID},
-				Dirs: []transfer.Directory{
+			plan: &downloadPlan{
+				root: transfer.Root{ID: batchID},
+				dirs: []transfer.Directory{
 					{ID: "one", ParentID: &batchID, Name: "One"},
 					{ID: "nested", ParentID: &rootID, Name: "Nested"},
 					{ID: rootID, ParentID: &batchID, Name: "Two"},
 				},
-				Files: []transfer.DownloadFile{{ID: "file", ParentID: &batchID, Name: "readme.txt"}},
+				fileCount: 1,
+				rootFiles: []string{"readme.txt"},
 			},
 			want: []transfer.DestinationTarget{
 				{Path: filepath.Join(target, "One"), Kind: transfer.DestinationDirectory},
@@ -703,7 +751,7 @@ func TestResolveDownloadDestinationTargets(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := resolveDownloadDestinationTargets(test.metadata, target)
+			got, err := resolveDownloadDestinationTargets(test.plan, target)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -714,7 +762,7 @@ func TestResolveDownloadDestinationTargets(t *testing.T) {
 	}
 }
 
-func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) {
+func TestReserveDownloadNamesResolvesExistingDirectoryConflict(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -725,7 +773,7 @@ func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) 
 	}{
 		{name: "overwrite preserves existing casing", choice: platform.DirectoryConflictOverwrite, wantName: "Folder"},
 		{name: "new name uses unique suffix", choice: platform.DirectoryConflictRename, wantName: "folder (2)"},
-		{name: "cancel cancels transfer", choice: platform.DirectoryConflictCancel, wantCancel: true},
+		{name: "cancel cancels download", choice: platform.DirectoryConflictCancel, wantCancel: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -743,52 +791,45 @@ func TestPrepareDownloadMetadataResolvesExistingDirectoryConflict(t *testing.T) 
 				},
 			)
 			transfers := transfer.New()
-			const pid = "directory-conflict"
-			if _, err := transfers.Create(transfer.CreateParams{
-				PID: pid, Type: "download", Name: "Folder", InitialStatus: transfer.StatusPreparing,
-				Data: transfer.Data{}, ManualStart: true,
-			}); err != nil {
-				t.Fatal(err)
+			drive := NewWithOptions(Options{
+				FS: platform.NewFS(), Dialog: dialog, Transfer: transfers, Download: infra.NewDownload(),
+			})
+			params := StartDownloadParams{
+				Items: []DownloadItem{{ID: "root", Name: "folder", IsDir: true}}, TargetPath: target,
 			}
-			drive := NewWithOptions(Options{FS: platform.NewFS(), Dialog: dialog, Transfer: transfers})
-			metadata := DownloadMetadata{
-				Root: transfer.Root{ID: "root", Name: "folder"},
-				Dirs: []transfer.Directory{{ID: "root", Name: "folder"}},
-			}
-			prepared, err := drive.prepareDownloadMetadata(
-				context.Background(),
-				transfers,
-				pid,
-				metadata,
-				StartDownloadParams{
-					Items: []DownloadItem{{ID: "root", Name: "folder", IsDir: true}}, TargetPath: target,
-				},
-			)
-			if promptedName != "Folder" {
-				t.Fatalf("prompted name = %q", promptedName)
-			}
-			if test.wantCancel {
-				if !errors.Is(err, context.Canceled) {
-					t.Fatalf("err = %v", err)
-				}
-				record, ok := transfers.Get(pid)
-				if !ok || record.Status != transfer.StatusCanceled {
-					t.Fatalf("transfer = %+v, ok=%v", record, ok)
-				}
-				return
-			}
+
+			layout, canceled, err := drive.reserveDownloadNames(context.Background(), params)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if prepared.Root.Name != test.wantName || len(prepared.Dirs) != 1 ||
-				prepared.Dirs[0].Name != test.wantName {
-				t.Fatalf("prepared = %+v", prepared)
+			if promptedName != "Folder" {
+				t.Fatalf("prompted name = %q", promptedName)
+			}
+			if canceled != test.wantCancel || layout.rootName != test.wantName {
+				t.Fatalf("layout = %+v, canceled = %v", layout, canceled)
+			}
+			if !test.wantCancel {
+				want := []transfer.DestinationTarget{{
+					Path: filepath.Join(target, test.wantName), Kind: transfer.DestinationDirectory,
+				}}
+				if got := layout.targets(params.Items, target); !slices.Equal(got, want) {
+					t.Fatalf("targets = %#v, want %#v", got, want)
+				}
+				return
+			}
+
+			result, err := drive.StartDownload(context.Background(), params)
+			if err != nil || result.Status != "canceled" {
+				t.Fatalf("download = %+v, %v", result, err)
+			}
+			if got := transfers.List(); len(got) != 0 {
+				t.Fatalf("canceled download left transfers: %#v", got)
 			}
 		})
 	}
 }
 
-func TestPrepareDownloadMetadataUsesUniqueNameWhenConflictIsFile(t *testing.T) {
+func TestReserveDownloadNamesUsesUniqueNameWhenConflictIsFile(t *testing.T) {
 	t.Parallel()
 
 	target := t.TempDir()
@@ -798,38 +839,85 @@ func TestPrepareDownloadMetadataUsesUniqueNameWhenConflictIsFile(t *testing.T) {
 	dialog := platform.NewDialog()
 	dialog.UseDirectoryConflictResolver(
 		func(platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
-			t.Fatal("file conflict should not prompt")
+			t.Error("file conflict should not prompt")
 			return "", nil
 		},
 	)
 	drive := NewWithOptions(Options{FS: platform.NewFS(), Dialog: dialog})
-	metadata := DownloadMetadata{
-		Root: transfer.Root{ID: "root", Name: "folder"},
-		Dirs: []transfer.Directory{{ID: "root", Name: "folder"}},
-	}
-	prepared, err := drive.prepareDownloadMetadata(context.Background(), nil, "", metadata, StartDownloadParams{
+	layout, canceled, err := drive.reserveDownloadNames(context.Background(), StartDownloadParams{
 		Items: []DownloadItem{{ID: "root", Name: "folder", IsDir: true}}, TargetPath: target,
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || canceled {
+		t.Fatalf("canceled = %v, err = %v", canceled, err)
 	}
-	if prepared.Root.Name != "folder (2)" || prepared.Dirs[0].Name != "folder (2)" {
-		t.Fatalf("prepared = %+v", prepared)
+	if layout.rootName != "folder (2)" {
+		t.Fatalf("layout = %+v", layout)
 	}
 }
 
-func downloadServiceTestDrive(server *httptest.Server, transfers *transfer.Transfer) *Drive {
+func TestReserveDownloadNamesKeepsBatchNamesUnique(t *testing.T) {
+	t.Parallel()
+
+	target := t.TempDir()
+	if err := os.Mkdir(filepath.Join(target, "Pack"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	drive := NewWithOptions(Options{FS: platform.NewFS()})
+	items := []DownloadItem{
+		{ID: "file", Name: "Notes"},
+		{ID: "pack", Name: "Pack", IsDir: true},
+		{ID: "notes", Name: "Notes", IsDir: true},
+	}
+	layout, canceled, err := drive.reserveDownloadNames(context.Background(), StartDownloadParams{
+		Items: items, TargetPath: target,
+	})
+	if err != nil || canceled {
+		t.Fatalf("canceled = %v, err = %v", canceled, err)
+	}
+
+	// Folders claim their names first, so the file is the one renamed.
+	want := []transfer.DestinationTarget{
+		{Path: filepath.Join(target, "Notes (2)"), Kind: transfer.DestinationFile},
+		{Path: filepath.Join(target, "Pack (2)"), Kind: transfer.DestinationDirectory},
+		{Path: filepath.Join(target, "Notes"), Kind: transfer.DestinationDirectory},
+	}
+	if got := layout.targets(items, target); !slices.Equal(got, want) {
+		t.Fatalf("targets = %#v, want %#v", got, want)
+	}
+}
+
+func downloadServiceTestDrive(t *testing.T, server *httptest.Server, transfers *transfer.Transfer) *Drive {
+	t.Helper()
 	client := infra.NewClientWithOptions(
 		infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline},
 	)
 	download := infra.NewDownload()
 	download.UseClient(client)
-	return NewWithOptions(Options{
+	drive := NewWithOptions(Options{
 		HTTP:     client,
 		FS:       platform.NewFS(),
 		Transfer: transfers,
 		Download: download,
 	})
+	store, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	drive.UseAppData(store)
+	return drive
+}
+
+func downloadSpoolCount(t *testing.T, drive *Drive) int {
+	t.Helper()
+	dir, err := drive.appData.Resolve(appdata.DownloadSpoolDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return len(entries)
 }
 
 type staticPathSelector struct {

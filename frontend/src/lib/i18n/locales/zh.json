@@ -208,6 +208,7 @@
         "paused": "已暂停",
         "queued": "排队中",
         "preparing": "准备中",
+        "discovering": "正在清点文件（{{count}} 个）",
         "upload_activity": {
           "preparing": "正在读取和压缩文件",
           "waiting": "正在等待服务器响应"

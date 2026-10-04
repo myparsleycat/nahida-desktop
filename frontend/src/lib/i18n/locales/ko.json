@@ -208,6 +208,7 @@
         "paused": "일시정지",
         "queued": "대기 중",
         "preparing": "준비 중",
+        "discovering": "항목 확인 중 ({{count}}개)",
         "upload_activity": {
           "preparing": "파일 읽기·압축 중",
           "waiting": "서버 응답 대기 중"

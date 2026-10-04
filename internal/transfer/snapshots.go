@@ -209,6 +209,36 @@ func (t *Transfer) MarkFileCompleted(pid, fileID string) error {
 }
 
 //wails:ignore
+func (t *Transfer) MarkIndexCompleted(pid string, index int) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	item, ok := t.entries[pid]
+	if !ok {
+		return fmt.Errorf("transfer %q not found", pid)
+	}
+	if index < 0 {
+		return fmt.Errorf("transfer %q file index %d is negative", pid, index)
+	}
+	word := index / 64
+	if missing := word + 1 - len(item.completedIndexes); missing > 0 {
+		item.completedIndexes = append(item.completedIndexes, make([]uint64, missing)...)
+	}
+	item.completedIndexes[word] |= 1 << (index % 64)
+	return nil
+}
+
+//wails:ignore
+func (t *Transfer) IsIndexCompleted(pid string, index int) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	item, ok := t.entries[pid]
+	if !ok || index < 0 || index/64 >= len(item.completedIndexes) {
+		return false
+	}
+	return item.completedIndexes[index/64]&(1<<(index%64)) != 0
+}
+
+//wails:ignore
 func (t *Transfer) CompletedFilesCount(pid string) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -257,6 +287,9 @@ func applyUpdates(record *Snapshot, updates Updates) {
 		if record.Status != StatusProgress {
 			record.UploadPhase = ""
 		}
+	}
+	if updates.Name != nil {
+		record.Name = *updates.Name
 	}
 	if updates.CurrentID != nil {
 		record.CurrentID = *updates.CurrentID

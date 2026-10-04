@@ -41,6 +41,41 @@ func (s testSettings) GetMoveTransferPageWhenStartTransfer(context.Context) (boo
 	return s.move, s.err
 }
 
+func TestCompletedIndexesTrackFilesByPositionUntilReset(t *testing.T) {
+	t.Parallel()
+
+	service := New()
+	createTestTransfer(t, service, "indexed", StatusPaused, true)
+	for _, index := range []int{0, 63, 64, 1_000_000} {
+		if service.IsIndexCompleted("indexed", index) {
+			t.Fatalf("index %d completed before it was marked", index)
+		}
+		if err := service.MarkIndexCompleted("indexed", index); err != nil {
+			t.Fatal(err)
+		}
+		if !service.IsIndexCompleted("indexed", index) {
+			t.Fatalf("index %d not completed after it was marked", index)
+		}
+	}
+	if service.IsIndexCompleted("indexed", 1) || service.IsIndexCompleted("indexed", 2_000_000) ||
+		service.IsIndexCompleted("indexed", -1) || service.IsIndexCompleted("missing", 0) {
+		t.Fatal("an unmarked index reads as completed")
+	}
+	if err := service.MarkIndexCompleted("indexed", -1); err == nil {
+		t.Fatal("a negative index was accepted")
+	}
+	if err := service.MarkIndexCompleted("missing", 0); err == nil {
+		t.Fatal("a missing transfer was accepted")
+	}
+
+	if err := service.ResetTransfer("indexed"); err != nil {
+		t.Fatal(err)
+	}
+	if service.IsIndexCompleted("indexed", 0) || service.IsIndexCompleted("indexed", 1_000_000) {
+		t.Fatal("reset kept completed indexes")
+	}
+}
+
 func createTestTransfer(t *testing.T, service *Transfer, pid string, status Status, manual bool) Record {
 	t.Helper()
 	record, err := service.Create(CreateParams{

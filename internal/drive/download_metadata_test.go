@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -17,7 +19,37 @@ import (
 	"nahida.live/desktop/internal/transfer"
 )
 
-func TestFetchDirectoryDownloadMetadataDecodesJSONAndZstdCBORChunks(t *testing.T) {
+func enumerateDownloadForTest(
+	t *testing.T,
+	drive *Drive,
+	params StartDownloadParams,
+) (*downloadPlan, []transfer.DownloadFile, error) {
+	t.Helper()
+	spoolPath := filepath.Join(t.TempDir(), "test"+downloadSpoolExt)
+	plan, err := drive.enumerateDownload(
+		context.Background(),
+		params,
+		downloadLayout{},
+		spoolPath,
+		func(int, int64) {},
+	)
+	if err != nil {
+		if _, statErr := os.Stat(spoolPath); !os.IsNotExist(statErr) {
+			t.Fatalf("failed enumeration left its spool behind: %v", statErr)
+		}
+		return nil, nil, err
+	}
+	var files []transfer.DownloadFile
+	for item, readErr := range plan.files() {
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		files = append(files, item.file)
+	}
+	return plan, files, nil
+}
+
+func TestEnumerateDownloadDecodesJSONAndZstdCBORChunks(t *testing.T) {
 	parent := "root"
 	directories := []transfer.Directory{{ID: "dir", ParentID: &parent, Name: "Sub"}}
 	cborData, err := cbor.Marshal(directories)
@@ -37,7 +69,7 @@ func TestFetchDirectoryDownloadMetadataDecodesJSONAndZstdCBORChunks(t *testing.T
 	)
 	filesJSON, _ := json.Marshal(
 		[]transfer.DownloadFile{
-			{ID: "file", FileID: "file", ParentID: &parent, Name: "a.bin", Size: 7, URL: "https://download.invalid/a"},
+			{ID: "file", ParentID: &parent, Name: "a.bin", Size: 7, URL: "https://download.invalid/a"},
 		},
 	)
 	filesEvent, _ := json.Marshal(downloadChunkEnvelope{Data: string(filesJSON)})
@@ -63,23 +95,58 @@ func TestFetchDirectoryDownloadMetadataDecodesJSONAndZstdCBORChunks(t *testing.T
 			),
 		},
 	)
-	metadata, err := drive.fetchDirectoryDownloadMetadata(
-		context.Background(),
-		"root",
-		&DownloadLink{LinkID: "link", Token: "secret"},
-	)
+	plan, files, err := enumerateDownloadForTest(t, drive, StartDownloadParams{
+		Items: []DownloadItem{{ID: "root", IsDir: true}},
+		Link:  &DownloadLink{LinkID: "link", Token: "secret"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Root.ID != "root" || metadata.TotalBytes != 7 || len(metadata.Dirs) != 1 ||
-		metadata.Dirs[0].Name != "Sub" ||
-		len(metadata.Files) != 1 ||
-		metadata.Files[0].Name != "a.bin" {
-		t.Fatalf("metadata = %+v", metadata)
+	if plan.root.ID != "root" || plan.root.Name != "Root" || plan.totalBytes != 7 || plan.fileCount != 1 {
+		t.Fatalf("plan = %+v", plan)
+	}
+	if len(plan.dirs) != 2 || plan.dirs[0].ID != "root" || plan.dirs[0].Name != "Root" || plan.dirs[1].Name != "Sub" {
+		t.Fatalf("directories = %+v", plan.dirs)
+	}
+	if len(files) != 1 || files[0].Name != "a.bin" || files[0].FileID != "file" {
+		t.Fatalf("files = %+v", files)
 	}
 }
 
-func TestFetchModDownloadMetadataSendsModCredentialsAndPrependsRoot(t *testing.T) {
+func TestEnumerateDownloadReportsStreamFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "error event", body: "event: error\ndata: walk failed\n\n", want: "walk failed"},
+		{
+			name: "missing root",
+			body: "event: complete\ndata: {}\n\n",
+			want: "root directory information was not received",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+			drive := NewWithOptions(Options{HTTP: infra.NewClientWithOptions(
+				infra.ClientOptions{HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline},
+			)})
+			_, _, err := enumerateDownloadForTest(t, drive, StartDownloadParams{
+				Items: []DownloadItem{{ID: "root", IsDir: true}},
+			})
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("err = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestEnumerateDownloadSendsModCredentialsAndPrependsRoot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/akasha/mod/download/item" || request.Header.Get("x-token") != "token" ||
 			request.Header.Get("x-sig") != "sig" {
@@ -103,23 +170,21 @@ func TestFetchModDownloadMetadataSendsModCredentialsAndPrependsRoot(t *testing.T
 		},
 	)
 
-	metadata, err := drive.fetchModDownloadMetadata(
-		context.Background(),
-		[]DownloadItem{{ID: "item", IsDir: true, Name: "Mod"}},
-		DownloadModAccess{Token: "token", Sig: "sig"},
-	)
+	plan, _, err := enumerateDownloadForTest(t, drive, StartDownloadParams{
+		Items: []DownloadItem{{ID: "item", IsDir: true, Name: "Mod"}},
+		Mod:   &DownloadModAccess{Token: "token", Sig: "sig"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Root.ID != "item" || len(metadata.Dirs) != 1 || metadata.Dirs[0].ID != "item" {
-		t.Fatalf("metadata = %+v", metadata)
+	if plan.root.ID != "item" || len(plan.dirs) != 1 || plan.dirs[0].ID != "item" {
+		t.Fatalf("plan = %+v", plan)
 	}
 
-	if _, err := drive.fetchModDownloadMetadata(
-		context.Background(),
-		[]DownloadItem{{ID: "file", Name: "a.bin"}},
-		DownloadModAccess{},
-	); err == nil {
+	if _, _, err := enumerateDownloadForTest(t, drive, StartDownloadParams{
+		Items: []DownloadItem{{ID: "file", Name: "a.bin"}},
+		Mod:   &DownloadModAccess{},
+	}); err == nil {
 		t.Fatal("mod file download was accepted")
 	}
 }
@@ -156,7 +221,7 @@ func TestFetchPresignedDownloadURLUsesModRouteAndCredentials(t *testing.T) {
 	}
 }
 
-func TestFetchDownloadMetadataBatchesFilesAndBuildsBatchRoot(t *testing.T) {
+func TestEnumerateDownloadBatchesFilesAndBuildsBatchRoot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/akasha/file/downloads" {
 			http.NotFound(w, request)
@@ -193,17 +258,21 @@ func TestFetchDownloadMetadataBatchesFilesAndBuildsBatchRoot(t *testing.T) {
 	for index := 0; index <= downloadFileBatchLimit; index++ {
 		items = append(items, DownloadItem{ID: fmt.Sprintf("file-%d", index)})
 	}
-	metadata, err := drive.fetchDownloadMetadata(context.Background(), items, nil)
+	plan, files, err := enumerateDownloadForTest(t, drive, StartDownloadParams{Items: items})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Root.ID != "batch-root" || len(metadata.Files) != len(items) || metadata.Files[0].ParentID == nil ||
-		*metadata.Files[0].ParentID != "batch-root" {
-		t.Fatalf("metadata = %+v", metadata)
+	if plan.root.ID != "batch-root" || len(files) != len(items) || len(plan.rootFiles) != len(items) ||
+		files[0].ParentID == nil || *files[0].ParentID != "batch-root" || files[0].FileID != "file-0" {
+		t.Fatalf("plan = %+v, first file = %+v", plan, files[0])
+	}
+	// 1+2+...+100 for the first batch, then 1 for the single file of the second.
+	if want := int64(downloadFileBatchLimit*(downloadFileBatchLimit+1)/2 + 1); plan.totalBytes != want {
+		t.Fatalf("total bytes = %d, want %d", plan.totalBytes, want)
 	}
 }
 
-func TestFetchFileDownloadMetadataRejectsMissingSelectedFile(t *testing.T) {
+func TestEnumerateDownloadRejectsMissingSelectedFile(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `[{"id":"one","name":"one.bin","size":1,"url":"https://download.invalid/one"}]`)
 	}))
@@ -215,7 +284,11 @@ func TestFetchFileDownloadMetadataRejectsMissingSelectedFile(t *testing.T) {
 			),
 		},
 	)
-	_, err := drive.fetchDownloadMetadata(context.Background(), []DownloadItem{{ID: "one"}, {ID: "two"}}, nil)
+	_, _, err := enumerateDownloadForTest(
+		t,
+		drive,
+		StartDownloadParams{Items: []DownloadItem{{ID: "one"}, {ID: "two"}}},
+	)
 	if err == nil {
 		t.Fatal("expected missing selected file error")
 	}

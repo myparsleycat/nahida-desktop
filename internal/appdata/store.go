@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	RootDirName  = ".nahida-desktop"
-	DatabaseFile = "data.db"
-	LogsDir      = "logs"
-	ToolsDir     = "tools"
-	ModBisectDir = "mod-bisect"
-	NTEModsDir   = "NTE-Mods"
+	RootDirName      = ".nahida-desktop"
+	DatabaseFile     = "data.db"
+	LogsDir          = "logs"
+	ToolsDir         = "tools"
+	ModBisectDir     = "mod-bisect"
+	NTEModsDir       = "NTE-Mods"
+	DownloadSpoolDir = "download-spool"
 )
 
 var ErrInvalidPath = errors.New("invalid app data path")

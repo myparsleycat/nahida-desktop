@@ -229,6 +229,13 @@ export const TransferItem = memo((props: TransferItemProps) => {
                   {t(`page.transfer.item.upload_activity.${uploadActivity}`)}
                 </span>
               );
+            } else if (status === "preparing" && type === "download" && totalFiles) {
+              // A download is still listing its files; none has been processed yet.
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {t("page.transfer.item.discovering", { count: totalFiles })}
+                </span>
+              );
             } else if (
               status === "preparing" ||
               status === "downloading" ||

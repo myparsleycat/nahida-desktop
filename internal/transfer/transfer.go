@@ -15,9 +15,12 @@ type entry struct {
 	restartData  any
 	cancel       context.CancelFunc
 	completedIDs map[string]struct{}
-	samples      []speedSample
-	createdOrder uint64
-	queueOrder   uint64
+	// completedIndexes is a bitset keyed by a file's position in the transfer's
+	// own file list, for transfers too large to track by ID.
+	completedIndexes []uint64
+	samples          []speedSample
+	createdOrder     uint64
+	queueOrder       uint64
 }
 
 type Transfer struct {

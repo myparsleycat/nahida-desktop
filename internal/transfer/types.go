@@ -183,6 +183,7 @@ type Options struct {
 
 type Updates struct {
 	Status             *Status
+	Name               *string
 	CurrentID          *string
 	TotalSize          *int64
 	TotalFiles         *int

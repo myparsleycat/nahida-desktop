@@ -69,11 +69,10 @@ func TestRedeemModDownloadTicketAndUseGrant(t *testing.T) {
 	if count != 1 || redeemed.ItemID != "root" || redeemed.Name != "My Mod" || redeemed.Grant != grant {
 		t.Fatalf("redemption = %+v, calls = %d", redeemed, count)
 	}
-	if _, err := d.fetchModDownloadMetadata(
-		context.Background(),
-		[]DownloadItem{{ID: redeemed.ItemID, IsDir: true}},
-		DownloadModAccess{Grant: grant},
-	); err != nil {
+	if _, _, err := enumerateDownloadForTest(t, d, StartDownloadParams{
+		Items: []DownloadItem{{ID: redeemed.ItemID, IsDir: true}},
+		Mod:   &DownloadModAccess{Grant: grant},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	url, err := d.fetchPresignedDownloadURL(
@@ -103,14 +102,18 @@ func TestStartDownloadRedeemsTicketBeforePathSelection(t *testing.T) {
 		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
 			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
 		}),
-		FS: platform.NewFS(), Transfer: transfer.New(), Download: infra.NewDownload(),
-		PathSelector: ticketPathSelectorFunc(func(_ context.Context, name, _ string, names []string, selectFile bool) (*string, *string, error) {
-			selections.Add(1)
-			if name != "Real Mod Name" || len(names) != 1 || names[0] != name || selectFile {
-				t.Errorf("selector got name %q, names %q, selectFile %v", name, names, selectFile)
-			}
-			return nil, nil, nil
-		}),
+		FS:       platform.NewFS(),
+		Transfer: transfer.New(),
+		Download: infra.NewDownload(),
+		PathSelector: ticketPathSelectorFunc(
+			func(_ context.Context, name, _ string, names []string, selectFile bool) (*string, *string, error) {
+				selections.Add(1)
+				if name != "Real Mod Name" || len(names) != 1 || names[0] != name || selectFile {
+					t.Errorf("selector got name %q, names %q, selectFile %v", name, names, selectFile)
+				}
+				return nil, nil, nil
+			},
+		),
 	})
 	result, err := d.StartDownload(context.Background(), StartDownloadParams{
 		Items: []DownloadItem{{Name: "Akasha Mod", IsDir: true}}, ModTicket: "ticket",
@@ -133,11 +136,15 @@ func TestStartDownloadRejectsInvalidTicketBeforePathSelection(t *testing.T) {
 		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
 			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
 		}),
-		FS: platform.NewFS(), Transfer: transfer.New(), Download: infra.NewDownload(),
-		PathSelector: ticketPathSelectorFunc(func(context.Context, string, string, []string, bool) (*string, *string, error) {
-			selections.Add(1)
-			return nil, nil, nil
-		}),
+		FS:       platform.NewFS(),
+		Transfer: transfer.New(),
+		Download: infra.NewDownload(),
+		PathSelector: ticketPathSelectorFunc(
+			func(context.Context, string, string, []string, bool) (*string, *string, error) {
+				selections.Add(1)
+				return nil, nil, nil
+			},
+		),
 	})
 	_, err := d.StartDownload(context.Background(), StartDownloadParams{
 		Items: []DownloadItem{{Name: "Akasha Mod", IsDir: true}}, ModTicket: "invalid",
@@ -173,12 +180,8 @@ func TestStartDownloadMarksOnlyTicketRedemptionFailures(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	d := NewWithOptions(Options{
-		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
-			HTTPClient: server.Client(), BackendURL: server.URL, Status: infra.BackendOnline,
-		}),
-		FS: platform.NewFS(), Transfer: transfer.New(), Download: infra.NewDownload(),
-	})
+	transfers := transfer.New()
+	d := downloadServiceTestDrive(t, server, transfers)
 	params := StartDownloadParams{Items: []DownloadItem{{Name: "Mod"}}, ModTicket: "ticket"}
 
 	params.TargetPath = t.TempDir() + "/missing"
@@ -188,10 +191,17 @@ func TestStartDownloadMarksOnlyTicketRedemptionFailures(t *testing.T) {
 		t.Fatalf("destination error = %v; want non-redemption error", err)
 	}
 
+	// The folder walk runs in the queue, so its failure lands on the transfer.
 	params.TargetPath = t.TempDir()
-	_, err = d.StartDownload(context.Background(), params)
-	if err == nil || errors.As(err, &redemptionErr) {
-		t.Fatalf("metadata error = %v; want non-redemption error", err)
+	started, err := d.StartDownload(context.Background(), params)
+	if err != nil || started.Status != "started" {
+		t.Fatalf("download = %+v, %v; want a started transfer", started, err)
+	}
+	if err := transfers.ProcessQueue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if record, ok := transfers.Get(started.PID); !ok || record.Status != transfer.StatusError || record.Error == "" {
+		t.Fatalf("metadata failure record = %+v, ok = %v", record, ok)
 	}
 
 	rejectTicket.Store(true)

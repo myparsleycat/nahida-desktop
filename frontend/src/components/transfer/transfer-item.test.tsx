@@ -25,6 +25,27 @@ const props: TransferItemProps = {
   type: "upload",
 };
 
+describe("TransferItem download discovery", () => {
+  const download: TransferItemProps = { ...props, id: "download", type: "download", progress: 0 };
+
+  it("shows the running file count while a download lists its files", () => {
+    render(<TransferItem {...download} status="preparing" totalFiles={1200} processedFiles={0} />);
+    expect(screen.getByText("page.transfer.item.discovering")).toBeDefined();
+  });
+
+  it("falls back to the plain preparing label before any file is listed", () => {
+    render(<TransferItem {...download} status="preparing" totalFiles={0} processedFiles={0} />);
+    expect(screen.getByText("page.transfer.item.preparing")).toBeDefined();
+  });
+
+  it("keeps the processed count once the download is running", () => {
+    render(
+      <TransferItem {...download} status="downloading" totalFiles={1200} processedFiles={3} />,
+    );
+    expect(screen.getByText("page.transfer.item.downloading (3/1200)")).toBeDefined();
+  });
+});
+
 describe("TransferItem upload activity", () => {
   it("shows response waiting with the actual percentage and hides stale metrics", () => {
     render(<TransferItem {...props} uploadPhase={UploadPhase.UploadWaiting} />);

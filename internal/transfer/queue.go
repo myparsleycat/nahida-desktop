@@ -547,6 +547,7 @@ func (t *Transfer) ResetTransfer(pid string) error {
 	item.record.UploadPhase = ""
 	item.samples = nil
 	item.completedIDs = make(map[string]struct{})
+	item.completedIndexes = nil
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
 	if shouldEmit {
