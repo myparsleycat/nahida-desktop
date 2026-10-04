@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -26,17 +27,18 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
-import { useGames } from "@renderer/hooks/use-mod-data";
+import { modGroupQueryOptions, useGames } from "@renderer/hooks/use-mod-data";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
-import type { ModInfo } from "@renderer/types/mod";
+import type { FolderGroup, ModInfo } from "@renderer/types/mod";
 import { isNteImporter, stripDisabledPrefix } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { PackageIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -46,6 +48,7 @@ import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 import { TouchProfileDialog } from "../components/mod/touch-profile-dialog";
+import { hasMissingDependency } from "../components/mod/utils";
 
 function getRenameDefaultValue(name: string) {
   return stripDisabledPrefix(name);
@@ -78,6 +81,8 @@ export interface ModActionApi {
   runner: ReturnType<typeof useModFixRunner>;
   isNteGame: boolean;
   convertingModelPath: string | null;
+  /** Runs enable at once, or after the user confirms when enabling a mod with a missing dependency. */
+  confirmEnable: (mod: ModInfo, enable: () => void) => void;
   openDeleteMod: (mod: ModInfo) => void;
   openDeletePreview: (mod: ModInfo) => void;
   openModelViewer: (mod: ModInfo) => Promise<void>;
@@ -127,7 +132,39 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     source: ModelViewerDialogSource;
   } | null>(null);
   const [showModelViewer, setShowModelViewer] = useState(false);
+  const [enableConfirmState, setEnableConfirmState] = useState<{
+    mod: ModInfo;
+    enable: () => void;
+  } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  // Stable within a group, so the memoized cards and rows that toggle through it do not rerender.
+  const confirmEnable = useCallback(
+    (mod: ModInfo, enable: () => void) => {
+      if (mod.isEnabled) {
+        enable();
+        return;
+      }
+      const confirm = (group?: FolderGroup) => {
+        const scanned = group?.mods.find((candidate) => candidate.path === mod.path) ?? mod;
+        if (hasMissingDependency(scanned)) {
+          setEnableConfirmState({ mod: scanned, enable });
+        } else {
+          enable();
+        }
+      };
+
+      // The light scan shown first carries no dependencies, so an enable requested before
+      // the full scan lands waits for it.
+      const options = modGroupQueryOptions(selectedGroupPath);
+      const group = queryClient.getQueryData(options.queryKey);
+      if (group || !selectedGroupPath) {
+        confirm(group);
+        return;
+      }
+      void queryClient.ensureQueryData(options).then(confirm, () => confirm());
+    },
+    [queryClient, selectedGroupPath],
+  );
 
   useEffect(() => {
     if (!renameDialogState) {
@@ -281,6 +318,43 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={enableConfirmState !== null}
+        onOpenChange={(open) => !open && setEnableConfirmState(null)}
+      >
+        <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.mod.dialog.missing-dependencies.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.mod.dialog.missing-dependencies.description", {
+                name: stripDisabledPrefix(enableConfirmState?.mod.name ?? ""),
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-wrap gap-1.5">
+            {enableConfirmState?.mod.dependencies
+              ?.filter((dependency) => !dependency.installed)
+              .map((dependency) => (
+                <Badge key={dependency.name} variant="destructive">
+                  <PackageIcon />
+                  {dependency.name}
+                </Badge>
+              ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                enableConfirmState?.enable();
+                setEnableConfirmState(null);
+              }}
+            >
+              {t("page.mod.dialog.missing-dependencies.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog
         open={renameDialogState !== null}
         onOpenChange={(open) => !open && setRenameDialogState(null)}
@@ -378,6 +452,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     runner,
     isNteGame,
     convertingModelPath,
+    confirmEnable,
     openDeleteMod,
     openDeletePreview,
     openModelViewer,

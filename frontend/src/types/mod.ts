@@ -1,3 +1,5 @@
+import type { ModDependency } from "@shared/types";
+
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;
@@ -31,9 +33,10 @@ export interface ModInfo {
         path: string;
         toggleKeys: ToggleKey[];
     }[];
+    dependencies?: ModDependency[];
 }
 
-export type { FolderGroup } from "@shared/types";
+export type { FolderGroup, ModDependency } from "@shared/types";
 
 export interface Preset {
     id: string;

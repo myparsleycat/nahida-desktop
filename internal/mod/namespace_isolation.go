@@ -196,6 +196,7 @@ func (m *Mod) StopNamespaceIsolation() error {
 //wails:ignore
 func (m *Mod) RefreshNamespaceIsolationImporters(ctx context.Context) {
 	if ctx.Err() == nil {
+		m.invalidateLibraries()
 		m.namespaceIsolation.enqueue()
 	}
 }
@@ -224,6 +225,7 @@ func (m *Mod) beginModOperation() func() {
 	m.operationMu.RLock()
 	return func() {
 		m.operationMu.RUnlock()
+		m.invalidateLibraries()
 		m.namespaceIsolation.enqueue()
 	}
 }

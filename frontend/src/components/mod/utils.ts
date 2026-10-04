@@ -1,3 +1,5 @@
+import type { ModInfo } from "@renderer/types/mod";
+
 export function mapKeyboardEventToInternal(
     e: React.KeyboardEvent | KeyboardEvent,
     strictMods?: { ctrl?: boolean; alt?: boolean; shift?: boolean },
@@ -108,7 +110,14 @@ export function mapKeyboardEventToInternal(
     return [ctrl, alt, shift, mappedKey].filter(Boolean).join(" ");
 }
 
-export const getModColorClass = (isEnabled: boolean) => {
+export const hasMissingDependency = (mod: Pick<ModInfo, "dependencies">) =>
+    mod.dependencies?.some((dependency) => !dependency.installed) ?? false;
+
+// An enabled mod whose dependency is missing is loaded but broken, so it is neither green nor red.
+export const getModColorClass = (isEnabled: boolean, isMissingDependency = false) => {
+    if (isEnabled && isMissingDependency) {
+        return "dark:bg-[#4d4208] bg-[#dcc75c]";
+    }
     if (isEnabled) {
         return "dark:bg-[#0d430d] bg-[#6aad6a]";
     } else {

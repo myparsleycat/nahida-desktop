@@ -14,7 +14,7 @@ import { memo } from "react";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModDownloadOverlay } from "./mod-download-overlay";
 import { MOD_LIST_GRID_TEMPLATE_COLUMNS } from "./mod-list-layout";
-import { getModColorClass } from "./utils";
+import { getModColorClass, hasMissingDependency } from "./utils";
 
 export const ModListRow = memo(function ModListRow({
   mod,
@@ -39,7 +39,9 @@ export const ModListRow = memo(function ModListRow({
         aria-disabled={isDownloading}
         className={cn(
           "group relative grid h-14 cursor-pointer items-center border-b border-transparent transition-colors",
-          isDownloading ? "cursor-wait bg-muted grayscale" : getModColorClass(mod.isEnabled),
+          isDownloading
+            ? "cursor-wait bg-muted grayscale"
+            : getModColorClass(mod.isEnabled, hasMissingDependency(mod)),
           !isDownloading && isMergeSelected && "ring-2 ring-primary ring-inset",
           !isDownloading &&
             "after:pointer-events-none after:absolute after:inset-0 hover:after:bg-black/10 dark:hover:after:bg-white/10",

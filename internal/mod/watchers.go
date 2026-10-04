@@ -72,7 +72,10 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
-	watcher.onChange(func() { m.invalidateClassifiedFolders(game) })
+	watcher.onChange(func() {
+		m.invalidateClassifiedFolders(game)
+		m.invalidateLibraries()
+	})
 	return m.replaceWatcher(true, watcher)
 }
 
@@ -94,7 +97,10 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	if err != nil {
 		return err
 	}
-	watcher.onChange(func() { m.invalidateClassifiedFolders(game.Game) })
+	watcher.onChange(func() {
+		m.invalidateClassifiedFolders(game.Game)
+		m.invalidateLibraries()
+	})
 	return m.replaceWatcher(false, watcher)
 }
 

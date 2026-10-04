@@ -109,6 +109,9 @@ type Mod struct {
 	classifiedMu       sync.Mutex
 	classifiedFolders  map[string]*classifiedFolderIndex
 	classifiedChanges  uint64
+	libraryMu          sync.Mutex
+	libraryIndexes     map[string]libraryIndex
+	libraryChanges     uint64
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -265,6 +268,9 @@ type IniResult struct {
 	Path         string      `json:"path"`
 	ToggleKeys   []ToggleKey `json:"toggleKeys"`
 	HasToggleKey bool        `json:"hasToggleKey"`
+	// references and declares are the shared libraries this INI refers to and provides.
+	references libraryMask
+	declares   libraryMask
 }
 
 type ModInfo struct {
@@ -277,6 +283,8 @@ type ModInfo struct {
 	Mtime         float64     `json:"mtime"`
 	Size          float64     `json:"size"`
 	Inis          []IniResult `json:"inis"`
+	// Dependencies is filled by the full scan only; the light scan reads no INI.
+	Dependencies []ModDependency `json:"dependencies,omitempty"`
 }
 
 type FolderGroup struct {
@@ -783,8 +791,9 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 		}
 		return nteScanGroup(nteRootsFor(*game), groupPath, search, diagnostics.Add), nil
 	}
-	group := scanGroup(groupPath, diagnostics.Add)
-	return m.filterManualMods(ctx, *game, groupPath, group), nil
+	group := m.filterManualMods(ctx, *game, groupPath, scanGroup(groupPath, diagnostics.Add))
+	m.attachDependencies(ctx, *game, &group, diagnostics.Add)
+	return group, nil
 }
 
 func (m *Mod) GetModsLight(ctx context.Context, groupPath string) (FolderGroup, error) {
