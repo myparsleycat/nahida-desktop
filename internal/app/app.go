@@ -189,7 +189,10 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 				viewers.Open,
 				func() { newWindow(app, rt.window) },
 				rt.window.HandleArguments,
-				rt.dispatchDeepLinkDownload,
+				func(args []string) {
+					rt.dispatchDeepLinkLogin(args)
+					rt.dispatchDeepLinkDownload(args)
+				},
 				func(key string, first bool) {
 					if first {
 						newWindow(app, rt.window)

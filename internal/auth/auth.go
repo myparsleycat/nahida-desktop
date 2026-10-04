@@ -21,14 +21,15 @@ import (
 const (
 	tokenKey = "token"
 
-	loginPath    = "/api/auth/desktop/auth/i-want-to-login"
-	sessionPath  = "/api/auth/get-session"
-	signOutPath  = "/api/auth/sign-out"
-	signOutWait  = 10 * time.Second
-	loginTimeout = 100 * time.Second
+	loginPath         = "/api/auth/desktop/auth/start"
+	loginExchangePath = "/api/auth/desktop/auth/exchange"
+	sessionPath       = "/api/auth/get-session"
+	signOutPath       = "/api/auth/sign-out"
+	signOutWait       = 10 * time.Second
+	loginTimeout      = 100 * time.Second
+	// loginWait matches how long the backend keeps a login state.
+	loginWait = 5 * time.Minute
 )
-
-var errAuthExpired = errors.New("auth state expired")
 
 type tokenStore interface {
 	GetValue(ctx context.Context, key string) (*string, error)
@@ -105,6 +106,7 @@ type Auth struct {
 	generation      int
 	mutateDone      chan struct{}
 	sessionInFlight *sessionCall
+	login           *pendingLogin
 
 	cancelProbe context.CancelFunc
 }
@@ -580,17 +582,6 @@ func (a *Auth) info(msg string) {
 	if a.log != nil {
 		a.log.Info(msg, "Auth")
 	}
-}
-
-func (a *Auth) error(err any) {
-	if err == nil {
-		return
-	}
-	failure, ok := err.(error)
-	if !ok {
-		failure = fmt.Errorf("%v", err)
-	}
-	a.reportBackgroundError(failure, "background", "callback", "")
 }
 
 func (a *Auth) reportBackgroundError(err error, operation, stage, endpoint string) {

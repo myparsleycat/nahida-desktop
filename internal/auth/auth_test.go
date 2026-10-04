@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -168,10 +170,10 @@ func TestLoginStartRequiresAllStringFields(t *testing.T) {
 		payload string
 		valid   bool
 	}{
-		{name: "all empty strings", payload: `{"state":"","pageUrl":"","stateResponse":""}`, valid: true},
-		{name: "missing state", payload: `{"pageUrl":"page","stateResponse":"response"}`},
-		{name: "null page URL", payload: `{"state":"state","pageUrl":null,"stateResponse":"response"}`},
-		{name: "numeric state response", payload: `{"state":"state","pageUrl":"page","stateResponse":1}`},
+		{name: "all empty strings", payload: `{"state":"","pageUrl":""}`, valid: true},
+		{name: "missing state", payload: `{"pageUrl":"page"}`},
+		{name: "null page URL", payload: `{"state":"state","pageUrl":null}`},
+		{name: "numeric page URL", payload: `{"state":"state","pageUrl":1}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -575,25 +577,32 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 	var opened string
 	var events []string
 	var after bool
-	var sseCookie string
+	var challenge string
+	var strayAccepted, linkAccepted bool
 	store := &memStore{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/auth/desktop/auth/i-want-to-login", func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{Name: "login", Value: "handshake", Path: "/"})
-		_ = json.NewEncoder(w).Encode(loginStart{
-			State:         "st",
-			PageURL:       "https://nahida.live/login",
-			StateResponse: "http://" + r.Host + "/sse",
-		})
+	mux.HandleFunc("/api/auth/desktop/auth/start", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Challenge string `json:"challenge"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		challenge = body.Challenge
+		_ = json.NewEncoder(w).Encode(loginStart{State: "st", PageURL: "https://nahida.live/login"})
 	})
-	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
-		sseCookie = r.Header.Get("Cookie")
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "event: ping\ndata: {}\n\n")
-		_, _ = io.WriteString(
-			w,
-			"event: state-response\ndata: {\"state\":\"st\",\"status\":\"loggedin\",\"session\":{\"userId\":\"user-id\",\"token\":\"login-token\"}}\n\n",
-		)
+	mux.HandleFunc("/api/auth/desktop/auth/exchange", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			State    string `json:"state"`
+			Code     string `json:"code"`
+			Verifier string `json:"verifier"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		digest := sha256.Sum256([]byte(body.Verifier))
+		if body.State != "st" || body.Code != "one-time-code" ||
+			base64.RawURLEncoding.EncodeToString(digest[:]) != challenge {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, `{"success":true,"session":{"userId":"user-id","token":"login-token"}}`)
 	})
 	mux.HandleFunc("/api/auth/get-session", func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -622,16 +631,28 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 		AfterLogin: func() { after = true },
 		Do:         srv.Client().Do,
 	})
+	// The browser answers through the deep link while StartLogin waits.
 	a.openURL = func(u string) error {
 		opened = u
+		strayAccepted = a.CompleteLogin("someone-elses-state", "their-code")
+		linkAccepted = a.CompleteLogin("st", "one-time-code")
 		return nil
 	}
 
+	if a.CompleteLogin("st", "one-time-code") {
+		t.Fatal("a link was accepted before any login started")
+	}
 	if err := a.StartLogin(context.Background()); err != nil {
 		t.Fatalf("StartLogin: %v", err)
 	}
 	if opened != "https://nahida.live/login" {
 		t.Fatalf("opened %q", opened)
+	}
+	if strayAccepted || !linkAccepted {
+		t.Fatalf("link accepted: stray=%v own=%v", strayAccepted, linkAccepted)
+	}
+	if a.CompleteLogin("st", "one-time-code") {
+		t.Fatal("a link was accepted after the login finished")
 	}
 	if store.token() != "login-token" {
 		t.Fatalf("stored %q", store.token())
@@ -642,8 +663,89 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 	if len(events) == 0 || events[0] != "auth:update" {
 		t.Fatalf("events = %v", events)
 	}
-	if sseCookie != "login=handshake" {
-		t.Fatalf("SSE cookie = %q", sseCookie)
+}
+
+func TestStartLoginReportsRefusedExchange(t *testing.T) {
+	t.Parallel()
+	store := &memStore{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/desktop/auth/start", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(loginStart{State: "st", PageURL: "https://nahida.live/login"})
+	})
+	mux.HandleFunc("/api/auth/desktop/auth/exchange", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"success":false,"message":"Invalid or expired login code"}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	a := NewWithOptions(Options{
+		Store:  store,
+		Crypto: passCrypto{},
+		HTTP:   infra.NewClientWithOptions(infra.ClientOptions{BackendURL: srv.URL, HTTPClient: srv.Client()}),
+		Emit:   func(string, any) { t.Error("a refused exchange broadcast a session") },
+		Do:     srv.Client().Do,
+	})
+	a.openURL = func(string) error {
+		a.CompleteLogin("st", "stale-code")
+		return nil
+	}
+
+	err := a.StartLogin(context.Background())
+	if !errors.Is(err, errLoginExchange) || err.Error() != errLoginExchange.Error() {
+		t.Fatalf("StartLogin = %v, want %v", err, errLoginExchange)
+	}
+	if store.token() != "" {
+		t.Fatalf("stored %q after a refused exchange", store.token())
+	}
+}
+
+func TestStartLoginIsReplacedByNewerLogin(t *testing.T) {
+	t.Parallel()
+	var starts atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/desktop/auth/start", func(w http.ResponseWriter, _ *http.Request) {
+		state := "first"
+		if starts.Add(1) > 1 {
+			state = "second"
+		}
+		_ = json.NewEncoder(w).Encode(loginStart{State: state, PageURL: "https://nahida.live/login"})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	a := NewWithOptions(Options{
+		Store:  &memStore{},
+		Crypto: passCrypto{},
+		HTTP:   infra.NewClientWithOptions(infra.ClientOptions{BackendURL: srv.URL, HTTPClient: srv.Client()}),
+		Do:     srv.Client().Do,
+	})
+	firstOpened := make(chan struct{})
+	a.openURL = func(string) error {
+		if starts.Load() == 1 {
+			close(firstOpened)
+		}
+		return nil
+	}
+
+	first := make(chan error, 1)
+	go func() { first <- a.StartLogin(context.Background()) }()
+	<-firstOpened
+
+	ctx, cancel := context.WithCancel(context.Background())
+	second := make(chan error, 1)
+	go func() { second <- a.StartLogin(ctx) }()
+
+	// The first login ends quietly once the second takes its place.
+	if err := <-first; err != nil {
+		t.Fatalf("replaced StartLogin = %v, want nil", err)
+	}
+	if a.CompleteLogin("first", "code") {
+		t.Fatal("the replaced login still accepted its link")
+	}
+	cancel()
+	if err := <-second; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled StartLogin = %v, want context.Canceled", err)
 	}
 }
 

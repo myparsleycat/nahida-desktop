@@ -1,32 +1,35 @@
 package auth
 
 import (
-	"bufio"
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
 )
 
-var errIWantToLogin = errors.New("Failed to get iWantToLogin data") //nolint:staticcheck // Electron contract text.
+var (
+	errIWantToLogin  = errors.New("Failed to get iWantToLogin data") //nolint:staticcheck // Electron contract text.
+	errLoginExchange = errors.New("Failed to complete login")        //nolint:staticcheck // Shown in the login dialog.
+)
 
 type loginStart struct {
-	State         string `json:"state"`
-	PageURL       string `json:"pageUrl"`
-	StateResponse string `json:"stateResponse"`
-	valid         bool
+	State   string `json:"state"`
+	PageURL string `json:"pageUrl"`
+	valid   bool
 }
 
 func (s *loginStart) UnmarshalJSON(data []byte) error {
 	type wire struct {
-		State         json.RawMessage `json:"state"`
-		PageURL       json.RawMessage `json:"pageUrl"`
-		StateResponse json.RawMessage `json:"stateResponse"`
+		State   json.RawMessage `json:"state"`
+		PageURL json.RawMessage `json:"pageUrl"`
 	}
 	var value wire
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -52,7 +55,7 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 		raw    json.RawMessage
 		target *string
 	}{
-		{"state", value.State, &s.State}, {"pageUrl", value.PageURL, &s.PageURL}, {"stateResponse", value.StateResponse, &s.StateResponse},
+		{"state", value.State, &s.State}, {"pageUrl", value.PageURL, &s.PageURL},
 	} {
 		if err := decodeString(field.name, field.raw, field.target); err != nil {
 			return infra.WithCause(errIWantToLogin, err)
@@ -62,15 +65,18 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type loginEvent struct {
-	State   string `json:"state"`
-	Status  string `json:"status"`
-	Session *struct {
-		UserID string `json:"userId"`
-		Token  string `json:"token"`
-	} `json:"session"`
+// pendingLogin is the handshake StartLogin is waiting on. Its verifier never
+// leaves StartLogin, so a code completes only the login that asked for it.
+type pendingLogin struct {
+	state  string
+	code   chan string
+	cancel context.CancelFunc
 }
 
+// StartLogin runs the deep-link handshake: it registers a PKCE challenge with
+// the backend, opens the web sign-in page, and waits for the nahida://auth link
+// that page opens to deliver a one-time code through CompleteLogin. The code and
+// the verifier together are exchanged for the session token.
 func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	stage := "prepare"
 	defer func() { err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage}) }()
@@ -82,48 +88,51 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	}
 	a.info("start login")
 
-	loginURL := strings.TrimRight(a.http.BackendURL(), "/") + loginPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
-	if err != nil {
+	seed := make([]byte, 32)
+	if _, err := rand.Read(seed); err != nil {
 		return err
 	}
-	headers, err := a.http.GetHeaders(loginURL)
-	if err != nil {
-		return err
-	}
-	req.Header = headers
-
-	loginCtx, cancel := context.WithTimeout(ctx, loginTimeout)
-	defer cancel()
-	req = req.WithContext(loginCtx)
+	verifier := base64.RawURLEncoding.EncodeToString(seed)
+	challenge := sha256.Sum256([]byte(verifier))
+	base := strings.TrimRight(a.http.BackendURL(), "/")
 
 	stage = "login-request"
-	resp, err := a.do(req)
-	if err != nil {
-		return infra.AnnotateError(err, infra.HTTPDiagnostic(http.MethodGet, loginURL, stage, nil))
-	}
-	defer func() { _ = resp.Body.Close() }()
-	stage = "login-response"
-	if resp.StatusCode >= 400 {
-		return infra.AnnotateError(
-			infra.WithCause(errIWantToLogin, &infra.HTTPError{Status: resp.StatusCode}),
-			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-response", resp),
-		)
-	}
 	var start loginStart
-	stage = "login-decode"
-	if err := json.NewDecoder(resp.Body).Decode(&start); err != nil {
-		return infra.AnnotateError(
-			infra.WithCause(errIWantToLogin, err),
-			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-decode", resp),
-		)
+	if err := a.loginPost(
+		ctx,
+		base+loginPath,
+		map[string]string{"challenge": base64.RawURLEncoding.EncodeToString(challenge[:])},
+		&start,
+		errIWantToLogin,
+	); err != nil {
+		return err
 	}
 	if !start.valid {
 		return infra.AnnotateError(
 			infra.WithCause(errIWantToLogin, errors.New("login response is not an object")),
-			infra.HTTPDiagnostic(http.MethodGet, loginURL, "login-validate", resp),
+			infra.HTTPDiagnostic(http.MethodPost, base+loginPath, "login-validate", nil),
 		)
 	}
+
+	// A newer login replaces this one, and the backend drops the state after
+	// loginWait, so either ends the wait.
+	waitCtx, cancel := context.WithTimeout(ctx, loginWait)
+	defer cancel()
+	pending := &pendingLogin{state: start.State, code: make(chan string, 1), cancel: cancel}
+	a.mu.Lock()
+	previous := a.login
+	a.login = pending
+	a.mu.Unlock()
+	if previous != nil {
+		previous.cancel()
+	}
+	defer func() {
+		a.mu.Lock()
+		if a.login == pending {
+			a.login = nil
+		}
+		a.mu.Unlock()
+	}()
 
 	stage = "open-browser"
 	if a.openURL == nil {
@@ -133,124 +142,111 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		return err
 	}
 
-	stage = "sse-request"
-	sseReq, err := http.NewRequestWithContext(ctx, http.MethodGet, start.StateResponse, nil)
-	if err != nil {
-		return err
-	}
-	sseHeaders, err := a.http.GetHeaders(start.StateResponse)
-	if err != nil {
-		return err
-	}
-	sseReq.Header = sseHeaders
-	for _, cookie := range resp.Cookies() {
-		sseReq.AddCookie(cookie)
-	}
-	sseResp, err := a.do(sseReq)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sseResp.Body.Close() }()
-	if sseResp.Body == nil {
-		return errors.New("SSE response body is null")
+	stage = "wait-code"
+	var code string
+	select {
+	case code = <-pending.code:
+	case <-waitCtx.Done():
+		// Replaced or never approved: there is nothing to report to the user.
+		return ctx.Err()
 	}
 
-	a.info("start parse sse")
-	stage = "sse-read"
-	err = parseSSE(sseResp.Body, func(event, data string) error {
-		if event != "state-response" {
-			return nil
-		}
-		return a.handleLoginEvent(ctx, data)
-	})
-	if errors.Is(err, errAuthExpired) {
-		return nil
+	stage = "exchange"
+	var exchanged struct {
+		Session *struct {
+			Token string `json:"token"`
+		} `json:"session"`
 	}
-	return err
-}
+	if err := a.loginPost(
+		ctx,
+		base+loginExchangePath,
+		map[string]string{"state": start.State, "code": code, "verifier": verifier},
+		&exchanged,
+		errLoginExchange,
+	); err != nil {
+		return err
+	}
+	if exchanged.Session == nil || exchanged.Session.Token == "" {
+		return infra.WithCause(errLoginExchange, errors.New("exchange response has no session token"))
+	}
 
-func (a *Auth) handleLoginEvent(ctx context.Context, data string) error {
-	var payload loginEvent
-	if err := json.Unmarshal([]byte(data), &payload); err != nil {
-		a.error(err)
-		return nil
+	stage = "save-token"
+	if err := a.saveToken(ctx, exchanged.Session.Token); err != nil {
+		return err
 	}
-	if payload.Status == "" {
-		a.error(errors.New("invalid login event"))
-		return nil
+	a.info("Login successful: Session saved.")
+
+	stage = "session"
+	session, err := a.GetSession(ctx)
+	if err != nil {
+		return err
 	}
-	if payload.Status == "loggedin" && payload.Session != nil && payload.Session.Token != "" {
-		if err := a.saveToken(ctx, payload.Session.Token); err != nil {
-			a.error(err)
-			return nil
-		}
-		a.info("Login successful: Session saved.")
-		session, err := a.GetSession(ctx)
-		if err != nil {
-			a.error(err)
-			return nil
-		}
-		a.broadcast("auth:update", session)
-		if a.afterLogin != nil {
-			a.afterLogin()
-		}
-	}
-	if payload.Status == "expired" {
-		a.error(errAuthExpired)
-		return errAuthExpired
+	a.broadcast("auth:update", session)
+	if a.afterLogin != nil {
+		a.afterLogin()
 	}
 	return nil
 }
 
-func parseSSE(r io.Reader, fn func(event, data string) error) error {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	var event, data string
-	hasData := false
-	flush := func() error {
-		if !hasData && event == "" {
-			return nil
-		}
-		name := event
-		if name == "" {
-			name = "message"
-		}
-		err := fn(name, data)
-		event = ""
-		data = ""
-		hasData = false
+// CompleteLogin hands the code a nahida://auth link carried to the login that
+// is waiting for it. It reports false for a link no pending login asked for,
+// which covers every link another client's handshake produced.
+//
+//wails:ignore
+func (a *Auth) CompleteLogin(state, code string) bool {
+	if a == nil || state == "" || code == "" {
+		return false
+	}
+	a.mu.Lock()
+	pending := a.login
+	a.mu.Unlock()
+	if pending == nil || pending.state != state {
+		return false
+	}
+	select {
+	case pending.code <- code:
+		return true
+	default:
+		return false
+	}
+}
+
+// loginPost sends one handshake request and decodes its JSON answer. A failure
+// keeps sentinel as its message, which is the text the renderer shows.
+func (a *Auth) loginPost(ctx context.Context, endpoint string, payload, dest any, sentinel error) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
 		return err
 	}
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			if err := flush(); err != nil {
-				return err
-			}
-			continue
-		}
-		if strings.HasPrefix(line, ":") {
-			continue
-		}
-		field, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		value = strings.TrimPrefix(value, " ")
-		switch field {
-		case "event":
-			event = value
-		case "data":
-			if hasData {
-				data += "\n" + value
-			} else {
-				data = value
-				hasData = true
-			}
-		}
-	}
-	if err := flush(); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
 		return err
 	}
-	return scanner.Err()
+	headers, err := a.http.GetHeaders(endpoint)
+	if err != nil {
+		return err
+	}
+	req.Header = headers
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.do(req)
+	if err != nil {
+		return infra.AnnotateError(err, infra.HTTPDiagnostic(http.MethodPost, endpoint, "request", nil))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		return infra.AnnotateError(
+			infra.WithCause(sentinel, &infra.HTTPError{Status: resp.StatusCode}),
+			infra.HTTPDiagnostic(http.MethodPost, endpoint, "response", resp),
+		)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+		return infra.AnnotateError(
+			infra.WithCause(sentinel, err),
+			infra.HTTPDiagnostic(http.MethodPost, endpoint, "decode", resp),
+		)
+	}
+	return nil
 }

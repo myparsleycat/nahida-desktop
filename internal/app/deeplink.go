@@ -160,6 +160,39 @@ func parseDownloadDeepLink(value string) *deepLinkDownload {
 	return download
 }
 
+const maxAuthDeepLinkValueLength = 128
+
+// parseAuthDeepLink reads nahida://auth?state=<state>&code=<code>, the link the
+// web sign-in page opens to finish a login this app started.
+func parseAuthDeepLink(value string) (state, code string, ok bool) {
+	parsed, err := url.Parse(value)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "nahida") || !strings.EqualFold(parsed.Hostname(), "auth") {
+		return "", "", false
+	}
+	query := parsed.Query()
+	state, code = query.Get("state"), query.Get("code")
+	if state == "" || code == "" ||
+		len(state) > maxAuthDeepLinkValueLength || len(code) > maxAuthDeepLinkValueLength {
+		return "", "", false
+	}
+	return state, code, true
+}
+
+// dispatchDeepLinkLogin hands a nahida://auth link found in args to the login
+// waiting for it. Any page can open such a link, so one that no pending login
+// asked for is dropped without a trace.
+func (rt *runtime) dispatchDeepLinkLogin(args []string) {
+	if rt.auth == nil {
+		return
+	}
+	for _, arg := range args {
+		if state, code, ok := parseAuthDeepLink(arg); ok {
+			rt.auth.CompleteLogin(state, code)
+			return
+		}
+	}
+}
+
 func nahidaDeepLinkDownload(args []string) *deepLinkDownload {
 	for _, arg := range args {
 		if download := parseDownloadDeepLink(arg); download != nil {
