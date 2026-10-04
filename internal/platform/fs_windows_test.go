@@ -46,6 +46,24 @@ func TestHideFileAddsHiddenAttributeWithoutDiscardingExistingAttributes(t *testi
 	}
 }
 
+// GetFinalPathNameByHandle answers with the \\?\ extended-length prefix; FinalPath has to hand back
+// an ordinary path whose volume is the drive letter.
+func TestFinalPathStripsExtendedLengthPrefix(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if volume := filepath.VolumeName(root); len(volume) != 2 || volume[1] != ':' {
+		t.Skipf("temp dir %q is not on a drive-letter volume", root)
+	}
+
+	got, err := FinalPath(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if volume := filepath.VolumeName(got); len(volume) != 2 || volume[1] != ':' {
+		t.Fatalf("FinalPath(%q) = %q, volume %q; want a plain drive letter", root, got, volume)
+	}
+}
+
 // A junction is invisible to filepath.EvalSymlinks; FinalPath has to name the folder it points at.
 func TestFinalPathFollowsJunction(t *testing.T) {
 	t.Parallel()

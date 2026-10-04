@@ -18,6 +18,7 @@ import (
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/drive"
 )
 
@@ -179,7 +180,7 @@ func (b *Backup) restore(
 				}); err != nil {
 					return fmt.Errorf("%s: %w", file.Path, err)
 				}
-				if err := verifySHA256(target, file.SHA256); err != nil {
+				if err := verifySHA256(groupCtx, target, file.SHA256); err != nil {
 					return fmt.Errorf("%s: %w", file.Path, err)
 				}
 				progressMu.Lock()
@@ -297,7 +298,13 @@ func isEmptyOrMissing(path string) (bool, error) {
 	return len(entries) == 0, nil
 }
 
-func verifySHA256(path, expected string) error {
+func verifySHA256(ctx context.Context, path, expected string) error {
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	handle, err := os.Open(path)
 	if err != nil {
 		return err

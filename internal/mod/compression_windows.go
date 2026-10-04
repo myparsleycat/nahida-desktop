@@ -16,6 +16,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 const (
@@ -69,6 +71,13 @@ func applyXpress4K(
 	}
 	setCompressionTotals(files, setTotals)
 	return runXpressWorkers(ctx, files, progress, onError, func(file compressionFile) error {
+		release, err := diskio.Acquire(ctx, file.path)
+		if err != nil {
+			// Only cancellation ends the wait, and that is not a failure of this file.
+			return nil
+		}
+		defer release()
+
 		handle, err := openXpressFile(file.path)
 		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
 			// Another program holds the file for writing; its writes raise
@@ -139,7 +148,13 @@ func restoreWOF(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := restoreOwnedWofFile(item, ownership, mark); err != nil && onError != nil {
+		release, err := diskio.Acquire(ctx, item.file.path)
+		if err != nil {
+			return err
+		}
+		err = restoreOwnedWofFile(item, ownership, mark)
+		release()
+		if err != nil && onError != nil {
 			onError(item.file.path, err)
 		}
 		progress(item.file.path, item.file.size, false)
@@ -164,6 +179,12 @@ func ownedWofRestoreFiles(
 	var mu sync.Mutex
 	work := make([]wofRestoreWork, 0, len(files))
 	err := runXpressJobs(ctx, files, func(file compressionFile) {
+		release, err := diskio.Acquire(ctx, file.path)
+		if err != nil {
+			return
+		}
+		defer release()
+
 		id, owned, err := isOwnedWofRestoreFile(file.path, ownership)
 		if err != nil {
 			if onError != nil {
@@ -283,6 +304,12 @@ func xpressCompressionFiles(
 	var mu sync.Mutex
 	result := make([]compressionFile, 0, len(candidates))
 	err := runXpressJobs(ctx, candidates, func(file compressionFile) {
+		release, err := diskio.Acquire(ctx, file.path)
+		if err != nil {
+			return
+		}
+		defer release()
+
 		external, provider, _, err := wofStateCall(file.path)
 		if err == nil && external && provider == wofProviderFile {
 			return

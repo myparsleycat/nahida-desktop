@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -523,6 +524,12 @@ func (r contextReader) Read(buffer []byte) (int, error) {
 }
 
 func hashUploadFile(ctx context.Context, path string) (string, error) {
+	release, err := diskio.Acquire(ctx, filepath.FromSlash(path))
+	if err != nil {
+		return "", err
+	}
+	defer release()
+
 	file, err := os.Open(filepath.FromSlash(path))
 	if err != nil {
 		return "", err

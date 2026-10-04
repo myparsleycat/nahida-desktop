@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"sync"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 func findFileAcrossRoots(
@@ -31,6 +33,12 @@ func findFileAcrossRoots(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			release, err := diskio.AcquireDir(searchCtx, root)
+			if err != nil {
+				return
+			}
+			defer release()
+
 			_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 				if searchCtx.Err() != nil {
 					return fs.SkipAll
