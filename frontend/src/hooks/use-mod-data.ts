@@ -1,6 +1,6 @@
 import { Mod } from "@bindings/mod";
 import { XXMI } from "@bindings/xxmi";
-import type { Classification, FolderGroup, GameConfig, Preset } from "@shared/types";
+import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 export function useGames() {
@@ -54,18 +54,6 @@ export function usePresets(selectedGame: string) {
     return useQuery<Preset[]>({
         queryKey: ["presets", selectedGame],
         queryFn: async () => ((await Mod.GetPresets(selectedGame)) ?? []) as Preset[],
-        enabled: !!selectedGame,
-    });
-}
-
-export function useClassifications(selectedGame: string) {
-    return useQuery<Classification[]>({
-        queryKey: ["classifications", selectedGame],
-        queryFn: async () =>
-            ((await Mod.GetClassifications(selectedGame)) ?? []).map((classification) => ({
-                ...classification,
-                groups: classification.groups ?? [],
-            })),
         enabled: !!selectedGame,
     });
 }

@@ -41,8 +41,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
-import { useClassifications, useGames } from "@renderer/hooks/use-mod-data";
-import { useClassificationMutations } from "@renderer/hooks/use-mod-mutations";
+import { useGames } from "@renderer/hooks/use-mod-data";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
@@ -64,8 +63,6 @@ import {
   ListIcon,
   Loader2Icon,
   Search,
-  Settings2Icon,
-  TagsIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -74,7 +71,6 @@ import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
-import { ClassificationManagementDialog } from "./classification-management-dialog";
 import { hasPreviewFile, isPreviewMediaPath } from "./preview-media";
 
 function getGroupName(groupPath: string) {
@@ -135,10 +131,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const sortDirection = useModStore((s) => s.folderSortDirection);
   const setSortDirection = useModStore((s) => s.setFolderSortDirection);
   const [hideEmptyGroups, setHideEmptyGroups] = useState(false);
-  const { data: classifications = [] } = useClassifications(selectedGame);
-  const activeClassification = classifications.find((item) => item.active) ?? null;
-  const { setActiveClassificationMutation } = useClassificationMutations();
-  const [isClassificationDialogOpen, setIsClassificationDialogOpen] = useState(false);
   const [createFolderTarget, setCreateFolderTarget] = useState<FolderGroup | null>(null);
   const [pendingPreviewDrop, setPendingPreviewDrop] = useState<{
     group: FolderGroup;
@@ -399,7 +391,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     previewCacheKey,
     modFixer,
     onOpenModFixer,
-    classification: activeClassification,
   };
 
   return (
@@ -497,39 +488,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
                       {t("page.mod.character-sidebar.sort.descending")}
                     </DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <TagsIcon />
-                  {t("page.mod.character-sidebar.classification.label")}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-48">
-                  <DropdownMenuRadioGroup value={activeClassification?.id ?? ""}>
-                    <DropdownMenuRadioItem
-                      value=""
-                      onClick={() => setActiveClassificationMutation.mutate(null)}
-                    >
-                      {t("page.mod.character-sidebar.classification.none")}
-                    </DropdownMenuRadioItem>
-                    {classifications.map((classification) => (
-                      <DropdownMenuRadioItem
-                        key={classification.id}
-                        value={classification.id}
-                        onClick={() => setActiveClassificationMutation.mutate(classification.id)}
-                      >
-                        {classification.name}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={!selectedGame}
-                    onClick={() => setIsClassificationDialogOpen(true)}
-                  >
-                    <Settings2Icon />
-                    {t("page.mod.character-sidebar.classification.manage")}
-                  </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />
@@ -677,10 +635,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <ClassificationManagementDialog
-        open={isClassificationDialogOpen}
-        onOpenChange={setIsClassificationDialogOpen}
-      />
       {confirmTrashDialog}
     </>
   );

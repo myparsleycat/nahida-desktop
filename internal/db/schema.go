@@ -1,6 +1,6 @@
 package db
 
-const AppSchemaVersion = 8
+const AppSchemaVersion = 7
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
@@ -156,53 +156,6 @@ var TableSpecs = []TableSpec{
 			{
 				Columns:    []string{"preset_id"},
 				RefTable:   "mod_presets",
-				RefColumns: []string{"id"},
-				OnDelete:   FKCascade,
-				OnUpdate:   FKNoAction,
-			},
-		},
-	},
-	{
-		Name: "mod_classifications",
-		Columns: []ColumnSpec{
-			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "game", Type: TypeText, NotNull: true},
-			{Name: "name", Type: TypeText, NotNull: true},
-			{Name: "item_order", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
-			{Name: "is_active", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0"), Boolean: true},
-		},
-		Indexes: []IndexSpec{
-			{Name: "mod_classifications_game_name_idx", Columns: []string{"game", "name"}, Unique: true},
-		},
-		ForeignKeys: []ForeignKeySpec{
-			{
-				Columns:    []string{"game"},
-				RefTable:   "game_paths",
-				RefColumns: []string{"game"},
-				OnDelete:   FKCascade,
-				OnUpdate:   FKNoAction,
-			},
-		},
-	},
-	{
-		Name: "mod_classification_groups",
-		Columns: []ColumnSpec{
-			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "classification_id", Type: TypeText, NotNull: true},
-			{Name: "name", Type: TypeText, NotNull: true},
-			{Name: "item_order", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
-		},
-		Indexes: []IndexSpec{
-			{
-				Name:    "mod_classification_groups_classification_name_idx",
-				Columns: []string{"classification_id", "name"},
-				Unique:  true,
-			},
-		},
-		ForeignKeys: []ForeignKeySpec{
-			{
-				Columns:    []string{"classification_id"},
-				RefTable:   "mod_classifications",
 				RefColumns: []string{"id"},
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
@@ -455,26 +408,6 @@ type ModPresetItemRow struct {
 	FolderName        string
 	IsEnabled         bool
 	ItemOrder         int64
-}
-
-type ModClassificationRow struct {
-	ID        string
-	Game      string
-	Name      string
-	ItemOrder int64
-	IsActive  bool
-}
-
-type ModClassificationGroupRow struct {
-	ID               string
-	ClassificationID string
-	Name             string
-	ItemOrder        int64
-}
-
-type ModClassificationWithGroups struct {
-	ModClassificationRow
-	Groups []ModClassificationGroupRow
 }
 
 type ImageCacheRow struct {

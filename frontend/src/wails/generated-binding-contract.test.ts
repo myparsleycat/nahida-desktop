@@ -50,19 +50,4 @@ describe("generated Wails binding contract", () => {
         );
         expect(models).toMatch(/MenuMakerDocument|MenuMakerGenerateRequest|MenuMakerSource/);
     });
-
-    it("exposes the character classification contract through the Mod service", () => {
-        const service = readFileSync("bindings/nahida.live/desktop/internal/mod/mod.ts", "utf8");
-        const models = readFileSync("bindings/nahida.live/desktop/internal/mod/models.ts", "utf8");
-        for (const method of [
-            "GetClassifications",
-            "SaveClassification",
-            "DeleteClassification",
-            "SetActiveClassification",
-            "SetCharacterClassification",
-        ]) {
-            expect(service).toContain(`export function ${method}(`);
-        }
-        expect(models).toMatch(/"classifications"\?: \{ \[_ in string\]\?: string \}/);
-    });
 });

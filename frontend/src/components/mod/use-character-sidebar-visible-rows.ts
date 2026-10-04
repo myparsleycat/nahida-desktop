@@ -1,7 +1,6 @@
 import { Mod } from "@bindings/mod";
 import { type FolderSortDirection, type FolderSortKey, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import type { Classification } from "@shared/types";
 import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -17,12 +16,10 @@ export function useCharacterSidebarVisibleRows(
     sortKey: FolderSortKey,
     sortDirection: FolderSortDirection,
     hideEmptyGroups: boolean,
-    classification?: Classification | null,
 ): VisibleSidebarRow[] {
     const queryClient = useQueryClient();
     const expandedGroups = useModStore((s) => s.expandedGroups);
     const persistentGroups = useModStore((s) => s.persistentGroups);
-    const collapsedSections = useModStore((s) => s.collapsedSections);
     const isSearching = searchTerm.trim().length > 0;
 
     const subGroupPaths = useMemo(() => {
@@ -94,12 +91,8 @@ export function useCharacterSidebarVisibleRows(
                 persistentGroups,
                 subGroupsByPath,
                 manualSubGroupsByPath,
-                classification,
-                collapsedSections,
             }),
         [
-            classification,
-            collapsedSections,
             expandedGroups,
             groups,
             hideEmptyGroups,

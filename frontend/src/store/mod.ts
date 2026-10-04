@@ -77,9 +77,7 @@ interface ModState {
     setFolderSortDirection: (direction: FolderSortDirection) => void;
     expandedGroups: Set<string>;
     persistentGroups: Set<string>;
-    collapsedSections: Set<string>;
     iniListExpandedByGroupPath: Record<string, Record<string, boolean>>;
-    toggleCollapsedSection: (key: string) => void;
     toggleExpandedGroup: (path: string) => void;
     togglePersistentGroup: (path: string) => void;
     setExpandedGroup: (path: string, expanded: boolean) => void;
@@ -160,17 +158,7 @@ export const modStore = createStore<ModState>((set) => ({
 
     expandedGroups: new Set<string>(),
     persistentGroups: new Set<string>(),
-    collapsedSections: new Set<string>(),
     iniListExpandedByGroupPath: {},
-
-    toggleCollapsedSection: (key) =>
-        set((state) => {
-            const next = new Set(state.collapsedSections);
-            if (!next.delete(key)) {
-                next.add(key);
-            }
-            return { collapsedSections: next };
-        }),
 
     toggleExpandedGroup: (path) =>
         set((state) => {

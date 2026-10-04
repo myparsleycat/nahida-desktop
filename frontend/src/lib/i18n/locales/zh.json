@@ -499,13 +499,6 @@
         "unpersist-subgroups": "取消子文件夹指定",
         "persist-subgroups": "指定为子文件夹",
         "unmark-manual-subgroup": "取消手动子分组指定",
-        "classification": {
-          "label": "分类依据",
-          "none": "文件夹",
-          "manage": "管理分类…",
-          "assign": "分类",
-          "unassigned": "未分类"
-        },
         "tools": "工具",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer"
@@ -642,20 +635,6 @@
         "texture-resize": {
           "title": "缩放模组纹理",
           "description": "扫描“{{name}}”中的 DDS 文件并原地缩放。"
-        },
-        "classification": {
-          "title": "管理分类",
-          "description": "创建分类依据及其分组，然后在侧边栏中右键单击角色文件夹，将其分配到分组。",
-          "new": "新建分类依据",
-          "name-label": "分类依据名称",
-          "name-placeholder": "例如：元素",
-          "groups-label": "分组",
-          "group-placeholder": "分组名称",
-          "add-group": "添加分组",
-          "move-up": "上移",
-          "move-down": "下移",
-          "delete-title": "要删除这个分类依据吗？",
-          "delete-description": "“{{name}}”及其所有分组都会被删除。角色文件夹不会被删除。"
         },
         "create-folder": {
           "title": "新建文件夹",
@@ -836,14 +815,6 @@
       },
       "hooks": {
         "use-mod-mutations": {
-          "classification": {
-            "INVALID_CLASSIFICATION_NAME": "请输入名称。",
-            "CLASSIFICATION_NAME_EXISTS": "已存在同名的分类依据。",
-            "CLASSIFICATION_GROUP_NAME_EXISTS": "已存在同名的分组。",
-            "CLASSIFICATION_NOT_FOUND": "找不到该分类依据或分组。",
-            "INVALID_CLASSIFICATION_PATH": "无法对此文件夹进行分类。",
-            "failed": "更改分类失败。"
-          },
           "add-game-mutation": {
             "duplicate-game-name": "该游戏名称已存在",
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",

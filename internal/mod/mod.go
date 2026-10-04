@@ -278,8 +278,6 @@ type FolderGroup struct {
 	IsManualSubGroup   bool      `json:"isManualSubGroup,omitempty"`
 	HasSubGroups       bool      `json:"hasSubGroups,omitempty"`
 	HasManualSubGroups bool      `json:"hasManualSubGroups,omitempty"`
-	// Classifications maps a classification ID to the group ID this top-level folder is assigned to.
-	Classifications map[string]string `json:"classifications,omitempty"`
 }
 
 func gameConfig(row db.GamePathRow) GameConfig {
@@ -665,11 +663,10 @@ func (m *Mod) GetCharacters(
 	if isNTEImporter(row.Importer) {
 		gameConfig := gameConfig(*row)
 		roots := nteRootsFor(gameConfig)
-		groups := nteListGroups(roots, roots.modRoot, search, diagnostics.Add)
-		return m.loadCharacterClassifications(ctx, client, game, groups, diagnostics.Add), nil
+		return nteListGroups(roots, roots.modRoot, search, diagnostics.Add), nil
 	}
-	groups := m.decorateGroups(ctx, game, "", listGroups(row.ModFolderPath, search, diagnostics.Add))
-	return m.loadCharacterClassifications(ctx, client, game, groups, diagnostics.Add), nil
+	groups := listGroups(row.ModFolderPath, search, diagnostics.Add)
+	return m.decorateGroups(ctx, game, "", groups), nil
 }
 
 func (m *Mod) GetSubGroups(
