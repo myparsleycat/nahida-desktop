@@ -39,6 +39,37 @@ func TestParseNahidaDeepLink(t *testing.T) {
 	}
 }
 
+func TestParseAuthDeepLink(t *testing.T) {
+	t.Parallel()
+	for _, input := range []string{
+		"nahida://auth?state=st&code=cd",
+		// Browsers may add a trailing slash when opening a URL with an empty path.
+		"nahida://auth/?state=st&code=cd",
+		"NAHIDA://AUTH?code=cd&state=st",
+	} {
+		if state, code, ok := parseAuthDeepLink(input); !ok || state != "st" || code != "cd" {
+			t.Errorf("parseAuthDeepLink(%q) = %q, %q, %v", input, state, code, ok)
+		}
+	}
+
+	for _, input := range []string{
+		"nahida://auth",
+		"nahida://auth?state=st",
+		"nahida://auth?code=cd",
+		"nahida://auth?state=&code=cd",
+		"nahida://auth?state=st&code=" + strings.Repeat("a", maxAuthDeepLinkValueLength+1),
+		"nahida://download?state=st&code=cd",
+		"https://auth?state=st&code=cd",
+	} {
+		if state, code, ok := parseAuthDeepLink(input); ok {
+			t.Errorf("parseAuthDeepLink(%q) = %q, %q, want rejected", input, state, code)
+		}
+	}
+	if route := parseNahidaDeepLink("nahida://auth?state=st&code=cd"); route != "" {
+		t.Errorf("auth link produced route %q", route)
+	}
+}
+
 func TestNahidaDeepLinkRouteUsesFirstValidArgument(t *testing.T) {
 	t.Parallel()
 	got := nahidaDeepLinkRoute(
