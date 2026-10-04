@@ -34,6 +34,54 @@
 - Fork repository: `https://github.com/myparsleycat/wails`, branch `master`.
 - Resolve the Wails source from the version selected by `go.mod` and the current Go environment. If a separate local checkout is needed, discover it from the workspace instead of assuming a machine-specific absolute path.
 - Pin the fork in `go.mod` with `replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 <tag>`. Do not copy the fork into `third_party`.
+- Register every service in `runtime.services()` in `internal/app/runtime.go` through `newLoggedService` or `newGuardedService`, never bare `application.NewService`: the logged wrapper installs the error marshaler that writes an unreported failure to `desktop.log` once, and the guarded wrapper also makes calls wait for startup maintenance.
+- Mark exported methods of a bound service that are not renderer APIs, such as `Use*` wiring and cross-service hooks, with `//wails:ignore`.
+- Event names are a renderer contract in the form `domain:kebab-name`. Backend packages emit through the `EventEmit` function injected in their options; change the Go emitter and every `Events.On` listener together.
+- Do not put large numeric arrays or base64 blobs in bound models. Serve binary data through `infra.Protocol` memory sessions and read it with `frontend/src/wails/binary-memory.ts`; `generated-binding-contract.test.ts` enforces this.
+
+## Required Gateways
+
+Each cross-cutting policy below has one owning package. Go through it instead of calling the standard library or a third-party package directly, and take the shared instance wired in `internal/app/runtime.go` through the feature's options rather than constructing a second one. When a gateway lacks something, extend the gateway; do not bypass it.
+
+### Network
+
+- Outbound HTTP goes through the injected `infra.Client`: `Fetch`, `Stream`, or `HTTPClient()` when the caller must own the response body or retry policy. It carries the user's proxy configuration, system-proxy failover, the product User-Agent, and backend status tracking. Do not use `http.DefaultClient`, `http.Get`, or a fresh `http.Client{}` in feature code.
+- GitHub REST API calls (`api.github.com`) go only through `github.Client` in `internal/github` (`Releases`, `AllReleases`, `LatestRelease`, `ResolveTagCommit`, `Tree`, `GetBytes`). It applies the process-wide core-rate gate and the persistent release-metadata cache owned by `infra.GitHubRateCoordinator`.
+  - Use the one client built in `runtime.go`. `github.New` without `Options.Rate` creates a private coordinator that does not share the budget, which is only acceptable in tests.
+  - Prefer `CachedReleases` or `ReleaseTags` for update checks and other repeated or background lookups.
+  - Handle `github.ErrRateLimited` (`*github.RateLimitError`, `ResetAt`) as an expected state, not as a failure to retry immediately.
+  - Download release assets, tag archives, and raw repository files with `DownloadFile` or `FetchFile`, and build URLs with `ReleaseFileURL` and `TagArchiveURL`. Validate repository input with `Repo.Validate`.
+- Download files to disk with the shared `infra.Download` (`File`), which applies the transfer bandwidth limiter, retries, and a `.ntmp` temporary file. Do not copy a response body to the destination by hand.
+- A pinned third-party artifact declares its expected SHA-256 next to its URL and verifies it before use.
+- Downloads and uploads the user should see, pause, or cancel are registered with `internal/transfer` instead of running as untracked goroutines.
+
+### Filesystem
+
+- Wrap bulk or parallel file work (hashing, copying, compressing, scanning, walking many files) in `diskio.Acquire(ctx, files...)` or `diskio.AcquireDir(ctx, dirs...)` and release the slot when done. It bounds concurrency on rotational disks for the whole process and passes straight through on solid-state and network volumes.
+  - Acquire around a leaf file operation only. Code holding a slot must never acquire again, directly or through a callee; nested acquisition can deadlock.
+  - Do not add a per-feature worker cap as a substitute. Unrelated features must queue behind the same disk.
+- Replace a file by writing a temporary file in the same directory and calling `platform.ReplaceAtomic`. Do not `os.Rename` over an existing file or truncate it in place.
+- Compare paths with `platform.SamePathFold` and `platform.SameOrChildPath`, not `==`, `strings.EqualFold`, or `strings.HasPrefix`. Both are lexical. When the physical location matters, such as a write below a junction, resolve with `platform.FinalPath`; `filepath.EvalSymlinks` leaves junctions unresolved.
+- Validate and sanitize user-supplied file names with `platform.FS` (`IsValidWindowsFilename`, `SanitizeWindowsFilename`, `GetUniqueName`) and `platform.IsUnaddressableName`.
+- Application-owned files live under `~/.nahida-desktop` and are addressed through `appdata.Store` (`Resolve`, `EnsureDir`, and the directory constants in `internal/appdata`). Do not derive those paths from `os.UserHomeDir` in feature code.
+- Extract archives of user or unknown origin with `infra.Archive`, which detects the container by content and rejects unsafe entry paths. Code that reads a zip directly must validate entry paths itself.
+- Watch files and directories with `internal/watcher` (debounced, settled `ReadDirectoryChangesW`). Do not add another watching library.
+- Sort names shown to the user with `platform.NewLocaleLess`, not byte order.
+
+### Persistence
+
+- All access to the application database goes through `internal/db`; `db.Open` fixes the single connection and its pragmas.
+- Declare schema changes in `TableSpecs` in `internal/db/schema.go` and let `Reconcile` apply them. Rename a table or column by adding the old name to `Aliases`. Do not write ad-hoc `ALTER TABLE` statements.
+- A one-shot data migration runs from `Reconcile` and is gated by its own `SchemaKey*` entry in the schema state so it never runs twice.
+- Adding a setting touches all of these: the `Key*` constant and its `allDefinitions` row in `internal/setting/keys.go`, with storage key `{scope}_{snake_case}`, which a test enforces; its spec in `buildSpecs` in `specs.go`; and `AppSettings` in `frontend/src/shared/settings.ts`.
+- Settings side effects on other services go through `setting.Hooks`. The setting package does not import feature packages.
+
+### Frontend
+
+- Import with the configured aliases: `@bindings/*` for generated services and models, `@renderer/*` for `src`, and `@shared/*` for `src/shared`.
+- Log with `Logger` from `@renderer/lib/logger`, which redacts and persists to `desktop.log`. Do not use `console.*`.
+- Every user-visible string goes through `t()`. Add a new key to all four locale files in `frontend/src/lib/i18n/locales` (`en`, `ja`, `ko`, `zh`) in the same change; `en` is only the runtime fallback.
+- Read and write settings through `useSetting` and `useSettings` in `hooks/use-settings.ts` or the helpers in `lib/settings.ts`. They share the `["settings", ...]` query keys and follow the `setting:update` event; do not call `Setting.Get`, `Setting.GetMany`, or `Setting.Set` directly from components.
 
 ## Commands
 
@@ -132,8 +180,13 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - For Wails-backed user actions, log the original backend error before returning it when the renderer will show only a generic fallback message.
 - Include enough structured context to diagnose the failure without reproduction: service/action name, user-facing entity name, relevant domain identifiers, current operation or stage, input and resolved paths, external URLs or executable paths when relevant, and rollback or cleanup state.
 - For multi-step operations, track and log the current stage and any registered rollback or cleanup state.
-- Preserve established sentinel messages or domain error codes when the frontend depends on them.
-- Never log secrets, session cookies, authorization headers, tokens, or unredacted sensitive user data.
+- Preserve established sentinel messages or domain error codes when the frontend depends on them. This includes `CODE:detail` prefixed errors such as `XXMI_RUNTIME_CORRUPTED:` and `infra.ContractError` text.
+- Never log secrets, session cookies, authorization headers, tokens, or unredacted sensitive user data. Pass URLs through `infra.SanitizeLogURL` before logging them.
+- Log through the injected `infra.Log`. `log/slog` and `fmt.Print*` are not routed to `desktop.log`.
+- Attach context with `infra.AnnotateError` in inner layers and emit with `infra.ReportError` at the layer that owns the operation. A reported error is marked, so the Wails and transfer boundaries do not log it again; do not log the same failure at several levels.
+- Cancellation by the user or by shutdown is not a failure. Check `infra.IsCancellationError` instead of logging it.
+- Use `infra.WithCause` when a domain contract hides the underlying cause from the caller but the log still needs it.
+- Use `infra.DiagnosticThrottle` for a failure that repeats in a loop and `infra.DiagnosticBatch` for many failures of one operation.
 
 ## Go Tools
 
@@ -141,6 +194,8 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - Do not add a `tools.go` pin file.
 - Keep `golangci-lint` in `golangci-lint.mod`, not `go.mod`.
 - Keep `govulncheck` in `govulncheck.mod`, not `go.mod`.
+- Tests use the standard `testing` package. `testify` is not a dependency; do not add it.
+- A `//nolint` directive must name the specific linter and give an explanation; `nolintlint` rejects anything else.
 
 ### Updating lint and vulnerability tools
 
