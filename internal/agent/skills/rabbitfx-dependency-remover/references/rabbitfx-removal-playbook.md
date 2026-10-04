@@ -70,6 +70,35 @@ If a conditional branch can bypass the restore after a save, restructure the cod
 
 Treat each `[TextureOverride...]` or equivalent draw section independently. Do not save in one section and restore in another; execution ordering may differ from file ordering.
 
+## Effect calls
+
+Not every RabbitFX call is a texture setter. An effect call hands an input to shader logic inside RabbitFX and is usually paired with a second call that resets it after the covered draws:
+
+```ini
+Resource\RabbitFX\FXMap = ref ResourceTextureChestFX
+run = CommandList\RabbitFX\Run
+if $draw_component_3_006
+    drawindexed = 4998, 147354, 0
+endif
+Resource\RabbitFX\FXMap = ref ResourceTextureChestFXoff
+run = CommandList\RabbitFX\Run
+```
+
+Without the RabbitFX implementation this effect cannot be rebuilt from the mod alone, and no slot mapping proves what it does. Retire it: comment out both assignment/run pairs and keep the draw.
+
+```ini
+; RabbitFX effect retired: FXMap has no local equivalent
+; Resource\RabbitFX\FXMap = ref ResourceTextureChestFX
+; run = CommandList\RabbitFX\Run
+if $draw_component_3_006
+    drawindexed = 4998, 147354, 0
+endif
+; Resource\RabbitFX\FXMap = ref ResourceTextureChestFXoff
+; run = CommandList\RabbitFX\Run
+```
+
+The mesh still renders with whatever texture state is active at that point; the overlay or animation the effect produced is gone, and the report must say so. The setter groups in the same file are converted as usual. An effect call is a reason to ask for the RabbitFX files only when no local draw sits between the call and its reset, because the external command list may then issue the draw itself.
+
 ## Resource-section checks
 
 When a direct binding says:
@@ -96,6 +125,8 @@ External framework resources may intentionally lack local definitions, but those
 5. **Global replacement**: unrelated resources are rebound because suffix naming was treated as a universal schema.
 6. **Line-ending churn**: whole-file diff makes review difficult and can disturb fragile tooling.
 7. **False validation**: zero `RabbitFX` strings is reported as success even though behavior was not preserved.
+8. **All-or-nothing refusal**: an effect call that cannot be reproduced stops the whole conversion, leaving proven setter groups untouched and the user asked for files they do not have.
+9. **Silent effect loss**: an effect call is retired without the report naming the affected draws and the lost visual.
 
 ## Known example pattern
 
