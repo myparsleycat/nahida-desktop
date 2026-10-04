@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -32,6 +33,70 @@ type fakeUpdaterEngine struct {
 	downloads    int
 	restarts     int
 	stopped      bool
+}
+
+type githubProviderTestEngine struct {
+	fakeUpdaterEngine
+	provider wailsupdater.Provider
+}
+
+func (e *githubProviderTestEngine) Check(ctx context.Context) (*wailsupdater.Release, error) {
+	return e.provider.Check(ctx, wailsupdater.CheckRequest{CurrentVersion: "1.0.0"})
+}
+
+func TestUpdaterGitHubProviderNoReleaseAndSecondaryCooldown(t *testing.T) {
+	t.Parallel()
+	for _, secondary := range []bool{false, true} {
+		t.Run(fmt.Sprintf("secondary=%t", secondary), func(t *testing.T) {
+			t.Parallel()
+			var clock atomic.Int64
+			clock.Store(time.Now().Unix())
+			now := func() time.Time { return time.Unix(clock.Load(), 0) }
+			var requests atomic.Int32
+			httpClient := NewClientWithOptions(ClientOptions{
+				Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					n := requests.Add(1)
+					if secondary && n == 1 {
+						return githubTestResponse(
+							request,
+							403,
+							make(http.Header),
+							`{"message":"secondary rate limit"}`,
+						), nil
+					}
+					return githubTestResponse(request, 404, make(http.Header), `{}`), nil
+				}),
+			})
+			rate := NewGitHubRateCoordinator()
+			rate.now = now
+			defer rate.Close()
+			provider, err := newGitHubUpdateProvider(false, httpClient, rate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updater := &Updater{
+				engine: &githubProviderTestEngine{provider: provider}, rate: rate,
+				settings: fakeUpdaterSettings{mode: "notify"},
+			}
+			for range 2 {
+				err := updater.CheckForUpdates(t.Context(), true)
+				if (err != nil) != secondary {
+					t.Fatalf("secondary=%t check error=%v", secondary, err)
+				}
+				status, err := updater.GetStatus(t.Context())
+				if err != nil || status.UpdateAvailable || status.UpdateDownloaded {
+					t.Fatalf("failed or empty check status=%+v err=%v", status, err)
+				}
+			}
+			if requests.Load() != 1 {
+				t.Fatalf("repeated check sent %d requests", requests.Load())
+			}
+			clock.Add(61)
+			if err := updater.CheckForUpdates(t.Context(), true); err != nil || requests.Load() != 2 {
+				t.Fatalf("cooldown recovery err=%v requests=%d", err, requests.Load())
+			}
+		})
+	}
 }
 
 func (f *fakeUpdaterEngine) Init(cfg wailsupdater.Config) error {
@@ -684,6 +749,7 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		client,
 		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Used: 60, Resource: "core"},
 	)
+	rate.UseAppState(client.AppState)
 	allowed, state, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI limited: %v", err)
@@ -697,6 +763,7 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		client,
 		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(-time.Hour).Unix(), Used: 60, Resource: "core"},
 	)
+	rate.UseAppState(client.AppState)
 	allowed, _, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI expired: %v", err)
@@ -708,6 +775,7 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 	if err := client.AppState.Delete(ctx, githubCoreRateKey); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
+	rate.UseAppState(client.AppState)
 	var requests int
 	rate.UseHTTP(NewClientWithOptions(ClientOptions{
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -780,7 +848,7 @@ func TestCheckForUpdatesGatesOnGitHubRateLimit(t *testing.T) {
 	}
 }
 
-func TestCheckForUpdatesRefreshesMissingRateState(t *testing.T) {
+func TestCheckForUpdatesDoesNotProbeMissingRateState(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	client := openUpdaterTestDB(t)
@@ -809,11 +877,11 @@ func TestCheckForUpdatesRefreshesMissingRateState(t *testing.T) {
 	if err := u.CheckForUpdates(ctx, false); err != nil {
 		t.Fatalf("automatic CheckForUpdates: %v", err)
 	}
-	if requests != 1 {
-		t.Fatalf("rate_limit requests = %d, want 1", requests)
+	if requests != 0 {
+		t.Fatalf("rate_limit requests = %d, want 0", requests)
 	}
-	if engine.checks != 0 {
-		t.Fatalf("check ran after refreshed rate limit: checks=%d", engine.checks)
+	if engine.checks != 1 {
+		t.Fatalf("checks = %d, want 1", engine.checks)
 	}
 }
 
@@ -1017,6 +1085,7 @@ func TestEnablingPrereleaseRetriesAfterRateLimit(t *testing.T) {
 	}
 
 	seedGitHubRateState(t, client, GitHubRateState{Limit: 60, Remaining: 60, Reset: reset, Resource: "core"})
+	rate.UseAppState(client.AppState)
 	if err := u.CheckForUpdates(ctx, true); err != nil {
 		t.Fatalf("retry after rate limit: %v", err)
 	}

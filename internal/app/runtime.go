@@ -36,6 +36,7 @@ type runtime struct {
 	fs                *platform.FS
 	native            *platform.Native
 	updater           *infra.Updater
+	githubRate        *infra.GitHubRateCoordinator
 	protocol          *infra.Protocol
 	download          *infra.Download
 	archive           *infra.Archive
@@ -168,18 +169,20 @@ func newRuntime() *runtime {
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
+	updaterService.UseGitHubRate(githubRate)
 	rt := &runtime{
-		startup:  newStartupWork(),
-		log:      log,
-		store:    infra.NewStore(),
-		http:     httpClient,
-		cdnTrace: infra.NewCDNTrace(httpClient),
-		fs:       fs,
-		native:   native,
-		updater:  updaterService,
-		protocol: protocolService,
-		download: download,
-		archive:  archive,
+		startup:    newStartupWork(),
+		log:        log,
+		store:      infra.NewStore(),
+		http:       httpClient,
+		cdnTrace:   infra.NewCDNTrace(httpClient),
+		fs:         fs,
+		native:     native,
+		updater:    updaterService,
+		githubRate: githubRate,
+		protocol:   protocolService,
+		download:   download,
+		archive:    archive,
 		auth: auth.NewWithOptions(auth.Options{
 			Crypto: platform.NewCrypto(),
 			HTTP:   httpClient,

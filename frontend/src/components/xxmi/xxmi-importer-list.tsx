@@ -229,6 +229,7 @@ export function useXXMIUpdates(enabled: boolean) {
     queryFn: () => XXMI.CheckUpdates(false),
     enabled,
     staleTime: 60 * 60 * 1000,
+    retry: false,
   }).data;
 }
 

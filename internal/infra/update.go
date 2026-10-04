@@ -108,6 +108,15 @@ type Updater struct {
 
 func NewUpdater() *Updater { return &Updater{interval: updaterCheckInterval} }
 
+// UseGitHubRate shares the runtime's request budget and metadata cache.
+//
+//wails:ignore
+func (u *Updater) UseGitHubRate(rate *GitHubRateCoordinator) {
+	u.mu.Lock()
+	u.rate = rate
+	u.mu.Unlock()
+}
+
 // AttachGitHubRate binds the shared GitHub core-rate coordinator used to gate
 // CheckForUpdates, matching Electron's GitHubRateCoordinator.
 //
@@ -147,23 +156,37 @@ type includePrereleaseProvider struct {
 func newIncludePrereleaseProvider(
 	httpClient *Client,
 	include func(context.Context) (bool, error),
+	rates ...*GitHubRateCoordinator,
 ) (wailsupdater.Provider, error) {
-	stable, err := newGitHubUpdateProvider(false, httpClient)
+	stable, err := newGitHubUpdateProvider(false, httpClient, rates...)
 	if err != nil {
 		return nil, err
 	}
-	prerelease, err := newGitHubUpdateProvider(true, httpClient)
+	prerelease, err := newGitHubUpdateProvider(true, httpClient, rates...)
 	if err != nil {
 		return nil, err
 	}
 	return &includePrereleaseProvider{stable: stable, prerelease: prerelease, include: include}, nil
 }
 
-func newGitHubUpdateProvider(prerelease bool, httpClient *Client) (wailsupdater.Provider, error) {
+func newGitHubUpdateProvider(
+	prerelease bool,
+	httpClient *Client,
+	rates ...*GitHubRateCoordinator,
+) (wailsupdater.Provider, error) {
 	config := githubProviderConfig(prerelease)
-	if httpClient != nil {
-		config.HTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: httpClient.HTTPClient().Transport}
+	var rate *GitHubRateCoordinator
+	if len(rates) > 0 && rates[0] != nil {
+		rate = rates[0]
+	} else {
+		rate = NewGitHubRateCoordinator()
 	}
+	base := &http.Client{Timeout: 30 * time.Second}
+	if httpClient != nil {
+		base = httpClient.HTTPClient()
+	}
+	config.HTTPClient = rate.HTTPClient(base)
+	config.HTTPClient.Timeout = 30 * time.Second
 	return githubprovider.New(config)
 }
 
@@ -209,8 +232,15 @@ func (u *Updater) Configure(opts UpdaterOptions) error {
 	}
 	provider := opts.Provider
 	if provider == nil {
+		u.mu.Lock()
+		if u.rate == nil {
+			u.rate = NewGitHubRateCoordinator()
+		}
+		rate := u.rate
+		u.mu.Unlock()
+		rate.UseLog(opts.Log)
 		var err error
-		provider, err = newIncludePrereleaseProvider(opts.HTTP, u.includePrerelease)
+		provider, err = newIncludePrereleaseProvider(opts.HTTP, u.includePrerelease, rate)
 		if err != nil {
 			return err
 		}
@@ -340,7 +370,8 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	u.checking = true
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
-	release, err := engine.Check(ctx)
+	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, "app-update"), userInitiated)
+	release, err := engine.Check(checkCtx)
 	if err != nil {
 		u.resetCheckedRelease(ctx)
 		u.finishIncludePrereleaseChange(ctx)
@@ -598,7 +629,8 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
 
-	release, err := engine.Check(ctx)
+	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, "app-update-channel"), true)
+	release, err := engine.Check(checkCtx)
 	if err != nil {
 		u.mu.Lock()
 		u.checking = false
@@ -933,7 +965,7 @@ func (u *Updater) githubRateAllowsCheck(ctx context.Context, userInitiated bool)
 	if rate == nil {
 		return true, nil
 	}
-	allowed, state, err := rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{RefreshIfMissing: true})
+	allowed, state, err := rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
 	if err != nil {
 		return false, err
 	}

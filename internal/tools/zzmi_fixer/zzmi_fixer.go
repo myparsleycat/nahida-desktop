@@ -588,7 +588,7 @@ func (t *Service) zzmiCheckLatest(ctx context.Context, force bool) (*zzmiLatestR
 	if !force && cached != nil && zzmiCacheFresh(cached.CheckedAt, time.Now().UTC()) {
 		return cached, false, nil
 	}
-	latest, checked, err := t.zzmiFetchLatest(ctx)
+	latest, checked, err := t.zzmiFetchLatest(infra.WithGitHubRefresh(ctx, force))
 	if err != nil {
 		if !force && cached != nil {
 			if persistErr := t.zzmiRememberLatest(ctx, cached); persistErr != nil {

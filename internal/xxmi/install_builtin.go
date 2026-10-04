@@ -20,6 +20,7 @@ import (
 func (x *XXMI) installBuiltinImporterPackage(
 	ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput,
 ) (returnErr error) {
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-importer-package")
 	stage := "validate"
 	rollbackState := "not-started"
 	defer func() {

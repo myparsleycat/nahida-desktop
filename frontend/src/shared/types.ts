@@ -1,4 +1,5 @@
 import type { Mod } from "@bindings/mod";
+import type { GitHubRateState } from "@bindings/tools";
 // oxlint-disable typescript/no-explicit-any
 import type { Snapshot as TransferSnapshot } from "@bindings/transfer";
 
@@ -7,6 +8,7 @@ import type { Session } from "./schemas/auth";
 import type { UpdaterStatus } from "./updater";
 
 export type { BackendStatus } from "./backend";
+export type { GitHubRateState } from "@bindings/tools";
 
 interface FixToolScript {
     id: string;
@@ -56,15 +58,6 @@ interface ToastData {
 export interface FixToolLogEvent {
     message: string;
     replaceLast?: boolean;
-}
-
-export interface GitHubRateState {
-    limit: number;
-    remaining: number;
-    reset: number;
-    used: number;
-    resource: string;
-    updatedAt: string;
 }
 
 export interface ModFixerAction {

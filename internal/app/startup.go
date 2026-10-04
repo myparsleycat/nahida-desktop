@@ -106,28 +106,11 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 		defer close(done)
 		prefetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		var wg sync.WaitGroup
-		for _, task := range []struct {
-			stage string
-			run   func(context.Context) error
-		}{
-			{"release-prefetch", rt.tools.FourThousandOneFixerUpdateReleases},
-			{"xxmi-update-check", func(ctx context.Context) error {
-				_, err := rt.xxmi.CheckUpdates(ctx, false)
-				return err
-			}},
-		} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if err := task.run(prefetchCtx); err != nil && ctx.Err() == nil {
-					_ = infra.ReportError(rt.log, err, "Startup", infra.Diagnostic{
-						Severity: infra.DiagnosticWarn, Operation: "maintenance", Stage: task.stage,
-					})
-				}
-			}()
+		if _, err := rt.xxmi.CheckUpdates(prefetchCtx, false); err != nil && ctx.Err() == nil {
+			_ = infra.ReportError(rt.log, err, "Startup", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "maintenance", Stage: "xxmi-update-check",
+			})
 		}
-		wg.Wait()
 	}()
 	rt.tools.StartWuwaAutoUpdateCheck()
 }

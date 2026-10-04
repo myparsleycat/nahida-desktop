@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -113,7 +114,7 @@ func TestGetBytesGatesOnExhaustedRateAndCapturesHeaders(t *testing.T) {
 	client := New(Options{
 		HTTP: newTestHTTP(func(*http.Request) (int, string) {
 			requests.Add(1)
-			return http.StatusOK, "{}"
+			return http.StatusOK, "[]"
 		}),
 		Rate: rate,
 	})
@@ -128,13 +129,14 @@ func TestGetBytesGatesOnExhaustedRateAndCapturesHeaders(t *testing.T) {
 	}
 
 	store.values = nil
+	rate.UseAppState(store)
 	capturing := New(Options{
 		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
 			Status: infra.BackendOnline,
 			HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				response := &http.Response{
 					StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
-					Body: http.NoBody,
+					Body: io.NopCloser(strings.NewReader("[]")),
 				}
 				response.Header.Set("X-RateLimit-Limit", "60")
 				response.Header.Set("X-RateLimit-Remaining", "41")

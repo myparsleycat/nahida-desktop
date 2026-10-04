@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/infra"
 )
 
 const updateCheckInterval = time.Hour
@@ -33,6 +34,7 @@ type UpdateStatus struct {
 }
 
 func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, error) {
+	ctx = infra.WithGitHubOperation(ctx, "xxmi-check-updates")
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
@@ -72,9 +74,15 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if !force && state != nil && time.Since(time.Unix(state.UpdateCheckTime, 0)) < updateCheckInterval {
 			continue
 		}
-		releases, err := x.listReleases(ctx, pkg, true)
+		var responseInfo infra.GitHubResponseInfo
+		checkCtx := infra.WithGitHubResponseInfo(ctx, &responseInfo)
+		releases, err := x.listReleases(checkCtx, pkg, force)
 		if err != nil {
-			if errors.Is(err, github.ErrRateLimited) {
+			err = infra.ReportError(x.log, err, "XXMI.CheckUpdates", infra.Diagnostic{
+				Operation: "check-updates", Stage: "release-metadata",
+				Fields: map[string]any{"package": pkg, "force": force},
+			})
+			if !force && errors.Is(err, github.ErrRateLimited) {
 				break
 			}
 			return nil, fmt.Errorf("check %s updates: %w", pkg, err)
@@ -86,7 +94,9 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			state.LatestVersion = &releases[0].Version
 			state.LatestReleaseNotes = &releases[0].Notes
 		}
-		state.UpdateCheckTime = time.Now().Unix()
+		if !responseInfo.FetchedAt.IsZero() {
+			state.UpdateCheckTime = responseInfo.FetchedAt.Unix()
+		}
 		if err := client.XXMIPackages.Upsert(ctx, *state); err != nil {
 			return nil, err
 		}

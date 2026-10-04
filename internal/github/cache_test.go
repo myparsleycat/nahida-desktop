@@ -8,47 +8,48 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"nahida.live/desktop/internal/infra"
 )
 
-func TestReleaseTagsCachesForProcessLifetimeAndHonorsRefreshCooldown(t *testing.T) {
-	var requests atomic.Int32
-	client := newTestClient(t, func(*http.Request) (int, string) {
-		requests.Add(1)
-		return http.StatusOK, testReleases
-	})
-	now := time.Now()
-	client.tags.now = func() time.Time { return now }
-	ctx := context.Background()
-
-	for range 2 {
-		tags, err := client.ReleaseTags(ctx, testRepo, false)
-		if err != nil || strings.Join(tags, ",") != "v2,v1" {
-			t.Fatalf("tags = %v, %v", tags, err)
+func TestReleaseTagsHonorsHourlyCacheAndRefreshCooldown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var requests atomic.Int32
+		client := newTestClient(t, func(*http.Request) (int, string) {
+			requests.Add(1)
+			return http.StatusOK, testReleases
+		})
+		ctx := context.Background()
+		for range 2 {
+			if _, err := client.ReleaseTags(ctx, testRepo, false); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-	now = now.Add(2 * tagRefreshCooldown)
-	if _, err := client.ReleaseTags(ctx, testRepo, false); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("non-refresh read refetched: %d", requests.Load())
-	}
-
-	if _, err := client.ReleaseTags(ctx, testRepo, true); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 2 {
-		t.Fatalf("refresh after cooldown requests = %d, want 2", requests.Load())
-	}
-	if _, err := client.ReleaseTags(ctx, testRepo, true); err != nil {
-		t.Fatal(err)
-	}
-	if requests.Load() != 2 {
-		t.Fatalf("refresh ignored cooldown: %d", requests.Load())
-	}
+		time.Sleep(2 * time.Minute)
+		if _, err := client.ReleaseTags(ctx, testRepo, false); err != nil {
+			t.Fatal(err)
+		}
+		if requests.Load() != 1 {
+			t.Fatalf("ordinary requests = %d", requests.Load())
+		}
+		for range 2 {
+			if _, err := client.ReleaseTags(ctx, testRepo, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if requests.Load() != 2 {
+			t.Fatalf("refresh requests = %d", requests.Load())
+		}
+		time.Sleep(time.Hour)
+		if _, err := client.ReleaseTags(ctx, testRepo, false); err != nil {
+			t.Fatal(err)
+		}
+		if requests.Load() != 3 {
+			t.Fatalf("expired requests = %d", requests.Load())
+		}
+	})
 }
 
 func TestNilClientReportsMissingConfiguration(t *testing.T) {
@@ -149,19 +150,27 @@ func TestReleaseTagsWaiterHonorsOwnCancellation(t *testing.T) {
 	}
 }
 
-func TestReleaseTagsDoesNotCacheFailures(t *testing.T) {
-	var requests atomic.Int32
-	client := newTestClient(t, func(*http.Request) (int, string) {
-		if requests.Add(1) == 1 {
-			return http.StatusBadGateway, "bad gateway"
+func TestReleaseTagsBacksOffFailures(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var requests atomic.Int32
+		client := newTestClient(t, func(*http.Request) (int, string) {
+			if requests.Add(1) == 1 {
+				return http.StatusBadGateway, "bad gateway"
+			}
+			return http.StatusOK, testReleases
+		})
+		for range 2 {
+			if _, err := client.ReleaseTags(context.Background(), testRepo, false); err == nil {
+				t.Fatal("expected failure")
+			}
 		}
-		return http.StatusOK, testReleases
+		if requests.Load() != 1 {
+			t.Fatalf("failed requests = %d", requests.Load())
+		}
+		time.Sleep(time.Minute)
+		tags, err := client.ReleaseTags(context.Background(), testRepo, false)
+		if err != nil || strings.Join(tags, ",") != "v2,v1" {
+			t.Fatalf("tags = %v, %v", tags, err)
+		}
 	})
-	if _, err := client.ReleaseTags(context.Background(), testRepo, false); err == nil {
-		t.Fatal("expected first fetch to fail")
-	}
-	tags, err := client.ReleaseTags(context.Background(), testRepo, false)
-	if err != nil || strings.Join(tags, ",") != "v2,v1" {
-		t.Fatalf("tags = %v, %v", tags, err)
-	}
 }

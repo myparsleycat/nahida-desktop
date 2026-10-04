@@ -52,17 +52,12 @@ export default function FourThousandOneFixer() {
   const [errorMessage, setErrorMessage] = useState("");
   const [backupPath, setBackupPath] = useState("");
   const [requiresElevation, setRequiresElevation] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const versionsRequestId = useRef(0);
 
   const isRunning = activeTask !== null;
 
   useEffect(() => {
-    void Tools.FourThousandOneFixerUpdateReleases().finally(() => {
-      setIsUpdating(false);
-    });
-
     void Tools.FourThousandOneFixerGetState().then((state) => {
       if (!state) return;
 
@@ -100,8 +95,6 @@ export default function FourThousandOneFixer() {
   }, []);
 
   useEffect(() => {
-    if (isUpdating) return;
-
     const requestId = ++versionsRequestId.current;
     const requestedProvider = provider;
 
@@ -119,7 +112,7 @@ export default function FourThousandOneFixer() {
         setVersion("");
         setFetchError(true);
       });
-  }, [provider, isUpdating]);
+  }, [provider]);
 
   useEffect(() => {
     if (!selectedImporter) return;
