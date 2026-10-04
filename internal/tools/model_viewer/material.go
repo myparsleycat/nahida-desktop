@@ -541,7 +541,7 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 		release()
 	} else {
 		var raw []byte
-		raw, err = os.ReadFile(path)
+		raw, err = readModelViewerTextureFile(path)
 		release()
 		if err == nil {
 			_, _, err = modelViewerTextureDimensions(raw, extension)
@@ -555,6 +555,33 @@ func decodeModelViewerTextureSource(ctx context.Context, path string) (*modelVie
 	}
 	rgba = downscaleModelViewerTexture(rgba, maxModelViewerTextureOutputPixels)
 	return analyzeModelViewerTexture(rgba), nil
+}
+
+// readModelViewerTextureFile checks and reads through one handle, so a file replaced or grown after
+// the caller's stat cannot push the read past the size limit.
+func readModelViewerTextureFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
+		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(file, maxModelViewerBufferFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maxModelViewerBufferFileBytes {
+		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
+	}
+	return raw, nil
 }
 
 func analyzeModelViewerTexture(rgba *image.NRGBA) *modelViewerDecodedTexture {
