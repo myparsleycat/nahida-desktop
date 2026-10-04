@@ -59,3 +59,12 @@ func TestPackProgressConvertsPayloadToLogicalBytes(t *testing.T) {
 		t.Fatalf("member credit = %d", got)
 	}
 }
+
+func TestSentPackMembersCountsFullySentMembers(t *testing.T) {
+	members := []preparedUpload{packMember(25, 100), packMember(100, 50)}
+	for payload, want := range map[int64]int{0: 0, 24: 0, 25: 1, 124: 1, 125: 2} {
+		if got := sentPackMembers(members, payload); got != want {
+			t.Fatalf("sent members at %d = %d, want %d", payload, got, want)
+		}
+	}
+}

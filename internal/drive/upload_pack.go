@@ -83,6 +83,18 @@ func logicalBytesForPackProgress(members []preparedUpload, uploadedPayload int64
 	return credited
 }
 
+// sentPackMembers counts the leading members whose payload was sent in full.
+func sentPackMembers(members []preparedUpload, uploadedPayload int64) int {
+	var cursor int64
+	for index, member := range members {
+		cursor += member.payloadBytes
+		if uploadedPayload < cursor {
+			return index
+		}
+	}
+	return len(members)
+}
+
 func creditedLogicalBytesForMember(members []preparedUpload, memberIndex int, uploadedPayload int64) int64 {
 	if memberIndex < 0 || memberIndex >= len(members) {
 		return 0

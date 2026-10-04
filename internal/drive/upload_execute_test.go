@@ -201,12 +201,20 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	}
 	var bytes int64
 	completed := make([]string, 0, 2)
+	sentFiles, sentPeak, shownFiles := 0, 0, 0
 	_, err := uploadTestDrive(
 		server,
 	).executeUploadPlanV2(context.Background(), files, plan, testUploadRules(), 8, func(progress UploadExecutionProgress) {
 		bytes += progress.Bytes
+		sentFiles += progress.SentFiles
+		sentPeak = max(sentPeak, sentFiles)
 		if progress.FileID != "" {
 			completed = append(completed, progress.FileID)
+		}
+		if shown := len(completed) + sentFiles; shown < shownFiles {
+			t.Errorf("shown files fell from %d to %d", shownFiles, shown)
+		} else {
+			shownFiles = shown
 		}
 	})
 	if err != nil {
@@ -215,6 +223,10 @@ func TestExecuteUploadPlanPacksSmallNonBundleIntents(t *testing.T) {
 	slices.Sort(completed)
 	if bytes != 5 || !slices.Equal(completed, []string{"file-1", "file-2"}) {
 		t.Fatalf("bytes = %d, completed = %v", bytes, completed)
+	}
+	// The pack counts its members as sent before the server answers, then hands each count to its completed file.
+	if sentPeak != 2 || sentFiles != 0 {
+		t.Fatalf("sent files peak = %d, left = %d", sentPeak, sentFiles)
 	}
 }
 
