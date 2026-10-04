@@ -247,8 +247,7 @@
       "storing_download_excluded": "ファイルサーバーにアップロード中のファイルはダウンロードから除外されました",
       "no_contents_section_message": {
         "0": "このフォルダーにはファイルやフォルダーがありません",
-        "1": "ここにファイルやフォルダーをドラッグしてアップロード",
-        "2": "ファイルやフォルダをここにドラッグしてアップロード"
+        "1": "ここにファイルやフォルダーをドラッグしてアップロード"
       },
       "dad_section": {
         "title": "{{name}} にアップロード",
@@ -578,7 +577,10 @@
           "title": "ゲーム設定",
           "path_label": "MODフォルダーのパス",
           "importer_label": "Importer",
-          "no_importer": "なし"
+          "no_importer": "なし",
+          "order_label": "表示順",
+          "order_value": "{{total}} 個中 {{current}} 番目",
+          "order_description": "矢印ボタンで、ドロップダウンに表示されるゲームの順番を変更します。"
         },
         "nte-launch": {
           "title": "ランチャーパスを指定",
@@ -617,7 +619,6 @@
           "confirm": "確認して起動"
         },
         "preset-management": {
-          "description": "このプリセットには {{length}} 個のMODが保存されています。",
           "legacy-badge": "旧形式",
           "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"
         },
@@ -862,6 +863,9 @@
           },
           "start-nte-launcher": {
             "not-set": "設定されたランチャーのパスがありません。",
+          "reorder-games-mutation": {
+            "failed": "ゲームの順番を保存できませんでした。"
+          },
             "not-found": "保存されたランチャーのパスが存在しません。",
             "failed": "ランチャーの起動に失敗しました。"
           },
@@ -1046,6 +1050,16 @@
       "no_files": "ダウンロード可能なファイルはありません。",
       "file_downloads": "{{count}} 回ダウンロード",
       "narrow_window": {
+      "no_preview_image": "プレビュー画像はありません。",
+      "comments": "コメント",
+      "comment_sort": {
+        "popular": "人気順",
+        "newest": "新着順"
+      },
+      "comment_replies": "返信 {{count}} 件",
+      "comment_stamps": "スタンプ {{count}} 個",
+      "load_more_comments": "コメントをさらに表示",
+      "no_comments": "表示するコメントはありません。",
         "title": "ウィンドウが狭すぎます",
         "description": "GameBanana コンテンツを表示するにはウィンドウを広げてください。"
       }
