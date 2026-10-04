@@ -294,6 +294,20 @@ export interface FolderGroup {
     isManualSubGroup?: boolean;
     hasSubGroups?: boolean;
     hasManualSubGroups?: boolean;
+    classifications?: Record<string, string>;
+}
+
+export interface ClassificationGroup {
+    id: string;
+    name: string;
+}
+
+export interface Classification {
+    id: string;
+    game: string;
+    name: string;
+    active: boolean;
+    groups: ClassificationGroup[];
 }
 
 export interface Preset {

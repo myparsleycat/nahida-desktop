@@ -500,6 +500,13 @@
         "unpersist-subgroups": "サブフォルダー指定を解除",
         "persist-subgroups": "サブフォルダーとして指定",
         "unmark-manual-subgroup": "手動サブグループ指定を解除",
+        "classification": {
+          "label": "分類基準",
+          "none": "フォルダー",
+          "manage": "分類を管理…",
+          "assign": "分類",
+          "unassigned": "未分類"
+        },
         "tools": "ツール",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer"
@@ -636,6 +643,20 @@
         "texture-resize": {
           "title": "MOD テクスチャをリサイズ",
           "description": "\"{{name}}\" 内の DDS ファイルを検索してその場でリサイズします。"
+        },
+        "classification": {
+          "title": "分類の管理",
+          "description": "分類基準とグループを作成し、サイドバーでキャラクターフォルダーを右クリックしてグループに割り当てます。",
+          "new": "新しい分類基準",
+          "name-label": "分類基準の名前",
+          "name-placeholder": "例: 属性",
+          "groups-label": "グループ",
+          "group-placeholder": "グループ名",
+          "add-group": "グループを追加",
+          "move-up": "上へ移動",
+          "move-down": "下へ移動",
+          "delete-title": "この分類基準を削除しますか？",
+          "delete-description": "「{{name}}」とそのグループがすべて削除されます。キャラクターフォルダーは削除されません。"
         },
         "create-folder": {
           "title": "新しいフォルダーを作成",
@@ -816,6 +837,14 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "classification": {
+            "INVALID_CLASSIFICATION_NAME": "名前を入力してください。",
+            "CLASSIFICATION_NAME_EXISTS": "同じ名前の分類基準が既に存在します。",
+            "CLASSIFICATION_GROUP_NAME_EXISTS": "同じ名前のグループが既に存在します。",
+            "CLASSIFICATION_NOT_FOUND": "分類基準またはグループが見つかりません。",
+            "INVALID_CLASSIFICATION_PATH": "このフォルダーは分類できません。",
+            "failed": "分類を変更できませんでした。"
+          },
           "add-game-mutation": {
             "duplicate-game-name": "そのゲーム名は既に存在します",
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",

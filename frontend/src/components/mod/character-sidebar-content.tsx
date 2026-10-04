@@ -1,13 +1,15 @@
 import { Mod } from "@bindings/mod";
+import { cn } from "@renderer/lib/utils";
 import { type FolderSortDirection, type FolderSortKey, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
-import type { ModFixerAction } from "@shared/types";
+import type { Classification, ModFixerAction } from "@shared/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo } from "react";
 
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
-import { getVisibleGroups } from "./character-sidebar-visible-rows";
+import { CharacterSidebarSectionHeader } from "./character-sidebar-section-header";
+import { getVisibleGroups, partitionByClassification } from "./character-sidebar-visible-rows";
 
 export interface CharacterSidebarContentProps {
   groups: FolderGroup[];
@@ -25,6 +27,7 @@ export interface CharacterSidebarContentProps {
   previewCacheKey: number;
   modFixer?: ModFixerAction | null;
   onOpenModFixer?: (path: string) => Promise<void>;
+  classification?: Classification | null;
 }
 
 interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProps {
@@ -236,40 +239,89 @@ export function CharacterSidebarContent({
   itemStyle,
   modFixer,
   onOpenModFixer,
+  classification,
 }: CharacterSidebarContentLayoutProps) {
+  const collapsedSections = useModStore((s) => s.collapsedSections);
+  const toggleCollapsedSection = useModStore((s) => s.toggleCollapsedSection);
+  const isSearching = searchTerm.trim().length > 0;
+
+  const renderGroups = (topLevelGroups: FolderGroup[]) =>
+    topLevelGroups.map((group) => (
+      <CharacterSidebarItemWithChildren
+        key={group.path}
+        group={group}
+        itemRefs={itemRefs}
+        onItemClick={onItemClick}
+        onItemDrop={onItemDrop}
+        depth={0}
+        searchTerm={searchTerm}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        hideEmptyGroups={hideEmptyGroups}
+        onCreateFolder={onCreateFolder}
+        onDeleteFolder={onDeleteFolder}
+        onManualSubGroupChange={onManualSubGroupChange}
+        layout={layout}
+        previewCacheKey={previewCacheKey}
+        listClassName={listClassName}
+        listStyle={listStyle}
+        itemClassName={itemClassName}
+        selectedItemClassName={selectedItemClassName}
+        nestedItemClassName={nestedItemClassName}
+        itemStyle={itemStyle}
+        modFixer={modFixer}
+        onOpenModFixer={onOpenModFixer}
+      />
+    ));
+
+  if (showSkeleton) {
+    return (
+      <div className={listClassName} style={listStyle}>
+        {Array.from({ length: 8 }).map((_, index) => (
+          <CharacterSidebarItemSkeleton key={index.toString()} layout={layout} />
+        ))}
+      </div>
+    );
+  }
+
+  if (!classification) {
+    return (
+      <div className={listClassName} style={listStyle}>
+        {renderGroups(getVisibleGroups(groups, sortKey, sortDirection, hideEmptyGroups))}
+      </div>
+    );
+  }
+
   return (
     <div className={listClassName} style={listStyle}>
-      {showSkeleton
-        ? Array.from({ length: 8 }).map((_, index) => (
-            <CharacterSidebarItemSkeleton key={index.toString()} layout={layout} />
-          ))
-        : getVisibleGroups(groups, sortKey, sortDirection, hideEmptyGroups).map((group) => (
-            <CharacterSidebarItemWithChildren
-              key={group.path}
-              group={group}
-              itemRefs={itemRefs}
-              onItemClick={onItemClick}
-              onItemDrop={onItemDrop}
-              depth={0}
-              searchTerm={searchTerm}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              hideEmptyGroups={hideEmptyGroups}
-              onCreateFolder={onCreateFolder}
-              onDeleteFolder={onDeleteFolder}
-              onManualSubGroupChange={onManualSubGroupChange}
-              layout={layout}
-              previewCacheKey={previewCacheKey}
-              listClassName={listClassName}
-              listStyle={listStyle}
-              itemClassName={itemClassName}
-              selectedItemClassName={selectedItemClassName}
-              nestedItemClassName={nestedItemClassName}
-              itemStyle={itemStyle}
-              modFixer={modFixer}
-              onOpenModFixer={onOpenModFixer}
+      {partitionByClassification(groups, classification).map((section) => {
+        const visibleGroups = getVisibleGroups(
+          section.groups,
+          sortKey,
+          sortDirection,
+          hideEmptyGroups,
+        );
+        if (section.name === null && visibleGroups.length === 0) {
+          return null;
+        }
+
+        // Searching ignores collapse so matches inside a collapsed section stay reachable.
+        const collapsed = !isSearching && collapsedSections.has(section.key);
+        return (
+          // `contents` keeps the folders in the parent grid while giving each section its own child scope.
+          <div key={section.key} className="contents">
+            <CharacterSidebarSectionHeader
+              name={section.name}
+              count={visibleGroups.length}
+              collapsed={collapsed}
+              onToggle={() => toggleCollapsedSection(section.key)}
+              // Matches are resolved inside each item, so a section without any is hidden once it renders alone.
+              className={cn("col-span-full", isSearching && "only:hidden")}
             />
-          ))}
+            {!collapsed && renderGroups(visibleGroups)}
+          </div>
+        );
+      })}
     </div>
   );
 }

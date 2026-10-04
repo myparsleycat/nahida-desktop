@@ -37,6 +37,7 @@ import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
 import { buttonVariants } from "../ui/button";
+import { CharacterSidebarClassificationMenu } from "./character-sidebar-classification-menu";
 import { CharacterSidebarItemGrid } from "./character-sidebar-item-grid";
 import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
 
@@ -330,6 +331,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
             {t("page.mod.character-sidebar.unmark-manual-subgroup")}
           </ContextMenuItem>
         )}
+
+        {depth === 0 && <CharacterSidebarClassificationMenu group={group} />}
 
         {modFixer && onOpenModFixer && (
           <>

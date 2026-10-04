@@ -1,6 +1,12 @@
 import { Mod } from "@bindings/mod";
 import { modStore, useModStore } from "@renderer/store/mod";
-import type { FolderGroup, GameConfig, ModInfo, PresetCreateConflict } from "@shared/types";
+import type {
+    ClassificationGroup,
+    FolderGroup,
+    GameConfig,
+    ModInfo,
+    PresetCreateConflict,
+} from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -556,5 +562,80 @@ export function usePresetMutations() {
         getPresetCreateConflicts,
         applyPresetMutation,
         deletePresetMutation,
+    };
+}
+
+export function useClassificationMutations() {
+    const { t } = useTranslation();
+    const queryClient = useQueryClient();
+    const selectedGame = useModStore((s) => s.selectedGame);
+
+    const invalidateClassifications = () =>
+        queryClient.invalidateQueries({ queryKey: ["classifications", selectedGame] });
+
+    const showError = (error: unknown) => {
+        const errorMessage = toErrorMessage(error);
+        const code = (
+            [
+                "INVALID_CLASSIFICATION_NAME",
+                "CLASSIFICATION_NAME_EXISTS",
+                "CLASSIFICATION_GROUP_NAME_EXISTS",
+                "CLASSIFICATION_NOT_FOUND",
+                "INVALID_CLASSIFICATION_PATH",
+            ] as const
+        ).find((candidate) => errorMessage.includes(candidate));
+
+        toast.error(t(`page.mod.hooks.use-mod-mutations.classification.${code ?? "failed"}`));
+        // A missing classification means the cached list is stale.
+        if (code === "CLASSIFICATION_NOT_FOUND") {
+            void invalidateClassifications();
+        }
+    };
+
+    const saveClassificationMutation = useMutation({
+        mutationFn: ({
+            id,
+            name,
+            groups,
+        }: {
+            id: string | null;
+            name: string;
+            groups: ClassificationGroup[];
+        }) => Mod.SaveClassification(selectedGame, id, name, groups),
+        onSuccess: invalidateClassifications,
+        onError: showError,
+    });
+
+    const deleteClassificationMutation = useMutation({
+        mutationFn: (id: string) => Mod.DeleteClassification(id),
+        onSuccess: invalidateClassifications,
+        onError: showError,
+    });
+
+    const setActiveClassificationMutation = useMutation({
+        mutationFn: (id: string | null) => Mod.SetActiveClassification(selectedGame, id),
+        onSuccess: invalidateClassifications,
+        onError: showError,
+    });
+
+    const setCharacterClassificationMutation = useMutation({
+        mutationFn: ({
+            folderPath,
+            classificationId,
+            groupId,
+        }: {
+            folderPath: string;
+            classificationId: string;
+            groupId: string | null;
+        }) => Mod.SetCharacterClassification(folderPath, classificationId, groupId),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+        onError: showError,
+    });
+
+    return {
+        saveClassificationMutation,
+        deleteClassificationMutation,
+        setActiveClassificationMutation,
+        setCharacterClassificationMutation,
     };
 }

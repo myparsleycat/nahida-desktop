@@ -499,6 +499,13 @@
         "unpersist-subgroups": "서브폴더 지정 해제",
         "persist-subgroups": "서브폴더로 지정",
         "unmark-manual-subgroup": "수동 서브그룹 지정 해제",
+        "classification": {
+          "label": "분류 기준",
+          "none": "폴더",
+          "manage": "분류 관리…",
+          "assign": "분류",
+          "unassigned": "미분류"
+        },
         "tools": "도구",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "zzmi-mod-fixer": "ZZMI Mod Fixer"
@@ -638,6 +645,20 @@
         "texture-resize": {
           "title": "모드 텍스처 리사이즈",
           "description": "\"{{name}}\" 아래의 DDS 파일을 찾아 제자리에서 리사이즈합니다."
+        },
+        "classification": {
+          "title": "분류 관리",
+          "description": "분류 기준과 그룹을 만든 뒤, 사이드바에서 캐릭터 폴더를 우클릭해 그룹에 배정하세요.",
+          "new": "새 분류 기준",
+          "name-label": "분류 기준 이름",
+          "name-placeholder": "예: 속성",
+          "groups-label": "그룹",
+          "group-placeholder": "그룹 이름",
+          "add-group": "그룹 추가",
+          "move-up": "위로 이동",
+          "move-down": "아래로 이동",
+          "delete-title": "이 분류 기준을 삭제할까요?",
+          "delete-description": "\"{{name}}\" 분류 기준과 그 안의 그룹이 모두 삭제됩니다. 캐릭터 폴더는 삭제되지 않습니다."
         },
         "create-folder": {
           "title": "새 폴더 만들기",
@@ -818,6 +839,14 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "classification": {
+            "INVALID_CLASSIFICATION_NAME": "이름을 입력해 주세요.",
+            "CLASSIFICATION_NAME_EXISTS": "이미 존재하는 분류 기준 이름입니다.",
+            "CLASSIFICATION_GROUP_NAME_EXISTS": "같은 이름의 그룹이 이미 있습니다.",
+            "CLASSIFICATION_NOT_FOUND": "분류 기준 또는 그룹을 찾을 수 없습니다.",
+            "INVALID_CLASSIFICATION_PATH": "이 폴더는 분류할 수 없습니다.",
+            "failed": "분류를 변경하지 못했습니다."
+          },
           "add-game-mutation": {
             "duplicate-game-name": "이미 존재하는 게임 이름입니다.",
             "duplicate-mod-folder-path": "이미 사용 중인 모드 폴더 경로입니다.",
