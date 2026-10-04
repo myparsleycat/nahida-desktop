@@ -85,16 +85,21 @@ type PatchResult struct {
 	Warnings     []string `json:"warnings,omitempty"`
 }
 
+// preparedPatch is the resolved change for one file. Several update operations may target the same
+// path: op is the first one, followups are the rest in input order, and updated carries the decoded
+// text each later update is applied to.
 type preparedPatch struct {
-	op       PatchOperation
-	path     string
-	text     string
-	data     []byte
-	format   textFormat
-	exists   bool
-	temp     string
-	backup   string
-	warnings []string
+	op        PatchOperation
+	followups []PatchOperation
+	path      string
+	text      string
+	updated   string
+	data      []byte
+	format    textFormat
+	exists    bool
+	temp      string
+	backup    string
+	warnings  []string
 }
 
 func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
@@ -359,10 +364,11 @@ func (s *Sandbox) PreparePatch(rootID string, operations []PatchOperation) ([]Pa
 	if err != nil {
 		return nil, nil, err
 	}
-	prepared := make([]PatchOperation, len(items))
+	prepared := make([]PatchOperation, 0, len(operations))
 	targets := make([]string, len(items))
 	for index, item := range items {
-		prepared[index] = item.op
+		prepared = append(prepared, item.op)
+		prepared = append(prepared, item.followups...)
 		targets[index] = filepath.ToSlash(item.path)
 	}
 	return prepared, targets, nil
@@ -381,17 +387,47 @@ func (s *Sandbox) preparePatch(
 		return nil, nil, errors.New("patch requires at least one operation")
 	}
 	items := make([]preparedPatch, 0, len(operations))
-	seen := make(map[string]bool, len(operations))
-	for _, operation := range operations {
+	indexes := make(map[string]int, len(operations))
+	// An update that does not match is collected instead of returned, so one rejection names every
+	// operation the model has to correct.
+	var failures []error
+	for number, operation := range operations {
 		clean, err := validateRelativePath(operation.Path)
 		if err != nil {
 			return nil, nil, err
 		}
+
+		// Later updates to a path already in the patch apply to the result of the earlier ones, so
+		// one call can carry every edit to a file. The first operation alone seals the file content.
 		pathKey := strings.ToLower(clean)
-		if seen[pathKey] {
-			return nil, nil, fmt.Errorf("patch contains duplicate path %q", clean)
+		if index, ok := indexes[pathKey]; ok {
+			earlier := &items[index]
+			if earlier.op.Type != "update" || operation.Type != "update" {
+				return nil, nil, fmt.Errorf(
+					"patch contains duplicate path %q: only update operations may repeat a path; merge the others into one operation",
+					clean,
+				)
+			}
+			if operation.ExpectedContent != nil && earlier.text != *operation.ExpectedContent {
+				return nil, nil, fmt.Errorf("patch precondition failed for %q", clean)
+			}
+			updated, warnings, err := applyUpdate(
+				earlier.updated, operation, earlier.format.newline, filepath.ToSlash(clean),
+			)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("operation %d: %w", number+1, err))
+				continue
+			}
+			for _, warning := range warnings {
+				earlier.warnings = append(earlier.warnings, filepath.ToSlash(clean)+": "+warning)
+			}
+			earlier.updated = updated
+			earlier.data = encodeText(updated, earlier.format)
+			earlier.followups = append(earlier.followups, operation)
+			continue
 		}
-		seen[pathKey] = true
+		indexes[pathKey] = len(items)
+
 		item := preparedPatch{op: operation, path: clean, format: textFormat{encoding: "utf-8", newline: "\n"}}
 		existing, readErr := root.root.ReadFile(clean)
 		if readErr == nil {
@@ -422,13 +458,19 @@ func (s *Sandbox) preparePatch(
 		case "write":
 			item.data = encodeText(normalizeNewlines(operation.Content, item.format.newline), item.format)
 		case "update":
-			updated, warnings, err := applyUpdate(item, filepath.ToSlash(clean))
+			if !item.exists {
+				return nil, nil, fmt.Errorf("update %q: file does not exist", filepath.ToSlash(clean))
+			}
+			updated, warnings, err := applyUpdate(item.text, operation, item.format.newline, filepath.ToSlash(clean))
 			if err != nil {
-				return nil, nil, err
+				// The file stays registered so later updates to it are still checked.
+				failures = append(failures, fmt.Errorf("operation %d: %w", number+1, err))
+				updated = item.text
 			}
 			for _, warning := range warnings {
 				item.warnings = append(item.warnings, filepath.ToSlash(clean)+": "+warning)
 			}
+			item.updated = updated
 			item.data = encodeText(updated, item.format)
 		case "delete":
 			if readErr != nil {
@@ -439,24 +481,27 @@ func (s *Sandbox) preparePatch(
 		}
 		items = append(items, item)
 	}
+	if len(failures) > 0 {
+		return nil, nil, errors.Join(failures...)
+	}
 	return root, items, nil
 }
 
-func applyUpdate(item preparedPatch, path string) (string, []string, error) {
-	if !item.exists {
-		return "", nil, fmt.Errorf("update %q: file does not exist", path)
-	}
-	hasHunks := len(item.op.Hunks) > 0
-	hasReplace := item.op.OldString != "" || item.op.NewString != ""
+func applyUpdate(text string, operation PatchOperation, newline, path string) (string, []string, error) {
+	hasHunks := len(operation.Hunks) > 0
+	hasReplace := operation.OldString != "" || operation.NewString != ""
 	if hasHunks && hasReplace {
 		return "", nil, fmt.Errorf("update %q: use oldString/newString or hunks, not both", path)
 	}
 	if hasHunks {
-		return applyPatchHunks(item.text, item.op.Hunks, path, item.format.newline)
+		return applyPatchHunks(text, operation.Hunks, path, newline)
 	}
-	updated, err := applySearchReplace(
-		item.text, item.op.OldString, item.op.NewString, path, item.format.newline, item.op.ReplaceAll,
+	updated, warning, err := applySearchReplace(
+		text, operation.OldString, operation.NewString, path, newline, operation.ReplaceAll,
 	)
+	if warning != "" {
+		return updated, []string{warning}, err
+	}
 	return updated, nil, err
 }
 

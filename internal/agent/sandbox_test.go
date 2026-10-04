@@ -323,6 +323,141 @@ func TestSandboxUpdateRejectsMissingFileAndDuplicatePath(t *testing.T) {
 	}
 }
 
+func TestSandboxAppliesRepeatedUpdatesToOnePathInOrder(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	original := "[A]\r\nvalue=old\r\n[B]\r\nvalue=keep\r\n[Resource]\r\nfilename = a.dds\r\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	// The second update only matches the text the first one wrote, and the third mixes in hunks.
+	operations := []PatchOperation{
+		{Type: "update", Path: "mod.ini", OldString: "[Resource]", NewString: "[Temp]\n\n[Resource]"},
+		{Type: "update", Path: "MOD.ini", OldString: "[Temp]\n", NewString: "[Temp]\ntype = buffer\n"},
+		{
+			Type: "update", Path: "mod.ini",
+			Hunks: []PatchHunk{{Context: "[A]", OldLines: []string{"value=old"}, NewLines: []string{"value=new"}}},
+		},
+	}
+	prepared, targets, err := sandbox.PreparePatch("root", operations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0] != "mod.ini" {
+		t.Fatalf("targets = %#v", targets)
+	}
+	if len(prepared) != 3 || prepared[0].ExpectedContent == nil || *prepared[0].ExpectedContent != original ||
+		prepared[1].ExpectedContent != nil || prepared[2].ExpectedContent != nil {
+		t.Fatalf("prepared = %#v", prepared)
+	}
+
+	result, err := sandbox.ApplyPatch("root", prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ChangedFiles) != 1 || result.ChangedFiles[0] != "mod.ini" {
+		t.Fatalf("changed files = %#v", result.ChangedFiles)
+	}
+	want := "[A]\r\nvalue=new\r\n[B]\r\nvalue=keep\r\n[Temp]\r\ntype = buffer\r\n\r\n[Resource]\r\nfilename = a.dds\r\n"
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Fatalf("file = %q", got)
+	}
+}
+
+func TestSandboxRepeatedUpdatesAreAtomicAndSealed(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	original := "[A]\r\nvalue=old\r\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{
+		{Type: "update", Path: "mod.ini", OldString: "value=old", NewString: "value=new"},
+		{Type: "update", Path: "mod.ini", OldString: "missing=1", NewString: "missing=2"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "oldString not found") {
+		t.Fatalf("err = %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != original {
+		t.Fatalf("file changed by a rejected patch: %q", got)
+	}
+
+	stale := "something else"
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{
+		{Type: "update", Path: "mod.ini", OldString: "value=old", NewString: "value=new"},
+		{Type: "update", Path: "mod.ini", OldString: "[A]", NewString: "[B]", ExpectedContent: &stale},
+	})
+	if err == nil || !strings.Contains(err.Error(), `patch precondition failed for "mod.ini"`) {
+		t.Fatalf("followup precondition err = %v", err)
+	}
+
+	prepared, _, err := sandbox.PreparePatch("root", []PatchOperation{
+		{Type: "update", Path: "mod.ini", OldString: "value=old", NewString: "value=new"},
+		{Type: "update", Path: "mod.ini", OldString: "[A]", NewString: "[B]"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[A]\r\nvalue=old\r\nadded=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sandbox.ApplyPatch("root", prepared); err == nil {
+		t.Fatal("stale approved patch unexpectedly applied")
+	}
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{
+		{Type: "create", Path: "new.ini", Content: "[A]\n"},
+		{Type: "update", Path: "new.ini", OldString: "[A]", NewString: "[B]"},
+	})
+	if err == nil || !strings.Contains(err.Error(), `duplicate path "new.ini": only update operations may repeat`) {
+		t.Fatalf("mixed duplicate err = %v", err)
+	}
+}
+
+// One rejection must name every operation that failed, so the model corrects them in one retry.
+func TestSandboxReportsEveryFailedUpdate(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "mod.ini")
+	original := "[A]\r\nvalue=old\r\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{{ID: "root", Name: "Root", Path: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	_, err = sandbox.ApplyPatch("root", []PatchOperation{
+		{Type: "update", Path: "mod.ini", OldString: "first=missing", NewString: "first=1"},
+		{Type: "update", Path: "mod.ini", OldString: "value=old", NewString: "value=new"},
+		{Type: "update", Path: "mod.ini", OldString: "third=missing", NewString: "third=1"},
+	})
+	if err == nil || !strings.Contains(err.Error(), `operation 1: update "mod.ini": oldString not found`) ||
+		!strings.Contains(err.Error(), `operation 3: update "mod.ini": oldString not found`) ||
+		strings.Contains(err.Error(), "operation 2") {
+		t.Fatalf("err = %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != original {
+		t.Fatalf("file changed by a rejected patch: %q", got)
+	}
+}
+
 func TestSandboxUpdateOldStringPreservesUntouchedLines(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

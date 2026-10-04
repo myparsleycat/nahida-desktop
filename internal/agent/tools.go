@@ -33,7 +33,9 @@ type toolExecution struct {
 	Approval     *agentactions.Proposal
 }
 
-func builtInToolDefinitions() []ToolDefinition {
+// builtInToolDefinitions lists the tools every request carries. patchText selects how the model
+// writes file edits: the patch text envelope or JSON operations.
+func builtInToolDefinitions(patchText bool) []ToolDefinition {
 	return []ToolDefinition{
 		{
 			Name:        "list_files",
@@ -67,40 +69,7 @@ func builtInToolDefinitions() []ToolDefinition {
 				"regex": map[string]any{"type": "boolean"},
 			}, "rootId", "pattern"),
 		},
-		{
-			Name:        "apply_patch",
-			Description: "Atomically create, update, or delete text files after preflight validation. For an existing file, use type update with oldString/newString; oldString must match exactly one place unless replaceAll is true, so include a unique nearby section header when the snippet repeats. If update is rejected, enlarge oldString and retry that update — do not switch to write. Ordered hunks are an alternative for several disjoint regions in one file; a hunk may reuse the immediately preceding hunk's final old line as its context when the replacement keeps that line unchanged, but hunks must not otherwise overlap. type write replaces an entire file and must not be used for a targeted edit. Existing encoding, BOM, and newline style are preserved.",
-			InputSchema: objectSchema(map[string]any{
-				"rootId": map[string]any{
-					"type": "string",
-				},
-				"operations": map[string]any{"type": "array", "items": objectSchema(map[string]any{
-					"type": map[string]any{
-						"type": "string", "enum": []string{"update", "create", "delete", "write"},
-					},
-					"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
-					"expectedContent": map[string]any{"type": "string"},
-					"oldString": map[string]any{
-						"type":        "string",
-						"description": "Exact text to replace. Must match once unless replaceAll is true.",
-					},
-					"newString": map[string]any{
-						"type":        "string",
-						"description": "Replacement text. Must differ from oldString.",
-					},
-					"replaceAll": map[string]any{
-						"type":        "boolean",
-						"description": "Replace every occurrence of oldString. Default false.",
-					},
-					"hunks": map[string]any{"type": "array", "items": objectSchema(map[string]any{
-						"context":  map[string]any{"type": "string"},
-						"oldLines": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						"newLines": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						"eof":      map[string]any{"type": "boolean"},
-					})},
-				}, "type", "path")},
-			}, "rootId", "operations"),
-		},
+		applyPatchDefinition(patchText),
 		{
 			Name:        "move_path",
 			Description: "Move or rename a path within the same sandbox root.",
@@ -133,6 +102,64 @@ func builtInToolDefinitions() []ToolDefinition {
 				"actionId": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object"},
 			}, "actionId", "arguments"),
 		},
+	}
+}
+
+func applyPatchDefinition(patchText bool) ToolDefinition {
+	if patchText {
+		return ToolDefinition{
+			Name: "apply_patch",
+			Description: "Atomically create, update, or delete text files with one patch; put every edit in a single call. " +
+				"patchText is this envelope:\n" +
+				"*** Begin Patch\n" +
+				"*** Update File: <path relative to the root>\n" +
+				"@@ <optional line above the change, such as its section header>\n" +
+				" <unchanged context line>\n" +
+				"-<removed line>\n" +
+				"+<added line>\n" +
+				"*** Add File: <path>\n" +
+				"+<every line of the new file>\n" +
+				"*** Delete File: <path>\n" +
+				"*** End Patch\n" +
+				"Start each changed region with @@ and prefix every line with a space (context), - (remove), or + (add), " +
+				"copying context and removed lines from the file. Chunks are matched in file order and a repeated block " +
+				"resolves to its first occurrence after the @@ line, so name the enclosing section header after @@ when a " +
+				"block repeats. Keep about three context lines around a change and never restate the whole file. A chunk " +
+				"followed by *** End of File is anchored to the end of the file, and a chunk of only + lines without @@ is " +
+				"appended there. Rename with move_path. Existing encoding, BOM, and newline style are preserved.",
+			InputSchema: objectSchema(map[string]any{
+				"rootId":    map[string]any{"type": "string"},
+				"patchText": map[string]any{"type": "string", "description": "The full patch envelope."},
+			}, "rootId", "patchText"),
+		}
+	}
+	return ToolDefinition{
+		Name:        "apply_patch",
+		Description: "Atomically create, update, or delete text files after preflight validation. For an existing file, use type update with oldString/newString; oldString must match exactly one place unless replaceAll is true, so include a unique nearby section header when the snippet repeats. Put every edit to a file in one call: several update operations may target the same path and apply in order, each to the result of the previous one. A rejection names every operation that failed; correct those and resend the call — do not switch to write. type write replaces an entire file and must not be used for a targeted edit. Existing encoding, BOM, and newline style are preserved.",
+		InputSchema: objectSchema(map[string]any{
+			"rootId": map[string]any{
+				"type": "string",
+			},
+			"operations": map[string]any{"type": "array", "items": objectSchema(map[string]any{
+				"type": map[string]any{
+					"type": "string", "enum": []string{"update", "create", "delete", "write"},
+				},
+				"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
+				"expectedContent": map[string]any{"type": "string"},
+				"oldString": map[string]any{
+					"type":        "string",
+					"description": "Exact text to replace. Must match once unless replaceAll is true.",
+				},
+				"newString": map[string]any{
+					"type":        "string",
+					"description": "Replacement text. Must differ from oldString.",
+				},
+				"replaceAll": map[string]any{
+					"type":        "boolean",
+					"description": "Replace every occurrence of oldString. Default false.",
+				},
+			}, "type", "path")},
+		}, "rootId", "operations"),
 	}
 }
 
@@ -226,10 +253,21 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 	case "apply_patch":
 		var input struct {
 			RootID     string           `json:"rootId"`
-			Operations []PatchOperation `json:"operations"`
+			PatchText  string           `json:"patchText,omitempty"`
+			Operations []PatchOperation `json:"operations,omitempty"`
 		}
 		if err := decodeToolArguments(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
+		}
+		if input.PatchText != "" {
+			if len(input.Operations) > 0 {
+				return toolExecution{}, errors.New("apply_patch takes patchText or operations, not both")
+			}
+			operations, err := parsePatchText(input.PatchText)
+			if err != nil {
+				return toolExecution{}, err
+			}
+			input.Operations, input.PatchText = operations, ""
 		}
 		prepared, targets, err := e.sandbox.PreparePatch(input.RootID, input.Operations)
 		if err != nil {

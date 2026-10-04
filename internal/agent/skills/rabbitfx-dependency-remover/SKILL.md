@@ -11,7 +11,7 @@ An explicit request to remove the dependency authorizes focused reversible INI e
 
 ## Use the available Nahida tools
 
-Use `search_files`, `search_text`, and bounded `read_file` ranges to inspect the selected mod folder in an authorized sandbox root. Use `apply_patch` with exact `update` operations or ordered hunks for existing INIs; include a section header when a snippet repeats. Preserve encoding, BOM, line endings, comments, section order, and unrelated content. Do not replace an existing INI with `write` after an update fails.
+Use `search_files`, `search_text`, and bounded `read_file` ranges to inspect the selected mod folder in an authorized sandbox root. Use one `apply_patch` call carrying every edit to an INI, and anchor each edit with its section header when a snippet repeats. Preserve encoding, BOM, line endings, comments, section order, and unrelated content. Do not replace an existing INI wholesale after an edit fails.
 
 Retain the exact original text of every changed region and any added sections in the session so the patch can be reversed. Do not claim a separate backup or working copy was created unless a tool actually created it.
 
