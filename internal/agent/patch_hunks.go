@@ -306,7 +306,9 @@ func resolveHunk(
 
 	// Hunks may also arrive out of file order, so a block that only exists before the cursor is
 	// accepted when it is unique in the whole file; the caller rejects overlapping hunks afterwards.
-	if !match.found && cursor > 0 {
+	// An end-of-file hunk stays anchored to the tail, so a stale one fails instead of replacing an
+	// earlier repeat of its old lines.
+	if !match.found && cursor > 0 && !hunk.EOF {
 		match = findLineBlock(lines, pattern, 0)
 		if !match.found && len(match.candidates) == 0 && len(shorter) < len(pattern) {
 			if match = findLineBlock(lines, shorter, 0); match.found {
@@ -340,15 +342,22 @@ func resolveHunk(
 	return resolution, end, nil
 }
 
-// seekHunk finds the old lines of one hunk at or after the cursor: anchored to the end of the file
-// when the hunk asks for it, else the first matching block.
+// seekHunk finds the old lines of one hunk at or after the cursor: only at the end of the file when
+// the hunk asks for it, else the first matching block.
 func seekHunk(lines, pattern []string, cursor int, eof bool) lineMatch {
-	if tail := len(lines) - len(pattern); eof && tail >= cursor {
-		if match := seekLineBlock(lines[tail:], pattern, 0); match.found {
-			return lineMatch{found: true, index: tail, pass: match.pass}
-		}
+	if !eof {
+		return seekLineBlock(lines, pattern, cursor)
 	}
-	return seekLineBlock(lines, pattern, cursor)
+
+	tail := len(lines) - len(pattern)
+	if tail < cursor {
+		return lineMatch{}
+	}
+	match := seekLineBlock(lines[tail:], pattern, 0)
+	if !match.found {
+		return lineMatch{}
+	}
+	return lineMatch{found: true, index: tail, pass: match.pass}
 }
 
 func keepsBoundary(lines []string, resolution hunkResolution) bool {

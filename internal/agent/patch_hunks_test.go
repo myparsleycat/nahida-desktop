@@ -195,6 +195,34 @@ func TestApplyPatchHunksAnchorsOldLinesToEndOfFile(t *testing.T) {
 	}
 }
 
+func TestApplyPatchHunksRejectsStaleEndOfFileHunk(t *testing.T) {
+	t.Parallel()
+	stale := PatchHunk{EOF: true, OldLines: []string{"key=1"}, NewLines: []string{"key=3"}}
+	cases := []struct {
+		name  string
+		hunks []PatchHunk
+	}{
+		{name: "earlier block after the cursor", hunks: []PatchHunk{stale}},
+		{
+			name: "earlier block before the cursor",
+			hunks: []PatchHunk{
+				{OldLines: []string{"[B]"}, NewLines: []string{"[C]"}},
+				stale,
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := applyPatchHunks("[A]\r\nkey=1\r\n[B]\r\nkey=2\r\n", testCase.hunks, "mod.ini", "\r\n")
+			if err == nil || !strings.Contains(err.Error(), `expected lines not found in "mod.ini": "key=1"`) {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
+
 func TestApplyPatchHunksReportsEveryFailedHunk(t *testing.T) {
 	t.Parallel()
 	_, _, err := applyPatchHunks("[A]\r\nkey=1\r\n", []PatchHunk{

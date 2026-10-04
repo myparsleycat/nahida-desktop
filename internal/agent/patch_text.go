@@ -50,12 +50,16 @@ func parsePatchText(text string) ([]PatchOperation, error) {
 	if begin < 0 {
 		return nil, fmt.Errorf("patchText must start with %q", patchBeginMarker)
 	}
-	end := len(lines)
+	// A patch without its end marker is most likely truncated output, so none of it is applied.
+	end := -1
 	for index := len(lines) - 1; index > begin; index-- {
 		if strings.TrimSpace(lines[index]) == patchEndMarker {
 			end = index
 			break
 		}
+	}
+	if end < 0 {
+		return nil, fmt.Errorf("patchText must end with %q", patchEndMarker)
 	}
 
 	operations := make([]PatchOperation, 0, 1)

@@ -79,6 +79,11 @@ func TestParsePatchTextRejectsMalformedPatches(t *testing.T) {
 		name, text, errMsg string
 	}{
 		{name: "no envelope", text: "*** Update File: mod.ini\n-a\n+b", errMsg: `must start with "*** Begin Patch"`},
+		{
+			name:   "no end marker",
+			text:   "*** Begin Patch\n*** Update File: mod.ini\n-a\n+b",
+			errMsg: `must end with "*** End Patch"`,
+		},
 		{name: "empty", text: "*** Begin Patch\n*** End Patch", errMsg: "contains no file sections"},
 		{
 			name:   "stray line",
