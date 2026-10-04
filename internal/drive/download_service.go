@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 
@@ -54,9 +53,13 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 	if fs == nil {
 		fs = platform.NewFS()
 	}
-	params.Items = slices.Clone(params.Items)
+	params.Items = lo.UniqBy(params.Items, func(item DownloadItem) string { return item.ID })
+	// An unnamed item stays unnamed, so the server's name is used once the walk
+	// reports it.
 	for index := range params.Items {
-		params.Items[index].Name = fs.SanitizeWindowsFilename(params.Items[index].Name, " ")
+		if params.Items[index].Name != "" {
+			params.Items[index].Name = fs.SanitizeWindowsFilename(params.Items[index].Name, " ")
+		}
 	}
 	if params.ModTicket != "" {
 		redemption, err := d.redeemModDownloadTicket(ctx, params.ModTicket)
@@ -64,7 +67,9 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 			redemptionFailed = true
 			return StartDownloadResult{}, err
 		}
-		params.Items = []DownloadItem{{ID: redemption.ItemID, IsDir: true, Name: fs.SanitizeWindowsFilename(redemption.Name, " ")}}
+		params.Items = []DownloadItem{
+			{ID: redemption.ItemID, IsDir: true, Name: fs.SanitizeWindowsFilename(redemption.Name, " ")},
+		}
 		params.Mod = &DownloadModAccess{Grant: redemption.Grant}
 		params.Link = nil
 		params.ModTicket = ""
@@ -93,64 +98,37 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 		return StartDownloadResult{}, fmt.Errorf("path is not writable: %s", targetPath)
 	}
 	params.TargetPath = filepath.Clean(targetPath)
-	var metadata DownloadMetadata
-	switch {
-	case params.Data != nil:
-		metadata = cloneDownloadMetadata(*params.Data)
-	case params.Mod != nil:
-		metadata, err = d.fetchModDownloadMetadata(ctx, params.Items, *params.Mod)
-	default:
-		metadata, err = d.fetchDownloadMetadata(ctx, params.Items, params.Link)
-	}
+	layout, canceled, err := d.reserveDownloadNames(ctx, params)
 	if err != nil {
 		return StartDownloadResult{}, err
 	}
-	prepared, err := d.prepareDownloadMetadata(ctx, nil, "", metadata, params)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if ctx.Err() != nil {
-				return StartDownloadResult{}, ctx.Err()
-			}
-			return StartDownloadResult{Status: "canceled"}, nil
-		}
-		return StartDownloadResult{}, err
+	if canceled {
+		return StartDownloadResult{Status: "canceled"}, nil
 	}
-	destinationTargets, err := resolveDownloadDestinationTargets(prepared, params.TargetPath)
-	if err != nil {
-		return StartDownloadResult{}, err
-	}
-	data := transfer.Data{Root: &prepared.Root, Files: slices.Clone(prepared.Files), Dirs: slices.Clone(prepared.Dirs)}
-	name := prepared.Root.Name
+	name := layout.rootName
 	if len(params.Items) != 1 {
 		name = fmt.Sprintf("%d items", len(params.Items))
 	}
+
+	d.sweepDownloadSpools()
 	pid := uuid.NewString()
 	if _, err := d.transfer.Create(transfer.CreateParams{
 		PID:                pid,
 		Type:               "download",
 		Name:               name,
 		Path:               filepath.ToSlash(params.TargetPath),
-		DestinationTargets: destinationTargets,
+		DestinationTargets: layout.targets(params.Items, params.TargetPath),
 		CurrentID:          downloadCurrentID(params),
-		InitialStatus:      transfer.StatusPreparing,
-		Data:               data,
+		InitialStatus:      transfer.StatusPending,
 		RestartData:        params,
 	}); err != nil {
 		return StartDownloadResult{}, err
 	}
-	if err := d.transfer.SetData(pid, data, prepared.TotalBytes, name, destinationTargets); err != nil {
-		_ = d.transfer.Cancel(pid)
-		return StartDownloadResult{}, err
-	}
-	pending := transfer.StatusPending
-	if err := d.transfer.Update(pid, transfer.Updates{Status: &pending}); err != nil {
-		_ = d.transfer.Cancel(pid)
-		return StartDownloadResult{}, err
-	}
+	run := &downloadRun{params: params, layout: layout}
 	if err := d.transfer.RegisterRunner(
 		pid,
 		func(runCtx context.Context, transfers *transfer.Transfer, runnerPID string) error {
-			return d.runDownload(runCtx, transfers, runnerPID, params, prepared)
+			return d.runDownload(runCtx, transfers, runnerPID, run)
 		},
 	); err != nil {
 		_ = d.transfer.Cancel(pid)
@@ -182,18 +160,19 @@ func (d *Drive) resolveDownloadTarget(ctx context.Context, params StartDownloadP
 	if d.paths == nil {
 		return resolvedDownloadTarget{}, errors.New("download target path is required")
 	}
+	// The dialog still needs something to show for an unnamed item.
+	names := make([]string, len(params.Items))
+	for index, item := range params.Items {
+		names[index] = driveFS(d).SanitizeWindowsFilename(item.Name, " ")
+	}
 	isSingle := len(params.Items) == 1
 	suggestedName := params.SuggestedName
 	if isSingle && suggestedName == "" {
-		suggestedName = params.Items[0].Name
+		suggestedName = names[0]
 	}
 	source := params.Source
 	if source == "" {
 		source = "nahidaLive"
-	}
-	names := make([]string, len(params.Items))
-	for index, item := range params.Items {
-		names[index] = item.Name
 	}
 	path, fileName, err := d.paths.SelectDownloadPath(
 		ctx,
@@ -217,12 +196,98 @@ func (d *Drive) resolveDownloadTarget(ctx context.Context, params StartDownloadP
 	return resolvedDownloadTarget{path: *path, suggestedName: suggestedName}, nil
 }
 
+// downloadLayout is the top-level naming a download settles before it is
+// queued, so its destinations are reserved while it waits for its turn.
+type downloadLayout struct {
+	// rootName names a single item. It is empty when the caller did not name
+	// the item, and the server's name is used once the walk reports it.
+	rootName string
+	// names maps each item of a multi-item download to its top-level name.
+	names map[string]string
+	// used lists the names already taken in the target directory.
+	used []string
+}
+
+func (l downloadLayout) targets(items []DownloadItem, targetPath string) []transfer.DestinationTarget {
+	target := func(item DownloadItem, name string) transfer.DestinationTarget {
+		kind := transfer.DestinationFile
+		if item.IsDir {
+			kind = transfer.DestinationDirectory
+		}
+		return transfer.DestinationTarget{Path: filepath.Join(targetPath, name), Kind: kind}
+	}
+	if len(items) == 1 {
+		if l.rootName == "" {
+			return nil
+		}
+		return []transfer.DestinationTarget{target(items[0], l.rootName)}
+	}
+	targets := make([]transfer.DestinationTarget, 0, len(items))
+	for _, item := range items {
+		if name := l.names[item.ID]; name != "" {
+			targets = append(targets, target(item, name))
+		}
+	}
+	return targets
+}
+
+func (d *Drive) reserveDownloadNames(ctx context.Context, params StartDownloadParams) (downloadLayout, bool, error) {
+	fs := driveFS(d)
+	entries, err := os.ReadDir(params.TargetPath)
+	if err != nil {
+		return downloadLayout{}, false, err
+	}
+	layout := downloadLayout{used: make([]string, len(entries))}
+	for index, entry := range entries {
+		layout.used[index] = entry.Name()
+	}
+
+	if len(params.Items) == 1 {
+		item := params.Items[0]
+		name := item.Name
+		if params.SuggestedName != "" {
+			name = fs.SanitizeWindowsFilename(params.SuggestedName, " ")
+		}
+		if item.IsDir && name != "" {
+			resolved, canceled, err := d.resolveDirectoryDownloadName(ctx, name, params.TargetPath, layout.used)
+			if err != nil || canceled {
+				return downloadLayout{}, canceled, err
+			}
+			name = resolved
+		}
+		layout.rootName = name
+		return layout, false, nil
+	}
+
+	// Folders claim their names before files, so a clash renames the file.
+	layout.names = make(map[string]string, len(params.Items))
+	for _, wantDir := range []bool{true, false} {
+		for _, item := range params.Items {
+			if item.IsDir != wantDir || item.Name == "" {
+				continue
+			}
+			name := fs.GetUniqueName(item.Name, layout.used)
+			layout.names[item.ID] = name
+			layout.used = append(layout.used, name)
+		}
+	}
+	return layout, false, nil
+}
+
+// downloadRun is the state a download's runner keeps across pause, resume,
+// and retry.
+type downloadRun struct {
+	params StartDownloadParams
+	layout downloadLayout
+	// plan is set once enumeration finishes, so a later run skips the walk.
+	plan *downloadPlan
+}
+
 func (d *Drive) runDownload(
 	ctx context.Context,
 	transfers *transfer.Transfer,
 	pid string,
-	params StartDownloadParams,
-	prepared DownloadMetadata,
+	run *downloadRun,
 ) error {
 	preparing := transfer.StatusPreparing
 	if err := transfers.Update(
@@ -231,98 +296,52 @@ func (d *Drive) runDownload(
 	); err != nil {
 		return d.reportDownloadFailure(transfers, pid, "prepare", err)
 	}
-	name := prepared.Root.Name
-	if len(params.Items) != 1 {
-		name = fmt.Sprintf("%d items", len(params.Items))
+
+	if run.plan == nil {
+		spoolPath, err := d.downloadSpoolPath(pid)
+		if err != nil {
+			return d.failDownloadTransfer(transfers, pid, "metadata", err)
+		}
+		plan, err := d.enumerateDownload(ctx, run.params, run.layout, spoolPath, func(files int, totalBytes int64) {
+			_ = transfers.Update(pid, transfer.Updates{TotalFiles: &files, TotalSize: &totalBytes})
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return d.failDownloadTransfer(transfers, pid, "metadata", err)
+		}
+		run.plan = plan
 	}
-	destinationTargets, err := resolveDownloadDestinationTargets(prepared, params.TargetPath)
+	plan := run.plan
+
+	destinationTargets, err := resolveDownloadDestinationTargets(plan, run.params.TargetPath)
 	if err != nil {
 		return d.failDownloadTransfer(transfers, pid, "resolve-target", err)
 	}
-	data := transfer.Data{Root: &prepared.Root, Files: slices.Clone(prepared.Files), Dirs: slices.Clone(prepared.Dirs)}
-	if err := transfers.SetData(pid, data, prepared.TotalBytes, name, destinationTargets); err != nil {
+	totalFiles, totalBytes := plan.fileCount, max(0, plan.totalBytes)
+	updates := transfer.Updates{
+		TotalFiles:         &totalFiles,
+		TotalSize:          &totalBytes,
+		DestinationTargets: destinationTargets,
+	}
+	// An item queued without a name takes the one the walk settled.
+	if len(run.params.Items) == 1 && run.layout.rootName == "" && plan.root.Name != "" {
+		updates.Name = &plan.root.Name
+	}
+	if err := transfers.Update(pid, updates); err != nil {
 		return d.failDownloadTransfer(transfers, pid, "metadata", err)
 	}
-	if err := d.executeDownload(ctx, transfers, pid, params, prepared); err != nil {
+	if err := d.executeDownload(ctx, transfers, pid, run.params, plan); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
 		return d.failDownloadTransfer(transfers, pid, "", err)
 	}
-	return nil
-}
 
-func (d *Drive) prepareDownloadMetadata(
-	ctx context.Context,
-	transfers *transfer.Transfer,
-	pid string,
-	metadata DownloadMetadata,
-	params StartDownloadParams,
-) (DownloadMetadata, error) {
-	metadata = cloneDownloadMetadata(metadata)
-	fs := d.fs
-	if fs == nil {
-		fs = platform.NewFS()
-	}
-	if metadata.Root.Name != "" {
-		metadata.Root.Name = fs.SanitizeWindowsFilename(metadata.Root.Name, " ")
-	}
-	for index := range metadata.Files {
-		metadata.Files[index].Name = fs.SanitizeWindowsFilename(metadata.Files[index].Name, " ")
-	}
-	for index := range metadata.Dirs {
-		metadata.Dirs[index].Name = fs.SanitizeWindowsFilename(metadata.Dirs[index].Name, " ")
-	}
-	if len(params.Items) == 1 && params.SuggestedName != "" {
-		name := fs.SanitizeWindowsFilename(params.SuggestedName, " ")
-		metadata.Root.Name = name
-		if !params.Items[0].IsDir && len(metadata.Files) == 1 {
-			metadata.Files[0].Name = name
-		}
-	}
-	entries, err := os.ReadDir(params.TargetPath)
-	if err != nil {
-		return DownloadMetadata{}, err
-	}
-	existing := make([]string, len(entries))
-	for index, entry := range entries {
-		existing[index] = entry.Name()
-	}
-	if len(params.Items) == 1 && params.Items[0].IsDir {
-		name, canceled, resolveErr := d.resolveDirectoryDownloadName(
-			ctx,
-			metadata.Root.Name,
-			params.TargetPath,
-			existing,
-		)
-		if resolveErr != nil {
-			return DownloadMetadata{}, resolveErr
-		}
-		if canceled {
-			if transfers != nil && pid != "" {
-				_ = transfers.Cancel(pid)
-			}
-			return DownloadMetadata{}, context.Canceled
-		}
-		setDownloadRootName(&metadata, name)
-	} else if len(params.Items) > 1 {
-		used := append([]string(nil), existing...)
-		for index := range metadata.Dirs {
-			if metadata.Dirs[index].ParentID == nil || *metadata.Dirs[index].ParentID != "batch-root" {
-				continue
-			}
-			metadata.Dirs[index].Name = fs.GetUniqueName(metadata.Dirs[index].Name, used)
-			used = append(used, metadata.Dirs[index].Name)
-		}
-		for index := range metadata.Files {
-			if metadata.Files[index].ParentID == nil || *metadata.Files[index].ParentID != "batch-root" {
-				continue
-			}
-			metadata.Files[index].Name = fs.GetUniqueName(metadata.Files[index].Name, used)
-			used = append(used, metadata.Files[index].Name)
-		}
-	}
-	return metadata, nil
+	run.plan = nil
+	d.reportCleanup(plan.remove(), "runDownload")
+	return nil
 }
 
 func (d *Drive) resolveDirectoryDownloadName(
@@ -373,23 +392,14 @@ func driveFS(d *Drive) *platform.FS {
 	return platform.NewFS()
 }
 
-func setDownloadRootName(metadata *DownloadMetadata, name string) {
-	metadata.Root.Name = name
-	for index := range metadata.Dirs {
-		if metadata.Dirs[index].ID == metadata.Root.ID {
-			metadata.Dirs[index].Name = name
-		}
-	}
-}
-
 func (d *Drive) executeDownload(
 	ctx context.Context,
 	transfers *transfer.Transfer,
 	pid string,
 	params StartDownloadParams,
-	metadata DownloadMetadata,
+	plan *downloadPlan,
 ) error {
-	paths, singleFile, err := resolveDownloadPaths(metadata, params.TargetPath)
+	paths, singleFile, err := resolveDownloadPaths(plan, params.TargetPath)
 	if err != nil {
 		return infra.AnnotateError(err, infra.Diagnostic{Stage: "resolve-target"})
 	}
@@ -397,11 +407,15 @@ func (d *Drive) executeDownload(
 	downloadedBytes := record.TransferredSize
 	downloadedFiles := record.TransferredFiles
 	if downloadedBytes == 0 {
-		for _, file := range metadata.Files {
-			if transfers.IsFileCompleted(pid, file.ID) || file.CompAlg != nil {
+		for item, err := range plan.files() {
+			if err != nil {
+				return infra.AnnotateError(err, infra.Diagnostic{Stage: "metadata"})
+			}
+			file := item.file
+			if transfers.IsIndexCompleted(pid, item.index) || file.CompAlg != nil {
 				continue
 			}
-			parentPath := paths[parentDownloadKey(file, metadata.Root.ID, singleFile)]
+			parentPath := paths[parentDownloadKey(file, plan.root.ID, singleFile)]
 			if parentPath == "" {
 				continue
 			}
@@ -420,15 +434,16 @@ func (d *Drive) executeDownload(
 
 	concurrency := d.downloadConcurrency(ctx)
 	d.parallelDownload.SetRequestConcurrency(concurrency)
+	// A job is a file to download, or a directory to create when dirPath is set.
 	type downloadJob struct {
-		file    *transfer.DownloadFile
+		spooledFile
 		dirPath string
 	}
 	jobs := make(chan downloadJob)
 	var workers sync.WaitGroup
 	var stateMu sync.Mutex
 	failures := make([]error, 0)
-	workerCount := min(max(1, concurrency), max(1, len(metadata.Files)+len(paths)))
+	workerCount := min(max(1, concurrency), max(1, plan.fileCount+len(paths)))
 	workers.Add(workerCount)
 	for range workerCount {
 		go func() {
@@ -437,7 +452,7 @@ func (d *Drive) executeDownload(
 				if ctx.Err() != nil {
 					continue
 				}
-				if job.file == nil {
+				if job.dirPath != "" {
 					if err := os.MkdirAll(job.dirPath, 0o755); err != nil {
 						failure := infra.AnnotateError(
 							fmt.Errorf("create download directory %q: %w", job.dirPath, err),
@@ -449,11 +464,11 @@ func (d *Drive) executeDownload(
 					}
 					continue
 				}
-				file := *job.file
-				if transfers.IsFileCompleted(pid, file.ID) {
+				file := job.file
+				if transfers.IsIndexCompleted(pid, job.index) {
 					continue
 				}
-				parentPath := paths[parentDownloadKey(file, metadata.Root.ID, singleFile)]
+				parentPath := paths[parentDownloadKey(file, plan.root.ID, singleFile)]
 				if parentPath == "" {
 					failure := infra.AnnotateError(
 						fmt.Errorf("download parent path missing for %s", file.Name),
@@ -496,7 +511,7 @@ func (d *Drive) executeDownload(
 					downloadedFiles++
 					bytesNow, filesNow := downloadedBytes, downloadedFiles
 					stateMu.Unlock()
-					_ = transfers.MarkFileCompleted(pid, file.ID)
+					_ = transfers.MarkIndexCompleted(pid, job.index)
 					_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow, TransferredFiles: &filesNow})
 					continue
 				}
@@ -525,7 +540,7 @@ func (d *Drive) executeDownload(
 					_ = transfers.MarkFileFailed(pid, failure.Error())
 					continue
 				}
-				_ = transfers.MarkFileCompleted(pid, file.ID)
+				_ = transfers.MarkIndexCompleted(pid, job.index)
 				stateMu.Lock()
 				downloadedFiles++
 				filesNow := downloadedFiles
@@ -542,12 +557,17 @@ func (d *Drive) executeDownload(
 			return true
 		}
 	}
-	for _, file := range redistributeDownloadFiles(metadata.Files) {
-		if !queue(downloadJob{file: &file}) {
+	var spoolErr error
+	for item, err := range plan.scheduled() {
+		if err != nil {
+			spoolErr = infra.AnnotateError(err, infra.Diagnostic{Stage: "metadata"})
+			break
+		}
+		if !queue(downloadJob{spooledFile: item}) {
 			break
 		}
 	}
-	if ctx.Err() == nil && !singleFile {
+	if spoolErr == nil && ctx.Err() == nil && !singleFile {
 		for _, path := range paths {
 			if !queue(downloadJob{dirPath: path}) {
 				break
@@ -559,13 +579,16 @@ func (d *Drive) executeDownload(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if spoolErr != nil {
+		failures = append(failures, spoolErr)
+	}
 	if len(failures) > 0 {
 		return errors.Join(failures...)
 	}
 	completed := transfer.StatusCompleted
 	hundred := 100.0
-	total := metadata.TotalBytes
-	totalFiles := len(metadata.Files)
+	total := plan.totalBytes
+	totalFiles := plan.fileCount
 	if err := transfers.Update(
 		pid,
 		transfer.Updates{
@@ -587,7 +610,7 @@ func (d *Drive) executeDownload(
 		d.inspectAddedMods(inspectionPaths)
 	}
 	if d.eventEmit != nil {
-		name := metadata.Root.Name
+		name := plan.root.Name
 		if latest, ok := transfers.Get(pid); ok && latest.Name != "" {
 			name = latest.Name
 		}
@@ -596,23 +619,22 @@ func (d *Drive) executeDownload(
 	return nil
 }
 
-func resolveDownloadPaths(metadata DownloadMetadata, targetPath string) (map[string]string, bool, error) {
-	singleFile := len(metadata.Dirs) == 0 && len(metadata.Files) == 1
-	paths := make(map[string]string, len(metadata.Dirs)+1)
-	if singleFile {
-		paths[metadata.Root.ID] = targetPath
+func resolveDownloadPaths(plan *downloadPlan, targetPath string) (map[string]string, bool, error) {
+	paths := make(map[string]string, len(plan.dirs)+1)
+	if plan.singleFile() {
+		paths[plan.root.ID] = targetPath
 		return paths, true, nil
 	}
-	rootPath := filepath.Join(targetPath, metadata.Root.Name)
-	paths[metadata.Root.ID] = rootPath
+	rootPath := filepath.Join(targetPath, plan.root.Name)
+	paths[plan.root.ID] = rootPath
 	children := make(map[string][]transfer.Directory)
-	for _, directory := range metadata.Dirs {
-		if directory.ID == metadata.Root.ID || directory.ParentID == nil {
+	for _, directory := range plan.dirs {
+		if directory.ID == plan.root.ID || directory.ParentID == nil {
 			continue
 		}
 		children[*directory.ParentID] = append(children[*directory.ParentID], directory)
 	}
-	stack := []string{metadata.Root.ID}
+	stack := []string{plan.root.ID}
 	for len(stack) > 0 {
 		parentID := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -628,30 +650,19 @@ func resolveDownloadPaths(metadata DownloadMetadata, targetPath string) (map[str
 	return paths, false, nil
 }
 
-func resolveDownloadDestinationTargets(
-	metadata DownloadMetadata,
-	targetPath string,
-) ([]transfer.DestinationTarget, error) {
-	paths, singleFile, err := resolveDownloadPaths(metadata, targetPath)
+func resolveDownloadDestinationTargets(plan *downloadPlan, targetPath string) ([]transfer.DestinationTarget, error) {
+	paths, singleFile, err := resolveDownloadPaths(plan, targetPath)
 	if err != nil {
 		return nil, err
 	}
-	if singleFile {
-		return []transfer.DestinationTarget{{
-			Path: filepath.Join(targetPath, metadata.Files[0].Name),
-			Kind: transfer.DestinationFile,
-		}}, nil
-	}
-	if metadata.Root.Name != "" {
-		return []transfer.DestinationTarget{{
-			Path: paths[metadata.Root.ID],
-			Kind: transfer.DestinationDirectory,
-		}}, nil
+	rootPath := paths[plan.root.ID]
+	if !singleFile && plan.root.Name != "" {
+		return []transfer.DestinationTarget{{Path: rootPath, Kind: transfer.DestinationDirectory}}, nil
 	}
 
-	destinationTargets := make([]transfer.DestinationTarget, 0)
-	for _, directory := range metadata.Dirs {
-		if directory.ParentID == nil || *directory.ParentID != metadata.Root.ID {
+	destinationTargets := make([]transfer.DestinationTarget, 0, len(plan.rootFiles))
+	for _, directory := range plan.dirs {
+		if directory.ParentID == nil || *directory.ParentID != plan.root.ID {
 			continue
 		}
 		if path := paths[directory.ID]; path != "" {
@@ -661,14 +672,11 @@ func resolveDownloadDestinationTargets(
 			})
 		}
 	}
-	rootPath := paths[metadata.Root.ID]
-	for _, file := range metadata.Files {
-		if file.ParentID != nil && *file.ParentID == metadata.Root.ID {
-			destinationTargets = append(destinationTargets, transfer.DestinationTarget{
-				Path: filepath.Join(rootPath, file.Name),
-				Kind: transfer.DestinationFile,
-			})
-		}
+	for _, name := range plan.rootFiles {
+		destinationTargets = append(destinationTargets, transfer.DestinationTarget{
+			Path: filepath.Join(rootPath, name),
+			Kind: transfer.DestinationFile,
+		})
 	}
 	return destinationTargets, nil
 }
@@ -681,28 +689,6 @@ func parentDownloadKey(file transfer.DownloadFile, rootID string, singleFile boo
 		return ""
 	}
 	return *file.ParentID
-}
-
-func redistributeDownloadFiles(files []transfer.DownloadFile) []transfer.DownloadFile {
-	const largeThreshold = 50 * 1024 * 1024
-	large, small := lo.FilterReject(files, func(file transfer.DownloadFile, _ int) bool {
-		return file.Size >= largeThreshold
-	})
-	if len(large) == 0 || len(small) == 0 {
-		return slices.Clone(files)
-	}
-	interval := max(1, len(small)/len(large))
-	out := make([]transfer.DownloadFile, 0, len(files))
-	for len(small) > 0 || len(large) > 0 {
-		count := min(interval, len(small))
-		out = append(out, small[:count]...)
-		small = small[count:]
-		if len(large) > 0 {
-			out = append(out, large[0])
-			large = large[1:]
-		}
-	}
-	return out
 }
 
 func (d *Drive) fetchPresignedDownloadURL(ctx context.Context, fileID string, access downloadAccess) (string, error) {
@@ -782,12 +768,6 @@ func (d *Drive) reportDownloadFailure(transfers *transfer.Transfer, pid, stage s
 		Stage:     stage,
 		Fields:    driveTransferFields(transfers, pid, ""),
 	})
-}
-
-func cloneDownloadMetadata(metadata DownloadMetadata) DownloadMetadata {
-	metadata.Files = slices.Clone(metadata.Files)
-	metadata.Dirs = slices.Clone(metadata.Dirs)
-	return metadata
 }
 
 func stringValue(value *string) string {

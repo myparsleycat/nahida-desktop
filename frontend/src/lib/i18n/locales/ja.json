@@ -208,6 +208,7 @@
         "paused": "一時停止",
         "queued": "待機中",
         "preparing": "準備中",
+        "discovering": "項目を確認中（{{count}}件）",
         "upload_activity": {
           "preparing": "ファイルを読み込み・圧縮中",
           "waiting": "サーバーの応答を待機中"

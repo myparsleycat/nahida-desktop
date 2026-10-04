@@ -56,6 +56,9 @@ func bootRuntime(
 	if rt.mod != nil {
 		rt.mod.UseAppData(data)
 	}
+	if rt.drive != nil {
+		rt.drive.UseAppData(data)
+	}
 	if rt.tools != nil {
 		rt.tools.UseAppData(data)
 	}

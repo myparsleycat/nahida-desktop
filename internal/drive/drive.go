@@ -14,6 +14,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
@@ -62,6 +63,7 @@ type Drive struct {
 	dialog           *platform.Dialog
 	settings         UploadSettings
 	paths            PathSelector
+	appData          *appdata.Store
 	eventEmit        func(string, ...any)
 	inspectAddedMods func([]string)
 	sleep            func(context.Context, time.Duration) error
@@ -179,6 +181,18 @@ func (d *Drive) UseLog(log *infra.Log) {
 		return
 	}
 	d.log = log
+}
+
+// UseAppData sets where download spools live. Spools left by a previous
+// process have no transfer to resume them, so they are removed here.
+//
+//wails:ignore
+func (d *Drive) UseAppData(data *appdata.Store) {
+	if d == nil {
+		return
+	}
+	d.appData = data
+	d.sweepDownloadSpools()
 }
 
 //wails:ignore

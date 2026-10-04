@@ -208,6 +208,7 @@
         "paused": "Paused",
         "queued": "Queued",
         "preparing": "Preparing",
+        "discovering": "Listing files ({{count}})",
         "upload_activity": {
           "preparing": "Reading and compressing files",
           "waiting": "Waiting for server response"

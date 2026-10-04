@@ -20,7 +20,10 @@ import (
 	"nahida.live/desktop/internal/transfer"
 )
 
-const downloadFileBatchLimit = 100
+const (
+	downloadFileBatchLimit = 100
+	downloadBatchRootID    = "batch-root"
+)
 
 type DownloadLink struct {
 	LinkID string `json:"linkId" cbor:"linkId"`
@@ -55,38 +58,28 @@ type downloadChunkEnvelope struct {
 	Type       string `json:"type"`
 }
 
-func (d *Drive) fetchDirectoryDownloadMetadata(
-	ctx context.Context,
-	itemID string,
-	link *DownloadLink,
-) (DownloadMetadata, error) {
-	if d == nil || d.http == nil {
-		return DownloadMetadata{}, errDriveHTTPUnconfigured
-	}
+// downloadMetadataSink receives a folder walk as it streams in, so the caller
+// never holds more than one chunk of the file list.
+type downloadMetadataSink struct {
+	root  func(root transfer.Root, totalBytes int64)
+	files func(files []transfer.DownloadFile) error
+	dirs  func(directories []transfer.Directory)
+}
+
+func (d *Drive) directoryDownloadRequest(itemID string, link *DownloadLink) (string, http.Header) {
 	query := url.Values{"uuid": []string{itemID}}
 	header := make(http.Header)
 	if link != nil {
 		query.Set("linkId", link.LinkID)
 		header.Set("nhd-link-token", link.Token)
 	}
-	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/dir/download?" + query.Encode()
-	return d.streamDownloadMetadata(ctx, rawURL, header)
+	return strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/dir/download?" + query.Encode(), header
 }
 
-// fetchModDownloadMetadata walks a single mod folder. The backend emits the
-// same frames as the drive folder walk, gated by the mod's access token and
+// modDownloadRequest addresses a mod folder walk. The backend emits the same
+// frames as the drive folder walk, gated by the mod's access token and
 // signature instead of a share link.
-func (d *Drive) fetchModDownloadMetadata(
-	ctx context.Context,
-	items []DownloadItem,
-	access DownloadModAccess,
-) (DownloadMetadata, error) {
-	if len(items) != 1 || !items[0].IsDir {
-		return DownloadMetadata{}, errors.New("mod download requires a single folder")
-	}
-	if d == nil || d.http == nil {
-		return DownloadMetadata{}, errDriveHTTPUnconfigured
-	}
+func (d *Drive) modDownloadRequest(itemID string, access DownloadModAccess) (string, http.Header) {
 	header := make(http.Header)
 	if access.Token != "" {
 		header.Set("x-token", access.Token)
@@ -97,38 +90,30 @@ func (d *Drive) fetchModDownloadMetadata(
 	if access.Grant != "" {
 		header.Set("x-mod-download-grant", access.Grant)
 	}
-	rawURL := strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/mod/download/" + url.PathEscape(items[0].ID)
-	metadata, err := d.streamDownloadMetadata(ctx, rawURL, header)
-	if err != nil {
-		return DownloadMetadata{}, err
-	}
-	metadata.Dirs = append(
-		[]transfer.Directory{{ID: metadata.Root.ID, ParentID: metadata.Root.ParentID, Name: metadata.Root.Name}},
-		metadata.Dirs...,
-	)
-	return metadata, nil
+	return strings.TrimRight(d.http.BackendURL(), "/") + "/akasha/mod/download/" + url.PathEscape(itemID), header
 }
 
 func (d *Drive) streamDownloadMetadata(
 	ctx context.Context,
 	rawURL string,
 	header http.Header,
-) (DownloadMetadata, error) {
+	sink downloadMetadataSink,
+) error {
 	response, err := d.http.Fetch(
 		ctx,
 		rawURL,
 		infra.FetchOptions{Method: http.MethodGet, Header: header, DisableHTTPErrors: true},
 	)
 	if err != nil {
-		return DownloadMetadata{}, err
+		return err
 	}
 	if response.Body == nil {
-		return DownloadMetadata{}, errors.New("download metadata stream is empty")
+		return errors.New("download metadata stream is empty")
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		raw, readErr := io.ReadAll(response.Body)
-		return DownloadMetadata{}, infra.WithCause(
+		return infra.WithCause(
 			CreateDriveAPIError(
 				decodeAPIValue(response.Header.Get("Content-Type"), raw),
 				"download metadata",
@@ -137,7 +122,12 @@ func (d *Drive) streamDownloadMetadata(
 			infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", response)),
 		)
 	}
-	metadata := DownloadMetadata{Files: []transfer.DownloadFile{}, Dirs: []transfer.Directory{}}
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return err
+	}
+	defer decoder.Close()
+
 	hasRoot := false
 	parseErr := parseSSE(response.Body, func(event, data string) error {
 		switch event {
@@ -149,26 +139,22 @@ func (d *Drive) streamDownloadMetadata(
 			if err := json.Unmarshal([]byte(data), &head); err != nil {
 				return fmt.Errorf("decode download metadata: %w", err)
 			}
-			metadata.Root = head.Root
-			metadata.TotalBytes = head.TotalBytes
-			hasRoot = head.Root.ID != ""
+			if head.Root.ID != "" {
+				hasRoot = true
+				sink.root(head.Root, head.TotalBytes)
+			}
 		case "files":
 			var files []transfer.DownloadFile
-			if err := decodeDownloadChunk(data, &files); err != nil {
+			if err := decodeDownloadChunk(decoder, data, &files); err != nil {
 				return fmt.Errorf("decode download files: %w", err)
 			}
-			for index := range files {
-				if files[index].FileID == "" {
-					files[index].FileID = files[index].ID
-				}
-			}
-			metadata.Files = append(metadata.Files, files...)
+			return sink.files(files)
 		case "dirs":
 			var directories []transfer.Directory
-			if err := decodeDownloadChunk(data, &directories); err != nil {
+			if err := decodeDownloadChunk(decoder, data, &directories); err != nil {
 				return fmt.Errorf("decode download directories: %w", err)
 			}
-			metadata.Dirs = append(metadata.Dirs, directories...)
+			sink.dirs(directories)
 		case "error":
 			if data == "" {
 				data = "download metadata stream failed"
@@ -178,15 +164,15 @@ func (d *Drive) streamDownloadMetadata(
 		return nil
 	})
 	if parseErr != nil {
-		return DownloadMetadata{}, parseErr
+		return parseErr
 	}
 	if !hasRoot {
-		return DownloadMetadata{}, errors.New("root directory information was not received")
+		return errors.New("root directory information was not received")
 	}
-	return metadata, nil
+	return nil
 }
 
-func decodeDownloadChunk(eventData string, target any) error {
+func decodeDownloadChunk(decoder *zstd.Decoder, eventData string, target any) error {
 	var envelope downloadChunkEnvelope
 	if err := json.Unmarshal([]byte(eventData), &envelope); err != nil {
 		return err
@@ -198,12 +184,7 @@ func decodeDownloadChunk(eventData string, target any) error {
 	if err != nil {
 		return err
 	}
-	decoder, err := zstd.NewReader(nil)
-	if err != nil {
-		return err
-	}
 	raw, err := decoder.DecodeAll(compressed, nil)
-	decoder.Close()
 	if err != nil {
 		return err
 	}
@@ -252,105 +233,215 @@ func (d *Drive) fetchFileDownloadMetadataBatch(
 	if len(files) == 0 {
 		return nil, errors.New("file download URL not received")
 	}
-	for index := range files {
-		if files[index].FileID == "" {
-			files[index].FileID = files[index].ID
-		}
-	}
 	return files, nil
 }
 
-func (d *Drive) fetchDownloadMetadata(
+// enumerateDownload walks everything the download covers and writes the file
+// list to a spool, reporting the running totals as chunks arrive.
+func (d *Drive) enumerateDownload(
 	ctx context.Context,
-	items []DownloadItem,
-	link *DownloadLink,
-) (DownloadMetadata, error) {
-	unique := make(map[string]DownloadItem, len(items))
-	ordered := make([]DownloadItem, 0, len(items))
-	for _, item := range items {
-		if _, exists := unique[item.ID]; exists {
-			continue
-		}
-		unique[item.ID] = item
-		ordered = append(ordered, item)
+	params StartDownloadParams,
+	layout downloadLayout,
+	spoolPath string,
+	onProgress func(files int, totalBytes int64),
+) (_ *downloadPlan, err error) {
+	if params.Data == nil && (d == nil || d.http == nil) {
+		return nil, errDriveHTTPUnconfigured
 	}
-	if len(ordered) == 1 {
-		item := ordered[0]
-		if item.IsDir {
-			metadata, err := d.fetchDirectoryDownloadMetadata(ctx, item.ID, link)
-			if err != nil {
-				return DownloadMetadata{}, err
-			}
-			metadata.Dirs = append(
-				[]transfer.Directory{
-					{ID: metadata.Root.ID, ParentID: metadata.Root.ParentID, Name: metadata.Root.Name},
-				},
-				metadata.Dirs...)
-			return metadata, nil
-		}
-		files, err := d.fetchFileDownloadMetadataBatch(ctx, []string{item.ID}, link)
+	writer, err := newSpoolWriter(spoolPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
 		if err != nil {
-			return DownloadMetadata{}, err
+			writer.abort()
 		}
-		file := files[0]
-		return DownloadMetadata{
-			Root:       transfer.Root{ID: file.ID, Name: file.Name},
-			TotalBytes: transfer.LogicalFileBytes(file),
-			Files:      []transfer.DownloadFile{file},
-			Dirs:       []transfer.Directory{},
-		}, nil
+	}()
+	plan := writer.plan
+	fs := driveFS(d)
+	items := params.Items
+	single := len(items) == 1
+	batchRoot := downloadBatchRootID
+
+	sanitize := func(name string) string {
+		return fs.SanitizeWindowsFilename(name, " ")
+	}
+	add := func(file transfer.DownloadFile) error {
+		if file.FileID == "" {
+			file.FileID = file.ID
+		}
+		return writer.add(file)
+	}
+	// rootName settles the name of a single item. A folder the caller could
+	// not name up front still must not collide with what is already there.
+	rootName := func(serverName string) string {
+		if layout.rootName != "" {
+			return layout.rootName
+		}
+		if items[0].IsDir {
+			return fs.GetUniqueName(sanitize(serverName), layout.used)
+		}
+		return sanitize(serverName)
+	}
+	topLevelName := func(id, serverName string) string {
+		if name := layout.names[id]; name != "" {
+			return name
+		}
+		name := fs.GetUniqueName(sanitize(serverName), layout.used)
+		layout.used = append(layout.used, name)
+		return name
+	}
+	streamFolder := func(rawURL string, header http.Header) error {
+		return d.streamDownloadMetadata(ctx, rawURL, header, downloadMetadataSink{
+			root: func(root transfer.Root, totalBytes int64) {
+				directory := transfer.Directory{ID: root.ID, ParentID: root.ParentID}
+				if single {
+					root.Name = rootName(root.Name)
+					plan.root = root
+					directory.Name = root.Name
+				} else {
+					directory.ParentID = &batchRoot
+					directory.Name = topLevelName(root.ID, root.Name)
+				}
+				plan.dirs = append(plan.dirs, directory)
+				plan.totalBytes += totalBytes
+				onProgress(plan.fileCount, plan.totalBytes)
+			},
+			files: func(files []transfer.DownloadFile) error {
+				for _, file := range files {
+					file.Name = sanitize(file.Name)
+					if err := add(file); err != nil {
+						return err
+					}
+				}
+				onProgress(plan.fileCount, plan.totalBytes)
+				return nil
+			},
+			dirs: func(directories []transfer.Directory) {
+				for _, directory := range directories {
+					directory.Name = sanitize(directory.Name)
+					plan.dirs = append(plan.dirs, directory)
+				}
+			},
+		})
 	}
 
-	const batchRootID = "batch-root"
-	metadata := DownloadMetadata{
-		Root:  transfer.Root{ID: batchRootID, Name: ""},
-		Files: []transfer.DownloadFile{},
-		Dirs:  []transfer.Directory{},
-	}
-	fileItems := make([]DownloadItem, 0)
-	for _, item := range ordered {
-		if item.IsDir {
-			folder, err := d.fetchDirectoryDownloadMetadata(ctx, item.ID, link)
-			if err != nil {
-				return DownloadMetadata{}, err
+	switch {
+	case params.Data != nil:
+		data := params.Data
+		plan.root = data.Root
+		plan.totalBytes = data.TotalBytes
+		// A root without a name is not a folder: its children land in the target
+		// itself, so an empty name must stay empty.
+		switch {
+		case single && (layout.rootName != "" || data.Root.Name != ""):
+			plan.root.Name = rootName(data.Root.Name)
+		case data.Root.Name != "":
+			plan.root.Name = sanitize(data.Root.Name)
+		}
+		isTopLevel := func(parentID *string) bool {
+			return !single && parentID != nil && *parentID == downloadBatchRootID
+		}
+
+		plan.dirs = make([]transfer.Directory, 0, len(data.Dirs))
+		for _, directory := range data.Dirs {
+			switch {
+			case single && directory.ID == plan.root.ID:
+				directory.Name = plan.root.Name
+			case isTopLevel(directory.ParentID):
+				directory.Name = topLevelName(directory.ID, directory.Name)
+			default:
+				directory.Name = sanitize(directory.Name)
 			}
-			parent := batchRootID
-			metadata.Dirs = append(
-				metadata.Dirs,
-				transfer.Directory{ID: folder.Root.ID, ParentID: &parent, Name: folder.Root.Name},
-			)
-			metadata.Dirs = append(metadata.Dirs, folder.Dirs...)
-			metadata.Files = append(metadata.Files, folder.Files...)
-			metadata.TotalBytes += folder.TotalBytes
-			continue
+			plan.dirs = append(plan.dirs, directory)
 		}
-		fileItems = append(fileItems, item)
-	}
-	for start := 0; start < len(fileItems); start += downloadFileBatchLimit {
-		end := min(start+downloadFileBatchLimit, len(fileItems))
-		ids := make([]string, end-start)
-		for index, item := range fileItems[start:end] {
-			ids[index] = item.ID
+
+		onlyFile := len(data.Dirs) == 0 && len(data.Files) == 1
+		for _, file := range data.Files {
+			switch {
+			case single && !items[0].IsDir && len(data.Files) == 1 && plan.root.Name != "":
+				file.Name = plan.root.Name
+			case isTopLevel(file.ParentID):
+				file.Name = topLevelName(file.ID, file.Name)
+			default:
+				file.Name = sanitize(file.Name)
+			}
+			if onlyFile || plan.root.Name == "" && file.ParentID != nil && *file.ParentID == plan.root.ID {
+				plan.rootFiles = append(plan.rootFiles, file.Name)
+			}
+			if err = add(file); err != nil {
+				return nil, err
+			}
 		}
-		files, err := d.fetchFileDownloadMetadataBatch(ctx, ids, link)
+	case params.Mod != nil:
+		if !single || !items[0].IsDir {
+			return nil, errors.New("mod download requires a single folder")
+		}
+		rawURL, header := d.modDownloadRequest(items[0].ID, *params.Mod)
+		if err = streamFolder(rawURL, header); err != nil {
+			return nil, err
+		}
+	case single && items[0].IsDir:
+		rawURL, header := d.directoryDownloadRequest(items[0].ID, params.Link)
+		if err = streamFolder(rawURL, header); err != nil {
+			return nil, err
+		}
+	case single:
+		var files []transfer.DownloadFile
+		files, err = d.fetchFileDownloadMetadataBatch(ctx, []string{items[0].ID}, params.Link)
 		if err != nil {
-			return DownloadMetadata{}, err
+			return nil, err
 		}
-		returned := make(map[string]struct{}, len(files))
-		for index := range files {
-			returned[files[index].ID] = struct{}{}
-			parent := batchRootID
-			files[index].ParentID = &parent
-			metadata.TotalBytes += transfer.LogicalFileBytes(files[index])
+		file := files[0]
+		file.Name = rootName(file.Name)
+		plan.root = transfer.Root{ID: file.ID, Name: file.Name}
+		plan.totalBytes = transfer.LogicalFileBytes(file)
+		plan.rootFiles = []string{file.Name}
+		if err = add(file); err != nil {
+			return nil, err
 		}
-		for _, id := range ids {
-			if _, exists := returned[id]; !exists {
-				return DownloadMetadata{}, errors.New("some selected files could not be fetched")
+	default:
+		plan.root = transfer.Root{ID: downloadBatchRootID}
+		fileIDs := make([]string, 0, len(items))
+		for _, item := range items {
+			if !item.IsDir {
+				fileIDs = append(fileIDs, item.ID)
+				continue
+			}
+			rawURL, header := d.directoryDownloadRequest(item.ID, params.Link)
+			if err = streamFolder(rawURL, header); err != nil {
+				return nil, err
 			}
 		}
-		metadata.Files = append(metadata.Files, files...)
+
+		for ids := range slices.Chunk(fileIDs, downloadFileBatchLimit) {
+			var files []transfer.DownloadFile
+			files, err = d.fetchFileDownloadMetadataBatch(ctx, ids, params.Link)
+			if err != nil {
+				return nil, err
+			}
+			returned := make(map[string]struct{}, len(files))
+			for _, file := range files {
+				returned[file.ID] = struct{}{}
+			}
+			for _, id := range ids {
+				if _, exists := returned[id]; !exists {
+					return nil, errors.New("some selected files could not be fetched")
+				}
+			}
+			for _, file := range files {
+				file.ParentID = &batchRoot
+				file.Name = topLevelName(file.ID, file.Name)
+				plan.totalBytes += transfer.LogicalFileBytes(file)
+				plan.rootFiles = append(plan.rootFiles, file.Name)
+				if err = add(file); err != nil {
+					return nil, err
+				}
+			}
+			onProgress(plan.fileCount, plan.totalBytes)
+		}
 	}
-	metadata.Files = slices.Clip(metadata.Files)
-	metadata.Dirs = slices.Clip(metadata.Dirs)
-	return metadata, nil
+
+	onProgress(plan.fileCount, plan.totalBytes)
+	return writer.finish()
 }
