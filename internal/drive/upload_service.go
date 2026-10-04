@@ -323,6 +323,9 @@ func (d *Drive) runUpload(
 	preparation := restart.Preparation
 	var uploadedBytes int64
 	uploadedFiles := 0
+	// sentFiles counts files a pack sent in full that the server has yet to
+	// confirm. It only feeds the displayed count; resume relies on completed ids.
+	sentFiles := 0
 	pendingFiles := make([]UploadFile, 0, len(preparation.Files))
 	for _, file := range preparation.Files {
 		if transfers.IsFileCompleted(pid, file.FID) {
@@ -468,14 +471,16 @@ func (d *Drive) runUpload(
 					return
 				}
 				uploadedBytes += progress.Bytes
+				sentFiles += progress.SentFiles
 				if progress.FileID != "" && !transfers.IsFileCompleted(pid, progress.FileID) {
 					if transfers.MarkFileCompleted(pid, progress.FileID) == nil {
 						uploadedFiles++
 					}
 				}
+				shownFiles := uploadedFiles + sentFiles
 				_ = transfers.Update(
 					pid,
-					transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles},
+					transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &shownFiles},
 				)
 			},
 		)

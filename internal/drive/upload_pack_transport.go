@@ -37,11 +37,14 @@ type intentPackResult struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
+// uploadPack sends the members as one pack. Beside the logical bytes, onProgress
+// carries the change in members sent in full but not yet answered by the
+// server; onReady says whether its member is still counted among those.
 func (d *Drive) uploadPack(
 	ctx context.Context,
 	members []preparedUpload,
-	onProgress func(int64),
-	onReady func(FinalUploadFile, []FinalUploadFile),
+	onProgress func(bytes int64, sentFiles int),
+	onReady func(source FinalUploadFile, copies []FinalUploadFile, sent bool),
 ) error {
 	if len(members) < 2 {
 		return errors.New("upload pack requires at least two members")
@@ -76,6 +79,12 @@ func (d *Drive) uploadPack(
 		}
 		var uploadedPayload int64
 		var reportedLogical int64
+		var reportedSent int
+		withdraw := func() {
+			if (reportedLogical > 0 || reportedSent > 0) && onProgress != nil {
+				onProgress(-reportedLogical, -reportedSent)
+			}
+		}
 		result, sendErr := d.sendMultipart(ctx, packURL, http.MethodPost, multipartUpload{
 			fields:    [][2]string{{"manifest", string(manifest)}},
 			file:      bytes.NewReader(payload.Bytes()),
@@ -85,16 +94,16 @@ func (d *Drive) uploadPack(
 			onProgress: func(uploaded int64) {
 				uploadedPayload += uploaded
 				target := logicalBytesForPackProgress(members, uploadedPayload)
-				if onProgress != nil && target != reportedLogical {
-					onProgress(target - reportedLogical)
+				sent := sentPackMembers(members, uploadedPayload)
+				if onProgress != nil && (target != reportedLogical || sent != reportedSent) {
+					onProgress(target-reportedLogical, sent-reportedSent)
 				}
 				reportedLogical = target
+				reportedSent = sent
 			},
 		})
 		if sendErr != nil {
-			if reportedLogical > 0 && onProgress != nil {
-				onProgress(-reportedLogical)
-			}
+			withdraw()
 			if ctx.Err() != nil || attempt == uploadRetryLimit {
 				return sendErr
 			}
@@ -106,21 +115,30 @@ func (d *Drive) uploadPack(
 		if result.status >= 200 && result.status < 300 {
 			packResults, parseErr := decodeIntentPackResults(result.payload)
 			if parseErr != nil {
-				if reportedLogical > 0 && onProgress != nil {
-					onProgress(-reportedLogical)
-				}
+				withdraw()
 				return parseErr
 			}
 			failures := make([]error, 0)
 			for index, member := range members {
 				packResult, found := uniqueIntentPackResult(packResults, member.upload.IntentID)
 				credited := creditedLogicalBytesForMember(members, index, uploadedPayload)
+				sent := index < reportedSent
+				withdrawMember := func() {
+					if onProgress == nil {
+						return
+					}
+					if sent {
+						onProgress(-credited, -1)
+					} else if credited > 0 {
+						onProgress(-credited, 0)
+					}
+				}
 				if found && packResult.Status == "completed" {
 					if credited < member.logicalSize && onProgress != nil {
-						onProgress(member.logicalSize - credited)
+						onProgress(member.logicalSize-credited, 0)
 					}
 					if onReady != nil {
-						onReady(member.source, slices.Clone(member.copies))
+						onReady(member.source, slices.Clone(member.copies), sent)
 					}
 					continue
 				}
@@ -128,16 +146,14 @@ func (d *Drive) uploadPack(
 					uploadRequired, waitErr := d.waitUploadIntent(ctx, member.upload, member.recoverable)
 					if waitErr == nil && !uploadRequired {
 						if credited < member.logicalSize && onProgress != nil {
-							onProgress(member.logicalSize - credited)
+							onProgress(member.logicalSize-credited, 0)
 						}
 						if onReady != nil {
-							onReady(member.source, slices.Clone(member.copies))
+							onReady(member.source, slices.Clone(member.copies), sent)
 						}
 						continue
 					}
-					if credited > 0 && onProgress != nil {
-						onProgress(-credited)
-					}
+					withdrawMember()
 					if waitErr != nil {
 						failures = append(failures, newPackMemberError(member, waitErr))
 						continue
@@ -151,7 +167,7 @@ func (d *Drive) uploadPack(
 						member.recoverable,
 						func(bytes int64) {
 							if onProgress != nil {
-								onProgress(bytes)
+								onProgress(bytes, 0)
 							}
 						},
 					); err != nil {
@@ -159,13 +175,11 @@ func (d *Drive) uploadPack(
 						continue
 					}
 					if onReady != nil {
-						onReady(member.source, slices.Clone(member.copies))
+						onReady(member.source, slices.Clone(member.copies), false)
 					}
 					continue
 				}
-				if credited > 0 && onProgress != nil {
-					onProgress(-credited)
-				}
+				withdrawMember()
 				reason := "pack_result_missing"
 				if found {
 					reason = packResult.Reason
@@ -177,9 +191,7 @@ func (d *Drive) uploadPack(
 			}
 			return errors.Join(failures...)
 		}
-		if reportedLogical > 0 && onProgress != nil {
-			onProgress(-reportedLogical)
-		}
+		withdraw()
 		// A failure of the whole pack names no member, so no recovery pass replans it.
 		if !retryableUploadResult(result, false) || attempt == uploadRetryLimit {
 			return uploadResultError(result)

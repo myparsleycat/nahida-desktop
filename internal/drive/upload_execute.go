@@ -22,6 +22,10 @@ type UploadExecutionProgress struct {
 	FileID               string
 	IsServerDeduplicated bool
 	Phase                transfer.UploadPhase
+	// SentFiles is the change in files sent in full but not yet confirmed by
+	// the server. They count toward the displayed file total only: a file is
+	// complete once its FileID is reported.
+	SentFiles int
 }
 
 type uploadRun struct {
@@ -396,9 +400,9 @@ func (r *uploadRun) flushPacked() error {
 		}
 		members := slices.Clone(group.members)
 		if err := r.queueTask(func() {
-			if err := r.drive.uploadPack(r.ctx, members, func(bytes int64) {
-				r.emitProgress(UploadExecutionProgress{Bytes: bytes})
-			}, r.markIntentReady); err != nil {
+			if err := r.drive.uploadPack(r.ctx, members, func(bytes int64, sentFiles int) {
+				r.emitProgress(UploadExecutionProgress{Bytes: bytes, SentFiles: sentFiles})
+			}, r.markPackMemberReady); err != nil {
 				r.failPack(err)
 			}
 		}); err != nil {
@@ -499,6 +503,26 @@ func (r *uploadRun) markReady(file FinalUploadFile, bytes int64, deduplicated bo
 
 func (r *uploadRun) markIntentReady(source FinalUploadFile, copies []FinalUploadFile) {
 	r.markReady(source, 0, false)
+	for _, file := range copies {
+		r.markReady(file, file.Size, true)
+	}
+}
+
+// markPackMemberReady is markIntentReady for a pack member. A member counted as
+// sent leaves that count in the progress that completes its file, so the two
+// never show as a dip in the file count.
+func (r *uploadRun) markPackMemberReady(source FinalUploadFile, copies []FinalUploadFile, sent bool) {
+	settled := 0
+	if sent {
+		settled = -1
+	}
+	if r.bundleByClientID[source.FID] != "" {
+		r.markReady(source, 0, false)
+		r.emitProgress(UploadExecutionProgress{SentFiles: settled})
+	} else {
+		r.emitProgress(UploadExecutionProgress{FileID: source.FID, SentFiles: settled})
+	}
+
 	for _, file := range copies {
 		r.markReady(file, file.Size, true)
 	}

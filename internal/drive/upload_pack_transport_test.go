@@ -77,16 +77,24 @@ func TestUploadPackSendsManifestAndCreditsLogicalFiles(t *testing.T) {
 		},
 	}
 	progress := int64(0)
+	sentFiles := 0
+	sentAtReady := make([]bool, 0, 2)
 	ready := make([]string, 0, 2)
-	if err := uploadTestDrive(server).uploadPack(context.Background(), members, func(bytes int64) {
+	if err := uploadTestDrive(server).uploadPack(context.Background(), members, func(bytes int64, sent int) {
 		progress += bytes
-	}, func(file FinalUploadFile, _ []FinalUploadFile) {
+		sentFiles += sent
+	}, func(file FinalUploadFile, _ []FinalUploadFile, sent bool) {
 		ready = append(ready, file.FID)
+		sentAtReady = append(sentAtReady, sent)
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if progress != 150 || len(ready) != 2 || ready[0] != "file-1" || ready[1] != "file-2" {
 		t.Fatalf("progress = %d, ready = %v", progress, ready)
+	}
+	// Both members were sent before the answer, and stay counted until the caller settles them at ready.
+	if sentFiles != 2 || len(sentAtReady) != 2 || !sentAtReady[0] || !sentAtReady[1] {
+		t.Fatalf("sent files = %d, sent at ready = %v", sentFiles, sentAtReady)
 	}
 }
 
@@ -137,9 +145,14 @@ func TestUploadPackAcceptsCBORResultsFromNHDAPI(t *testing.T) {
 		},
 	}
 	ready := make([]string, 0, 2)
-	if err := drive.uploadPack(context.Background(), members, nil, func(file FinalUploadFile, _ []FinalUploadFile) {
-		ready = append(ready, file.FID)
-	}); err != nil {
+	if err := drive.uploadPack(
+		context.Background(),
+		members,
+		nil,
+		func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
+			ready = append(ready, file.FID)
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(ready) != 2 || ready[0] != "file-1" || ready[1] != "file-2" {
@@ -182,7 +195,7 @@ func TestUploadPackPollsPendingMembersWithoutResendingPack(t *testing.T) {
 	ready := make([]string, 0, 2)
 	if err := uploadTestDrive(
 		server,
-	).uploadPack(context.Background(), members, nil, func(file FinalUploadFile, _ []FinalUploadFile) {
+	).uploadPack(context.Background(), members, nil, func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
 		ready = append(ready, file.FID)
 	}); err != nil {
 		t.Fatal(err)
