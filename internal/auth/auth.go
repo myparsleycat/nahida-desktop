@@ -198,7 +198,13 @@ func (a *Auth) sessionRefresh() infra.SessionRefresh {
 }
 
 func (a *Auth) saveToken(ctx context.Context, token string) error {
-	return a.mutateToken(ctx, func() error {
+	return a.saveTokenIf(ctx, token, nil)
+}
+
+// saveTokenIf saves token only while current reports true. current runs with
+// a.mu held, in the step that orders this save among the other token changes.
+func (a *Auth) saveTokenIf(ctx context.Context, token string, current func() bool) error {
+	return a.mutateToken(ctx, current, func() error {
 		if a.crypto == nil {
 			return errors.New("auth crypto is not configured")
 		}
@@ -246,7 +252,7 @@ func (a *Auth) getToken(ctx context.Context) (string, error) {
 }
 
 func (a *Auth) removeToken(ctx context.Context) error {
-	return a.mutateToken(ctx, func() error {
+	return a.mutateToken(ctx, nil, func() error {
 		if a.store == nil {
 			return errors.New("auth store is not configured")
 		}
@@ -350,8 +356,12 @@ func (a *Auth) stop() {
 	}
 }
 
-func (a *Auth) mutateToken(_ context.Context, fn func() error) error {
+func (a *Auth) mutateToken(_ context.Context, current func() bool, fn func() error) error {
 	a.mu.Lock()
+	if current != nil && !current() {
+		a.mu.Unlock()
+		return errLoginReplaced
+	}
 	a.sessionInFlight = nil
 	a.generation++
 	prev := a.mutateDone

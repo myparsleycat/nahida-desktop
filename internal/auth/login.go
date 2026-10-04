@@ -20,6 +20,9 @@ var (
 	errLoginExchange = errors.New("Failed to complete login")        //nolint:staticcheck // Shown in the login dialog.
 )
 
+// errLoginReplaced cancels a login a newer StartLogin call took over from.
+var errLoginReplaced = errors.New("login replaced by a newer login")
+
 type loginStart struct {
 	State   string `json:"state"`
 	PageURL string `json:"pageUrl"`
@@ -65,12 +68,13 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// pendingLogin is the handshake StartLogin is waiting on. Its verifier never
+// pendingLogin is the handshake StartLogin is running. Its verifier never
 // leaves StartLogin, so a code completes only the login that asked for it.
+// state is empty until the backend answers and is guarded by Auth.mu.
 type pendingLogin struct {
 	state  string
 	code   chan string
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 }
 
 // StartLogin runs the deep-link handshake: it registers a PKCE challenge with
@@ -78,11 +82,37 @@ type pendingLogin struct {
 // that page opens to deliver a one-time code through CompleteLogin. The code and
 // the verifier together are exchanged for the session token.
 func (a *Auth) StartLogin(ctx context.Context) (err error) {
-	stage := "prepare"
-	defer func() { err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage}) }()
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// The newest call owns the login from here on, whichever backend answer
+	// arrives first: taking over cancels every step of the one before.
+	loginCtx, cancel := context.WithCancelCause(ctx)
+	pending := &pendingLogin{code: make(chan string, 1), cancel: cancel}
+	a.mu.Lock()
+	previous := a.login
+	a.login = pending
+	a.mu.Unlock()
+	if previous != nil {
+		previous.cancel(errLoginReplaced)
+	}
+
+	stage := "prepare"
+	saved := false
+	defer func() {
+		// A login replaced before it saved a token has nothing to report.
+		if !saved && errors.Is(context.Cause(loginCtx), errLoginReplaced) {
+			err = ctx.Err()
+		}
+		cancel(nil)
+		a.mu.Lock()
+		if a.login == pending {
+			a.login = nil
+		}
+		a.mu.Unlock()
+		err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage})
+	}()
 	if a.http == nil {
 		return errors.New("auth http is not configured")
 	}
@@ -99,7 +129,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	stage = "login-request"
 	var start loginStart
 	if err := a.loginPost(
-		ctx,
+		loginCtx,
 		base+loginPath,
 		map[string]string{"challenge": base64.RawURLEncoding.EncodeToString(challenge[:])},
 		&start,
@@ -114,25 +144,13 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		)
 	}
 
-	// A newer login replaces this one, and the backend drops the state after
-	// loginWait, so either ends the wait.
-	waitCtx, cancel := context.WithTimeout(ctx, loginWait)
-	defer cancel()
-	pending := &pendingLogin{state: start.State, code: make(chan string, 1), cancel: cancel}
 	a.mu.Lock()
-	previous := a.login
-	a.login = pending
+	pending.state = start.State
+	current := a.login == pending
 	a.mu.Unlock()
-	if previous != nil {
-		previous.cancel()
+	if !current {
+		return errLoginReplaced
 	}
-	defer func() {
-		a.mu.Lock()
-		if a.login == pending {
-			a.login = nil
-		}
-		a.mu.Unlock()
-	}()
 
 	stage = "open-browser"
 	if a.openURL == nil {
@@ -142,7 +160,11 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		return err
 	}
 
+	// A newer login replaces this one, and the backend drops the state after
+	// loginWait, so either ends the wait.
 	stage = "wait-code"
+	waitCtx, stopWait := context.WithTimeout(loginCtx, loginWait)
+	defer stopWait()
 	var code string
 	select {
 	case code = <-pending.code:
@@ -158,7 +180,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		} `json:"session"`
 	}
 	if err := a.loginPost(
-		ctx,
+		loginCtx,
 		base+loginExchangePath,
 		map[string]string{"state": start.State, "code": code, "verifier": verifier},
 		&exchanged,
@@ -170,10 +192,13 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		return infra.WithCause(errLoginExchange, errors.New("exchange response has no session token"))
 	}
 
+	// The save and what follows run on ctx: once this login wins the check, a
+	// later replacement must not leave its token half applied.
 	stage = "save-token"
-	if err := a.saveToken(ctx, exchanged.Session.Token); err != nil {
+	if err := a.saveTokenIf(ctx, exchanged.Session.Token, func() bool { return a.login == pending }); err != nil {
 		return err
 	}
+	saved = true
 	a.info("Login successful: Session saved.")
 
 	stage = "session"
@@ -199,8 +224,9 @@ func (a *Auth) CompleteLogin(state, code string) bool {
 	}
 	a.mu.Lock()
 	pending := a.login
+	matches := pending != nil && pending.state == state
 	a.mu.Unlock()
-	if pending == nil || pending.state != state {
+	if !matches {
 		return false
 	}
 	select {

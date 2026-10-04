@@ -749,6 +749,154 @@ func TestStartLoginIsReplacedByNewerLogin(t *testing.T) {
 	}
 }
 
+// lateLogin runs logins against a backend that names its states "first" and
+// "second" in arrival order and exchanges any code for "<state>-token". The
+// first answer from heldPath reaches Auth only after release, even when its
+// request was canceled meanwhile, which is how a slow backend loses a race.
+type lateLogin struct {
+	auth    *Auth
+	store   *memStore
+	holding chan struct{}
+	release func()
+	opened  chan string
+	updates atomic.Int32
+}
+
+func newLateLogin(t *testing.T, heldPath string) *lateLogin {
+	t.Helper()
+	var starts atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc(loginPath, func(w http.ResponseWriter, _ *http.Request) {
+		state := "first"
+		if starts.Add(1) > 1 {
+			state = "second"
+		}
+		_ = json.NewEncoder(w).Encode(loginStart{State: state, PageURL: state})
+	})
+	mux.HandleFunc(loginExchangePath, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			State string `json:"state"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(map[string]any{"session": map[string]string{"token": body.State + "-token"}})
+	})
+	mux.HandleFunc(sessionPath, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, sessionJSON(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	release := make(chan struct{})
+	login := &lateLogin{
+		store:   &memStore{},
+		holding: make(chan struct{}),
+		release: sync.OnceFunc(func() { close(release) }),
+		opened:  make(chan string, 2),
+	}
+	t.Cleanup(login.release)
+
+	var held atomic.Bool
+	zero := 0
+	none := time.Duration(0)
+	login.auth = NewWithOptions(Options{
+		Store:  login.store,
+		Crypto: passCrypto{},
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			BackendURL: srv.URL,
+			HTTPClient: srv.Client(),
+			RetryLimit: &zero,
+			RetryWait:  &none,
+			Status:     infra.BackendOnline,
+		}),
+		Emit: func(name string, _ any) {
+			if name == "auth:update" {
+				login.updates.Add(1)
+			}
+		},
+		Do: func(req *http.Request) (*http.Response, error) {
+			resp, err := srv.Client().Do(req.Clone(context.WithoutCancel(req.Context())))
+			if req.URL.Path == heldPath && held.CompareAndSwap(false, true) {
+				close(login.holding)
+				<-release
+			}
+			return resp, err
+		},
+	})
+	login.auth.openURL = func(page string) error {
+		login.opened <- page
+		return nil
+	}
+	return login
+}
+
+func TestReplacedLoginDoesNotSaveLateExchange(t *testing.T) {
+	t.Parallel()
+	login := newLateLogin(t, loginExchangePath)
+	a := login.auth
+
+	first := make(chan error, 1)
+	go func() { first <- a.StartLogin(context.Background()) }()
+	if page := <-login.opened; page != "first" || !a.CompleteLogin("first", "code") {
+		t.Fatalf("first login did not take its link, opened %q", page)
+	}
+	<-login.holding
+
+	second := make(chan error, 1)
+	go func() { second <- a.StartLogin(context.Background()) }()
+	if page := <-login.opened; page != "second" || !a.CompleteLogin("second", "code") {
+		t.Fatalf("second login did not take its link, opened %q", page)
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second StartLogin: %v", err)
+	}
+
+	// The first exchange answers only now, after the second login finished.
+	login.release()
+	if err := <-first; err != nil {
+		t.Fatalf("replaced StartLogin = %v, want nil", err)
+	}
+	if got := login.store.token(); got != "second-token" {
+		t.Fatalf("stored %q, want the newer login's token", got)
+	}
+	if got := login.updates.Load(); got != 1 {
+		t.Fatalf("auth:update broadcasts = %d, want 1", got)
+	}
+}
+
+func TestLateStartResponseDoesNotReplaceNewerLogin(t *testing.T) {
+	t.Parallel()
+	login := newLateLogin(t, loginPath)
+	a := login.auth
+
+	first := make(chan error, 1)
+	go func() { first <- a.StartLogin(context.Background()) }()
+	<-login.holding
+
+	second := make(chan error, 1)
+	go func() { second <- a.StartLogin(context.Background()) }()
+	if page := <-login.opened; page != "second" {
+		t.Fatalf("opened %q, want the second login's page", page)
+	}
+
+	// The first start request answers after the second login began waiting.
+	login.release()
+	if err := <-first; err != nil {
+		t.Fatalf("replaced StartLogin = %v, want nil", err)
+	}
+	if len(login.opened) != 0 {
+		t.Fatalf("the replaced login opened %q", <-login.opened)
+	}
+	if !a.CompleteLogin("second", "code") {
+		t.Fatal("the newer login no longer accepted its link")
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second StartLogin: %v", err)
+	}
+	if got := login.store.token(); got != "second-token" {
+		t.Fatalf("stored %q", got)
+	}
+}
+
 func TestStartLogoutBroadcastsAndSignsOut(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
