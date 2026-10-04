@@ -53,6 +53,11 @@ func (t *Tools) BodyShapeCommitExport(
 	return t.bodyShape.BodyShapeCommitExport(ctx, input)
 }
 
+//wails:ignore
+func (t *Tools) BodyShapeSessionPaths(sessionID string) ([]string, error) {
+	return t.bodyShape.BodyShapeSessionPaths(sessionID)
+}
+
 func (t *Tools) BodyShapeCloseSession(ctx context.Context, sessionID string) (BodyShapeOK, error) {
 	return t.bodyShape.BodyShapeCloseSession(ctx, sessionID)
 }

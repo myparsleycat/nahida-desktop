@@ -3,7 +3,9 @@
 package platform
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -41,5 +43,31 @@ func TestHideFileAddsHiddenAttributeWithoutDiscardingExistingAttributes(t *testi
 	// A second call must be idempotent.
 	if err := HideFile(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A junction is invisible to filepath.EvalSymlinks; FinalPath has to name the folder it points at.
+func TestFinalPathFollowsJunction(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "Target")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "Link")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+
+	want, err := FinalPath(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := FinalPath(link)
+	if err != nil || !SamePathFold(got, want) {
+		t.Fatalf("FinalPath(link) = %q, %v; want %q", got, err, want)
+	}
+	if _, err := FinalPath(filepath.Join(link, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("FinalPath(missing) err = %v", err)
 	}
 }

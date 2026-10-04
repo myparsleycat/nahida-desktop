@@ -452,6 +452,17 @@ func (t *Service) BodyShapeCommitExport(
 	)
 }
 
+// BodyShapeSessionPaths returns the mod folder a commit of the session copies and disables.
+//
+//wails:ignore
+func (t *Service) BodyShapeSessionPaths(sessionID string) ([]string, error) {
+	session, err := t.requireBodyShapeSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{session.loaded.ModRoot}, nil
+}
+
 func (t *Service) BodyShapeCloseSession(_ context.Context, sessionID string) (BodyShapeOK, error) {
 	t.bodyShapeMu.Lock()
 	delete(t.bodyShapeSessions, sessionID)

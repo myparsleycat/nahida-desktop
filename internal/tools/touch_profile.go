@@ -66,6 +66,11 @@ func (t *Tools) TouchProfileCloseSession(ctx context.Context, sessionID string) 
 	return t.touchProfile.TouchProfileCloseSession(ctx, sessionID)
 }
 
+//wails:ignore
+func (t *Tools) TouchProfileSessionPaths(sessionID string) ([]string, error) {
+	return t.touchProfile.TouchProfileSessionPaths(sessionID)
+}
+
 func (t *Tools) TouchProfileApply(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
 	return t.touchProfile.TouchProfileApply(ctx, input)
 }

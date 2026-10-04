@@ -18,6 +18,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/google/uuid"
 
+	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -26,13 +27,18 @@ const (
 	maxSearchMatches = 200
 )
 
-var errSandboxPath = errors.New("path is outside the agent sandbox")
+var (
+	errSandboxPath     = errors.New("path is outside the agent sandbox")
+	errSandboxReadOnly = errors.New("path is inside a read-only sandbox root")
+)
 
 type SandboxRoot struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Path     string `json:"path"`
 	Importer string `json:"importer,omitempty"`
+	// ReadOnly marks reference material the agent may list, read, and search but never change.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 type Sandbox struct {
@@ -42,6 +48,8 @@ type Sandbox struct {
 type openedRoot struct {
 	view SandboxRoot
 	root *os.Root
+	// physical is the root with every junction resolved, which the read-only check compares against.
+	physical string
 }
 
 type FileEntry struct {
@@ -120,7 +128,13 @@ func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
 			_ = sandbox.Close()
 			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
 		}
-		sandbox.roots[view.ID] = &openedRoot{view: view, root: root}
+		physical, err := platform.FinalPath(canonical)
+		if err != nil {
+			_ = root.Close()
+			_ = sandbox.Close()
+			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
+		}
+		sandbox.roots[view.ID] = &openedRoot{view: view, root: root, physical: physical}
 	}
 	return sandbox, nil
 }
@@ -396,6 +410,9 @@ func (s *Sandbox) preparePatch(
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := s.guardWrite(filepath.Join(root.view.Path, clean), false); err != nil {
+			return nil, nil, err
+		}
 
 		// Later updates to a path already in the patch apply to the result of the earlier ones, so
 		// one call can carry every edit to a file. The first operation alone seals the file content.
@@ -441,7 +458,7 @@ func (s *Sandbox) preparePatch(
 			if operation.ExpectedContent != nil && text != *operation.ExpectedContent {
 				return nil, nil, fmt.Errorf("patch precondition failed for %q", clean)
 			}
-			if sealPreconditions && patchNeedsApproval(operation.Type) {
+			if sealPreconditions && patchReplacesExisting(operation.Type) {
 				item.op.ExpectedContent = &text
 			}
 		} else if !errors.Is(readErr, fs.ErrNotExist) && operation.Type != "delete" {
@@ -505,15 +522,21 @@ func applyUpdate(text string, operation PatchOperation, newline, path string) (s
 	return updated, nil, err
 }
 
-// patchNeedsApproval reports whether a patch operation mutates an existing file. Those operations
-// pause for user approval, and approval seals the file content they were resolved against.
-func patchNeedsApproval(operationType string) bool {
+// patchReplacesExisting reports whether a patch operation mutates an existing file. Preparing such
+// an operation seals the file content it was resolved against, so it cannot apply to a newer file.
+func patchReplacesExisting(operationType string) bool {
 	switch operationType {
 	case "write", "update", "delete":
 		return true
 	default:
 		return false
 	}
+}
+
+// patchNeedsApproval reports whether a patch operation pauses for user approval. Creating and
+// editing files inside a writable root is automatic; only a deletion asks first.
+func patchNeedsApproval(operationType string) bool {
+	return operationType == "delete"
 }
 
 func rollbackPatch(root *openedRoot, items []preparedPatch, committed int) {
@@ -543,6 +566,9 @@ func (s *Sandbox) MovePath(rootID, from, to string) error {
 	}
 	_, target, err := s.resolve(rootID, to)
 	if err != nil {
+		return err
+	}
+	if err := s.checkMove(filepath.Join(root.view.Path, source), filepath.Join(root.view.Path, target)); err != nil {
 		return err
 	}
 	if err := root.root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -628,6 +654,92 @@ func (s *Sandbox) ResolveTarget(rootID, relativePath string) (string, error) {
 		return "", errSandboxPath
 	}
 	return target, nil
+}
+
+// physicalPath resolves the junctions and links in the part of path that exists and rejoins the
+// missing remainder, so a file that is yet to be created is judged by where it would really land.
+func physicalPath(path string) (string, error) {
+	missing := ""
+	for current := path; ; {
+		resolved, err := platform.FinalPath(current)
+		if err == nil {
+			return filepath.Join(resolved, missing), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		// A link whose target is missing still redirects whatever is created through it.
+		if _, statErr := os.Lstat(current); statErr == nil {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		missing = filepath.Join(filepath.Base(current), missing)
+		current = parent
+	}
+}
+
+// guardWrite refuses a path inside a read-only root and, with tree set, a folder that contains one,
+// which is off limits to anything that moves or rewrites a whole tree. The check is by physical
+// location, not by the root a call names or the spelling of the path, so neither a writable root
+// that contains a read-only one nor a junction into it can be used to reach it.
+func (s *Sandbox) guardWrite(path string, tree bool) error {
+	physical, err := physicalPath(path)
+	if err != nil {
+		return err
+	}
+	for _, root := range s.roots {
+		if !root.view.ReadOnly {
+			continue
+		}
+		if pathWithin(root.physical, physical) || tree && pathWithin(physical, root.physical) {
+			return fmt.Errorf("%w: %q", errSandboxReadOnly, path)
+		}
+	}
+	return nil
+}
+
+func (s *Sandbox) checkMove(source, target string) error {
+	if err := s.guardWrite(source, true); err != nil {
+		return err
+	}
+	return s.guardWrite(target, false)
+}
+
+// Writable returns the resolver that mutating desktop actions bind to. It resolves like the sandbox
+// itself and then refuses read-only locations.
+func (s *Sandbox) Writable() agentactions.Resolver {
+	return writableSandbox{sandbox: s}
+}
+
+type writableSandbox struct {
+	sandbox *Sandbox
+}
+
+func (w writableSandbox) ResolveExisting(rootID, relativePath string) (string, error) {
+	return w.writable(w.sandbox.ResolveExisting(rootID, relativePath))
+}
+
+func (w writableSandbox) ResolveTarget(rootID, relativePath string) (string, error) {
+	return w.writable(w.sandbox.ResolveTarget(rootID, relativePath))
+}
+
+// CheckWritable vets a path an earlier action resolved and stored, such as the mod folder of a
+// session a read action opened, before a later action changes it.
+func (w writableSandbox) CheckWritable(path string) error {
+	return w.sandbox.guardWrite(path, true)
+}
+
+func (w writableSandbox) writable(path string, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	if err := w.sandbox.guardWrite(path, true); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func validateRelativePath(path string) (string, error) {

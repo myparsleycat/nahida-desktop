@@ -639,6 +639,27 @@ func (t *Service) TouchProfileCloseSession(ctx context.Context, sessionID string
 	return t.TouchProfileDiscardDraft(ctx, sessionID)
 }
 
+// TouchProfileSessionPaths returns the mod folders that applying or regenerating the session changes:
+// the analyzed source and, once applied, the generated output and the disabled source.
+//
+//wails:ignore
+func (t *Service) TouchProfileSessionPaths(sessionID string) ([]string, error) {
+	session, err := t.requireTouchSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	paths := []string{session.Analysis.ModRoot}
+	if session.Draft != nil && session.Draft.SourceModRoot != session.Analysis.ModRoot {
+		paths = append(paths, session.Draft.SourceModRoot)
+	}
+	if session.Applied != nil {
+		paths = append(paths, session.Applied.OutputRoot, session.Applied.SourceRoot)
+	}
+	return paths, nil
+}
+
 func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
 	session, err := t.requireTouchSession(input.SessionID)
 	if err != nil {

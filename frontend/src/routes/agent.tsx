@@ -58,6 +58,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   FolderIcon,
+  FolderLockIcon,
   Gamepad2Icon,
   HashIcon,
   HeartHandshakeIcon,
@@ -761,7 +762,11 @@ function AgentRoute() {
                   className="inline-flex h-[25px] max-w-[180px] min-w-0 items-center gap-1 truncate overflow-hidden rounded-[13px] bg-muted px-2 text-[11px] whitespace-nowrap text-muted-foreground"
                   title={root.path}
                 >
-                  <FolderIcon className="size-3 flex-none" />
+                  {root.readOnly ? (
+                    <FolderLockIcon className="size-3 flex-none" />
+                  ) : (
+                    <FolderIcon className="size-3 flex-none" />
+                  )}
                   {root.name}
                 </span>
               ))}
