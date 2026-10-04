@@ -273,9 +273,6 @@ func newProviderLogin(providerID string, config providerOAuthConfig, client *htt
 	if address, ok := listener.Addr().(*net.TCPAddr); ok && config.CallbackPort == 0 {
 		config.CallbackPort = address.Port
 	}
-	if client == nil {
-		client = http.DefaultClient
-	}
 
 	login := &providerLogin{
 		providerID: providerID,
