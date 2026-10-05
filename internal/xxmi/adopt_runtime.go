@@ -132,10 +132,17 @@ func (x *XXMI) launchesCustomDLL(ctx context.Context, cfg ImporterConfig) (bool,
 		return false, nil
 	}
 
-	// The next deployment replaces a custom DLL whose selection was cleared, unless the user changed the file.
+	// Ask the deployment's own rule about the file as it is now: the manifest only knows the last deployment,
+	// and the user may have replaced the DLL since.
 	manifest, ok := readXXMIRuntimeManifest(cfg.ImporterFolder)
-	hash := manifest.UserManaged[customDLLName]
-	return ok && hash != "" && !manifest.deployedCustomDLL(customDLLName, hash), nil
+	if !ok {
+		return false, nil
+	}
+	current, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, customDLLName))
+	if err != nil {
+		return false, nil //nolint:nilerr // an unreadable DLL is not a kept one; the launch reports the failure.
+	}
+	return preservesUserFile(cfg, manifest, nil, customDLLName, hashBytes(current)), nil
 }
 
 // usesCustomDLL reports whether the last deployment left a user-provided d3d11.dll in the importer folder.

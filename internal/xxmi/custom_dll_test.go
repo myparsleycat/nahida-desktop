@@ -219,6 +219,12 @@ func TestDeployRuntimeAppliesCustomDLLOncePerSelection(t *testing.T) {
 		t.Fatalf("cleared selection reported = %t, err = %v", launches, err)
 	}
 
+	// A DLL the user swapped in since then is kept by that deployment, whatever hash the manifest recorded.
+	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("fixer build"))
+	if launches, err := New().launchesCustomDLL(ctx, cfg); err != nil || !launches {
+		t.Fatalf("replaced DLL reported = %t, err = %v", launches, err)
+	}
+
 	// A file changed after the selection was applied is the user's own and stays when the selection is cleared.
 	deploy(first)
 	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("fixer build"))
