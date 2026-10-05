@@ -137,6 +137,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     enable: () => void;
   } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const pendingEnablesRef = useRef(new Set<string>());
   // Stable within a group, so the memoized cards and rows that toggle through it do not rerender.
   const confirmEnable = useCallback(
     (mod: ModInfo, enable: () => void) => {
@@ -153,15 +154,28 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         }
       };
 
-      // The light scan shown first carries no dependencies, so an enable requested before
-      // the full scan lands waits for it.
+      // The light scan shown first carries no dependencies and an invalidated scan may predate
+      // a library change, so an enable requested before the full scan lands waits for it.
       const options = modGroupQueryOptions(selectedGroupPath);
-      const group = queryClient.getQueryData(options.queryKey);
-      if (group || !selectedGroupPath) {
-        confirm(group);
+      const state = queryClient.getQueryState(options.queryKey);
+      if (!selectedGroupPath || (state?.data && !state.isInvalidated)) {
+        confirm(state?.data);
         return;
       }
-      void queryClient.ensureQueryData(options).then(confirm, () => confirm());
+
+      // The mod keeps its stale state until the scan lands, so repeated requests are dropped.
+      const pending = pendingEnablesRef.current;
+      if (pending.has(mod.path)) {
+        return;
+      }
+      pending.add(mod.path);
+      void queryClient
+        .fetchQuery(options)
+        .then(confirm, (error: unknown) => {
+          Logger.warn({ error, modPath: mod.path, groupPath: selectedGroupPath }, "confirmEnable");
+          toast.error(toErrorMessage(error));
+        })
+        .finally(() => pending.delete(mod.path));
     },
     [queryClient, selectedGroupPath],
   );
