@@ -1245,7 +1245,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         onClickPromise={async () => {
                           try {
                             await XXMI.CreateShortcut(importer);
-                            refresh();
                             toast.success(t("page.setting.xxmi.builtin.shortcutCreated"));
                           } catch (error) {
                             toast.error(toErrorMessage(error));
@@ -1254,21 +1253,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       >
                         {t("page.setting.xxmi.builtin.createShortcut")}
                       </Button>
-                      {saved?.shortcutPath && (
-                        <Button
-                          variant="outline"
-                          onClickPromise={async () => {
-                            try {
-                              await XXMI.DeleteShortcut(importer);
-                              refresh();
-                            } catch (error) {
-                              toast.error(toErrorMessage(error));
-                            }
-                          }}
-                        >
-                          {t("page.setting.xxmi.builtin.deleteShortcut")}
-                        </Button>
-                      )}
                     </div>
                   </SectionContent>
                 </Section>

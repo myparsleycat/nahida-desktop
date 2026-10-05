@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -46,34 +45,7 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := createShortcutOnDesktop(ctx, key, executable, icon)
-	if err != nil {
-		return "", err
-	}
-	cfg.ShortcutPath = path
-	if err := x.SaveImporterConfig(ctx, key, cfg); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func (x *XXMI) DeleteShortcut(ctx context.Context, key string) error {
-	cfg, err := x.GetImporterConfig(ctx, key)
-	if err != nil {
-		return err
-	}
-	if cfg.ShortcutPath == "" {
-		return nil
-	}
-	expected, err := desktopShortcutPath(key)
-	if err != nil {
-		return err
-	}
-	if err := removeSavedShortcut(cfg.ShortcutPath, expected); err != nil {
-		return err
-	}
-	cfg.ShortcutPath = ""
-	return x.SaveImporterConfig(ctx, key, cfg)
+	return createShortcutOnDesktop(ctx, key, executable, icon)
 }
 
 func createShortcutOnDesktop(ctx context.Context, key, executable, icon string) (string, error) {
@@ -112,16 +84,6 @@ func desktopShortcutPath(key string) (string, error) {
 	}
 	path := filepath.Join(desktopPath, key+" Quick Start.lnk")
 	return path, nil
-}
-
-func removeSavedShortcut(saved, expected string) error {
-	if !strings.EqualFold(filepath.Clean(saved), filepath.Clean(expected)) {
-		return fmt.Errorf("quick start shortcut path is outside the current desktop: %s", saved)
-	}
-	if err := os.Remove(saved); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
 }
 
 func createWindowsShortcut(ctx context.Context, path, executable, args, icon string) error {
