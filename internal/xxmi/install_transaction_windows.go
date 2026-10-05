@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -305,7 +307,7 @@ func (t *importerInstallTransaction) commit(
 			return nil, parsedConfig{}, errors.New("importer folder identity changed before replacement")
 		}
 		if err := t.parent.renameChild(t.liveName, t.backupName); err != nil {
-			return nil, parsedConfig{}, err
+			return nil, parsedConfig{}, importerFolderInUseError(err)
 		}
 	}
 	if err := t.writeJournal(context.Background(), installStateTreeBackedUp); err != nil {
@@ -315,7 +317,7 @@ func (t *importerInstallTransaction) commit(
 		return nil, parsedConfig{}, err
 	}
 	if err := t.parent.renameChild(t.stageName, t.liveName); err != nil {
-		return nil, parsedConfig{}, err
+		return nil, parsedConfig{}, importerFolderInUseError(err)
 	}
 	if err := t.writeJournal(context.Background(), installStateTreeInstalled); err != nil {
 		return nil, parsedConfig{}, err
@@ -346,6 +348,15 @@ func (t *importerInstallTransaction) commit(
 	}
 	t.state = installStateCommitted
 	return loaded, parsed, nil
+}
+
+// importerFolderInUseError names a denied importer folder swap. Windows refuses to rename a directory while any
+// file below it is open and reports that as an access error, which otherwise reads like a permission problem.
+func importerFolderInUseError(err error) error {
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		return fmt.Errorf("XXMI_IMPORTER_FOLDER_IN_USE: %w", err)
+	}
+	return err
 }
 
 func (t *importerInstallTransaction) rollback() error {

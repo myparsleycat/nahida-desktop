@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { importerFolderErrorCode } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import type { XXMIData } from "@renderer/routes/xxmi/index";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -76,6 +77,11 @@ function XXMIImporterPackageRow({
       await XXMI.InstallImporterPackage({ importer: importer.key, version, allowUnsigned: false });
       refetch();
     } catch (error) {
+      const code = importerFolderErrorCode(error);
+      if (code) {
+        toast.error(t(`page.setting.xxmi.fn.installImporterPackage.errors.${code}`));
+        return;
+      }
       toast.error(
         toErrorMessage(error).includes("XXMI Launcher")
           ? t("page.setting.xxmi.fn.installImporterPackage.launcherCloseFailed")

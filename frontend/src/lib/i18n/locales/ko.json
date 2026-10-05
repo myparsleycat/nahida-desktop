@@ -2362,7 +2362,11 @@
           },
           "installImporterPackage": {
             "failed": "선택한 importer 패키지 버전을 적용하지 못했습니다",
-            "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
+            "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요.",
+            "errors": {
+              "XXMI_IMPORTER_FOLDER_IN_USE": "임포터 폴더를 다른 프로그램이 사용 중입니다. 게임, XXMI Launcher, 폴더 안의 파일을 열어 둔 프로그램을 종료한 뒤 다시 시도하세요.",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "임포터 폴더가 XXMI Launcher 설치 폴더입니다. 이 임포터 전용 폴더를 따로 선택하세요."
+            }
           }
         }
       },

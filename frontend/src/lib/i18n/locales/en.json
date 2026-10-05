@@ -2414,7 +2414,11 @@
           },
           "installImporterPackage": {
             "failed": "Failed to apply the selected importer package version",
-            "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
+            "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again.",
+            "errors": {
+              "XXMI_IMPORTER_FOLDER_IN_USE": "The importer folder is in use by another program. Close the game, XXMI Launcher, and any program that has files in the folder open, then try again.",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "The importer folder is an XXMI Launcher installation folder. Choose a separate folder for this importer."
+            }
           }
         }
       },

@@ -334,6 +334,9 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
 	}
+	if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
+		return err
+	}
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
 			Operation: "save-importer-config", Stage: "validate-package",

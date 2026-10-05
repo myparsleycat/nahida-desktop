@@ -2362,7 +2362,11 @@
           },
           "installImporterPackage": {
             "failed": "应用所选 Importer 包版本失败",
-            "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
+            "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。",
+            "errors": {
+              "XXMI_IMPORTER_FOLDER_IN_USE": "Importer 文件夹正被其他程序占用。请关闭游戏、XXMI Launcher 以及打开了该文件夹内文件的程序，然后重试。",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "Importer 文件夹是 XXMI Launcher 的安装文件夹。请为此 Importer 选择单独的文件夹。"
+            }
           }
         }
       },

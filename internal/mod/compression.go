@@ -667,6 +667,10 @@ func (c *compressionCoordinator) replaceWatcher(ctx context.Context) error {
 		return err
 	}
 	configPath := filepath.Join(*xxmiPath, "XXMI Launcher Config.json")
+	// Only an external launcher keeps this file; the built-in runtime has nothing to watch here.
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	c.configWatcher, err = watcher.WatchFile(configPath, watcher.FileConfig{
 		Ops: watcher.All, SettleDelay: 900 * time.Millisecond, DistinctContent: true,
 		OnError: func(err error) { c.logError(err, "watch-importers", "", configPath) },
