@@ -95,6 +95,19 @@ func TestSaveAndLaunchRejectUninstalledPackagePin(t *testing.T) {
 	if len(stages) != 1 || stages[0] != "failed" {
 		t.Fatalf("launch performed work before rejecting the package: %v", stages)
 	}
+
+	// The stuck importer can still be turned off, and turning it back on needs the package again.
+	if err := service.DisableImporter(ctx, "GIMI"); err != nil {
+		t.Fatalf("disabling an importer with an uninstalled pin: %v", err)
+	}
+	stored, err = service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || stored.Enabled || stored.PackageVersion.Pinned != "1.2.3" {
+		t.Fatalf("disabled config = %+v, err = %v", stored, err)
+	}
+	if err := service.EnableImporter(ctx, "GIMI", ""); err == nil ||
+		!strings.Contains(err.Error(), "XXMI_IMPORTER_NOT_INSTALLED") {
+		t.Fatalf("importer with an uninstalled pin enabled: %v", err)
+	}
 }
 
 func writeInstalledImporterPackage(t *testing.T, key, folder, version string) {

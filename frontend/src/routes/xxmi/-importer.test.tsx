@@ -332,8 +332,28 @@ it("discards the pending package selection together with the draft", async () =>
   expect(screen.queryByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeNull();
 });
 
+it("lets an importer whose pinned package is missing be disabled and saved", async () => {
+  config.packageVersion = { pinned: "2.0.0" };
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  expect(screen.getByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.enabled" }));
+  expect(screen.queryByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeNull();
+  expect(screen.getAllByRole("button", { name: "g.save" })[0]).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ enabled: false, packageVersion: { pinned: "2.0.0" } }),
+    ),
+  );
+});
+
 afterEach(() => {
   cleanup();
+  config.packageVersion = { follow: "latest" };
   xxmi.SaveImporterConfig.mockReset();
   xxmi.EnsureLibsVersion.mockReset();
   xxmi.InstallImporterPackage.mockReset();
