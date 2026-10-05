@@ -61,7 +61,7 @@ type EnabledImporter struct {
 	UpdateAvailable  bool        `json:"updateAvailable"`
 	InstalledVersion *string     `json:"installedVersion"`
 	PackageInfo      PackageInfo `json:"packageInfo"`
-	// CustomDLL reports that the built-in runtime preserves a user-provided d3d11.dll instead of the signed one.
+	// CustomDLL reports that the built-in runtime launches with a user-provided d3d11.dll instead of the signed one.
 	CustomDLL bool `json:"customDll"`
 }
 

@@ -77,6 +77,11 @@ export function XXMIImporterList() {
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{key}</span>
+              {importer?.packageInfo.deployed_version && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {importer.packageInfo.deployed_version}
+                </span>
+              )}
               {importer?.running && (
                 <span
                   title={t("page.setting.xxmi.builtin.running")}
@@ -87,8 +92,9 @@ export function XXMIImporterList() {
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              {importer && `${importer.mode === "legacy" ? "3DMigoto" : "XXMI"} · `}
-              {importer?.packageInfo.deployed_version ||
+              {importer && (importer.mode === "legacy" ? "3DMigoto" : "XXMI")}
+              {importer && !importer.packageInfo.deployed_version && " · "}
+              {!importer?.packageInfo.deployed_version &&
                 t("page.setting.xxmi.builtin.notInstalled")}
               {importer?.customDll && (
                 <>

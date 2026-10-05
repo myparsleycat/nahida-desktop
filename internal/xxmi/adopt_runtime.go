@@ -120,14 +120,45 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	return warnings, nil
 }
 
+// launchesCustomDLL reports whether the importer's next launch runs a user-provided d3d11.dll: the selected
+// custom DLL, or a file in the importer folder that unsafe mode keeps. It follows the configuration instead of
+// the last deployment, so a changed selection shows before the game is launched again.
+func (x *XXMI) launchesCustomDLL(ctx context.Context, cfg ImporterConfig) (bool, error) {
+	id, err := x.customDLLID(ctx, cfg)
+	if err != nil || id != "" {
+		return id != "", err
+	}
+	if cfg.Mode != RuntimeXXMI || !cfg.Migoto.UnsafeMode {
+		return false, nil
+	}
+
+	// Ask the deployment's own rule about the file as it is now: the manifest only knows the last deployment,
+	// and the user may have replaced the DLL since.
+	manifest, ok := readXXMIRuntimeManifest(cfg.ImporterFolder)
+	if !ok {
+		return false, nil
+	}
+	current, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, customDLLName))
+	if err != nil {
+		return false, nil //nolint:nilerr // an unreadable DLL is not a kept one; the launch reports the failure.
+	}
+	return preservesUserFile(cfg, manifest, nil, customDLLName, hashBytes(current)), nil
+}
+
+// usesCustomDLL reports whether the last deployment left a user-provided d3d11.dll in the importer folder.
 func usesCustomDLL(folder string) bool {
+	manifest, ok := readXXMIRuntimeManifest(folder)
+	return ok && manifest.UserManaged[customDLLName] != ""
+}
+
+func readXXMIRuntimeManifest(folder string) (runtimeManifest, bool) {
 	data, err := os.ReadFile(filepath.Join(folder, runtimeManifestName))
 	if err != nil {
-		return false
+		return runtimeManifest{}, false
 	}
 	var manifest runtimeManifest
 	if json.Unmarshal(data, &manifest) != nil || manifest.Mode != RuntimeXXMI {
-		return false
+		return runtimeManifest{}, false
 	}
-	return manifest.UserManaged["d3d11.dll"] != ""
+	return manifest, true
 }

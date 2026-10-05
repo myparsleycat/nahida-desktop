@@ -213,6 +213,18 @@ func TestDeployRuntimeAppliesCustomDLLOncePerSelection(t *testing.T) {
 		t.Fatalf("manifest after clearing = %+v, backups = %v", manifest, backups())
 	}
 
+	// Until that deployment runs, a cleared selection is already reported as the signed DLL.
+	deploy(first)
+	if launches, err := New().launchesCustomDLL(ctx, cfg); err != nil || launches {
+		t.Fatalf("cleared selection reported = %t, err = %v", launches, err)
+	}
+
+	// A DLL the user swapped in since then is kept by that deployment, whatever hash the manifest recorded.
+	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("fixer build"))
+	if launches, err := New().launchesCustomDLL(ctx, cfg); err != nil || !launches {
+		t.Fatalf("replaced DLL reported = %t, err = %v", launches, err)
+	}
+
 	// A file changed after the selection was applied is the user's own and stays when the selection is cleared.
 	deploy(first)
 	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("fixer build"))
@@ -344,9 +356,31 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 		t.Fatalf("overview = %+v, err = %v", overview, err)
 	}
 
+	// A selection is reported before any launch has deployed it.
+	launchesCustomDLL := func() bool {
+		t.Helper()
+		overview, err := service.GetOverview(ctx)
+		if err != nil || len(overview.Importers) != 1 {
+			t.Fatalf("overview = %+v, err = %v", overview, err)
+		}
+		return overview.Importers[0].CustomDLL
+	}
+	if !launchesCustomDLL() {
+		t.Fatal("own selection is not reported before a launch")
+	}
+	if err := service.SaveImporterConfig(ctx, "GIMI", following); err != nil {
+		t.Fatal(err)
+	}
+	if !launchesCustomDLL() {
+		t.Fatal("shared selection is not reported before a launch")
+	}
+
 	// Dropping the last reference preserves this session's imports.
 	if err := service.SetSharedCustomDLL(ctx, ""); err != nil {
 		t.Fatal(err)
+	}
+	if launchesCustomDLL() {
+		t.Fatal("cleared shared selection is still reported")
 	}
 	root, err := xxmiCacheRoot()
 	if err != nil {
