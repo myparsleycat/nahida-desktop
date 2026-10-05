@@ -1989,8 +1989,13 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 					name = filepath.Base(canonical)
 				}
 				validated := AgentScope{Type: "mod", ModPath: canonical, ModName: name}
+				// The rest of the game's Mods folder is there to compare against and to trace shared
+				// dependencies, so it joins read-only around the writable mod.
+				reference := gameRoot
+				reference.ReadOnly, reference.overridable = true, true
 				roots := []SandboxRoot{
 					{ID: rootID(name, canonical), Name: name, Path: canonical, Importer: gameRoot.Importer},
+					reference,
 				}
 				if core, ok := s.importerCoreRoot(ctx, gameRoot.Importer); ok {
 					roots = append(roots, core)

@@ -414,6 +414,214 @@ func TestReadOnlyRootHoldsThroughJunction(t *testing.T) {
 	}
 }
 
+// A mod scope puts the writable mod inside the read-only Mods folder. The mod stays writable under
+// either root ID, while its siblings stay unchanged, also through a junction out of the mod.
+func TestOverridableReadOnlyRootYieldsToNestedWritableRoot(t *testing.T) {
+	t.Parallel()
+	mods := filepath.Join(t.TempDir(), "Mods")
+	selected := filepath.Join(mods, "Selected")
+	sibling := filepath.Join(mods, "Sibling")
+	for _, dir := range []string{selected, sibling} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte("[Constants]\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{
+		{ID: "selected", Name: "Selected", Path: selected},
+		{ID: "mods", Name: "Game", Path: mods, ReadOnly: true, overridable: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+	executor := &toolExecutor{sandbox: sandbox}
+
+	read, err := executor.Execute(context.Background(), ToolCall{
+		ID: "read", Name: "read_file", Arguments: json.RawMessage(`{"rootId":"mods","relativePath":"Sibling/mod.ini"}`),
+	})
+	if err != nil || read.Output.(ReadFileResult).Text != "[Constants]\n" {
+		t.Fatalf("read sibling = %#v, %v", read, err)
+	}
+
+	allowed := map[string]ToolCall{
+		"through the mod root": {Name: "apply_patch", Arguments: json.RawMessage(
+			`{"rootId":"selected","operations":[{"type":"create","path":"new.ini","content":"x"}]}`,
+		)},
+		"through the Mods root": {Name: "apply_patch", Arguments: json.RawMessage(
+			`{"rootId":"mods","operations":[{"type":"create","path":"Selected/other.ini","content":"x"}]}`,
+		)},
+		"move inside the mod": {Name: "move_path", Arguments: json.RawMessage(
+			`{"rootId":"selected","from":"mod.ini","to":"renamed.ini"}`,
+		)},
+	}
+	for name, call := range allowed {
+		if _, err := executor.Execute(context.Background(), call); err != nil {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+	writable := sandbox.Writable()
+	if _, err := writable.ResolveExisting("selected", "."); err != nil {
+		t.Fatalf("writable mod folder err = %v", err)
+	}
+
+	refused := map[string]ToolCall{
+		"create in sibling": {Name: "apply_patch", Arguments: json.RawMessage(
+			`{"rootId":"mods","operations":[{"type":"create","path":"Sibling/new.ini","content":"x"}]}`,
+		)},
+		"create beside the mods": {Name: "apply_patch", Arguments: json.RawMessage(
+			`{"rootId":"mods","operations":[{"type":"create","path":"new.ini","content":"x"}]}`,
+		)},
+		"move the mod out": {Name: "move_path", Arguments: json.RawMessage(
+			`{"rootId":"mods","from":"Selected","to":"Renamed"}`,
+		)},
+		"move into sibling": {Name: "move_path", Arguments: json.RawMessage(
+			`{"rootId":"mods","from":"Selected/new.ini","to":"Sibling/new.ini"}`,
+		)},
+	}
+	for name, call := range refused {
+		execution, err := executor.Execute(context.Background(), call)
+		if !errors.Is(err, errSandboxReadOnly) || execution.Approval != nil {
+			t.Fatalf("%s: execution = %#v, err = %v", name, execution, err)
+		}
+	}
+	if _, err := writable.ResolveExisting("mods", "."); !errors.Is(err, errSandboxReadOnly) {
+		t.Fatalf("writable Mods folder err = %v", err)
+	}
+	if _, err := writable.ResolveExisting("mods", "Sibling"); !errors.Is(err, errSandboxReadOnly) {
+		t.Fatalf("writable sibling err = %v", err)
+	}
+
+	alias := filepath.Join(selected, "Alias")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", alias, sibling).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	if _, err := writable.ResolveTarget("selected", "Alias/new.ini"); !errors.Is(err, errSandboxReadOnly) {
+		t.Fatalf("writable target through junction err = %v", err)
+	}
+	if entries, err := os.ReadDir(sibling); err != nil || len(entries) != 1 {
+		t.Fatalf("sibling mod changed: %v, %v", entries, err)
+	}
+}
+
+// A link changes where it sits, not only where it points. A link in a read-only folder that leads
+// into a writable one must survive every patch and move, whether the folder is protected or only
+// overridable.
+func TestReadOnlyRootKeepsLinkIntoWritableRoot(t *testing.T) {
+	t.Parallel()
+	tests := map[string]func(mods, selected, sibling string) []SandboxRoot{
+		"protected folder inside a writable root": func(mods, _, sibling string) []SandboxRoot {
+			return []SandboxRoot{
+				{ID: "mods", Name: "Game", Path: mods},
+				{ID: "sibling", Name: "Sibling", Path: sibling, ReadOnly: true},
+			}
+		},
+		"overridable root around a writable mod": func(mods, selected, _ string) []SandboxRoot {
+			return []SandboxRoot{
+				{ID: "selected", Name: "Selected", Path: selected},
+				{ID: "mods", Name: "Game", Path: mods, ReadOnly: true, overridable: true},
+			}
+		},
+	}
+	for name, roots := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			mods := filepath.Join(t.TempDir(), "Mods")
+			selected := filepath.Join(mods, "Selected")
+			sibling := filepath.Join(mods, "Sibling")
+			for _, dir := range []string{selected, sibling} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			target := filepath.Join(selected, "mod.ini")
+			if err := os.WriteFile(target, []byte("[Constants]\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(sibling, "alias.ini")
+			if err := os.Symlink(filepath.Join("..", "Selected", "mod.ini"), link); err != nil {
+				t.Skipf("filesystem cannot create a symbolic link: %v", err)
+			}
+			sandbox, err := NewSandbox(roots(mods, selected, sibling))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = sandbox.Close() }()
+			executor := &toolExecutor{sandbox: sandbox}
+
+			calls := map[string]ToolCall{
+				"update": {Name: "apply_patch", Arguments: json.RawMessage(
+					`{"rootId":"mods","operations":[{"type":"update","path":"Sibling/alias.ini",` +
+						`"oldString":"Constants","newString":"X"}]}`,
+				)},
+				"write": {Name: "apply_patch", Arguments: json.RawMessage(
+					`{"rootId":"mods","operations":[{"type":"write","path":"Sibling/alias.ini","content":"x"}]}`,
+				)},
+				"delete": {Name: "apply_patch", Arguments: json.RawMessage(
+					`{"rootId":"mods","operations":[{"type":"delete","path":"Sibling/alias.ini"}]}`,
+				)},
+				"move out": {Name: "move_path", Arguments: json.RawMessage(
+					`{"rootId":"mods","from":"Sibling/alias.ini","to":"Selected/moved.ini"}`,
+				)},
+			}
+			for name, call := range calls {
+				execution, err := executor.Execute(context.Background(), call)
+				if !errors.Is(err, errSandboxReadOnly) || execution.Approval != nil {
+					t.Fatalf("%s: execution = %#v, err = %v", name, execution, err)
+				}
+			}
+
+			info, err := os.Lstat(link)
+			if err != nil || info.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("link was replaced: %v, %v", info, err)
+			}
+			if entries, err := os.ReadDir(sibling); err != nil || len(entries) != 1 {
+				t.Fatalf("read-only folder changed: %v, %v", entries, err)
+			}
+			if got, _ := os.ReadFile(target); string(got) != "[Constants]\n" {
+				t.Fatalf("link target changed: %q", got)
+			}
+		})
+	}
+}
+
+// A mod installed as a junction inside the Mods folder sits in the read-only folder but leads
+// elsewhere. It is the writable root itself, so the mod folder and its files stay writable.
+func TestOverridableReadOnlyRootYieldsToJunctionRoot(t *testing.T) {
+	t.Parallel()
+	mods := filepath.Join(t.TempDir(), "Mods")
+	storage := filepath.Join(t.TempDir(), "Storage")
+	for _, dir := range []string{mods, storage} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selected := filepath.Join(mods, "Selected")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", selected, storage).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	sandbox, err := NewSandbox([]SandboxRoot{
+		{ID: "selected", Name: "Selected", Path: selected},
+		{ID: "mods", Name: "Game", Path: mods, ReadOnly: true, overridable: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sandbox.Close() }()
+
+	if err := sandbox.guardWrite(selected, true); err != nil {
+		t.Fatalf("junction mod folder err = %v", err)
+	}
+	if err := sandbox.guardWrite(filepath.Join(selected, "mod.ini"), false); err != nil {
+		t.Fatalf("file in junction mod err = %v", err)
+	}
+	if err := sandbox.guardWrite(filepath.Join(mods, "Other"), false); !errors.Is(err, errSandboxReadOnly) {
+		t.Fatalf("sibling of junction mod err = %v", err)
+	}
+}
+
 // Providers reject a function name longer than 64 characters for the whole request, so every
 // built-in definition has to fit that limit too.
 func TestToolDefinitionsFitProviderNameLimit(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -96,19 +97,21 @@ func sandboxRootsFromEvents(events []db.AgentEventRow) []SandboxRoot {
 	return roots
 }
 
+// mergeSandboxRoots adds the roots that base does not cover yet. An overridable root covers
+// nothing: a candidate inside it is kept as its own writable root, and a candidate that holds it
+// replaces it.
 func mergeSandboxRoots(base, extra []SandboxRoot) []SandboxRoot {
 	merged := append([]SandboxRoot(nil), base...)
 	for _, candidate := range extra {
-		covered := false
-		for _, existing := range merged {
-			if pathWithin(existing.Path, candidate.Path) {
-				covered = true
-				break
-			}
+		if slices.ContainsFunc(merged, func(existing SandboxRoot) bool {
+			return !existing.overridable && pathWithin(existing.Path, candidate.Path)
+		}) {
+			continue
 		}
-		if !covered {
-			merged = append(merged, candidate)
-		}
+		merged = slices.DeleteFunc(merged, func(existing SandboxRoot) bool {
+			return existing.overridable && pathWithin(candidate.Path, existing.Path)
+		})
+		merged = append(merged, candidate)
 	}
 	return merged
 }
