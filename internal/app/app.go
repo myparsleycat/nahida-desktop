@@ -219,7 +219,8 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 							}
 							return
 						}
-						if err := rt.xxmi.StartGame(context.Background(), key); err != nil {
+						// A quick start has no dialog to ask about logging with, so it launches as configured.
+						if err := rt.xxmi.StartGameWithLogging(context.Background(), key); err != nil {
 							showError(err)
 							return
 						}

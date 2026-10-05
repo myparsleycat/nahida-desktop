@@ -16,6 +16,9 @@ var (
 	// frontend/src/hooks/use-launch-guard.tsx.
 	errGimiDCREnabled      = errors.New("GIMI_DCR_ENABLED")
 	errSmoothMotionEnabled = errors.New("NVIDIA_SMOOTH_MOTION_ENABLED")
+	// errLoggingEnabled asks before a launch with 3DMigoto logging on, which can slow the game down
+	// severely. Unlike the blockers above, the user may launch anyway through StartGameWithLogging.
+	errLoggingEnabled = errors.New("XXMI_LOGGING_ENABLED")
 
 	// errSmoothMotionUnreadable marks a failed NVIDIA settings read. The reference launcher has no such check,
 	// so a launch only warns about it instead of failing.
@@ -171,6 +174,99 @@ func (x *XXMI) clearLaunchBlockers(ctx context.Context, importer, gameExecutable
 			return err
 		}
 		return x.reportLaunchGuard(err, "clear-launch-blockers", importer, gameExecutable)
+	}
+	return nil
+}
+
+// rejectLogging fails the launch while 3DMigoto logging is on for importer.
+func (x *XXMI) rejectLogging(ctx context.Context, importer string, external bool) error {
+	enabled, err := x.loggingEnabled(ctx, importer, external)
+	if err != nil || !enabled {
+		return err
+	}
+	if x.log != nil {
+		x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, errLoggingEnabled),
+			xxmiLaunchGuardWhere)
+	}
+	return infra.AnnotateError(errLoggingEnabled, infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "launch-guard",
+		Fields: map[string]any{"importer": importer, "external": external},
+	})
+}
+
+// loggingEnabled reports whether launching importer loads the XXMI DLL with 3DMigoto logging on.
+// An importer that cannot launch reports false, so the launch itself explains why.
+func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external bool) (bool, error) {
+	if external {
+		launcher, err := x.loadExternalLauncher(ctx)
+		if err != nil || launcher == nil {
+			return false, err
+		}
+		_, disabled := launcher.disabled[importer]
+		return !disabled && externalLoggingEnabled(launcher.migoto(importer)), nil
+	}
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil {
+		return false, err
+	}
+	if !cfg.Enabled || cfg.Migoto.LogLevel == "Disabled" {
+		return false, nil
+	}
+	return x.migotoDLLUsed(ctx, cfg)
+}
+
+// migoto returns the importer's Migoto section of the launcher config, or nil when it has none.
+func (l externalLauncher) migoto(importer string) map[string]any {
+	importers, _ := l.config["Importers"].(map[string]any)
+	section, _ := importers[importer].(map[string]any)
+	migoto, _ := section["Migoto"].(map[string]any)
+	return migoto
+}
+
+// externalLoggingEnabled reads log_level, or the two switches XXMI Launcher used before 2.3.
+func externalLoggingEnabled(migoto map[string]any) bool {
+	if level, ok := migoto["log_level"].(string); ok {
+		return !strings.EqualFold(level, "DISABLED")
+	}
+	calls, _ := migoto["calls_logging"].(bool)
+	debug, _ := migoto["debug_logging"].(bool)
+	return calls || debug
+}
+
+// DisableLogging turns 3DMigoto logging off for importer in the launcher that starts its game.
+func (x *XXMI) DisableLogging(ctx context.Context, importer string) error {
+	importer = strings.ToUpper(strings.TrimSpace(importer))
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	if !external {
+		cfg, err := x.GetImporterConfig(ctx, importer)
+		if err != nil {
+			return err
+		}
+		cfg.Migoto.LogLevel = "Disabled"
+		return x.SaveImporterConfig(ctx, importer, cfg)
+	}
+
+	launcher, err := x.requireExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	migoto := launcher.migoto(importer)
+	if migoto == nil {
+		return fmt.Errorf("importer %s not found", importer)
+	}
+	if _, modern := migoto["log_level"]; modern {
+		migoto["log_level"] = "DISABLED"
+	} else {
+		migoto["calls_logging"], migoto["debug_logging"] = false, false
+	}
+	if err := writeXXMIConfig(launcher.configPath(), launcher.config); err != nil {
+		return infra.ReportError(x.log, err, xxmiLaunchGuardWhere, infra.Diagnostic{
+			Operation: "disable-logging", Stage: "write-config",
+			Fields: map[string]any{"importer": importer, "configPath": launcher.configPath()},
+		})
 	}
 	return nil
 }

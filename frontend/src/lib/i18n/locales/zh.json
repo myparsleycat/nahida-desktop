@@ -618,6 +618,12 @@
           "description": "{{importer}} 需要 DirectX 11 才能运行。官方启动器打开后，请勾选窗口右下角的 DirectX 11 模式复选框。此提醒只显示一次。",
           "confirm": "确认并启动"
         },
+        "xxmi-logging": {
+          "title": "3DMigoto 日志已开启",
+          "description": "{{importer}} 的 3DMigoto 日志已开启。记录日志可能导致游戏性能严重下降，仅在调试模组时才需要。请选择关闭后启动或保持开启并启动。",
+          "confirm": "关闭并启动",
+          "keep": "保持开启并启动"
+        },
         "preset-management": {
           "legacy-badge": "旧版",
           "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。"

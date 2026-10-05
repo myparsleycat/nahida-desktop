@@ -3,6 +3,7 @@ package xxmi
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -222,6 +223,137 @@ func TestLaunchBlockerErrorTextKeepsBothCodes(t *testing.T) {
 	}
 	if !errors.Is(annotated, errGimiDCREnabled) || !errors.Is(annotated, errSmoothMotionEnabled) {
 		t.Fatal("annotated error lost a sentinel")
+	}
+}
+
+func TestExternalLoggingEnabled(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		migoto map[string]any
+		want   bool
+	}{
+		{"missing section", nil, false},
+		{"level disabled", map[string]any{"log_level": "DISABLED"}, false},
+		{"level warning", map[string]any{"log_level": "WARNING"}, true},
+		{"level debug", map[string]any{"log_level": "debug"}, true},
+		{"level wins over old switches", map[string]any{"log_level": "DISABLED", "debug_logging": true}, false},
+		{"old switches off", map[string]any{"calls_logging": false, "debug_logging": false}, false},
+		{"old calls switch", map[string]any{"calls_logging": true, "debug_logging": false}, true},
+		{"old debug switch", map[string]any{"calls_logging": false, "debug_logging": true}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := externalLoggingEnabled(tc.migoto); got != tc.want {
+				t.Fatalf("enabled = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuiltinLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
+	ctx := t.Context()
+	client := newXXMITestClient(t)
+	service := New()
+	service.UseClient(client)
+	useBuiltinLauncher(t, service)
+	root := t.TempDir()
+	if err := client.Settings.Upsert(ctx, "xxmi_root", &root); err != nil {
+		t.Fatal(err)
+	}
+	store := func(config string) {
+		t.Helper()
+		if err := client.XXMIImporters.Upsert(ctx, "GIMI", config); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// An importer that is not set up fails the launch on its own, without the logging question.
+	store(`{"schemaVersion":2,"enabled":false,"migoto":{"logLevel":"Debug"}}`)
+	if err := service.rejectLogging(ctx, "GIMI", false); err != nil {
+		t.Fatalf("disabled importer = %v", err)
+	}
+	// Logging settings do not reach the game when the XXMI DLL is left out.
+	store(`{"schemaVersion":2,"enabled":true,"xxmiDLLInjectMode":"Bypass","migoto":{"logLevel":"Debug"}}`)
+	if err := service.rejectLogging(ctx, "GIMI", false); err != nil {
+		t.Fatalf("launch without the XXMI DLL = %v", err)
+	}
+
+	store(`{"schemaVersion":2,"enabled":true,"migoto":{"logLevel":"Warning"}}`)
+	err := service.rejectLogging(ctx, "GIMI", false)
+	if !errors.Is(err, errLoggingEnabled) || !strings.Contains(err.Error(), "XXMI_LOGGING_ENABLED") {
+		t.Fatalf("error = %v, want the logging question", err)
+	}
+	if err := service.DisableLogging(ctx, " gimi "); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || cfg.Migoto.LogLevel != "Disabled" || !cfg.Enabled {
+		t.Fatalf("config after disabling = %+v, %v", cfg.Migoto, err)
+	}
+	if err := service.rejectLogging(ctx, "GIMI", false); err != nil {
+		t.Fatalf("after disabling = %v", err)
+	}
+}
+
+func TestExternalLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
+	ctx := t.Context()
+	for _, tc := range []struct {
+		name  string
+		apply func(migoto map[string]any)
+		check func(migoto map[string]any) bool
+	}{
+		{
+			name:  "log level",
+			apply: func(migoto map[string]any) { migoto["log_level"] = "INFO" },
+			check: func(migoto map[string]any) bool { return migoto["log_level"] == "DISABLED" },
+		},
+		{
+			name:  "old switches",
+			apply: func(migoto map[string]any) { migoto["debug_logging"] = true },
+			check: func(migoto map[string]any) bool {
+				_, modern := migoto["log_level"]
+				return !modern && migoto["calls_logging"] == false && migoto["debug_logging"] == false
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			config := xxmiTestConfig()
+			migoto := config["Importers"].(map[string]any)["GIMI"].(map[string]any)["Migoto"].(map[string]any)
+			tc.apply(migoto)
+			if _, modern := migoto["log_level"]; modern {
+				delete(migoto, "calls_logging")
+				delete(migoto, "debug_logging")
+			}
+			if err := writeXXMIConfig(filepath.Join(root, xxmiConfigName), config); err != nil {
+				t.Fatal(err)
+			}
+			service := New()
+			service.UseClient(newXXMITestClient(t))
+			useExternalLauncher(t, service, root)
+
+			if err := service.rejectLogging(ctx, "SRMI", true); err != nil {
+				t.Fatalf("importer without logging = %v", err)
+			}
+			if err := service.StartGame(ctx, "GIMI"); !errors.Is(err, errLoggingEnabled) {
+				t.Fatalf("start error = %v, want the logging question", err)
+			}
+			if err := service.DisableLogging(ctx, "gimi"); err != nil {
+				t.Fatal(err)
+			}
+			launcher, err := service.requireExternalLauncher(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored := launcher.migoto("GIMI"); !tc.check(stored) {
+				t.Fatalf("stored Migoto section = %v", stored)
+			}
+			if err := service.rejectLogging(ctx, "GIMI", true); err != nil {
+				t.Fatalf("after disabling = %v", err)
+			}
+		})
 	}
 }
 

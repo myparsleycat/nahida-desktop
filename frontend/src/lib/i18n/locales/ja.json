@@ -618,6 +618,12 @@
           "description": "{{importer}} の動作には DirectX 11 が必要です。公式ランチャーが開いたら、ウィンドウ右下の DirectX 11 モードのチェックボックスを有効にしてください。この案内は一度だけ表示されます。",
           "confirm": "確認して起動"
         },
+        "xxmi-logging": {
+          "title": "3DMigoto のログが有効です",
+          "description": "{{importer}} の 3DMigoto ログが有効になっています。ログを記録するとゲームのパフォーマンスが大幅に低下する場合があり、MOD のデバッグ時にのみ必要です。無効にして起動するか、有効のまま起動してください。",
+          "confirm": "無効にして起動",
+          "keep": "有効のまま起動"
+        },
         "preset-management": {
           "legacy-badge": "旧形式",
           "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"

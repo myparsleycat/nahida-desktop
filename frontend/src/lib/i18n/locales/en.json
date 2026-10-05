@@ -618,6 +618,12 @@
           "description": "{{importer}} requires DirectX 11. Once the official launcher opens, enable the DirectX 11 mode checkbox in the bottom-right corner of its window. This reminder is shown only once.",
           "confirm": "OK, start"
         },
+        "xxmi-logging": {
+          "title": "3DMigoto logging is on",
+          "description": "{{importer}} is set to write 3DMigoto logs. Logging can slow the game down severely and is only needed while debugging mods. Turn it off before starting, or keep it on?",
+          "confirm": "Turn off and start",
+          "keep": "Keep on and start"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
