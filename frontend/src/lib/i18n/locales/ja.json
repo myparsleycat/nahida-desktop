@@ -857,15 +857,15 @@
             "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
             "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーはゲームの Mods フォルダーパス内、またはその逆の関係にはできません。"
           },
+          "reorder-games-mutation": {
+            "failed": "ゲームの順番を保存できませんでした。"
+          },
           "set-game-executable-path": {
             "invalid-path": "選択したランチャーのパスが無効です。",
             "failed": "ランチャーのパスを保存できませんでした。"
           },
           "start-nte-launcher": {
             "not-set": "設定されたランチャーのパスがありません。",
-            "reorder-games-mutation": {
-              "failed": "ゲームの順番を保存できませんでした。"
-            },
             "not-found": "保存されたランチャーのパスが存在しません。",
             "failed": "ランチャーの起動に失敗しました。"
           },
@@ -1044,22 +1044,22 @@
       "no_results": "一致する MOD はありません。",
       "mod_details": "MOD 詳細",
       "mod_details_description": "MOD を選ぶとファイル、統計、リンクを確認できます。",
+      "no_preview_image": "プレビュー画像はありません。",
+      "comments": "コメント",
+      "comment_sort": {
+        "popular": "人気順",
+        "newest": "新着順"
+      },
+      "comment_replies": "返信 {{count}} 件",
+      "comment_stamps": "スタンプ {{count}} 個",
+      "load_more_comments": "コメントをさらに表示",
+      "no_comments": "表示するコメントはありません。",
       "select_mod_prompt": "一覧から MOD を選択すると詳細が表示されます。",
       "no_description": "説明はありません。",
       "files": "ファイル",
       "no_files": "ダウンロード可能なファイルはありません。",
       "file_downloads": "{{count}} 回ダウンロード",
       "narrow_window": {
-        "no_preview_image": "プレビュー画像はありません。",
-        "comments": "コメント",
-        "comment_sort": {
-          "popular": "人気順",
-          "newest": "新着順"
-        },
-        "comment_replies": "返信 {{count}} 件",
-        "comment_stamps": "スタンプ {{count}} 個",
-        "load_more_comments": "コメントをさらに表示",
-        "no_comments": "表示するコメントはありません。",
         "title": "ウィンドウが狭すぎます",
         "description": "GameBanana コンテンツを表示するにはウィンドウを広げてください。"
       }
