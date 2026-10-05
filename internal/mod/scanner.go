@@ -407,10 +407,15 @@ func parseINI(path string, reports ...func(error)) IniResult {
 			section = line[1 : len(line)-1]
 			continue
 		}
+		if strings.IndexByte(line, '\\') >= 0 {
+			result.references |= referencedLibraries(strings.ToLower(iniCode(line)))
+		}
 		if section != "" {
 			if at := strings.IndexByte(line, '='); at >= 0 {
 				values[strings.ToLower(strings.TrimSpace(line[:at]))] = strings.TrimSpace(line[at+1:])
 			}
+		} else if namespace, ok := iniNamespace(line); ok {
+			result.declares |= declaredLibrary(namespace)
 		}
 	}
 	reportScanFailure(

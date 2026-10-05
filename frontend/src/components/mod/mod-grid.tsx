@@ -42,7 +42,7 @@ export function ModGrid(_props: ModGridProps) {
     isPlaceholderData ? [] : activeGroup?.mods || [],
   );
   const mods = useFilteredMods(displayMods, searchQuery);
-  useModShortcuts(searchQuery, mods);
+  useModShortcuts(searchQuery, mods, actions.confirmEnable);
   const isLoading = isPending || isPlaceholderData;
   const showDelayedSkeleton = useDelayedSkeleton(isLoading);
   const showSkeleton =
@@ -96,13 +96,17 @@ export function ModGrid(_props: ModGridProps) {
         toggleMergeSelection(mod.path);
         return;
       }
-      if (event && (event.ctrlKey || event.metaKey)) {
-        exclusiveToggleModMutation.mutate(mod);
-      } else {
-        toggleModMutation.mutate(mod);
-      }
+      const isExclusive = event != null && (event.ctrlKey || event.metaKey);
+      actions.confirmEnable(mod, () => {
+        if (isExclusive) {
+          exclusiveToggleModMutation.mutate(mod);
+        } else {
+          toggleModMutation.mutate(mod);
+        }
+      });
     },
     [
+      actions.confirmEnable,
       isMergeMode,
       toggleMergeSelection,
       toggleModMutation.mutate,

@@ -7,15 +7,16 @@ import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
-import { CalendarIcon, FolderIcon } from "lucide-react";
+import { CalendarIcon, FolderIcon, PackageIcon } from "lucide-react";
 import { memo, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModDownloadOverlay } from "./mod-download-overlay";
 import { ModIniList } from "./mod-ini-list";
 import { ModPreviewContainer } from "./mod-preview-container";
-import { getModColorClass } from "./utils";
+import { getModColorClass, hasMissingDependency } from "./utils";
 
 interface ModCardProps {
   mod: ModInfo;
@@ -38,6 +39,7 @@ export const ModCard = memo(function ModCard({
   onToggle,
   onToggleKeyUpdate,
 }: ModCardProps) {
+  const { t } = useTranslation();
   const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const downloadTransfer = useModDownloadTransfer(mod.path);
   const isDownloading = mod.isDownloading || Boolean(downloadTransfer);
@@ -64,7 +66,9 @@ export const ModCard = memo(function ModCard({
           aria-disabled={isDownloading}
           className={cn(
             "relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg",
-            isDownloading ? "cursor-wait bg-muted grayscale" : getModColorClass(mod.isEnabled),
+            isDownloading
+              ? "cursor-wait bg-muted grayscale"
+              : getModColorClass(mod.isEnabled, hasMissingDependency(mod)),
             !isDownloading &&
               isMergeSelected &&
               "ring-2 ring-primary ring-offset-2 ring-offset-background",
@@ -161,6 +165,31 @@ export const ModCard = memo(function ModCard({
                   <CalendarIcon />
                   {formatDate(new Date(mod.mtime), "ko")}
                 </Badge>
+                {mod.dependencies && mod.dependencies.length > 0 && (
+                  <div className="flex gap-1">
+                    {mod.dependencies.map((dependency) => (
+                      <Badge
+                        key={dependency.name}
+                        variant={dependency.installed ? "default" : "destructive"}
+                        title={
+                          dependency.installed
+                            ? undefined
+                            : t("page.mod.dialog.missing-dependencies.badge")
+                        }
+                        className={cn(
+                          "flex h-5 items-center gap-1.5 text-xs backdrop-blur",
+                          dependency.installed
+                            ? "bg-background/35 text-foreground"
+                            : "bg-destructive text-white dark:bg-destructive",
+                        )}
+                        style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
+                      >
+                        <PackageIcon />
+                        {dependency.name}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

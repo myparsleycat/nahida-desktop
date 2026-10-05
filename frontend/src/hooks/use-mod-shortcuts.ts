@@ -1,3 +1,4 @@
+import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { globalStore } from "@renderer/store/global";
 import { modStore } from "@renderer/store/mod";
@@ -6,7 +7,11 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { findModDownloadTransfer } from "./use-mod-download-transfer";
 
-export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
+export function useModShortcuts(
+    searchQuery: string,
+    filteredMods: ModInfo[],
+    confirmEnable: ModActionApi["confirmEnable"],
+) {
     const latestSearchQueryRef = useRef(searchQuery);
     const latestFilteredModsRef = useRef(filteredMods);
     const { exclusiveToggleModMutation } = useModMutations();
@@ -81,13 +86,13 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
                 return;
             }
 
-            exclusiveToggleRef.current(mod);
+            confirmEnable(mod, () => exclusiveToggleRef.current(mod));
             modStore.getState().setSearchQuery("");
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, []);
+    }, [confirmEnable]);
 }
 
 function hasOpenDialogOrOverlay() {

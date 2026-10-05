@@ -275,6 +275,12 @@ export interface ModInfo {
         path: string;
         toggleKeys: ToggleKey[];
     }[];
+    dependencies?: ModDependency[];
+}
+
+export interface ModDependency {
+    name: string;
+    installed: boolean;
 }
 
 // The renderer's view of the bound model. Only the fields listed here differ from it: mods carry

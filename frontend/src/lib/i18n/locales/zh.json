@@ -630,6 +630,12 @@
           "title": "确定要删除这个模组？",
           "description": "已删除的模组可以从回收站恢复。"
         },
+        "missing-dependencies": {
+          "title": "缺少必需的依赖",
+          "description": "“{{name}}”需要以下依赖，但在导入器中找不到。直接启用可能导致模组无法正常显示。",
+          "confirm": "忽略并启用",
+          "badge": "未安装的依赖"
+        },
         "rename-mod": {
           "title": "重命名模组",
           "description": "更改这个模组所使用的文件夹名称。",

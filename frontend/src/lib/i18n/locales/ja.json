@@ -630,6 +630,12 @@
           "title": "このMODを削除しますか？",
           "description": "削除されたMODはゴミ箱から復元できます。"
         },
+        "missing-dependencies": {
+          "title": "必要な依存関係がありません",
+          "description": "「{{name}}」には以下の依存関係が必要ですが、インポーターに見つかりません。このまま有効にすると、MODが正しく表示されない場合があります。",
+          "confirm": "無視して有効にする",
+          "badge": "インストールされていない依存関係"
+        },
         "rename-mod": {
           "title": "MOD名を変更",
           "description": "このMODに使われているフォルダー名を変更します。",

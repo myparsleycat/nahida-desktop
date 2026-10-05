@@ -1,7 +1,7 @@
 import { Mod } from "@bindings/mod";
 import { XXMI } from "@bindings/xxmi";
 import type { Classification, FolderGroup, GameConfig, Preset } from "@shared/types";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 
 export function useGames() {
     return useQuery<GameConfig[]>({
@@ -19,6 +19,13 @@ export function useCharacters(selectedGame: string) {
     });
 }
 
+export function modGroupQueryOptions(groupPath?: string) {
+    return queryOptions<FolderGroup>({
+        queryKey: ["modGroup", groupPath],
+        queryFn: async () => (await Mod.GetMods(groupPath as string)) as FolderGroup,
+    });
+}
+
 export function useModGroup(groupPath?: string) {
     const lightQuery = useQuery<FolderGroup>({
         queryKey: ["modGroupLight", groupPath],
@@ -26,9 +33,8 @@ export function useModGroup(groupPath?: string) {
         enabled: !!groupPath,
         placeholderData: keepPreviousData,
     });
-    const fullQuery = useQuery<FolderGroup>({
-        queryKey: ["modGroup", groupPath],
-        queryFn: async () => (await Mod.GetMods(groupPath as string)) as FolderGroup,
+    const fullQuery = useQuery({
+        ...modGroupQueryOptions(groupPath),
         enabled: !!groupPath,
         placeholderData: keepPreviousData,
     });

@@ -630,6 +630,12 @@
           "title": "Are you sure you want to delete this mod?",
           "description": "Deleted mods can be restored from the recycle bin."
         },
+        "missing-dependencies": {
+          "title": "Required Dependencies Are Missing",
+          "description": "\"{{name}}\" needs the dependencies below, but the importer does not have them. The mod may not display correctly if you enable it anyway.",
+          "confirm": "Enable Anyway",
+          "badge": "Dependency not installed"
+        },
         "rename-mod": {
           "title": "Rename Mod",
           "description": "Change the folder name used for this mod.",
