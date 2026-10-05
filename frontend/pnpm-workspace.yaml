@@ -3,7 +3,7 @@
 # pnpm 11 reads this setting only from pnpm-workspace.yaml, not from .npmrc.
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  - "@wailsio/runtime@3.0.0-beta.14 || 3.0.0-beta.15 || 3.0.0-beta.16 || 3.0.0-beta.17 || 3.0.0-beta.20 || 3.0.0-beta.21 || 3.0.0-beta.26"
+  - "@wailsio/runtime@3.0.0-beta.14 || 3.0.0-beta.15 || 3.0.0-beta.16 || 3.0.0-beta.17 || 3.0.0-beta.20 || 3.0.0-beta.21 || 3.0.0-beta.26 || 3.0.0-beta.28"
 # Mirrors resize-border support from the pinned Wails fork until the npm runtime includes it.
 patchedDependencies:
-  "@wailsio/runtime@3.0.0-beta.26": patches/@wailsio__runtime@3.0.0-beta.26.patch
+  "@wailsio/runtime@3.0.0-beta.28": patches/@wailsio__runtime@3.0.0-beta.28.patch
