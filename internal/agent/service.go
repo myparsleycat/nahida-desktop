@@ -128,7 +128,9 @@ type sessionWorker struct {
 func New(options Options) *Service {
 	httpClient := options.HTTP
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		// An unwired service fails its requests instead of bypassing the proxy policy.
+		var unconfigured *infra.Client
+		httpClient = unconfigured.HTTPClient()
 	}
 	crypto := options.Crypto
 	if crypto == nil {

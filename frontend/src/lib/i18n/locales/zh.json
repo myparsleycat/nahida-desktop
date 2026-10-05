@@ -577,7 +577,10 @@
           "title": "游戏设置",
           "path_label": "模组文件夹路径",
           "importer_label": "Importer",
-          "no_importer": "无"
+          "no_importer": "无",
+          "order_label": "显示顺序",
+          "order_value": "第 {{current}} 个，共 {{total}} 个",
+          "order_description": "使用箭头按钮调整此游戏在下拉列表中的位置。"
         },
         "nte-launch": {
           "title": "指定启动器路径",
@@ -616,7 +619,6 @@
           "confirm": "确认并启动"
         },
         "preset-management": {
-          "description": "此预设包含 {{length}} 个模组。",
           "legacy-badge": "旧版",
           "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。"
         },
@@ -855,6 +857,9 @@
             "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",
             "nte_custom_mod_folder_inside_link_path": "自定义模组文件夹不能位于游戏 Mods 文件夹路径内，反之亦然。"
           },
+          "reorder-games-mutation": {
+            "failed": "无法保存游戏顺序。"
+          },
           "set-game-executable-path": {
             "invalid-path": "所选启动器路径无效。",
             "failed": "保存启动器路径失败。"
@@ -1039,6 +1044,16 @@
       "no_results": "没有匹配的模组。",
       "mod_details": "模组详情",
       "mod_details_description": "选择模组后可查看文件、统计和链接。",
+      "no_preview_image": "没有预览图片。",
+      "comments": "评论",
+      "comment_sort": {
+        "popular": "热门",
+        "newest": "最新"
+      },
+      "comment_replies": "{{count}} 条回复",
+      "comment_stamps": "{{count}} 个印章",
+      "load_more_comments": "加载更多评论",
+      "no_comments": "没有可显示的评论。",
       "select_mod_prompt": "从列表中选择一个模组以查看详细信息。",
       "no_description": "暂无说明。",
       "files": "文件",

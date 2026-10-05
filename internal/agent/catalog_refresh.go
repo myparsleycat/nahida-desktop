@@ -106,11 +106,7 @@ func (s *Service) refreshCatalog(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	client := s.http
-	if client == nil {
-		client = http.DefaultClient
-	}
-	raw, err := fetchCatalogDocument(ctx, client, catalogSourceURL)
+	raw, err := fetchCatalogDocument(ctx, s.http, catalogSourceURL)
 	if err != nil {
 		return err
 	}

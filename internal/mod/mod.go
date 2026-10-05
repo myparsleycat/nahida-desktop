@@ -59,11 +59,13 @@ type ImporterSource interface {
 }
 
 type Options struct {
-	AppData    *appdata.Store
-	FS         *platform.FS
-	Settings   Settings
-	Archive    *infra.Archive
-	HTTP       *infra.Client
+	AppData  *appdata.Store
+	FS       *platform.FS
+	Settings Settings
+	Archive  *infra.Archive
+	HTTP     *infra.Client
+	// Download is the shared file downloader; nil downloads through HTTP directly.
+	Download   *infra.Download
 	XXMI       ImporterSource
 	Log        *infra.Log
 	Dialog     *platform.Dialog
@@ -81,6 +83,7 @@ type Mod struct {
 	settings           Settings
 	archive            *infra.Archive
 	http               *infra.Client
+	download           *infra.Download
 	xxmi               ImporterSource
 	log                *infra.Log
 	dialog             *platform.Dialog
@@ -114,9 +117,14 @@ func NewWithOptions(opts Options) *Mod {
 	if opts.FS == nil {
 		opts.FS = platform.NewFS()
 	}
+	if opts.Download == nil {
+		opts.Download = infra.NewDownload()
+		opts.Download.UseClient(opts.HTTP)
+	}
 	m := &Mod{
 		appData: opts.AppData, fs: opts.FS, settings: opts.Settings, archive: opts.Archive, http: opts.HTTP,
-		xxmi: opts.XXMI, log: opts.Log, dialog: opts.Dialog, emit: opts.EventEmit,
+		download: opts.Download,
+		xxmi:     opts.XXMI, log: opts.Log, dialog: opts.Dialog, emit: opts.EventEmit,
 		transfer: opts.Transfer, gamebanana: opts.GameBanana, native: opts.Native,
 		shaders: newShaderFixes(), extractPrompts: map[string]chan string{},
 		downloader:        infra.NewParallelDownloader(),

@@ -159,7 +159,7 @@ func newRuntime() *runtime {
 	modService := mod.NewWithOptions(mod.Options{
 		FS: fs, Settings: settings, Archive: archive, HTTP: httpClient, EventEmit: eventEmit,
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
-		GameBanana: gameBananaService, Native: native,
+		GameBanana: gameBananaService, Native: native, Download: download,
 	})
 	xxmiService.UseExternalImportersChanged(func(ctx context.Context) {
 		modService.RefreshCompressionImporters(ctx)

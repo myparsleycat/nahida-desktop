@@ -619,7 +619,6 @@
           "confirm": "확인하고 시작"
         },
         "preset-management": {
-          "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
           "legacy-badge": "레거시",
           "legacy-description": "이 프리셋은 구버전 형식이라 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
         },
@@ -1045,11 +1044,8 @@
       "no_results": "일치하는 모드가 없습니다.",
       "mod_details": "모드 상세",
       "mod_details_description": "모드를 선택하면 파일, 통계, 링크를 확인할 수 있습니다.",
-      "preview": "프리뷰",
-      "preview_description": "모드의 미리보기 이미지를 확인합니다.",
       "no_preview_image": "프리뷰 이미지가 없습니다.",
       "comments": "댓글",
-      "comments_description": "GameBanana 댓글을 인기순 또는 최신순으로 확인합니다.",
       "comment_sort": {
         "popular": "인기순",
         "newest": "최신순"

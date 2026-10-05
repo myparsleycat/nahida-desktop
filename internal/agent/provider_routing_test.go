@@ -371,7 +371,7 @@ func TestProviderLoginStoresAccountCredential(t *testing.T) {
 		"chatgpt_account_id": "acc-42", "email": "user@example.com",
 	})
 	issuer := oauthTestServer(t, "access-1", idToken)
-	service := newSettingsService(t, Options{})
+	service := newSettingsService(t, Options{HTTP: issuer.Client()})
 	service.oauth = providerOAuthConfig{
 		Issuer: issuer.URL, ClientID: "test-client", CallbackPort: 0, Originator: codexOriginator,
 	}
@@ -415,7 +415,7 @@ func TestProviderLoginRejectsMismatchedState(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	issuer := oauthTestServer(t, "access-1", codexTestToken(t, map[string]any{"chatgpt_account_id": "acc-1"}))
-	service := newSettingsService(t, Options{})
+	service := newSettingsService(t, Options{HTTP: issuer.Client()})
 	service.oauth = providerOAuthConfig{Issuer: issuer.URL, ClientID: "test-client", CallbackPort: 0}
 
 	login, err := service.StartProviderLogin(ctx, providerOpenAI)

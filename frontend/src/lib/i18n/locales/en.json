@@ -237,23 +237,6 @@
           "retry_failed_files": "Retry failed files",
           "remove_from_transfer": "Remove from transfer"
         }
-      },
-      "transfer": {
-        "title": "Transfer",
-        "concurrency": {
-          "title": "Concurrency"
-        },
-        "other": {
-          "title": "Other"
-        },
-        "downloadConcurrency": {
-          "title": "Download concurrency",
-          "description": "Set the number of files to download simultaneously in drive transfers. Range: 16-64"
-        },
-        "uploadConcurrency": {
-          "title": "Upload concurrency",
-          "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
-        }
       }
     },
     "drive": {
@@ -1061,11 +1044,8 @@
       "no_results": "No matching mods found.",
       "mod_details": "Mod Details",
       "mod_details_description": "Select a mod to inspect files, stats, and links.",
-      "preview": "Preview",
-      "preview_description": "Browse the mod's preview images.",
       "no_preview_image": "No preview image.",
       "comments": "Comments",
-      "comments_description": "Browse GameBanana comments by popular or newest.",
       "comment_sort": {
         "popular": "Popular",
         "newest": "Newest"
@@ -1317,6 +1297,8 @@
         "backup": "Create backup",
         "backup_description": "Create a sibling .bak file before overwriting each DDS. Existing backups are kept.",
         "load": "Load texture list",
+        "output_color_space": "Output color space",
+        "output_color_space_description": "The source color space could not be determined. Choose sRGB or Linear manually.",
         "refresh": "Refresh list",
         "texture_list_title": "Texture list",
         "texture_list_empty": "Select a path and load the texture list.",
