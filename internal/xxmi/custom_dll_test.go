@@ -147,7 +147,7 @@ func TestDeployRuntimeAppliesCustomDLLOncePerSelection(t *testing.T) {
 	deploy := func(custom *customRuntimeDLL) runtimeManifest {
 		t.Helper()
 		if _, err := deployCustomRuntimeFiles(
-			ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess, custom,
+			ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess, custom, nil,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -251,7 +251,7 @@ func TestDeployRuntimeReplacesCustomDLLWithoutUnsafeMode(t *testing.T) {
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
 	custom := &customRuntimeDLL{id: hashBytes([]byte("custom"))[:12], data: []byte("custom")}
 	if _, err := deployCustomRuntimeFiles(
-		ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess, custom,
+		ctx, "GIMI", cfg, libs, "xxmi-libs@1", base, false, noGameProcess, custom, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestDeployRuntimeReplacesCustomDLLWithoutUnsafeMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
-	if err := validateXXMIRuntimeFiles(importer, libs, false); err != nil {
+	if err := validateXXMIRuntimeFiles(importer, libs, libs, false); err != nil {
 		t.Fatal(err)
 	}
 	backups, err := os.ReadDir(filepath.Join(base, "backups"))
@@ -516,7 +516,7 @@ func TestCustomDLLSelectionChangeBacksUpPrunedDLL(t *testing.T) {
 			writeTestFile(t, filepath.Join(libs, "d3dcompiler_47.dll"), []byte("compiler"))
 			if _, err := deployCustomRuntimeFiles(
 				ctx, "GIMI", cfg, libs, "xxmi-libs@1", root, false, noGameProcess,
-				&customRuntimeDLL{id: first.ID, data: firstData},
+				&customRuntimeDLL{id: first.ID, data: firstData}, nil,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -544,7 +544,7 @@ func TestCustomDLLSelectionChangeBacksUpPrunedDLL(t *testing.T) {
 				t.Fatalf("previous DLL cache was not pruned: %v", err)
 			}
 			if _, err := deployCustomRuntimeFiles(
-				ctx, "GIMI", cfg, libs, "xxmi-libs@1", root, false, noGameProcess, custom,
+				ctx, "GIMI", cfg, libs, "xxmi-libs@1", root, false, noGameProcess, custom, nil,
 			); err != nil {
 				t.Fatal(err)
 			}

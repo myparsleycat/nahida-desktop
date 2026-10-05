@@ -2052,6 +2052,14 @@
           "libsFollowShared": "跟随共用版本",
           "libsOwnVersion": "此导入器专用版本",
           "libsSharedCurrent": "共用版本：{{version}}",
+          "libsProvider": "XXMI 库提供者",
+          "libsProviderDescription": "应用于跟随共用提供者的导入器。SpectrumQT 以外的提供者只会在已签名的 SpectrumQT 库之上替换 d3d11.dll。",
+          "libsProviderFollowShared": "跟随共用提供者",
+          "libsProviderSharedCurrent": "共用提供者：{{provider}}",
+          "libsProviders": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "libsVersion": "XXMI 版本",
           "libsNotify": "显示更新通知",
           "libsNotifyDescription": "关闭后将固定为所选版本，不再显示更新。",

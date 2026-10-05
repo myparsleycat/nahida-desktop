@@ -21,6 +21,9 @@ import { toast } from "sonner";
 // Base UI selects cannot represent an empty string as a regular option value.
 export const FOLLOW_LATEST = "__latest__";
 
+// Keep in sync with libsProviders in internal/xxmi/libs_provider.go. The first one is the default.
+export const LIBS_PROVIDERS = ["spectrumqt", "myparsleycat"] as const;
+
 // Nested options appear only while the parent toggle is on, so disabled inputs never pile up.
 export function ToggleRow({
   label,

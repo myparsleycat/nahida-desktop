@@ -116,6 +116,8 @@ type XXMI struct {
 	disabledMu sync.Mutex
 	// customDLLMu serializes imports, selection writes, and cleanup of the custom DLL cache.
 	customDLLMu sync.Mutex
+	// libsProviderMu keeps shared provider selections in the order they were made.
+	libsProviderMu sync.Mutex
 	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
 	importedCustomDLLs map[string]bool
 

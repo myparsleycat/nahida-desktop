@@ -255,7 +255,7 @@ func TestValidateXXMIRuntimeFilesRejectsChangedDLLWithRewrittenManifest(t *testi
 		}
 	}
 	writeManifest()
-	if err := validateXXMIRuntimeFiles(importer, cache, false); err != nil {
+	if err := validateXXMIRuntimeFiles(importer, cache, cache, false); err != nil {
 		t.Fatal(err)
 	}
 	modified := []byte("modified d3d11")
@@ -267,10 +267,10 @@ func TestValidateXXMIRuntimeFilesRejectsChangedDLLWithRewrittenManifest(t *testi
 	if err := validateDeployedRuntime(importer, RuntimeXXMI); err != nil {
 		t.Fatalf("rewritten manifest should pass its own hash check: %v", err)
 	}
-	if err := validateXXMIRuntimeFiles(importer, cache, false); err == nil {
+	if err := validateXXMIRuntimeFiles(importer, cache, cache, false); err == nil {
 		t.Fatal("modified DLL passed signed-cache comparison")
 	}
-	if err := validateXXMIRuntimeFiles(importer, cache, true); err != nil {
+	if err := validateXXMIRuntimeFiles(importer, cache, cache, true); err != nil {
 		t.Fatalf("unsafe mode rejected a user-managed DLL: %v", err)
 	}
 }

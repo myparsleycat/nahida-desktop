@@ -74,6 +74,10 @@ func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]Re
 	case "gi-fps-unlocker":
 		repo = github.Repo{Owner: "SpectrumQT", Name: "GI-FPS-Unlocker-Package"}
 	default:
+		if provider, ok := lookupOverlayPackage(pkg); ok {
+			repo = provider.repo
+			break
+		}
 		key, ok := strings.CutPrefix(pkg, "importer:")
 		if !ok {
 			return nil, fmt.Errorf("unknown XXMI package %q", pkg)

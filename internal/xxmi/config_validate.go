@@ -31,6 +31,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if cfg.CustomDLL != "" && !isCustomDLLID(cfg.CustomDLL) {
 		return fmt.Errorf("invalid custom DLL %q", cfg.CustomDLL)
 	}
+	if _, ok := lookupLibsProvider(cfg.LibsProvider); cfg.LibsProvider != "" && !ok {
+		return fmt.Errorf("invalid libraries provider %q", cfg.LibsProvider)
+	}
 	if err := validateLocalFolder("importerFolder", cfg.ImporterFolder, true); err != nil {
 		return err
 	}

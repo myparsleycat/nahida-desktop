@@ -73,14 +73,16 @@ type Overview struct {
 	// SharedLibsVersion is empty while importers following the shared version use the latest release.
 	SharedLibsVersion string `json:"sharedLibsVersion"`
 	// SharedCustomDLL is the custom d3d11.dll for importers that follow the shared libraries, or empty.
-	SharedCustomDLL  string              `json:"sharedCustomDll"`
-	CustomDLLs       []CustomDLL         `json:"customDlls"`
-	Importers        []EnabledImporter   `json:"importers"`
-	LibsCache        []CachedLibs        `json:"libsCache"`
-	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
-	FPSVersions      []string            `json:"fpsVersions"`
-	CacheIssues      []string            `json:"cacheIssues,omitempty"`
-	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
+	SharedCustomDLL string `json:"sharedCustomDll"`
+	// SharedLibsProvider is the XXMI libraries provider of importers that do not choose their own.
+	SharedLibsProvider string              `json:"sharedLibsProvider"`
+	CustomDLLs         []CustomDLL         `json:"customDlls"`
+	Importers          []EnabledImporter   `json:"importers"`
+	LibsCache          []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes     []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions        []string            `json:"fpsVersions"`
+	CacheIssues        []string            `json:"cacheIssues,omitempty"`
+	ExternalLauncher   *ExternalLauncher   `json:"externalLauncher,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -119,6 +121,10 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	sharedProvider, err := x.sharedLibsProvider(ctx)
+	if err != nil {
+		return Overview{}, err
+	}
 	importers, err := x.builtinEnabledImporters(ctx)
 	if err != nil {
 		return Overview{}, err
@@ -143,6 +149,8 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		Configured:   len(rows) > 0,
 		Root:         filepath.Clean(rootPath),
 		Importers:    importers,
+
+		SharedLibsProvider: sharedProvider.id,
 	}
 	if sharedLibs != nil {
 		overview.SharedLibsVersion = normalizeVersion(*sharedLibs)
@@ -183,6 +191,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 // builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them.
 var builtinSettingKeys = []string{
 	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
+	sharedLibsProviderKey, providerDLLHashesKey,
 }
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,

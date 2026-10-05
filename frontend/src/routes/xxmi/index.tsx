@@ -30,6 +30,7 @@ import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
 import {
   FOLLOW_LATEST,
+  LIBS_PROVIDERS,
   PathField,
   SelectRow,
   ToggleRow,
@@ -351,6 +352,20 @@ export function XXMIDashboard() {
                     void XXMI.SetSharedLibsVersion(value === FOLLOW_LATEST ? "" : value).then(
                       refresh,
                       (error: unknown) => toast.error(toErrorMessage(error)),
+                    );
+                  }}
+                />
+                <SelectRow
+                  label={t("page.setting.xxmi.builtin.libsProvider")}
+                  description={t("page.setting.xxmi.builtin.libsProviderDescription")}
+                  value={overview?.sharedLibsProvider || LIBS_PROVIDERS[0]}
+                  options={LIBS_PROVIDERS.map((provider) => ({
+                    value: provider,
+                    label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                  }))}
+                  onValueChange={(value) => {
+                    void XXMI.SetSharedLibsProvider(value).then(refresh, (error: unknown) =>
+                      toast.error(toErrorMessage(error)),
                     );
                   }}
                 />

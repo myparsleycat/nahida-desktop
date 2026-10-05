@@ -28,7 +28,10 @@ type runtimeManifest struct {
 	Files       map[string]string `json:"files"`
 	UserManaged map[string]string `json:"userManaged,omitempty"`
 	// Custom is the cached custom d3d11.dll this deployment wrote. The file is listed in UserManaged.
-	Custom     string `json:"custom,omitempty"`
+	Custom string `json:"custom,omitempty"`
+	// Provider is the provider d3d11.dll this deployment wrote over the signed one, as
+	// "<overlay package>@<version>". The file is listed in Files.
+	Provider   string `json:"provider,omitempty"`
 	DeployedAt string `json:"deployedAt"`
 }
 
@@ -79,6 +82,7 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	}
 	var sourceFolder, sourceID string
 	var custom *customRuntimeDLL
+	var provider *providerRuntimeDLL
 	switch cfg.Mode {
 	case RuntimeXXMI:
 		version, err := x.resolveLibsVersion(ctx, cfg)
@@ -104,6 +108,11 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 				return nil, fmt.Errorf("XXMI_CUSTOM_DLL_MISSING: %w", err)
 			}
 			custom = &customRuntimeDLL{id: id, data: data}
+		}
+
+		provider, err = x.providerRuntimeDLL(ctx, cfg)
+		if err != nil {
+			return nil, err
 		}
 	case RuntimeLegacy:
 		id := cfg.LegacyRuntime
@@ -136,7 +145,9 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
-	return deployCustomRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess, custom)
+	return deployCustomRuntimeFiles(
+		ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess, custom, provider,
+	)
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
@@ -233,10 +244,11 @@ func deployRuntimeFiles(
 	repair bool,
 	findProcess func(context.Context, string) (int, error),
 ) ([]string, error) {
-	return deployCustomRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, findProcess, nil)
+	return deployCustomRuntimeFiles(ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, findProcess, nil, nil)
 }
 
-// deployCustomRuntimeFiles deploys the runtime with custom in place of the signed d3d11.dll when it is set.
+// deployCustomRuntimeFiles deploys the runtime with custom, or else provider, in place of the signed
+// d3d11.dll when one is set.
 func deployCustomRuntimeFiles(
 	ctx context.Context,
 	key string,
@@ -245,6 +257,7 @@ func deployCustomRuntimeFiles(
 	repair bool,
 	findProcess func(context.Context, string) (int, error),
 	custom *customRuntimeDLL,
+	provider *providerRuntimeDLL,
 ) ([]string, error) {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
@@ -280,6 +293,9 @@ func deployCustomRuntimeFiles(
 				return nil, err
 			}
 			desired[name] = data
+		}
+		if provider != nil {
+			desired[customDLLName] = provider.data
 		}
 		if custom != nil {
 			desired[customDLLName] = custom.data
@@ -445,6 +461,11 @@ func deployCustomRuntimeFiles(
 			return nil, runtimeFileError(err, filepath.Join(cfg.ImporterFolder, name))
 		}
 		deployed[name] = wantedHash
+	}
+
+	// A custom DLL or a file unsafe mode kept is user-managed, and then the provider's DLL was not deployed.
+	if provider != nil && manifest.Files[customDLLName] != "" {
+		manifest.Provider = provider.source
 	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -621,7 +642,9 @@ func validateDeployedRuntime(folder string, mode RuntimeMode) error {
 	return nil
 }
 
-func validateXXMIRuntimeFiles(importerFolder, cacheFolder string, unsafeMode bool) error {
+// validateXXMIRuntimeFiles checks the deployed runtime against the verified caches it was copied from.
+// d3d11Folder is the signed cache folder, or the provider's when its d3d11.dll was deployed instead.
+func validateXXMIRuntimeFiles(importerFolder, cacheFolder, d3d11Folder string, unsafeMode bool) error {
 	if unsafeMode {
 		return nil
 	}
@@ -630,17 +653,18 @@ func validateXXMIRuntimeFiles(importerFolder, cacheFolder string, unsafeMode boo
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	for _, name := range []string{"d3d11.dll", "d3dcompiler_47.dll"} {
+	for name, folder := range map[string]string{customDLLName: d3d11Folder, "d3dcompiler_47.dll": cacheFolder} {
 		deployed, _, err := root.readFile(name)
 		if err != nil {
 			return fmt.Errorf("read deployed %s: %w", name, err)
 		}
-		signed, err := os.ReadFile(filepath.Join(cacheFolder, name))
+		// The folder tells the signed libraries cache from a provider's download.
+		cached, err := os.ReadFile(filepath.Join(folder, name))
 		if err != nil {
-			return fmt.Errorf("read signed %s: %w", name, err)
+			return fmt.Errorf("read cached %s from %s: %w", name, folder, err)
 		}
-		if hashBytes(deployed) != hashBytes(signed) {
-			return fmt.Errorf("deployed %s differs from signed XXMI libraries", name)
+		if hashBytes(deployed) != hashBytes(cached) {
+			return fmt.Errorf("deployed %s differs from the verified copy in %s", name, folder)
 		}
 	}
 	return nil

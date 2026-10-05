@@ -62,6 +62,13 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
 			packages["xxmi-libs"] = struct{}{}
 		}
+		provider, err := x.deployedLibsProvider(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if provider.overlayPackage != "" {
+			packages[provider.overlayPackage] = struct{}{}
+		}
 		if row.Key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
 			packages["gi-fps-unlocker"] = struct{}{}
 		}
@@ -162,6 +169,22 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
 			statuses = append(statuses, libs)
 		}
+
+		// A provider d3d11.dll is tracked beside the signed libraries it is deployed over.
+		provider, err := x.deployedLibsProvider(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if provider.overlayPackage != "" {
+			dll := updateStatus(row.Key, provider.overlayPackage, states[provider.overlayPackage])
+			dll.Shared = cfg.LibsProvider == ""
+			dll.Installed = cachedLibsVersion(
+				dll.LatestVersion, dll.SkippedVersion, providerDLLBaseVersion(cfg.ImporterFolder, provider),
+				func(version string) bool { return x.verifiedProviderDLL(ctx, provider, version) },
+			)
+			dll.Available = updateAvailable(dll.LatestVersion, dll.Installed, dll.SkippedVersion)
+			statuses = append(statuses, dll)
+		}
 		if row.Key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
 			fps := updateStatus(row.Key, "gi-fps-unlocker", states["gi-fps-unlocker"])
 			fps.Installed = newestCachedPackageVersion("gi-fps-unlocker")
@@ -251,7 +274,7 @@ func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
 }
 
 func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
-	if pkg != "xxmi-libs" && pkg != "gi-fps-unlocker" {
+	if _, overlay := lookupOverlayPackage(pkg); pkg != "xxmi-libs" && pkg != "gi-fps-unlocker" && !overlay {
 		key, ok := strings.CutPrefix(pkg, "importer:")
 		if !ok {
 			return errors.New("unknown XXMI package")
@@ -297,7 +320,10 @@ func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []st
 			importer != "" && status.Importer != importer {
 			continue
 		}
+		provider, overlay := lookupOverlayPackage(status.Package)
 		switch {
+		case overlay:
+			err = x.ensureProviderDLL(ctx, provider, status.LatestVersion)
 		case strings.HasPrefix(status.Package, "importer:"):
 			err = x.InstallImporterPackage(ctx, InstallImporterPackageInput{
 				Importer: status.Importer, Version: status.LatestVersion,
