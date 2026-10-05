@@ -75,7 +75,6 @@ const config = {
   runPostLoad: { enabled: false, command: "", wait: false },
   extraLibraries: { enabled: false, paths: [] },
   iniOptimizer: { enabled: false, resetCache: false },
-  shortcutPath: "",
 };
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));

@@ -4,6 +4,7 @@ package xxmi
 
 import (
 	"context"
+	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -61,8 +62,17 @@ func testCreateWindowsShortcut(t *testing.T, executable string) {
 		t.Fatal(err)
 	}
 	defer win.CoUninitialize()
+	iconPath, err := writeShortcutIcon(t.TempDir(), "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIconInfo, err := os.Stat(iconPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(t.TempDir(), "GIMI Quick Start.lnk")
-	if err := createWindowsShortcut(context.Background(), path, executable, "--xxmi-launch GIMI"); err != nil {
+	err = createWindowsShortcut(context.Background(), path, executable, "--xxmi-launch GIMI", iconPath)
+	if err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
@@ -105,37 +115,78 @@ func testCreateWindowsShortcut(t *testing.T, executable string) {
 	}
 	icon, index, err := link.GetIconLocation()
 	if err != nil || index != 0 {
-		t.Fatalf("shortcut icon = %q, want executable = %q, index = %d, error = %v", icon, executable, index, err)
+		t.Fatalf("shortcut icon = %q, want = %q, index = %d, error = %v", icon, iconPath, index, err)
 	}
 	iconInfo, err := os.Stat(icon)
-	if err != nil || !os.SameFile(iconInfo, executableInfo) {
-		t.Fatalf("shortcut icon = %q, want executable = %q, index = %d, error = %v", icon, executable, index, err)
+	if err != nil || !os.SameFile(iconInfo, wantIconInfo) {
+		t.Fatalf("shortcut icon = %q, want = %q, index = %d, error = %v", icon, iconPath, index, err)
 	}
 }
 
-func TestRemoveSavedShortcutOnlyDeletesExpectedPath(t *testing.T) {
-	root := t.TempDir()
-	expected := filepath.Join(root, "GIMI Quick Start.lnk")
-	other := filepath.Join(root, "other.lnk")
-	if err := os.WriteFile(expected, []byte("shortcut"), 0o600); err != nil {
-		t.Fatal(err)
+func TestWriteShortcutIconForEveryImporter(t *testing.T) {
+	const (
+		imageIcon      = 1
+		loadFromFile   = 0x10
+		largeIconPixel = 256
+	)
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	loadImage, destroyIcon := user32.NewProc("LoadImageW"), user32.NewProc("DestroyIcon")
+
+	dir := t.TempDir()
+	for key := range importerPackages {
+		image, err := shortcutIcons.Open("shortcut_icons/" + key + ".png")
+		if err != nil {
+			t.Fatalf("%s has no shortcut icon: %v", key, err)
+		}
+		config, err := png.DecodeConfig(image)
+		_ = image.Close()
+		if err != nil || config.Width != largeIconPixel || config.Height != largeIconPixel {
+			t.Fatalf("%s shortcut icon = %dx%d, want 256x256, error = %v", key, config.Width, config.Height, err)
+		}
+
+		path, err := writeShortcutIcon(dir, strings.ToLower(key))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := filepath.Join(dir, key+".ico"); path != want {
+			t.Fatalf("%s shortcut icon path = %q, want %q", key, path, want)
+		}
+		pathPtr, err := windows.UTF16PtrFromString(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handle, _, callErr := loadImage.Call(
+			0, uintptr(unsafe.Pointer(pathPtr)), imageIcon, largeIconPixel, largeIconPixel, loadFromFile,
+		)
+		if handle == 0 {
+			t.Fatalf("Windows cannot load %s shortcut icon %q: %v", key, path, callErr)
+		}
+		_, _, _ = destroyIcon.Call(handle)
+
+		// Creating the same shortcut again must leave the stored icon in place.
+		before, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writeShortcutIcon(dir, key); err != nil {
+			t.Fatal(err)
+		}
+		after, err := os.Stat(path)
+		if err != nil || !os.SameFile(before, after) {
+			t.Fatalf("%s shortcut icon was rewritten: %v", key, err)
+		}
 	}
-	if err := os.WriteFile(other, []byte("keep"), 0o600); err != nil {
-		t.Fatal(err)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != len(importerPackages) {
+		t.Fatalf(
+			"shortcut icon directory holds %d entries, want %d, error = %v",
+			len(entries),
+			len(importerPackages),
+			err,
+		)
 	}
-	if err := removeSavedShortcut(other, expected); err == nil {
-		t.Fatal("unrelated shortcut was accepted")
-	}
-	if _, err := os.Stat(other); err != nil {
-		t.Fatal("unrelated shortcut was removed:", err)
-	}
-	if err := removeSavedShortcut(expected, expected); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(expected); !os.IsNotExist(err) {
-		t.Fatalf("expected shortcut remains: %v", err)
-	}
-	if err := removeSavedShortcut(expected, expected); err != nil {
-		t.Fatal("repeated deletion should succeed:", err)
+	if _, err := writeShortcutIcon(dir, "unknown"); err == nil {
+		t.Fatal("unknown importer produced a shortcut icon")
 	}
 }

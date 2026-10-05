@@ -150,7 +150,6 @@ type ImporterConfig struct {
 	Migoto            MigotoOptions       `json:"migoto"`
 	IniOptimizer      IniOptimizerOptions `json:"iniOptimizer"`
 	LaunchCount       int                 `json:"launchCount"`
-	ShortcutPath      string              `json:"shortcutPath"`
 	WoundedFXDecided  bool                `json:"woundedFXDecided"`
 	// D3D11ModeNoticeShown records that the user saw the reminder to turn on DirectX 11 in the
 	// game's own launcher, which an Epic Games launch cannot do for them.

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -38,37 +37,18 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := createShortcutOnDesktop(ctx, key, executable)
+	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return "", err
 	}
-	cfg.ShortcutPath = path
-	if err := x.SaveImporterConfig(ctx, key, cfg); err != nil {
+	icon, err := writeShortcutIcon(filepath.Join(cacheRoot, shortcutIconDir), key)
+	if err != nil {
 		return "", err
 	}
-	return path, nil
+	return createShortcutOnDesktop(ctx, key, executable, icon)
 }
 
-func (x *XXMI) DeleteShortcut(ctx context.Context, key string) error {
-	cfg, err := x.GetImporterConfig(ctx, key)
-	if err != nil {
-		return err
-	}
-	if cfg.ShortcutPath == "" {
-		return nil
-	}
-	expected, err := desktopShortcutPath(key)
-	if err != nil {
-		return err
-	}
-	if err := removeSavedShortcut(cfg.ShortcutPath, expected); err != nil {
-		return err
-	}
-	cfg.ShortcutPath = ""
-	return x.SaveImporterConfig(ctx, key, cfg)
-}
-
-func createShortcutOnDesktop(ctx context.Context, key, executable string) (string, error) {
+func createShortcutOnDesktop(ctx context.Context, key, executable, icon string) (string, error) {
 	path, err := desktopShortcutPath(key)
 	if err != nil {
 		return "", err
@@ -79,7 +59,7 @@ func createShortcutOnDesktop(ctx context.Context, key, executable string) (strin
 		return "", fmt.Errorf("initialize COM for shortcut: %w", err)
 	}
 	defer win.CoUninitialize()
-	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key); err != nil {
+	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key, icon); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -106,17 +86,7 @@ func desktopShortcutPath(key string) (string, error) {
 	return path, nil
 }
 
-func removeSavedShortcut(saved, expected string) error {
-	if !strings.EqualFold(filepath.Clean(saved), filepath.Clean(expected)) {
-		return fmt.Errorf("quick start shortcut path is outside the current desktop: %s", saved)
-	}
-	if err := os.Remove(saved); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
-func createWindowsShortcut(ctx context.Context, path, executable, args string) error {
+func createWindowsShortcut(ctx context.Context, path, executable, args, icon string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -135,7 +105,7 @@ func createWindowsShortcut(ctx context.Context, path, executable, args string) e
 	if err := link.SetWorkingDirectory(filepath.Dir(executable)); err != nil {
 		return err
 	}
-	if err := link.SetIconLocation(executable, 0); err != nil {
+	if err := link.SetIconLocation(icon, 0); err != nil {
 		return err
 	}
 	var persist *shortcutPersistFile
