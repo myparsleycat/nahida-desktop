@@ -145,6 +145,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     packageInstalledInFolder &&
     version.trim().replace(/^v/i, "") === installedVersion?.trim().replace(/^v/i, "");
   const packageNeedsInstall = !!selectedPackage && !isInstalledPackageVersion(selectedPackage);
+  // A disabled importer never launches, so it can be saved, and so turned off, without its package.
+  const saveBlocked = !!config?.enabled && packageNeedsInstall;
   const [isSaving, setIsSaving] = useState(false);
   // A picked DLL is only in the draft until the config is saved, so the overview does not list it yet.
   const [importedDll, setImportedDll] = useState<CustomDLL | null>(null);
@@ -203,7 +205,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   };
   const save = async (next = config) => {
     if (!next || isSaving) return;
-    if (next.packageVersion.pinned && !isInstalledPackageVersion(next.packageVersion.pinned))
+    if (
+      next.enabled &&
+      next.packageVersion.pinned &&
+      !isInstalledPackageVersion(next.packageVersion.pinned)
+    )
       return;
     try {
       const resolved = await resolveImporterGameFolder(importer, next);
@@ -274,15 +280,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   <PlayIcon />
                   {t("page.setting.xxmi.builtin.launch")}
                 </Button>
-                <Button
-                  disabled={!dirty || packageNeedsInstall || isSaving}
-                  onClickPromise={() => save()}
-                >
+                <Button disabled={!dirty || saveBlocked || isSaving} onClickPromise={() => save()}>
                   {t("g.save")}
                 </Button>
               </div>
             </div>
-            {packageNeedsInstall && (
+            {saveBlocked && (
               <Alert>
                 <TriangleAlertIcon />
                 <AlertDescription>
