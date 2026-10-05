@@ -39,6 +39,10 @@ type SandboxRoot struct {
 	Importer string `json:"importer,omitempty"`
 	// ReadOnly marks reference material the agent may list, read, and search but never change.
 	ReadOnly bool `json:"readOnly,omitempty"`
+	// overridable marks a read-only root that only withholds write access by default instead of
+	// protecting its content: a writable root inside or around it keeps its own write access, and a
+	// path the user names inside it is still promoted.
+	overridable bool
 }
 
 type Sandbox struct {
@@ -50,6 +54,8 @@ type openedRoot struct {
 	root *os.Root
 	// physical is the root with every junction resolved, which the read-only check compares against.
 	physical string
+	// entry is where the root folder itself sits, which differs from physical when it is a junction.
+	entry string
 }
 
 type FileEntry struct {
@@ -134,7 +140,13 @@ func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
 			_ = sandbox.Close()
 			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
 		}
-		sandbox.roots[view.ID] = &openedRoot{view: view, root: root, physical: physical}
+		entry, err := entryPath(canonical)
+		if err != nil {
+			_ = root.Close()
+			_ = sandbox.Close()
+			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
+		}
+		sandbox.roots[view.ID] = &openedRoot{view: view, root: root, physical: physical, entry: entry}
 	}
 	return sandbox, nil
 }
@@ -681,24 +693,66 @@ func physicalPath(path string) (string, error) {
 	}
 }
 
+// entryPath resolves the folder that holds path and rejoins its name, which is where the directory
+// entry lives. It differs from physicalPath only when path itself is a link or junction.
+func entryPath(path string) (string, error) {
+	parent := filepath.Dir(path)
+	if parent == path {
+		return physicalPath(path)
+	}
+	resolved, err := physicalPath(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(resolved, filepath.Base(path)), nil
+}
+
 // guardWrite refuses a path inside a read-only root and, with tree set, a folder that contains one,
 // which is off limits to anything that moves or rewrites a whole tree. The check is by physical
 // location, not by the root a call names or the spelling of the path, so neither a writable root
-// that contains a read-only one nor a junction into it can be used to reach it.
+// that contains a read-only one nor a junction into it can be used to reach it. An overridable root
+// gives way only where a writable root physically covers the path.
+//
+// A link is checked twice: where it points, because a write through it lands there, and where it
+// sits, because replacing, deleting, or moving it changes the folder that holds it.
 func (s *Sandbox) guardWrite(path string, tree bool) error {
 	physical, err := physicalPath(path)
 	if err != nil {
 		return err
 	}
-	for _, root := range s.roots {
-		if !root.view.ReadOnly {
-			continue
-		}
-		if pathWithin(root.physical, physical) || tree && pathWithin(physical, root.physical) {
+	entry, err := entryPath(path)
+	if err != nil {
+		return err
+	}
+	for _, location := range []string{physical, entry} {
+		for _, root := range s.roots {
+			if !root.view.ReadOnly {
+				continue
+			}
+			if !pathWithin(root.physical, location) && (!tree || !pathWithin(location, root.physical)) {
+				continue
+			}
+			if root.view.overridable && s.writableCovers(location) {
+				continue
+			}
 			return fmt.Errorf("%w: %q", errSandboxReadOnly, path)
 		}
 	}
 	return nil
+}
+
+// writableCovers reports whether a writable root grants location. A root that is a junction grants
+// its own entry too, which lies outside the folder the junction leads to.
+func (s *Sandbox) writableCovers(location string) bool {
+	for _, root := range s.roots {
+		if root.view.ReadOnly {
+			continue
+		}
+		if pathWithin(root.physical, location) || platform.SamePathFold(root.entry, location) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Sandbox) checkMove(source, target string) error {

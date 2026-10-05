@@ -336,6 +336,34 @@ func TestMergeSandboxRootsKeepsLeastPrivilege(t *testing.T) {
 	}
 }
 
+// A path the user names inside an overridable read-only root still becomes its own writable root,
+// while a protected read-only root keeps covering what lies inside it.
+func TestMergeSandboxRootsPromotesInsideOverridableRoot(t *testing.T) {
+	t.Parallel()
+
+	mods := filepath.Join(t.TempDir(), "Mods")
+	core := filepath.Join(t.TempDir(), "Core")
+	base := []SandboxRoot{
+		{ID: "selected", Name: "Selected", Path: filepath.Join(mods, "Selected")},
+		{ID: "mods", Name: "Game", Path: mods, ReadOnly: true, overridable: true},
+		{ID: "core", Name: "Core", Path: core, ReadOnly: true},
+	}
+
+	merged := mergeSandboxRoots(base, []SandboxRoot{
+		{ID: "nested", Name: "Nested", Path: filepath.Join(mods, "Selected", "Nested")},
+		{ID: "sibling", Name: "Sibling", Path: filepath.Join(mods, "Sibling")},
+		{ID: "shader", Name: "Shader", Path: filepath.Join(core, "Shader")},
+	})
+	if len(merged) != 4 || merged[3].ID != "sibling" || merged[3].ReadOnly {
+		t.Fatalf("merged roots = %#v", merged)
+	}
+
+	merged = mergeSandboxRoots(base, []SandboxRoot{{ID: "named", Name: "Mods", Path: mods}})
+	if len(merged) != 3 || merged[0].ID != "selected" || merged[1].ID != "core" || merged[2].ID != "named" {
+		t.Fatalf("roots after naming the Mods folder = %#v", merged)
+	}
+}
+
 func TestWindowsPathVariantsAreBounded(t *testing.T) {
 	t.Parallel()
 

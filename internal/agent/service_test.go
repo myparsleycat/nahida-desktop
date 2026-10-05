@@ -675,8 +675,17 @@ func TestSessionScopesResolveCurrentGameRoots(t *testing.T) {
 	if canonicalErr != nil {
 		t.Fatalf("canonicalExistingDir(%q): %v", selectedMod, canonicalErr)
 	}
-	if err != nil || len(modSnapshot.Roots) != 1 || modSnapshot.Roots[0].Path != canonicalSelected {
+	if err != nil || len(modSnapshot.Roots) != 2 || modSnapshot.Roots[0].Path != canonicalSelected ||
+		modSnapshot.Roots[0].ReadOnly {
 		t.Fatalf("mod roots = %#v, expected = %q, %v", modSnapshot.Roots, canonicalSelected, err)
+	}
+	canonicalMods, canonicalErr := canonicalExistingDir(firstRoot)
+	if canonicalErr != nil {
+		t.Fatalf("canonicalExistingDir(%q): %v", firstRoot, canonicalErr)
+	}
+	if reference := modSnapshot.Roots[1]; reference.Path != canonicalMods || !reference.ReadOnly ||
+		reference.Name != "Game One" || reference.Importer != importer {
+		t.Fatalf("mod reference root = %#v, want read-only %q", reference, canonicalMods)
 	}
 	if _, err := service.CreateSession(ctx, AgentScope{Type: "mod", ModPath: t.TempDir()}); err == nil {
 		t.Fatal("outside mod scope unexpectedly succeeded")
@@ -724,17 +733,20 @@ func TestSessionScopesExposeImporterCoreReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	coreRoots := func(roots []SandboxRoot) []SandboxRoot {
-		return slices.DeleteFunc(slices.Clone(roots), func(root SandboxRoot) bool { return !root.ReadOnly })
+		return slices.DeleteFunc(slices.Clone(roots), func(root SandboxRoot) bool {
+			return !root.ReadOnly || root.overridable
+		})
 	}
 
+	// A mod scope always holds the mod and the game's Mods folder around it.
 	_, roots, err := service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
-	if err != nil || len(roots) != 1 {
+	if err != nil || len(roots) != 2 {
 		t.Fatalf("roots without an importer runtime = %#v, %v", roots, err)
 	}
 
 	service.importers = fakeHuntingImporter{root: importerFolder}
 	_, roots, err = service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
-	if err != nil || len(roots) != 2 || roots[0].ReadOnly {
+	if err != nil || len(roots) != 3 || roots[0].ReadOnly {
 		t.Fatalf("mod roots = %#v, %v", roots, err)
 	}
 	if got := coreRoots(roots); len(got) != 1 || got[0].Path != canonicalCore || got[0].Name != "GIMI Core" {
@@ -752,7 +764,7 @@ func TestSessionScopesExposeImporterCoreReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, roots, err = service.resolveScope(ctx, AgentScope{Type: "mod", ModPath: selectedMod})
-	if err != nil || len(roots) != 1 {
+	if err != nil || len(roots) != 2 {
 		t.Fatalf("roots without a Core folder = %#v, %v", roots, err)
 	}
 }
