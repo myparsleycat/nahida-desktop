@@ -38,7 +38,15 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := createShortcutOnDesktop(ctx, key, executable)
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		return "", err
+	}
+	icon, err := writeShortcutIcon(filepath.Join(cacheRoot, shortcutIconDir), key)
+	if err != nil {
+		return "", err
+	}
+	path, err := createShortcutOnDesktop(ctx, key, executable, icon)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +76,7 @@ func (x *XXMI) DeleteShortcut(ctx context.Context, key string) error {
 	return x.SaveImporterConfig(ctx, key, cfg)
 }
 
-func createShortcutOnDesktop(ctx context.Context, key, executable string) (string, error) {
+func createShortcutOnDesktop(ctx context.Context, key, executable, icon string) (string, error) {
 	path, err := desktopShortcutPath(key)
 	if err != nil {
 		return "", err
@@ -79,7 +87,7 @@ func createShortcutOnDesktop(ctx context.Context, key, executable string) (strin
 		return "", fmt.Errorf("initialize COM for shortcut: %w", err)
 	}
 	defer win.CoUninitialize()
-	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key); err != nil {
+	if err := createWindowsShortcut(ctx, path, executable, "--xxmi-launch "+key, icon); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -116,7 +124,7 @@ func removeSavedShortcut(saved, expected string) error {
 	return nil
 }
 
-func createWindowsShortcut(ctx context.Context, path, executable, args string) error {
+func createWindowsShortcut(ctx context.Context, path, executable, args, icon string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -135,7 +143,7 @@ func createWindowsShortcut(ctx context.Context, path, executable, args string) e
 	if err := link.SetWorkingDirectory(filepath.Dir(executable)); err != nil {
 		return err
 	}
-	if err := link.SetIconLocation(executable, 0); err != nil {
+	if err := link.SetIconLocation(icon, 0); err != nil {
 		return err
 	}
 	var persist *shortcutPersistFile
