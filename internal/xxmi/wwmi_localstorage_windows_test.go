@@ -16,7 +16,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 	ctx := context.Background()
 	game := t.TempDir()
 	cfg := ImporterConfig{ConfigureGame: true, WWMI: &WWMIOptions{UnlockFPS: true}}
-	if err := configureWWMILocalStorage(ctx, game, cfg, true); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	database, err := sql.Open("sqlite", filepath.Join(game, "Client", "Saved", "LocalStorage", "LocalStorage.db"))
@@ -46,6 +46,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 		game,
 		cfg,
 		true,
+		nil,
 	); err == nil ||
 		err.Error() != "WWMI_WOUNDED_FX_DECISION_REQUIRED" {
 		t.Fatalf("wounded effect error = %v", err)
@@ -53,7 +54,7 @@ func TestConfigureWWMILocalStorageFPSAndWoundedDecision(t *testing.T) {
 	cfg.WoundedFXDecided = true
 	cfg.WWMI.DisableWoundedFX = true
 	cfg.WWMI.UnlockFPS = false
-	if err := configureWWMILocalStorage(ctx, game, cfg, true); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	var trigger string
@@ -74,7 +75,7 @@ func TestConfigureWWMILocalStorageBypassKeepsFPSWithoutMigotoSettings(t *testing
 	ctx := context.Background()
 	game := t.TempDir()
 	cfg := ImporterConfig{ConfigureGame: true, WWMI: &WWMIOptions{UnlockFPS: true, ForceMaxLODBias: true}}
-	if err := configureWWMILocalStorage(ctx, game, cfg, false); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	database, err := sql.Open("sqlite", filepath.Join(game, "Client", "Saved", "LocalStorage", "LocalStorage.db"))
@@ -125,7 +126,7 @@ func TestConfigureWWMILocalStorageKeepsNewestDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := ImporterConfig{WWMI: &WWMIOptions{}}
-	if err := configureWWMILocalStorage(ctx, game, cfg, true); err != nil {
+	if err := configureWWMILocalStorage(ctx, game, cfg, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	database, err := sql.Open("sqlite", filepath.Join(folder, "LocalStorage.db"))

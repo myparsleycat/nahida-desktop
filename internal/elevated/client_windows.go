@@ -452,6 +452,35 @@ func (c *Client) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject
 	return result, nil
 }
 
+// ApplyFiles has the helper run ops in order with administrator rights. They are not a
+// transaction: a failure leaves the earlier operations applied.
+func (c *Client) ApplyFiles(ctx context.Context, ops []FileOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(ops)
+	if err != nil {
+		return err
+	}
+
+	// An oversized request is refused here because a failed pipe write tears the helper down.
+	if len(payload) > maxFilePayloadSize {
+		return fmt.Errorf("elevated file request is too large: %d operations", len(ops))
+	}
+	callCtx, cancel := context.WithTimeout(ctx, fileOpsTimeout+10*time.Second)
+	defer cancel()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == nil {
+		return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
+	}
+	_, err = c.callLocked(callCtx, operationFiles, payload)
+	return err
+}
+
 func (c *Client) HelperImageName() string {
 	data, err := bundledHelper()
 	if err != nil {

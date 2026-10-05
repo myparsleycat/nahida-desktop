@@ -43,7 +43,7 @@ func TestGameTweakErrorsKeepImporterCode(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := initializeGameLaunch(context.Background(), tc.key, tc.cfg, true)
+			err := initializeGameLaunch(context.Background(), tc.key, tc.cfg, true, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.code) {
 				t.Fatalf("game tweak error = %v, want %s", err, tc.code)
 			}

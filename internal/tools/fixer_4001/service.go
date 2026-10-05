@@ -13,6 +13,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -34,6 +35,8 @@ type Options struct {
 	PEDiversifier PEDiversifier
 	// GitHub serves release lists and source archives; nil builds one from HTTP and Download.
 	GitHub *github.Client
+	// Elevated changes files in an importer folder this process cannot write to; nil fails those writes.
+	Elevated elevated.FileGateway
 }
 
 type Service struct {
@@ -45,6 +48,7 @@ type Service struct {
 	archive       *infra.Archive
 	xxmi          *xxmi.XXMI
 	peDiversifier PEDiversifier
+	elevated      elevated.FileGateway
 	client        *db.Client
 	appData       *appdata.Store
 
@@ -72,6 +76,7 @@ func NewWithOptions(opts Options) *Service {
 		archive:       opts.Archive,
 		xxmi:          opts.XXMI,
 		peDiversifier: opts.PEDiversifier,
+		elevated:      opts.Elevated,
 	}
 }
 

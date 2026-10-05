@@ -1,6 +1,7 @@
 package mod
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -46,6 +49,9 @@ type nteBootstrapSnapshot struct {
 type nteBootstrapInstall struct {
 	rollbackDir string
 	snapshots   []nteBootstrapSnapshot
+	// lease is held from the first protected write until Commit or Rollback, so installing the
+	// files and rolling them back share one UAC prompt.
+	lease *elevated.FileLease
 }
 
 func (m *Mod) resolveNteBootstrapExecutablePath(
@@ -144,12 +150,12 @@ func (m *Mod) ensureNteBootstrapFiles(
 		}
 	}
 
-	install, err = prepareNteBootstrapInstall(copies)
+	install, err = prepareNteBootstrapInstall(copies, m.elevated)
 	if err != nil {
 		return nil, err
 	}
 	m.emitNteBootstrapProgress("installing", lo.ToPtr[float64](96), "", "")
-	if err := installNteBootstrapCopies(copies, !directoryWritableOrCreatable(targetDir)); err != nil {
+	if err := install.copyFiles(ctx, copies, !directoryWritableOrCreatable(targetDir)); err != nil {
 		return install, err
 	}
 	m.emitNteBootstrapProgress("completed", lo.ToPtr[float64](100), "", "")
@@ -221,12 +227,18 @@ func findNteBootstrapFile(files []string, name string) string {
 	return ""
 }
 
-func prepareNteBootstrapInstall(copies []nteBootstrapFileCopy) (*nteBootstrapInstall, error) {
+func prepareNteBootstrapInstall(
+	copies []nteBootstrapFileCopy,
+	gateway elevated.FileGateway,
+) (*nteBootstrapInstall, error) {
 	rollbackDir, err := os.MkdirTemp("", "nte-bootstrap-rollback-*")
 	if err != nil {
 		return nil, err
 	}
-	install := &nteBootstrapInstall{rollbackDir: rollbackDir, snapshots: make([]nteBootstrapSnapshot, 0, len(copies))}
+	install := &nteBootstrapInstall{
+		rollbackDir: rollbackDir, snapshots: make([]nteBootstrapSnapshot, 0, len(copies)),
+		lease: elevated.NewFileLease(gateway),
+	}
 	for index, file := range copies {
 		snapshot := nteBootstrapSnapshot{
 			targetPath: file.targetPath,
@@ -245,14 +257,14 @@ func prepareNteBootstrapInstall(copies []nteBootstrapFileCopy) (*nteBootstrapIns
 	return install, nil
 }
 
-func installNteBootstrapCopies(copies []nteBootstrapFileCopy, elevated bool) error {
-	if elevated {
-		return elevatedCopyNteBootstrapFiles(copies)
+func (i *nteBootstrapInstall) copyFiles(ctx context.Context, copies []nteBootstrapFileCopy, useElevated bool) error {
+	if useElevated {
+		return elevatedCopyNteBootstrapFiles(ctx, i.lease, copies)
 	}
 	for _, file := range copies {
 		if err := copyNteBootstrapFile(file.sourcePath, file.targetPath); err != nil {
 			if errors.Is(err, os.ErrPermission) {
-				return elevatedCopyNteBootstrapFiles(copies)
+				return elevatedCopyNteBootstrapFiles(ctx, i.lease, copies)
 			}
 			return err
 		}
@@ -285,9 +297,15 @@ func (i *nteBootstrapInstall) Rollback() error {
 	if i == nil {
 		return nil
 	}
+	defer i.lease.Release()
+
+	// A file the install never got to replace is left alone: restoring it would ask for rights
+	// the install was refused and report a rollback failure for a folder that is unchanged.
+	pending := lo.Filter(i.snapshots, func(snapshot nteBootstrapSnapshot, _ int) bool {
+		return !snapshot.existed || snapshot.replaced()
+	})
 	var rollbackErr error
-	for index := len(i.snapshots) - 1; index >= 0; index-- {
-		snapshot := i.snapshots[index]
+	for _, snapshot := range slices.Backward(pending) {
 		if snapshot.existed {
 			rollbackErr = errors.Join(rollbackErr, copyNteBootstrapFile(snapshot.backupPath, snapshot.targetPath))
 		} else if err := os.Remove(snapshot.targetPath); err != nil && !os.IsNotExist(err) {
@@ -295,15 +313,37 @@ func (i *nteBootstrapInstall) Rollback() error {
 		}
 	}
 	if rollbackErr != nil && errors.Is(rollbackErr, os.ErrPermission) {
-		rollbackErr = elevatedRollbackNteBootstrapFiles(i.snapshots)
+		// A rollback also follows a cancelled action, so it does not run under that action's context.
+		rollbackErr = elevatedRollbackNteBootstrapFiles(context.Background(), i.lease, pending)
 	}
-	removeErr := os.RemoveAll(i.rollbackDir)
-	return errors.Join(rollbackErr, removeErr)
+
+	// After a failed rollback the backups are the only copy of the files the install replaced.
+	if rollbackErr != nil && i.backupsStillNeeded() {
+		return infra.AnnotateError(rollbackErr, infra.Diagnostic{
+			Stage: "rollback", Fields: map[string]any{"backupDir": i.rollbackDir, "backupsKept": true},
+		})
+	}
+	return errors.Join(rollbackErr, os.RemoveAll(i.rollbackDir))
+}
+
+func (i *nteBootstrapInstall) backupsStillNeeded() bool {
+	return slices.ContainsFunc(i.snapshots, func(snapshot nteBootstrapSnapshot) bool {
+		return snapshot.existed && snapshot.replaced()
+	})
+}
+
+// replaced reports whether the target no longer holds what its backup does. A file that cannot
+// be compared counts as replaced.
+func (s nteBootstrapSnapshot) replaced() bool {
+	backup, backupErr := os.ReadFile(s.backupPath)
+	target, targetErr := os.ReadFile(s.targetPath)
+	return backupErr != nil || targetErr != nil || !bytes.Equal(backup, target)
 }
 
 func (i *nteBootstrapInstall) Commit() error {
 	if i == nil {
 		return nil
 	}
+	i.lease.Release()
 	return os.RemoveAll(i.rollbackDir)
 }

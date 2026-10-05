@@ -10,10 +10,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-func configureZZMIGame(ctx context.Context, gameFolder string) error {
+func configureZZMIGame(ctx context.Context, gameFolder string, publish *gameFilePublisher) error {
 	folder := filepath.Join(gameFolder, "ZenlessZoneZero_Data", "Persistent", "LocalStorage")
+	owns := func(name string) bool { return strings.EqualFold(name, "GENERAL_DATA.bin") }
+	return editGameFolder(ctx, folder, owns, publish, func(folder string) error {
+		return editZZMISettings(ctx, folder)
+	})
+}
+
+func editZZMISettings(ctx context.Context, folder string) error {
 	root, err := ensureInstallRoot(folder)
 	if err != nil {
 		return err

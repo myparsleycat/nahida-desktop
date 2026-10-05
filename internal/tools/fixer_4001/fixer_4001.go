@@ -16,6 +16,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -226,6 +227,8 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		return t.failed4001("XXMI_ERR_DLL_IN_USE", errors.New(t.fs.FormatProcessList(access.Processes)))
 	}
 	useElevated := !access.Writable
+	lease := elevated.NewFileLease(t.elevated)
+	defer lease.Release()
 
 	t.update4001Progress("XXMI_FIND_VS", "")
 	vcvarsPath, err := t.locate4001VSDevCmd(ctx)
@@ -273,13 +276,15 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		t.update4001Progress("XXMI_ERR_DLL_NOT_FOUND", "")
 		return result
 	}
-	if err := installFileCopies([]fileCopy{{Source: builtDLL, Target: finalDestination}}, useElevated); err != nil {
+	if err := installFileCopies(
+		ctx, lease, []fileCopy{{Source: builtDLL, Target: finalDestination}}, useElevated,
+	); err != nil {
 		return t.failed4001Install(err, finalDestination, "XXMI_ERR_BUILD_FAILED")
 	}
 	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
-	t.removeDiversifierBackups(importerPath, useElevated)
+	t.removeDiversifierBackups(ctx, lease, importerPath, useElevated)
 	t.update4001Progress("XXMI_BUILD_SUCCESS", "")
 	return Fixer4001Result{Success: true}
 }
@@ -319,6 +324,8 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		return t.failed4001("XXMI_ERR_DLL_IN_USE", errors.New(t.fs.FormatProcessList(access.Processes)))
 	}
 	useElevated := !access.Writable
+	lease := elevated.NewFileLease(t.elevated)
+	defer lease.Release()
 	tempRoot := filepath.Join(os.TempDir(), d3dBuildTempDirName)
 	if err := os.MkdirAll(tempRoot, 0o700); err != nil {
 		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", err)
@@ -378,10 +385,16 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		fmt.Sprintf("%s%s-%d.bak", diversifierBackupPre, hashPrefix, time.Now().Unix()),
 	)
 	if err := installFileCopies(
+		ctx,
+		lease,
 		[]fileCopy{{Source: target, Target: backupPath}, {Source: tempPath, Target: target}},
 		useElevated,
 	); err != nil {
-		_ = removeFilePaths([]string{backupPath}, useElevated)
+		// A helper request that failed in transit may still have replaced the DLL, and the backup
+		// is then the only copy of the original.
+		if hash, hashErr := hashFile(target); hashErr == nil && strings.EqualFold(hash, currentHash) {
+			_ = removeFilePaths(context.WithoutCancel(ctx), lease, []string{backupPath}, useElevated)
+		}
 		return t.failed4001Install(err, target, "XXMI_ERR_OBFUSCATE_FAILED")
 	}
 	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
@@ -435,11 +448,15 @@ func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
 	if access.Locked {
 		return t.failed4001("XXMI_ERR_DLL_IN_USE", errors.New(t.fs.FormatProcessList(access.Processes)))
 	}
+	lease := elevated.NewFileLease(t.elevated)
+	defer lease.Release()
 	t.update4001Progress("XXMI_RESTORING", "")
-	if err := installFileCopies([]fileCopy{{Source: *backup, Target: target}}, !access.Writable); err != nil {
+	if err := installFileCopies(
+		ctx, lease, []fileCopy{{Source: *backup, Target: target}}, !access.Writable,
+	); err != nil {
 		return t.failed4001Install(err, target, "XXMI_ERR_RESTORE_FAILED")
 	}
-	t.removeDiversifierBackups(importerPath, !access.Writable)
+	t.removeDiversifierBackups(ctx, lease, importerPath, !access.Writable)
 	t.update4001Progress("XXMI_RESTORE_SUCCESS", "")
 	return Fixer4001Result{Success: true, BackupPath: backup}
 }
@@ -800,18 +817,26 @@ func (t *Service) findDiversifierBackup(importerPath string) (*string, error) {
 	return nil, nil
 }
 
-func (t *Service) removeDiversifierBackups(importerPath string, elevated bool) {
+func (t *Service) removeDiversifierBackups(
+	ctx context.Context,
+	lease *elevated.FileLease,
+	importerPath string,
+	useElevated bool,
+) {
 	entries, err := os.ReadDir(importerPath)
 	if err != nil {
 		return
 	}
 	var paths []string
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), diversifierBackupPre) && strings.HasSuffix(entry.Name(), ".bak") {
+		// The elevated helper removes regular files only and stops at anything else, which would
+		// leave the real backups behind it.
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), diversifierBackupPre) &&
+			strings.HasSuffix(entry.Name(), ".bak") {
 			paths = append(paths, filepath.Join(importerPath, entry.Name()))
 		}
 	}
-	if err := removeFilePaths(paths, elevated); err != nil {
+	if err := removeFilePaths(ctx, lease, paths, useElevated); err != nil {
 		t.logError(err, "4001Fixer:removeBackups")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -17,15 +18,22 @@ type recordingLaunchHelper struct {
 	spec     inject.LaunchSpec
 	calls    int
 	warnings []string
+	leases   int
+	released int
 }
 
-func (*recordingLaunchHelper) Acquire(context.Context) (func(), error) { return func() {}, nil }
+func (h *recordingLaunchHelper) Acquire(context.Context) (func(), error) {
+	h.leases++
+	return func() { h.released++ }, nil
+}
 
 func (h *recordingLaunchHelper) LaunchXXMI(_ context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
 	h.spec = spec
 	h.calls++
 	return inject.LaunchResult{PID: 42, InjectionVerified: true, Warnings: h.warnings}, nil
 }
+
+func (*recordingLaunchHelper) ApplyFiles(context.Context, []elevated.FileOp) error { return nil }
 
 func (*recordingLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
 
@@ -125,6 +133,13 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	if helper.calls != 1 || helper.spec.Mode != inject.ModeLegacy || helper.spec.StartExe != gameExe ||
 		helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
 		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, helper.spec)
+	}
+	if helper.leases != 1 || helper.released != 1 {
+		t.Fatalf(
+			"helper leases = %d, released = %d; want one lease held for the launch",
+			helper.leases,
+			helper.released,
+		)
 	}
 	stored, err := service.GetImporterConfig(ctx, "EFMI")
 	if err != nil || stored.LaunchCount != 1 {

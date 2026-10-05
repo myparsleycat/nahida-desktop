@@ -1,12 +1,14 @@
 package fixer4001
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -22,12 +24,14 @@ func (e elevatedFileCopyError) Error() string { return e.err.Error() }
 
 func (e elevatedFileCopyError) Unwrap() error { return e.err }
 
-func installFileCopies(copies []fileCopy, elevated bool) error {
+// installFileCopies and removeFilePaths take the lease of the user action they belong to, so every
+// change of that action that needs administrator rights shares one UAC prompt.
+func installFileCopies(ctx context.Context, lease *elevated.FileLease, copies []fileCopy, useElevated bool) error {
 	if len(copies) == 0 {
 		return nil
 	}
-	if elevated {
-		if err := elevatedCopyFiles(copies); err != nil {
+	if useElevated {
+		if err := elevatedCopyFiles(ctx, lease, copies); err != nil {
 			return elevatedFileCopyError{err: err}
 		}
 		return nil
@@ -35,7 +39,7 @@ func installFileCopies(copies []fileCopy, elevated bool) error {
 	for _, item := range copies {
 		if err := copyFileOverwrite(item.Source, item.Target); err != nil {
 			if errors.Is(err, os.ErrPermission) {
-				if elevatedErr := elevatedCopyFiles(copies); elevatedErr != nil {
+				if elevatedErr := elevatedCopyFiles(ctx, lease, copies); elevatedErr != nil {
 					return elevatedFileCopyError{err: elevatedErr}
 				}
 				return nil
@@ -85,17 +89,17 @@ func regularFile(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-func removeFilePaths(paths []string, elevated bool) error {
+func removeFilePaths(ctx context.Context, lease *elevated.FileLease, paths []string, useElevated bool) error {
 	if len(paths) == 0 {
 		return nil
 	}
-	if elevated {
-		return elevatedRemoveFiles(paths)
+	if useElevated {
+		return elevatedRemoveFiles(ctx, lease, paths)
 	}
 	for _, path := range paths {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			if errors.Is(err, os.ErrPermission) {
-				return elevatedRemoveFiles(paths)
+				return elevatedRemoveFiles(ctx, lease, paths)
 			}
 			return fmt.Errorf("remove %s: %w", path, err)
 		}

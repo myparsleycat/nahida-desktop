@@ -12,7 +12,15 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, migotoDLLUsed bool) error {
+// initializeGameLaunch applies the importer's game settings. publish carries edits into a game
+// folder this process cannot write to; nil leaves such a folder to fail with its own error.
+func initializeGameLaunch(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	migotoDLLUsed bool,
+	publish *gameFilePublisher,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -22,7 +30,7 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 		return nil
 	}
 	if key == "WWMI" && cfg.WWMI != nil {
-		if err := configureWWMIGame(ctx, cfg, migotoDLLUsed); err != nil {
+		if err := configureWWMIGame(ctx, cfg, migotoDLLUsed, publish); err != nil {
 			return fmt.Errorf("WWMI_GAME_CONFIG_FAILED: %w", err)
 		}
 		return nil
@@ -78,7 +86,7 @@ func initializeGameLaunch(ctx context.Context, key string, cfg ImporterConfig, m
 		}
 	case "ZZMI":
 		if cfg.ConfigureGame && migotoDLLUsed {
-			if err := configureZZMIGame(ctx, cfg.GameFolder); err != nil {
+			if err := configureZZMIGame(ctx, cfg.GameFolder, publish); err != nil {
 				return fmt.Errorf("ZZMI_GAME_CONFIG_FAILED: %w", err)
 			}
 		}

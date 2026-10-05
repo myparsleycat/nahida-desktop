@@ -120,6 +120,11 @@ it.each([
   expect(screen.queryByRole("alertdialog")).toBeNull();
 });
 
+it("reports a declined elevation over the game settings step that asked for it", () => {
+  const detail = "ZZMI_GAME_CONFIG_FAILED: XXMI_ELEVATION_DENIED: The operation was canceled";
+  expect(launchErrorCode(detail)).toBe("XXMI_ELEVATION_DENIED");
+});
+
 it("repairs a damaged runtime before retrying launch", async () => {
   xxmi.StartGame.mockRejectedValueOnce(
     new Error("XXMI_RUNTIME_CORRUPTED: C:\\Mods\\GIMI\\d3d11.dll is missing"),
