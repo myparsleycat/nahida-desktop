@@ -334,8 +334,12 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return err
 	}
-	// A disabled importer never launches, so a pin whose package is gone must not keep it from being turned off.
+	// A disabled importer never launches or installs, so a missing pinned package or a rejected folder must not
+	// keep it from being turned off.
 	if cfg.Enabled {
+		if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
+			return err
+		}
 		if err := validateInstalledImporterPackage(key, cfg); err != nil {
 			return infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
 				Operation: "save-importer-config", Stage: "validate-package",

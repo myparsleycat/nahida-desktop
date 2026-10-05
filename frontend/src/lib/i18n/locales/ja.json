@@ -2362,7 +2362,11 @@
           },
           "installImporterPackage": {
             "failed": "選択したImporterパッケージバージョンの適用に失敗しました",
-            "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
+            "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
+            "errors": {
+              "XXMI_IMPORTER_FOLDER_IN_USE": "Importerフォルダーが他のプログラムで使用されています。ゲーム、XXMI Launcher、フォルダー内のファイルを開いているプログラムを終了してから、もう一度お試しください。",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "ImporterフォルダーがXXMI Launcherのインストールフォルダーです。このImporter専用のフォルダーを選択してください。"
+            }
           }
         }
       },

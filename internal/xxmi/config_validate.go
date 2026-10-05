@@ -3,6 +3,7 @@ package xxmi
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -96,6 +97,15 @@ func validateLocalFolder(name, path string, required bool) error {
 	}
 	if !filepath.IsAbs(path) || filepath.VolumeName(path) == "" || strings.HasPrefix(path, `\\`) {
 		return fmt.Errorf("%s must be an absolute local drive path", name)
+	}
+	return nil
+}
+
+// validateImporterFolderTarget rejects the root of an XXMI Launcher installation. Installing a package swaps the
+// whole importer folder, which there would stage and replace the launcher and every importer below it.
+func validateImporterFolderTarget(folder string) error {
+	if _, err := os.Stat(filepath.Join(folder, xxmiConfigName)); err == nil {
+		return errors.New("XXMI_IMPORTER_FOLDER_IS_LAUNCHER")
 	}
 	return nil
 }

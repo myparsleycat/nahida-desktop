@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -422,5 +423,73 @@ func createXXMIJunction(t *testing.T, target, link string) {
 	output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
 	if err != nil {
 		t.Skipf("junction creation unavailable: %v (%s)", err, output)
+	}
+}
+
+func TestImporterInstallTransactionReportsFolderInUse(t *testing.T) {
+	root := t.TempDir()
+	importerRoot := filepath.Join(root, "GIMI")
+	heldPath := filepath.Join(importerRoot, "Core", "held.txt")
+	if err := os.MkdirAll(filepath.Dir(heldPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(heldPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// An open file below the importer folder is what a running game or launcher leaves behind.
+	held, err := os.Open(heldPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Close() }()
+
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = transaction.Close() }()
+	stage, err := transaction.prepare(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := transaction.commit(context.Background(), nil); err == nil ||
+		!strings.Contains(err.Error(), "XXMI_IMPORTER_FOLDER_IN_USE") {
+		t.Fatalf("commit over an open importer folder = %v", err)
+	}
+	if err := transaction.rollback(); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, heldPath, "old")
+}
+
+func TestSaveImporterConfigRejectsLauncherRoot(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	service.UseClient(client)
+	useBuiltinLauncher(t, service)
+	launcherRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(launcherRoot, xxmiConfigName), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.EnableImporter(ctx, "GIMI", launcherRoot); err == nil ||
+		!strings.Contains(err.Error(), "XXMI_IMPORTER_FOLDER_IS_LAUNCHER") {
+		t.Fatalf("launcher root accepted as importer folder: %v", err)
+	}
+	if err := service.EnableImporter(ctx, "GIMI", filepath.Join(launcherRoot, "GIMI")); err != nil {
+		t.Fatalf("importer folder below the launcher root rejected: %v", err)
 	}
 }

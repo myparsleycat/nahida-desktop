@@ -44,6 +44,7 @@ import {
   SelectRow,
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
+import { importerFolderErrorCode } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -197,7 +198,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       refresh();
       return true;
     } catch (error) {
-      toast.error(toErrorMessage(error));
+      const code = importerFolderErrorCode(error);
+      toast.error(
+        code
+          ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${code}`)
+          : toErrorMessage(error),
+      );
       return false;
     } finally {
       setIsSaving(false);

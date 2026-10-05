@@ -44,6 +44,9 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if cfg.ImporterFolder == "" {
 		return errors.New("XXMI importer folder is not configured")
 	}
+	if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
+		return err
+	}
 	version := normalizeVersion(input.Version)
 	if version == "" {
 		return errors.New("invalid importer package version")
