@@ -13,6 +13,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -20,11 +21,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 func newXXMITestClient(t *testing.T) *db.Client {
@@ -259,7 +263,50 @@ func TestSetExternalImporterEnabledHidesImporterFromConsumers(t *testing.T) {
 	}
 }
 
-func TestExternalInstallImporterPackageOverlaysAndPreservesMods(t *testing.T) {
+// fakeLauncherProcess stands in for the host process list so no real launcher is found or terminated.
+type fakeLauncherProcess struct {
+	mu      sync.Mutex
+	pid     int
+	killErr error
+	found   []string
+	killed  []string
+}
+
+func (p *fakeLauncherProcess) find(_ context.Context, executable string) (int, error) {
+	if filepath.Base(executable) != launcherImageName {
+		return 0, nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.found = append(p.found, executable)
+	return p.pid, nil
+}
+
+func (p *fakeLauncherProcess) kill(executable string) func(int) error {
+	return func(pid int) error {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if pid == 0 || pid != p.pid {
+			return fmt.Errorf("unexpected pid %d", pid)
+		}
+		p.killed = append(p.killed, executable)
+		if p.killErr != nil {
+			return p.killErr
+		}
+		p.pid = 0
+		return nil
+	}
+}
+
+type externalImporterInstall struct {
+	service  *XXMI
+	root     string
+	gimi     string
+	requests *atomic.Int32
+}
+
+func newExternalImporterInstall(t *testing.T, process *fakeLauncherProcess) externalImporterInstall {
+	t.Helper()
 	root := t.TempDir()
 	writeXXMITestConfig(t, root)
 	gimi := filepath.Join(root, "GIMI")
@@ -290,10 +337,12 @@ func TestExternalInstallImporterPackageOverlaysAndPreservesMods(t *testing.T) {
 		"ShaderFixes/new.hlsl":     "new-shader",
 		"Mods/should-not-copy.ini": "from-zip",
 	})
+	requests := &atomic.Int32{}
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests.Add(1)
 		if !strings.Contains(request.URL.Path, "/SilentNightSound/GIMI-Package/releases/download/") ||
 			!strings.HasSuffix(request.URL.Path, "/GIMI-PACKAGE-v1.2.3.zip") {
-			t.Fatalf("URL = %s", request.URL)
+			return nil, fmt.Errorf("unexpected URL %s", request.URL)
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header),
@@ -305,37 +354,85 @@ func TestExternalInstallImporterPackageOverlaysAndPreservesMods(t *testing.T) {
 	download.UseClient(infraClient)
 	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
 	service.UseClient(newXXMITestClient(t))
+	service.findProcess = process.find
+	service.killExecutableProcess = process.kill
 	useExternalLauncher(t, service, root)
+	return externalImporterInstall{service: service, root: root, gimi: gimi, requests: requests}
+}
 
-	if err := service.InstallImporterPackage(
+func TestExternalInstallImporterPackageOverlaysAndPreservesMods(t *testing.T) {
+	for name, pid := range map[string]int{"launcher absent": 0, "launcher running": 4242} {
+		t.Run(name, func(t *testing.T) {
+			process := &fakeLauncherProcess{pid: pid}
+			install := newExternalImporterInstall(t, process)
+			root, gimi, service := install.root, install.gimi, install.service
+
+			if err := service.InstallImporterPackage(
+				context.Background(), InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3"},
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			launcherExecutable := filepath.Join(root, "Resources", "Bin", launcherImageName)
+			if len(process.found) == 0 {
+				t.Fatal("launcher process was not queried")
+			}
+			for _, executable := range append(slices.Clone(process.found), process.killed...) {
+				if !platform.SamePathFold(executable, launcherExecutable) {
+					t.Fatalf("launcher executable = %q, want %q", executable, launcherExecutable)
+				}
+			}
+			if wantKills := min(pid, 1); len(process.killed) != wantKills {
+				t.Fatalf("terminated launchers = %v, want %d", process.killed, wantKills)
+			}
+
+			assertFile(t, filepath.Join(gimi, "Mods", "user-mod.ini"), "keep-mod")
+			assertFile(t, filepath.Join(gimi, "d3dx.ini"), "user-ini")
+			assertFile(t, filepath.Join(gimi, "Core", "keep.ini"), "new-keep")
+			assertFile(t, filepath.Join(gimi, "ShaderFixes", "new.hlsl"), "new-shader")
+			for _, removed := range []string{
+				filepath.Join(gimi, "Core", "obsolete.ini"),
+				filepath.Join(gimi, "ShaderFixes", "old.hlsl"),
+				filepath.Join(gimi, "Mods", "should-not-copy.ini"),
+			} {
+				if _, err := os.Stat(removed); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("%s still present: %v", removed, err)
+				}
+			}
+			rawConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
+			if err != nil || !bytes.Contains(rawConfig, []byte(`"auto_update": false`)) ||
+				!bytes.Contains(rawConfig, []byte(`"deployed_version": "1.2.3"`)) {
+				t.Fatalf("config = %q, error = %v", rawConfig, err)
+			}
+			data, err := service.GetXXMIData(context.Background())
+			if err != nil || len(data.EnabledImporters) != 1 || data.EnabledImporters[0].InstalledVersion == nil ||
+				*data.EnabledImporters[0].InstalledVersion != "1.2.3" {
+				t.Fatalf("data = %+v, err = %v", data, err)
+			}
+		})
+	}
+}
+
+func TestExternalInstallImporterPackageStopsWhenLauncherStaysOpen(t *testing.T) {
+	process := &fakeLauncherProcess{pid: 4242, killErr: errors.New("access denied")}
+	install := newExternalImporterInstall(t, process)
+
+	err := install.service.InstallImporterPackage(
 		context.Background(), InstallImporterPackageInput{Importer: "GIMI", Version: "v1.2.3"},
-	); err != nil {
-		t.Fatal(err)
+	)
+	if err == nil || !strings.Contains(err.Error(), "failed to close XXMI Launcher") {
+		t.Fatalf("error = %v, want launcher close failure", err)
 	}
 
-	assertFile(t, filepath.Join(gimi, "Mods", "user-mod.ini"), "keep-mod")
-	assertFile(t, filepath.Join(gimi, "d3dx.ini"), "user-ini")
-	assertFile(t, filepath.Join(gimi, "Core", "keep.ini"), "new-keep")
-	assertFile(t, filepath.Join(gimi, "ShaderFixes", "new.hlsl"), "new-shader")
-	for _, removed := range []string{
-		filepath.Join(gimi, "Core", "obsolete.ini"),
-		filepath.Join(gimi, "ShaderFixes", "old.hlsl"),
-		filepath.Join(gimi, "Mods", "should-not-copy.ini"),
-	} {
-		if _, err := os.Stat(removed); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("%s still present: %v", removed, err)
-		}
+	if len(process.killed) != 1 {
+		t.Fatalf("terminated launchers = %v, want one attempt", process.killed)
 	}
-	rawConfig, err := os.ReadFile(filepath.Join(root, xxmiConfigName))
-	if err != nil || !bytes.Contains(rawConfig, []byte(`"auto_update": false`)) ||
-		!bytes.Contains(rawConfig, []byte(`"deployed_version": "1.2.3"`)) {
-		t.Fatalf("config = %q, error = %v", rawConfig, err)
+	if requests := install.requests.Load(); requests != 0 {
+		t.Fatalf("package requests = %d, want none before the launcher closes", requests)
 	}
-	data, err := service.GetXXMIData(context.Background())
-	if err != nil || len(data.EnabledImporters) != 1 || data.EnabledImporters[0].InstalledVersion == nil ||
-		*data.EnabledImporters[0].InstalledVersion != "1.2.3" {
-		t.Fatalf("data = %+v, err = %v", data, err)
-	}
+	assertFile(t, filepath.Join(install.gimi, "Core", "obsolete.ini"), "gone")
+	assertFile(t, filepath.Join(install.gimi, "Core", "keep.ini"), "old-keep")
+	assertFile(t, filepath.Join(install.gimi, "ShaderFixes", "old.hlsl"), "gone")
 }
 
 func TestInstallDLLVersionStagesAndValidatesBeforeCopy(t *testing.T) {
