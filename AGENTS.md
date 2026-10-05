@@ -211,6 +211,12 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
   go get -tool -modfile="./govulncheck.mod" golang.org/x/vuln/cmd/govulncheck@latest
   ```
 
+## Comments
+
+- These rules apply to Go and TypeScript code, including method documentation and inline comments.
+- Do not add comments to self-explanatory methods or code. Avoid restating a method name, signature, assignment, or obvious control flow in prose.
+- Add comments only when they explain non-obvious intent, constraints, surprising behavior, or a contract that the code alone does not convey. Preserve required tool directives and documentation required by project tooling.
+
 ## Blank Lines
 
 Treat a blank line as a paragraph break: one blank line ends one topic. These rules apply to Go and TypeScript code.
@@ -258,7 +264,6 @@ Three paragraphs: load, fetch and filter, save.
 - Rely on type inference when possible. Add explicit types for exported boundaries or when they materially improve clarity.
 - Prefer functional array methods such as `flatMap`, `filter`, and `map` for straightforward transformations. Use type guards when filtering so downstream inference is preserved.
 - Prefer `es-toolkit` for common TypeScript collection or object operations when it is clearer than a local implementation.
-- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
 
 ### Variables and property access
 
