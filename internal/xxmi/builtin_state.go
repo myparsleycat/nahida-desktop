@@ -54,10 +54,14 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 		if installed != nil {
 			info.DeployedVersion = *installed
 		}
+		customDLL, err := x.launchesCustomDLL(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, EnabledImporter{Key: row.Key, Mode: cfg.Mode, ImporterFolder: cfg.ImporterFolder,
 			GameFolder: cfg.GameFolder, InstalledVersion: installed, PackageInfo: info,
 			UpdateAvailable: updateAvailable(info.LatestVersion, info.DeployedVersion, info.SkippedVersion),
-			CustomDLL:       cfg.Mode == RuntimeXXMI && usesCustomDLL(cfg.ImporterFolder)})
+			CustomDLL:       customDLL})
 	}
 	return out, nil
 }
