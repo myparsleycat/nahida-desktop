@@ -130,6 +130,11 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchGame, setSearchGame] = useState(selectedGame);
+  if (searchGame !== selectedGame) {
+    setSearchGame(selectedGame);
+    setSearchTerm("");
+  }
   const sortKey = useModStore((s) => s.folderSortKey);
   const setSortKey = useModStore((s) => s.setFolderSortKey);
   const sortDirection = useModStore((s) => s.folderSortDirection);
