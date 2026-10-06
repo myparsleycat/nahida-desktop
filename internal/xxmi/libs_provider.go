@@ -284,8 +284,8 @@ func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpe
 	}
 	asset := release.Assets[assetIndex]
 
-	// The published size keeps an oversized asset from being downloaded at all. Metadata without one is
-	// still held to the limit once the file is on disk.
+	// The published size keeps an oversized asset from being downloaded at all. Metadata without one, or
+	// with a wrong one, is still held to the limit while the file streams.
 	if asset.Size > customDLLSizeLimit {
 		return fmt.Errorf("%s %s exceeds size limit", spec.overlayPackage, version)
 	}
@@ -302,7 +302,9 @@ func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpe
 	if err := x.downloadPackageFile(
 		ctx,
 		spec.overlayPackage, version,
-		github.FileRequest{Repo: spec.repo, URL: asset.BrowserDownloadURL, Destination: dllPath},
+		github.FileRequest{
+			Repo: spec.repo, URL: asset.BrowserDownloadURL, Destination: dllPath, MaxSize: customDLLSizeLimit,
+		},
 	); err != nil {
 		return fmt.Errorf("download %s %s: %w", spec.overlayPackage, version, err)
 	}

@@ -15,7 +15,9 @@ type FileRequest struct {
 	Repo        Repo
 	URL         string
 	Destination string
-	Progress    func(downloaded, total int64)
+	// MaxSize fails the download with infra.ErrDownloadTooLarge once the file would exceed it; <= 0 is no limit.
+	MaxSize  int64
+	Progress func(downloaded, total int64)
 }
 
 // DownloadFile streams a file to disk through the shared download policy.
@@ -29,6 +31,7 @@ func (c *Client) DownloadFile(ctx context.Context, request FileRequest) error {
 	download := infra.DownloadRequest{
 		URL:         request.URL,
 		Destination: request.Destination,
+		MaxSize:     request.MaxSize,
 		Header:      fileHeader(request.Repo),
 	}
 	if request.Progress != nil {

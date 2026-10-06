@@ -221,6 +221,14 @@ func TestSetSharedLibsProviderRejectsUnverifiableReleases(t *testing.T) {
 			want: "exceeds size limit",
 		},
 		{
+			// The published size understates the file, so only the stream itself shows the excess.
+			name: "oversized download",
+			release: providerTestRelease{
+				tag: "v0.2.0", data: make([]byte, customDLLSizeLimit+1), digest: providerTestDigest(image), size: 1,
+			},
+			want: "download exceeds size limit",
+		},
+		{
 			name:    "no asset",
 			release: providerTestRelease{tag: "v0.2.0", noAsset: true},
 			want:    "has no d3d11.dll",
@@ -233,7 +241,7 @@ func TestSetSharedLibsProviderRejectsUnverifiableReleases(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
-			if tc.release.size != 0 && downloads.Load() != 0 {
+			if tc.release.size > customDLLSizeLimit && downloads.Load() != 0 {
 				t.Fatal("an asset published over the size limit was downloaded")
 			}
 			if stored, err := client.Settings.GetValue(ctx, sharedLibsProviderKey); err != nil || stored != nil {

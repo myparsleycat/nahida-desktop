@@ -24,6 +24,9 @@ const (
 
 var contentRangePattern = regexp.MustCompile(`(?i)^bytes\s+(\d+)-(\d+)/(\d+)$`)
 
+// ErrDownloadTooLarge reports a download that would write more than DownloadRequest.MaxSize bytes.
+var ErrDownloadTooLarge = errors.New("download exceeds size limit")
+
 type DownloadLimiter interface {
 	Take(context.Context, int64, func()) error
 }
@@ -32,6 +35,9 @@ type DownloadRequest struct {
 	URL         string
 	Destination string
 	Size        int64
+	// MaxSize stops the download with ErrDownloadTooLarge before more than MaxSize bytes are written to
+	// Destination, whatever length the server announced. A value <= 0 means no limit.
+	MaxSize     int64
 	Compression string
 	Header      http.Header
 	Progress    func(bytes int64)
@@ -142,6 +148,10 @@ func (d *Download) File(ctx context.Context, request DownloadRequest) error {
 			}
 			return nil
 		}
+		if errors.Is(lastErr, ErrDownloadTooLarge) {
+			_ = os.Remove(temporaryPath)
+			break
+		}
 		var httpErr *DownloadHTTPError
 		if errors.As(lastErr, &httpErr) && httpErr.Status >= 400 && httpErr.Status < 500 &&
 			httpErr.Status != http.StatusRequestTimeout &&
@@ -231,6 +241,13 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 		}
 	}
 	defer func() { _ = response.Body.Close() }()
+	written := int64(0)
+	if appendFile {
+		written = resumeFrom
+	}
+	if request.MaxSize > 0 && request.Compression == "" && written+response.ContentLength > request.MaxSize {
+		return fmt.Errorf("%w of %d bytes", ErrDownloadTooLarge, request.MaxSize)
+	}
 	if request.OnResponse != nil {
 		request.OnResponse(downloadContentLength(response, request, appendFile))
 	}
@@ -243,7 +260,7 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 	if err != nil {
 		return fmt.Errorf("open partial download: %w", err)
 	}
-	copyErr := d.copyResponse(ctx, request, response.Body, output)
+	copyErr := d.copyResponse(ctx, request, response.Body, output, written)
 	closeErr := output.Close()
 	if copyErr != nil {
 		return copyErr
@@ -298,7 +315,14 @@ func (d *Download) fetch(ctx context.Context, request DownloadRequest, resumeFro
 	})
 }
 
-func (d *Download) copyResponse(ctx context.Context, request DownloadRequest, body io.Reader, output io.Writer) error {
+// copyResponse writes the response body to output, which already holds written bytes of the file.
+func (d *Download) copyResponse(
+	ctx context.Context,
+	request DownloadRequest,
+	body io.Reader,
+	output io.Writer,
+	written int64,
+) error {
 	networkReader := &limitedProgressReader{
 		ctx:      ctx,
 		reader:   body,
@@ -334,11 +358,15 @@ func (d *Download) copyResponse(ctx context.Context, request DownloadRequest, bo
 		}
 		read, readErr := reader.Read(buffer)
 		if read > 0 {
-			written, writeErr := output.Write(buffer[:read])
+			written += int64(read)
+			if request.MaxSize > 0 && written > request.MaxSize {
+				return fmt.Errorf("%w of %d bytes", ErrDownloadTooLarge, request.MaxSize)
+			}
+			wrote, writeErr := output.Write(buffer[:read])
 			if writeErr != nil {
 				return fmt.Errorf("write download: %w", writeErr)
 			}
-			if written != read {
+			if wrote != read {
 				return io.ErrShortWrite
 			}
 		}
