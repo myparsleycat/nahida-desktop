@@ -26,6 +26,8 @@ const overview = vi.hoisted(() => ({
     installedVersion?: string;
   }>,
   sharedCustomDll: "",
+  sharedLibsProvider: "spectrumqt",
+  libsProviders: ["spectrumqt", "myparsleycat"],
   customDlls: [] as Array<{ id: string; name: string }>,
 }));
 const packageVerification = vi.hoisted(() => ({

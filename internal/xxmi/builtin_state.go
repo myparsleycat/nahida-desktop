@@ -75,14 +75,16 @@ type Overview struct {
 	// SharedCustomDLL is the custom d3d11.dll for importers that follow the shared libraries, or empty.
 	SharedCustomDLL string `json:"sharedCustomDll"`
 	// SharedLibsProvider is the XXMI libraries provider of importers that do not choose their own.
-	SharedLibsProvider string              `json:"sharedLibsProvider"`
-	CustomDLLs         []CustomDLL         `json:"customDlls"`
-	Importers          []EnabledImporter   `json:"importers"`
-	LibsCache          []CachedLibs        `json:"libsCache"`
-	LegacyRuntimes     []LegacyRuntimeInfo `json:"legacyRuntimes"`
-	FPSVersions        []string            `json:"fpsVersions"`
-	CacheIssues        []string            `json:"cacheIssues,omitempty"`
-	ExternalLauncher   *ExternalLauncher   `json:"externalLauncher,omitempty"`
+	SharedLibsProvider string `json:"sharedLibsProvider"`
+	// LibsProviders lists the selectable provider IDs, the default one first.
+	LibsProviders    []string            `json:"libsProviders"`
+	CustomDLLs       []CustomDLL         `json:"customDlls"`
+	Importers        []EnabledImporter   `json:"importers"`
+	LibsCache        []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions      []string            `json:"fpsVersions"`
+	CacheIssues      []string            `json:"cacheIssues,omitempty"`
+	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -151,6 +153,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		Importers:    importers,
 
 		SharedLibsProvider: sharedProvider.id,
+		LibsProviders:      libsProviderIDs(),
 	}
 	if sharedLibs != nil {
 		overview.SharedLibsVersion = normalizeVersion(*sharedLibs)
@@ -188,10 +191,11 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	return overview, nil
 }
 
-// builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them.
+// builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them,
+// and neither are the provider DLL hashes: they vouch for package cache entries, which a reset keeps.
 var builtinSettingKeys = []string{
 	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
-	sharedLibsProviderKey, providerDLLHashesKey,
+	sharedLibsProviderKey,
 }
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,

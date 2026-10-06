@@ -39,7 +39,6 @@ import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-se
 import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import {
   FOLLOW_LATEST,
-  LIBS_PROVIDERS,
   NumberRow,
   PathField,
   SelectRow,
@@ -125,9 +124,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
   const sharedLibsVersion = overview?.sharedLibsVersion;
-  const sharedLibsProvider =
-    LIBS_PROVIDERS.find((provider) => provider === overview?.sharedLibsProvider) ??
-    LIBS_PROVIDERS[0];
+  const libsProviders = overview?.libsProviders ?? [];
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
@@ -747,11 +744,11 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       <SelectRow
                         label={t("page.setting.xxmi.builtin.libsProvider")}
                         description={
-                          config.libsProvider
+                          config.libsProvider || !overview?.sharedLibsProvider
                             ? undefined
                             : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
                                 provider: t(
-                                  `page.setting.xxmi.builtin.libsProviders.${sharedLibsProvider}`,
+                                  `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
                                 ),
                               })
                         }
@@ -761,7 +758,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             value: "shared",
                             label: t("page.setting.xxmi.builtin.libsProviderFollowShared"),
                           },
-                          ...LIBS_PROVIDERS.map((provider) => ({
+                          ...libsProviders.map((provider) => ({
                             value: provider,
                             label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
                           })),

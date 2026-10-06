@@ -132,6 +132,9 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	if err != nil || overview.SharedLibsProvider != defaultLibsProvider {
 		t.Fatalf("default provider = %q, err = %v", overview.SharedLibsProvider, err)
 	}
+	if !slices.Equal(overview.LibsProviders, []string{defaultLibsProvider, "myparsleycat"}) {
+		t.Fatalf("selectable providers = %v", overview.LibsProviders)
+	}
 	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
 		t.Fatal(err)
 	}
@@ -186,6 +189,30 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	}
 	if stored, err := client.Settings.GetValue(ctx, sharedLibsProviderKey); err != nil || stored != nil {
 		t.Fatalf("reset kept provider %v, err = %v", stored, err)
+	}
+
+	// A reset keeps the package cache and the hashes that vouch for it, so the cached DLL is reused.
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil || downloads.Load() != 3 {
+		t.Fatalf("reselect after reset downloaded %d times, err = %v", downloads.Load(), err)
+	}
+}
+
+func TestProviderDLLHashesSurviveNullRecord(t *testing.T) {
+	ctx := context.Background()
+	data := testCustomDLLImage("0.2.0")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v0.2.0", data: data, digest: providerTestDigest(data)},
+	})
+	null := "null"
+	if err := client.Settings.Upsert(ctx, providerDLLHashesKey, &null); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
+		t.Fatal(err)
+	}
+	if !service.verifiedProviderDLL(ctx, libsProviders[1], "0.2.0") {
+		t.Fatal("downloaded DLL was not recorded as verified")
 	}
 }
 

@@ -50,6 +50,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		return nil, err
 	}
 	packages := map[string]struct{}{}
+	providers := make(map[string]libsProviderSpec, len(rows))
 	for _, row := range rows {
 		cfg, err := x.GetImporterConfig(ctx, row.Key)
 		if err != nil {
@@ -66,6 +67,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if err != nil {
 			return nil, err
 		}
+		providers[row.Key] = provider
 		if provider.overlayPackage != "" {
 			packages[provider.overlayPackage] = struct{}{}
 		}
@@ -171,11 +173,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		}
 
 		// A provider d3d11.dll is tracked beside the signed libraries it is deployed over.
-		provider, err := x.deployedLibsProvider(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		if provider.overlayPackage != "" {
+		if provider := providers[row.Key]; provider.overlayPackage != "" {
 			dll := updateStatus(row.Key, provider.overlayPackage, states[provider.overlayPackage])
 			dll.Shared = cfg.LibsProvider == ""
 			dll.Installed = cachedLibsVersion(

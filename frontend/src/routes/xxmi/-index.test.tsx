@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
     fpsVersions: [],
     cacheIssues: ["legacy 3DMigoto: missing source.json"],
     sharedCustomDll: "",
+    sharedLibsProvider: "spectrumqt",
+    libsProviders: ["spectrumqt", "myparsleycat"],
     customDlls: [] as Array<{ id: string; name: string }>,
     importers: [
       {

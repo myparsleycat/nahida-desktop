@@ -66,6 +66,15 @@ func lookupLibsProvider(id string) (libsProviderSpec, bool) {
 	return libsProviderSpec{}, false
 }
 
+// libsProviderIDs lists the selectable providers, the default one first.
+func libsProviderIDs() []string {
+	ids := make([]string, 0, len(libsProviders))
+	for _, spec := range libsProviders {
+		ids = append(ids, spec.id)
+	}
+	return ids
+}
+
 func lookupOverlayPackage(pkg string) (libsProviderSpec, bool) {
 	for _, spec := range libsProviders {
 		if spec.overlayPackage != "" && spec.overlayPackage == pkg {
@@ -373,6 +382,10 @@ func (x *XXMI) providerDLLHashes(ctx context.Context) (map[string]string, error)
 	if stored != nil {
 		// An unreadable record verifies nothing, and the entries it covered are downloaded again.
 		_ = json.Unmarshal([]byte(*stored), &hashes)
+	}
+	// A stored JSON null decodes into a nil map, which recordProviderDLLHash could not add to.
+	if hashes == nil {
+		hashes = map[string]string{}
 	}
 	return hashes, nil
 }
