@@ -74,7 +74,7 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 	}
 	watcher.onChange(func() {
 		m.invalidateClassifiedFolders(game)
-		m.invalidateLibraries()
+		m.InvalidateLibraries()
 	})
 	return m.replaceWatcher(true, watcher)
 }
@@ -99,7 +99,7 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 	}
 	watcher.onChange(func() {
 		m.invalidateClassifiedFolders(game.Game)
-		m.invalidateLibraries()
+		m.InvalidateLibraries()
 	})
 	return m.replaceWatcher(false, watcher)
 }
@@ -108,7 +108,6 @@ func (m *Mod) ServiceShutdown() error {
 	if m == nil {
 		return nil
 	}
-	namespaceErr := m.StopNamespaceIsolation()
 	m.watchMu.Lock()
 	game, character := m.gameWatcher, m.characterWatcher
 	m.gameWatcher, m.characterWatcher = nil, nil
@@ -117,7 +116,7 @@ func (m *Mod) ServiceShutdown() error {
 	if m.compression != nil {
 		compressionErr = m.compression.stop()
 	}
-	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr, namespaceErr)
+	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr)
 }
 
 func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {

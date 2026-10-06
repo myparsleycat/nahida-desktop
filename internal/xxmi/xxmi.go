@@ -132,15 +132,14 @@ type XXMI struct {
 	searchRoots func() ([]string, error)
 	busy        map[string]bool
 	// launching holds importers whose game is being started; unlike busy, it is reported as running.
-	launching                  map[string]bool
-	runningWatchMu             sync.Mutex
-	runningCancel              context.CancelFunc
-	runningDone                chan struct{}
-	runningWake                chan struct{}
-	processSnapshot            func(context.Context) (map[string]bool, error)
-	externalImportersChanged   func(context.Context)
-	importerMaintenance        func(context.Context) (func([]ImportedImporter) error, error)
-	namespaceLaunchPreparation func(context.Context, string) error
+	launching                map[string]bool
+	runningWatchMu           sync.Mutex
+	runningCancel            context.CancelFunc
+	runningDone              chan struct{}
+	runningWake              chan struct{}
+	processSnapshot          func(context.Context) (map[string]bool, error)
+	externalImportersChanged func(context.Context)
+	importerMaintenance      func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
 	// launchSettings accesses registry and driver settings; tests replace it to isolate host state.

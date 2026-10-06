@@ -1,4 +1,4 @@
-import type { FolderGroup as BoundFolderGroup, Mod } from "@bindings/mod";
+import type { FolderGroup as BoundFolderGroup } from "@bindings/mod";
 import type { GitHubRateState } from "@bindings/tools";
 // oxlint-disable typescript/no-explicit-any
 import type { Snapshot as TransferSnapshot } from "@bindings/transfer";
@@ -257,8 +257,6 @@ export interface ToggleKey {
     currentValue?: string;
 }
 
-export type NamespaceIsolationState = Awaited<ReturnType<typeof Mod.GetNamespaceIsolationState>>;
-
 export interface ModInfo {
     id: string;
     name: string;
@@ -438,7 +436,6 @@ export type IpcEvents = {
     "mod:update-game": () => void;
     "mod:update-mods": () => void;
     "mod:update-settings": () => void;
-    "mod:namespace-isolation-state": (state: NamespaceIsolationState) => void;
     "mod:nte-bootstrap-progress": (payload: NteBootstrapProgress) => void;
     "drive:update-settings": () => void;
 

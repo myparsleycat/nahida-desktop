@@ -3,6 +3,7 @@ package mod
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -131,7 +132,7 @@ func iniNamespace(line string) (string, bool) {
 func requiredLibraries(info ModInfo) libraryMask {
 	var references, declares libraryMask
 	for _, ini := range info.Inis {
-		if namespaceDisabledPath(info.Path, ini.Path) {
+		if libraryDisabledPath(info.Path, ini.Path) {
 			continue
 		}
 		references |= ini.references
@@ -197,7 +198,10 @@ func (m *Mod) installedLibraries(ctx context.Context, game GameConfig, reports .
 	return installed
 }
 
-func (m *Mod) invalidateLibraries() {
+// InvalidateLibraries drops the installed-library indexes after mod or importer files change.
+//
+//wails:ignore
+func (m *Mod) InvalidateLibraries() {
 	m.libraryMu.Lock()
 	m.libraryChanges++
 	m.libraryMu.Unlock()
@@ -240,7 +244,7 @@ func (m *Mod) libraryRoots(ctx context.Context, game GameConfig) []string {
 	// WalkDir would not enter and which must not be scanned twice.
 	physical := []string{}
 	for _, candidate := range candidates {
-		if path, err := namespacePhysicalPath(candidate); err == nil {
+		if path, err := libraryPhysicalPath(candidate); err == nil {
 			physical = append(physical, path)
 		}
 	}
@@ -312,4 +316,57 @@ func readININamespace(path string, reports ...func(error)) string {
 		}
 	}
 	return ""
+}
+
+// libraryDisabledPath reports whether a folder below root carries the DISABLED prefix.
+// 3DMigoto loads nothing below such a folder.
+func libraryDisabledPath(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(strings.Split(relative, string(os.PathSeparator)), func(part string) bool {
+		return strings.HasPrefix(strings.ToLower(part), "disabled")
+	})
+}
+
+// libraryPhysicalPath resolves symbolic links and junctions. filepath.EvalSymlinks
+// leaves a Windows junction in place and WalkDir does not descend into one.
+func libraryPhysicalPath(path string) (string, error) {
+	for range 32 {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return "", err
+		}
+
+		// Substitute the junction nearest the volume root, then resolve the result again.
+		link, target := "", ""
+		for current := resolved; ; current = filepath.Dir(current) {
+			info, err := os.Lstat(current)
+			if err != nil {
+				return "", err
+			}
+			// Reparse points without a link target, such as cloud placeholders, are physical.
+			if isReparsePoint(info) {
+				if next, err := os.Readlink(current); err == nil {
+					link, target = current, next
+				}
+			}
+			if filepath.Dir(current) == current {
+				break
+			}
+		}
+		if link == "" {
+			return resolved, nil
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(link), target)
+		}
+		relative, err := filepath.Rel(link, resolved)
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(target, relative)
+	}
+	return "", fmt.Errorf("too many links in %q", path)
 }

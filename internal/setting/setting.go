@@ -643,14 +643,6 @@ func (s *Setting) SetPersistToggles(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyXXMIPersistToggles, enabled)
 }
 
-func (s *Setting) GetNamespaceIsolation(ctx context.Context) (bool, error) {
-	return s.getBool(ctx, KeyXXMINamespaceIsolation)
-}
-
-func (s *Setting) SetNamespaceIsolation(ctx context.Context, enabled bool) error {
-	return s.Set(ctx, KeyXXMINamespaceIsolation, enabled)
-}
-
 func (s *Setting) getBool(ctx context.Context, key string) (bool, error) {
 	value, err := s.Get(ctx, key)
 	if err != nil {

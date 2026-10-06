@@ -3,19 +3,18 @@ package setting
 // Hooks are optional afterSet side effects owned by runtime services.
 // Empty Hooks are a no-op so settings remain usable in tests and headless callers.
 type Hooks struct {
-	AfterSet                       func(key string, value any)
-	AfterRunOnStartupChanged       func(enabled bool) error
-	AfterLanguageChanged           func(language string)
-	AfterAutoUpdateModeChanged     func(mode string)
-	AfterIncludePrereleaseChanged  func(enabled bool)
-	AfterLogLevelChanged           func(level string)
-	AfterPowerSaveBlockChanged     func()
-	AfterBandwidthLimitChanged     func(mibps int)
-	AfterOpenConsoleChanged        func(enabled bool)
-	AfterPersistTogglesChanged     func(enabled bool)
-	AfterNamespaceIsolationChanged func(enabled bool)
-	AfterElevatedHelperChanged     func(enabled bool)
-	AfterRendererReload            func()
+	AfterSet                      func(key string, value any)
+	AfterRunOnStartupChanged      func(enabled bool) error
+	AfterLanguageChanged          func(language string)
+	AfterAutoUpdateModeChanged    func(mode string)
+	AfterIncludePrereleaseChanged func(enabled bool)
+	AfterLogLevelChanged          func(level string)
+	AfterPowerSaveBlockChanged    func()
+	AfterBandwidthLimitChanged    func(mibps int)
+	AfterOpenConsoleChanged       func(enabled bool)
+	AfterPersistTogglesChanged    func(enabled bool)
+	AfterElevatedHelperChanged    func(enabled bool)
+	AfterRendererReload           func()
 }
 
 func (h Hooks) elevatedHelperChanged(enabled bool) {
@@ -82,12 +81,6 @@ func (h Hooks) openConsoleChanged(enabled bool) {
 func (h Hooks) persistTogglesChanged(enabled bool) {
 	if h.AfterPersistTogglesChanged != nil {
 		h.AfterPersistTogglesChanged(enabled)
-	}
-}
-
-func (h Hooks) namespaceIsolationChanged(enabled bool) {
-	if h.AfterNamespaceIsolationChanged != nil {
-		h.AfterNamespaceIsolationChanged(enabled)
 	}
 }
 

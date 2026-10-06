@@ -75,7 +75,6 @@ export interface AppSettings {
     "modelViewer.toonShadows": boolean;
 
     "xxmi.persistToggles": boolean;
-    "xxmi.namespaceIsolation": boolean;
     "xxmi.root": string;
     "xxmi.autoUpdate": AutoUpdateMode;
     "xxmi.includePrereleases": boolean;
@@ -388,11 +387,6 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.persistToggles",
         scope: "xxmi",
         storageKey: "xxmi_persist_toggles",
-    },
-    "xxmi.namespaceIsolation": {
-        publicKey: "xxmi.namespaceIsolation",
-        scope: "xxmi",
-        storageKey: "xxmi_namespace_isolation",
     },
     "xxmi.root": {
         publicKey: "xxmi.root",
