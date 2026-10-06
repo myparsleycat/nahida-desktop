@@ -1,5 +1,5 @@
 .tmp
-local.db*
+*.db
 .task
 bin
 node_modules
