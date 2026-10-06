@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/sync/errgroup"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
@@ -658,7 +659,7 @@ const testUploadPartSize = 16 * 1024
 
 type uploadPartsTest struct {
 	parts   int
-	slots   partSlots
+	limiter *partLimiter
 	timeout time.Duration
 	now     func() time.Time
 }
@@ -687,7 +688,7 @@ func uploadTestParts(t *testing.T, test uploadPartsTest, handler http.HandlerFun
 	var progress atomic.Int64
 	err := drive.uploadParts(t.Context(), UploadPlanEntry{URL: server.URL}, FinalUploadFile{
 		UploadFile: UploadFile{Name: "parts.bin", FullPath: filepath.ToSlash(path), Size: size},
-	}, rules, false, test.slots, func(bytes int64) { progress.Add(bytes) })
+	}, rules, false, test.limiter, func(bytes int64) { progress.Add(bytes) })
 	return progress.Load(), err
 }
 
@@ -711,7 +712,10 @@ func TestUploadPartsSendsFirstPartAloneThenInParallel(t *testing.T) {
 		want   int32
 	}{
 		"file limit": {upload: uploadPartsTest{parts: 5}, want: maxMultipartUploadConcurrency},
-		"run slots":  {upload: uploadPartsTest{parts: 5, slots: make(partSlots, 2)}, want: 2},
+		"run slots": {
+			upload: uploadPartsTest{parts: 5, limiter: &partLimiter{slots: make(chan struct{}, 2)}},
+			want:   2,
+		},
 		"slow first part": {
 			upload: uploadPartsTest{parts: 5, timeout: 100 * time.Second, now: steppedClock(20 * time.Second)},
 			want:   2,
@@ -848,6 +852,66 @@ func TestUploadPartsRetriesPartAlone(t *testing.T) {
 	}
 	if firstTry.Load() != 2 || retryPeers.Load() != 0 || progress != 6*testUploadPartSize {
 		t.Fatalf("tries = %d, retry peers = %d, progress = %d", firstTry.Load(), retryPeers.Load(), progress)
+	}
+}
+
+func TestUploadPartsSendsFirstAndRetriedPartsAloneAcrossRun(t *testing.T) {
+	t.Parallel()
+	var active, alonePeers, retried atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		if strings.HasSuffix(request.URL.Path, "/complete") {
+			_, _ = io.WriteString(w, `{}`)
+			return
+		}
+		alone := strings.HasSuffix(request.URL.Path, "/parts/0")
+		if request.URL.Path == "/a/parts/1" {
+			if retried.Add(1) == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			alone = true
+		}
+
+		current := active.Add(1)
+		time.Sleep(5 * time.Millisecond)
+		if alone {
+			time.Sleep(15 * time.Millisecond)
+			peers := max(current, active.Load()) - 1
+			for seen := alonePeers.Load(); peers > seen && !alonePeers.CompareAndSwap(seen, peers); seen = alonePeers.Load() {
+			}
+		}
+		active.Add(-1)
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	t.Cleanup(server.Close)
+	drive := withUploadRules(NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: server.Client(),
+			Status:     infra.BackendOnline,
+		}),
+		Sleep: func(context.Context, time.Duration) error { return nil },
+	}), testUploadRules())
+
+	const parts = 8
+	size := int64(parts) * testUploadPartSize
+	rules := testUploadRules()
+	rules.Parts.MaxBytes = testUploadPartSize
+	limiter := newPartLimiter()
+	var group errgroup.Group
+	for _, name := range []string{"a", "b"} {
+		path := writeUploadContent(t, name+".bin", bytes.Repeat([]byte("x"), int(size)))
+		group.Go(func() error {
+			return drive.uploadParts(t.Context(), UploadPlanEntry{URL: server.URL + "/" + name}, FinalUploadFile{
+				UploadFile: UploadFile{Name: name + ".bin", FullPath: filepath.ToSlash(path), Size: size},
+			}, rules, false, limiter, nil)
+		})
+	}
+	if err := group.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if retried.Load() != 2 || alonePeers.Load() != 0 {
+		t.Fatalf("tries = %d, peers of a part sent alone = %d", retried.Load(), alonePeers.Load())
 	}
 }
 

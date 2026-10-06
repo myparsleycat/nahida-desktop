@@ -262,7 +262,7 @@ func (d *Drive) uploadParts(
 	file FinalUploadFile,
 	rules UploadRules,
 	recoverable bool,
-	slots partSlots,
+	limiter *partLimiter,
 	onProgress func(int64),
 ) (returnErr error) {
 	sourcePath := filepath.FromSlash(file.FullPath)
@@ -299,8 +299,11 @@ func (d *Drive) uploadParts(
 	// A retried part is sent alone: parts sent together share the uplink, so
 	// one that ran out of time beside the others gets all of it back.
 	// The same goes for every part once one has timed out: the first part's
-	// time no longer describes the uplink.
-	var retryGate sync.RWMutex
+	// time no longer describes the uplink. The first part is sent alone too, so
+	// its time measures the uplink and not the other files of the run.
+	if limiter == nil {
+		limiter = newPartLimiter()
+	}
 	var timedOut atomic.Bool
 	soloElapsed := time.Duration(0)
 	sendPart := func(ctx context.Context, index int) (bool, error) {
@@ -308,15 +311,8 @@ func (d *Drive) uploadParts(
 		size := min(partSize, file.Size-start)
 		partURL := fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index)
 		for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
-			unlock := retryGate.RUnlock
-			if attempt == 0 && !timedOut.Load() {
-				retryGate.RLock()
-			} else {
-				retryGate.Lock()
-				unlock = retryGate.Unlock
-			}
-			if err := slots.acquire(ctx); err != nil {
-				unlock()
+			release, err := limiter.acquire(ctx, index == 0 || attempt > 0 || timedOut.Load())
+			if err != nil {
 				return false, err
 			}
 			// The transport can still read the body after the request returned;
@@ -352,8 +348,7 @@ func (d *Drive) uploadParts(
 			if index == 0 {
 				soloElapsed = d.now().Sub(began)
 			}
-			slots.release()
-			unlock()
+			release()
 			reportMu.Lock()
 			settled = true
 			reportMu.Unlock()
@@ -629,25 +624,38 @@ func multipartRequestSize(fields [][2]string, fileSize int64, filename, fieldNam
 	return int64(len(prefix)) + fileSize + int64(len(suffix)), nil
 }
 
-// partSlots bounds the part requests in flight across one upload run. A nil
-// value bounds nothing.
-type partSlots chan struct{}
-
-func (s partSlots) acquire(ctx context.Context) error {
-	if s == nil {
-		return ctx.Err()
-	}
-	select {
-	case s <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+// partLimiter bounds the part requests in flight across one upload run and
+// lets one of them have the uplink to itself.
+type partLimiter struct {
+	gate  sync.RWMutex
+	slots chan struct{}
 }
 
-func (s partSlots) release() {
-	if s != nil {
-		<-s
+func newPartLimiter() *partLimiter {
+	return &partLimiter{slots: make(chan struct{}, maxMultipartUploadConcurrency)}
+}
+
+// acquire waits for a slot and answers the function that gives it back. An
+// alone request waits until no other part of the run is in flight and keeps the
+// others out until it is released.
+func (l *partLimiter) acquire(ctx context.Context, alone bool) (func(), error) {
+	unlock := l.gate.RUnlock
+	if alone {
+		l.gate.Lock()
+		unlock = l.gate.Unlock
+	} else {
+		l.gate.RLock()
+	}
+
+	select {
+	case l.slots <- struct{}{}:
+		return func() {
+			<-l.slots
+			unlock()
+		}, nil
+	case <-ctx.Done():
+		unlock()
+		return nil, ctx.Err()
 	}
 }
 
