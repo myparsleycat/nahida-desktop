@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -461,20 +463,64 @@ func (x *XXMI) SetImporterVersions(ctx context.Context, key string, versions Imp
 	return x.SaveImporterConfig(ctx, key, cfg)
 }
 
-// SetSharedLibsVersion selects the XXMI libraries version for importers that follow the shared version.
-// An empty version follows the latest release.
+// SetSharedLibsVersion selects the XXMI libraries version for importers that follow the shared version: a
+// release of the shared provider. An empty version follows the latest release.
 func (x *XXMI) SetSharedLibsVersion(ctx context.Context, version string) error {
 	client, err := x.settingsClient()
 	if err != nil {
 		return err
 	}
 	version = normalizeVersion(version)
+
+	// A provider selection in progress moves the shared version too.
+	x.libsProviderMu.Lock()
+	defer x.libsProviderMu.Unlock()
 	if version != "" {
+		providers, err := x.sharedVersionProviders(ctx, client)
+		if err != nil {
+			return err
+		}
+		for _, provider := range providers {
+			if err := x.EnsureLibsProvider(ctx, provider, version); err != nil {
+				return err
+			}
+		}
 		if err := x.EnsureLibsVersion(ctx, version); err != nil {
 			return err
 		}
 	}
 	return client.Settings.Upsert(ctx, sharedLibsVersionKey, &version)
+}
+
+// sharedVersionProviders lists the providers that deploy the shared libraries version: the shared provider and
+// the one of every enabled importer that follows the shared version. Each of them needs a release for it.
+func (x *XXMI) sharedVersionProviders(ctx context.Context, client *db.Client) ([]string, error) {
+	shared, err := x.sharedLibsProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
+	providers := []string{shared.id}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		cfg, err := x.GetImporterConfig(ctx, row.Key)
+		if err != nil {
+			return nil, err
+		}
+		if !cfg.Enabled || cfg.XXMIVersion.Follow != followShared {
+			continue
+		}
+		provider, err := x.deployedLibsProvider(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Contains(providers, provider.id) {
+			providers = append(providers, provider.id)
+		}
+	}
+	return providers, nil
 }
 
 // libsPin returns the XXMI libraries version an importer is held to, or "" when it follows the latest release.

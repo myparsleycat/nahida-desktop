@@ -90,8 +90,9 @@ export function XXMIDashboard() {
     retry: false,
   });
   const { data: libsReleases } = useQuery({
-    queryKey: ["xxmi:libs-releases"],
-    queryFn: () => XXMI.ListReleases("xxmi-libs"),
+    queryKey: ["xxmi:libs-releases", overview?.sharedLibsProvider],
+    queryFn: () => XXMI.GetLibsProviderReleases(overview?.sharedLibsProvider ?? ""),
+    enabled: !!overview?.sharedLibsProvider,
     staleTime: 60 * 60 * 1000,
     retry: false,
   });

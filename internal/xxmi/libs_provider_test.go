@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -151,11 +152,11 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	}
 
 	// A verified copy is reused, and a damaged one is replaced by the release it came from.
-	if err := service.EnsureLibsProvider(ctx, "myparsleycat"); err != nil || downloads.Load() != 1 {
+	if err := service.EnsureLibsProvider(ctx, "myparsleycat", ""); err != nil || downloads.Load() != 1 {
 		t.Fatalf("repeat ensure downloaded %d times, err = %v", downloads.Load(), err)
 	}
 	writeTestFile(t, cached, []byte("damaged"))
-	if err := service.EnsureLibsProvider(ctx, "myparsleycat"); err != nil || downloads.Load() != 2 {
+	if err := service.EnsureLibsProvider(ctx, "myparsleycat", ""); err != nil || downloads.Load() != 2 {
 		t.Fatalf("repair downloaded %d times, err = %v", downloads.Load(), err)
 	}
 	if data, err := os.ReadFile(cached); err != nil || !bytes.Equal(data, latest) {
@@ -170,7 +171,7 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	}
 	writeTestFile(t, cached, forged)
 	writeTestFile(t, filepath.Join(providerTestCache(t, "0.2.0"), providerDLLMetadata), metadata)
-	if err := service.EnsureLibsProvider(ctx, "myparsleycat"); err != nil || downloads.Load() != 3 {
+	if err := service.EnsureLibsProvider(ctx, "myparsleycat", ""); err != nil || downloads.Load() != 3 {
 		t.Fatalf("forged entry downloaded %d times, err = %v", downloads.Load(), err)
 	}
 	if data, err := os.ReadFile(cached); err != nil || !bytes.Equal(data, latest) {
@@ -466,7 +467,7 @@ func TestFirstProviderDeploymentKeepsCachedRelease(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		version, err := service.resolveProviderDLLVersion(ctx, spec, t.TempDir())
+		version, err := service.resolveProviderDLLVersion(ctx, spec, "", t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -636,9 +637,18 @@ func TestCheckUpdatesTracksProviderDLL(t *testing.T) {
 		!status.Available || status.Shared {
 		t.Fatalf("status before install = %+v", status)
 	}
-	installed, err := service.InstallUpdates(ctx, "GIMI", []string{providerTestPackage})
-	if err != nil || !slices.Contains(installed, providerTestPackage) || downloads.Load() != 1 {
+
+	// The signed libraries the release deploys over cannot be downloaded here, so nothing is installed.
+	if installed, err := service.InstallUpdates(
+		ctx,
+		"GIMI",
+		[]string{providerTestPackage},
+	); err == nil || len(installed) != 0 || downloads.Load() != 0 {
 		t.Fatalf("installed = %v, downloads = %d, err = %v", installed, downloads.Load(), err)
+	}
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+		t.Fatal(err)
 	}
 
 	// The cached release is deployed by the next launch, so it is not announced again.
@@ -667,5 +677,308 @@ func TestCheckUpdatesTracksProviderDLL(t *testing.T) {
 	}
 	if err := service.SkipVersion(ctx, providerTestPackage, "0.2.0"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProviderReleasePinsSignedLibraries(t *testing.T) {
+	ctx := context.Background()
+	newest, first, old := testCustomDLLImage("1.2.2-nhd.2"), testCustomDLLImage("1.2.2-nhd.1"),
+		testCustomDLLImage("1.2.0-nhd.1")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.2", data: newest, digest: providerTestDigest(newest)},
+		{tag: "v1.2.2-nhd.1", data: first, digest: providerTestDigest(first)},
+		{tag: "v1.2.0-nhd.1", data: old, digest: providerTestDigest(old)},
+	})
+	for version, signed := range map[string]string{
+		"v1.2.2-nhd.1": "1.2.2", "1.2.2": "1.2.2", "1.3.0-rc1": "1.3.0-rc1", "": "",
+	} {
+		if got := signedLibsVersion(version); got != signed {
+			t.Fatalf("signed libraries of %q = %q, want %q", version, got, signed)
+		}
+	}
+
+	releases, err := service.GetLibsProviderReleases(ctx, "myparsleycat")
+	if err != nil || len(releases) != 3 || releases[0].Version != "1.2.2-nhd.2" {
+		t.Fatalf("fork releases = %+v, err = %v", releases, err)
+	}
+	if _, err := service.GetLibsProviderReleases(ctx, "nobody"); err == nil {
+		t.Fatal("an unknown provider listed releases")
+	}
+
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.LibsProvider = true, "myparsleycat"
+	for pin, want := range map[string][2]string{
+		// A fork release deploys over the signed libraries it was built on.
+		"1.2.0-nhd.1": {"1.2.0-nhd.1", "1.2.0"},
+		// A signed version stands for the newest fork release built on it.
+		"1.2.2": {"1.2.2-nhd.2", "1.2.2"},
+		// Following the latest fork release keeps the signed libraries at its base.
+		"": {"1.2.2-nhd.2", "1.2.2"},
+	} {
+		cfg.XXMIVersion = VersionPin{Pinned: pin}
+		if pin == "" {
+			cfg.XXMIVersion = VersionPin{Follow: "latest"}
+		}
+		spec, err := service.libsProvider(ctx, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dll, err := service.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+		if err != nil || dll != want[0] {
+			t.Fatalf("fork release for pin %q = %q, err = %v", pin, dll, err)
+		}
+		if signed, err := service.resolveLibsVersion(ctx, cfg); err != nil || signed != want[1] {
+			t.Fatalf("signed libraries for pin %q = %q, err = %v", pin, signed, err)
+		}
+	}
+	cfg.XXMIVersion = VersionPin{Pinned: "1.1.7"}
+	if version, err := service.resolveLibsVersion(ctx, cfg); err == nil {
+		t.Fatalf("signed libraries without a fork release resolved to %q", version)
+	}
+
+	// A pinned fork importer follows only the fork's releases, and its pin holds the update back.
+	cfg.XXMIVersion = VersionPin{Pinned: "1.2.0-nhd.1"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := service.CheckUpdates(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range statuses {
+		switch status.Package {
+		case "xxmi-libs":
+			t.Fatalf("fork importer follows the signed libraries: %+v", status)
+		case providerTestPackage:
+			if !status.Pinned || status.Installed != "1.2.0-nhd.1" || status.LatestVersion != "1.2.2-nhd.2" {
+				t.Fatalf("pinned fork status = %+v", status)
+			}
+		}
+	}
+
+	sharedVersion := func() string {
+		t.Helper()
+		stored, err := client.Settings.GetValue(ctx, sharedLibsVersionKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored == nil {
+			return ""
+		}
+		return *stored
+	}
+	selectProvider := func(pinned, provider string) string {
+		t.Helper()
+		if err := client.Settings.Upsert(ctx, sharedLibsVersionKey, &pinned); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.SetSharedLibsProvider(ctx, provider); err != nil {
+			t.Fatal(err)
+		}
+		return sharedVersion()
+	}
+
+	// The shared version moves to the selected provider's release of the same signed libraries.
+	if got := selectProvider("1.2.2", "myparsleycat"); got != "1.2.2-nhd.2" {
+		t.Fatalf("shared version under the fork = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, "1.2.2-nhd.2"), customDLLName)); err != nil {
+		t.Fatalf("pinned fork release was not cached: %v", err)
+	}
+	if got := selectProvider("1.2.0-nhd.1", defaultLibsProvider); got != "1.2.0" {
+		t.Fatalf("shared version under the signed provider = %q", got)
+	}
+	if got := selectProvider("1.1.7", "myparsleycat"); got != "" {
+		t.Fatalf("shared version without a fork release = %q", got)
+	}
+}
+
+func TestProviderUpdateKeepsPinWithoutSignedLibraries(t *testing.T) {
+	ctx := context.Background()
+	newer, pinned := testCustomDLLImage("1.2.2-nhd.1"), testCustomDLLImage("1.2.0-nhd.1")
+	service, _, downloads := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.1", data: newer, digest: providerTestDigest(newer)},
+		{tag: "v1.2.0-nhd.1", data: pinned, digest: providerTestDigest(pinned)},
+	})
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.LibsProvider = true, "myparsleycat"
+	cfg.XXMIVersion = VersionPin{Pinned: "1.2.0-nhd.1", Notify: true}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The fake GitHub has no signed 1.2.2 libraries, which the newer fork release deploys over.
+	if _, err := service.InstallUpdates(ctx, "GIMI", []string{providerTestPackage}); err == nil {
+		t.Fatal("a fork update was installed without its signed libraries")
+	}
+	saved, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || saved.XXMIVersion.Pinned != "1.2.0-nhd.1" || downloads.Load() != 0 {
+		t.Fatalf("pin = %q, downloads = %d, err = %v", saved.XXMIVersion.Pinned, downloads.Load(), err)
+	}
+}
+
+func TestPruneLibsCacheKeepsProviderSignedLibraries(t *testing.T) {
+	ctx := context.Background()
+	latest := testCustomDLLImage("1.2.2-nhd.1")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.1", data: latest, digest: providerTestDigest(latest)},
+	})
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.LibsProvider = true, "myparsleycat"
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The importer still runs the signed 1.2.0 libraries, and the cached fork release moves the next launch
+	// to 1.2.2 while the signed releases are already at 1.3.0.
+	manifest, err := json.Marshal(runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, runtimeManifestName), manifest)
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	if err := service.ensureProviderDLL(ctx, spec, "1.2.2-nhd.1"); err != nil {
+		t.Fatal(err)
+	}
+	signedLatest, forkLatest := "1.3.0", "1.2.2-nhd.1"
+	for pkg, version := range map[string]*string{"xxmi-libs": &signedLatest, providerTestPackage: &forkLatest} {
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{Package: pkg, LatestVersion: version}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Join(root, "packages", "xxmi-libs")
+	for _, version := range []string{"1.1.7", "1.2.0", "1.2.2"} {
+		if err := os.MkdirAll(filepath.Join(parent, version), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, referenced, err := service.libsCacheReferences(ctx)
+	if err != nil || !referenced["1.2.2"].InUse || !referenced["1.2.0"].Referenced {
+		t.Fatalf("references = %+v, err = %v", referenced, err)
+	}
+	removed, err := service.PruneLibsCache(ctx)
+	if err != nil || !slices.Equal(removed, []string{"1.1.7"}) {
+		t.Fatalf("pruned libraries = %v, err = %v", removed, err)
+	}
+}
+
+func TestSharedProviderSelectionMovesImporterPins(t *testing.T) {
+	ctx := context.Background()
+	newest, first := testCustomDLLImage("1.2.2-nhd.2"), testCustomDLLImage("1.2.2-nhd.1")
+	service, _, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.2", data: newest, digest: providerTestDigest(newest)},
+		{tag: "v1.2.2-nhd.1", data: first, digest: providerTestDigest(first)},
+	})
+	for key, pin := range map[string]VersionPin{
+		"GIMI": {Pinned: "1.2.2", Notify: true},
+		"SRMI": {Pinned: "1.1.7"},
+	} {
+		cfg, err := DefaultImporterConfig(key, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Mode, cfg.XXMIVersion = RuntimeXXMI, pin
+		if err := service.SaveImporterConfig(ctx, key, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pin := func(key string) VersionPin {
+		t.Helper()
+		cfg, err := service.GetImporterConfig(ctx, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg.XXMIVersion
+	}
+
+	// An importer's own pin moves with the shared provider it follows, like the shared version does.
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pin("GIMI"); got != (VersionPin{Pinned: "1.2.2-nhd.2", Notify: true}) {
+		t.Fatalf("pin under the fork = %+v", got)
+	}
+	if got := pin("SRMI"); got != (VersionPin{Follow: "latest"}) {
+		t.Fatalf("pin without a fork release = %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, "1.2.2-nhd.2"), customDLLName)); err != nil {
+		t.Fatalf("moved pin's fork release was not cached: %v", err)
+	}
+
+	if err := service.SetSharedLibsProvider(ctx, defaultLibsProvider); err != nil {
+		t.Fatal(err)
+	}
+	if got := pin("GIMI"); got != (VersionPin{Pinned: "1.2.2", Notify: true}) {
+		t.Fatalf("pin under the signed provider = %+v", got)
+	}
+}
+
+func TestSharedLibsVersionNeedsReleaseOfFollowingProviders(t *testing.T) {
+	ctx := context.Background()
+	latest := testCustomDLLImage("1.2.2-nhd.1")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.1", data: latest, digest: providerTestDigest(latest)},
+	})
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.Mode, cfg.LibsProvider = true, RuntimeXXMI, "myparsleycat"
+	cfg.XXMIVersion = VersionPin{Follow: followShared}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The shared provider is the signed one, but the importer deploys the fork over the shared version.
+	err = service.SetSharedLibsVersion(ctx, "1.1.7")
+	if err == nil || !strings.Contains(err.Error(), providerTestPackage) {
+		t.Fatalf("shared version without a fork release: err = %v", err)
+	}
+	if stored, err := client.Settings.GetValue(ctx, sharedLibsVersionKey); err != nil || stored != nil {
+		t.Fatalf("rejected shared version was stored: %v, err = %v", stored, err)
+	}
+}
+
+func TestCheckUpdatesComparesSignedLibrariesOfProviderPin(t *testing.T) {
+	ctx := context.Background()
+	service, client, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.Mode = true, RuntimeXXMI
+	cfg.XXMIVersion = VersionPin{Pinned: "1.2.2-nhd.1", Notify: true}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	latest := "1.2.2"
+	if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+		Package: "xxmi-libs", LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A pin left from the fork deploys the signed 1.2.2 libraries under the signed provider.
+	statuses, err := service.CheckUpdates(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := slices.IndexFunc(statuses, func(status UpdateStatus) bool { return status.Package == "xxmi-libs" })
+	if index < 0 || statuses[index].Installed != "1.2.2" || statuses[index].Available {
+		t.Fatalf("statuses = %+v", statuses)
 	}
 }

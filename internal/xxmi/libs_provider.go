@@ -1,6 +1,7 @@
 package xxmi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,9 @@ type libsProviderSpec struct {
 	// overlayPackage names the package of a provider that ships only d3d11.dll. It is deployed over the
 	// signed SpectrumQT package, which still supplies the loader and the compiler.
 	overlayPackage string
+	// versionMark separates the signed libraries version a provider release is built on from the provider's
+	// own revision, as in "1.2.2-nhd.1".
+	versionMark string
 }
 
 var libsProviders = []libsProviderSpec{
@@ -37,6 +41,7 @@ var libsProviders = []libsProviderSpec{
 		id:             "myparsleycat",
 		repo:           github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
 		overlayPackage: "xxmi-libs-myparsleycat",
+		versionMark:    "-nhd.",
 	},
 }
 
@@ -84,6 +89,30 @@ func lookupOverlayPackage(pkg string) (libsProviderSpec, bool) {
 	return libsProviderSpec{}, false
 }
 
+// signedLibsVersion returns the signed SpectrumQT libraries a libraries version deploys: the release a
+// provider version is built on, or the version itself.
+func signedLibsVersion(version string) string {
+	version = normalizeVersion(version)
+	for _, spec := range libsProviders {
+		if spec.versionMark == "" {
+			continue
+		}
+		if signed, _, ok := strings.Cut(version, spec.versionMark); ok && signed != "" {
+			return signed
+		}
+	}
+	return version
+}
+
+// GetLibsProviderReleases lists the libraries versions an importer of the provider can be held to.
+func (x *XXMI) GetLibsProviderReleases(ctx context.Context, provider string) ([]ReleaseInfo, error) {
+	spec, ok := lookupLibsProvider(strings.TrimSpace(provider))
+	if !ok {
+		return nil, fmt.Errorf("unknown XXMI libraries provider %q", provider)
+	}
+	return x.ListReleases(ctx, cmp.Or(spec.overlayPackage, "xxmi-libs"))
+}
+
 // SetSharedLibsProvider selects the XXMI libraries provider for importers that do not choose their own.
 // The provider's libraries are cached first, so a provider that cannot be downloaded is not selected.
 func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) error {
@@ -96,20 +125,84 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) error
 	// The download can take a while, and a later selection must not be overwritten when it finishes.
 	x.libsProviderMu.Lock()
 	defer x.libsProviderMu.Unlock()
-	if err := x.EnsureLibsProvider(ctx, provider); err != nil {
+
+	// The shared version names a release of the provider it was picked from, so it moves along with the
+	// provider: to the release built on the same signed libraries, or back to following the latest one.
+	stored, err := client.Settings.GetValue(ctx, sharedLibsVersionKey)
+	if err != nil {
 		return err
+	}
+	pinned, version := "", ""
+	if stored != nil {
+		pinned = normalizeVersion(*stored)
+	}
+	spec, known := lookupLibsProvider(provider)
+	if known && pinned != "" {
+		if version, err = x.providerPin(ctx, spec, pinned); err != nil {
+			return err
+		}
+	}
+	if err := x.EnsureLibsProvider(ctx, provider, version); err != nil {
+		return err
+	}
+
+	// An importer that follows the shared provider but pins its own version holds a release of it as well.
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		cfg, err := x.GetImporterConfig(ctx, row.Key)
+		if err != nil {
+			return err
+		}
+		own := normalizeVersion(cfg.XXMIVersion.Pinned)
+		if cfg.Mode != RuntimeXXMI || cfg.LibsProvider != "" || own == "" {
+			continue
+		}
+
+		// A user-provided DLL deploys over the signed libraries, which a pin of either provider names.
+		custom, err := x.launchesCustomDLL(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		if custom {
+			continue
+		}
+		moved, err := x.providerPin(ctx, spec, own)
+		if err != nil {
+			return err
+		}
+		if moved == own {
+			continue
+		}
+		if err := x.EnsureLibsProvider(ctx, provider, moved); err != nil {
+			return err
+		}
+		cfg.XXMIVersion.Pinned = moved
+		if moved == "" {
+			cfg.XXMIVersion = VersionPin{Follow: "latest"}
+		}
+		if err := x.SaveImporterConfig(ctx, row.Key, cfg); err != nil {
+			return err
+		}
+	}
+	if version != pinned {
+		if err := client.Settings.Upsert(ctx, sharedLibsVersionKey, &version); err != nil {
+			return err
+		}
 	}
 	return client.Settings.Upsert(ctx, sharedLibsProviderKey, &provider)
 }
 
 // EnsureLibsProvider caches the libraries a provider adds to the signed package, so the next launch deploys
-// them without downloading.
-func (x *XXMI) EnsureLibsProvider(ctx context.Context, provider string) (returnErr error) {
+// them without downloading. An empty pin caches the release an importer following the latest one deploys.
+func (x *XXMI) EnsureLibsProvider(ctx context.Context, provider, pin string) (returnErr error) {
 	stage, version := "resolve-provider", ""
 	defer func() {
 		returnErr = infra.ReportError(x.log, returnErr, "XXMI.EnsureLibsProvider", infra.Diagnostic{
 			Operation: "ensure-libs-provider", Stage: stage,
-			Fields: map[string]any{"provider": provider, "version": version},
+			Fields: map[string]any{"provider": provider, "pin": pin, "version": version},
 		})
 	}()
 	spec, ok := lookupLibsProvider(provider)
@@ -121,7 +214,7 @@ func (x *XXMI) EnsureLibsProvider(ctx context.Context, provider string) (returnE
 	}
 
 	stage = "resolve-version"
-	version, err := x.resolveProviderDLLVersion(ctx, spec, "")
+	version, err := x.resolveProviderDLLVersion(ctx, spec, normalizeVersion(pin), "")
 	if err != nil {
 		return err
 	}
@@ -183,7 +276,11 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	if err != nil || spec.overlayPackage == "" {
 		return nil, err
 	}
-	version, err := x.resolveProviderDLLVersion(ctx, spec, cfg.ImporterFolder)
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
 	if err != nil {
 		return nil, err
 	}
@@ -201,16 +298,58 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	return &providerRuntimeDLL{source: spec.overlayPackage + "@" + version, data: data}, nil
 }
 
-// resolveProviderDLLVersion picks the provider release an importer deploys. It follows the latest release
-// with the same rules as the signed libraries: a skipped or not yet cached update keeps the deployed one.
+// providerPin moves a pinned libraries version to a provider: to the release built on the same signed
+// libraries, or to "" when the provider has none and the pin goes back to following the latest release.
+func (x *XXMI) providerPin(ctx context.Context, spec libsProviderSpec, pinned string) (string, error) {
+	if spec.overlayPackage == "" {
+		return signedLibsVersion(pinned), nil
+	}
+	return x.providerRelease(ctx, spec, pinned)
+}
+
+// providerRelease returns the provider release a pinned libraries version stands for: that release, or the
+// newest one built on the signed libraries the pin names. It is "" when the provider has neither.
+func (x *XXMI) providerRelease(ctx context.Context, spec libsProviderSpec, pin string) (string, error) {
+	if spec.versionMark != "" && strings.Contains(pin, spec.versionMark) {
+		return pin, nil
+	}
+	releases, err := x.ListReleases(ctx, spec.overlayPackage)
+	if err != nil {
+		return "", err
+	}
+	signed, built := signedLibsVersion(pin), ""
+	for _, release := range releases {
+		if release.Version == pin {
+			return pin, nil
+		}
+		if built == "" && signedLibsVersion(release.Version) == signed {
+			built = release.Version
+		}
+	}
+	return built, nil
+}
+
+// resolveProviderDLLVersion picks the provider release an importer deploys: the pinned one, or else the
+// latest release with the same rules as the signed libraries, where a skipped or not yet cached update keeps
+// the deployed one.
 func (x *XXMI) resolveProviderDLLVersion(
 	ctx context.Context,
 	spec libsProviderSpec,
-	importerFolder string,
+	pin, importerFolder string,
 ) (string, error) {
 	client, err := x.settingsClient()
 	if err != nil {
 		return "", err
+	}
+	if pin != "" {
+		version, err := x.providerRelease(ctx, spec, pin)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s for XXMI libraries %s: %w", spec.overlayPackage, pin, err)
+		}
+		if version == "" {
+			return "", fmt.Errorf("%s has no release for XXMI libraries %s", spec.overlayPackage, pin)
+		}
+		return version, nil
 	}
 	deployed := providerDLLBaseVersion(importerFolder, spec)
 	cacheVerified := func(version string) bool { return x.verifiedProviderDLL(ctx, spec, version) }

@@ -60,14 +60,14 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			continue
 		}
 		packages["importer:"+row.Key] = struct{}{}
-		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
-			packages["xxmi-libs"] = struct{}{}
-		}
 		provider, err := x.deployedLibsProvider(ctx, cfg)
 		if err != nil {
 			return nil, err
 		}
 		providers[row.Key] = provider
+		if followsSignedLibs(cfg, provider) {
+			packages["xxmi-libs"] = struct{}{}
+		}
 		if provider.overlayPackage != "" {
 			packages[provider.overlayPackage] = struct{}{}
 		}
@@ -138,11 +138,11 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		status.Available = updateAvailable(status.LatestVersion, status.Installed, status.SkippedVersion)
 		statuses = append(statuses, status)
 
-		if cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg) {
-			pin, notify, err := x.libsPin(ctx, cfg)
-			if err != nil {
-				return nil, err
-			}
+		pin, notify, err := x.libsPin(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if followsSignedLibs(cfg, providers[row.Key]) {
 			libs := updateStatus(row.Key, "xxmi-libs", states["xxmi-libs"])
 			libs.Pinned = pin != "" && !notify
 			libs.Shared = cfg.XXMIVersion.Follow == followShared
@@ -166,7 +166,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			// A pin that still announces releases is compared by the pinned version itself, so moving the pin
 			// clears the notice before the next launch deploys it.
 			if notify {
-				libs.Installed = pin
+				libs.Installed = signedLibsVersion(pin)
 			}
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
 			statuses = append(statuses, libs)
@@ -175,11 +175,16 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		// A provider d3d11.dll is tracked beside the signed libraries it is deployed over.
 		if provider := providers[row.Key]; provider.overlayPackage != "" {
 			dll := updateStatus(row.Key, provider.overlayPackage, states[provider.overlayPackage])
+			dll.Pinned = pin != "" && !notify
 			dll.Shared = cfg.LibsProvider == ""
-			dll.Installed = cachedLibsVersion(
-				dll.LatestVersion, dll.SkippedVersion, providerDLLBaseVersion(cfg.ImporterFolder, provider),
-				func(version string) bool { return x.verifiedProviderDLL(ctx, provider, version) },
-			)
+			if pin == "" {
+				dll.Installed = cachedLibsVersion(
+					dll.LatestVersion, dll.SkippedVersion, providerDLLBaseVersion(cfg.ImporterFolder, provider),
+					func(version string) bool { return x.verifiedProviderDLL(ctx, provider, version) },
+				)
+			} else if version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder); err == nil {
+				dll.Installed = version
+			}
 			dll.Available = updateAvailable(dll.LatestVersion, dll.Installed, dll.SkippedVersion)
 			statuses = append(statuses, dll)
 		}
@@ -250,7 +255,7 @@ func newestCachedPackageVersion(pkg string) string {
 }
 
 func selectedLegacyInjectorVersion(pin string) string {
-	if version := normalizeVersion(pin); version != "" {
+	if version := signedLibsVersion(pin); version != "" {
 		return version
 	}
 	return newestCachedPackageVersion("xxmi-libs")
@@ -264,6 +269,14 @@ func updateAvailable(latest, installed, skipped string) bool {
 		return semver.Compare("v"+latest, "v"+installed) > 0
 	}
 	return true
+}
+
+// followsSignedLibs reports whether the importer's updates follow the signed libraries releases. Under a
+// provider d3d11.dll the signed libraries are the ones that release was built on, so only the provider's
+// releases are followed.
+func followsSignedLibs(cfg ImporterConfig, provider libsProviderSpec) bool {
+	return provider.overlayPackage == "" &&
+		(cfg.Mode == RuntimeXXMI || cfg.XXMIVersion.Pinned != "" || legacyUsesXXMIInjector(cfg))
 }
 
 func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
@@ -321,7 +334,7 @@ func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []st
 		provider, overlay := lookupOverlayPackage(status.Package)
 		switch {
 		case overlay:
-			err = x.ensureProviderDLL(ctx, provider, status.LatestVersion)
+			err = x.installProviderUpdate(ctx, status.Importer, provider, status.LatestVersion)
 		case strings.HasPrefix(status.Package, "importer:"):
 			err = x.InstallImporterPackage(ctx, InstallImporterPackageInput{
 				Importer: status.Importer, Version: status.LatestVersion,
@@ -356,6 +369,27 @@ func (x *XXMI) installLibsUpdate(ctx context.Context, importer, version string) 
 	if err := x.EnsureLibsVersion(ctx, version); err != nil {
 		return err
 	}
+	return x.moveLibsPin(ctx, importer, version)
+}
+
+// installProviderUpdate is installLibsUpdate for a provider release, cached together with the signed libraries
+// it deploys over.
+func (x *XXMI) installProviderUpdate(
+	ctx context.Context,
+	importer string,
+	provider libsProviderSpec,
+	version string,
+) error {
+	if err := x.EnsureLibsVersion(ctx, version); err != nil {
+		return err
+	}
+	if err := x.ensureProviderDLL(ctx, provider, version); err != nil {
+		return err
+	}
+	return x.moveLibsPin(ctx, importer, version)
+}
+
+func (x *XXMI) moveLibsPin(ctx context.Context, importer, version string) error {
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil || cfg.XXMIVersion.Pinned == "" {
 		return err
@@ -427,7 +461,8 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
 	targets := []string{}
 	for _, status := range statuses {
 		// A pinned XXMI libraries version only announces its update; moving the pin stays a manual choice.
-		if status.Package == "xxmi-libs" && cfg.XXMIVersion.Pinned != "" {
+		_, overlay := lookupOverlayPackage(status.Package)
+		if (status.Package == "xxmi-libs" || overlay) && cfg.XXMIVersion.Pinned != "" {
 			continue
 		}
 		if status.Importer == importer && status.Available && !status.Pinned {

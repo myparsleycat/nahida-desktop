@@ -356,7 +356,9 @@ it("lets an importer whose pinned package is missing be disabled and saved", asy
 
 afterEach(() => {
   cleanup();
+  config.mode = "xxmi";
   config.packageVersion = { follow: "latest" };
+  overview.sharedLibsProvider = "spectrumqt";
   xxmi.SaveImporterConfig.mockReset();
   xxmi.EnsureLibsVersion.mockReset();
   xxmi.EnsureLibsProvider.mockReset();
@@ -422,6 +424,45 @@ it("pins the importer's own XXMI version without update notices by default", asy
       expect.objectContaining({ xxmiVersion: { pinned: "1.7.6", notify: false } }),
     ),
   );
+  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("spectrumqt", "1.7.6");
+});
+
+it("follows the latest release again when the pinned version's provider changes", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  await chooseOption(/page.setting.xxmi.builtin.libsVersion/, "1.7.6");
+  await chooseOption(
+    /page.setting.xxmi.builtin.libsProvider/,
+    "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ libsProvider: "myparsleycat", xxmiVersion: { follow: "latest" } }),
+    ),
+  );
+  expect(xxmi.EnsureLibsVersion).not.toHaveBeenCalled();
+});
+
+it("pins a legacy importer's XXMI version to the signed libraries under a shared provider", async () => {
+  config.mode = "legacy";
+  overview.sharedLibsProvider = "myparsleycat";
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  await chooseOption(/page.setting.xxmi.builtin.libsVersion/, "1.7.6");
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+  await waitFor(() => expect(xxmi.SaveImporterConfig).toHaveBeenCalled());
+  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("spectrumqt", "1.7.6");
 });
 
 it("keeps switched-on update notices when another pinned XXMI version is chosen", async () => {
@@ -490,7 +531,7 @@ it("caches the importer's own libraries provider before saving it", async () => 
       expect.objectContaining({ libsProvider: "myparsleycat" }),
     ),
   );
-  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat");
+  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat", "");
 });
 
 it("leaves the draft unsaved when the importer's libraries provider cannot be cached", async () => {
@@ -505,7 +546,7 @@ it("leaves the draft unsaved when the importer's libraries provider cannot be ca
   );
   fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
 
-  await waitFor(() => expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat"));
+  await waitFor(() => expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat", ""));
   expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
 });
 

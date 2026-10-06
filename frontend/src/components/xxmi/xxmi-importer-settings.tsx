@@ -111,12 +111,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     queryFn: () => XXMI.GetImporterPackageVerification(importer),
     enabled: !!saved,
   });
-  const { data: libsReleases } = useQuery({
-    queryKey: ["xxmi:libs-releases"],
-    queryFn: () => XXMI.ListReleases("xxmi-libs"),
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  });
   const { data: cachedLibs } = useQuery({
     queryKey: ["xxmi:libs-cache"],
     queryFn: XXMI.ListCachedLibs,
@@ -128,6 +122,23 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
+  // A legacy runtime and a user-provided DLL deploy the default provider's signed libraries, so that is the
+  // provider whose releases their libraries version names.
+  const deployedLibsProvider = (cfg: ImporterConfig | null | undefined) => {
+    if (!cfg) return undefined;
+    const dll = cfg.xxmiVersion.follow === "shared" ? overview?.sharedCustomDll : cfg.customDll;
+    return cfg.mode === RuntimeMode.RuntimeXXMI && !(cfg.migoto.unsafeMode && (dll || customDll))
+      ? cfg.libsProvider || overview?.sharedLibsProvider
+      : libsProviders[0];
+  };
+  const libsProvider = deployedLibsProvider(config);
+  const { data: libsReleases } = useQuery({
+    queryKey: ["xxmi:libs-releases", libsProvider],
+    queryFn: () => XXMI.GetLibsProviderReleases(libsProvider ?? ""),
+    enabled: !!libsProvider,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
   const { data: legacyRuntimes } = useQuery({
     queryKey: ["xxmi:legacy-cache"],
     queryFn: XXMI.GetLegacyRuntimes,
@@ -179,11 +190,18 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       if (install) {
         await XXMI.InstallImporterPackage({ importer, ...install, config: next });
       } else {
-        if (next.xxmiVersion.pinned && next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
+        const pinChanged =
+          !!next.xxmiVersion.pinned && next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned;
+        if (next.xxmiVersion.pinned && pinChanged) {
           await XXMI.EnsureLibsVersion(next.xxmiVersion.pinned);
         }
-        if (next.libsProvider && next.libsProvider !== saved?.libsProvider) {
-          await XXMI.EnsureLibsProvider(next.libsProvider);
+        const provider = deployedLibsProvider(next);
+        if (provider && (pinChanged || provider !== deployedLibsProvider(saved))) {
+          await XXMI.EnsureLibsProvider(
+            provider,
+            (next.xxmiVersion.follow === "shared" ? sharedLibsVersion : next.xxmiVersion.pinned) ??
+              "",
+          );
         }
         await XXMI.SaveImporterConfig(importer, next);
       }
@@ -694,9 +712,20 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
                           })),
                         ]}
-                        onValueChange={(value) =>
-                          setConfig({ ...config, libsProvider: value === "shared" ? "" : value })
-                        }
+                        onValueChange={(value) => {
+                          const selected = value === "shared" ? "" : value;
+
+                          // A pinned version names a release of the provider it was picked from.
+                          const keepsPin =
+                            !config.xxmiVersion.pinned ||
+                            deployedLibsProvider({ ...config, libsProvider: selected }) ===
+                              libsProvider;
+                          setConfig({
+                            ...config,
+                            libsProvider: selected,
+                            xxmiVersion: keepsPin ? config.xxmiVersion : { follow: "latest" },
+                          });
+                        }}
                       />
                     )}
                     <SelectRow

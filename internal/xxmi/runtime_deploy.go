@@ -152,8 +152,21 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {
 	pin, _, err := x.libsPin(ctx, cfg)
-	if err != nil || pin != "" {
-		return pin, err
+	if err != nil {
+		return "", err
+	}
+
+	// A provider d3d11.dll is built for one signed release, which is the one deployed under it.
+	provider, err := x.deployedLibsProvider(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	if provider.overlayPackage != "" {
+		version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder)
+		return signedLibsVersion(version), err
+	}
+	if pin != "" {
+		return signedLibsVersion(pin), nil
 	}
 	deployed, _ := deployedLibsVersion(cfg.ImporterFolder)
 	x.mu.RLock()
