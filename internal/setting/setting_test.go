@@ -746,30 +746,6 @@ func TestPersistTogglesEnablesRunInBackground(t *testing.T) {
 	}
 }
 
-func TestNamespaceIsolationDefaultsOffAndNotifies(t *testing.T) {
-	t.Parallel()
-
-	var changed []bool
-	s, _ := openTemp(t, Options{Hooks: Hooks{AfterNamespaceIsolationChanged: func(enabled bool) {
-		changed = append(changed, enabled)
-	}}})
-	ctx := context.Background()
-	got, err := s.GetNamespaceIsolation(ctx)
-	if err != nil || got {
-		t.Fatalf("default = %v, %v", got, err)
-	}
-
-	if err := s.SetNamespaceIsolation(ctx, true); err != nil {
-		t.Fatalf("enable isolation: %v", err)
-	}
-	if raw := rawValue(t, s, "xxmi_namespace_isolation"); raw != "true" {
-		t.Fatalf("isolation stored %q", raw)
-	}
-	if len(changed) != 1 || !changed[0] {
-		t.Fatalf("hook calls = %v", changed)
-	}
-}
-
 func TestEveryAppSettingGetSetRoundTrip(t *testing.T) {
 	t.Parallel()
 

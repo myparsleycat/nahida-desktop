@@ -340,9 +340,6 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if usesPlatform {
 		platform.apply(&launchSpec, cfg)
 	}
-	if err := x.prepareNamespaceLaunch(ctx, key); err != nil {
-		return fmt.Errorf("final namespace preparation before launch: %w", err)
-	}
 	progress("inject-launch")
 	var result inject.LaunchResult
 	if cfg.GameLaunch == "Epic" {

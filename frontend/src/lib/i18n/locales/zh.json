@@ -2315,26 +2315,6 @@
         "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
         "persistLogs": "日志",
         "persistLogsEmpty": "暂无日志。",
-        "namespaceIsolation": {
-          "title": "namespace 冲突",
-          "description": "在安全的情况下自动隔离模组之间重复的 namespace。启用期间会定期扫描模组文件夹。",
-          "disabled": "启用切换状态持久化以隔离重复的 namespace。",
-          "checking": "正在检查 namespace…",
-          "empty": "未报告 namespace 冲突。",
-          "queryFailed": "无法加载 namespace 状态。",
-          "rescan": "重新扫描",
-          "rescanImporter": "重新扫描 {{importer}}",
-          "rescanFailed": "无法重新扫描 namespace。",
-          "reason": "原因",
-          "modPaths": "模组文件夹",
-          "iniPaths": "INI 文件",
-          "status": {
-            "waiting_for_game_exit": "等待游戏退出",
-            "needs_review": "需要检查",
-            "failed": "失败",
-            "recovery_required": "需要恢复"
-          }
-        },
         "dllVersion": "XXMI DLL 版本",
         "dllVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。",
         "dllVersionLoading": "正在加载版本...",

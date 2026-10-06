@@ -178,7 +178,7 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 		content = append(content, byte(unit), byte(unit>>8))
 	}
 	writeModFile(t, library, "RabbitFX.ini", string(content))
-	service.invalidateLibraries()
+	service.InvalidateLibraries()
 	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies with a disabled library = %#v, want %#v", got, want)
 	}
@@ -189,7 +189,7 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies before invalidation = %#v, want the cached %#v", got, want)
 	}
-	service.invalidateLibraries()
+	service.InvalidateLibraries()
 	want[0].Installed = true
 	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies with the library enabled = %#v, want %#v", got, want)

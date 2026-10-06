@@ -14,8 +14,7 @@ import (
 )
 
 func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
@@ -40,8 +39,7 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 //
 //wails:ignore
 func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
@@ -63,8 +61,7 @@ func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 //
 //wails:ignore
 func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	return m.disableWithShaders(ctx, modPath)
 }
@@ -73,8 +70,7 @@ func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, err
 //
 //wails:ignore
 func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
@@ -92,8 +88,7 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 }
 
 func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, modPath)
 	if err != nil {
@@ -174,8 +169,7 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 }
 
 func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, error) {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	if _, err := m.ownedPath(ctx, modPath); err != nil {
 		return "", err
@@ -213,8 +207,7 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 }
 
 func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, groupPath)
 	if err != nil {
@@ -247,8 +240,7 @@ func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 }
 
 func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
-	finishOperation := m.beginModOperation()
-	defer finishOperation()
+	defer m.InvalidateLibraries()
 
 	game, err := m.ownedPath(ctx, groupPath)
 	if err != nil {

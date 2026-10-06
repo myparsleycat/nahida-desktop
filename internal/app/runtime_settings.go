@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
@@ -22,49 +21,8 @@ func runtimeSettingHooks(
 	emit func(string, ...any),
 	syncModelViewerMenu func(language string),
 	elevatedHelperChanged func(enabled bool),
-	modServices ...*mod.Mod,
 ) setting.Hooks {
 	var persistTransition sync.Mutex
-	// Persistence changes restart both services in order. Isolation changes keep
-	// queued toggle saves alive; reconciliation suspends persistence only to mutate.
-	restart := func(action string, restartWatcher bool) {
-		persistTransition.Lock()
-		defer persistTransition.Unlock()
-
-		if len(modServices) > 0 && modServices[0] != nil {
-			mods := modServices[0]
-			if err := mods.StopNamespaceIsolation(); err != nil {
-				_ = infra.ReportError(log, err, action, infra.Diagnostic{
-					Operation: "namespace-isolation", Stage: "stop",
-				})
-			}
-			if restartWatcher && toolsService != nil {
-				toolsService.StopPersistWatcher()
-			}
-			if err := mods.StartNamespaceIsolation(context.Background()); err != nil {
-				_ = infra.ReportError(log, err, action, infra.Diagnostic{
-					Operation: "namespace-isolation", Stage: "start",
-				})
-			}
-		}
-		if !restartWatcher || toolsService == nil {
-			return
-		}
-		// StartPersistWatcher reads the current stored setting. A delayed callback
-		// must not override a newer transition using its stale boolean argument.
-		if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
-			_ = infra.ReportError(
-				log,
-				err,
-				action,
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticError,
-					Operation: action,
-					Stage:     "background",
-				},
-			)
-		}
-	}
 	return setting.Hooks{
 		AfterRunOnStartupChanged:   autostart,
 		AfterElevatedHelperChanged: elevatedHelperChanged,
@@ -124,10 +82,27 @@ func runtimeSettingHooks(
 			}
 		},
 		AfterPersistTogglesChanged: func(bool) {
-			restart("Setting.xxmi.persistToggles", true)
-		},
-		AfterNamespaceIsolationChanged: func(bool) {
-			restart("Setting.xxmi.namespaceIsolation", false)
+			if toolsService == nil {
+				return
+			}
+			persistTransition.Lock()
+			defer persistTransition.Unlock()
+
+			// StartPersistWatcher reads the current stored setting. A delayed callback
+			// must not override a newer transition using its stale boolean argument.
+			toolsService.StopPersistWatcher()
+			if err := toolsService.StartPersistWatcher(context.Background()); err != nil {
+				_ = infra.ReportError(
+					log,
+					err,
+					"Setting.xxmi.persistToggles",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "Setting.xxmi.persistToggles",
+						Stage:     "background",
+					},
+				)
+			}
 		},
 	}
 }

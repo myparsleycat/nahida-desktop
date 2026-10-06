@@ -116,11 +116,6 @@ func buildSpecs() map[string]spec {
 		s.opts.Hooks.elevatedHelperChanged(asBool(value))
 		return nil
 	}
-	namespaceIsolation := boolSpec(definitionsByKey[KeyXXMINamespaceIsolation], false)
-	namespaceIsolation.afterSet = func(s *Setting, _ context.Context, value any) error {
-		s.opts.Hooks.namespaceIsolationChanged(asBool(value))
-		return nil
-	}
 	specs := map[string]spec{
 		KeyGeneralRunOnStartup: runOnStartup,
 		KeyGeneralLanguage: {
@@ -539,7 +534,6 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
-		KeyXXMINamespaceIsolation: namespaceIsolation,
 		KeyXXMIRoot: {
 			def: definitionsByKey[KeyXXMIRoot],
 			getDefault: func(*Setting) any {

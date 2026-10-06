@@ -65,7 +65,7 @@ type Options struct {
 // subpackages; this type keeps the binding contract and wires them together.
 type Tools struct {
 	githubRate      *infra.GitHubRateCoordinator
-	reserveModFiles func() func()
+	modFilesChanged func()
 
 	bisect        *modbisect.Service
 	bodyShape     *bodyshape.Service
@@ -84,9 +84,9 @@ type Tools struct {
 func New() *Tools { return NewWithOptions(Options{}) }
 
 func NewWithOptions(opts Options) *Tools {
-	var reserveModFiles func() func()
-	if mods, ok := opts.Mod.(interface{ ReserveModFiles() func() }); ok {
-		reserveModFiles = mods.ReserveModFiles
+	var modFilesChanged func()
+	if mods, ok := opts.Mod.(interface{ InvalidateLibraries() }); ok {
+		modFilesChanged = mods.InvalidateLibraries
 	}
 	if opts.FS == nil {
 		opts.FS = platform.NewFS()
@@ -116,7 +116,7 @@ func NewWithOptions(opts Options) *Tools {
 	})
 	fixInspection.Register(zzmifixer.NewInspector(zzmi))
 	return &Tools{
-		reserveModFiles: reserveModFiles,
+		modFilesChanged: modFilesChanged,
 		githubRate:      opts.GitHubRate,
 		bisect: modbisect.NewWithOptions(modbisect.Options{
 			Log:       opts.Log,

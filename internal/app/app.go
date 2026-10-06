@@ -127,7 +127,6 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			emitAppEvent,
 			syncModelViewerMenu,
 			rt.configureElevatedHelper,
-			rt.mod,
 		),
 	)
 	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {

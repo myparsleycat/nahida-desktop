@@ -2315,26 +2315,6 @@
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
         "persistLogs": "ログ",
         "persistLogsEmpty": "まだログはありません。",
-        "namespaceIsolation": {
-          "title": "namespace の競合",
-          "description": "MOD 間の重複 namespace を、安全な場合に自動で分離します。有効な間は MOD フォルダーを定期的にスキャンします。",
-          "disabled": "重複 namespace を分離するには、トグル状態の永続保存を有効にしてください。",
-          "checking": "namespace を確認中…",
-          "empty": "namespace の競合は報告されていません。",
-          "queryFailed": "namespace の状態を取得できませんでした。",
-          "rescan": "再検査",
-          "rescanImporter": "{{importer}} を再検査",
-          "rescanFailed": "namespace を再検査できませんでした。",
-          "reason": "理由",
-          "modPaths": "MOD フォルダー",
-          "iniPaths": "INI ファイル",
-          "status": {
-            "waiting_for_game_exit": "ゲームの終了待ち",
-            "needs_review": "確認が必要",
-            "failed": "失敗",
-            "recovery_required": "復旧が必要"
-          }
-        },
         "dllVersion": "XXMI DLLバージョン",
         "dllVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
         "dllVersionLoading": "バージョンを読み込み中...",

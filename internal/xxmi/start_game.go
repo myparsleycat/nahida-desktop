@@ -3,12 +3,9 @@ package xxmi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"nahida.live/desktop/internal/infra"
 )
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
@@ -19,24 +16,6 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 	defer x.releaseImporter(importer)
 	x.setLaunching(importer, true)
 	defer x.setLaunching(importer, false)
-
-	x.mu.RLock()
-	prepare := x.namespaceLaunchPreparation
-	x.mu.RUnlock()
-	if prepare != nil {
-		if err := prepare(ctx, importer); err != nil {
-			return infra.ReportError(
-				x.log,
-				fmt.Errorf("prepare mod namespaces before launch: %w", err),
-				"XXMI:StartGame",
-				infra.Diagnostic{
-					Operation: "start-game",
-					Stage:     "namespace-preparation",
-					Fields:    map[string]any{"importerKey": importer},
-				},
-			)
-		}
-	}
 
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {
