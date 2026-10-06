@@ -8,25 +8,35 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
+	"golang.org/x/sync/errgroup"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
 const (
 	uploadRetryLimit    = 3
 	uploadCompleteLimit = 15 * time.Minute
+	uploadReadBlockSize = 4 * 1024 * 1024
 )
+
+// errUploadAlreadyCompleted stops the parts still in flight once the server
+// answers that it already holds the whole file.
+var errUploadAlreadyCompleted = errors.New("upload already completed")
 
 type uploadHTTPResult struct {
 	status  int
@@ -53,6 +63,51 @@ func (r *backupSourceReader) Read(buffer []byte) (int, error) {
 	return n, err
 }
 
+// diskGatedReader takes the shared disk slot for one block at a time instead of
+// for the whole request, so a part that waits on the network holds none. The
+// wait for a slot runs inside the request timeout, and a block keeps the part
+// from queueing behind other disk work once for every small read.
+type diskGatedReader struct {
+	ctx     context.Context
+	path    string
+	reader  io.Reader
+	block   []byte
+	pending []byte
+	err     error
+}
+
+func (r *diskGatedReader) Read(buffer []byte) (int, error) {
+	if len(r.pending) == 0 {
+		if r.err != nil {
+			return 0, r.err
+		}
+		if err := r.fill(); err != nil {
+			return 0, err
+		}
+	}
+	n := copy(buffer, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
+}
+
+func (r *diskGatedReader) fill() error {
+	release, err := diskio.Acquire(r.ctx, r.path)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	n, err := io.ReadFull(r.reader, r.block)
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		err = io.EOF
+	}
+	r.pending, r.err = r.block[:n], err
+	if n == 0 {
+		return err
+	}
+	return nil
+}
+
 func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
 	read, err := r.reader.Read(buffer)
 	if read > 0 && r.onProgress != nil {
@@ -72,14 +127,14 @@ func (d *Drive) uploadIntent(
 		return err
 	}
 	if file.Size >= rules.DirectUploadMaxLogicalBytes {
-		return d.uploadParts(ctx, upload, file, rules, false, onProgress)
+		return d.uploadParts(ctx, upload, file, rules, false, nil, onProgress)
 	}
 	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.Compression, rules.MaxUploadBodyBytes)
 	if err != nil {
 		return err
 	}
 	if useParts {
-		return d.uploadParts(ctx, upload, file, rules, false, onProgress)
+		return d.uploadParts(ctx, upload, file, rules, false, nil, onProgress)
 	}
 	return d.uploadPreparedDirect(ctx, upload, file, data, compression, false, onProgress)
 }
@@ -207,9 +262,11 @@ func (d *Drive) uploadParts(
 	file FinalUploadFile,
 	rules UploadRules,
 	recoverable bool,
+	slots partSlots,
 	onProgress func(int64),
 ) (returnErr error) {
-	handle, err := os.Open(filepath.FromSlash(file.FullPath))
+	sourcePath := filepath.FromSlash(file.FullPath)
+	handle, err := os.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("%w: open upload file %q: %w", ErrBackupSourceRead, file.Name, err)
 	}
@@ -219,78 +276,154 @@ func (d *Drive) uploadParts(
 		return &UploadV2Error{Code: "file_too_large", Message: file.Name + ": file_too_large"}
 	}
 	totalParts := uploadPartCount(file.Size, partSize)
+	// Parts report from several goroutines; onProgress never runs concurrently.
+	var reportMu sync.Mutex
 	reported := int64(0)
-	report := func(bytes int64) {
+	reportLocked := func(bytes int64) {
 		reported += bytes
 		if onProgress != nil {
 			onProgress(bytes)
 		}
+	}
+	report := func(bytes int64) {
+		reportMu.Lock()
+		defer reportMu.Unlock()
+		reportLocked(bytes)
 	}
 	defer func() {
 		if returnErr != nil && reported > 0 {
 			report(-reported)
 		}
 	}()
-	sendAllParts := func() (bool, error) {
-		for index := range totalParts {
-			start := int64(index) * partSize
-			size := min(partSize, file.Size-start)
-			completedEarly := false
-			for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
-				attemptReported := int64(0)
-				section := &backupSourceReader{reader: io.NewSectionReader(handle, start, size), remaining: size}
-				partURL := fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index)
-				result, sendErr := d.sendMultipart(ctx, partURL, http.MethodPut, multipartUpload{
-					fields: [][2]string{
-						{"token", upload.Form.Token},
-						{"totalParts", strconv.Itoa(totalParts)},
-					},
-					file:      section,
-					fileSize:  size,
-					filename:  file.Name,
-					fieldName: "file",
-					onProgress: func(bytes int64) {
-						attemptReported += bytes
-						report(bytes)
-					},
-				})
-				if sendErr != nil {
-					if attemptReported > 0 {
-						report(-attemptReported)
+
+	// A retried part is sent alone: parts sent together share the uplink, so
+	// one that ran out of time beside the others gets all of it back.
+	// The same goes for every part once one has timed out: the first part's
+	// time no longer describes the uplink.
+	var retryGate sync.RWMutex
+	var timedOut atomic.Bool
+	soloElapsed := time.Duration(0)
+	sendPart := func(ctx context.Context, index int) (bool, error) {
+		start := int64(index) * partSize
+		size := min(partSize, file.Size-start)
+		partURL := fmt.Sprintf("%s/parts/%d", strings.TrimRight(upload.URL, "/"), index)
+		for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
+			unlock := retryGate.RUnlock
+			if attempt == 0 && !timedOut.Load() {
+				retryGate.RLock()
+			} else {
+				retryGate.Lock()
+				unlock = retryGate.Unlock
+			}
+			if err := slots.acquire(ctx); err != nil {
+				unlock()
+				return false, err
+			}
+			// The transport can still read the body after the request returned;
+			// a settled attempt reports nothing more.
+			attemptReported := int64(0)
+			settled := false
+			section := &diskGatedReader{
+				ctx:    ctx,
+				path:   sourcePath,
+				reader: &backupSourceReader{reader: io.NewSectionReader(handle, start, size), remaining: size},
+				block:  make([]byte, min(size, uploadReadBlockSize)),
+			}
+			began := d.now()
+			result, sendErr := d.sendMultipart(ctx, partURL, http.MethodPut, multipartUpload{
+				fields: [][2]string{
+					{"token", upload.Form.Token},
+					{"totalParts", strconv.Itoa(totalParts)},
+				},
+				file:      section,
+				fileSize:  size,
+				filename:  file.Name,
+				fieldName: "file",
+				onProgress: func(bytes int64) {
+					reportMu.Lock()
+					defer reportMu.Unlock()
+					if settled {
+						return
 					}
-					if ctx.Err() != nil || errors.Is(sendErr, ErrBackupSourceRead) || attempt == uploadRetryLimit {
-						return false, sendErr
-					}
-					if sleepErr := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); sleepErr != nil {
-						return false, errors.Join(sendErr, sleepErr)
-					}
-					continue
-				}
-				if status, _ := result.payload["status"].(string); status == "completed" {
-					if reported < file.Size {
-						report(file.Size - reported)
-					}
-					completedEarly = true
-					break
-				}
-				if result.status >= 200 && result.status < 300 {
-					break
-				}
+					attemptReported += bytes
+					reportLocked(bytes)
+				},
+			})
+			if index == 0 {
+				soloElapsed = d.now().Sub(began)
+			}
+			slots.release()
+			unlock()
+			reportMu.Lock()
+			settled = true
+			reportMu.Unlock()
+
+			if sendErr != nil {
 				if attemptReported > 0 {
 					report(-attemptReported)
 				}
-				if !retryableUploadResult(result, recoverable) || attempt == uploadRetryLimit {
-					return false, uploadResultError(result)
+				if ctx.Err() != nil || errors.Is(sendErr, ErrBackupSourceRead) || attempt == uploadRetryLimit {
+					return false, sendErr
 				}
-				if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {
-					return false, err
+				var netErr net.Error
+				if errors.As(sendErr, &netErr) && netErr.Timeout() {
+					timedOut.Store(true)
 				}
+				if sleepErr := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); sleepErr != nil {
+					return false, errors.Join(sendErr, sleepErr)
+				}
+				continue
 			}
-			if completedEarly {
+			if status, _ := result.payload["status"].(string); status == "completed" {
 				return true, nil
 			}
+			if result.status >= 200 && result.status < 300 {
+				return false, nil
+			}
+			if attemptReported > 0 {
+				report(-attemptReported)
+			}
+			if !retryableUploadResult(result, recoverable) || attempt == uploadRetryLimit {
+				return false, uploadResultError(result)
+			}
+			if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {
+				return false, err
+			}
 		}
-		return false, nil
+		return false, errors.New("part upload exhausted retries")
+	}
+
+	// The first part goes alone and times the uplink; the rest are sent as many
+	// at once as that time leaves room for.
+	sendAllParts := func() (bool, error) {
+		if totalParts == 0 {
+			return false, nil
+		}
+		completed, err := sendPart(ctx, 0)
+		if err == nil && !completed && totalParts > 1 {
+			group, groupCtx := errgroup.WithContext(ctx)
+			group.SetLimit(partParallelism(soloElapsed, d.http.HTTPClient().Timeout))
+			for index := 1; index < totalParts && groupCtx.Err() == nil; index++ {
+				group.Go(func() error {
+					done, sendErr := sendPart(groupCtx, index)
+					if sendErr == nil && done {
+						return errUploadAlreadyCompleted
+					}
+					return sendErr
+				})
+			}
+			err = group.Wait()
+			if errors.Is(err, errUploadAlreadyCompleted) {
+				completed, err = true, nil
+			}
+		}
+		if err != nil {
+			return false, err
+		}
+		if completed && reported < file.Size {
+			report(file.Size - reported)
+		}
+		return completed, nil
 	}
 
 	completed, err := sendAllParts()
@@ -494,6 +627,38 @@ func multipartRequestSize(fields [][2]string, fileSize int64, filename, fieldNam
 		return 0, err
 	}
 	return int64(len(prefix)) + fileSize + int64(len(suffix)), nil
+}
+
+// partSlots bounds the part requests in flight across one upload run. A nil
+// value bounds nothing.
+type partSlots chan struct{}
+
+func (s partSlots) acquire(ctx context.Context) error {
+	if s == nil {
+		return ctx.Err()
+	}
+	select {
+	case s <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s partSlots) release() {
+	if s != nil {
+		<-s
+	}
+}
+
+// partParallelism answers how many parts to send at once after one part took
+// elapsed alone. Parts sent together share the uplink, so each of n takes about
+// n times as long and must still end well inside the request timeout.
+func partParallelism(elapsed, timeout time.Duration) int {
+	if elapsed <= 0 || timeout <= 0 {
+		return maxMultipartUploadConcurrency
+	}
+	return int(min(max(timeout/2/elapsed, 1), maxMultipartUploadConcurrency))
 }
 
 func uploadPartCount(fileSize, partSize int64) int {

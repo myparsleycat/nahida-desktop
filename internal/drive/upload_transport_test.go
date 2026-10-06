@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,7 +54,7 @@ func TestUploadPartsReportsWaitingAndResumesAfterDelayedResponse(t *testing.T) {
 	go func() {
 		done <- uploadTestDrive(server).uploadParts(ctx, UploadPlanEntry{URL: server.URL}, FinalUploadFile{
 			UploadFile: UploadFile{Name: "delayed.bin", FullPath: filepath.ToSlash(path), Size: 2 * partSize},
-		}, rules, false, func(bytes int64) { transferred.Add(bytes) })
+		}, rules, false, nil, func(bytes int64) { transferred.Add(bytes) })
 	}()
 	select {
 	case <-firstReceived:
@@ -119,6 +120,7 @@ func TestUploadSourceFailuresAreMarked(t *testing.T) {
 		file,
 		UploadRules{},
 		false,
+		nil,
 		nil,
 	); !errors.Is(
 		err,
@@ -639,7 +641,7 @@ func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
 	progress := int64(0)
 	if err := uploadTestDrive(server).uploadParts(context.Background(), upload, FinalUploadFile{
 		UploadFile: UploadFile{Name: "file.bin", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
-	}, testUploadRules(), false, func(bytes int64) { progress += bytes }); err != nil {
+	}, testUploadRules(), false, nil, func(bytes int64) { progress += bytes }); err != nil {
 		t.Fatal(err)
 	}
 	if partRequests.Load() != 2 || completeRequests.Load() != 2 || progress != int64(len(content)) {
@@ -649,5 +651,259 @@ func TestUploadPartsResendsAfterMissingManifest(t *testing.T) {
 			completeRequests.Load(),
 			progress,
 		)
+	}
+}
+
+const testUploadPartSize = 16 * 1024
+
+type uploadPartsTest struct {
+	parts   int
+	slots   partSlots
+	timeout time.Duration
+	now     func() time.Time
+}
+
+// uploadTestParts sends a file of the given number of parts to the handler and
+// answers the bytes reported once the upload returns.
+func uploadTestParts(t *testing.T, test uploadPartsTest, handler http.HandlerFunc) (int64, error) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client := *server.Client()
+	client.Timeout = test.timeout
+	drive := withUploadRules(NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			HTTPClient: &client,
+			Status:     infra.BackendOnline,
+		}),
+		Sleep: func(context.Context, time.Duration) error { return nil },
+		Now:   test.now,
+	}), testUploadRules())
+
+	size := int64(test.parts) * testUploadPartSize
+	path := writeUploadContent(t, "parts.bin", bytes.Repeat([]byte("x"), int(size)))
+	rules := testUploadRules()
+	rules.Parts.MaxBytes = testUploadPartSize
+	var progress atomic.Int64
+	err := drive.uploadParts(t.Context(), UploadPlanEntry{URL: server.URL}, FinalUploadFile{
+		UploadFile: UploadFile{Name: "parts.bin", FullPath: filepath.ToSlash(path), Size: size},
+	}, rules, false, test.slots, func(bytes int64) { progress.Add(bytes) })
+	return progress.Load(), err
+}
+
+// steppedClock answers a time that moves on by step at every reading, so the
+// time between two readings is the step whatever the speed of the runner.
+func steppedClock(step time.Duration) func() time.Time {
+	var mu sync.Mutex
+	now := time.Unix(0, 0)
+	return func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		now = now.Add(step)
+		return now
+	}
+}
+
+func TestUploadPartsSendsFirstPartAloneThenInParallel(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		upload uploadPartsTest
+		want   int32
+	}{
+		"file limit": {upload: uploadPartsTest{parts: 5}, want: maxMultipartUploadConcurrency},
+		"run slots":  {upload: uploadPartsTest{parts: 5, slots: make(partSlots, 2)}, want: 2},
+		"slow first part": {
+			upload: uploadPartsTest{parts: 5, timeout: 100 * time.Second, now: steppedClock(20 * time.Second)},
+			want:   2,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var active, peak, completes atomic.Int32
+			together := make(chan struct{})
+			var togetherOnce sync.Once
+			progress, err := uploadTestParts(t, test.upload, func(w http.ResponseWriter, request *http.Request) {
+				_, _ = io.Copy(io.Discard, request.Body)
+				if request.URL.Path == "/complete" {
+					completes.Add(1)
+					_, _ = io.WriteString(w, `{}`)
+					return
+				}
+				current := active.Add(1)
+				for seen := peak.Load(); current > seen && !peak.CompareAndSwap(seen, current); seen = peak.Load() {
+				}
+				if request.URL.Path == "/parts/0" {
+					if current != 1 {
+						t.Errorf("first part shared the uplink with %d requests", current-1)
+					}
+				} else {
+					if current == test.want {
+						togetherOnce.Do(func() { close(together) })
+					}
+					select {
+					case <-together:
+					case <-time.After(5 * time.Second):
+						t.Errorf("only %d parts were in flight together, want %d", peak.Load(), test.want)
+					}
+				}
+				active.Add(-1)
+				_, _ = io.WriteString(w, `{}`)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if peak.Load() != test.want || completes.Load() != 1 || progress != 5*testUploadPartSize {
+				t.Fatalf("peak = %d, completes = %d, progress = %d", peak.Load(), completes.Load(), progress)
+			}
+		})
+	}
+}
+
+func TestUploadPartsRollsBackProgressWhenPartIsRefused(t *testing.T) {
+	t.Parallel()
+	progress, err := uploadTestParts(
+		t,
+		uploadPartsTest{parts: 4},
+		func(w http.ResponseWriter, request *http.Request) {
+			_, _ = io.Copy(io.Discard, request.Body)
+			if request.URL.Path == "/parts/2" {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = io.WriteString(w, `{"reason":"chunk_owner_mismatch"}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{}`)
+		},
+	)
+	var uploadErr *UploadV2Error
+	if !errors.As(err, &uploadErr) || uploadErr.Code != "chunk_owner_mismatch" {
+		t.Fatalf("error = %v", err)
+	}
+	if progress != 0 {
+		t.Fatalf("progress after failure = %d, want 0", progress)
+	}
+}
+
+func TestUploadPartsStopsWhenServerAlreadyHoldsFile(t *testing.T) {
+	t.Parallel()
+	progress, err := uploadTestParts(
+		t,
+		uploadPartsTest{parts: 4},
+		func(w http.ResponseWriter, request *http.Request) {
+			_, _ = io.Copy(io.Discard, request.Body)
+			switch request.URL.Path {
+			case "/parts/2":
+				_, _ = io.WriteString(w, `{"status":"completed"}`)
+			case "/complete":
+				t.Error("completed upload was completed again")
+			default:
+				_, _ = io.WriteString(w, `{}`)
+			}
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if progress != 4*testUploadPartSize {
+		t.Fatalf("progress = %d, want %d", progress, 4*testUploadPartSize)
+	}
+}
+
+func TestUploadPartsRetriesPartAlone(t *testing.T) {
+	t.Parallel()
+	var active, retryPeers, firstTry atomic.Int32
+	release := make(chan struct{})
+	progress, err := uploadTestParts(
+		t,
+		uploadPartsTest{parts: 6},
+		func(w http.ResponseWriter, request *http.Request) {
+			_, _ = io.Copy(io.Discard, request.Body)
+			if request.URL.Path == "/complete" {
+				_, _ = io.WriteString(w, `{}`)
+				return
+			}
+			current := active.Add(1)
+			switch request.URL.Path {
+			case "/parts/1":
+				if firstTry.Add(1) == 1 {
+					active.Add(-1)
+					w.WriteHeader(http.StatusInternalServerError)
+					close(release)
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+				retryPeers.Store(max(current, active.Load()) - 1)
+			case "/parts/2", "/parts/3", "/parts/4":
+				select {
+				case <-release:
+				case <-request.Context().Done():
+					return
+				}
+			}
+			active.Add(-1)
+			_, _ = io.WriteString(w, `{}`)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstTry.Load() != 2 || retryPeers.Load() != 0 || progress != 6*testUploadPartSize {
+		t.Fatalf("tries = %d, retry peers = %d, progress = %d", firstTry.Load(), retryPeers.Load(), progress)
+	}
+}
+
+func TestUploadPartsSendsOneAtATimeAfterTimeout(t *testing.T) {
+	t.Parallel()
+	var tries [8]atomic.Int32
+	var active, peak atomic.Int32
+	progress, err := uploadTestParts(
+		t,
+		// A clock that stands still times the first part at nothing, which
+		// allows the full width whatever the speed of the runner.
+		uploadPartsTest{parts: len(tries), timeout: time.Second, now: steppedClock(0)},
+		func(w http.ResponseWriter, request *http.Request) {
+			_, _ = io.Copy(io.Discard, request.Body)
+			index, err := strconv.Atoi(strings.TrimPrefix(request.URL.Path, "/parts/"))
+			if err != nil {
+				_, _ = io.WriteString(w, `{}`)
+				return
+			}
+			if tries[index].Add(1) == 1 && index >= 1 && index <= maxMultipartUploadConcurrency {
+				<-request.Context().Done()
+				return
+			}
+			if index > 0 {
+				current := active.Add(1)
+				for seen := peak.Load(); current > seen && !peak.CompareAndSwap(seen, current); seen = peak.Load() {
+				}
+				time.Sleep(10 * time.Millisecond)
+				active.Add(-1)
+			}
+			_, _ = io.WriteString(w, `{}`)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if peak.Load() != 1 || progress != int64(len(tries))*testUploadPartSize {
+		t.Fatalf("peak after timeout = %d, progress = %d", peak.Load(), progress)
+	}
+}
+
+func TestPartParallelismLeavesRoomInsideRequestTimeout(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		elapsed, timeout time.Duration
+		want             int
+	}{
+		{elapsed: 0, timeout: 100 * time.Second, want: maxMultipartUploadConcurrency},
+		{elapsed: time.Minute, timeout: 0, want: maxMultipartUploadConcurrency},
+		{elapsed: 5 * time.Second, timeout: 100 * time.Second, want: maxMultipartUploadConcurrency},
+		{elapsed: 20 * time.Second, timeout: 100 * time.Second, want: 2},
+		{elapsed: 42 * time.Second, timeout: 100 * time.Second, want: 1},
+		{elapsed: 90 * time.Second, timeout: 100 * time.Second, want: 1},
+	} {
+		if got := partParallelism(test.elapsed, test.timeout); got != test.want {
+			t.Errorf("partParallelism(%s, %s) = %d, want %d", test.elapsed, test.timeout, got, test.want)
+		}
 	}
 }
