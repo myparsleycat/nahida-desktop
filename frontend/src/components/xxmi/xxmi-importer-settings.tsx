@@ -36,7 +36,7 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
-import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
+import { CUSTOM_DLL_SOURCE, CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import {
   FOLLOW_LATEST,
   NumberRow,
@@ -124,10 +124,20 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const dirty = draft !== null && !isEqual(draft, saved);
   // A legacy runtime and a user-provided DLL deploy the default provider's signed libraries, so that is the
   // provider whose releases their libraries version names.
+  // The importer's own DLL comes first; the shared one reaches importers that follow the shared provider.
+  const selectedDll = (cfg: ImporterConfig) =>
+    cfg.mode === RuntimeMode.RuntimeXXMI
+      ? cfg.customDll || (cfg.libsProvider ? "" : (overview?.sharedCustomDll ?? ""))
+      : "";
+  const appliedCustomDll = (cfg: ImporterConfig) => (cfg.migoto.unsafeMode ? selectedDll(cfg) : "");
   const deployedLibsProvider = (cfg: ImporterConfig | null | undefined) => {
     if (!cfg) return undefined;
-    const dll = cfg.xxmiVersion.follow === "shared" ? overview?.sharedCustomDll : cfg.customDll;
-    return cfg.mode === RuntimeMode.RuntimeXXMI && !(cfg.migoto.unsafeMode && (dll || customDll))
+
+    // The overview reports the saved config. A saved selection accounts for its custom DLL, so a draft that
+    // drops the selection drops the DLL; only a DLL kept in the importer folder outlives the draft.
+    const keptDll =
+      customDll && cfg.migoto.unsafeMode && !(saved != null && appliedCustomDll(saved));
+    return cfg.mode === RuntimeMode.RuntimeXXMI && !appliedCustomDll(cfg) && !keptDll
       ? cfg.libsProvider || overview?.sharedLibsProvider
       : libsProviders[0];
   };
@@ -164,6 +174,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   // A picked DLL is only in the draft until the config is saved, so the overview does not list it yet.
   const [importedDll, setImportedDll] = useState<CustomDLL | null>(null);
   const [pendingCustomDll, setPendingCustomDll] = useState<CustomDLL | null>(null);
+  // Choosing the custom DLL as the provider changes nothing in the draft until a file is picked.
+  const [pickingCustomDll, setPickingCustomDll] = useState(false);
   const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [optimizationPreview, setOptimizationPreview] = useState<
     Awaited<ReturnType<typeof XXMI.OptimizeMods>> | undefined
@@ -217,6 +229,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       setPendingFolderChange(null);
       setPackageDialogVersion(null);
       setConfig(null);
+      setPickingCustomDll(false);
       refresh();
       return true;
     } catch (error) {
@@ -268,12 +281,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
-  const selectedCustomDll =
-    config.mode !== RuntimeMode.RuntimeXXMI
-      ? ""
-      : followsSharedLibs
-        ? (overview?.sharedCustomDll ?? "")
-        : config.customDll;
+  const selectedCustomDll = selectedDll(config);
+  const ownsCustomDll = !!config.customDll || pickingCustomDll;
   const selectedCustomDllName = [importedDll, ...(overview?.customDlls ?? [])].find(
     (dll) => dll?.id === selectedCustomDll,
   )?.name;
@@ -343,7 +352,14 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   className="pointer-events-auto flex items-center justify-between gap-3 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md"
                 >
                   <span>{t("page.setting.xxmi.builtin.unsavedChanges")}</span>
-                  <Button variant="ghost" size="xs" onClick={() => setConfig(null)}>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      setConfig(null);
+                      setPickingCustomDll(false);
+                    }}
+                  >
                     {t("page.setting.xxmi.builtin.discard")}
                   </Button>
                 </div>
@@ -688,20 +704,27 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 </Section>
 
                 <Section>
+                  <SectionHeader>
+                    <SectionTitle>{t("page.setting.xxmi.builtin.libs")}</SectionTitle>
+                  </SectionHeader>
                   <SectionContent>
                     {config.mode === RuntimeMode.RuntimeXXMI && (
                       <SelectRow
                         label={t("page.setting.xxmi.builtin.libsProvider")}
                         description={
-                          config.libsProvider || !overview?.sharedLibsProvider
+                          ownsCustomDll || config.libsProvider || !overview?.sharedLibsProvider
                             ? undefined
-                            : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
-                                provider: t(
-                                  `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
-                                ),
-                              })
+                            : selectedCustomDll
+                              ? t("page.setting.xxmi.builtin.customDllShared", {
+                                  name: selectedCustomDllName ?? selectedCustomDll,
+                                })
+                              : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
+                                  provider: t(
+                                    `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
+                                  ),
+                                })
                         }
-                        value={config.libsProvider || "shared"}
+                        value={ownsCustomDll ? CUSTOM_DLL_SOURCE : config.libsProvider || "shared"}
                         options={[
                           {
                             value: "shared",
@@ -711,34 +734,103 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             value: provider,
                             label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
                           })),
+                          {
+                            value: CUSTOM_DLL_SOURCE,
+                            label: t("page.setting.xxmi.builtin.customDll"),
+                          },
                         ]}
                         onValueChange={(value) => {
-                          const selected = value === "shared" ? "" : value;
+                          setPickingCustomDll(value === CUSTOM_DLL_SOURCE);
+                          if (value === CUSTOM_DLL_SOURCE) return;
+                          const next = {
+                            ...config,
+                            libsProvider: value === "shared" ? "" : value,
+                            customDll: "",
+                          };
 
                           // A pinned version names a release of the provider it was picked from.
                           const keepsPin =
                             !config.xxmiVersion.pinned ||
-                            deployedLibsProvider({ ...config, libsProvider: selected }) ===
-                              libsProvider;
+                            deployedLibsProvider(next) === libsProvider;
                           setConfig({
-                            ...config,
-                            libsProvider: selected,
+                            ...next,
                             xxmiVersion: keepsPin ? config.xxmiVersion : { follow: "latest" },
                           });
                         }}
                       />
                     )}
+                    {config.mode === RuntimeMode.RuntimeXXMI && ownsCustomDll && (
+                      <div className="rounded-md bg-muted/50 p-3">
+                        <CustomDLLField
+                          dropTargetId={FileDropTargetID.xxmiImporterCustomDll}
+                          selected={
+                            config.customDll
+                              ? { id: config.customDll, name: selectedCustomDllName }
+                              : undefined
+                          }
+                          onPick={async (path) => {
+                            const dll = await XXMI.ImportCustomDLL(path);
+                            setImportedDll(dll);
+                            if (config.migoto.unsafeMode)
+                              setConfig({ ...config, customDll: dll.id });
+                            else setPendingCustomDll(dll);
+                          }}
+                        />
+                      </div>
+                    )}
+                    {selectedCustomDll && !config.migoto.unsafeMode && (
+                      <Alert>
+                        <TriangleAlertIcon />
+                        <AlertDescription className="flex items-center justify-between gap-4">
+                          <span>{t("page.setting.xxmi.builtin.customDllInactive")}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() =>
+                              setConfig({
+                                ...config,
+                                migoto: { ...config.migoto, unsafeMode: true },
+                              })
+                            }
+                          >
+                            {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {customDll && (
+                      <Alert>
+                        <ShieldAlertIcon />
+                        <AlertDescription className="flex items-center justify-between gap-4">
+                          <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
+                          {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            disabled={dirty}
+                            title={
+                              dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined
+                            }
+                            onClickPromise={async () => {
+                              try {
+                                const warnings = await XXMI.RestoreOfficialDLL(importer);
+                                refresh();
+                                toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
+                                warnings?.forEach((warning) => toast.warning(warning));
+                              } catch (error) {
+                                toast.error(toErrorMessage(error));
+                              }
+                            }}
+                          >
+                            {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <SelectRow
-                      label={
-                        <span className="flex items-center gap-1.5">
-                          {t("page.setting.xxmi.builtin.libs")}
-                          {customDll && (
-                            <span className="text-xs font-normal text-muted-foreground">
-                              {t("page.setting.xxmi.builtin.customDll")}
-                            </span>
-                          )}
-                        </span>
-                      }
+                      label={t("page.setting.xxmi.builtin.libsTrack")}
                       description={
                         followsSharedLibs
                           ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
@@ -796,82 +888,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           })
                         }
                       />
-                    )}
-                    {config.mode === RuntimeMode.RuntimeXXMI && !followsSharedLibs && (
-                      <CustomDLLField
-                        dropTargetId={FileDropTargetID.xxmiImporterCustomDll}
-                        selected={
-                          selectedCustomDll
-                            ? { id: selectedCustomDll, name: selectedCustomDllName }
-                            : undefined
-                        }
-                        onPick={async (path) => {
-                          const dll = await XXMI.ImportCustomDLL(path);
-                          setImportedDll(dll);
-                          if (config.migoto.unsafeMode) setConfig({ ...config, customDll: dll.id });
-                          else setPendingCustomDll(dll);
-                        }}
-                        onClear={() => setConfig({ ...config, customDll: "" })}
-                      />
-                    )}
-                    {followsSharedLibs && selectedCustomDll && (
-                      <SectionRow
-                        title={t("page.setting.xxmi.builtin.customDll")}
-                        description={t("page.setting.xxmi.builtin.customDllShared", {
-                          name: selectedCustomDllName ?? selectedCustomDll,
-                        })}
-                      />
-                    )}
-                    {selectedCustomDll && !config.migoto.unsafeMode && (
-                      <Alert>
-                        <TriangleAlertIcon />
-                        <AlertDescription className="flex items-center justify-between gap-4">
-                          <span>{t("page.setting.xxmi.builtin.customDllInactive")}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() =>
-                              setConfig({
-                                ...config,
-                                migoto: { ...config.migoto, unsafeMode: true },
-                              })
-                            }
-                          >
-                            {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {customDll && (
-                      <Alert>
-                        <ShieldAlertIcon />
-                        <AlertDescription className="flex items-center justify-between gap-4">
-                          <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
-                          {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            disabled={dirty}
-                            title={
-                              dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined
-                            }
-                            onClickPromise={async () => {
-                              try {
-                                const warnings = await XXMI.RestoreOfficialDLL(importer);
-                                refresh();
-                                toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
-                                warnings?.forEach((warning) => toast.warning(warning));
-                              } catch (error) {
-                                toast.error(toErrorMessage(error));
-                              }
-                            }}
-                          >
-                            {t("page.setting.xxmi.builtin.restoreOfficialDll")}
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
                     )}
                   </SectionContent>
                 </Section>

@@ -143,7 +143,11 @@ func TestDeployRuntimeAppliesCustomDLLOncePerSelection(t *testing.T) {
 	} {
 		writeTestFile(t, path, []byte(content))
 	}
-	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI, Migoto: MigotoOptions{UnsafeMode: true}}
+	// Its own provider keeps the importer off the shared selection, which needs the settings store.
+	cfg := ImporterConfig{
+		ImporterFolder: importer, Mode: RuntimeXXMI, LibsProvider: defaultLibsProvider,
+		Migoto: MigotoOptions{UnsafeMode: true},
+	}
 	deploy := func(custom *customRuntimeDLL) runtimeManifest {
 		t.Helper()
 		if _, err := deployCustomRuntimeFiles(
@@ -339,9 +343,14 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 		t.Fatalf("own selection resolved %q, want %q", id, own.ID)
 	}
 	following := cfg
-	following.XXMIVersion = VersionPin{Follow: followShared}
+	following.CustomDLL = ""
 	if id := resolve(following); id != shared.ID {
 		t.Fatalf("shared selection resolved %q, want %q", id, shared.ID)
+	}
+	ownProvider := following
+	ownProvider.LibsProvider = defaultLibsProvider
+	if id := resolve(ownProvider); id != "" {
+		t.Fatalf("own provider resolved the shared selection %q", id)
 	}
 	safe := cfg
 	safe.Migoto.UnsafeMode = false
@@ -381,6 +390,9 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 	}
 	if launchesCustomDLL() {
 		t.Fatal("cleared shared selection is still reported")
+	}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
 	}
 	root, err := xxmiCacheRoot()
 	if err != nil {

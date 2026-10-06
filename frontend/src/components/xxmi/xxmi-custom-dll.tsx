@@ -3,7 +3,7 @@ import { Button } from "@renderer/components/ui/button";
 import { cn } from "@renderer/lib/utils";
 import { useWindowFileDrop } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
-import { FileUpIcon, XIcon } from "lucide-react";
+import { FileUpIcon } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -11,18 +11,20 @@ import { toast } from "sonner";
 // Keep in sync with the custom DLL errors in internal/xxmi/custom_dll.go.
 const customDllErrorCodes = ["XXMI_CUSTOM_DLL_INVALID", "XXMI_CUSTOM_DLL_MISSING"] as const;
 
+// The custom DLL is offered beside the libraries providers, whose IDs it must not collide with.
+export const CUSTOM_DLL_SOURCE = "__custom_dll__";
+
 // Picks the custom d3d11.dll through the file dialog or a file dropped on the row. The row only reports the picked
 // path; importing it and storing the selection is up to the caller, which differs between the shared and importer rows.
+// A selection is dropped by choosing a provider again, so the row has no clear action of its own.
 export function CustomDLLField({
   dropTargetId,
   selected,
   onPick,
-  onClear,
 }: {
   dropTargetId: string;
   selected?: { id: string; name?: string };
   onPick: (path: string) => Promise<void>;
-  onClear: () => Promise<void> | void;
 }) {
   const { t } = useTranslation();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -73,30 +75,14 @@ export function CustomDLLField({
       )}
     >
       <div className="min-w-0 flex-1 space-y-0.5">
-        <span className="text-sm font-medium">{t("page.setting.xxmi.builtin.customDll")}</span>
+        <span className="text-sm font-medium break-all">
+          {selected?.name ?? t("page.setting.xxmi.builtin.customDll")}
+        </span>
         <p className="text-xs break-all text-muted-foreground">
-          {selected
-            ? [selected.name, selected.id].filter(Boolean).join(" · ")
-            : t("page.setting.xxmi.builtin.customDllDropHint")}
+          {selected ? selected.id : t("page.setting.xxmi.builtin.customDllDropHint")}
         </p>
       </div>
       <div className="flex shrink-0 gap-2">
-        {selected && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClickPromise={async () => {
-              try {
-                await onClear();
-              } catch (error) {
-                toast.error(toErrorMessage(error));
-              }
-            }}
-          >
-            <XIcon />
-            {t("page.setting.xxmi.builtin.customDllClear")}
-          </Button>
-        )}
         <Button
           variant="outline"
           size="sm"

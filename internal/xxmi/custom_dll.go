@@ -78,8 +78,8 @@ func (x *XXMI) ImportCustomDLL(ctx context.Context, path string) (dll CustomDLL,
 	return dll, nil
 }
 
-// SetSharedCustomDLL selects the custom d3d11.dll for importers that follow the shared XXMI libraries.
-// An empty ID returns them to the signed DLL.
+// SetSharedCustomDLL selects the custom d3d11.dll for importers that follow the shared XXMI libraries provider.
+// An empty ID returns them to the shared provider's DLL.
 func (x *XXMI) SetSharedCustomDLL(ctx context.Context, id string) error {
 	client, err := x.settingsClient()
 	if err != nil {
@@ -101,13 +101,15 @@ func (x *XXMI) SetSharedCustomDLL(ctx context.Context, id string) error {
 	return nil
 }
 
-// customDLLID returns the custom d3d11.dll an importer deploys, or "" when it uses the signed one.
+// customDLLID returns the custom d3d11.dll an importer deploys, or "" when it uses its provider's.
 // A custom DLL only applies in unsafe mode, which is what lets a launch accept an unsigned runtime file.
+// The DLL stands in for the provider, so the importer's own selection comes first and the shared one reaches
+// only importers that follow the shared provider.
 func (x *XXMI) customDLLID(ctx context.Context, cfg ImporterConfig) (string, error) {
 	if cfg.Mode != RuntimeXXMI || !cfg.Migoto.UnsafeMode {
 		return "", nil
 	}
-	if cfg.XXMIVersion.Follow != followShared {
+	if cfg.CustomDLL != "" || cfg.LibsProvider != "" {
 		return cfg.CustomDLL, nil
 	}
 	client, err := x.settingsClient()

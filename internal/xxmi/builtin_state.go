@@ -72,7 +72,7 @@ type Overview struct {
 	Root         string       `json:"root"`
 	// SharedLibsVersion is empty while importers following the shared version use the latest release.
 	SharedLibsVersion string `json:"sharedLibsVersion"`
-	// SharedCustomDLL is the custom d3d11.dll for importers that follow the shared libraries, or empty.
+	// SharedCustomDLL is the custom d3d11.dll for importers that follow the shared provider, or empty.
 	SharedCustomDLL string `json:"sharedCustomDll"`
 	// SharedLibsProvider is the XXMI libraries provider of importers that do not choose their own.
 	SharedLibsProvider string `json:"sharedLibsProvider"`

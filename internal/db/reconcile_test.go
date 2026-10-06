@@ -482,6 +482,91 @@ func TestReconcileMovesCommonXXMILibsPinToSharedVersion(t *testing.T) {
 	}
 }
 
+func TestReconcileKeepsXXMICustomDLLWhenItFollowsProvider(t *testing.T) {
+	t.Parallel()
+
+	client, err := New(filepath.Join(t.TempDir(), "xxmi.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	if _, err := client.db.Exec(
+		`DELETE FROM "_schema_state" WHERE "key" = ?`,
+		SchemaKeyXXMICustomDLLFollowProvider,
+	); err != nil {
+		t.Fatalf("clear flag: %v", err)
+	}
+	sharedDLL, sharedProvider := "aaaaaaaaaaaa", "myparsleycat"
+	if err := client.Settings.Upsert(ctx, "xxmi_custom_dll", &sharedDLL); err != nil {
+		t.Fatalf("seed shared DLL: %v", err)
+	}
+	if err := client.Settings.Upsert(ctx, "xxmi_libs_provider", &sharedProvider); err != nil {
+		t.Fatalf("seed shared provider: %v", err)
+	}
+	const unsafe = `"migoto":{"unsafeMode":true}`
+	seeded := map[string]string{
+		// Followed the shared version: the stale own DLL was ignored in favor of the shared one.
+		"GIMI": `{"xxmiVersion":{"follow":"shared"},"customDll":"bbbbbbbbbbbb","libsProvider":"",` + unsafe + `}`,
+		// Followed the shared version with its own provider: still launched the shared DLL.
+		"SRMI": `{"xxmiVersion":{"follow":"shared"},"customDll":"","libsProvider":"spectrumqt",` + unsafe + `}`,
+		// Own version without a DLL: launched the shared provider's DLL, not the shared custom one.
+		"ZZMI": `{"xxmiVersion":{"follow":"latest"},"customDll":"","libsProvider":"",` + unsafe + `}`,
+		// A pin is stored without a follow value and is the importer's own version as well.
+		"AEMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"",` + unsafe + `}`,
+		// Own version with its own DLL: unchanged.
+		"WWMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"cccccccccccc","libsProvider":"",` + unsafe + `}`,
+		// No stored version decodes to following the shared one, so these took the shared DLL as well.
+		"HIMI": `{"customDll":"","libsProvider":"",` + unsafe + `}`,
+		"EFMI": `{"customDll":"bbbbbbbbbbbb","libsProvider":"spectrumqt",` + unsafe + `}`,
+		// Without unsafe mode, or in the legacy runtime, no custom DLL applied: the provider is still followed.
+		"NTMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":""}`,
+		"SSMI": `{"mode":"legacy","xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"",` + unsafe + `}`,
+		"HSMI": `{"xxmiVersion":{"follow":"shared"},"customDll":"","libsProvider":"spectrumqt"}`,
+	}
+	for key, config := range seeded {
+		if err := client.XXMIImporters.Upsert(ctx, key, config); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("migrate reconcile: %v", err)
+	}
+	for key, want := range map[string]string{
+		"GIMI": `{"xxmiVersion":{"follow":"shared"},"customDll":"","libsProvider":"",` + unsafe + `}`,
+		"SRMI": `{"xxmiVersion":{"follow":"shared"},"customDll":"aaaaaaaaaaaa","libsProvider":"spectrumqt",` + unsafe + `}`,
+		"ZZMI": `{"xxmiVersion":{"follow":"latest"},"customDll":"","libsProvider":"myparsleycat",` + unsafe + `}`,
+		"AEMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"myparsleycat",` + unsafe + `}`,
+		"WWMI": seeded["WWMI"],
+		"HIMI": seeded["HIMI"],
+		"EFMI": `{"customDll":"aaaaaaaaaaaa","libsProvider":"spectrumqt",` + unsafe + `}`,
+		"NTMI": seeded["NTMI"],
+		"SSMI": seeded["SSMI"],
+		"HSMI": seeded["HSMI"],
+	} {
+		row, err := client.XXMIImporters.Get(ctx, key)
+		if err != nil || row == nil || row.Config != want {
+			t.Fatalf("%s after migration = %+v, err = %v", key, row, err)
+		}
+	}
+
+	// Second pass must be one-shot: a selection made under the new rule is left alone.
+	if err := client.XXMIImporters.Upsert(ctx, "ZZMI", seeded["ZZMI"]); err != nil {
+		t.Fatalf("reset row: %v", err)
+	}
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	if row, err := client.XXMIImporters.Get(ctx, "ZZMI"); err != nil || row == nil || row.Config != seeded["ZZMI"] {
+		t.Fatalf("one-shot migration ran twice: %+v, err = %v", row, err)
+	}
+}
+
 func TestReconcileSeedsBuiltInBlenderMCPServerOnce(t *testing.T) {
 	t.Parallel()
 

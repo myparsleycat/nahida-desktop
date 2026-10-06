@@ -119,8 +119,8 @@ type ImporterConfig struct {
 	Mode           RuntimeMode `json:"mode"`
 	PackageVersion VersionPin  `json:"packageVersion"`
 	XXMIVersion    VersionPin  `json:"xxmiVersion"`
-	// CustomDLL is the cached custom d3d11.dll used in unsafe mode when XXMIVersion does not follow the
-	// shared libraries; importers that follow them use the shared custom DLL instead.
+	// CustomDLL is the cached custom d3d11.dll this importer uses in place of its provider's in unsafe mode.
+	// Without one, an importer that follows the shared provider uses the shared custom DLL.
 	CustomDLL string `json:"customDll"`
 	// LibsProvider is the XXMI libraries provider of this importer; empty follows the shared provider.
 	LibsProvider       string            `json:"libsProvider"`
