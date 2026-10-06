@@ -671,6 +671,34 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
 
                 <Section>
                   <SectionContent>
+                    {config.mode === RuntimeMode.RuntimeXXMI && (
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.libsProvider")}
+                        description={
+                          config.libsProvider || !overview?.sharedLibsProvider
+                            ? undefined
+                            : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
+                                provider: t(
+                                  `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
+                                ),
+                              })
+                        }
+                        value={config.libsProvider || "shared"}
+                        options={[
+                          {
+                            value: "shared",
+                            label: t("page.setting.xxmi.builtin.libsProviderFollowShared"),
+                          },
+                          ...libsProviders.map((provider) => ({
+                            value: provider,
+                            label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                          })),
+                        ]}
+                        onValueChange={(value) =>
+                          setConfig({ ...config, libsProvider: value === "shared" ? "" : value })
+                        }
+                      />
+                    )}
                     <SelectRow
                       label={
                         <span className="flex items-center gap-1.5">
@@ -737,34 +765,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             ...config,
                             xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
                           })
-                        }
-                      />
-                    )}
-                    {config.mode === RuntimeMode.RuntimeXXMI && (
-                      <SelectRow
-                        label={t("page.setting.xxmi.builtin.libsProvider")}
-                        description={
-                          config.libsProvider || !overview?.sharedLibsProvider
-                            ? undefined
-                            : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
-                                provider: t(
-                                  `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
-                                ),
-                              })
-                        }
-                        value={config.libsProvider || "shared"}
-                        options={[
-                          {
-                            value: "shared",
-                            label: t("page.setting.xxmi.builtin.libsProviderFollowShared"),
-                          },
-                          ...libsProviders.map((provider) => ({
-                            value: provider,
-                            label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
-                          })),
-                        ]}
-                        onValueChange={(value) =>
-                          setConfig({ ...config, libsProvider: value === "shared" ? "" : value })
                         }
                       />
                     )}

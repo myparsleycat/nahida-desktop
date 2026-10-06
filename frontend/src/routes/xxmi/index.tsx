@@ -340,6 +340,20 @@ export function XXMIDashboard() {
                   onCheckedChange={(value) => update("includePrereleases", value)}
                 />
                 <SelectRow
+                  label={t("page.setting.xxmi.builtin.libsProvider")}
+                  description={t("page.setting.xxmi.builtin.libsProviderDescription")}
+                  value={overview?.sharedLibsProvider ?? ""}
+                  options={(overview?.libsProviders ?? []).map((provider) => ({
+                    value: provider,
+                    label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                  }))}
+                  onValueChange={(value) => {
+                    void XXMI.SetSharedLibsProvider(value).then(refresh, (error: unknown) =>
+                      toast.error(toErrorMessage(error)),
+                    );
+                  }}
+                />
+                <SelectRow
                   label={t("page.setting.xxmi.builtin.sharedLibsVersion")}
                   description={t("page.setting.xxmi.builtin.sharedLibsVersionDescription")}
                   value={overview?.sharedLibsVersion || FOLLOW_LATEST}
@@ -351,20 +365,6 @@ export function XXMIDashboard() {
                     void XXMI.SetSharedLibsVersion(value === FOLLOW_LATEST ? "" : value).then(
                       refresh,
                       (error: unknown) => toast.error(toErrorMessage(error)),
-                    );
-                  }}
-                />
-                <SelectRow
-                  label={t("page.setting.xxmi.builtin.libsProvider")}
-                  description={t("page.setting.xxmi.builtin.libsProviderDescription")}
-                  value={overview?.sharedLibsProvider ?? ""}
-                  options={(overview?.libsProviders ?? []).map((provider) => ({
-                    value: provider,
-                    label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
-                  }))}
-                  onValueChange={(value) => {
-                    void XXMI.SetSharedLibsProvider(value).then(refresh, (error: unknown) =>
-                      toast.error(toErrorMessage(error)),
                     );
                   }}
                 />
