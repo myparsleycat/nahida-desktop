@@ -58,6 +58,34 @@ func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
 	}
 }
 
+func TestOfficialDLLConfigOwnsTheLibrariesVersion(t *testing.T) {
+	tests := []struct {
+		name          string
+		version       VersionPin
+		sharedVersion string
+		want          VersionPin
+	}{
+		{"shared latest", VersionPin{Follow: followShared}, "", VersionPin{Follow: "latest"}},
+		{"shared pin", VersionPin{Follow: followShared}, "1.7.5", VersionPin{Pinned: "1.7.5"}},
+		{"shared provider release", VersionPin{Follow: followShared}, "1.7.5-nhd.2", VersionPin{Pinned: "1.7.5"}},
+		{
+			"own pin",
+			VersionPin{Pinned: "1.7.4", Notify: true},
+			"1.7.5",
+			VersionPin{Pinned: "1.7.4", Notify: true},
+		},
+		{"own latest", VersionPin{Follow: "latest"}, "1.7.5", VersionPin{Follow: "latest"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := officialDLLConfig(ImporterConfig{XXMIVersion: test.version}, test.sharedVersion)
+			if cfg.XXMIVersion != test.want || cfg.LibsProvider != defaultLibsProvider {
+				t.Fatalf("version = %+v, provider = %q, want %+v", cfg.XXMIVersion, cfg.LibsProvider, test.want)
+			}
+		})
+	}
+}
+
 func TestRestoreOfficialDLLRejectsUnmanagedImporters(t *testing.T) {
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))

@@ -26,6 +26,7 @@ const overview = vi.hoisted(() => ({
     installedVersion?: string;
   }>,
   sharedCustomDll: "",
+  sharedLibsVersion: "",
   sharedLibsProvider: "spectrumqt",
   libsProviders: ["spectrumqt", "myparsleycat"],
   customDlls: [] as Array<{ id: string; name: string }>,
@@ -359,6 +360,7 @@ afterEach(() => {
   config.mode = "xxmi";
   config.packageVersion = { follow: "latest" };
   overview.sharedLibsProvider = "spectrumqt";
+  overview.sharedLibsVersion = "";
   xxmi.SaveImporterConfig.mockReset();
   xxmi.EnsureLibsVersion.mockReset();
   xxmi.EnsureLibsProvider.mockReset();
@@ -421,7 +423,10 @@ it("pins the importer's own XXMI version without update notices by default", asy
   await waitFor(() =>
     expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
       "GIMI",
-      expect.objectContaining({ xxmiVersion: { pinned: "1.7.6", notify: false } }),
+      expect.objectContaining({
+        libsProvider: "spectrumqt",
+        xxmiVersion: { pinned: "1.7.6", notify: false },
+      }),
     ),
   );
   expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("spectrumqt", "1.7.6");
@@ -485,53 +490,174 @@ it("keeps switched-on update notices when another pinned XXMI version is chosen"
   }
 });
 
-it("hides the importer's own XXMI version while it follows the shared version", async () => {
+it("follows the shared settings for the provider and its version together", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   mod.GetGames.mockResolvedValue([]);
-  render(<XXMIImporterSettings importer="GIMI" />);
-  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  config.xxmiVersion = { pinned: "1.7.5", notify: true };
 
-  await chooseOption(
-    /page.setting.xxmi.builtin.libsTrack/,
-    "page.setting.xxmi.builtin.libsFollowShared",
-  );
-  expect(
-    screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
-  ).toBeNull();
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    // A version of its own under the shared provider is shown as that provider.
+    expect(
+      screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }).textContent,
+    ).toContain("page.setting.xxmi.builtin.libsProviders.spectrumqt");
+
+    await chooseOption(
+      /page.setting.xxmi.builtin.libsProvider/,
+      "page.setting.xxmi.builtin.libsFollowSharedSettings",
+    );
+    expect(screen.getByText("page.setting.xxmi.builtin.libsSharedSettings")).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.libsNotify" }),
+    ).toBeNull();
+  } finally {
+    config.xxmiVersion = { follow: "latest" };
+  }
   fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
 
   await waitFor(() =>
     expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
       "GIMI",
-      expect.objectContaining({ xxmiVersion: { follow: "shared" } }),
+      expect.objectContaining({
+        libsProvider: "",
+        customDll: "",
+        xxmiVersion: { follow: "shared" },
+      }),
     ),
   );
+});
+
+it("keeps the shared version when the importer takes the shared provider as its own", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
+  xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  config.xxmiVersion = { follow: "shared" };
+  overview.sharedLibsVersion = "1.7.5";
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    await chooseOption(
+      /page.setting.xxmi.builtin.libsProvider/,
+      "page.setting.xxmi.builtin.libsProviders.spectrumqt",
+    );
+    expect(
+      screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }).textContent,
+    ).toContain("1.7.5");
+    fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+    await waitFor(() =>
+      expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+        "GIMI",
+        expect.objectContaining({
+          libsProvider: "spectrumqt",
+          xxmiVersion: { pinned: "1.7.5", notify: false },
+        }),
+      ),
+    );
+  } finally {
+    config.xxmiVersion = { follow: "latest" };
+  }
+});
+
+it("keeps a version that alone follows the shared settings until it is changed", async () => {
+  Object.assign(config, { libsProvider: "myparsleycat" });
+  config.xxmiVersion = { follow: "shared" };
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+    const version = screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ });
+    expect(version.textContent).toContain("page.setting.xxmi.builtin.libsFollowShared");
+    await chooseOption(/page.setting.xxmi.builtin.libsVersion/, "1.7.6");
+
+    fireEvent.click(version);
+    await screen.findByRole("option", { name: "1.7.5" });
+    expect(
+      screen.queryByRole("option", { name: "page.setting.xxmi.builtin.libsFollowShared" }),
+    ).toBeNull();
+  } finally {
+    Object.assign(config, { libsProvider: "" });
+    config.xxmiVersion = { follow: "latest" };
+  }
+});
+
+it("explains the legacy runtime's XXMI version and hides it for the native injector", () => {
+  config.mode = "legacy";
+
+  try {
+    const view = render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+    expect(screen.getByText("page.setting.xxmi.builtin.libsVersionLegacy")).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }),
+    ).toBeNull();
+    view.unmount();
+
+    Object.assign(config, { injectionMethod: "Native" });
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+    expect(screen.queryByText("page.setting.xxmi.builtin.libs")).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
+    ).toBeNull();
+    cleanup();
+
+    config.xxmiVersion = { pinned: "1.7.5", notify: true };
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+    expect(
+      screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }).textContent,
+    ).toContain("1.7.5");
+  } finally {
+    Object.assign(config, { injectionMethod: undefined });
+    config.xxmiVersion = { follow: "latest" };
+  }
 });
 
 it("caches the importer's own libraries provider before saving it", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
   mod.GetGames.mockResolvedValue([]);
-  render(<XXMIImporterSettings importer="GIMI" />);
-  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  config.xxmiVersion = { follow: "shared" };
+  overview.sharedLibsVersion = "1.7.5";
 
-  const provider = screen.getByRole("combobox", {
-    name: /page.setting.xxmi.builtin.libsProvider/,
-  });
-  expect(provider.textContent).toContain("page.setting.xxmi.builtin.libsProviderFollowShared");
-  await chooseOption(
-    /page.setting.xxmi.builtin.libsProvider/,
-    "page.setting.xxmi.builtin.libsProviders.myparsleycat",
-  );
-  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
-  await waitFor(() =>
-    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
-      "GIMI",
-      expect.objectContaining({ libsProvider: "myparsleycat" }),
-    ),
-  );
-  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat", "");
+    const provider = screen.getByRole("combobox", {
+      name: /page.setting.xxmi.builtin.libsProvider/,
+    });
+    expect(provider.textContent).toContain("page.setting.xxmi.builtin.libsFollowSharedSettings");
+    await chooseOption(
+      /page.setting.xxmi.builtin.libsProvider/,
+      "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+    // The shared version names a release of the shared provider, so another provider starts from its latest.
+    await waitFor(() =>
+      expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+        "GIMI",
+        expect.objectContaining({
+          libsProvider: "myparsleycat",
+          xxmiVersion: { follow: "latest" },
+        }),
+      ),
+    );
+    expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat", "");
+  } finally {
+    config.xxmiVersion = { follow: "latest" };
+  }
 });
 
 it("leaves the draft unsaved when the importer's libraries provider cannot be cached", async () => {
@@ -784,6 +910,9 @@ it("saves a dropped custom DLL together with unsafe mode once the prompt is conf
   fireEvent.click(await dropImporterCustomDLL());
 
   expect(await screen.findByText("custom.dll")).toBeTruthy();
+  expect(
+    screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
+  ).toBeNull();
   fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
   await waitFor(() =>
     expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
@@ -883,8 +1012,11 @@ it("shows the shared custom DLL read-only and warns while unsafe mode is off", (
     render(<XXMIImporterSettings importer="GIMI" />);
     fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
-    expect(screen.getByText("page.setting.xxmi.builtin.customDllShared")).toBeTruthy();
+    expect(screen.getByText("page.setting.xxmi.builtin.libsSharedSettings")).toBeTruthy();
     expect(screen.getByText("page.setting.xxmi.builtin.customDllInactive")).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.libsVersion/ }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
     ).toBeNull();

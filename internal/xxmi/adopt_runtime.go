@@ -64,11 +64,21 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 }
 
 // officialDLLConfig returns cfg changed to run the signed XXMI d3d11.dll. The provider is set on the importer
-// itself, so a shared provider that ships its own DLL does not bring that one back at the next launch.
-func officialDLLConfig(cfg ImporterConfig) ImporterConfig {
+// itself, so a shared provider that ships its own DLL does not bring that one back at the next launch. A version
+// that followed the shared settings becomes the importer's own with it: sharedVersion is the shared pin, which
+// names a release of the shared provider.
+func officialDLLConfig(cfg ImporterConfig, sharedVersion string) ImporterConfig {
 	cfg.Migoto.UnsafeMode = false
 	cfg.CustomDLL = ""
 	cfg.LibsProvider = defaultLibsProvider
+	if cfg.XXMIVersion.Follow != followShared {
+		return cfg
+	}
+
+	cfg.XXMIVersion = VersionPin{Follow: "latest"}
+	if version := signedLibsVersion(sharedVersion); version != "" {
+		cfg.XXMIVersion = VersionPin{Pinned: version}
+	}
 	return cfg
 }
 
@@ -111,7 +121,11 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	// Without unsafe mode the deployment no longer preserves user-managed files, so it backs up the custom
 	// DLL and writes the signed one in its place.
 	stage = "deploy-runtime"
-	cfg = officialDLLConfig(cfg)
+	sharedVersion, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg = officialDLLConfig(cfg, sharedVersion)
 	warnings, err = x.deployRuntime(ctx, importer, cfg, false)
 	if err != nil {
 		return nil, err
