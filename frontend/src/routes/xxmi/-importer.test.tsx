@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const xxmi = vi.hoisted(() => ({
   SaveImporterConfig: vi.fn(),
   EnsureLibsVersion: vi.fn(),
+  EnsureLibsProvider: vi.fn(),
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
   ImportCustomDLL: vi.fn(),
@@ -25,6 +26,8 @@ const overview = vi.hoisted(() => ({
     installedVersion?: string;
   }>,
   sharedCustomDll: "",
+  sharedLibsProvider: "spectrumqt",
+  libsProviders: ["spectrumqt", "myparsleycat"],
   customDlls: [] as Array<{ id: string; name: string }>,
 }));
 const packageVerification = vi.hoisted(() => ({
@@ -356,6 +359,7 @@ afterEach(() => {
   config.packageVersion = { follow: "latest" };
   xxmi.SaveImporterConfig.mockReset();
   xxmi.EnsureLibsVersion.mockReset();
+  xxmi.EnsureLibsProvider.mockReset();
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
   xxmi.ImportCustomDLL.mockReset();
@@ -461,6 +465,48 @@ it("hides the importer's own XXMI version while it follows the shared version", 
       expect.objectContaining({ xxmiVersion: { follow: "shared" } }),
     ),
   );
+});
+
+it("caches the importer's own libraries provider before saving it", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  const provider = screen.getByRole("combobox", {
+    name: /page.setting.xxmi.builtin.libsProvider/,
+  });
+  expect(provider.textContent).toContain("page.setting.xxmi.builtin.libsProviderFollowShared");
+  await chooseOption(
+    /page.setting.xxmi.builtin.libsProvider/,
+    "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ libsProvider: "myparsleycat" }),
+    ),
+  );
+  expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat");
+});
+
+it("leaves the draft unsaved when the importer's libraries provider cannot be cached", async () => {
+  xxmi.EnsureLibsProvider.mockRejectedValue(new Error("offline"));
+  mod.GetGames.mockResolvedValue([]);
+  render(<XXMIImporterSettings importer="GIMI" />);
+  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+
+  await chooseOption(
+    /page.setting.xxmi.builtin.libsProvider/,
+    "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+  await waitFor(() => expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat"));
+  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
 });
 
 it("requires a fresh unsigned confirmation for each selected release", async () => {

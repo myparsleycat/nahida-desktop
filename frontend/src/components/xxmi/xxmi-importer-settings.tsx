@@ -124,6 +124,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
   const sharedLibsVersion = overview?.sharedLibsVersion;
+  const libsProviders = overview?.libsProviders ?? [];
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
@@ -180,6 +181,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       } else {
         if (next.xxmiVersion.pinned && next.xxmiVersion.pinned !== saved?.xxmiVersion.pinned) {
           await XXMI.EnsureLibsVersion(next.xxmiVersion.pinned);
+        }
+        if (next.libsProvider && next.libsProvider !== saved?.libsProvider) {
+          await XXMI.EnsureLibsProvider(next.libsProvider);
         }
         await XXMI.SaveImporterConfig(importer, next);
       }
@@ -733,6 +737,34 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             ...config,
                             xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
                           })
+                        }
+                      />
+                    )}
+                    {config.mode === RuntimeMode.RuntimeXXMI && (
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.libsProvider")}
+                        description={
+                          config.libsProvider || !overview?.sharedLibsProvider
+                            ? undefined
+                            : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
+                                provider: t(
+                                  `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
+                                ),
+                              })
+                        }
+                        value={config.libsProvider || "shared"}
+                        options={[
+                          {
+                            value: "shared",
+                            label: t("page.setting.xxmi.builtin.libsProviderFollowShared"),
+                          },
+                          ...libsProviders.map((provider) => ({
+                            value: provider,
+                            label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                          })),
+                        ]}
+                        onValueChange={(value) =>
+                          setConfig({ ...config, libsProvider: value === "shared" ? "" : value })
                         }
                       />
                     )}

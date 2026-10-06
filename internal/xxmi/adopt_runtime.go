@@ -63,8 +63,17 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 	return x.SaveImporterConfig(ctx, importer, cfg)
 }
 
-// RestoreOfficialDLL replaces a user-provided d3d11.dll with the signed XXMI library and turns unsafe mode
-// back off. The replaced DLL is kept in the XXMI backup folder by the runtime deployment.
+// officialDLLConfig returns cfg changed to run the signed XXMI d3d11.dll. The provider is set on the importer
+// itself, so a shared provider that ships its own DLL does not bring that one back at the next launch.
+func officialDLLConfig(cfg ImporterConfig) ImporterConfig {
+	cfg.Migoto.UnsafeMode = false
+	cfg.CustomDLL = ""
+	cfg.LibsProvider = defaultLibsProvider
+	return cfg
+}
+
+// RestoreOfficialDLL replaces a user-provided or provider d3d11.dll with the signed XXMI library and turns
+// unsafe mode back off. A replaced user DLL is kept in the XXMI backup folder by the runtime deployment.
 func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warnings []string, returnErr error) {
 	stage := "acquire"
 	folder := ""
@@ -102,8 +111,7 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	// Without unsafe mode the deployment no longer preserves user-managed files, so it backs up the custom
 	// DLL and writes the signed one in its place.
 	stage = "deploy-runtime"
-	cfg.Migoto.UnsafeMode = false
-	cfg.CustomDLL = ""
+	cfg = officialDLLConfig(cfg)
 	warnings, err = x.deployRuntime(ctx, importer, cfg, false)
 	if err != nil {
 		return nil, err

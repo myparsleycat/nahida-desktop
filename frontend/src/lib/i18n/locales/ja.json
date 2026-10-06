@@ -2052,6 +2052,14 @@
           "libsFollowShared": "共有バージョンに従う",
           "libsOwnVersion": "このインポーター専用のバージョン",
           "libsSharedCurrent": "共有バージョン: {{version}}",
+          "libsProvider": "XXMI ライブラリの提供元",
+          "libsProviderDescription": "共有の提供元に従うインポーターに適用されます。SpectrumQT 以外の提供元は、署名済みの SpectrumQT ライブラリの上で d3d11.dll のみを置き換えます。",
+          "libsProviderFollowShared": "共有の提供元に従う",
+          "libsProviderSharedCurrent": "共有の提供元: {{provider}}",
+          "libsProviders": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "libsVersion": "XXMI バージョン",
           "libsNotify": "更新通知を表示",
           "libsNotifyDescription": "オフにすると選択したバージョンに固定され、更新は表示されません。",

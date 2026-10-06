@@ -354,6 +354,20 @@ export function XXMIDashboard() {
                     );
                   }}
                 />
+                <SelectRow
+                  label={t("page.setting.xxmi.builtin.libsProvider")}
+                  description={t("page.setting.xxmi.builtin.libsProviderDescription")}
+                  value={overview?.sharedLibsProvider ?? ""}
+                  options={(overview?.libsProviders ?? []).map((provider) => ({
+                    value: provider,
+                    label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                  }))}
+                  onValueChange={(value) => {
+                    void XXMI.SetSharedLibsProvider(value).then(refresh, (error: unknown) =>
+                      toast.error(toErrorMessage(error)),
+                    );
+                  }}
+                />
               </SectionContent>
             </Section>
 

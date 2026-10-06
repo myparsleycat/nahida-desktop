@@ -60,6 +60,8 @@ type Asset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 	// Digest is GitHub's "sha256:<hex>" asset digest; older assets have none.
 	Digest string `json:"digest"`
+	// Size is the asset size in bytes; release metadata cached before this field was read has none.
+	Size int64 `json:"size"`
 }
 
 // ReleaseFileURL is the public download URL of a release asset by tag and name.

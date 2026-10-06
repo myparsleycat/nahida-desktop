@@ -2073,6 +2073,14 @@
           "libsFollowShared": "Follow shared version",
           "libsOwnVersion": "Version for this importer",
           "libsSharedCurrent": "Shared version: {{version}}",
+          "libsProvider": "XXMI libraries provider",
+          "libsProviderDescription": "Applies to importers that follow the shared provider. A provider other than SpectrumQT replaces only d3d11.dll on top of the signed SpectrumQT libraries.",
+          "libsProviderFollowShared": "Follow shared provider",
+          "libsProviderSharedCurrent": "Shared provider: {{provider}}",
+          "libsProviders": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "libsVersion": "XXMI version",
           "libsNotify": "Show update notices",
           "libsNotifyDescription": "When off, the selected version stays fixed and updates are not shown.",

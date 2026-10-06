@@ -34,6 +34,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	} else if cfg.XXMIVersion.Pinned != "" {
 		runtimeSource = "xxmi-libs@" + normalizeVersion(cfg.XXMIVersion.Pinned)
 	}
+	runtimeProvider := ""
 	rollbackState := "not-started"
 	gameExe := ""
 	defer func() {
@@ -49,6 +50,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 					"importer":        key,
 					"mode":            cfg.Mode,
 					"source":          runtimeSource,
+					"provider":        runtimeProvider,
 					"rollback":        rollbackState,
 					"importerFolder":  cfg.ImporterFolder,
 					"gameFolder":      cfg.GameFolder,
@@ -215,6 +217,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			var deployed runtimeManifest
 			if json.Unmarshal(data, &deployed) == nil && deployed.Source != "" {
 				runtimeSource = deployed.Source
+				runtimeProvider = deployed.Provider
 			}
 		}
 		for _, warning := range warnings {
@@ -239,7 +242,16 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			if err := verifyXXMILibsCache(cacheFolder, version); err != nil {
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
-			if err := validateXXMIRuntimeFiles(cfg.ImporterFolder, cacheFolder, cfg.Migoto.UnsafeMode); err != nil {
+			d3d11Folder := cacheFolder
+			if runtimeProvider != "" && !cfg.Migoto.UnsafeMode {
+				d3d11Folder, err = x.verifiedProviderDLLFolder(ctx, cacheRoot, runtimeProvider)
+				if err != nil {
+					return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+				}
+			}
+			if err := validateXXMIRuntimeFiles(
+				cfg.ImporterFolder, cacheFolder, d3d11Folder, cfg.Migoto.UnsafeMode,
+			); err != nil {
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
 		} else if !cfg.Migoto.UnsafeMode {

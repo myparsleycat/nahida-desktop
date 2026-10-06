@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -32,6 +33,23 @@ func TestDownloadFileSendsFileHeaders(t *testing.T) {
 	}
 	if data, err := os.ReadFile(destination); err != nil || string(data) != payload {
 		t.Fatalf("downloaded = %q, %v", data, err)
+	}
+}
+
+func TestDownloadFileEnforcesMaxSize(t *testing.T) {
+	const payload = "release payload"
+	client := newTestClient(t, func(*http.Request) (int, string) { return http.StatusOK, payload })
+	destination := filepath.Join(t.TempDir(), "d3d11.dll")
+
+	err := client.DownloadFile(context.Background(), FileRequest{
+		Repo: Repo{Owner: "SpectrumQT", Name: "XXMI-Libs-Package"}, URL: "https://example.test/d3d11.dll",
+		Destination: destination, MaxSize: int64(len(payload)) - 1,
+	})
+	if !errors.Is(err, infra.ErrDownloadTooLarge) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := os.Stat(destination); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("oversized file was kept: %v", err)
 	}
 }
 

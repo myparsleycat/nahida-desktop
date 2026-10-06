@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
     fpsVersions: [],
     cacheIssues: ["legacy 3DMigoto: missing source.json"],
     sharedCustomDll: "",
+    sharedLibsProvider: "spectrumqt",
+    libsProviders: ["spectrumqt", "myparsleycat"],
     customDlls: [] as Array<{ id: string; name: string }>,
     importers: [
       {
@@ -45,6 +47,7 @@ const state = vi.hoisted(() => ({
 
 const xxmi = vi.hoisted(() => ({
   SetSharedLibsVersion: vi.fn(),
+  SetSharedLibsProvider: vi.fn(),
   ImportCustomDLL: vi.fn(),
   SetSharedCustomDLL: vi.fn(),
   GetImporterConfig: vi.fn(),
@@ -384,6 +387,38 @@ it("selects the shared XXMI libraries version from the dashboard", async () => {
   fireEvent.click(version);
 
   expect(xxmi.SetSharedLibsVersion).toHaveBeenCalledWith("1.7.5");
+});
+
+it("selects the shared XXMI libraries provider from the dashboard", async () => {
+  xxmi.SetSharedLibsProvider.mockResolvedValue(undefined);
+  render(<XXMIDashboard />);
+
+  const provider = screen.getByRole("combobox", {
+    name: /page.setting.xxmi.builtin.libsProvider/,
+  });
+  expect(provider.textContent).toContain("page.setting.xxmi.builtin.libsProviders.spectrumqt");
+  fireEvent.click(provider);
+  const fork = await screen.findByRole("option", {
+    name: "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  });
+  fireEvent.pointerDown(fork, { pointerType: "mouse" });
+  fireEvent.click(fork);
+
+  expect(xxmi.SetSharedLibsProvider).toHaveBeenCalledWith("myparsleycat");
+});
+
+it("reports a shared libraries provider that could not be selected", async () => {
+  xxmi.SetSharedLibsProvider.mockRejectedValue(new Error("release asset digest mismatch"));
+  render(<XXMIDashboard />);
+
+  fireEvent.click(screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }));
+  const fork = await screen.findByRole("option", {
+    name: "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  });
+  fireEvent.pointerDown(fork, { pointerType: "mouse" });
+  fireEvent.click(fork);
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("release asset digest mismatch"));
 });
 
 it("collapses importers that are not installed", () => {
