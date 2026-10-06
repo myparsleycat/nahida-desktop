@@ -15,6 +15,8 @@ import (
 	"nahida.live/desktop/internal/transfer"
 )
 
+// maxMultipartUploadConcurrency bounds the part requests in flight, for one
+// file and across one upload run.
 const maxMultipartUploadConcurrency = 4
 
 type UploadExecutionProgress struct {
@@ -41,7 +43,7 @@ type uploadRun struct {
 	bundleByClientID map[string]string
 
 	taskPool          *uploadTaskPool
-	multipartSlots    chan struct{}
+	partLimiter       *partLimiter
 	packed            []preparedUpload
 	packedBytes       int64
 	pendingByIntent   map[string][]FinalUploadFile
@@ -224,7 +226,7 @@ func (r *uploadRun) indexPlan() {
 func (r *uploadRun) dispatchIntents() error {
 	r.packed = make([]preparedUpload, 0, max(1, r.rules.Pack.MaxFiles))
 	r.taskPool = newUploadTaskPool(r.ctx, r.concurrency)
-	r.multipartSlots = make(chan struct{}, maxMultipartUploadConcurrency)
+	r.partLimiter = newPartLimiter()
 
 	for _, intentID := range r.intentOrder {
 		if err := r.dispatchIntent(intentID); err != nil {
@@ -322,19 +324,13 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 func (r *uploadRun) queuePartsIntent(upload UploadPlanEntry, source FinalUploadFile, targets []FinalUploadFile) error {
 	taskCtx := r.targetContext(targets)
 	return r.queueTask(func() {
-		select {
-		case r.multipartSlots <- struct{}{}:
-		case <-taskCtx.Done():
-			return
-		}
-		defer func() { <-r.multipartSlots }()
-
 		err := r.drive.uploadParts(
 			taskCtx,
 			upload,
 			source,
 			r.rules,
 			r.recoverable(targets),
+			r.partLimiter,
 			func(bytes int64) { r.report(source, bytes, false) },
 		)
 		if err != nil {
