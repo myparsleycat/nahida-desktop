@@ -2074,7 +2074,7 @@
           "libsOwnVersion": "Version for this importer",
           "libsSharedCurrent": "Shared version: {{version}}",
           "libsProvider": "XXMI libraries provider",
-          "libsProviderDescription": "Applies to importers that follow the shared provider. A provider other than SpectrumQT replaces only d3d11.dll on top of the signed SpectrumQT libraries.",
+          "libsProviderDescription": "Applies to importers that follow the shared provider.",
           "libsProviderFollowShared": "Follow shared provider",
           "libsProviderSharedCurrent": "Shared provider: {{provider}}",
           "libsProviders": {

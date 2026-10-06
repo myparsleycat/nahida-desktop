@@ -2053,7 +2053,7 @@
           "libsOwnVersion": "이 임포터 전용 버전",
           "libsSharedCurrent": "공용 버전: {{version}}",
           "libsProvider": "XXMI 라이브러리 제공자",
-          "libsProviderDescription": "공용 제공자를 따르는 임포터에 적용됩니다. SpectrumQT 외의 제공자는 서명된 SpectrumQT 라이브러리 위에 d3d11.dll만 교체합니다.",
+          "libsProviderDescription": "공용 제공자를 따르는 임포터에 적용됩니다.",
           "libsProviderFollowShared": "공용 제공자 따르기",
           "libsProviderSharedCurrent": "공용 제공자: {{provider}}",
           "libsProviders": {
