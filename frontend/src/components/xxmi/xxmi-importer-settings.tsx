@@ -70,6 +70,9 @@ type PendingImporterFolderChange = {
   install?: { version: string; allowUnsigned: boolean };
 };
 
+// Offered beside the libraries providers and versions, whose names it must not collide with.
+const FOLLOW_SHARED = "__shared__";
+
 function normalizedFolder(folder: string) {
   return folder.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
 }
@@ -130,14 +133,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       ? cfg.customDll || (cfg.libsProvider ? "" : (overview?.sharedCustomDll ?? ""))
       : "";
   const appliedCustomDll = (cfg: ImporterConfig) => (cfg.migoto.unsafeMode ? selectedDll(cfg) : "");
-  const deployedLibsProvider = (cfg: ImporterConfig | null | undefined) => {
-    if (!cfg) return undefined;
-
+  const launchesCustomDll = (cfg: ImporterConfig) => {
     // The overview reports the saved config. A saved selection accounts for its custom DLL, so a draft that
     // drops the selection drops the DLL; only a DLL kept in the importer folder outlives the draft.
     const keptDll =
       customDll && cfg.migoto.unsafeMode && !(saved != null && appliedCustomDll(saved));
-    return cfg.mode === RuntimeMode.RuntimeXXMI && !appliedCustomDll(cfg) && !keptDll
+    return !!appliedCustomDll(cfg) || keptDll;
+  };
+  const deployedLibsProvider = (cfg: ImporterConfig | null | undefined) => {
+    if (!cfg) return undefined;
+    return cfg.mode === RuntimeMode.RuntimeXXMI && !launchesCustomDll(cfg)
       ? cfg.libsProvider || overview?.sharedLibsProvider
       : libsProviders[0];
   };
@@ -279,6 +284,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   if (!config) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
+  const xxmiRuntime = config.mode === RuntimeMode.RuntimeXXMI;
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
   const selectedCustomDll = selectedDll(config);
@@ -286,6 +292,26 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const selectedCustomDllName = [importedDll, ...(overview?.customDlls ?? [])].find(
     (dll) => dll?.id === selectedCustomDll,
   )?.name;
+
+  // One choice covers the provider and its version: the shared settings, a provider, or a custom DLL. A config
+  // saved while the two followed the shared settings separately is shown by the provider it deploys.
+  const libsSource = ownsCustomDll
+    ? CUSTOM_DLL_SOURCE
+    : config.libsProvider ||
+      (followsSharedLibs || overview?.sharedCustomDll || !overview?.sharedLibsProvider
+        ? FOLLOW_SHARED
+        : overview.sharedLibsProvider);
+  const sharedLibsSettings = !overview?.sharedLibsProvider
+    ? undefined
+    : overview.sharedCustomDll
+      ? `${t("page.setting.xxmi.builtin.customDll")} · ${selectedCustomDllName ?? overview.sharedCustomDll}`
+      : `${t(`page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`)} · ${sharedLibsVersion || t("page.setting.xxmi.builtin.latest")}`;
+  // Only a provider has releases to choose from. The legacy runtime keeps the libraries for their injector alone,
+  // which the native injector replaces.
+  const choosesLibsVersion = xxmiRuntime
+    ? libsSource !== FOLLOW_SHARED && libsSource !== CUSTOM_DLL_SOURCE && !launchesCustomDll(config)
+    : // A pin left from another injection method is still tracked, so it stays reachable.
+      config.injectionMethod !== "Native" || !!config.xxmiVersion.pinned;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
@@ -609,6 +635,212 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               </TabsContent>
 
               <TabsContent value="package" className="flex flex-col gap-6">
+                {(xxmiRuntime || choosesLibsVersion) && (
+                  <Section>
+                    <SectionHeader>
+                      <SectionTitle>{t("page.setting.xxmi.builtin.libs")}</SectionTitle>
+                    </SectionHeader>
+                    <SectionContent>
+                      {xxmiRuntime && (
+                        <SelectRow
+                          label={t("page.setting.xxmi.builtin.libsProvider")}
+                          description={
+                            libsSource === FOLLOW_SHARED && sharedLibsSettings
+                              ? t("page.setting.xxmi.builtin.libsSharedSettings", {
+                                  settings: sharedLibsSettings,
+                                })
+                              : undefined
+                          }
+                          value={libsSource}
+                          options={[
+                            {
+                              value: FOLLOW_SHARED,
+                              label: t("page.setting.xxmi.builtin.libsFollowSharedSettings"),
+                            },
+                            ...libsProviders.map((provider) => ({
+                              value: provider,
+                              label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                            })),
+                            {
+                              value: CUSTOM_DLL_SOURCE,
+                              label: t("page.setting.xxmi.builtin.customDll"),
+                            },
+                          ]}
+                          onValueChange={(value) => {
+                            setPickingCustomDll(value === CUSTOM_DLL_SOURCE);
+                            if (value === CUSTOM_DLL_SOURCE) return;
+                            if (value === FOLLOW_SHARED) {
+                              setConfig({
+                                ...config,
+                                libsProvider: "",
+                                customDll: "",
+                                xxmiVersion: { follow: "shared" },
+                              });
+                              return;
+                            }
+                            const next = { ...config, libsProvider: value, customDll: "" };
+
+                            // A pinned version names a release of the provider it was picked from, so only that
+                            // provider keeps the version in effect, the shared one included.
+                            const keepsVersion = followsSharedLibs
+                              ? value === overview?.sharedLibsProvider
+                              : deployedLibsProvider(next) === libsProvider;
+                            const version =
+                              followsSharedLibs && sharedLibsVersion
+                                ? { pinned: sharedLibsVersion, notify: false }
+                                : followsSharedLibs
+                                  ? { follow: "latest" }
+                                  : config.xxmiVersion;
+                            setConfig({
+                              ...next,
+                              xxmiVersion: keepsVersion ? version : { follow: "latest" },
+                            });
+                          }}
+                        />
+                      )}
+                      {xxmiRuntime && ownsCustomDll && (
+                        <div className="rounded-md bg-muted/50 p-3">
+                          <CustomDLLField
+                            dropTargetId={FileDropTargetID.xxmiImporterCustomDll}
+                            selected={
+                              config.customDll
+                                ? { id: config.customDll, name: selectedCustomDllName }
+                                : undefined
+                            }
+                            onPick={async (path) => {
+                              const dll = await XXMI.ImportCustomDLL(path);
+                              setImportedDll(dll);
+                              if (config.migoto.unsafeMode)
+                                setConfig({ ...config, customDll: dll.id });
+                              else setPendingCustomDll(dll);
+                            }}
+                          />
+                        </div>
+                      )}
+                      {selectedCustomDll && !config.migoto.unsafeMode && (
+                        <Alert>
+                          <TriangleAlertIcon />
+                          <AlertDescription className="flex items-center justify-between gap-4">
+                            <span>{t("page.setting.xxmi.builtin.customDllInactive")}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() =>
+                                setConfig({
+                                  ...config,
+                                  migoto: { ...config.migoto, unsafeMode: true },
+                                })
+                              }
+                            >
+                              {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      {customDll && (
+                        <Alert>
+                          <ShieldAlertIcon />
+                          <AlertDescription className="flex items-center justify-between gap-4">
+                            <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
+                            {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              disabled={dirty}
+                              title={
+                                dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined
+                              }
+                              onClickPromise={async () => {
+                                try {
+                                  const warnings = await XXMI.RestoreOfficialDLL(importer);
+                                  refresh();
+                                  toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
+                                  warnings?.forEach((warning) => toast.warning(warning));
+                                } catch (error) {
+                                  toast.error(toErrorMessage(error));
+                                }
+                              }}
+                            >
+                              {t("page.setting.xxmi.builtin.restoreOfficialDll")}
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      {choosesLibsVersion && (
+                        <SelectRow
+                          label={t("page.setting.xxmi.builtin.libsVersion")}
+                          description={
+                            [
+                              !xxmiRuntime && t("page.setting.xxmi.builtin.libsVersionLegacy"),
+                              followsSharedLibs &&
+                                t("page.setting.xxmi.builtin.libsSharedCurrent", {
+                                  version:
+                                    sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
+                                }),
+                            ]
+                              .filter(Boolean)
+                              .join(" ") || undefined
+                          }
+                          value={
+                            followsSharedLibs
+                              ? FOLLOW_SHARED
+                              : config.xxmiVersion.pinned || FOLLOW_LATEST
+                          }
+                          options={[
+                            // The legacy runtime has no provider to follow the shared settings through, and a config
+                            // saved with only the version following them keeps that choice until it is changed.
+                            ...(!xxmiRuntime || followsSharedLibs
+                              ? [
+                                  {
+                                    value: FOLLOW_SHARED,
+                                    label: t("page.setting.xxmi.builtin.libsFollowShared"),
+                                  },
+                                ]
+                              : []),
+                            { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                            ...(libsReleases?.map((release) => release.version) ?? []),
+                          ]}
+                          onValueChange={(value) =>
+                            setConfig({
+                              ...config,
+                              // The shared provider is shown as the importer's own while only its version is, so
+                              // choosing a version makes both its own.
+                              libsProvider: xxmiRuntime ? libsSource : config.libsProvider,
+                              xxmiVersion:
+                                value === FOLLOW_SHARED
+                                  ? { follow: "shared" }
+                                  : value === FOLLOW_LATEST
+                                    ? { follow: "latest" }
+                                    : {
+                                        pinned: value,
+                                        // A new pin starts fixed; picking another version keeps the notices the user chose.
+                                        notify: config.xxmiVersion.pinned
+                                          ? config.xxmiVersion.notify
+                                          : false,
+                                      },
+                            })
+                          }
+                        />
+                      )}
+                      {choosesLibsVersion && !followsSharedLibs && config.xxmiVersion.pinned && (
+                        <ToggleRow
+                          label={t("page.setting.xxmi.builtin.libsNotify")}
+                          description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
+                          checked={!!config.xxmiVersion.notify}
+                          onCheckedChange={(notify) =>
+                            setConfig({
+                              ...config,
+                              xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
+                            })
+                          }
+                        />
+                      )}
+                    </SectionContent>
+                  </Section>
+                )}
+
                 <Section>
                   <SectionHeader>
                     <SectionTitle>{t("page.setting.xxmi.builtin.packageVersion")}</SectionTitle>
@@ -700,195 +932,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       checked={config.overwriteINI}
                       onCheckedChange={(overwriteINI) => setConfig({ ...config, overwriteINI })}
                     />
-                  </SectionContent>
-                </Section>
-
-                <Section>
-                  <SectionHeader>
-                    <SectionTitle>{t("page.setting.xxmi.builtin.libs")}</SectionTitle>
-                  </SectionHeader>
-                  <SectionContent>
-                    {config.mode === RuntimeMode.RuntimeXXMI && (
-                      <SelectRow
-                        label={t("page.setting.xxmi.builtin.libsProvider")}
-                        description={
-                          ownsCustomDll || config.libsProvider || !overview?.sharedLibsProvider
-                            ? undefined
-                            : selectedCustomDll
-                              ? t("page.setting.xxmi.builtin.customDllShared", {
-                                  name: selectedCustomDllName ?? selectedCustomDll,
-                                })
-                              : t("page.setting.xxmi.builtin.libsProviderSharedCurrent", {
-                                  provider: t(
-                                    `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
-                                  ),
-                                })
-                        }
-                        value={ownsCustomDll ? CUSTOM_DLL_SOURCE : config.libsProvider || "shared"}
-                        options={[
-                          {
-                            value: "shared",
-                            label: t("page.setting.xxmi.builtin.libsProviderFollowShared"),
-                          },
-                          ...libsProviders.map((provider) => ({
-                            value: provider,
-                            label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
-                          })),
-                          {
-                            value: CUSTOM_DLL_SOURCE,
-                            label: t("page.setting.xxmi.builtin.customDll"),
-                          },
-                        ]}
-                        onValueChange={(value) => {
-                          setPickingCustomDll(value === CUSTOM_DLL_SOURCE);
-                          if (value === CUSTOM_DLL_SOURCE) return;
-                          const next = {
-                            ...config,
-                            libsProvider: value === "shared" ? "" : value,
-                            customDll: "",
-                          };
-
-                          // A pinned version names a release of the provider it was picked from.
-                          const keepsPin =
-                            !config.xxmiVersion.pinned ||
-                            deployedLibsProvider(next) === libsProvider;
-                          setConfig({
-                            ...next,
-                            xxmiVersion: keepsPin ? config.xxmiVersion : { follow: "latest" },
-                          });
-                        }}
-                      />
-                    )}
-                    {config.mode === RuntimeMode.RuntimeXXMI && ownsCustomDll && (
-                      <div className="rounded-md bg-muted/50 p-3">
-                        <CustomDLLField
-                          dropTargetId={FileDropTargetID.xxmiImporterCustomDll}
-                          selected={
-                            config.customDll
-                              ? { id: config.customDll, name: selectedCustomDllName }
-                              : undefined
-                          }
-                          onPick={async (path) => {
-                            const dll = await XXMI.ImportCustomDLL(path);
-                            setImportedDll(dll);
-                            if (config.migoto.unsafeMode)
-                              setConfig({ ...config, customDll: dll.id });
-                            else setPendingCustomDll(dll);
-                          }}
-                        />
-                      </div>
-                    )}
-                    {selectedCustomDll && !config.migoto.unsafeMode && (
-                      <Alert>
-                        <TriangleAlertIcon />
-                        <AlertDescription className="flex items-center justify-between gap-4">
-                          <span>{t("page.setting.xxmi.builtin.customDllInactive")}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() =>
-                              setConfig({
-                                ...config,
-                                migoto: { ...config.migoto, unsafeMode: true },
-                              })
-                            }
-                          >
-                            {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {customDll && (
-                      <Alert>
-                        <ShieldAlertIcon />
-                        <AlertDescription className="flex items-center justify-between gap-4">
-                          <span>{t("page.setting.xxmi.builtin.customDllDescription")}</span>
-                          {/* Restoring saves the config server-side, so a stale draft would re-enable unsafe mode. */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            disabled={dirty}
-                            title={
-                              dirty ? t("page.setting.xxmi.builtin.unsavedChanges") : undefined
-                            }
-                            onClickPromise={async () => {
-                              try {
-                                const warnings = await XXMI.RestoreOfficialDLL(importer);
-                                refresh();
-                                toast.success(t("page.setting.xxmi.builtin.officialDllRestored"));
-                                warnings?.forEach((warning) => toast.warning(warning));
-                              } catch (error) {
-                                toast.error(toErrorMessage(error));
-                              }
-                            }}
-                          >
-                            {t("page.setting.xxmi.builtin.restoreOfficialDll")}
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    <SelectRow
-                      label={t("page.setting.xxmi.builtin.libsTrack")}
-                      description={
-                        followsSharedLibs
-                          ? t("page.setting.xxmi.builtin.libsSharedCurrent", {
-                              version: sharedLibsVersion || t("page.setting.xxmi.builtin.latest"),
-                            })
-                          : undefined
-                      }
-                      value={followsSharedLibs ? "shared" : "own"}
-                      options={[
-                        { value: "shared", label: t("page.setting.xxmi.builtin.libsFollowShared") },
-                        { value: "own", label: t("page.setting.xxmi.builtin.libsOwnVersion") },
-                      ]}
-                      onValueChange={(value) => {
-                        if ((value === "shared") === followsSharedLibs) return;
-                        setConfig({
-                          ...config,
-                          xxmiVersion: { follow: value === "shared" ? "shared" : "latest" },
-                        });
-                      }}
-                    />
-                    {!followsSharedLibs && (
-                      <SelectRow
-                        label={t("page.setting.xxmi.builtin.libsVersion")}
-                        value={config.xxmiVersion.pinned || FOLLOW_LATEST}
-                        options={[
-                          { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                          ...(libsReleases?.map((release) => release.version) ?? []),
-                        ]}
-                        onValueChange={(value) =>
-                          setConfig({
-                            ...config,
-                            xxmiVersion:
-                              value === FOLLOW_LATEST
-                                ? { follow: "latest" }
-                                : {
-                                    pinned: value,
-                                    // A new pin starts fixed; picking another version keeps the notices the user chose.
-                                    notify: config.xxmiVersion.pinned
-                                      ? config.xxmiVersion.notify
-                                      : false,
-                                  },
-                          })
-                        }
-                      />
-                    )}
-                    {!followsSharedLibs && config.xxmiVersion.pinned && (
-                      <ToggleRow
-                        label={t("page.setting.xxmi.builtin.libsNotify")}
-                        description={t("page.setting.xxmi.builtin.libsNotifyDescription")}
-                        checked={!!config.xxmiVersion.notify}
-                        onCheckedChange={(notify) =>
-                          setConfig({
-                            ...config,
-                            xxmiVersion: { pinned: config.xxmiVersion.pinned, notify },
-                          })
-                        }
-                      />
-                    )}
                   </SectionContent>
                 </Section>
               </TabsContent>

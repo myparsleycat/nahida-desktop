@@ -74,6 +74,20 @@ const settingsConfig = {
 } as const;
 const launchUpdateModes = ["auto", "notify", "off"] as const;
 
+function importerConfigs(keys: string[]) {
+  return Promise.all(keys.map(async (key) => ({ key, config: await XXMI.GetImporterConfig(key) })));
+}
+
+// The shared custom DLL reaches the importers that follow the shared settings, and only launches in unsafe mode.
+function ignoresSharedDll(config: ImporterConfig) {
+  return (
+    config.mode === RuntimeMode.RuntimeXXMI &&
+    !config.libsProvider &&
+    !config.customDll &&
+    !config.migoto.unsafeMode
+  );
+}
+
 export function XXMIDashboard() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -106,6 +120,15 @@ export function XXMIDashboard() {
   // Choosing the custom DLL as the provider stores nothing until a file is picked.
   const [pickingSharedDll, setPickingSharedDll] = useState(false);
   const sharedDllSource = !!sharedCustomDll || pickingSharedDll;
+  const importerKeys = overview?.importers?.map((entry) => entry.key) ?? [];
+  const { data: sharedDllConfigs } = useQuery({
+    queryKey: ["xxmi:shared-dll-configs", sharedCustomDll, importerKeys],
+    queryFn: () => importerConfigs(importerKeys),
+    enabled: !!sharedCustomDll,
+  });
+  const sharedDllIgnored = sharedCustomDll
+    ? (sharedDllConfigs?.filter(({ config }) => ignoresSharedDll(config)) ?? [])
+    : [];
   const root = editedRoot ?? overview?.root ?? "";
   // A cleared root field imports into the saved root, which the overview already resolves to the default.
   const importRoot = root.trim() || overview?.root || "";
@@ -168,21 +191,8 @@ export function XXMIDashboard() {
     refresh();
     toast.success(t("page.setting.xxmi.builtin.customDllSet"));
 
-    const configs = await Promise.all(
-      (overview?.importers ?? []).map(async (entry) => ({
-        key: entry.key,
-        config: await XXMI.GetImporterConfig(entry.key),
-      })),
-    );
-    setUnsafePrompt(
-      configs.filter(
-        ({ config }) =>
-          config.mode === RuntimeMode.RuntimeXXMI &&
-          !config.libsProvider &&
-          !config.customDll &&
-          !config.migoto.unsafeMode,
-      ),
-    );
+    const configs = await importerConfigs(importerKeys);
+    setUnsafePrompt(configs.filter(({ config }) => ignoresSharedDll(config)));
   };
 
   const enableUnsafeMode = async () => {
@@ -345,8 +355,8 @@ export function XXMIDashboard() {
                   onCheckedChange={(value) => update("includePrereleases", value)}
                 />
                 <SelectRow
-                  label={t("page.setting.xxmi.builtin.libsProvider")}
-                  description={t("page.setting.xxmi.builtin.libsProviderDescription")}
+                  label={t("page.setting.xxmi.builtin.sharedLibsProvider")}
+                  description={t("page.setting.xxmi.builtin.sharedLibsDescription")}
                   value={sharedDllSource ? CUSTOM_DLL_SOURCE : (overview?.sharedLibsProvider ?? "")}
                   options={[
                     ...(overview?.libsProviders ?? []).map((provider) => ({
@@ -368,7 +378,7 @@ export function XXMIDashboard() {
                   }}
                 />
                 {sharedDllSource && (
-                  <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                  <div className="rounded-md bg-muted/50 p-3">
                     <CustomDLLField
                       dropTargetId={FileDropTargetID.xxmiSharedCustomDll}
                       selected={
@@ -382,32 +392,57 @@ export function XXMIDashboard() {
                       }
                       onPick={selectSharedCustomDll}
                     />
-                    {overview?.sharedLibsProvider && (
-                      <p className="text-xs text-muted-foreground">
-                        {t("page.setting.xxmi.builtin.customDllFallbackProvider", {
-                          provider: t(
-                            `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
-                          ),
-                        })}
-                      </p>
-                    )}
                   </div>
                 )}
-                <SelectRow
-                  label={t("page.setting.xxmi.builtin.sharedLibsVersion")}
-                  description={t("page.setting.xxmi.builtin.sharedLibsVersionDescription")}
-                  value={overview?.sharedLibsVersion || FOLLOW_LATEST}
-                  options={[
-                    { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
-                    ...(libsReleases?.map((release) => release.version) ?? []),
-                  ]}
-                  onValueChange={(value) => {
-                    void XXMI.SetSharedLibsVersion(value === FOLLOW_LATEST ? "" : value).then(
-                      refresh,
-                      (error: unknown) => toast.error(toErrorMessage(error)),
-                    );
-                  }}
-                />
+                {sharedDllIgnored.length > 0 && (
+                  <Alert>
+                    <TriangleAlertIcon />
+                    <AlertDescription className="flex items-center justify-between gap-4">
+                      <span>
+                        {t("page.setting.xxmi.builtin.customDllFallbackProvider", {
+                          // The shared version cannot be edited while the DLL hides its row, so the one these
+                          // importers still deploy is named here.
+                          importers: sharedDllIgnored
+                            .map(({ key, config }) => {
+                              const version =
+                                config.xxmiVersion.follow === "shared"
+                                  ? overview?.sharedLibsVersion
+                                  : config.xxmiVersion.pinned;
+                              return `${key} (${version || t("page.setting.xxmi.builtin.latest")})`;
+                            })
+                            .join(", "),
+                          provider: t(
+                            `page.setting.xxmi.builtin.libsProviders.${overview?.sharedLibsProvider}`,
+                          ),
+                        })}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => setUnsafePrompt(sharedDllIgnored)}
+                      >
+                        {t("page.setting.xxmi.builtin.customDllEnableUnsafe")}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {!sharedDllSource && (
+                  <SelectRow
+                    label={t("page.setting.xxmi.builtin.sharedLibsVersion")}
+                    value={overview?.sharedLibsVersion || FOLLOW_LATEST}
+                    options={[
+                      { value: FOLLOW_LATEST, label: t("page.setting.xxmi.builtin.latest") },
+                      ...(libsReleases?.map((release) => release.version) ?? []),
+                    ]}
+                    onValueChange={(value) => {
+                      void XXMI.SetSharedLibsVersion(value === FOLLOW_LATEST ? "" : value).then(
+                        refresh,
+                        (error: unknown) => toast.error(toErrorMessage(error)),
+                      );
+                    }}
+                  />
+                )}
               </SectionContent>
             </Section>
 

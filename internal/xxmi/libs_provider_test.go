@@ -638,7 +638,7 @@ func TestCustomDLLHidesProviderUpdates(t *testing.T) {
 	}
 
 	// Restoring the official DLL drops the custom DLL and keeps the fork from taking its place.
-	restored := officialDLLConfig(cfg)
+	restored := officialDLLConfig(cfg, "")
 	if spec, err := service.libsProvider(ctx, restored); err != nil || spec.id != defaultLibsProvider {
 		t.Fatalf("restored provider = %q, err = %v", spec.id, err)
 	}

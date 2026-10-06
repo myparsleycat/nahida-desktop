@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
     sharedLibsProvider: "spectrumqt",
     libsProviders: ["spectrumqt", "myparsleycat"],
     customDlls: [] as Array<{ id: string; name: string }>,
+    sharedDllConfigs: [] as Array<{ key: string; config: ReturnType<typeof sharedImporterConfig> }>,
     importers: [
       {
         key: "GIMI",
@@ -84,7 +85,9 @@ vi.mock("@tanstack/react-query", () => ({
           ? state.xxmiData
           : queryKey[0] === "xxmi:libs-releases"
             ? [{ version: "1.7.5" }, { version: "1.7.6" }]
-            : state.updates,
+            : queryKey[0] === "xxmi:shared-dll-configs"
+              ? state.overview.sharedDllConfigs
+              : state.updates,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -114,17 +117,26 @@ afterEach(() => {
   state.overview.libsCache = [];
   state.overview.sharedCustomDll = "";
   state.overview.customDlls = [];
+  state.overview.sharedDllConfigs = [];
   Object.values(xxmi).forEach((mock) => mock.mockReset());
   dialog.ShowOpenDialog.mockReset();
   vi.mocked(toast.error).mockReset();
 });
 
 function sharedImporterConfig(unsafeMode: boolean) {
-  return { mode: "xxmi", libsProvider: "", customDll: "", migoto: { unsafeMode } };
+  return {
+    mode: "xxmi",
+    libsProvider: "",
+    customDll: "",
+    xxmiVersion: { follow: "shared" },
+    migoto: { unsafeMode },
+  };
 }
 
 async function chooseProvider(option: string) {
-  fireEvent.click(screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }));
+  fireEvent.click(
+    screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.sharedLibsProvider/ }),
+  );
   const item = await screen.findByRole("option", { name: option });
   fireEvent.pointerDown(item, { pointerType: "mouse" });
   fireEvent.click(item);
@@ -247,14 +259,46 @@ it("shows the shared custom DLL as the provider and drops it for a provider", as
   render(<XXMIDashboard />);
 
   const provider = screen.getByRole("combobox", {
-    name: /page.setting.xxmi.builtin.libsProvider/,
+    name: /page.setting.xxmi.builtin.sharedLibsProvider/,
   });
   expect(provider.textContent).toContain("page.setting.xxmi.builtin.customDll");
   expect(screen.getByText("custom.dll")).toBeTruthy();
-  expect(screen.getByText("page.setting.xxmi.builtin.customDllFallbackProvider")).toBeTruthy();
+  expect(screen.queryByText("page.setting.xxmi.builtin.customDllFallbackProvider")).toBeNull();
+  expect(
+    screen.queryByRole("combobox", { name: /page.setting.xxmi.builtin.sharedLibsVersion/ }),
+  ).toBeNull();
   await chooseProvider("page.setting.xxmi.builtin.libsProviders.spectrumqt");
 
   await waitFor(() => expect(xxmi.SetSharedLibsProvider).toHaveBeenCalledWith("spectrumqt"));
+});
+
+it("offers unsafe mode for the importers that ignore the shared custom DLL", async () => {
+  state.overview.sharedCustomDll = "abcdef123456";
+  state.overview.importers.push({ ...state.overview.importers[0], key: "WWMI" });
+  state.overview.sharedDllConfigs = [
+    { key: "GIMI", config: sharedImporterConfig(false) },
+    { key: "WWMI", config: sharedImporterConfig(true) },
+  ];
+  xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  render(<XXMIDashboard />);
+
+  expect(screen.getByText("page.setting.xxmi.builtin.customDllFallbackProvider")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.setting.xxmi.builtin.customDllEnableUnsafe" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledExactlyOnceWith(
+      "GIMI",
+      expect.objectContaining({ migoto: { unsafeMode: true } }),
+    ),
+  );
 });
 
 it("keeps the shared custom DLL when the provider chosen in its place cannot be selected", async () => {
@@ -433,7 +477,7 @@ it("selects the shared XXMI libraries provider from the dashboard", async () => 
   render(<XXMIDashboard />);
 
   const provider = screen.getByRole("combobox", {
-    name: /page.setting.xxmi.builtin.libsProvider/,
+    name: /page.setting.xxmi.builtin.sharedLibsProvider/,
   });
   expect(provider.textContent).toContain("page.setting.xxmi.builtin.libsProviders.spectrumqt");
   fireEvent.click(provider);
@@ -450,7 +494,9 @@ it("reports a shared libraries provider that could not be selected", async () =>
   xxmi.SetSharedLibsProvider.mockRejectedValue(new Error("release asset digest mismatch"));
   render(<XXMIDashboard />);
 
-  fireEvent.click(screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }));
+  fireEvent.click(
+    screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.sharedLibsProvider/ }),
+  );
   const fork = await screen.findByRole("option", {
     name: "page.setting.xxmi.builtin.libsProviders.myparsleycat",
   });
