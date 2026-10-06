@@ -180,6 +180,10 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("inspect partial download: %w", err)
 		}
+		// A partial file already over the limit must not be completed by a 416 response; File removes it.
+		if request.MaxSize > 0 && resumeFrom > request.MaxSize {
+			return fmt.Errorf("%w of %d bytes", ErrDownloadTooLarge, request.MaxSize)
+		}
 		if request.Size > 0 && resumeFrom > request.Size {
 			resetBytes := min(resumeFrom, request.Size)
 			if err := os.Remove(temporaryPath); err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -349,6 +349,34 @@ func TestDownloadFileStopsAtMaxSize(t *testing.T) {
 	}
 }
 
+func TestDownloadFileRejectsOversizedPartialOn416(t *testing.T) {
+	content := []byte("oversized")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), "file.bin")
+	if err := os.WriteFile(destination+".ntmp", content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := testDownload(server.Client()).File(context.Background(), DownloadRequest{
+		URL:         server.URL,
+		Destination: destination,
+		Size:        int64(len(content)),
+		MaxSize:     int64(len(content)) - 1,
+		Resume:      true,
+	})
+	if !errors.Is(err, ErrDownloadTooLarge) {
+		t.Fatalf("File() error = %v", err)
+	}
+	for _, path := range []string{destination, destination + ".ntmp"} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s was kept: %v", filepath.Base(path), err)
+		}
+	}
+}
+
 func TestDownloadFileDoesNotUseSharedClientRetries(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
