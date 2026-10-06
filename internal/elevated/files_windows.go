@@ -144,6 +144,13 @@ func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
 		return err
 	}
 	replaced = true
+
+	// The published file is the temporary one, which never carried the attribute.
+	if readOnly {
+		if err := os.Chmod(op.Target, 0o400); err != nil {
+			return fmt.Errorf("restore read-only attribute: %w", err)
+		}
+	}
 	return nil
 }
 

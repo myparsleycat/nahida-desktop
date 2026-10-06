@@ -93,6 +93,9 @@ func TestApplyFileOpsReplacesReadOnlyTarget(t *testing.T) {
 	if data, err := os.ReadFile(target); err != nil || string(data) != "new library" {
 		t.Fatalf("target = %q, err = %v", data, err)
 	}
+	if info, err := os.Stat(target); err != nil || info.Mode().Perm()&0o200 != 0 {
+		t.Fatalf("replaced target lost its read-only attribute: mode = %v, err = %v", info.Mode(), err)
+	}
 }
 
 func TestApplyFileOpsKeepsReadOnlyTargetItCannotReplace(t *testing.T) {
