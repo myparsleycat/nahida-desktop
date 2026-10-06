@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/gameplatform"
@@ -40,6 +41,7 @@ type Options struct {
 type elevatedLauncher interface {
 	Acquire(context.Context) (func(), error)
 	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	ApplyFiles(context.Context, []elevated.FileOp) error
 	HelperImageName() string
 }
 

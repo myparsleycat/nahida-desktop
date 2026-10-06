@@ -4,14 +4,19 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -191,7 +196,15 @@ func TestResolveNteInstallPathUsesInjectedAppDataFallback(t *testing.T) {
 	}
 }
 
-func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
+// nteBootstrapFiles is what the archives served by nteBootstrapService install next to the game.
+var nteBootstrapFiles = map[string]string{
+	"dsound.dll": "new-dsound", "UniversalSigBypasser.asi": "sig-bypasser", "winhttp.dll": "asi-loader",
+	"UniversalSigBypasser.asi.sha512": "sig-hash", "winhttp.dll.sha512": "loader-hash",
+}
+
+// nteBootstrapService downloads the bootstrap archives from a local server instead of GitHub.
+func nteBootstrapService(t *testing.T, options Options) *Mod {
+	t.Helper()
 	sigArchive := nteBootstrapZip(t, map[string]string{
 		"release/dsound.dll":                      "new-dsound",
 		"release/UniversalSigBypasser.asi":        "sig-bypasser",
@@ -213,18 +226,107 @@ func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
+	options.Archive = infra.NewArchive()
+	options.HTTP = infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()})
+	service := NewWithOptions(options)
+	service.nteSigBypasserURL = server.URL + "/sig.zip"
+	service.nteASILoaderURL = server.URL + "/loader.zip"
+	return service
+}
+
+// recordingElevatedFiles stands in for the elevated helper, so no test asks for UAC consent. It
+// records what it was asked to do and, like the helper, checks each staged source against its
+// digest and carries the operation out, through the read-only attribute that stops this process.
+type recordingElevatedFiles struct {
+	acquires   int
+	releases   int
+	acquireErr error
+	ops        []elevated.FileOp
+	content    map[string]string
+}
+
+func (h *recordingElevatedFiles) Acquire(context.Context) (func(), error) {
+	h.acquires++
+	if h.acquireErr != nil {
+		return nil, h.acquireErr
+	}
+	return func() { h.releases++ }, nil
+}
+
+func (h *recordingElevatedFiles) ApplyFiles(_ context.Context, ops []elevated.FileOp) error {
+	if h.content == nil {
+		h.content = make(map[string]string)
+	}
+	for _, op := range ops {
+		h.ops = append(h.ops, op)
+		if op.Kind != elevated.FileOpCopy {
+			if err := os.Remove(op.Target); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			continue
+		}
+		data, err := os.ReadFile(op.Source)
+		if err != nil {
+			return err
+		}
+		if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != op.SHA256 {
+			return errors.New("staged file does not match its digest: " + op.Target)
+		}
+		h.content[filepath.Base(op.Target)] = string(data)
+		if err := writeProtectedFile(op.Target, data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeProtectedFile(path string, data []byte) error {
+	info, err := os.Stat(path)
+	readOnly := err == nil && info.Mode().Perm()&0o200 == 0
+	if readOnly {
+		if err := os.Chmod(path, 0o600); err != nil {
+			return err
+		}
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	if readOnly {
+		return os.Chmod(path, 0o400)
+	}
+	return nil
+}
+
+// protectedNteGameFolder returns a game executable whose folder holds a dsound.dll this process
+// cannot overwrite. The read-only attribute denies the write to every user, administrators
+// included, so the bootstrap install has to go through the helper.
+func protectedNteGameFolder(t *testing.T) (executable, dsound string) {
+	t.Helper()
+	targetDir := t.TempDir()
+	executable = filepath.Join(targetDir, nteExecutableName)
+	if err := os.WriteFile(executable, []byte("exe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dsound = filepath.Join(targetDir, "dsound.dll")
+	if err := os.WriteFile(dsound, []byte("old-dsound"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dsound, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dsound, 0o600) })
+	return executable, dsound
+}
+
+func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
 	var progress []NteBootstrapProgress
-	service := NewWithOptions(Options{
-		Archive: infra.NewArchive(),
-		HTTP:    infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()}),
+	service := nteBootstrapService(t, Options{
 		EventEmit: func(name string, data ...any) {
 			if name == nteBootstrapEvent && len(data) == 1 {
 				progress = append(progress, data[0].(NteBootstrapProgress))
 			}
 		},
 	})
-	service.nteSigBypasserURL = server.URL + "/sig.zip"
-	service.nteASILoaderURL = server.URL + "/loader.zip"
 	targetDir := t.TempDir()
 	executable := filepath.Join(targetDir, nteExecutableName)
 	if err := os.WriteFile(executable, []byte("exe"), 0o755); err != nil {
@@ -238,10 +340,7 @@ func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
 	if err != nil || install == nil {
 		t.Fatalf("ensureNteBootstrapFiles = %#v, %v", install, err)
 	}
-	for name, content := range map[string]string{
-		"dsound.dll": "new-dsound", "UniversalSigBypasser.asi": "sig-bypasser", "winhttp.dll": "asi-loader",
-		"UniversalSigBypasser.asi.sha512": "sig-hash", "winhttp.dll.sha512": "loader-hash",
-	} {
+	for name, content := range nteBootstrapFiles {
 		got, readErr := os.ReadFile(filepath.Join(targetDir, name))
 		if readErr != nil || string(got) != content {
 			t.Fatalf("installed %s = %q, %v", name, got, readErr)
@@ -269,6 +368,170 @@ func TestEnsureNteBootstrapFilesInstallsEmitsAndRollsBack(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(targetDir, name)); !os.IsNotExist(err) {
 			t.Fatalf("rollback left %s: %v", name, err)
 		}
+	}
+}
+
+func TestEnsureNteBootstrapFilesInstallsProtectedFilesWithOnePrompt(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		finish func(*nteBootstrapInstall) error
+		// wantAfter is what the helper is asked to do once the install is finished.
+		wantAfter  []string
+		wantDsound string
+	}{
+		{name: "commit", finish: (*nteBootstrapInstall).Commit, wantDsound: "new-dsound"},
+		{
+			name: "rollback", finish: (*nteBootstrapInstall).Rollback,
+			wantAfter:  []string{"remove", "remove", "remove", "remove", "copy dsound.dll"},
+			wantDsound: "old-dsound",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			helper := &recordingElevatedFiles{}
+			service := nteBootstrapService(t, Options{Elevated: helper})
+			executable, dsound := protectedNteGameFolder(t)
+
+			install, err := service.ensureNteBootstrapFiles(t.Context(), executable)
+			if err != nil || install == nil {
+				t.Fatalf("ensureNteBootstrapFiles = %#v, %v", install, err)
+			}
+			if len(helper.ops) != len(nteBootstrapFiles) {
+				t.Fatalf("helper operations = %+v", helper.ops)
+			}
+			for name, content := range nteBootstrapFiles {
+				if helper.content[name] != content {
+					t.Fatalf("staged %s = %q, want %q", name, helper.content[name], content)
+				}
+			}
+			if helper.acquires != 1 || helper.releases != 0 {
+				t.Fatalf(
+					"acquires = %d, releases = %d; want the lease held until the install is finished",
+					helper.acquires, helper.releases,
+				)
+			}
+
+			if err := test.finish(install); err != nil {
+				t.Fatal(err)
+			}
+			after := make([]string, 0, len(test.wantAfter))
+			for _, op := range helper.ops[len(nteBootstrapFiles):] {
+				if op.Kind == elevated.FileOpRemove {
+					after = append(after, "remove")
+					continue
+				}
+				after = append(after, string(op.Kind)+" "+filepath.Base(op.Target))
+			}
+			if !slices.Equal(after, test.wantAfter) {
+				t.Fatalf("helper operations after the install = %q, want %q", after, test.wantAfter)
+			}
+			if helper.acquires != 1 || helper.releases != 1 {
+				t.Fatalf(
+					"acquires = %d, releases = %d; want one prompt for the action",
+					helper.acquires,
+					helper.releases,
+				)
+			}
+			if helper.content["dsound.dll"] != test.wantDsound {
+				t.Fatalf("last staged dsound.dll = %q, want %q", helper.content["dsound.dll"], test.wantDsound)
+			}
+			if got, err := os.ReadFile(dsound); err != nil || string(got) != test.wantDsound {
+				t.Fatalf("dsound.dll = %q, %v; want %q", got, err, test.wantDsound)
+			}
+		})
+	}
+}
+
+func TestEnsureNteBootstrapFilesDoesNotRepeatDeclinedPrompt(t *testing.T) {
+	t.Parallel()
+
+	declined := errors.New("the operation was canceled by the user")
+	helper := &recordingElevatedFiles{acquireErr: declined}
+	var progress []NteBootstrapProgress
+	service := nteBootstrapService(t, Options{
+		Elevated: helper,
+		EventEmit: func(name string, data ...any) {
+			if name == nteBootstrapEvent && len(data) == 1 {
+				progress = append(progress, data[0].(NteBootstrapProgress))
+			}
+		},
+	})
+	executable, dsound := protectedNteGameFolder(t)
+
+	install, err := service.ensureNteBootstrapFiles(t.Context(), executable)
+	if install != nil || !errors.Is(err, declined) ||
+		!strings.HasPrefix(err.Error(), "NTE_BOOTSTRAP_ELEVATED_COPY_FAILED: ") {
+		t.Fatalf("ensureNteBootstrapFiles = %#v, %v", install, err)
+	}
+
+	// Nothing was installed, so there is nothing to roll back and nothing to ask for a second time.
+	if helper.acquires != 1 || len(helper.ops) != 0 {
+		t.Fatalf("acquires = %d, operations = %d; want one prompt and no request", helper.acquires, len(helper.ops))
+	}
+	if strings.Contains(err.Error(), "NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED: ") {
+		t.Fatalf("declined install reports a rollback of an unchanged folder: %v", err)
+	}
+	if len(progress) == 0 || progress[len(progress)-1].Phase != "failed" {
+		t.Fatalf("progress = %#v", progress)
+	}
+	if got, err := os.ReadFile(dsound); err != nil || string(got) != "old-dsound" {
+		t.Fatalf("dsound.dll = %q, %v", got, err)
+	}
+}
+
+func TestNteBootstrapRollbackKeepsBackupsItCouldNotRestore(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		replaced bool
+	}{
+		{name: "replaced file", replaced: true},
+		{name: "untouched file"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, dsound := protectedNteGameFolder(t)
+			helper := &recordingElevatedFiles{acquireErr: errors.New("elevated helper is gone")}
+			install, err := prepareNteBootstrapInstall(
+				[]nteBootstrapFileCopy{{sourcePath: dsound, targetPath: dsound}}, helper,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(install.rollbackDir) })
+			if test.replaced {
+				if err := os.Chmod(dsound, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dsound, []byte("new-dsound"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(dsound, 0o400); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = install.Rollback()
+			if !test.replaced {
+				if err != nil || helper.acquires != 0 {
+					t.Fatalf("Rollback = %v after %d prompts, want an untouched file left alone", err, helper.acquires)
+				}
+				if _, statErr := os.Stat(install.rollbackDir); !os.IsNotExist(statErr) {
+					t.Fatalf("rollback left backups nothing depends on: %v", statErr)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED: ") {
+				t.Fatalf("Rollback = %v, want the rollback that could not run", err)
+			}
+			backup, readErr := os.ReadFile(install.snapshots[0].backupPath)
+			if readErr != nil || string(backup) != "old-dsound" {
+				t.Fatalf("backup of the replaced dsound.dll = %q, %v", backup, readErr)
+			}
+		})
 	}
 }
 

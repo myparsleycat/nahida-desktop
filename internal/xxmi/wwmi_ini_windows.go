@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // wwmiRetiredEngineOptions are performance tweaks earlier versions wrote to Engine.ini.
@@ -23,10 +24,16 @@ var wwmiRetiredEngineOptions = []string{
 
 // configureWWMIINIFiles edits the game's INI files. The engine files only matter to mods, so they
 // are left alone when the XXMI DLL is not loaded.
-func configureWWMIINIFiles(ctx context.Context, game string, options WWMIOptions, migotoDLLUsed bool) error {
+func configureWWMIINIFiles(
+	ctx context.Context,
+	game string,
+	options WWMIOptions,
+	migotoDLLUsed bool,
+	publish *gameFilePublisher,
+) error {
 	if options.UnlockFPS {
 		if err := editWWMIINI(ctx,
-			filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini"),
+			filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini"), publish,
 			func(doc *iniDocument) {
 				doc.SetOptionUnique("/Script/Engine.GameUserSettings", "FrameRateLimit", "120.000000", false)
 			}); err != nil {
@@ -37,7 +44,8 @@ func configureWWMIINIFiles(ctx context.Context, game string, options WWMIOptions
 		return nil
 	}
 
-	if err := editWWMIINI(ctx, filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "Engine.ini"),
+	if err := editWWMIINI(ctx,
+		filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "Engine.ini"), publish,
 		func(doc *iniDocument) {
 			doc.RemoveOption("ConsoleVariables", "r.Kuro.SkeletalMesh.DistanceLODBaseFOV")
 			if !options.RetiredEngineOptionsPending {
@@ -49,7 +57,7 @@ func configureWWMIINIFiles(ctx context.Context, game string, options WWMIOptions
 		}); err != nil {
 		return fmt.Errorf("edit WWMI Engine.ini: %w", err)
 	}
-	if err := editWWMIINI(ctx, filepath.Join(game, "Client", "Config", "UserEngine.ini"),
+	if err := editWWMIINI(ctx, filepath.Join(game, "Client", "Config", "UserEngine.ini"), publish,
 		func(doc *iniDocument) {
 			doc.SetOptionUnique(
 				"ConsoleVariables",
@@ -63,13 +71,20 @@ func configureWWMIINIFiles(ctx context.Context, game string, options WWMIOptions
 	return nil
 }
 
-func editWWMIINI(ctx context.Context, path string, edit func(*iniDocument)) error {
-	root, err := ensureInstallRoot(filepath.Dir(path))
+func editWWMIINI(ctx context.Context, path string, publish *gameFilePublisher, edit func(*iniDocument)) error {
+	name := filepath.Base(path)
+	owns := func(candidate string) bool { return strings.EqualFold(candidate, name) }
+	return editGameFolder(ctx, filepath.Dir(path), owns, publish, func(folder string) error {
+		return editINIFile(ctx, folder, name, edit)
+	})
+}
+
+func editINIFile(ctx context.Context, folder, name string, edit func(*iniDocument)) error {
+	root, err := ensureInstallRoot(folder)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	name := filepath.Base(path)
 	data, info, err := root.readFile(name)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

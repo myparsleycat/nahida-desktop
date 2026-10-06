@@ -19,6 +19,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -74,6 +75,8 @@ type Options struct {
 	GameBanana *gamebanana.GameBanana
 	Native     *platform.Native
 	Focus      func()
+	// Elevated changes files in a game folder this process cannot write to; nil fails those writes.
+	Elevated elevated.FileGateway
 }
 
 type Mod struct {
@@ -91,6 +94,7 @@ type Mod struct {
 	transfer           *transfer.Transfer
 	gamebanana         *gamebanana.GameBanana
 	native             *platform.Native
+	elevated           elevated.FileGateway
 	paths              *pathSelector
 	downloader         *infra.ParallelDownloader
 	extractMu          sync.Mutex
@@ -128,7 +132,7 @@ func NewWithOptions(opts Options) *Mod {
 		appData: opts.AppData, fs: opts.FS, settings: opts.Settings, archive: opts.Archive, http: opts.HTTP,
 		download: opts.Download,
 		xxmi:     opts.XXMI, log: opts.Log, dialog: opts.Dialog, emit: opts.EventEmit,
-		transfer: opts.Transfer, gamebanana: opts.GameBanana, native: opts.Native,
+		transfer: opts.Transfer, gamebanana: opts.GameBanana, native: opts.Native, elevated: opts.Elevated,
 		shaders: newShaderFixes(), extractPrompts: map[string]chan string{},
 		downloader:        infra.NewParallelDownloader(),
 		nteSigBypasserURL: defaultNteSigBypasserURL,

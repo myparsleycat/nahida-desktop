@@ -5,8 +5,6 @@ package fixer4001
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"unicode/utf16"
+
+	"nahida.live/desktop/internal/elevated"
 )
 
 func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath, gitPath string) error {
@@ -69,70 +68,28 @@ func cmdScript(ctx context.Context, script string) *exec.Cmd {
 	return cmd
 }
 
-func elevatedCopyFiles(copies []fileCopy) error {
-	var entries strings.Builder
+func elevatedCopyFiles(ctx context.Context, lease *elevated.FileLease, copies []fileCopy) error {
+	ops := make([]elevated.FileOp, 0, len(copies))
 	for _, item := range copies {
-		fmt.Fprintf(
-			&entries,
-			"[pscustomobject]@{ SourcePath = %s; TargetPath = %s }\n",
-			psLiteral(item.Source),
-			psLiteral(item.Target),
-		)
+		op, err := elevated.NewCopyOp(item.Source, item.Target)
+		if err != nil {
+			return fmt.Errorf("XXMI_ERR_ELEVATED_COPY_FAILED: %w", err)
+		}
+		ops = append(ops, op)
 	}
-	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-$Copies = @(
-%s)
-foreach ($Copy in $Copies) {
-  [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.TargetPath)) | Out-Null
-  Copy-Item -LiteralPath $Copy.SourcePath -Destination $Copy.TargetPath -Force
-}`, entries.String())
-	return runElevatedPowerShell(script, "XXMI_ERR_ELEVATED_COPY_FAILED")
-}
-
-func elevatedRemoveFiles(paths []string) error {
-	var entries strings.Builder
-	for _, path := range paths {
-		fmt.Fprintf(&entries, "%s\n", psLiteral(path))
-	}
-	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-$Paths = @(
-%s)
-foreach ($PathValue in $Paths) {
-  if (Test-Path -LiteralPath $PathValue) { Remove-Item -LiteralPath $PathValue -Force }
-}`, entries.String())
-	return runElevatedPowerShell(script, "XXMI_ERR_ELEVATED_REMOVE_FAILED")
-}
-
-func runElevatedPowerShell(script, errorPrefix string) error {
-	inner := encodePowerShell(script)
-	outer := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-try {
-  $Process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '%s')
-  if ($null -eq $Process -or $null -eq $Process.ExitCode) { exit 1 }
-  exit $Process.ExitCode
-} catch { exit 1 }`, inner)
-	cmd := exec.Command(
-		"powershell.exe",
-		"-NoProfile",
-		"-ExecutionPolicy",
-		"Bypass",
-		"-EncodedCommand",
-		encodePowerShell(outer),
-	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w", errorPrefix, err)
+	if err := lease.Apply(ctx, ops); err != nil {
+		return fmt.Errorf("XXMI_ERR_ELEVATED_COPY_FAILED: %w", err)
 	}
 	return nil
 }
 
-func psLiteral(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
-
-func encodePowerShell(command string) string {
-	units := utf16.Encode([]rune(command))
-	bytes := make([]byte, len(units)*2)
-	for i, unit := range units {
-		binary.LittleEndian.PutUint16(bytes[i*2:], unit)
+func elevatedRemoveFiles(ctx context.Context, lease *elevated.FileLease, paths []string) error {
+	ops := make([]elevated.FileOp, 0, len(paths))
+	for _, path := range paths {
+		ops = append(ops, elevated.FileOp{Kind: elevated.FileOpRemove, Target: path})
 	}
-	return base64.StdEncoding.EncodeToString(bytes)
+	if err := lease.Apply(ctx, ops); err != nil {
+		return fmt.Errorf("XXMI_ERR_ELEVATED_REMOVE_FAILED: %w", err)
+	}
+	return nil
 }

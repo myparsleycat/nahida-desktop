@@ -16,6 +16,7 @@ const (
 	operationStop       = "session.stop"
 	operationKeys       = "input.send_keys"
 	operationXXMILaunch = "xxmi.launch"
+	operationFiles      = "fs.apply"
 )
 
 type message struct {

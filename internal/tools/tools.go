@@ -6,6 +6,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -56,6 +57,8 @@ type Options struct {
 	PEDiversifier PEDiversifier
 	// GitHub serves GitHub releases; nil builds one from HTTP, Download and GitHubRate.
 	GitHub *github.Client
+	// Elevated changes files the application cannot write to; nil fails those writes.
+	Elevated elevated.FileGateway
 }
 
 // Tools is the Wails service the renderer calls. Feature behavior lives in the
@@ -139,6 +142,7 @@ func NewWithOptions(opts Options) *Tools {
 			XXMI:          opts.XXMI,
 			PEDiversifier: opts.PEDiversifier,
 			GitHub:        opts.GitHub,
+			Elevated:      opts.Elevated,
 		}),
 		menuMaker: menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
 		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{

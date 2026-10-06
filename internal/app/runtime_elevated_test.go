@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -343,7 +345,7 @@ func TestXXMILauncherShutdownCancelsLaunch(t *testing.T) {
 
 	lifecycle := newElevatedLifecycle(nil, nil, nil)
 	defer lifecycle.shutdown()
-	client := &blockingLaunchClient{started: make(chan struct{})}
+	client := &blockingHelperClient{started: make(chan struct{})}
 	launcher := xxmiElevatedLauncher{lifecycle: lifecycle, client: client}
 	launchErr := make(chan error, 1)
 	go func() {
@@ -367,17 +369,102 @@ func TestXXMILauncherShutdownCancelsLaunch(t *testing.T) {
 	}
 }
 
-type blockingLaunchClient struct {
+func TestElevatedFileCallsStopAtShutdown(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		apply func(*elevatedLifecycle, *blockingHelperClient) error
+	}{
+		{name: "launch", apply: func(lifecycle *elevatedLifecycle, client *blockingHelperClient) error {
+			return xxmiElevatedLauncher{lifecycle: lifecycle, client: client}.ApplyFiles(context.Background(), nil)
+		}},
+		{name: "file gateway", apply: func(lifecycle *elevatedLifecycle, client *blockingHelperClient) error {
+			return elevatedFileGateway{lifecycle: lifecycle, client: client}.ApplyFiles(context.Background(), nil)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			lifecycle := newElevatedLifecycle(nil, nil, nil)
+			defer lifecycle.shutdown()
+			client := &blockingHelperClient{started: make(chan struct{})}
+			applyErr := make(chan error, 1)
+			go func() { applyErr <- test.apply(lifecycle, client) }()
+			select {
+			case <-client.started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("file request did not start")
+			}
+
+			lifecycle.shutdown()
+			select {
+			case err := <-applyErr:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("ApplyFiles = %v, want context.Canceled", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("shutdown left the file request running")
+			}
+		})
+	}
+}
+
+// blockingHelperClient holds every helper call until its context ends.
+type blockingHelperClient struct {
 	started chan struct{}
 }
 
-func (b *blockingLaunchClient) LaunchXXMI(ctx context.Context, _ inject.LaunchSpec) (inject.LaunchResult, error) {
+func (b *blockingHelperClient) LaunchXXMI(ctx context.Context, _ inject.LaunchSpec) (inject.LaunchResult, error) {
 	close(b.started)
 	<-ctx.Done()
 	return inject.LaunchResult{}, ctx.Err()
 }
 
-func (b *blockingLaunchClient) HelperImageName() string { return "" }
+func (b *blockingHelperClient) ApplyFiles(ctx context.Context, _ []elevated.FileOp) error {
+	close(b.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (b *blockingHelperClient) HelperImageName() string { return "" }
+
+func TestElevatedFileGatewayStartsHelperOncePerLease(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubElevatedClient{}
+	lifecycle := newElevatedLifecycle(stub, nil, nil)
+	defer lifecycle.shutdown()
+	files := &recordingFileClient{}
+	lease := elevated.NewFileLease(elevatedFileGateway{lifecycle: lifecycle, client: files})
+
+	root := t.TempDir()
+	for _, name := range []string{"first.bak", "second.bak"} {
+		ops := []elevated.FileOp{{Kind: elevated.FileOpRemove, Target: filepath.Join(root, name)}}
+		if err := lease.Apply(t.Context(), ops); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if stub.startCount() != 1 || files.batches != 2 || !stub.Connected() {
+		t.Fatalf(
+			"starts = %d, batches = %d, connected = %t; want one running helper for both batches",
+			stub.startCount(), files.batches, stub.Connected(),
+		)
+	}
+
+	lease.Release()
+	if stub.Connected() {
+		t.Fatal("temporary helper remained connected after the lease")
+	}
+}
+
+type recordingFileClient struct {
+	batches int
+}
+
+func (c *recordingFileClient) ApplyFiles(context.Context, []elevated.FileOp) error {
+	c.batches++
+	return nil
+}
 
 func statusEmitter(statuses chan<- platform.ElevatedHelperStatus) func(string, ...any) {
 	return func(name string, data ...any) {

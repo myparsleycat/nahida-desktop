@@ -12,7 +12,7 @@ import (
 func TestConfigureZZMIGameCreatesAndPreservesSettings(t *testing.T) {
 	game := t.TempDir()
 	path := filepath.Join(game, "ZenlessZoneZero_Data", "Persistent", "LocalStorage", "GENERAL_DATA.bin")
-	if err := configureZZMIGame(context.Background(), game); err != nil {
+	if err := configureZZMIGame(context.Background(), game, nil); err != nil {
 		t.Fatal(err)
 	}
 	first, err := os.ReadFile(path)
@@ -33,7 +33,7 @@ func TestConfigureZZMIGameCreatesAndPreservesSettings(t *testing.T) {
 			t.Fatalf("setting %s missing", id)
 		}
 	}
-	if err := configureZZMIGame(context.Background(), game); err != nil {
+	if err := configureZZMIGame(context.Background(), game, nil); err != nil {
 		t.Fatal(err)
 	}
 	second, err := os.ReadFile(path)

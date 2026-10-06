@@ -29,6 +29,7 @@ type ServerOptions struct {
 type serverOperations struct {
 	sendKeys   func(context.Context, platform.KeyRequest) (platform.KeyResult, error)
 	launchXXMI func(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	applyFiles func(context.Context, []FileOp) error
 }
 
 func RunServer(ctx context.Context, options ServerOptions) error {
@@ -132,7 +133,7 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	}
 	input := platform.NewInput()
 	return serveHelperConnection(ctx, conn, options.Secret, serverOperations{
-		sendKeys: input.SendKeys, launchXXMI: inject.Launch,
+		sendKeys: input.SendKeys, launchXXMI: inject.Launch, applyFiles: applyFileOps,
 	})
 }
 
@@ -233,6 +234,20 @@ func serveHelperConnection(ctx context.Context, conn net.Conn, secret string, op
 			response.Payload, err = json.Marshal(result)
 			if err != nil {
 				response.Error = "encode XXMI launch result"
+				break
+			}
+			response.OK = true
+		case operationFiles:
+			var ops []FileOp
+			if err := json.Unmarshal(request.Payload, &ops); err != nil {
+				response.Error = "invalid file request"
+				break
+			}
+			callCtx, cancel := context.WithTimeout(ctx, fileOpsTimeout)
+			err := operations.applyFiles(callCtx, ops)
+			cancel()
+			if err != nil {
+				response.Error = err.Error()
 				break
 			}
 			response.OK = true

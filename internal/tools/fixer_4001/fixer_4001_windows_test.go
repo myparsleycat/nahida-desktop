@@ -5,13 +5,14 @@ package fixer4001
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
-	"unicode/utf16"
+
+	"nahida.live/desktop/internal/elevated"
 )
 
 func TestCmdScriptRunsQuotedBatchWithSpaces(t *testing.T) {
@@ -130,25 +131,55 @@ func TestResolveVSDevCmdRejectsUNCAndDeviceNamespace(t *testing.T) {
 	}
 }
 
-func TestElevatedPowerShellEncodingAndLiteralEscaping(t *testing.T) {
+func TestElevatedFileOperationsKeepErrorCodes(t *testing.T) {
 	t.Parallel()
-	command := "Write-Output '한글 🚀'"
-	encoded := encodePowerShell(command)
-	data, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
+
+	root := t.TempDir()
+	source := filepath.Join(root, "built.dll")
+	if err := os.WriteFile(source, []byte("built"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if len(data)%2 != 0 {
-		t.Fatalf("encoded UTF-16 byte length = %d", len(data))
+	target := filepath.Join(root, "importer", targetD3D11DLL)
+	stale := filepath.Join(root, "importer", diversifierBackupPre+"1234567-1.bak")
+
+	helper := &recordingElevatedFiles{}
+	lease := elevated.NewFileLease(helper)
+	if err := elevatedCopyFiles(t.Context(), lease, []fileCopy{{Source: source, Target: target}}); err != nil {
+		t.Fatal(err)
 	}
-	units := make([]uint16, len(data)/2)
-	for i := range units {
-		units[i] = binary.LittleEndian.Uint16(data[i*2:])
+	if err := elevatedRemoveFiles(t.Context(), lease, []string{stale}); err != nil {
+		t.Fatal(err)
 	}
-	if decoded := string(utf16.Decode(units)); decoded != command {
-		t.Fatalf("decoded command = %q, want %q", decoded, command)
+	if got, want := helper.summary(), []string{"copy " + target, "remove " + stale}; !slices.Equal(got, want) {
+		t.Fatalf("helper operations = %q, want %q", got, want)
 	}
-	if got, want := psLiteral(`C:\O'Brien\file.dll`), `'C:\O''Brien\file.dll'`; got != want {
-		t.Fatalf("psLiteral = %q, want %q", got, want)
+	if helper.content[target] != "built" || helper.acquires != 1 {
+		t.Fatalf("staged content = %q, acquires = %d", helper.content, helper.acquires)
+	}
+
+	refused := errors.New("target is not a regular file")
+	failing := &recordingElevatedFiles{applyErr: refused}
+	lease = elevated.NewFileLease(failing)
+	err := elevatedCopyFiles(t.Context(), lease, []fileCopy{{Source: source, Target: target}})
+	if !errors.Is(err, refused) || !strings.HasPrefix(err.Error(), "XXMI_ERR_ELEVATED_COPY_FAILED: ") {
+		t.Fatalf("copy error = %v", err)
+	}
+	err = elevatedRemoveFiles(t.Context(), lease, []string{stale})
+	if !errors.Is(err, refused) || !strings.HasPrefix(err.Error(), "XXMI_ERR_ELEVATED_REMOVE_FAILED: ") {
+		t.Fatalf("remove error = %v", err)
+	}
+
+	// A source that cannot be staged fails before the user is asked for consent.
+	unasked := &recordingElevatedFiles{}
+	err = elevatedCopyFiles(
+		t.Context(),
+		elevated.NewFileLease(unasked),
+		[]fileCopy{{Source: filepath.Join(root, "missing.dll"), Target: target}},
+	)
+	if !errors.Is(err, os.ErrNotExist) || !strings.HasPrefix(err.Error(), "XXMI_ERR_ELEVATED_COPY_FAILED: ") {
+		t.Fatalf("missing source error = %v", err)
+	}
+	if unasked.acquires != 0 {
+		t.Fatal("an unreadable source started the helper")
 	}
 }

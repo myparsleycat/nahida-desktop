@@ -310,10 +310,8 @@ func (l *elevatedLifecycle) acquire(ctx context.Context) (func(), error) {
 	l.leases++
 	l.mu.Unlock()
 
-	startCtx, cancel := context.WithCancel(ctx)
-	stop := context.AfterFunc(l.ctx, cancel)
+	startCtx, cancel := l.bindShutdown(ctx)
 	err := l.client.Start(startCtx)
-	stop()
 	cancel()
 	if err != nil {
 		l.release()
@@ -331,6 +329,22 @@ func (l *elevatedLifecycle) release() {
 	}
 	l.mu.Unlock()
 	l.publishStatus()
+}
+
+// bindShutdown returns ctx cancelled by shutdown as well. A helper call holds the client for its
+// whole exchange, which a manual launch stretches to the process timeout; binding the wait to
+// shutdown before the client blocks lets quitting cancel the read instead of leaving Close and
+// status queries behind it.
+func (l *elevatedLifecycle) bindShutdown(ctx context.Context) (context.Context, context.CancelFunc) {
+	if l == nil {
+		return ctx, func() {}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(l.ctx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 func (l *elevatedLifecycle) watchHealth() {
@@ -437,6 +451,7 @@ var _ elevatedHelperClient = (*elevated.Client)(nil)
 // xxmiLaunchClient is the helper surface used while a game launch is in flight.
 type xxmiLaunchClient interface {
 	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	ApplyFiles(context.Context, []elevated.FileOp) error
 	HelperImageName() string
 }
 
@@ -452,19 +467,39 @@ func (l xxmiElevatedLauncher) Acquire(ctx context.Context) (func(), error) {
 }
 
 func (l xxmiElevatedLauncher) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
-	if l.lifecycle != nil {
-		// Manual launch waits inside the helper for the whole process timeout.
-		// Bind that wait to shutdown before the client blocks, so quitting
-		// cancels the read instead of leaving Close and status queries behind it.
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		defer cancel()
-		stop := context.AfterFunc(l.lifecycle.ctx, cancel)
-		defer stop()
-	}
+	ctx, cancel := l.lifecycle.bindShutdown(ctx)
+	defer cancel()
 	return l.client.LaunchXXMI(ctx, spec)
+}
+
+func (l xxmiElevatedLauncher) ApplyFiles(ctx context.Context, ops []elevated.FileOp) error {
+	ctx, cancel := l.lifecycle.bindShutdown(ctx)
+	defer cancel()
+	return l.client.ApplyFiles(ctx, ops)
 }
 
 func (l xxmiElevatedLauncher) HelperImageName() string {
 	return l.client.HelperImageName()
+}
+
+type elevatedFileClient interface {
+	ApplyFiles(context.Context, []elevated.FileOp) error
+}
+
+// elevatedFileGateway lets a feature change protected files through the shared helper lifecycle.
+type elevatedFileGateway struct {
+	lifecycle *elevatedLifecycle
+	client    elevatedFileClient
+}
+
+var _ elevated.FileGateway = elevatedFileGateway{}
+
+func (g elevatedFileGateway) Acquire(ctx context.Context) (func(), error) {
+	return g.lifecycle.acquire(ctx)
+}
+
+func (g elevatedFileGateway) ApplyFiles(ctx context.Context, ops []elevated.FileOp) error {
+	ctx, cancel := g.lifecycle.bindShutdown(ctx)
+	defer cancel()
+	return g.client.ApplyFiles(ctx, ops)
 }

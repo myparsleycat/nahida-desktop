@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -346,6 +347,154 @@ func TestFourThousandOneFixerBackupStateAndRestore(t *testing.T) {
 	}
 	if len(progress) < 3 || progress[len(progress)-1].Code != "XXMI_RESTORE_SUCCESS" {
 		t.Fatalf("progress = %#v", progress)
+	}
+}
+
+func TestFourThousandOneFixerDiversifiesProtectedDllWithOnePrompt(t *testing.T) {
+	t.Parallel()
+
+	declined := errors.New("the operation was canceled by the user")
+	refused := errors.New("target is not a regular file")
+	lost := errors.New("read elevated helper response: i/o timeout")
+	for _, test := range []struct {
+		name     string
+		helper   recordingElevatedFiles
+		success  bool
+		wantOps  []string
+		released int
+		// replaced is a target the helper replaced although the request was reported as failed.
+		replaced bool
+	}{
+		{name: "approved", success: true, wantOps: []string{"copy backup", "copy target"}, released: 1},
+		{name: "declined", helper: recordingElevatedFiles{acquireErr: declined}},
+		{
+			name: "helper failure", helper: recordingElevatedFiles{applyErr: refused},
+			wantOps: []string{"copy backup", "copy target", "remove backup"}, released: 1,
+		},
+		{
+			name: "response lost", helper: recordingElevatedFiles{applies: true, applyErr: lost},
+			wantOps: []string{"copy backup", "copy target"}, released: 1, replaced: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			importerPath := t.TempDir()
+			target := filepath.Join(importerPath, targetD3D11DLL)
+			original := "original PE fixture"
+			if err := os.WriteFile(target, []byte(original), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			makeReadOnly(t, target)
+
+			helper := test.helper
+			service := NewWithOptions(Options{PEDiversifier: fakePEDiversifier{}, Elevated: &helper})
+			result := service.FourThousandOneFixerDiversifyDllPadding(
+				t.Context(),
+				Fixer4001ImporterInput{ImporterPath: &importerPath},
+			)
+			if result.Success != test.success {
+				t.Fatalf("diversify result = %#v", result)
+			}
+
+			// The backup gets a timestamped name, so operations are compared by the file they touch.
+			ops := make([]string, 0, len(helper.ops))
+			for _, op := range helper.ops {
+				file := "target"
+				if op.Target != target {
+					file = "backup"
+					if !strings.HasPrefix(op.Target, filepath.Join(importerPath, diversifierBackupPre)) {
+						t.Fatalf("unexpected helper target %q", op.Target)
+					}
+				}
+				ops = append(ops, string(op.Kind)+" "+file)
+			}
+			if !slices.Equal(ops, test.wantOps) {
+				t.Fatalf("helper operations = %q, want %q", ops, test.wantOps)
+			}
+			if helper.acquires != 1 || helper.releases != test.released {
+				t.Fatalf(
+					"acquires = %d, releases = %d; want one prompt for the action",
+					helper.acquires,
+					helper.releases,
+				)
+			}
+			wantTarget := original
+			if test.replaced {
+				wantTarget = original + "\xcc"
+			}
+			if got, err := os.ReadFile(target); err != nil || string(got) != wantTarget {
+				t.Fatalf("target = %q, %v; want %q", got, err, wantTarget)
+			}
+
+			// The original must stay restorable once the diversified DLL is in place.
+			if test.replaced {
+				backup, err := service.findDiversifierBackup(importerPath)
+				if err != nil || backup == nil {
+					t.Fatalf("backup of the replaced DLL = %v, %v", backup, err)
+				}
+				if got, err := os.ReadFile(*backup); err != nil || string(got) != original {
+					t.Fatalf("backup = %q, %v; want %q", got, err, original)
+				}
+			}
+
+			if test.success {
+				if result.BackupPath == nil || helper.content[*result.BackupPath] != original ||
+					helper.content[target] != original+"\xcc" {
+					t.Fatalf("staged content = %q, result = %#v", helper.content, result)
+				}
+				return
+			}
+			state := service.FourThousandOneFixerGetState()
+			if state.Progress != "XXMI_ERR_ELEVATION_FAILED" ||
+				!strings.HasPrefix(state.ErrorMessage, "XXMI_ERR_ELEVATED_COPY_FAILED: ") {
+				t.Fatalf("state after failed elevation = %#v", state)
+			}
+		})
+	}
+}
+
+func TestFourThousandOneFixerRestoresProtectedDllWithOnePrompt(t *testing.T) {
+	t.Parallel()
+
+	importerPath := t.TempDir()
+	target := filepath.Join(importerPath, targetD3D11DLL)
+	if err := os.WriteFile(target, []byte("diversified-dll"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := hashFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(importerPath, diversifierBackupPre+hash[:7]+"-1234.bak")
+	if err := os.WriteFile(backup, []byte("original-dll"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// A folder that only looks like a backup is not something the helper would remove.
+	if err := os.Mkdir(filepath.Join(importerPath, diversifierBackupPre+"folder.bak"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	makeReadOnly(t, target)
+
+	helper := &recordingElevatedFiles{}
+	service := NewWithOptions(Options{Elevated: helper})
+	input := Fixer4001PathInput{ImporterPath: &importerPath}
+	if access := service.FourThousandOneFixerCheckImporterWriteAccess(input); !access.RequiresElevation {
+		t.Fatalf("write access = %#v, want elevation required", access)
+	}
+	result := service.FourThousandOneFixerRestoreDiversifiedDll(t.Context(), input)
+	if !result.Success {
+		t.Fatalf("restore result = %#v, state = %#v", result, service.FourThousandOneFixerGetState())
+	}
+
+	if got, want := helper.summary(), []string{"copy " + target, "remove " + backup}; !slices.Equal(got, want) {
+		t.Fatalf("helper operations = %q, want %q", got, want)
+	}
+	if helper.content[target] != "original-dll" {
+		t.Fatalf("staged content = %q", helper.content)
+	}
+	if helper.acquires != 1 || helper.releases != 1 {
+		t.Fatalf("acquires = %d, releases = %d; want one prompt for the action", helper.acquires, helper.releases)
 	}
 }
 

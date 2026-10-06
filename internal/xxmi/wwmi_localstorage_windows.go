@@ -15,8 +15,23 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func configureWWMILocalStorage(ctx context.Context, gameFolder string, cfg ImporterConfig, migotoDLLUsed bool) error {
+func configureWWMILocalStorage(
+	ctx context.Context,
+	gameFolder string,
+	cfg ImporterConfig,
+	migotoDLLUsed bool,
+	publish *gameFilePublisher,
+) error {
 	folder := filepath.Join(gameFolder, "Client", "Saved", "LocalStorage")
+
+	// Every database generation and its journal belongs to the edit, which keeps only the newest.
+	owns := func(name string) bool { return strings.HasPrefix(name, "LocalStorage") }
+	return editGameFolder(ctx, folder, owns, publish, func(folder string) error {
+		return editWWMILocalStorage(ctx, folder, cfg, migotoDLLUsed)
+	})
+}
+
+func editWWMILocalStorage(ctx context.Context, folder string, cfg ImporterConfig, migotoDLLUsed bool) error {
 	root, err := ensureInstallRoot(folder)
 	if err != nil {
 		return err

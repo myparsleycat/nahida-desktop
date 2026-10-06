@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -24,7 +25,28 @@ func (stubLaunchHelper) LaunchXXMI(context.Context, inject.LaunchSpec) (inject.L
 	return inject.LaunchResult{}, nil
 }
 
+func (stubLaunchHelper) ApplyFiles(context.Context, []elevated.FileOp) error { return nil }
+
 func (stubLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
+
+func TestElevationDeniedCodesOnlyAnUnavailableHelper(t *testing.T) {
+	t.Parallel()
+
+	declined := errors.New("the operation was canceled by the user")
+	err := elevationDenied(&elevated.AcquireError{Err: declined})
+	if !errors.Is(err, declined) || !strings.HasPrefix(err.Error(), "XXMI_ELEVATION_DENIED: ") {
+		t.Fatalf("declined consent = %v, want the elevation code", err)
+	}
+
+	refused := errors.New("elevated helper: target is not a regular file")
+	err = elevationDenied(refused)
+	if !errors.Is(err, refused) || strings.Contains(err.Error(), "XXMI_ELEVATION_DENIED") {
+		t.Fatalf("refused request = %v, want it left as it is", err)
+	}
+	if err := elevationDenied(nil); err != nil {
+		t.Fatalf("no failure = %v", err)
+	}
+}
 
 func TestImporterLaunchLockAllowsOtherImporters(t *testing.T) {
 	t.Parallel()

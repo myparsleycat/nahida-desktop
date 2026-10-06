@@ -39,7 +39,7 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 	}
 
 	// Without the XXMI DLL only the frame rate limit is written; the engine files serve mods.
-	if err := configureWWMIINIFiles(context.Background(), game, options, false); err != nil {
+	if err := configureWWMIINIFiles(context.Background(), game, options, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	for path, before := range map[string][]byte{enginePath: engineBefore, userPath: userBefore} {
@@ -52,7 +52,7 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 	}
 
 	// The retired performance tweaks stay until a config that wrote them asks for their removal.
-	if err := configureWWMIINIFiles(context.Background(), game, options, true); err != nil {
+	if err := configureWWMIINIFiles(context.Background(), game, options, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(enginePath); err != nil ||
@@ -61,7 +61,7 @@ func TestConfigureWWMIINIFiles(t *testing.T) {
 		t.Fatalf("Engine.ini = %q, error = %v", data, err)
 	}
 	options.RetiredEngineOptionsPending = true
-	if err := configureWWMIINIFiles(context.Background(), game, options, true); err != nil {
+	if err := configureWWMIINIFiles(context.Background(), game, options, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	userData, err := os.ReadFile(userPath)

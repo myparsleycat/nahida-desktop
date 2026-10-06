@@ -84,6 +84,7 @@ func newRuntime() *runtime {
 		reportElevatedHelperError(log, err, stage)
 	}, emitAppEvent)
 	elevatedClient.UseDisconnect(elevatedHelper.publishStatus)
+	elevatedFiles := elevatedFileGateway{lifecycle: elevatedHelper, client: elevatedClient}
 	input.UseElevatedInput(elevatedClient)
 	input.UseElevatedHelperStatus(elevatedHelper.status)
 	input.UseDiagnostic(func(err error, stage string, fields map[string]any) {
@@ -159,7 +160,7 @@ func newRuntime() *runtime {
 	modService := mod.NewWithOptions(mod.Options{
 		FS: fs, Settings: settings, Archive: archive, HTTP: httpClient, EventEmit: eventEmit,
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
-		GameBanana: gameBananaService, Native: native, Download: download,
+		GameBanana: gameBananaService, Native: native, Download: download, Elevated: elevatedFiles,
 	})
 	xxmiService.UseExternalImportersChanged(func(ctx context.Context) {
 		modService.RefreshCompressionImporters(ctx)
@@ -219,6 +220,7 @@ func newRuntime() *runtime {
 			GitHubRate:             githubRate,
 			GitHub:                 githubClient,
 			Mod:                    modService,
+			Elevated:               elevatedFiles,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
 					ID: "wuwa-mod-fixer-updated", Title: title, Body: body,

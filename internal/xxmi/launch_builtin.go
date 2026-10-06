@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -275,8 +276,20 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			}
 		}
 	}
+
+	// One helper lease covers the launch, so game files that need administrator rights and the
+	// launch itself share a single UAC prompt.
+	lease := elevated.NewFileLease(x.elevated)
+	defer lease.Release()
+
 	progress("game-tweaks")
-	if err := initializeGameLaunch(ctx, key, cfg, migotoDLLUsed); err != nil {
+	publish := &gameFilePublisher{
+		apply: func(ctx context.Context, ops []elevated.FileOp) error {
+			return elevationDenied(lease.Apply(ctx, ops))
+		},
+		reportCleanup: func(err error) { x.reportCleanup(err, "game-tweaks") },
+	}
+	if err := initializeGameLaunch(ctx, key, cfg, migotoDLLUsed, publish); err != nil {
 		return err
 	}
 	x.mu.RLock()
@@ -305,11 +318,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		}
 	}
 	progress("elevate")
-	release, err := x.elevated.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("XXMI_ELEVATION_DENIED: %w", err)
+	if err := elevationDenied(lease.Hold(ctx)); err != nil {
+		return err
 	}
-	defer release()
 	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, migotoDLLUsed)
 	if err != nil {
 		return err
@@ -359,6 +370,16 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			"XXMI.StartGame")
 	}
 	return nil
+}
+
+// elevationDenied gives a helper that could not be started the code the renderer explains, and
+// leaves a file request the running helper refused as it is.
+func elevationDenied(err error) error {
+	var acquire *elevated.AcquireError
+	if errors.As(err, &acquire) {
+		return fmt.Errorf("XXMI_ELEVATION_DENIED: %w", err)
+	}
+	return err
 }
 
 func (x *XXMI) acquireImporter(key string) bool {
