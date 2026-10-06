@@ -492,7 +492,7 @@ it("hides the importer's own XXMI version while it follows the shared version", 
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
   await chooseOption(
-    /page.setting.xxmi.builtin.libs$/,
+    /page.setting.xxmi.builtin.libsTrack/,
     "page.setting.xxmi.builtin.libsFollowShared",
   );
   expect(
@@ -693,8 +693,6 @@ it("offers restoring the official DLL when the importer uses a custom DLL", asyn
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
-  // The label appears on the libraries row as the badge and on the custom DLL row as its title.
-  expect(screen.getAllByText("page.setting.xxmi.builtin.customDll")).toHaveLength(2);
   fireEvent.click(
     screen.getByRole("button", { name: "page.setting.xxmi.builtin.restoreOfficialDll" }),
   );
@@ -768,6 +766,11 @@ async function dropImporterCustomDLL() {
   xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "custom.dll" });
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+  await chooseOption(
+    /page.setting.xxmi.builtin.libsProvider/,
+    "page.setting.xxmi.builtin.customDll",
+  );
+  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" });
   fileDrop.drop({ paths: ["C:\\Builds\\custom.dll"], target: { id: "importer-dll" } });
   await waitFor(() => expect(xxmi.ImportCustomDLL).toHaveBeenCalledWith("C:\\Builds\\custom.dll"));
   return screen.findByRole("button", {
@@ -780,7 +783,7 @@ it("saves a dropped custom DLL together with unsafe mode once the prompt is conf
   mod.GetGames.mockResolvedValue([]);
   fireEvent.click(await dropImporterCustomDLL());
 
-  expect(await screen.findByText("custom.dll · abcdef123456")).toBeTruthy();
+  expect(await screen.findByText("custom.dll")).toBeTruthy();
   fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
   await waitFor(() =>
     expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
@@ -805,7 +808,70 @@ it("leaves the draft untouched when the unsafe mode prompt is cancelled", async 
     ).toBeNull(),
   );
   expect(screen.getByText("page.setting.xxmi.builtin.customDllDropHint")).toBeTruthy();
-  expect(screen.queryByText("custom.dll · abcdef123456")).toBeNull();
+  expect(screen.queryByText("custom.dll")).toBeNull();
+});
+
+it("drops the importer's custom DLL when a provider is chosen again", async () => {
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+  fireEvent.click(await dropImporterCustomDLL());
+  await screen.findByText("custom.dll");
+
+  await chooseOption(
+    /page.setting.xxmi.builtin.libsProvider/,
+    "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
+    ).toBeNull(),
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ customDll: "", libsProvider: "myparsleycat" }),
+    ),
+  );
+});
+
+it("prepares the provider chosen in place of a saved custom DLL and releases its pin", async () => {
+  const migoto = config.migoto;
+  config.customDll = "abcdef123456";
+  config.migoto = { ...migoto, unsafeMode: true };
+  config.xxmiVersion = { pinned: "1.7.6" };
+  overview.importers = [{ key: "GIMI", customDll: true }];
+  overview.customDlls = [{ id: "abcdef123456", name: "custom.dll" }];
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
+  mod.GetGames.mockResolvedValue([]);
+
+  try {
+    render(<XXMIImporterSettings importer="GIMI" />);
+    fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
+    await chooseOption(
+      /page.setting.xxmi.builtin.libsProvider/,
+      "page.setting.xxmi.builtin.libsProviders.myparsleycat",
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+
+    await waitFor(() =>
+      expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+        "GIMI",
+        expect.objectContaining({
+          customDll: "",
+          libsProvider: "myparsleycat",
+          xxmiVersion: { follow: "latest" },
+        }),
+      ),
+    );
+    expect(xxmi.EnsureLibsProvider).toHaveBeenCalledWith("myparsleycat", "");
+  } finally {
+    config.customDll = "";
+    config.migoto = migoto;
+    config.xxmiVersion = { follow: "latest" };
+  }
 });
 
 it("shows the shared custom DLL read-only and warns while unsafe mode is off", () => {

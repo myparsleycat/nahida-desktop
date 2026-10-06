@@ -120,13 +120,27 @@ afterEach(() => {
 });
 
 function sharedImporterConfig(unsafeMode: boolean) {
-  return { mode: "xxmi", xxmiVersion: { follow: "shared" }, migoto: { unsafeMode } };
+  return { mode: "xxmi", libsProvider: "", customDll: "", migoto: { unsafeMode } };
+}
+
+async function chooseProvider(option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: /page.setting.xxmi.builtin.libsProvider/ }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item, { pointerType: "mouse" });
+  fireEvent.click(item);
+}
+
+// The DLL row only exists once the custom DLL is chosen in place of a provider.
+async function renderPickingSharedDll() {
+  render(<XXMIDashboard />);
+  await chooseProvider("page.setting.xxmi.builtin.customDll");
+  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" });
 }
 
 it("selects a shared DLL and enables unsafe mode without overwriting newer importer settings", async () => {
   xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
   xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
-  render(<XXMIDashboard />);
+  await renderPickingSharedDll();
 
   fileDrop.drop({ paths: ["C:\\Builds\\d3d11.dll"], target: { id: "shared-dll" } });
 
@@ -159,7 +173,7 @@ it.each(["GetImporterConfig", "SaveImporterConfig"] as const)(
     xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "d3d11.dll" });
     xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(false));
     xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-    render(<XXMIDashboard />);
+    await renderPickingSharedDll();
     fileDrop.drop({ paths: ["C:\\Builds\\d3d11.dll"], target: { id: "shared-dll" } });
     const confirm = await screen.findByRole("button", {
       name: "page.setting.xxmi.builtin.customDllEnableUnsafeConfirm",
@@ -197,7 +211,7 @@ it("selects the shared custom DLL through the file dialog without asking when un
   dialog.ShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["D:\\custom.dll"] });
   xxmi.ImportCustomDLL.mockResolvedValue({ id: "abcdef123456", name: "custom.dll" });
   xxmi.GetImporterConfig.mockResolvedValue(sharedImporterConfig(true));
-  render(<XXMIDashboard />);
+  await renderPickingSharedDll();
 
   fireEvent.click(
     screen.getByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
@@ -215,8 +229,8 @@ it("selects the shared custom DLL through the file dialog without asking when un
   ).toBeNull();
 });
 
-it("rejects dropped files that are not a single DLL", () => {
-  render(<XXMIDashboard />);
+it("rejects dropped files that are not a single DLL", async () => {
+  await renderPickingSharedDll();
 
   fileDrop.drop({ paths: ["C:\\Builds\\d3d11.zip"], target: { id: "shared-dll" } });
   fileDrop.drop({ paths: ["C:\\a.dll", "C:\\b.dll"], target: { id: "shared-dll" } });
@@ -226,16 +240,41 @@ it("rejects dropped files that are not a single DLL", () => {
   expect(xxmi.ImportCustomDLL).not.toHaveBeenCalled();
 });
 
-it("shows the shared custom DLL and clears it", async () => {
+it("shows the shared custom DLL as the provider and drops it for a provider", async () => {
   state.overview.sharedCustomDll = "abcdef123456";
   state.overview.customDlls = [{ id: "abcdef123456", name: "custom.dll" }];
-  xxmi.SetSharedCustomDLL.mockResolvedValue(undefined);
+  xxmi.SetSharedLibsProvider.mockResolvedValue(undefined);
   render(<XXMIDashboard />);
 
-  expect(screen.getByText("custom.dll · abcdef123456")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.customDllClear" }));
+  const provider = screen.getByRole("combobox", {
+    name: /page.setting.xxmi.builtin.libsProvider/,
+  });
+  expect(provider.textContent).toContain("page.setting.xxmi.builtin.customDll");
+  expect(screen.getByText("custom.dll")).toBeTruthy();
+  expect(screen.getByText("page.setting.xxmi.builtin.customDllFallbackProvider")).toBeTruthy();
+  await chooseProvider("page.setting.xxmi.builtin.libsProviders.spectrumqt");
 
-  await waitFor(() => expect(xxmi.SetSharedCustomDLL).toHaveBeenCalledWith(""));
+  await waitFor(() => expect(xxmi.SetSharedLibsProvider).toHaveBeenCalledWith("spectrumqt"));
+});
+
+it("keeps the shared custom DLL when the provider chosen in its place cannot be selected", async () => {
+  state.overview.sharedCustomDll = "abcdef123456";
+  state.overview.customDlls = [{ id: "abcdef123456", name: "custom.dll" }];
+  xxmi.SetSharedLibsProvider.mockRejectedValue(new Error("release asset digest mismatch"));
+  render(<XXMIDashboard />);
+
+  await chooseProvider("page.setting.xxmi.builtin.libsProviders.myparsleycat");
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("release asset digest mismatch"));
+  expect(screen.getByText("custom.dll")).toBeTruthy();
+});
+
+it("offers the shared custom DLL only after it is chosen as the provider", () => {
+  render(<XXMIDashboard />);
+
+  expect(
+    screen.queryByRole("button", { name: "page.setting.xxmi.builtin.customDllSelect" }),
+  ).toBeNull();
 });
 
 it("marks only the selected libraries as in use while protecting the previous deployment", () => {
@@ -404,7 +443,7 @@ it("selects the shared XXMI libraries provider from the dashboard", async () => 
   fireEvent.pointerDown(fork, { pointerType: "mouse" });
   fireEvent.click(fork);
 
-  expect(xxmi.SetSharedLibsProvider).toHaveBeenCalledWith("myparsleycat");
+  await waitFor(() => expect(xxmi.SetSharedLibsProvider).toHaveBeenCalledWith("myparsleycat"));
 });
 
 it("reports a shared libraries provider that could not be selected", async () => {

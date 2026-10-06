@@ -113,9 +113,10 @@ func (x *XXMI) GetLibsProviderReleases(ctx context.Context, provider string) ([]
 	return x.ListReleases(ctx, cmp.Or(spec.overlayPackage, "xxmi-libs"))
 }
 
-// SetSharedLibsProvider selects the XXMI libraries provider for importers that do not choose their own.
-// The provider's libraries are cached first, so a provider that cannot be downloaded is not selected.
-func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) error {
+// SetSharedLibsProvider selects the XXMI libraries provider for importers that do not choose their own, in
+// place of a shared custom DLL. The provider's libraries are cached first, so a provider that cannot be
+// downloaded is not selected.
+func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (returnErr error) {
 	client, err := x.settingsClient()
 	if err != nil {
 		return err
@@ -143,6 +144,30 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) error
 		}
 	}
 	if err := x.EnsureLibsProvider(ctx, provider, version); err != nil {
+		return err
+	}
+
+	// The shared custom DLL goes before the pins move, so the importers that launched it are moved with the
+	// rest. A selection that fails afterwards puts it back.
+	x.customDLLMu.Lock()
+	customDLL, err := client.Settings.GetValue(ctx, sharedCustomDLLKey)
+	if err == nil && customDLL != nil && strings.TrimSpace(*customDLL) != "" {
+		err = client.Settings.Upsert(ctx, sharedCustomDLLKey, new(string))
+		defer func() {
+			x.customDLLMu.Lock()
+			defer x.customDLLMu.Unlock()
+			if returnErr == nil {
+				x.reportCleanup(x.pruneCustomDLLsLocked(ctx), "prune-custom-dll")
+				return
+			}
+			x.reportCleanup(
+				client.Settings.Upsert(context.WithoutCancel(ctx), sharedCustomDLLKey, customDLL),
+				"restore-shared-custom-dll",
+			)
+		}()
+	}
+	x.customDLLMu.Unlock()
+	if err != nil {
 		return err
 	}
 

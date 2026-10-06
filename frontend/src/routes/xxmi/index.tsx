@@ -26,7 +26,7 @@ import {
   SectionHeader,
   SectionTitle,
 } from "@renderer/components/ui/section";
-import { CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
+import { CUSTOM_DLL_SOURCE, CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
 import {
   FOLLOW_LATEST,
@@ -100,9 +100,12 @@ export function XXMIDashboard() {
   const [editedRoot, setEditedRoot] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  // Importers that follow the shared libraries but would ignore the shared custom DLL until unsafe mode is on.
+  // Importers that follow the shared provider but would ignore the shared custom DLL until unsafe mode is on.
   const [unsafePrompt, setUnsafePrompt] = useState<{ key: string; config: ImporterConfig }[]>([]);
   const sharedCustomDll = overview?.sharedCustomDll;
+  // Choosing the custom DLL as the provider stores nothing until a file is picked.
+  const [pickingSharedDll, setPickingSharedDll] = useState(false);
+  const sharedDllSource = !!sharedCustomDll || pickingSharedDll;
   const root = editedRoot ?? overview?.root ?? "";
   // A cleared root field imports into the saved root, which the overview already resolves to the default.
   const importRoot = root.trim() || overview?.root || "";
@@ -175,7 +178,8 @@ export function XXMIDashboard() {
       configs.filter(
         ({ config }) =>
           config.mode === RuntimeMode.RuntimeXXMI &&
-          config.xxmiVersion.follow === "shared" &&
+          !config.libsProvider &&
+          !config.customDll &&
           !config.migoto.unsafeMode,
       ),
     );
@@ -343,17 +347,52 @@ export function XXMIDashboard() {
                 <SelectRow
                   label={t("page.setting.xxmi.builtin.libsProvider")}
                   description={t("page.setting.xxmi.builtin.libsProviderDescription")}
-                  value={overview?.sharedLibsProvider ?? ""}
-                  options={(overview?.libsProviders ?? []).map((provider) => ({
-                    value: provider,
-                    label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
-                  }))}
+                  value={sharedDllSource ? CUSTOM_DLL_SOURCE : (overview?.sharedLibsProvider ?? "")}
+                  options={[
+                    ...(overview?.libsProviders ?? []).map((provider) => ({
+                      value: provider,
+                      label: t(`page.setting.xxmi.builtin.libsProviders.${provider}`),
+                    })),
+                    { value: CUSTOM_DLL_SOURCE, label: t("page.setting.xxmi.builtin.customDll") },
+                  ]}
                   onValueChange={(value) => {
-                    void XXMI.SetSharedLibsProvider(value).then(refresh, (error: unknown) =>
-                      toast.error(toErrorMessage(error)),
-                    );
+                    setPickingSharedDll(value === CUSTOM_DLL_SOURCE);
+                    if (value === CUSTOM_DLL_SOURCE) return;
+
+                    // Selecting a provider drops the shared custom DLL with it, so the current provider is
+                    // selected again when only the DLL has to go.
+                    if (value === overview?.sharedLibsProvider && !sharedCustomDll) return;
+                    void XXMI.SetSharedLibsProvider(value)
+                      .catch((error: unknown) => toast.error(toErrorMessage(error)))
+                      .finally(refresh);
                   }}
                 />
+                {sharedDllSource && (
+                  <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                    <CustomDLLField
+                      dropTargetId={FileDropTargetID.xxmiSharedCustomDll}
+                      selected={
+                        sharedCustomDll
+                          ? {
+                              id: sharedCustomDll,
+                              name: overview?.customDlls?.find((dll) => dll.id === sharedCustomDll)
+                                ?.name,
+                            }
+                          : undefined
+                      }
+                      onPick={selectSharedCustomDll}
+                    />
+                    {overview?.sharedLibsProvider && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("page.setting.xxmi.builtin.customDllFallbackProvider", {
+                          provider: t(
+                            `page.setting.xxmi.builtin.libsProviders.${overview.sharedLibsProvider}`,
+                          ),
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <SelectRow
                   label={t("page.setting.xxmi.builtin.sharedLibsVersion")}
                   description={t("page.setting.xxmi.builtin.sharedLibsVersionDescription")}
@@ -393,26 +432,6 @@ export function XXMIDashboard() {
                       : entry.version,
                     active: entry.inUse,
                   }))}
-                  footer={
-                    <CustomDLLField
-                      dropTargetId={FileDropTargetID.xxmiSharedCustomDll}
-                      selected={
-                        sharedCustomDll
-                          ? {
-                              id: sharedCustomDll,
-                              name: overview?.customDlls?.find((dll) => dll.id === sharedCustomDll)
-                                ?.name,
-                            }
-                          : undefined
-                      }
-                      onPick={selectSharedCustomDll}
-                      onClear={async () => {
-                        await XXMI.SetSharedCustomDLL("");
-                        refresh();
-                        toast.success(t("page.setting.xxmi.builtin.customDllCleared"));
-                      }}
-                    />
-                  }
                 >
                   <Button
                     variant="outline"
@@ -582,12 +601,10 @@ export function XXMIDashboard() {
 function PackageRow({
   title,
   versions,
-  footer,
   children,
 }: {
   title: string;
   versions?: { key: string; label: string; active?: boolean }[];
-  footer?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -617,7 +634,6 @@ function PackageRow({
           </span>
         )}
       </div>
-      {footer}
     </div>
   );
 }

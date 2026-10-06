@@ -198,6 +198,62 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	}
 }
 
+func TestSetSharedLibsProviderReplacesSharedCustomDLL(t *testing.T) {
+	ctx := context.Background()
+	data := testCustomDLLImage("0.2.0")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v0.2.0", data: data, digest: providerTestDigest(data)},
+	})
+	service.findProcess = noGameProcess
+	folder := filepath.Join(t.TempDir(), "GIMI")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "d3d11.dll")
+	writeTestFile(t, source, testCustomDLLImage("custom"))
+	dll, err := service.ImportCustomDLL(ctx, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetSharedCustomDLL(ctx, dll.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// The importer launches the shared custom DLL over signed libraries the provider has no release for.
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Migoto.UnsafeMode = true
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A provider that cannot be selected leaves the custom DLL in place.
+	if err := service.SetSharedLibsProvider(ctx, "nobody"); err == nil {
+		t.Fatal("unknown provider was selected")
+	}
+	if stored, err := client.Settings.GetValue(ctx, sharedCustomDLLKey); err != nil || stored == nil ||
+		*stored != dll.ID {
+		t.Fatalf("shared custom DLL after a rejected provider = %v, err = %v", stored, err)
+	}
+
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
+		t.Fatal(err)
+	}
+	if stored, err := client.Settings.GetValue(ctx, sharedCustomDLLKey); err != nil || stored == nil || *stored != "" {
+		t.Fatalf("shared custom DLL after selecting a provider = %v, err = %v", stored, err)
+	}
+	cfg, err = service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || cfg.XXMIVersion != (VersionPin{Follow: "latest"}) {
+		t.Fatalf("pin of the importer that launched the custom DLL = %+v, err = %v", cfg.XXMIVersion, err)
+	}
+}
+
 func TestProviderDLLHashesSurviveNullRecord(t *testing.T) {
 	ctx := context.Background()
 	data := testCustomDLLImage("0.2.0")

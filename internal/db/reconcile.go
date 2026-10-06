@@ -120,6 +120,9 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateXXMILibsSharedDefault(ctx); err != nil {
 		return err
 	}
+	if err := c.migrateXXMICustomDLLFollowProvider(ctx); err != nil {
+		return err
+	}
 	return c.dropToggleViewerArtifactTable(ctx)
 }
 
@@ -721,6 +724,78 @@ ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`, "xxmi_libs_version
 	}
 
 	return c.SchemaState.Upsert(ctx, SchemaKeyXXMILibsSharedDefault, "1", time.Now().UTC().Format(time.RFC3339Nano))
+}
+
+// migrateXXMICustomDLLFollowProvider rewrites importers saved while the shared libraries version decided which
+// custom d3d11.dll applied. The importer's own DLL now comes first and the shared one reaches importers that
+// follow the shared provider, so each row is restated to keep the DLL it launched with.
+func (c *Client) migrateXXMICustomDLLFollowProvider(ctx context.Context) error {
+	migrated, err := c.SchemaState.Get(ctx, SchemaKeyXXMICustomDLLFollowProvider)
+	if err != nil {
+		return err
+	}
+	if migrated != nil && migrated.Value == "1" {
+		return nil
+	}
+
+	if err := c.withImmediate(ctx, func(q queryExec) error {
+		var sharedDLL, sharedProvider string
+		if err := q.QueryRowContext(ctx, `
+SELECT COALESCE((SELECT trim("value") FROM "setting" WHERE "key" = 'xxmi_custom_dll'), ''),
+       COALESCE(NULLIF((SELECT trim("value") FROM "setting" WHERE "key" = 'xxmi_libs_provider'), ''), 'spectrumqt')`,
+		).Scan(&sharedDLL, &sharedProvider); err != nil {
+			return err
+		}
+
+		// A config without a libraries version decodes to the default, which follows the shared version, and
+		// one without a follow value pins its own.
+		const followsShared = `(json_type("config", '$.xxmiVersion') IS NULL
+    OR COALESCE(json_extract("config", '$.xxmiVersion.follow'), '') = 'shared')`
+
+		// Only the XXMI runtime in unsafe mode launches a custom DLL. Other importers used none, so they keep
+		// following the shared provider.
+		const launchesCustomDLL = `COALESCE(json_extract("config", '$.mode'), 'xxmi') = 'xxmi'
+  AND json_extract("config", '$.migoto.unsafeMode') = 1`
+
+		// A follower of the shared version ignored its own DLL and took the shared one whatever its provider.
+		if _, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.customDll', '')
+WHERE `+followsShared+`
+  AND COALESCE(json_extract("config", '$.customDll'), '') <> ''`); err != nil {
+			return err
+		}
+		if sharedDLL == "" {
+			return nil
+		}
+		if _, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.customDll', ?)
+WHERE `+followsShared+`
+  AND `+launchesCustomDLL+`
+  AND COALESCE(json_extract("config", '$.libsProvider'), '') <> ''`, sharedDLL); err != nil {
+			return err
+		}
+
+		// An importer on its own version never took the shared DLL, so it keeps the provider it resolved to.
+		_, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.libsProvider', ?)
+WHERE NOT `+followsShared+`
+  AND `+launchesCustomDLL+`
+  AND COALESCE(json_extract("config", '$.customDll'), '') = ''
+  AND COALESCE(json_extract("config", '$.libsProvider'), '') = ''`, sharedProvider)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migrate xxmi custom dll follow provider: %w", err)
+	}
+
+	return c.SchemaState.Upsert(
+		ctx,
+		SchemaKeyXXMICustomDLLFollowProvider,
+		"1",
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
 }
 
 func (c *Client) dropToggleViewerArtifactTable(ctx context.Context) error {

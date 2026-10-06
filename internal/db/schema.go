@@ -8,6 +8,7 @@ const (
 	SchemaKeyToggleViewerArtifactDropped = "toggle_viewer_artifact_dropped"
 	SchemaKeyBlenderMCPDefaultSeeded     = "blender_mcp_default_seeded"
 	SchemaKeyXXMILibsSharedDefault       = "xxmi_libs_shared_default"
+	SchemaKeyXXMICustomDLLFollowProvider = "xxmi_custom_dll_follow_provider"
 	NTEImporter                          = "NTE"
 	NTEGameExeKeepSuffix                 = "%htgame.exe"
 	// BlenderMCPTransport names the built-in Blender compatibility layer. It is the transport value
