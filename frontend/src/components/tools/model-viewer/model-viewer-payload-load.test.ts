@@ -1,13 +1,6 @@
 import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerMeshTransport } from "@shared/mod-viewer/types";
-import {
-    BufferGeometry,
-    Mesh,
-    MeshStandardMaterial,
-    Texture,
-    TextureLoader,
-    SRGBColorSpace,
-} from "three";
+import { BufferGeometry, Mesh, MeshStandardMaterial, Texture, SRGBColorSpace } from "three";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -269,14 +262,14 @@ it("starts no requests for an already cancelled load", async () => {
     expect(fetchBinaryBytes).not.toHaveBeenCalled();
 });
 
-function mockTextureURLs() {
-    vi.stubGlobal(
-        "URL",
-        class extends URL {
-            static createObjectURL = vi.fn(() => "blob:texture");
-            static revokeObjectURL = vi.fn();
-        },
-    );
+function fakeImageBitmap() {
+    return { width: 1, height: 1, close: vi.fn() };
+}
+
+function mockImageDecoding() {
+    const decode = vi.fn(async () => fakeImageBitmap());
+    vi.stubGlobal("createImageBitmap", decode);
+    return decode;
 }
 
 function bc1DDS(): ArrayBuffer {
@@ -327,14 +320,9 @@ it("loads a supported DDS as a GPU compressed texture", async () => {
 });
 
 it("skips the DDS request and loads its lazy fallback when the GPU format is unsupported", async () => {
-    mockTextureURLs();
+    mockImageDecoding();
     const fetchTexture = vi.fn().mockResolvedValue(new Response(new Blob(["image"])));
     vi.stubGlobal("fetch", fetchTexture);
-    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
-        const texture = new Texture();
-        queueMicrotask(() => onLoad?.(texture));
-        return texture;
-    });
     const input = transport([mesh("mesh")]);
     input.textures = {
         body: {
@@ -362,13 +350,8 @@ it("skips the DDS request and loads its lazy fallback when the GPU format is uns
 });
 
 it("keeps DDS normal and alpha correction metadata when the fallback format is unknown", async () => {
-    mockTextureURLs();
+    mockImageDecoding();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new Blob(["image"]))));
-    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
-        const texture = new Texture();
-        queueMicrotask(() => onLoad?.(texture));
-        return texture;
-    });
     const input = transport([mesh("mesh")]);
     input.textures = {
         normal: {
@@ -390,14 +373,9 @@ it("keeps DDS normal and alpha correction metadata when the fallback format is u
 });
 
 it("deduplicates texture transfers and preserves texture decoding settings", async () => {
-    mockTextureURLs();
+    const decode = mockImageDecoding();
     const fetchTexture = vi.fn().mockResolvedValue(new Response(new Blob(["image"])));
     vi.stubGlobal("fetch", fetchTexture);
-    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
-        const texture = new Texture();
-        queueMicrotask(() => onLoad?.(texture));
-        return texture;
-    });
     const input = transport([mesh("mesh")]);
     input.textures = {
         first: { url: "image", role: "diffuse" },
@@ -406,11 +384,17 @@ it("deduplicates texture transfers and preserves texture decoding settings", asy
     const root = await buildPayloadModel(input, { state: {}, meshes: [] }, true, { load: vi.fn() });
     const textures = root.userData.payloadTextures as Map<string, Texture>;
     expect(fetchTexture).toHaveBeenCalledOnce();
+    expect(decode).toHaveBeenCalledOnce();
+    expect(decode).toHaveBeenCalledWith(expect.any(Blob), {
+        imageOrientation: "flipY",
+        premultiplyAlpha: "none",
+    });
     expect(textures.get("first")).toBe(textures.get("second"));
-    expect(textures.get("first")?.flipY).toBe(true);
+    expect(textures.get("first")?.flipY).toBe(false);
     expect(textures.get("first")?.colorSpace).toBe(SRGBColorSpace);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:texture");
+    const image = textures.get("first")?.image as ReturnType<typeof fakeImageBitmap>;
     clearPayloadModelData(root);
+    expect(image.close).toHaveBeenCalledOnce();
 });
 
 it("cancels pending texture transfers and leaves queued textures unrequested", async () => {
@@ -448,16 +432,19 @@ it("cancels pending texture transfers and leaves queued textures unrequested", a
     expect(fetchTexture).toHaveBeenCalledTimes(startedTransfers);
 });
 
-it("disposes an image decoded after cancellation and revokes its object URL", async () => {
-    mockTextureURLs();
+it("closes an image decoded after cancellation", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new Blob(["image"]))));
-    const texture = new Texture();
-    const dispose = vi.spyOn(texture, "dispose");
+    const image = fakeImageBitmap();
     let finishImage!: () => void;
-    vi.spyOn(TextureLoader.prototype, "load").mockImplementation((_url, onLoad) => {
-        finishImage = () => onLoad?.(texture);
-        return texture;
-    });
+    vi.stubGlobal(
+        "createImageBitmap",
+        vi.fn(
+            () =>
+                new Promise<typeof image>((resolve) => {
+                    finishImage = () => resolve(image);
+                }),
+        ),
+    );
     const controller = new AbortController();
     const input = transport([mesh("mesh")]);
     input.textures = { image: { url: "image", role: "diffuse" } };
@@ -473,9 +460,8 @@ it("disposes an image decoded after cancellation and revokes its object URL", as
     await vi.waitFor(() => expect(finishImage).toBeTypeOf("function"));
     controller.abort();
     await rejected;
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:texture");
     finishImage();
-    expect(dispose).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(image.close).toHaveBeenCalledOnce());
 });
 
 it("keeps the existing fallback when an optional texture cannot be loaded", async () => {

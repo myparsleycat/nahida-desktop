@@ -25,7 +25,6 @@ import {
     SRGBColorSpace,
     ShaderChunk,
     Texture,
-    TextureLoader,
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
@@ -91,7 +90,6 @@ type DDSTextureMetadata = {
     direct: boolean;
 };
 
-const textureLoader = new TextureLoader();
 const noCompressedTextureCapabilities: ModelViewerTextureCapabilities = {
     maxTextureSize: 0,
     s3tc: false,
@@ -156,6 +154,7 @@ export async function buildPayloadModel(
                 const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
                 if (signal.aborted) {
                     texture?.dispose();
+                    if (texture) releaseTextureImage(texture);
                     signal.throwIfAborted();
                 }
                 if (texture) {
@@ -371,8 +370,9 @@ export function finalizePayloadGeometry(root: Object3D): boolean {
 
 export function clearPayloadModelData(root: Object3D): void {
     const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
-    for (const texture of textures?.values() ?? []) {
+    for (const texture of new Set(textures?.values())) {
         texture.dispose();
+        releaseTextureImage(texture);
     }
     textures?.clear();
     delete root.userData.payloadTextures;
@@ -391,6 +391,20 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.lastShapeSignature = undefined;
         userData.geometryStale = undefined;
     });
+}
+
+// A decoded ImageBitmap keeps its pixels alive until closed, independent of
+// the GPU texture that three.js releases on dispose.
+function releaseTextureImage(texture: Texture): void {
+    const image: unknown = texture.image;
+    if (
+        image &&
+        typeof image === "object" &&
+        "close" in image &&
+        typeof image.close === "function"
+    ) {
+        image.close();
+    }
 }
 
 function disposeIncompletePayloadModel(root: Object3D): void {
@@ -1027,32 +1041,36 @@ async function loadPayloadImageTexture(url: string, signal: AbortSignal): Promis
     if (!response.ok) return null;
     const blob = await response.blob();
     signal.throwIfAborted();
-    const objectUrl = URL.createObjectURL(blob);
-    let onAbort: (() => void) | undefined;
-    try {
-        return await new Promise<Texture>((resolve, reject) => {
-            onAbort = () => reject(signal.reason);
-            signal.addEventListener("abort", onAbort, { once: true });
-            textureLoader.load(
-                objectUrl,
-                (texture) => {
-                    // Image decoding may finish after cancellation; it must not retain a texture.
-                    if (signal.aborted) {
-                        texture.dispose();
-                        reject(signal.reason);
-                        return;
-                    }
 
-                    // TextureLoader's default flipY matches the mesh-builder 1-v UV flip.
-                    resolve(texture);
-                },
-                undefined,
-                reject,
-            );
-        });
+    // Decode off the main thread. The flip replaces TextureLoader's default
+    // flipY, which the GPU upload ignores for an ImageBitmap, and matches the
+    // mesh-builder 1-v UV flip.
+    const decoding = createImageBitmap(blob, {
+        imageOrientation: "flipY",
+        premultiplyAlpha: "none",
+    });
+    let onAbort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
+    aborted.catch(() => {});
+    try {
+        const image = await Promise.race([decoding, aborted]);
+        const texture = new Texture(image);
+        texture.flipY = false;
+        texture.needsUpdate = true;
+        return texture;
+    } catch (error) {
+        // Decoding cannot be cancelled; a bitmap finished after the abort won
+        // must not keep its pixels alive.
+        decoding.then(
+            (image) => image.close(),
+            () => {},
+        );
+        throw error;
     } finally {
         if (onAbort) signal.removeEventListener("abort", onAbort);
-        URL.revokeObjectURL(objectUrl);
     }
 }
 
