@@ -87,7 +87,6 @@ const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
   alpha: true,
   antialias: true,
-  preserveDrawingBuffer: true,
 });
 
 type LoadedShapeKey = {
@@ -682,18 +681,13 @@ function ThreeModelScene({
   }, [camera, invalidate, modelRoot, rotation]);
 
   useEffect(() => {
+    const renderNow = () => gl.render(scene, camera);
     // oxlint-disable-next-line react/immutability
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),
-      captureSquarePngBlob: async () => {
-        const blob = await captureSquareCanvasPngBlob(gl.domElement, invalidate);
-        return blob;
-      },
-      captureSquarePngDataUrl: async () => {
-        const dataUrl = await captureSquareCanvasPngDataUrl(gl.domElement, invalidate);
-        return dataUrl;
-      },
+      captureSquarePngBlob: () => captureSquareCanvasPngBlob(gl.domElement, renderNow),
+      captureSquarePngDataUrl: () => captureSquareCanvasPngDataUrl(gl.domElement, renderNow),
       restoreCameraState: (state, options) => {
         restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options);
         desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
@@ -783,7 +777,7 @@ function ThreeModelScene({
     return () => {
       domElement.removeEventListener("wheel", onWheel);
     };
-  }, [camera, gl, invalidate]);
+  }, [camera, gl, invalidate, scene]);
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
@@ -1858,9 +1852,9 @@ function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {
 
 async function captureSquareCanvasPngDataUrl(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<string | null> {
-  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  const canvas = await copySquareCanvas(sourceCanvas, render);
   if (!canvas) {
     return null;
   }
@@ -1875,9 +1869,9 @@ async function captureSquareCanvasPngDataUrl(
 
 async function captureSquareCanvasPngBlob(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<Blob | null> {
-  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  const canvas = await copySquareCanvas(sourceCanvas, render);
   if (!canvas) {
     return null;
   }
@@ -1887,13 +1881,12 @@ async function captureSquareCanvasPngBlob(
 
 async function copySquareCanvas(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<HTMLCanvasElement | null> {
   if (!sourceCanvas) {
     return null;
   }
 
-  invalidate?.();
   await waitForNextFrame();
 
   const width = sourceCanvas.width;
@@ -1914,7 +1907,10 @@ async function copySquareCanvas(
     return null;
   }
 
+  // The drawing buffer is not preserved across frames, so the copy must
+  // follow a render in the same task.
   try {
+    render();
     context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
     return canvas;
   } catch (error) {
