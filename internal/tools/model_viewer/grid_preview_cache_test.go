@@ -46,13 +46,21 @@ func TestGridPreviewFingerprintTracksModFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeGridPreviewTestFile(t, path, []byte("other"))
-		// Content changes must invalidate even when size and modification time are preserved.
+		writeGridPreviewTestFile(t, path, []byte("resized"))
 		if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
 			t.Fatal(err)
 		}
 		if next := fingerprint(); next == previous {
-			t.Fatalf("editing %s did not invalidate fingerprint", name)
+			t.Fatalf("resizing %s did not invalidate fingerprint", name)
+		} else {
+			previous = next
+		}
+		touched := info.ModTime().Add(time.Hour)
+		if err := os.Chtimes(path, touched, touched); err != nil {
+			t.Fatal(err)
+		}
+		if next := fingerprint(); next == previous {
+			t.Fatalf("touching %s did not invalidate fingerprint", name)
 		} else {
 			previous = next
 		}
@@ -98,13 +106,29 @@ func TestGridPreviewFingerprintTracksTextureOnlyEdits(t *testing.T) {
 	} else {
 		previous = next
 	}
-	writeGridPreviewTestFile(t, texture, []byte("other!!"))
-	// Same-size edits still invalidate via nanosecond file modification time.
-	if err := os.Chtimes(texture, time.Now(), time.Now().Add(time.Hour)); err != nil {
+	info, err := os.Stat(texture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeGridPreviewTestFile(t, texture, []byte("SECOND-CONTENT"))
+	// Same-size edits are detected through the modification time alone.
+	touched := info.ModTime().Add(time.Hour)
+	if err := os.Chtimes(texture, touched, touched); err != nil {
 		t.Fatal(err)
 	}
 	if next := fingerprint(); next == previous {
-		t.Fatal("texture timestamp-only edit did not invalidate fingerprint")
+		t.Fatal("same-size texture edit did not invalidate fingerprint")
+	} else {
+		previous = next
+	}
+
+	// Contents are not hashed, so an edit that keeps size and modification time is not detected.
+	writeGridPreviewTestFile(t, texture, []byte("third--content"))
+	if err := os.Chtimes(texture, touched, touched); err != nil {
+		t.Fatal(err)
+	}
+	if fingerprint() != previous {
+		t.Fatal("fingerprint read file contents")
 	}
 }
 
@@ -150,7 +174,8 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 		t.Fatal("ignored files or render settings were not handled correctly")
 	}
 	writeGridPreviewTestFile(t, path, []byte("replaced"))
-	if err := os.Chtimes(path, sourceInfo.ModTime(), sourceInfo.ModTime()); err != nil {
+	edited := sourceInfo.ModTime().Add(time.Hour)
+	if err := os.Chtimes(path, edited, edited); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
@@ -164,7 +189,7 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	if get("settings-a").Image != encoded {
-		t.Fatal("replacement image was not cached after a same-metadata source edit")
+		t.Fatal("replacement image was not cached after a source edit")
 	}
 	cachePath, err := service.gridPreviewCachePath(dir, "settings-a")
 	if err != nil {

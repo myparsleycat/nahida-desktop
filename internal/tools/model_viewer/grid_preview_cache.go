@@ -9,13 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -110,6 +110,9 @@ func (t *Service) gridPreviewCachePath(modPath, variant string) (string, error) 
 	return t.data.Resolve(filepath.Join(gridPreviewCacheDir, fmt.Sprintf("%x.json", key)))
 }
 
+// gridPreviewFingerprint identifies the mod's render sources by relative path, size, and
+// modification time. File contents are deliberately not read: the fingerprint is recomputed on
+// every cache lookup, and hashing textures made a cache hit as slow as reading the whole mod.
 func gridPreviewFingerprint(ctx context.Context, modPath string) (string, error) {
 	info, err := os.Stat(modPath)
 	if err != nil {
@@ -118,6 +121,13 @@ func gridPreviewFingerprint(ctx context.Context, modPath string) (string, error)
 	if !info.IsDir() {
 		return "", errors.New("grid preview mod path must be a directory")
 	}
+
+	release, err := diskio.AcquireDir(ctx, modPath)
+	if err != nil {
+		return "", fmt.Errorf("wait for grid preview mod disk: %w", err)
+	}
+	defer release()
+
 	hash := sha256.New()
 	err = filepath.WalkDir(modPath, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -147,19 +157,7 @@ func gridPreviewFingerprint(ctx context.Context, modPath string) (string, error)
 			info.Size(),
 			info.ModTime().UnixNano(),
 		)
-		if err != nil {
-			return err
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(hash, file)
-		closeErr := file.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		return closeErr
+		return err
 	})
 	if err != nil {
 		return "", fmt.Errorf("scan grid preview mod files: %w", err)
