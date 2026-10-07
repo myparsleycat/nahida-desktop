@@ -246,6 +246,40 @@ body:has(.titlebar) [data-slot="alert-dialog-content"] {
     max-height: calc(100vh - var(--app-titlebar-height) - 2rem);
 }
 
+/* Sonner's close button shares the toast background variables, so only the toast surface is made translucent. */
+.toaster [data-sonner-toast].cn-toast[data-styled="true"] {
+    background: color-mix(
+        in oklab,
+        var(--toast-surface, var(--normal-bg)) var(--toast-surface-opacity, 50%),
+        transparent
+    );
+}
+
+/* Collapsed toasts sit directly behind the front one and would show through it. */
+.toaster [data-sonner-toast].cn-toast[data-styled="true"][data-front="true"][data-expanded="false"]:has(~ [data-front="false"]) {
+    background: var(--toast-surface, var(--normal-bg));
+}
+
+.toaster .cn-toast[data-rich-colors="true"][data-type="success"] {
+    --toast-surface: var(--success-bg);
+    --toast-surface-opacity: 80%;
+}
+
+.toaster .cn-toast[data-rich-colors="true"][data-type="info"] {
+    --toast-surface: var(--info-bg);
+    --toast-surface-opacity: 80%;
+}
+
+.toaster .cn-toast[data-rich-colors="true"][data-type="warning"] {
+    --toast-surface: var(--warning-bg);
+    --toast-surface-opacity: 80%;
+}
+
+.toaster .cn-toast[data-rich-colors="true"][data-type="error"] {
+    --toast-surface: var(--error-bg);
+    --toast-surface-opacity: 80%;
+}
+
 .scroll-area::-webkit-scrollbar {
     width: 8px;
     height: 8px;

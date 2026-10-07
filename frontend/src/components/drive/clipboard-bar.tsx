@@ -27,7 +27,7 @@ export function DriveClipboardBar({ destinationId }: { destinationId: string }) 
       <div className="mx-auto w-full max-w-2xl px-4 pt-2 pb-4">
         <div
           role="status"
-          className="pointer-events-auto flex items-center gap-3 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md"
+          className="pointer-events-auto flex items-center gap-3 rounded-md border bg-popover/50 px-3 py-1.5 text-xs text-popover-foreground shadow-md backdrop-blur-lg"
         >
           <Icon className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate" title={message}>
