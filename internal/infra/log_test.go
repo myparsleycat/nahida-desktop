@@ -202,13 +202,12 @@ func TestLogDevWritesEveryLevelToConsoleAndSkipsFile(t *testing.T) {
 
 func TestLogNoDestDoesNotCreateDesktopLog(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
 	var buf bytes.Buffer
 	l := NewLogWithOptions(LogOptions{Writer: &buf})
 	l.SetLevel("error")
 	l.Error("x", "")
-	if _, err := os.Stat(filepath.Join(dir, "desktop.log")); !os.IsNotExist(err) {
-		t.Fatalf("created desktop.log: %v", err)
+	if l.file != nil {
+		t.Fatalf("opened log file %q without a destination", l.file.Name())
 	}
 	if buf.Len() == 0 {
 		t.Fatal("expected stderr/writer fallback")

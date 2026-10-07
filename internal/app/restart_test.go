@@ -3,7 +3,7 @@ package app
 import (
 	"errors"
 	"os"
-	"strconv"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,9 +28,25 @@ func restoreRelaunchHooks() {
 
 func TestRelaunchChildEnvReplacesWaitPID(t *testing.T) {
 	t.Parallel()
-	got := relaunchChildEnv([]string{"PATH=x", relaunchWaitPIDEnv + "=9", "FOO=1"}, 42)
-	if len(got) != 3 || got[0] != "PATH=x" || got[1] != "FOO=1" || got[2] != relaunchWaitPIDEnv+"=42" {
-		t.Fatalf("env = %#v", got)
+	cases := []struct {
+		name    string
+		environ []string
+		want    []string
+	}{
+		{
+			name:    "replaces inherited pid",
+			environ: []string{"PATH=x", relaunchWaitPIDEnv + "=9", "FOO=1"},
+			want:    []string{"PATH=x", "FOO=1", relaunchWaitPIDEnv + "=42"},
+		},
+		{name: "empty environment", want: []string{relaunchWaitPIDEnv + "=42"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := relaunchChildEnv(tc.environ, 42); !slices.Equal(got, tc.want) {
+				t.Fatalf("env = %#v, want %#v", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -150,14 +166,5 @@ func TestRunWaitsForRelaunchBeforeSingleInstance(t *testing.T) {
 	}
 	if len(order) != 2 || order[0] != "wait" || order[1] != "new" {
 		t.Fatalf("order = %#v", order)
-	}
-}
-
-func TestRelaunchChildEnvPIDFormat(t *testing.T) {
-	t.Parallel()
-	pid := os.Getpid()
-	got := relaunchChildEnv(nil, pid)
-	if len(got) != 1 || got[0] != relaunchWaitPIDEnv+"="+strconv.Itoa(pid) {
-		t.Fatalf("env = %#v", got)
 	}
 }

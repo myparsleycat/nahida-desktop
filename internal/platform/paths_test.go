@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-func TestInstallDirFromExe(t *testing.T) {
-	t.Parallel()
-
-	got := installDirFromExe(filepath.Join("C:", "Program Files", "MyCompany", "MyApp", "MyApp.exe"))
-	want := filepath.Clean(filepath.Join("C:", "Program Files", "MyCompany", "MyApp"))
-	if got != want {
-		t.Fatalf("installDirFromExe = %q, want %q", got, want)
-	}
-}
-
 func TestInstallDirMatchesExecutable(t *testing.T) {
 	t.Parallel()
 

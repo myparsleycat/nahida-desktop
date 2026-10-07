@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,14 +79,17 @@ func TestDetectFileMediaTypeLeavesTheFileOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = file.Close() }()
+	if _, err := file.Seek(5, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
 
 	got, ok := DetectFileMediaType(file)
 	if !ok || got != "image/avif" {
 		t.Fatalf("DetectFileMediaType = %q, %v", got, ok)
 	}
-	offset, err := file.Seek(0, 0)
-	if err != nil || offset != 0 {
-		t.Fatalf("offset = %d, %v", offset, err)
+	offset, err := file.Seek(0, io.SeekCurrent)
+	if err != nil || offset != 5 {
+		t.Fatalf("offset = %d, %v, want 5", offset, err)
 	}
 }
 

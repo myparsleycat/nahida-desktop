@@ -117,19 +117,56 @@ func TestSanitizeModelViewerLogValueStripsControlCharacters(t *testing.T) {
 }
 
 func TestModelViewerSafetySanitizesUnsafeResourcesInsteadOfFailingLoad(t *testing.T) {
-	dir := t.TempDir()
-	abs := filepath.ToSlash(filepath.Join(filepath.Dir(dir), "outside.dds"))
-	result := loadViewerMod(t, dir, `[TextureOverrideBody]
+	// Every case points at a decodable texture, so only the path policy decides whether it loads.
+	cases := []struct {
+		name     string
+		filename func(base, dir string) string
+		wantKey  string
+	}{
+		{
+			name:     "relative path inside the mod",
+			filename: func(_, _ string) string { return "inside.png" },
+			wantKey:  "diffuse::inside.png",
+		},
+		{
+			name:     "absolute path inside the mod",
+			filename: func(_, dir string) string { return filepath.ToSlash(filepath.Join(dir, "inside.png")) },
+		},
+		{
+			name:     "absolute path outside the mod",
+			filename: func(base, _ string) string { return filepath.ToSlash(filepath.Join(base, "outside.png")) },
+		},
+		{
+			name:     "traversal beyond one parent",
+			filename: func(_, _ string) string { return `..\..\..\outside.png` },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			dir := filepath.Join(base, "Game", "Mods", "MyMod")
+			writeTextureFile(t, dir, "inside.png", encodeTinyPNG())
+			writeTextureFile(t, base, "outside.png", encodeTinyPNG())
+
+			result := loadViewerMod(t, dir, `[TextureOverrideBody]
 ib = ResourceBodyIB
 vb0 = ResourcePos
 vb1 = ResourceTc
-ps-t0 = ResourceUnsafe
+ps-t0 = ResourceBodyDiffuse
 drawindexed = 3, 0, 0
 `+viewerBodyResources+`
-[ResourceUnsafe]
-filename = `+abs)
-	if len(result.Meshes) != 1 {
-		t.Fatalf("result = %#v", result)
+[ResourceBodyDiffuse]
+filename = `+tc.filename(base, dir))
+			if len(result.Meshes) != 1 {
+				t.Fatalf("result = %#v", result)
+			}
+			if key := texKey(result.Meshes[0]); key != tc.wantKey {
+				t.Fatalf("texKey = %q, want %q (textures=%#v)", key, tc.wantKey, result.Textures)
+			}
+			if tc.wantKey == "" && len(result.Textures) != 0 {
+				t.Fatalf("unsafe texture was loaded: %#v", result.Textures)
+			}
+		})
 	}
 }
 

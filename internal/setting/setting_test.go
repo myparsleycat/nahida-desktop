@@ -749,19 +749,54 @@ func TestPersistTogglesEnablesRunInBackground(t *testing.T) {
 func TestEveryAppSettingGetSetRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	s, _ := openTemp(t, Options{Locale: "en-US"})
+	opts := Options{Locale: "en-US"}
+	s, path := openTemp(t, opts)
 	ctx := context.Background()
+	values := map[string]any{}
+	stored := map[string]string{}
 	for _, key := range AllPublicKeys() {
 		value, err := s.Get(ctx, key)
 		if err != nil {
 			t.Fatalf("Get(%s): %v", key, err)
 		}
+		values[key] = value
+
+		// Get just stored the default, so drop the row to make Set the only writer.
+		sp, err := s.spec(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Client().Settings.Delete(ctx, sp.def.StorageKey); err != nil {
+			t.Fatalf("delete %s: %v", sp.def.StorageKey, err)
+		}
 		if err := s.Set(ctx, key, value); err != nil {
 			t.Fatalf("Set(%s): %v", key, err)
 		}
-		again, err := s.Get(ctx, key)
+		stored[sp.def.StorageKey] = rawValue(t, s, sp.def.StorageKey)
+		if stored[sp.def.StorageKey] != sp.stored(s, value) {
+			t.Fatalf("Set(%s) stored %q, want %q", key, stored[sp.def.StorageKey], sp.stored(s, value))
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened, err := OpenWithOptions(ctx, path, opts)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+
+	// Read the rows before any Get, which would put a default back in place of a lost one.
+	for storageKey, want := range stored {
+		if raw := rawValue(t, reopened, storageKey); raw != want {
+			t.Fatalf("%s after reopen = %q, want %q", storageKey, raw, want)
+		}
+	}
+	for key, value := range values {
+		again, err := reopened.Get(ctx, key)
 		if err != nil {
-			t.Fatalf("Get after Set(%s): %v", key, err)
+			t.Fatalf("Get after reopen(%s): %v", key, err)
 		}
 		if storedString(again) != storedString(value) {
 			t.Fatalf("Get/Set %s: %#v vs %#v", key, again, value)

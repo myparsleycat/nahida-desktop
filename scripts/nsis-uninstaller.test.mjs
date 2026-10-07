@@ -22,10 +22,17 @@ test('blocks uninstall while the app mutex is held', () => {
     project.indexOf('FunctionEnd', project.indexOf('Function un.onInit')),
   );
 
-  assert.match(init, /OpenMutexW/);
-  assert.match(init, /MB_RETRYCANCEL/);
-  assert.match(init, /IfSilent appRunningSilent/);
-  assert.match(init, /SetErrorLevel 2\s+Abort/);
+  // A null handle is the only way past the guard; any other result reaches a retry or an Abort.
+  assert.match(
+    init,
+    /checkAppRunning:\s+System::Call 'kernel32::OpenMutexW\([^)]*\$\{APP_SINGLE_INSTANCE_MUTEX\}"\) p\.R0'\s+IntPtrCmp \$R0 0 appStopped\s/,
+  );
+  const held = init.slice(init.indexOf('IntPtrCmp $R0 0 appStopped'), init.indexOf('appStopped:'));
+  assert.match(
+    held,
+    /IfSilent appRunningSilent\s+MessageBox MB_RETRYCANCEL[^\n]*IDRETRY checkAppRunning\s+Abort\s+appRunningSilent:\s+SetErrorLevel 2\s+Abort\s*$/,
+  );
+  assert.doesNotMatch(held, /Goto appStopped/);
 });
 
 test('preserves uninstall registration when executable removal fails', () => {

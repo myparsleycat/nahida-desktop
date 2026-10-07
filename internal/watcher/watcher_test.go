@@ -5,6 +5,7 @@ package watcher
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -129,9 +130,19 @@ func TestWatchTreeDebouncesBurst(t *testing.T) {
 }
 
 func TestSamePath(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "file.ini")
-	if !SamePath(path, filepath.Clean(path)) {
-		t.Fatal("cleaned paths should be equal")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.ini")
+	for _, alias := range []string{
+		strings.ToUpper(path),
+		dir + `\.\file.ini`,
+		dir + `\sub\..\file.ini`,
+	} {
+		if !SamePath(path, alias) {
+			t.Fatalf("SamePath(%q, %q) = false", path, alias)
+		}
+	}
+	if SamePath(path, filepath.Join(dir, "other.ini")) {
+		t.Fatal("different files compared equal")
 	}
 }
 

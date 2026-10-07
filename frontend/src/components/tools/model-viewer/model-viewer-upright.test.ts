@@ -20,9 +20,15 @@ describe("needsUprightCorrection", () => {
     });
 
     it("detects a Z-up model from the combined bounds of several meshes", () => {
+        // Neither cube is Z-dominant alone; only their union spans the Z axis.
+        const feet = boxMesh([10, 10, 10]);
+        const head = boxMesh([10, 10, 10]);
+        head.position.z = 90;
+        expect(needsUprightCorrection(new Group().add(feet))).toBe(false);
+        expect(needsUprightCorrection(new Group().add(head))).toBe(false);
+
         const root = new Group();
-        root.add(boxMesh([6, 6, 6]));
-        root.add(boxMesh([12, 14, 94]));
+        root.add(feet, head);
         expect(needsUprightCorrection(root)).toBe(true);
     });
 

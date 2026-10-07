@@ -45,10 +45,20 @@ describe("generated Wails binding contract", () => {
             "bindings/nahida.live/desktop/internal/tools/models.ts",
             "utf8",
         );
-        expect(service).toMatch(
-            /MenuMakerApplyBundle|MenuMakerGenerate|MenuMakerLoadSource|MenuMakerParse|MenuMakerSaveINI|MenuMakerSaveZIP|MenuMakerScanFolder/,
-        );
-        expect(models).toMatch(/MenuMakerDocument|MenuMakerGenerateRequest|MenuMakerSource/);
+        for (const method of [
+            "MenuMakerApplyBundle",
+            "MenuMakerGenerate",
+            "MenuMakerLoadSource",
+            "MenuMakerParse",
+            "MenuMakerSaveINI",
+            "MenuMakerSaveZIP",
+            "MenuMakerScanFolder",
+        ]) {
+            expect(service).toContain(`export function ${method}(`);
+        }
+        for (const model of ["MenuMakerDocument", "MenuMakerGenerateRequest", "MenuMakerSource"]) {
+            expect(models).toContain(`export type ${model} =`);
+        }
     });
 
     it("exposes the character classification contract through the Mod service", () => {

@@ -395,12 +395,6 @@ func TestModelViewerPreviewMipmap(t *testing.T) {
 	}
 }
 
-func TestModelViewerTextureConcurrencyRemainsEight(t *testing.T) {
-	if modelViewerTextureConcurrency != 8 {
-		t.Fatalf("modelViewerTextureConcurrency = %d, want 8", modelViewerTextureConcurrency)
-	}
-}
-
 func TestReconstructModelViewerNormalZ(t *testing.T) {
 	input := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	input.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 17, A: 77})

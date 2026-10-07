@@ -669,11 +669,6 @@ describe("body-shape buffer", () => {
         assert.equal(roundTrip[3], 1); // unpainted
         assert.equal(roundTrip[6], 4); // 2 * 2
         assert.equal(roundTrip[9], 3); // unpainted
-
-        // Index buffer fixture remains untouched when we only write positions
-        const indexBuf = new Uint32Array([0, 1, 2, 0, 2, 3]);
-        const indexCopy = new Uint32Array(indexBuf);
-        assert.deepEqual([...indexBuf], [...indexCopy]);
     });
 
     it("detects SNORM8 vector layout and corrects only active verts", () => {

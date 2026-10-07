@@ -52,6 +52,7 @@ describe("texture upscale helpers", () => {
         expect(getTextureUpscaleEngine("realcugan-se")).toBe("realcugan");
         expect(getTextureUpscaleEngine("realcugan-nose")).toBe("realcugan");
         expect(getTextureUpscaleEngine("realesr-animevideov3")).toBe("realesrgan");
+        expect(getTextureUpscaleEngine("realesrgan-x4plus-anime")).toBe("realesrgan");
         expect(getTextureUpscaleEngine("realesrgan-x4plus")).toBe("realesrgan");
     });
 

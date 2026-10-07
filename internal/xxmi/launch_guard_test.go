@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"nahida.live/desktop/internal/infra"
 )
 
 type fakeLaunch struct {
@@ -212,16 +210,18 @@ func TestApplyLaunchFixesStopsAfterDisableError(t *testing.T) {
 
 func TestLaunchBlockerErrorTextKeepsBothCodes(t *testing.T) {
 	t.Parallel()
-	joined := errors.Join(errGimiDCREnabled, errSmoothMotionEnabled)
-	annotated := infra.AnnotateError(joined, infra.Diagnostic{
-		Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "launch-guard",
-	})
-	message := annotated.Error()
+	err := NewWithOptions(Options{}).rejectLaunchBlockersFrom(
+		t.Context(), "GIMI", "GenshinImpact.exe", true, &fakeLaunch{dcr: true, smooth: true},
+	)
+	if err == nil {
+		t.Fatal("launch with both blockers active was allowed")
+	}
+	message := err.Error()
 	if !strings.Contains(message, "GIMI_DCR_ENABLED") || !strings.Contains(message, "NVIDIA_SMOOTH_MOTION_ENABLED") {
 		t.Fatalf("message = %q", message)
 	}
-	if !errors.Is(annotated, errGimiDCREnabled) || !errors.Is(annotated, errSmoothMotionEnabled) {
-		t.Fatal("annotated error lost a sentinel")
+	if !errors.Is(err, errGimiDCREnabled) || !errors.Is(err, errSmoothMotionEnabled) {
+		t.Fatal("rejection lost a sentinel")
 	}
 }
 

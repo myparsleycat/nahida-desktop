@@ -2,10 +2,13 @@ package texture
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/myparsleycat/ddsutil"
 )
 
 // Mirrors the Rust sidecar's downscale_candidates_match_source_backend and
@@ -161,11 +164,61 @@ func TestExecuteResizeRejectsNonDDSFile(t *testing.T) {
 
 func TestParseTextureOutputFormatRoundTrip(t *testing.T) {
 	t.Parallel()
-	for name, format := range textureFormatsByName {
+
+	// Spelled out independently of textureFormatsByName so a swapped, dropped, or unlisted entry fails.
+	want := map[string]ddsutil.ImageFormat{
+		"DXGI_FORMAT_R8_UNORM":            ddsutil.R8Unorm,
+		"DXGI_FORMAT_R8_SNORM":            ddsutil.R8Snorm,
+		"DXGI_FORMAT_R8G8_UNORM":          ddsutil.Rg8Unorm,
+		"DXGI_FORMAT_R8G8_SNORM":          ddsutil.Rg8Snorm,
+		"DXGI_FORMAT_R8G8B8A8_UNORM":      ddsutil.Rgba8Unorm,
+		"DXGI_FORMAT_R8G8B8A8_UNORM_SRGB": ddsutil.Rgba8UnormSrgb,
+		"DXGI_FORMAT_R8G8B8A8_SNORM":      ddsutil.Rgba8Snorm,
+		"DXGI_FORMAT_R16_UNORM":           ddsutil.R16Unorm,
+		"DXGI_FORMAT_R16_SNORM":           ddsutil.R16Snorm,
+		"DXGI_FORMAT_R16_FLOAT":           ddsutil.R16Float,
+		"DXGI_FORMAT_R16G16_UNORM":        ddsutil.Rg16Unorm,
+		"DXGI_FORMAT_R16G16_SNORM":        ddsutil.Rg16Snorm,
+		"DXGI_FORMAT_R16G16_FLOAT":        ddsutil.Rg16Float,
+		"DXGI_FORMAT_R16G16B16A16_UNORM":  ddsutil.Rgba16Unorm,
+		"DXGI_FORMAT_R16G16B16A16_SNORM":  ddsutil.Rgba16Snorm,
+		"DXGI_FORMAT_R16G16B16A16_FLOAT":  ddsutil.Rgba16Float,
+		"DXGI_FORMAT_R32_FLOAT":           ddsutil.R32Float,
+		"DXGI_FORMAT_R32G32_FLOAT":        ddsutil.Rg32Float,
+		"DXGI_FORMAT_R32G32B32_FLOAT":     ddsutil.Rgb32Float,
+		"DXGI_FORMAT_R32G32B32A32_FLOAT":  ddsutil.Rgba32Float,
+		"DXGI_FORMAT_B8G8R8A8_UNORM":      ddsutil.Bgra8Unorm,
+		"DXGI_FORMAT_B8G8R8A8_UNORM_SRGB": ddsutil.Bgra8UnormSrgb,
+		"DXGI_FORMAT_B4G4R4A4_UNORM":      ddsutil.Bgra4Unorm,
+		"DXGI_FORMAT_B5G5R5A1_UNORM":      ddsutil.Bgr5A1Unorm,
+		"DXGI_FORMAT_BC1_UNORM":           ddsutil.BC1RgbaUnorm,
+		"DXGI_FORMAT_BC1_UNORM_SRGB":      ddsutil.BC1RgbaUnormSrgb,
+		"DXGI_FORMAT_BC2_UNORM":           ddsutil.BC2RgbaUnorm,
+		"DXGI_FORMAT_BC2_UNORM_SRGB":      ddsutil.BC2RgbaUnormSrgb,
+		"DXGI_FORMAT_BC3_UNORM":           ddsutil.BC3RgbaUnorm,
+		"DXGI_FORMAT_BC3_UNORM_SRGB":      ddsutil.BC3RgbaUnormSrgb,
+		"DXGI_FORMAT_BC4_UNORM":           ddsutil.BC4RUnorm,
+		"DXGI_FORMAT_BC4_SNORM":           ddsutil.BC4RSnorm,
+		"DXGI_FORMAT_BC5_UNORM":           ddsutil.BC5RgUnorm,
+		"DXGI_FORMAT_BC5_SNORM":           ddsutil.BC5RgSnorm,
+		"DXGI_FORMAT_BC6H_UF16":           ddsutil.BC6hRgbUfloat,
+		"DXGI_FORMAT_BC6H_SF16":           ddsutil.BC6hRgbSfloat,
+		"DXGI_FORMAT_BC7_UNORM":           ddsutil.BC7RgbaUnorm,
+		"DXGI_FORMAT_BC7_UNORM_SRGB":      ddsutil.BC7RgbaUnormSrgb,
+	}
+	if !maps.Equal(textureFormatsByName, want) {
+		t.Fatalf("textureFormatsByName = %v, want %v", textureFormatsByName, want)
+	}
+	for name, format := range want {
+		got, err := parseTextureOutputFormat(name)
+		if err != nil || got != format {
+			t.Fatalf("parseTextureOutputFormat(%q) = %v, %v, want %v", name, got, err, format)
+		}
 		if textureImageFormatName(format) != name {
-			t.Fatalf("format %v maps back to %q, want %q", format, textureImageFormatName(format), name)
+			t.Fatalf("textureImageFormatName(%v) = %q, want %q", format, textureImageFormatName(format), name)
 		}
 	}
+
 	if _, err := parseTextureOutputFormat("DXGI_FORMAT_UNKNOWN"); err == nil {
 		t.Fatal("unknown format must be rejected")
 	}

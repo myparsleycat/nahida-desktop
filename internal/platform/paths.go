@@ -27,7 +27,3 @@ func executablePath() (string, error) {
 	}
 	return resolved, nil
 }
-
-func installDirFromExe(exePath string) string {
-	return filepath.Clean(filepath.Dir(exePath))
-}
