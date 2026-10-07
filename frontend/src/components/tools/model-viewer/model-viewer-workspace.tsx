@@ -98,6 +98,7 @@ export function ModelViewerWorkspace({
     getInitialActiveState(source),
   );
   const [previewState, setPreviewState] = useState<Record<string, VariableStateValue> | null>(null);
+  const [toggleResetCount, setToggleResetCount] = useState(0);
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(() =>
     getInitialActiveAnimationId(source),
   );
@@ -284,6 +285,7 @@ export function ModelViewerWorkspace({
       return;
     }
     setActiveState(source.transport.defaultState);
+    setToggleResetCount((count) => count + 1);
   };
 
   const handleSaveTogglesToIni = async () => {
@@ -746,8 +748,10 @@ export function ModelViewerWorkspace({
                         ))}
                       </div>
                       {sliderVariables.map((variable) => (
+                        // Remounting on reset cancels a queued slider commit
+                        // that would otherwise reapply the pre-reset value.
                         <VariantSlider
-                          key={variable.id}
+                          key={`${variable.id}:${toggleResetCount}`}
                           variable={variable}
                           activeValue={activeState[variable.id]}
                           realtime

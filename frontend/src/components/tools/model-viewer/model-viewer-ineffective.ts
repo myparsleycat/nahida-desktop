@@ -59,7 +59,9 @@ export function useModelViewerIneffectiveValues(
                     setResult({ sessionId, values });
                 })
                 .catch((error: unknown) => {
-                    if (!ignore) Logger.capture("model-viewer:ineffective-values", error);
+                    if (ignore) return;
+                    Logger.capture("model-viewer:ineffective-values", error);
+                    setResult(undefined);
                 });
         }, INEFFECTIVE_VALUES_DEBOUNCE_MS);
         return () => {

@@ -109,9 +109,11 @@ func (t *Service) SaveModGridPreviewCache(
 	}
 	temporary := path + ".tmp"
 	if err := os.WriteFile(temporary, image, 0o600); err != nil {
+		_ = os.Remove(temporary)
 		return fmt.Errorf("write grid preview cache: %w", err)
 	}
 	if err := platform.ReplaceAtomic(temporary, path); err != nil {
+		_ = os.Remove(temporary)
 		return fmt.Errorf("replace grid preview cache: %w", err)
 	}
 

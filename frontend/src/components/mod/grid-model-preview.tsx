@@ -214,11 +214,29 @@ export class GridModelPreviewController {
     }
 
     const { entry } = task;
-    let state: GridModelPreviewState = { status: "unavailable" };
-    if (!this.disposed && blob) {
-      const url = this.cache.set(entry.finalKey, blob);
-      state = { status: "ready", url };
-      if (entry.fingerprint) {
+    const persist = !this.disposed && blob !== null && entry.fingerprint !== "";
+    if (!this.disposed) {
+      if (blob) {
+        this.settle(entry, { status: "ready", url: this.cache.set(entry.finalKey, blob) });
+      } else {
+        if (entry.fingerprint) {
+          this.failedKeys.add(entry.finalKey);
+        }
+        this.settle(entry, { status: "unavailable" });
+      }
+
+      if (this.activeTask === task) {
+        this.activeTask = null;
+        this.activeEntry = null;
+        this.showRenderTask(null);
+      }
+      void this.pump();
+    }
+
+    // The upload goes through the model session, so it outlives the render
+    // slot released above and is cleaned up only after the save settles.
+    try {
+      if (persist && blob) {
         await saveModelPreview(task, blob).catch((cacheError: unknown) =>
           Logger.capture(
             "mod-grid:model-preview-cache-save",
@@ -227,22 +245,9 @@ export class GridModelPreviewController {
           ),
         );
       }
-    } else if (!this.disposed && entry.fingerprint) {
-      this.failedKeys.add(entry.finalKey);
+    } finally {
+      await cleanupModelPreviewSession(task.sessionId);
     }
-
-    await cleanupModelPreviewSession(task.sessionId);
-    if (this.disposed) {
-      return;
-    }
-    this.settle(entry, state);
-
-    if (this.activeTask === task) {
-      this.activeTask = null;
-      this.activeEntry = null;
-      this.showRenderTask(null);
-    }
-    void this.pump();
   }
 
   dispose() {

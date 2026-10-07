@@ -97,7 +97,11 @@ export function ModelViewerAnimationBar({
             defaultFps={clip.fps}
             onFpsChange={onFpsChange}
           />{" "}
-          · Frame {activeFrame?.index ?? clip.frameStart} / {clip.frameEnd}
+          ·{" "}
+          {t("page.tools.model_viewer.animation_frame", {
+            current: activeFrame?.index ?? clip.frameStart,
+            end: clip.frameEnd,
+          })}
         </div>
       </div>
 
@@ -110,6 +114,7 @@ export function ModelViewerAnimationBar({
           step={1}
           value={frameIndex}
           className="w-full accent-primary"
+          aria-label={t("page.tools.model_viewer.animation_frame_slider")}
           {...scrubPlayback}
           onChange={(event) => {
             setFrameIndex(Number(event.currentTarget.value));
@@ -130,7 +135,11 @@ export function ModelViewerAnimationBar({
           }
         }}
         disabled={clip.frames.length <= 1}
-        aria-label={playing ? "Pause" : "Play"}
+        aria-label={t(
+          playing
+            ? "page.tools.model_viewer.animation_pause"
+            : "page.tools.model_viewer.animation_play",
+        )}
       >
         {playing ? <PauseIcon /> : <PlayIcon />}
       </Button>
