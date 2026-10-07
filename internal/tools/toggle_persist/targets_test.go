@@ -370,12 +370,14 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 
 	// $anime_state depends on time only through a condition on a counter that
 	// another INI advances, and $glow through a variable of that other INI.
+	// $step is assigned in a command list that only a time condition runs.
 	// $menu is assigned every frame as well, but only from cursor input.
 	harness := createPersistHarness(t, nil)
 	writePersistFixture(t, harness, "Mods/Example/mod.ini", strings.Join([]string{
 		"[Constants]",
 		"global persist $anime_state = 0",
 		"global persist $menu = 0",
+		"global persist $step = 0",
 		"global $loop = 0",
 		"[Present]",
 		"local $dt = time - $ts",
@@ -386,7 +388,12 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 		"if cursor_x > 0.5 && $clicked == 1",
 		"\t$menu = 1 - $menu",
 		"endif",
+		"if time > $next",
+		"	run = CommandListStep",
+		"endif",
 		`post run = CommandList\Parts\Advance`,
+		"[CommandListStep]",
+		"$step = $step + 1",
 		"",
 	}, "\r\n"))
 	partsPath := filepath.Join(filepath.Dir(harness.targetINIPath), "parts.ini")
@@ -410,6 +417,7 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 		triggerPersistContent(t, harness, strings.Join([]string{
 			`$\Mods\Example\mod.ini\anime_state = ` + animeState,
 			`$\Mods\Example\mod.ini\menu = 1`,
+			`$\Mods\Example\mod.ini\step = 1`,
 			`$\Parts\glow = 1`,
 		}, "\n"))
 	}
@@ -428,7 +436,7 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 
 	trigger("2")
 	harness.engine.Advance(initialQuietMs)
-	expect(harness.targetINIPath, "$anime_state = 0", "$menu = 1")
+	expect(harness.targetINIPath, "$anime_state = 0", "$menu = 1", "$step = 0")
 	expect(partsPath, "$glow = 0")
 
 	// The animation keeps cycling while $glow has settled.

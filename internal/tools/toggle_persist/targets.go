@@ -47,10 +47,15 @@ type commandAssignment struct {
 	inputs   []string
 }
 
+type commandRun struct {
+	target     string
+	conditions []string
+}
+
 type commandSection struct {
 	perFrame bool
 	assigns  []commandAssignment
-	runs     []string
+	runs     []commandRun
 }
 
 var callableSectionPrefixes = []string{"commandlist", "customshader"}
@@ -266,15 +271,14 @@ func (graph commandGraph) add(content, namespace string) {
 				continue
 			}
 			key = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(key), "local "))
+			enclosing := slices.Concat(conditions...)
 			if key == "run" {
 				target, _ := callable(strings.TrimSpace(value))
-				section.runs = append(section.runs, target)
+				section.runs = append(section.runs, commandRun{target: target, conditions: enclosing})
 			} else if strings.HasPrefix(key, "$") {
-				inputs := tokens(value)
-				for _, condition := range conditions {
-					inputs = append(inputs, condition...)
-				}
-				section.assigns = append(section.assigns, commandAssignment{variable: variable(key), inputs: inputs})
+				section.assigns = append(section.assigns, commandAssignment{
+					variable: variable(key), inputs: append(tokens(value), enclosing...),
+				})
 			}
 		}
 	}
@@ -283,7 +287,7 @@ func (graph commandGraph) add(content, namespace string) {
 // A variable is time driven when a frame section, or a command list it runs,
 // assigns it a value that depends on the `time` builtin, either in the
 // expression or in an enclosing condition, directly or through other variables.
-// Only such a variable can change without user input.
+// A condition around `run` encloses everything the command list assigns.
 //
 // Being assigned from a frame section is not enough: GUI mods handle cursor
 // clicks, sliders and presets in [Present]. Time dependence is not sufficient
@@ -297,33 +301,43 @@ func (graph commandGraph) timeDriven() map[string]struct{} {
 			queue = append(queue, name)
 		}
 	}
-	var assigns []commandAssignment
-	visited := map[string]struct{}{}
+	reached := map[string]*commandSection{}
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
 		section := graph[name]
-		if _, seen := visited[name]; seen || section == nil {
+		if _, seen := reached[name]; seen || section == nil {
 			continue
 		}
-		visited[name] = struct{}{}
-		assigns = append(assigns, section.assigns...)
-		queue = append(queue, section.runs...)
+		reached[name] = section
+		for _, run := range section.runs {
+			queue = append(queue, run.target)
+		}
 	}
 
 	driven := map[string]struct{}{}
+	gated := map[string]struct{}{}
+	dependent := func(inputs []string) bool {
+		return slices.ContainsFunc(inputs, func(input string) bool {
+			_, found := driven[input]
+			return found || input == "time"
+		})
+	}
 	for changed := true; changed; {
 		changed = false
-		for _, assign := range assigns {
-			if _, done := driven[assign.variable]; done {
-				continue
+		for name, section := range reached {
+			_, sectionGated := gated[name]
+			for _, assign := range section.assigns {
+				if _, done := driven[assign.variable]; !done && (sectionGated || dependent(assign.inputs)) {
+					driven[assign.variable] = struct{}{}
+					changed = true
+				}
 			}
-			if slices.ContainsFunc(assign.inputs, func(input string) bool {
-				_, dependent := driven[input]
-				return dependent || input == "time"
-			}) {
-				driven[assign.variable] = struct{}{}
-				changed = true
+			for _, run := range section.runs {
+				if _, done := gated[run.target]; !done && (sectionGated || dependent(run.conditions)) {
+					gated[run.target] = struct{}{}
+					changed = true
+				}
 			}
 		}
 	}
