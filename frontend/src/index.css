@@ -256,7 +256,10 @@ body:has(.titlebar) [data-slot="alert-dialog-content"] {
 }
 
 /* Collapsed toasts sit directly behind the front one and would show through it. */
-.toaster [data-sonner-toast].cn-toast[data-styled="true"][data-front="true"][data-expanded="false"]:has(~ [data-front="false"]) {
+.toaster
+    [data-sonner-toast].cn-toast[data-styled="true"][data-front="true"][data-expanded="false"]:has(
+        ~ [data-front="false"]
+    ) {
     background: var(--toast-surface, var(--normal-bg));
 }
 
