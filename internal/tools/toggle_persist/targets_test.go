@@ -365,6 +365,84 @@ func TestPersistWatcherIgnoresNestedLinks(t *testing.T) {
 	}
 }
 
+func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
+	t.Parallel()
+
+	// $anime_state depends on time only through a condition on a counter that
+	// another INI advances, and $glow through a variable of that other INI.
+	// $menu is assigned every frame as well, but only from cursor input.
+	harness := createPersistHarness(t, nil)
+	writePersistFixture(t, harness, "Mods/Example/mod.ini", strings.Join([]string{
+		"[Constants]",
+		"global persist $anime_state = 0",
+		"global persist $menu = 0",
+		"global $loop = 0",
+		"[Present]",
+		"local $dt = time - $ts",
+		"$ts = time",
+		"if $anime_state == 0 && $loop > 50",
+		"\t$anime_state = 1",
+		"endif",
+		"if cursor_x > 0.5 && $clicked == 1",
+		"\t$menu = 1 - $menu",
+		"endif",
+		`post run = CommandList\Parts\Advance`,
+		"",
+	}, "\r\n"))
+	partsPath := filepath.Join(filepath.Dir(harness.targetINIPath), "parts.ini")
+	writePersistFixture(t, harness, "Mods/Example/parts.ini", strings.Join([]string{
+		"namespace = Parts",
+		"[Constants]",
+		"global persist $glow = 0",
+		"[CommandListAdvance]",
+		`$frame = $frame + 23 * $\Mods\Example\mod.ini\dt`,
+		"if $frame > 60",
+		`	$\Mods\Example\mod.ini\loop = $\Mods\Example\mod.ini\loop + 1`,
+		"endif",
+		"$glow = $frame % 2",
+		"",
+	}, "\n"))
+	if err := harness.start(); err != nil {
+		t.Fatal(err)
+	}
+	trigger := func(animeState string) {
+		t.Helper()
+		triggerPersistContent(t, harness, strings.Join([]string{
+			`$\Mods\Example\mod.ini\anime_state = ` + animeState,
+			`$\Mods\Example\mod.ini\menu = 1`,
+			`$\Parts\glow = 1`,
+		}, "\n"))
+	}
+	expect := func(path string, want ...string) {
+		t.Helper()
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range want {
+			if !strings.Contains(strings.ReplaceAll(string(raw), "\r\n", "\n"), "global persist "+declaration+"\n") {
+				t.Errorf("%s is missing %q: %s", filepath.Base(path), declaration, raw)
+			}
+		}
+	}
+
+	trigger("2")
+	harness.engine.Advance(initialQuietMs)
+	expect(harness.targetINIPath, "$anime_state = 0", "$menu = 1")
+	expect(partsPath, "$glow = 0")
+
+	// The animation keeps cycling while $glow has settled.
+	for _, animeState := range []string{"0", "1", "2"} {
+		trigger(animeState)
+		harness.engine.Advance(timeDrivenSettleMs / 2)
+	}
+	expect(harness.targetINIPath, "$anime_state = 0")
+	expect(partsPath, "$glow = 1")
+
+	harness.engine.Advance(timeDrivenSettleMs)
+	expect(harness.targetINIPath, "$anime_state = 2")
+}
+
 func writePersistFixture(t *testing.T, harness *persistHarness, relative, content string) {
 	t.Helper()
 	path := filepath.Join(filepath.Dir(harness.d3dxPath), filepath.FromSlash(relative))

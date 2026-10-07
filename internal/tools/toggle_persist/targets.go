@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"nahida.live/desktop/internal/diskio"
@@ -24,7 +25,39 @@ type persistTarget struct {
 	info        os.FileInfo
 	fingerprint string
 	persistent  bool
+	timeDriven  bool
 }
+
+// Sections 3DMigoto runs on its own every frame or draw call, as opposed to
+// [Key*] sections that only run on user input.
+var frameSectionPrefixes = []string{
+	"present",
+	"textureoverride",
+	"shaderoverride",
+	"shaderregex",
+	"clearrendertargetview",
+	"cleardepthstencilview",
+	"clearunorderedaccessview",
+}
+
+var commandTokenRE = regexp.MustCompile(`[$\w\\.]+`)
+
+type commandAssignment struct {
+	variable string
+	inputs   []string
+}
+
+type commandSection struct {
+	perFrame bool
+	assigns  []commandAssignment
+	runs     []string
+}
+
+var callableSectionPrefixes = []string{"commandlist", "customshader"}
+
+// commandGraph holds the command lists of every INI an importer loads, because
+// a mod split over several files assigns and runs across them.
+type commandGraph map[string]*commandSection
 
 type persistTargetIndex map[string][]persistTarget
 
@@ -37,6 +70,7 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		return nil, fmt.Errorf("resolve persist importer %q: %w", importerFolder, err)
 	}
 	index := persistTargetIndex{}
+	graph := commandGraph{}
 	visit := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -68,7 +102,8 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		if strings.EqualFold(relative, "d3dx.ini") {
 			namespace = ""
 		}
-		targets := parsePersistTargets(string(content), namespace)
+		targets, namespace := parsePersistTargets(string(content), namespace)
+		graph.add(string(content), namespace)
 		fingerprint := ""
 		if len(targets) > 0 {
 			fingerprint = fingerprintTogglePersistINI(string(content))
@@ -98,10 +133,16 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 			return nil, fmt.Errorf("index linked persist mods %q: %w", mods, err)
 		}
 	}
+
+	for key := range graph.timeDriven() {
+		for i := range index[key] {
+			index[key][i].timeDriven = true
+		}
+	}
 	return index, nil
 }
 
-func parsePersistTargets(content, namespace string) []persistTarget {
+func parsePersistTargets(content, namespace string) ([]persistTarget, string) {
 	targets := []persistTarget{}
 	preamble := true
 	inConstants := false
@@ -140,7 +181,152 @@ func parsePersistTargets(content, namespace string) []persistTarget {
 			key: strings.ToLower(key), varName: match[2], persistent: match[1] != "",
 		})
 	}
-	return targets
+	return targets, namespace
+}
+
+// add records the command lists of one INI under the names other files use to
+// reach them: 3DMigoto exposes `$var` and `[CommandListName]` of a namespaced
+// file as `$\namespace\var` and `CommandList\namespace\Name`.
+func (graph commandGraph) add(content, namespace string) {
+	namespace = strings.ToLower(namespace)
+	variable := func(token string) string {
+		unqualified := strings.HasPrefix(token, "$") && !strings.HasPrefix(token, `$\`)
+		if namespace == "" || !unqualified {
+			return token
+		}
+		return `$\` + namespace + `\` + token[1:]
+	}
+	callable := func(name string) (string, bool) {
+		for _, prefix := range callableSectionPrefixes {
+			if rest, ok := strings.CutPrefix(name, prefix); ok {
+				if namespace == "" || strings.HasPrefix(rest, `\`) {
+					return name, true
+				}
+				return prefix + `\` + namespace + `\` + rest, true
+			}
+		}
+		return name, false
+	}
+	tokens := func(text string) []string {
+		found := commandTokenRE.FindAllString(text, -1)
+		for i, token := range found {
+			found[i] = variable(token)
+		}
+		return found
+	}
+
+	var section *commandSection
+	var conditions [][]string
+	lower := strings.ToLower(strings.TrimPrefix(content, "\uFEFF"))
+	for _, line := range strings.Split(strings.ReplaceAll(lower, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") {
+			name := strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]")
+			key, shared := callable(name)
+			if !shared {
+				key = namespace + "|" + name
+			}
+			section = graph[key]
+			if section == nil {
+				section = &commandSection{}
+				graph[key] = section
+			}
+			section.perFrame = section.perFrame || slices.ContainsFunc(frameSectionPrefixes, func(prefix string) bool {
+				return strings.HasPrefix(name, prefix)
+			})
+			conditions = nil
+			continue
+		}
+		if section == nil {
+			continue
+		}
+		for _, modifier := range []string{"pre ", "post "} {
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, modifier))
+		}
+
+		switch {
+		case strings.HasPrefix(trimmed, "if "):
+			conditions = append(conditions, tokens(trimmed))
+		case strings.HasPrefix(trimmed, "elif "), strings.HasPrefix(trimmed, "else if "):
+			// A later branch also depends on every earlier condition being false.
+			if last := len(conditions) - 1; last >= 0 {
+				conditions[last] = append(conditions[last], tokens(trimmed)...)
+			}
+		case trimmed == "endif":
+			if last := len(conditions) - 1; last >= 0 {
+				conditions = conditions[:last]
+			}
+		default:
+			key, value, found := strings.Cut(trimmed, "=")
+			if !found {
+				continue
+			}
+			key = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(key), "local "))
+			if key == "run" {
+				target, _ := callable(strings.TrimSpace(value))
+				section.runs = append(section.runs, target)
+			} else if strings.HasPrefix(key, "$") {
+				inputs := tokens(value)
+				for _, condition := range conditions {
+					inputs = append(inputs, condition...)
+				}
+				section.assigns = append(section.assigns, commandAssignment{variable: variable(key), inputs: inputs})
+			}
+		}
+	}
+}
+
+// A variable is time driven when a frame section, or a command list it runs,
+// assigns it a value that depends on the `time` builtin, either in the
+// expression or in an enclosing condition, directly or through other variables.
+// Only such a variable can change without user input.
+//
+// Being assigned from a frame section is not enough: GUI mods handle cursor
+// clicks, sliders and presets in [Present]. Time dependence is not sufficient
+// either, because a slider that eases toward the value the user picked depends
+// on time too, so this only marks candidates and the learner holds them back
+// until they stop changing.
+func (graph commandGraph) timeDriven() map[string]struct{} {
+	var queue []string
+	for name, section := range graph {
+		if section.perFrame {
+			queue = append(queue, name)
+		}
+	}
+	var assigns []commandAssignment
+	visited := map[string]struct{}{}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		section := graph[name]
+		if _, seen := visited[name]; seen || section == nil {
+			continue
+		}
+		visited[name] = struct{}{}
+		assigns = append(assigns, section.assigns...)
+		queue = append(queue, section.runs...)
+	}
+
+	driven := map[string]struct{}{}
+	for changed := true; changed; {
+		changed = false
+		for _, assign := range assigns {
+			if _, done := driven[assign.variable]; done {
+				continue
+			}
+			if slices.ContainsFunc(assign.inputs, func(input string) bool {
+				_, dependent := driven[input]
+				return dependent || input == "time"
+			}) {
+				driven[assign.variable] = struct{}{}
+				changed = true
+			}
+		}
+	}
+	return driven
 }
 
 func (index persistTargetIndex) resolve(key string) (*persistTarget, error) {
