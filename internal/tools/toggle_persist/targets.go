@@ -224,7 +224,8 @@ func (graph commandGraph) add(content, namespace string) {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "[") {
-			name := strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]")
+			name, _, _ := strings.Cut(strings.TrimPrefix(trimmed, "["), "]")
+			name = strings.TrimSpace(name)
 			key, shared := callable(name)
 			if !shared {
 				key = namespace + "|" + name
