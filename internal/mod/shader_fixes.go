@@ -196,6 +196,45 @@ func (s *ShaderFixes) RollbackEnabledShaders(modPath string, processedShaders []
 	return rollbackError
 }
 
+// reapplyRelocated copies the shaders of every mod under root whose manifest records a ShaderFixes folder other
+// than the one its importer uses now, and repoints the manifest. The previous copies stay in place: an external
+// launcher that still shares the mods needs them.
+func (s *ShaderFixes) reapplyRelocated(root string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	matches, err := s.glob(filepath.ToSlash("**/"+shaderFixesModMarkerFile), root, shaderGlobOptions{
+		onlyFiles: true, ignoreShaderFixes: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+	for _, match := range matches {
+		modPath := filepath.Dir(filepath.Join(root, match))
+		manifest, err := s.readShaderFixesModManifest(modPath)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		current := s.getGlobalShaderFixesPath(modPath)
+		if manifest == nil || current == "" {
+			continue
+		}
+		relocated := lo.ContainsBy(manifest.Files, func(file shaderFixesModManifestFile) bool {
+			recorded := s.getShaderFixesPathFromManifestFile(file)
+			return recorded != "" && !platform.SamePathFold(recorded, current)
+		})
+		if !relocated {
+			continue
+		}
+		if _, err := s.handleShadersLocked(modPath, true); err != nil {
+			errs = append(errs, fmt.Errorf("reapply shader fixes of %q: %w", modPath, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (s *ShaderFixes) DeleteModManifest(modPath string) error {
 	err := os.Remove(s.getShaderFixesModManifestPath(modPath))
 	if err != nil && !os.IsNotExist(err) {

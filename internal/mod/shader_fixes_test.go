@@ -216,6 +216,35 @@ func TestShaderFixesCleansOriginalImporterAfterMove(t *testing.T) {
 	}
 }
 
+func TestShaderFixesReappliesAfterImporterFolderChange(t *testing.T) {
+	t.Parallel()
+	h := newShaderFixesHarness(t)
+	modPath := filepath.Join(h.modsPath, "Group", "Mod")
+	writeFile(t, filepath.Join(modPath, "ShaderFixes", "fix.ini"), "fix")
+	if _, err := h.service.HandleShaders(modPath, true); err != nil {
+		t.Fatal(err)
+	}
+	previous := filepath.Join(h.importerPath, "ShaderFixes", "fix.ini")
+	imported := filepath.Join(h.root, "Builtin", "Importer")
+	h.importers[0].ImporterFolder = imported
+	current := filepath.Join(imported, "ShaderFixes", "fix.ini")
+
+	if err := h.service.reapplyRelocated(h.modsPath); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(current) || !exists(previous) {
+		t.Fatalf("shader after reapply: current = %v, previous = %v", exists(current), exists(previous))
+	}
+
+	// The manifest follows the new folder, so disabling cleans up there and leaves the shared launcher's copy.
+	if _, err := h.service.HandleShaders(modPath, false); err != nil {
+		t.Fatal(err)
+	}
+	if exists(current) || !exists(previous) {
+		t.Fatalf("shader after disable: current = %v, previous = %v", exists(current), exists(previous))
+	}
+}
+
 func TestShaderFixesRebuildsCorruptedOwnerIndex(t *testing.T) {
 	t.Parallel()
 	h := newShaderFixesHarness(t)

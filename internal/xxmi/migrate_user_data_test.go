@@ -164,6 +164,10 @@ func TestImportExternalLauncherMovesUserData(t *testing.T) {
 	}
 	assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
+	assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
+	if _, err := os.Lstat(filepath.Join(target, "ShaderFixes")); !os.IsNotExist(err) {
+		t.Fatalf("ShaderFixes was carried over: %v", err)
+	}
 	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row == nil {
 		t.Fatalf("imported row = %+v, err = %v", row, err)
 	}
@@ -276,6 +280,13 @@ func TestImportExternalLauncherReusesResetImporterFolder(t *testing.T) {
 			if err := service.ResetBuiltinRuntime(ctx); err != nil {
 				t.Fatal(err)
 			}
+			// Earlier versions linked ShaderFixes as well.
+			if err := createJunction(
+				filepath.Join(target, "ShaderFixes"),
+				filepath.Join(source, "ShaderFixes"),
+			); err != nil {
+				t.Fatal(err)
+			}
 			if err := os.WriteFile(
 				filepath.Join(target, "d3dx_user.ini"),
 				[]byte("built-in state"),
@@ -295,6 +306,10 @@ func TestImportExternalLauncherReusesResetImporterFolder(t *testing.T) {
 			}
 			assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
 			assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
+			if _, err := os.Lstat(filepath.Join(target, "ShaderFixes")); !os.IsNotExist(err) {
+				t.Fatalf("ShaderFixes link left after %s reimport: %v", mode, err)
+			}
+			assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
 			if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row == nil {
 				t.Fatalf("reimported row = %+v, err = %v", row, err)
 			}
@@ -319,11 +334,15 @@ func TestImportExternalLauncherRestoresReusedFolderOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An empty folder in place of the ShaderFixes link, as the built-in launcher leaves after the link is removed.
-	if err := os.Remove(filepath.Join(target, "ShaderFixes")); err != nil {
+	// The import then displaces one entry of each kind: an empty folder, a link, and a file.
+	if err := os.Remove(filepath.Join(target, "Mods")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(target, "ShaderFixes"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(target, "Mods"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shaders := filepath.Join(target, "ShaderFixes")
+	if err := createJunction(shaders, filepath.Join(source, "ShaderFixes")); err != nil {
 		t.Fatal(err)
 	}
 	fakeImportInstaller(t, service, errors.New("install failed"))
@@ -337,12 +356,12 @@ func TestImportExternalLauncherRestoresReusedFolderOnFailure(t *testing.T) {
 	assertFile(t, filepath.Join(source, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
 	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")
-	if info, err := os.Lstat(filepath.Join(target, "Mods")); err != nil || !isInstallReparsePoint(info) {
-		t.Fatalf("Mods link not restored: info = %v, err = %v", info, err)
+	if entries, err := os.ReadDir(filepath.Join(target, "Mods")); err != nil || len(entries) != 0 {
+		t.Fatalf("empty Mods not restored: entries = %v, err = %v", entries, err)
 	}
-	assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
-	if entries, err := os.ReadDir(filepath.Join(target, "ShaderFixes")); err != nil || len(entries) != 0 {
-		t.Fatalf("empty ShaderFixes not restored: entries = %v, err = %v", entries, err)
+	if info, err := os.Lstat(shaders); err != nil || !isInstallReparsePoint(info) ||
+		!linksTo(shaders, filepath.Join(source, "ShaderFixes")) {
+		t.Fatalf("ShaderFixes link not restored: info = %v, err = %v", info, err)
 	}
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "built-in state")
 }

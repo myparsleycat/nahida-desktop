@@ -59,7 +59,6 @@ func TestImportExternalLauncherCopiesUserDataAcrossVolumes(t *testing.T) {
 	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")
 	assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(target, "Mods", "Character", "skin.ini"), "nested mod")
-	assertFile(t, filepath.Join(target, "ShaderFixes", "fix.hlsl"), "user shader")
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
 	if row, err := client.XXMIImporters.Get(ctx, "GIMI"); err != nil || row == nil {
 		t.Fatalf("imported row = %+v, err = %v", row, err)
@@ -79,7 +78,7 @@ func TestImportExternalLauncherCopiesUserDataAcrossVolumes(t *testing.T) {
 		}
 		copied[event["name"].(string)] = event["copied"] == event["total"]
 	}
-	if !copied["Mods"] || !copied["ShaderFixes"] || !copied["d3dx_user.ini"] {
+	if !copied["Mods"] || !copied["d3dx_user.ini"] {
 		t.Fatalf("progress never completed for every entry: %v", events)
 	}
 	if events[len(events)-1]["stage"] != "done" {
@@ -292,7 +291,6 @@ func TestImportExternalLauncherCopiesUserDataBetweenRealVolumes(t *testing.T) {
 	assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
 	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")
 	assertFile(t, filepath.Join(target, "Mods", "user.ini"), "user mod")
-	assertFile(t, filepath.Join(target, "ShaderFixes", "fix.hlsl"), "user shader")
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
 }
 

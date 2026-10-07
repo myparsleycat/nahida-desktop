@@ -106,18 +106,18 @@ func TestImportExternalLauncherInstallsImporterIntoBuiltinRoot(t *testing.T) {
 		t.Fatalf("imported XXMI libraries selection = %+v", cfg.XXMIVersion)
 	}
 
-	// Kept user data stays in the external folder and is reached through junctions.
-	for _, name := range []string{"Mods", "ShaderFixes"} {
-		info, err := os.Lstat(filepath.Join(target, name))
-		if err != nil || !isInstallReparsePoint(info) {
-			t.Fatalf("%s is not linked: info = %v, err = %v", name, info, err)
-		}
+	// Kept user data stays in the external folder and is reached through a junction.
+	if info, err := os.Lstat(filepath.Join(target, "Mods")); err != nil || !isInstallReparsePoint(info) {
+		t.Fatalf("Mods is not linked: info = %v, err = %v", info, err)
 	}
 	if err := os.WriteFile(filepath.Join(target, "Mods", "new.ini"), []byte("new mod"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	assertFile(t, filepath.Join(source, "Mods", "new.ini"), "new mod")
-	assertFile(t, filepath.Join(target, "ShaderFixes", "fix.hlsl"), "user shader")
+	if _, err := os.Lstat(filepath.Join(target, "ShaderFixes")); !os.IsNotExist(err) {
+		t.Fatalf("ShaderFixes was carried over: %v", err)
+	}
+	assertFile(t, filepath.Join(source, "ShaderFixes", "fix.hlsl"), "user shader")
 	assertFile(t, filepath.Join(target, "d3dx.ini"), "user ini")
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "user state")
 	assertFile(t, filepath.Join(source, "d3dx_user.ini"), "user state")

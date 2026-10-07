@@ -21,8 +21,9 @@ const (
 )
 
 // importerUserData lists the importer folder entries that belong to the user rather than the package. Packages and
-// XXMI libraries are installed fresh; these are carried over from the external launcher.
-var importerUserData = []string{"Mods", "ShaderFixes", "d3dx_user.ini"}
+// XXMI libraries are installed fresh; these are carried over from the external launcher. ShaderFixes is left out:
+// the package installs its own shaders there, so sharing the folder would let two launchers overwrite each other's.
+var importerUserData = []string{"Mods", "d3dx_user.ini"}
 
 var (
 	errImportFolderConflict = errors.New("XXMI_IMPORT_FOLDER_CONFLICT")
@@ -149,6 +150,14 @@ func (m *importerFolderMigration) prepare(
 		m.created = append(m.created, target)
 	case err != nil:
 		return err
+	}
+
+	// An import by an earlier version linked ShaderFixes to source, and the installer keeps top-level links.
+	shaders := filepath.Join(target, "ShaderFixes")
+	if from := filepath.Join(source, "ShaderFixes"); linksTo(shaders, from) {
+		if err := m.displace(shaders, from); err != nil {
+			return err
+		}
 	}
 
 	// The installer restores an existing d3dx.ini over the packaged one when overwriting is disabled.
