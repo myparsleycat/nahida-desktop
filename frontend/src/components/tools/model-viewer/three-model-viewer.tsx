@@ -306,7 +306,12 @@ function ThreeModelScene({
     // oxlint-disable-next-line react/immutability
     gl.toneMappingExposure = Number.isFinite(threeExposure) ? threeExposure : 1;
     gl.setClearAlpha(0);
+    invalidate();
+  }, [gl, invalidate, threeExposure, threeToneMapping]);
 
+  // The PMREM environment is a GPU prefilter pass; keep it off the exposure and
+  // tone-mapping path so dragging the exposure slider does not rebuild it.
+  useEffect(() => {
     if (threeEnvironment === "none") {
       // oxlint-disable-next-line react/immutability
       scene.environment = null;
@@ -333,7 +338,7 @@ function ThreeModelScene({
       roomEnvironment.dispose();
       pmremGenerator.dispose();
     };
-  }, [gl, invalidate, scene, threeEnvironment, threeExposure, threeToneMapping]);
+  }, [gl, invalidate, scene, threeEnvironment]);
 
   useEffect(() => {
     onLoadRef.current = onLoad;
