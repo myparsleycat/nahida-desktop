@@ -100,6 +100,8 @@ export function VariantSlider({
   const [prevResolvedValue, setPrevResolvedValue] = useState(resolvedValue);
   const [draftValue, setDraftValue] = useState(resolvedValue);
   const commitTimeoutRef = useRef<number | null>(null);
+  const realtimeFrameRef = useRef<number | null>(null);
+  const realtimeValueRef = useRef<number | null>(null);
 
   if (prevResolvedValue !== resolvedValue) {
     setPrevResolvedValue(resolvedValue);
@@ -110,6 +112,9 @@ export function VariantSlider({
     return () => {
       if (commitTimeoutRef.current !== null) {
         window.clearTimeout(commitTimeoutRef.current);
+      }
+      if (realtimeFrameRef.current !== null) {
+        window.cancelAnimationFrame(realtimeFrameRef.current);
       }
     };
   }, []);
@@ -126,6 +131,22 @@ export function VariantSlider({
       onSelect(variable.id, nextValue);
       commitTimeoutRef.current = null;
     }, 150);
+  };
+
+  // Pointer moves outpace the display; forward only the latest value per frame.
+  const scheduleRealtimeCommit = (nextValue: number) => {
+    realtimeValueRef.current = nextValue;
+    if (realtimeFrameRef.current !== null) {
+      return;
+    }
+    realtimeFrameRef.current = window.requestAnimationFrame(() => {
+      realtimeFrameRef.current = null;
+      const value = realtimeValueRef.current;
+      realtimeValueRef.current = null;
+      if (value !== null) {
+        onSelect(variable.id, value);
+      }
+    });
   };
 
   return (
@@ -157,7 +178,7 @@ export function VariantSlider({
           setDraftValue(nextValue);
           if (!disabled) {
             if (realtime) {
-              onSelect(variable.id, nextValue);
+              scheduleRealtimeCommit(nextValue);
             } else {
               scheduleCommit(nextValue);
             }

@@ -58,6 +58,7 @@ type PayloadMeshUserData = {
     toonShadows: boolean;
     lastPositionVariantIndex?: number | null;
     lastShapeSignature?: string;
+    geometryStale?: boolean;
     lastMaps?: {
         texKey: string | null;
         normalMapKey: string | null;
@@ -319,9 +320,20 @@ export async function preparePayloadEval(
     return { evalResult, positions: new Map(await Promise.all(requests)) };
 }
 
-export function commitPayloadEval(root: Object3D, prepared: PreparedPayloadEval): void {
+export type CommitPayloadEvalOptions = {
+    // Skip normal and bounds recomputation after a shape deformation. The caller
+    // owns a follow-up finalizePayloadGeometry once interaction settles.
+    deferGeometryUpdates?: boolean;
+};
+
+export function commitPayloadEval(
+    root: Object3D,
+    prepared: PreparedPayloadEval,
+    options?: CommitPayloadEvalOptions,
+): void {
     const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
     const evalById = new Map(prepared.evalResult.meshes.map((mesh) => [mesh.id, mesh]));
+    const deferGeometryUpdates = options?.deferGeometryUpdates ?? false;
     root.traverse((object) => {
         if (!(object instanceof Mesh)) {
             return;
@@ -330,8 +342,31 @@ export function commitPayloadEval(root: Object3D, prepared: PreparedPayloadEval)
         if (!meshId) {
             return;
         }
-        applyEvaluatedMesh(object, evalById.get(meshId), textures, prepared.positions.get(meshId));
+        applyEvaluatedMesh(
+            object,
+            evalById.get(meshId),
+            textures,
+            prepared.positions.get(meshId),
+            deferGeometryUpdates,
+        );
     });
+}
+
+export function finalizePayloadGeometry(root: Object3D): boolean {
+    let changed = false;
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        if (!userData.geometryStale) {
+            return;
+        }
+        refreshDeformedGeometry(object.geometry);
+        userData.geometryStale = false;
+        changed = true;
+    });
+    return changed;
 }
 
 export function clearPayloadModelData(root: Object3D): void {
@@ -354,6 +389,7 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.lastMaps = undefined;
         userData.lastPositionVariantIndex = undefined;
         userData.lastShapeSignature = undefined;
+        userData.geometryStale = undefined;
     });
 }
 
@@ -384,6 +420,7 @@ function applyEvaluatedMesh(
     evaluated: EvaluatedViewerState["meshes"][number] | undefined,
     textures?: Map<string, Texture>,
     preparedPosition?: { variantIndex: number } & ModelViewerPositionGeometry,
+    deferGeometryUpdates = false,
 ): void {
     if (!evaluated) {
         return;
@@ -399,7 +436,7 @@ function applyEvaluatedMesh(
         applyEvaluatedMaps(material, object, userData, evaluated, textures);
     }
     if (evaluated.positionVariantIndex === null) {
-        applyShapeTargets(object, evaluated.shapeWeights);
+        applyShapeTargets(object, evaluated.shapeWeights, deferGeometryUpdates);
     }
 }
 
@@ -782,9 +819,14 @@ function applyPositionVariant(
         object.geometry.attributes.normal.needsUpdate = true;
     }
     if (bounds) applyGeometryBounds(object.geometry, bounds);
+    userData.geometryStale = false;
 }
 
-function applyShapeTargets(object: Mesh, weights: Record<string, number>): void {
+function applyShapeTargets(
+    object: Mesh,
+    weights: Record<string, number>,
+    deferGeometryUpdates: boolean,
+): void {
     const userData = object.userData as PayloadMeshUserData;
     const targets = userData.shapeTargets ?? [];
     if (targets.length === 0) {
@@ -842,17 +884,26 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
         }
     }
     attr.needsUpdate = true;
+    userData.lastShapeSignature = signature;
     if (!deformed) {
         object.geometry.attributes.normal.array.set(userData.baseNormals);
         object.geometry.attributes.normal.needsUpdate = true;
         if (userData.baseBounds) applyGeometryBounds(object.geometry, userData.baseBounds);
-        userData.lastShapeSignature = signature;
+        userData.geometryStale = false;
         return;
     }
-    object.geometry.computeVertexNormals();
-    object.geometry.computeBoundingBox();
-    object.geometry.computeBoundingSphere();
-    userData.lastShapeSignature = signature;
+    if (deferGeometryUpdates) {
+        userData.geometryStale = true;
+        return;
+    }
+    refreshDeformedGeometry(object.geometry);
+    userData.geometryStale = false;
+}
+
+function refreshDeformedGeometry(geometry: BufferGeometry): void {
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
 }
 
 function normalizeShapeWeight(value: number | undefined): string {

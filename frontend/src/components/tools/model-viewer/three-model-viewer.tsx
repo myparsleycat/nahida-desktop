@@ -60,6 +60,7 @@ import {
   buildPayloadModel,
   clearPayloadModelData,
   commitPayloadEval,
+  finalizePayloadGeometry,
   type PreparedPayloadEval,
   preparePayloadEval,
   setPayloadToonShadows,
@@ -81,6 +82,7 @@ const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
 const SMOOTH_ZOOM_MAX_DELTA = 1 / 30;
+const INTERACTIVE_COMMIT_WINDOW_MS = 150;
 const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
   alpha: true,
@@ -263,7 +265,9 @@ function ThreeModelScene({
   const animationClipRef = useRef(animationClip);
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
-  const applyPayloadVisualsRef = useRef(() => {});
+  const applyPayloadVisualsRef = useRef<(options?: { interactive?: boolean }) => void>(() => {});
+  const lastInteractiveCommitAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const geometryFinalizeTimerRef = useRef<number | undefined>(undefined);
   const positionLoaderRef = useRef<ModelViewerPositionLoader | null>(null);
   const computeControllerRef = useRef<ModelViewerComputeController | null>(null);
   const payloadEvalAbortRef = useRef<AbortController | null>(null);
@@ -365,13 +369,14 @@ function ThreeModelScene({
   }, [modelRoot]);
 
   useEffect(() => {
-    applyPayloadVisualsRef.current = () => {
+    applyPayloadVisualsRef.current = (options) => {
       const root = modelRootRef.current;
       const transport = payloadTransportRef.current;
       const toggleEval = payloadEvalRef.current;
       if (!root || !transport || !toggleEval) {
         return;
       }
+      const interactive = options?.interactive ?? false;
       const animationValues = animationValuesRef.current;
       const evalResult = Object.keys(animationValues).length
         ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
@@ -398,7 +403,23 @@ function ThreeModelScene({
         ) {
           return;
         }
-        commitPayloadEval(root, prepared);
+        // A slider drag commits on every pointer tick; recompute normals and
+        // bounds only once the ticks settle instead of on each one.
+        const now = performance.now();
+        const deferGeometryUpdates =
+          interactive && now - lastInteractiveCommitAtRef.current < INTERACTIVE_COMMIT_WINDOW_MS;
+        if (interactive) {
+          lastInteractiveCommitAtRef.current = now;
+        }
+        window.clearTimeout(geometryFinalizeTimerRef.current);
+        commitPayloadEval(root, prepared, { deferGeometryUpdates });
+        if (deferGeometryUpdates) {
+          geometryFinalizeTimerRef.current = window.setTimeout(() => {
+            if (root === modelRootRef.current && finalizePayloadGeometry(root)) {
+              invalidate();
+            }
+          }, INTERACTIVE_COMMIT_WINDOW_MS);
+        }
         invalidate();
         // Defined below to keep the state-transition path together; refs make this
         // independent of render-time initialization order.
@@ -434,6 +455,7 @@ function ThreeModelScene({
     let disposed = false;
     payloadEvalAbortRef.current?.abort();
     payloadEvalAbortRef.current = null;
+    window.clearTimeout(geometryFinalizeTimerRef.current);
     preparedAnimationRingRef.current = [];
     positionLoaderRef.current?.dispose();
     positionLoaderRef.current = null;
@@ -601,7 +623,7 @@ function ThreeModelScene({
     if (!modelRoot || !payloadEval || !payloadTransport) {
       return;
     }
-    applyPayloadVisualsRef.current();
+    applyPayloadVisualsRef.current({ interactive: true });
   }, [modelRoot, payloadEval, payloadTransport]);
 
   useLayoutEffect(() => {
@@ -801,6 +823,7 @@ function ThreeModelScene({
     return () => {
       payloadEvalAbortRef.current?.abort();
       payloadEvalAbortRef.current = null;
+      window.clearTimeout(geometryFinalizeTimerRef.current);
       positionLoaderRef.current?.dispose();
       positionLoaderRef.current = null;
       computeControllerRef.current?.dispose(false);
