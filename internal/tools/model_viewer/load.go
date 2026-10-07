@@ -21,8 +21,9 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewe
 
 func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{
-		ddsPreviewMaxDimension:   modelViewerDDSPreviewMaxDimension,
-		includeAllStateVariables: true,
+		ddsPreviewMaxDimension:       modelViewerDDSPreviewMaxDimension,
+		ddsPreviewPreferredDimension: modelViewerGridPreviewDDSDimension,
+		includeAllStateVariables:     true,
 	})
 }
 
