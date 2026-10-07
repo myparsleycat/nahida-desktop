@@ -1011,6 +1011,7 @@ async function loadPayloadTexture(
                     entry.format,
                     capabilities.maxTextureSize,
                     signal,
+                    entry.mipCount,
                 ),
                 entry.format,
                 capabilities.maxTextureSize,

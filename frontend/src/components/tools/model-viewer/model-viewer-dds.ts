@@ -116,7 +116,16 @@ export async function fetchModelViewerDDSBuffer(
     expectedFormat: ViewerDDSFormat,
     maxTextureSize: number,
     signal: AbortSignal,
+    mipCount?: number,
 ): Promise<ArrayBuffer> {
+    // Ranged requests exist to skip oversized mips. A single-mip file has none
+    // to skip, so probing its header would only add a round trip.
+    if (mipCount === 1) {
+        const response = await fetch(url, { signal, cache: "no-store" });
+        if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
+        return response.arrayBuffer();
+    }
+
     const headerResponse = await fetch(url, {
         signal,
         cache: "no-store",
