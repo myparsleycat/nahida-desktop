@@ -15,43 +15,17 @@ export function useDriveClipboardActions(destinationId: string) {
     const handleCut = useCallback(() => {
         if (selectedItems.length === 0) return;
 
-        const itemsToCut = [...selectedItems];
-        setCopyOrCuts("cut", itemsToCut);
-
-        if (itemsToCut.length === 1) {
-            toast.info(t("page.drive.clipboard.cut_single", { name: itemsToCut[0].name }));
-            return;
-        }
-
-        toast.info(
-            t("page.drive.clipboard.cut_multiple", {
-                name: itemsToCut[0].name,
-                count: itemsToCut.length - 1,
-            }),
-        );
-    }, [selectedItems, setCopyOrCuts, t]);
+        setCopyOrCuts("cut", [...selectedItems]);
+    }, [selectedItems, setCopyOrCuts]);
 
     const handleCopy = useCallback(() => {
         if (selectedItems.length === 0) return;
 
-        const itemsToCopy = [...selectedItems];
-        setCopyOrCuts("copy", itemsToCopy);
-
-        if (itemsToCopy.length === 1) {
-            toast.info(t("page.drive.clipboard.copy_single", { name: itemsToCopy[0].name }));
-            return;
-        }
-
-        toast.info(
-            t("page.drive.clipboard.copy_multiple", {
-                name: itemsToCopy[0].name,
-                count: itemsToCopy.length - 1,
-            }),
-        );
-    }, [selectedItems, setCopyOrCuts, t]);
+        setCopyOrCuts("copy", [...selectedItems]);
+    }, [selectedItems, setCopyOrCuts]);
 
     const handlePaste = useCallback(() => {
-        if (copyOrCuts.action === null || copyOrCuts.items.length === 0) return;
+        if (pasting || copyOrCuts.action === null || copyOrCuts.items.length === 0) return;
 
         if (copyOrCuts.action === "cut") {
             const itemsToMove: Content[] = [...copyOrCuts.items];
@@ -81,7 +55,7 @@ export function useDriveClipboardActions(destinationId: string) {
                         message: toErrorMessage(err),
                     }),
             });
-            return;
+            return track(promise);
         }
 
         if (copyOrCuts.action === "copy") {
@@ -111,6 +85,7 @@ export function useDriveClipboardActions(destinationId: string) {
                         message: toErrorMessage(err),
                     }),
             });
+            return track(promise);
         }
     }, [copyOrCuts, destinationId, queryClient, setCopyOrCuts, t]);
 
@@ -120,4 +95,16 @@ export function useDriveClipboardActions(destinationId: string) {
         handleCopy,
         handlePaste,
     };
+}
+
+// One paste at a time across every entry point: shortcut, context menu, and clipboard bar.
+let pasting = false;
+
+// toast.promise already reports the failure; callers only need to know when the paste is over.
+function track(promise: Promise<unknown>) {
+    pasting = true;
+    const done = () => {
+        pasting = false;
+    };
+    return promise.then(done, done);
 }

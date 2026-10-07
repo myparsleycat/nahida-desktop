@@ -60,7 +60,7 @@ export function ContextMenuProvider(props: ContextMenuProviderProps) {
 }
 
 function ContextMenuContentSnippet() {
-  const { selectedItems, setSelectedItems } = useSelectionStore();
+  const { selectedItems, setSelectedItems, dropCopyOrCuts } = useSelectionStore();
   const dialog = useDialogStore();
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
@@ -82,9 +82,12 @@ function ContextMenuContentSnippet() {
   });
 
   const handleTrashBtn = async (_e: React.MouseEvent) => {
+    const trashedIds = selectedItems.map((item) => item.id);
+
     return trashMutation
       .mutateAsync({ items: selectedItems })
       .then(async () => {
+        dropCopyOrCuts(trashedIds);
         setSelectedItems([]);
         await queryClient.invalidateQueries();
       })
@@ -124,7 +127,7 @@ function ContextMenuContentSnippet() {
           <>
             <ContextMenuSeparator />
 
-            <ContextMenuItem onClick={handlePaste}>
+            <ContextMenuItem onClick={() => void handlePaste()}>
               <ClipboardPaste size={18} />
               {t("page.drive.context_menu.paste")}
             </ContextMenuItem>

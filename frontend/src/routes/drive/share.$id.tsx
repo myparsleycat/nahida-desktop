@@ -16,6 +16,7 @@ import {
   UnsupportedExtensionsDialog,
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
+import { DriveClipboardBar, DriveClipboardSpacer } from "@renderer/components/drive/clipboard-bar";
 import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
 import { DriveUploadDropOverlay } from "@renderer/components/drive/drive-upload-drop-overlay";
 import { AliceLoader } from "@renderer/components/loaders";
@@ -196,7 +197,7 @@ function RouteComponent() {
   if (query.data) {
     return (
       <>
-        <div className="flex h-full w-full flex-col select-none">
+        <div className="relative flex h-full w-full flex-col select-none">
           <div className="flex h-12 w-full flex-row items-center border-b p-2 select-none">
             {location.pathname !== "/drive/share" ? (
               <AkashaBreadcrumb itemId={effectiveId} ancestors={query.data.ancestors ?? []} />
@@ -256,6 +257,8 @@ function RouteComponent() {
                           </Button>
                         </div>
                       )}
+
+                      <DriveClipboardSpacer />
                     </>
                   </ScrollArea>
                 ) : isSearchFailed ? (
@@ -306,6 +309,8 @@ function RouteComponent() {
               folderName={query.data.content?.name ?? t("page.share_drive.title")}
             />
           </div>
+
+          <DriveClipboardBar destinationId={effectiveId} />
         </div>
 
         <RenameDialog />

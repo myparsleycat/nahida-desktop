@@ -268,6 +268,7 @@ interface SelectionState {
         items: Content[];
     };
     setCopyOrCuts: (action: "cut" | "copy" | null, items: Content[]) => void;
+    dropCopyOrCuts: (ids: string[]) => void;
 }
 
 export const selectionStore = createStore<SelectionState>((set) => ({
@@ -277,6 +278,13 @@ export const selectionStore = createStore<SelectionState>((set) => ({
     setLastSelectedIdx: (lastSelectedIdx) => set({ lastSelectedIdx }),
     copyOrCuts: { action: null, items: [] },
     setCopyOrCuts: (action, items) => set({ copyOrCuts: { action, items } }),
+    dropCopyOrCuts: (ids) =>
+        set((state) => {
+            const items = state.copyOrCuts.items.filter((item) => !ids.includes(item.id));
+            return {
+                copyOrCuts: { action: items.length > 0 ? state.copyOrCuts.action : null, items },
+            };
+        }),
 }));
 
 export const useSelectionStore = () => useStore(selectionStore);

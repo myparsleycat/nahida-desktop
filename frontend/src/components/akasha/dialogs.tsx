@@ -349,7 +349,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
 export function DeleteItemsDialog() {
   const { t } = useTranslation();
   const { deleteItemsDialog, setOpen } = useDialogStore();
-  const { selectedItems, setSelectedItems } = useSelectionStore();
+  const { selectedItems, setSelectedItems, dropCopyOrCuts } = useSelectionStore();
   const { queryClient } = useRouteContext({ from: "__root__" });
 
   const deleteMutation = useMutation({
@@ -384,6 +384,7 @@ export function DeleteItemsDialog() {
             { description: outcome.errorMessage },
           );
         }
+        dropCopyOrCuts(acceptedIds);
         setSelectedItems([]);
         setOpen("deleteItemsDialog", false);
         await queryClient.invalidateQueries();

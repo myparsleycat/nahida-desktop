@@ -490,6 +490,10 @@ function StoringIndicator(props: { size: string }) {
   );
 }
 
+function cutItemIds(copyOrCuts: { action: "cut" | "copy" | null; items: Content[] }) {
+  return copyOrCuts.action === "cut" ? new Set(copyOrCuts.items.map((item) => item.id)) : null;
+}
+
 export function ContentMenuList(props: ContentMenuProps) {
   const { sortedContents, isFetching, itemId } = props;
   const {
@@ -503,6 +507,7 @@ export function ContentMenuList(props: ContentMenuProps) {
   const location = useLocation();
   const navi = useNavigate();
   const dialog = useDialogStore();
+  const cutIds = cutItemIds(selection.copyOrCuts);
 
   return (
     <>
@@ -518,6 +523,7 @@ export function ContentMenuList(props: ContentMenuProps) {
                 selection.selectedItems.some((selected) => selected.id === item.id) &&
                   "bg-black/10 dark:bg-white/10",
                 currentDragOver?.id === item.id && "bg-black/10 dark:bg-white/10",
+                cutIds?.has(item.id) && "opacity-50",
               )}
               draggable="true"
               onClick={(e) => handleItemClick(item, idx, e)}
@@ -592,6 +598,7 @@ export function ContentMenuGrid(props: ContentMenuProps) {
   const { selection, handleItemClick, handleItemRightClick, getDoubleClickHandler } =
     useContentMenu(sortedContents);
   const navi = useNavigate();
+  const cutIds = cutItemIds(selection.copyOrCuts);
 
   return (
     <div className="grid grid-cols-2 gap-4 p-4 pr-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -602,6 +609,7 @@ export function ContentMenuGrid(props: ContentMenuProps) {
           className={cn(
             "sorted-contents cursor-pointer rounded-md p-2 hover:bg-secondary",
             selection.selectedItems.some((selected) => selected.id === item.id) && "bg-secondary",
+            cutIds?.has(item.id) && "opacity-50",
           )}
           draggable="true"
           onClick={(e) => handleItemClick(item, idx, e)}
@@ -896,7 +904,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        handlePaste();
+        void handlePaste();
       }
     },
     [
