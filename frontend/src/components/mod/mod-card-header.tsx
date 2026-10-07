@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
+import { TruncatedText } from "@renderer/components/ui/truncated-text";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { openModAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
@@ -46,7 +47,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
 
   return (
     <div className="relative z-10 flex items-center justify-between pb-1">
-      <span className="truncate text-sm font-semibold">{stripDisabledPrefix(mod.name)}</span>
+      <TruncatedText className="text-sm font-semibold" text={stripDisabledPrefix(mod.name)} />
       <div className="flex items-center gap-1">
         <Tooltip disableHoverablePopup>
           <TooltipTrigger

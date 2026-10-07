@@ -1,4 +1,5 @@
 import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
+import { TruncatedText } from "@renderer/components/ui/truncated-text";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { useModDownloadTransfer } from "@renderer/hooks/use-mod-download-transfer";
 import i18n from "@renderer/lib/i18n";
@@ -74,9 +75,10 @@ export const ModListRow = memo(function ModListRow({
             )}
           </div>
           <div role="cell" className="min-w-0 p-2 text-left">
-            <span className="block w-full truncate text-left font-medium">
-              {stripDisabledPrefix(mod.name)}
-            </span>
+            <TruncatedText
+              className="block w-full text-left font-medium"
+              text={stripDisabledPrefix(mod.name)}
+            />
           </div>
           <div role="cell" className="p-2 text-right whitespace-nowrap text-muted-foreground">
             {mod.isDownloadPlaceholder ? "—" : formatSize(mod.size || 0)}
