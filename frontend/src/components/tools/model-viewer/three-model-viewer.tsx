@@ -391,6 +391,10 @@ function ThreeModelScene({
               invalidate();
             }
           }, INTERACTIVE_COMMIT_WINDOW_MS);
+        } else {
+          // The cleared timer may have owned a mesh whose shape signature this
+          // commit left unchanged, so nothing else would refresh it.
+          finalizePayloadGeometry(root);
         }
         invalidate();
         // Defined below to keep the state-transition path together; refs make this
