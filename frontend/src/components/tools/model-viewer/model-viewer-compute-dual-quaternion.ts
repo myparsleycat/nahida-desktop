@@ -94,7 +94,8 @@ function computeValidatedPackedDualQuaternionFrame(
     const frame1 = Math.min(frame0 + 1, pose.frameCount - 1);
     const inter = frame - frame0;
     const base = preparedPackedVertices(deformer.base, buffers.base);
-    const blend = new DataView(buffers.blend!);
+    const blendWeights = new Float32Array(buffers.blend!);
+    const blendBones = new Int32Array(buffers.blend!);
     const palette = new Float32Array(buffers.pose!);
     const vertices = options?.vertices;
     const { positions, normals } = ensureGIMIShapePoseFrame(
@@ -106,12 +107,13 @@ function computeValidatedPackedDualQuaternionFrame(
     forEachComputeVertex(deformer.vertexCount, vertices, (vertex, destIndex) => {
         accumulated.fill(0);
         const source = vertex * 7;
-        const blendOffset = vertex * 32;
-        const referenceBone = blend.getInt32(blendOffset + 16, true);
+        // Each blend record is four float32 weights followed by four int32 bones.
+        const blendOffset = vertex * 8;
+        const referenceBone = blendBones[blendOffset + 4]!;
         const reference = (frame0 * pose.boneCount + referenceBone) * 14 + 6;
         for (let influence = 0; influence < 4; influence += 1) {
-            const bone = blend.getInt32(blendOffset + 16 + influence * 4, true);
-            const weight = blend.getFloat32(blendOffset + influence * 4, true);
+            const bone = blendBones[blendOffset + 4 + influence]!;
+            const weight = blendWeights[blendOffset + influence]!;
             // The shader fetches all four indices, including zero-weight influences.
             if (bone < 0 || bone >= pose.boneCount || !Number.isFinite(weight)) {
                 throw new Error(
@@ -205,12 +207,13 @@ function validatePackedDualQuaternionInfluences(
     vertexCount: number,
     boneCount: number,
 ): void {
-    const view = new DataView(blend);
+    const weights = new Float32Array(blend);
+    const bones = new Int32Array(blend);
     for (let vertex = 0; vertex < vertexCount; vertex += 1) {
-        const blendOffset = vertex * 32;
+        const blendOffset = vertex * 8;
         for (let influence = 0; influence < 4; influence += 1) {
-            const bone = view.getInt32(blendOffset + 16 + influence * 4, true);
-            const weight = view.getFloat32(blendOffset + influence * 4, true);
+            const bone = bones[blendOffset + 4 + influence]!;
+            const weight = weights[blendOffset + influence]!;
             if (bone < 0 || bone >= boneCount || !Number.isFinite(weight)) {
                 throw new Error(
                     `Invalid packed dual-quaternion influence at vertex ${vertex}: bone=${bone}`,

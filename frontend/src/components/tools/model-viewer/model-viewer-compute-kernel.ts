@@ -191,7 +191,8 @@ function computeValidatedGIMIShapePoseFrame(
         positions,
         normals,
         tangents,
-        new DataView(buffers.blend),
+        new Float32Array(buffers.blend),
+        new Int32Array(buffers.blend),
         new Float32Array(buffers.pose),
         frame,
         deformer.pose.boneCount,
@@ -352,13 +353,13 @@ function validateBlendBoneIndices(
     vertexCount: number,
     boneCount: number,
 ): void {
-    const view = new DataView(blend);
+    const bones = new Int32Array(blend);
     for (let vertex = 0; vertex < vertexCount; vertex += 1) {
-        const blendOffset = vertex * 32;
-        const bone0 = view.getInt32(blendOffset + 16, true);
-        const bone1 = view.getInt32(blendOffset + 20, true);
-        const bone2 = view.getInt32(blendOffset + 24, true);
-        const bone3 = view.getInt32(blendOffset + 28, true);
+        const blendOffset = vertex * 8;
+        const bone0 = bones[blendOffset + 4]!;
+        const bone1 = bones[blendOffset + 5]!;
+        const bone2 = bones[blendOffset + 6]!;
+        const bone3 = bones[blendOffset + 7]!;
         if (
             bone0 < 0 ||
             bone0 >= boneCount ||
@@ -381,7 +382,8 @@ function applyGIMIShapePose(
     positions: Float32Array,
     normals: Float32Array,
     tangents: Float32Array,
-    blend: DataView,
+    blendWeights: Float32Array,
+    blendBones: Int32Array,
     pose: Float32Array,
     frame: number,
     boneCount: number,
@@ -390,15 +392,16 @@ function applyGIMIShapePose(
     const count = positions.length / 3;
     for (let dest = 0; dest < count; dest += 1) {
         const vertex = vertices ? vertices[dest]! : dest;
-        const blendOffset = vertex * 32;
-        const weights0 = blend.getFloat32(blendOffset, true);
-        const weights1 = blend.getFloat32(blendOffset + 4, true);
-        const weights2 = blend.getFloat32(blendOffset + 8, true);
-        const weights3 = blend.getFloat32(blendOffset + 12, true);
-        const bone0 = blend.getInt32(blendOffset + 16, true);
-        const bone1 = blend.getInt32(blendOffset + 20, true);
-        const bone2 = blend.getInt32(blendOffset + 24, true);
-        const bone3 = blend.getInt32(blendOffset + 28, true);
+        // Each blend record is four float32 weights followed by four int32 bones.
+        const blendOffset = vertex * 8;
+        const weights0 = blendWeights[blendOffset]!;
+        const weights1 = blendWeights[blendOffset + 1]!;
+        const weights2 = blendWeights[blendOffset + 2]!;
+        const weights3 = blendWeights[blendOffset + 3]!;
+        const bone0 = blendBones[blendOffset + 4]!;
+        const bone1 = blendBones[blendOffset + 5]!;
+        const bone2 = blendBones[blendOffset + 6]!;
+        const bone3 = blendBones[blendOffset + 7]!;
         if (
             bone0 < 0 ||
             bone0 >= boneCount ||

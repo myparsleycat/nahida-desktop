@@ -15,6 +15,8 @@ import {
 } from "./model-viewer-packed-vertex";
 
 const BLEND_STRIDE = 32;
+// Four float32 weights followed by four int32 bones per vertex.
+const BLEND_WORDS = BLEND_STRIDE / 4;
 const POSE_STRIDE = 48;
 
 export function validateCyclicPackedBuffers(
@@ -92,7 +94,8 @@ function computeValidatedCyclicPackedFrame(
     const frame1 = Math.min(frame0 + 1, frameCount - 1);
     const inter = frame0 === frame1 ? 0 : poseFrame - frame0;
     const base = preparedPackedVertices(deformer.base, buffers.base);
-    const blend = new DataView(buffers.blend!);
+    const blendWeights = new Float32Array(buffers.blend!);
+    const blendBones = new Int32Array(buffers.blend!);
     const poseValues = new Float32Array(buffers.pose!);
     const vertices = options?.vertices;
     const { positions, normals } = ensureGIMIShapePoseFrame(
@@ -109,15 +112,15 @@ function computeValidatedCyclicPackedFrame(
         const normalX = base[source + 4]!;
         const normalY = base[source + 6]! * -1;
         const normalZ = base[source + 5]!;
-        const blendOffset = vertex * BLEND_STRIDE;
-        const weight0 = blend.getFloat32(blendOffset, true);
-        const weight1 = blend.getFloat32(blendOffset + 4, true);
-        const weight2 = blend.getFloat32(blendOffset + 8, true);
-        const weight3 = blend.getFloat32(blendOffset + 12, true);
-        const bone0 = blend.getInt32(blendOffset + 16, true);
-        const bone1 = blend.getInt32(blendOffset + 20, true);
-        const bone2 = blend.getInt32(blendOffset + 24, true);
-        const bone3 = blend.getInt32(blendOffset + 28, true);
+        const blendOffset = vertex * BLEND_WORDS;
+        const weight0 = blendWeights[blendOffset]!;
+        const weight1 = blendWeights[blendOffset + 1]!;
+        const weight2 = blendWeights[blendOffset + 2]!;
+        const weight3 = blendWeights[blendOffset + 3]!;
+        const bone0 = blendBones[blendOffset + 4]!;
+        const bone1 = blendBones[blendOffset + 5]!;
+        const bone2 = blendBones[blendOffset + 6]!;
+        const bone3 = blendBones[blendOffset + 7]!;
         let r00 = 0;
         let r01 = 0;
         let r02 = 0;
@@ -190,15 +193,16 @@ function validateCyclicBlendInfluences(
     vertexCount: number,
     boneCount: number,
 ): void {
-    const view = new DataView(blend);
+    const weights = new Float32Array(blend);
+    const bones = new Int32Array(blend);
     for (let vertex = 0; vertex < vertexCount; vertex += 1) {
-        const blendOffset = vertex * BLEND_STRIDE;
+        const blendOffset = vertex * BLEND_WORDS;
         for (let influence = 0; influence < 4; influence += 1) {
-            const weight = view.getFloat32(blendOffset + influence * 4, true);
+            const weight = weights[blendOffset + influence]!;
             if (weight === 0) {
                 continue;
             }
-            const bone = view.getInt32(blendOffset + 16 + influence * 4, true);
+            const bone = bones[blendOffset + 4 + influence]!;
             if (bone < 0 || bone >= boneCount) {
                 throw new Error(`Cyclic packed bone index ${bone} is outside the pose buffer.`);
             }
