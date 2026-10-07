@@ -161,6 +161,15 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - For `.ts`, `.tsx`, `.js`, and `.jsx` files, use the existing `pnpm lint` and `pnpm fmt` scripts from `frontend/`; do not invoke `tsc`, Oxlint, or Oxfmt directly.
 - Run `task vuln` when dependencies, networking, archive handling, process execution, or other security-sensitive code changes.
 
+### Adding and changing tests
+
+- Do not add tests by default for every change. Add or extend tests only for a concrete behavior or failure mode that existing coverage and required checks do not adequately verify. Prioritize consequential risks such as data loss, security, rollback, cancellation, concurrency, and renderer/backend contracts. More coverage or a new function alone is not sufficient justification; presentation-only changes, mechanical renames, and trivial forwarding usually need no new tests.
+- For bug fixes, add or extend a regression test unless an existing test already reproduces the bug. Verify that the relevant assertion fails with the original faulty behavior and passes with the fix; compilation errors or unrelated setup failures do not count. If deterministic automated reproduction is not feasible, explain the limitation and the alternative verification performed.
+- Prefer the smallest case in an existing test that covers the risk. Avoid equivalent assertions across test layers, and keep fixtures and fakes proportional to the risk. Do not introduce production abstractions solely to support a low-value test.
+- Assert observable behavior and stable contracts rather than mirroring implementation details. Source or generated-text checks are allowed for explicit repository contracts whose runtime verification is unavailable or impractical, such as generated binding surfaces, dependency pins, or startup ordering; do not use them merely to assert that an implementation fragment exists.
+- Follow the Verification rules regardless of whether new tests are added. Preserve meaningful existing coverage and follow GitHub Actions test compatibility when adding or changing tests.
+- When tests are added or extended, briefly state the concrete risk they cover in the final response.
+
 ### GitHub Actions test compatibility
 
 - When writing or changing tests, inspect the relevant `.github/workflows` and `.github/actions` validation steps and account for the Windows runner environment, not just the local workstation.
