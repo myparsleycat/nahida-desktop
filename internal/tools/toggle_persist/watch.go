@@ -241,6 +241,7 @@ func (e *persistEngine) handleD3dxUserINIChange(importer persistImporter, iniPat
 			return
 		}
 		e.mu.Lock()
+		e.learner.setTimeDriven(target.iniPath, target.varName, target.timeDriven)
 		result := e.learner.Observe(target.iniPath, target.varName, newValue, revision, at)
 		e.mu.Unlock()
 		e.scheduleFlush(target.iniPath, result.NextDueAt, generation)

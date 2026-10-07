@@ -20,6 +20,11 @@ const (
 	observationLimit            = 128
 	initialQuietMs              = 3_000
 	maximumQuietMs              = 10_000
+	// A time-driven variable is written back only once it has stopped changing
+	// for this long. A value the user picked settles and passes; an animation
+	// keeps moving and never does. The slowest cycles seen in animation mods
+	// change state about every 90 seconds.
+	timeDrivenSettleMs = 120_000
 )
 
 type TogglePersistLearnedVariable struct {
@@ -56,6 +61,7 @@ type persistVariableState struct {
 	cohortSuppressed           bool
 	sparseCohortSuppressed     bool
 	suppressedObservationCount *int
+	timeDriven                 bool
 }
 
 type persistFileState struct {
@@ -101,6 +107,21 @@ func (l *TogglePersistLearner) RegisterLearnedVariables(
 			learnedProfile: &copied,
 		}
 	}
+}
+
+func (l *TogglePersistLearner) setTimeDriven(targetINIPath, varName string, timeDriven bool) {
+	file := l.requireFile(targetINIPath)
+	varKey := strings.ToLower(varName)
+	state, ok := file.variables[varKey]
+	if !ok {
+		if !timeDriven {
+			return
+		}
+		state = &persistVariableState{name: varName, status: "observing"}
+		file.order = append(file.order, varKey)
+		file.variables[varKey] = state
+	}
+	state.timeDriven = timeDriven
 }
 
 func (l *TogglePersistLearner) Observe(
@@ -683,10 +704,14 @@ func quietWindow(state *persistVariableState) int64 {
 		value := state.learnedProfile.MedianIntervalMs
 		interval = &value
 	}
-	if interval == nil {
-		return initialQuietMs
+	quiet := int64(initialQuietMs)
+	if interval != nil {
+		quiet = int64(math.Min(maximumQuietMs, math.Max(initialQuietMs, *interval*3)))
 	}
-	return int64(math.Min(maximumQuietMs, math.Max(initialQuietMs, *interval*3)))
+	if state.timeDriven {
+		return max(quiet, timeDrivenSettleMs)
+	}
+	return quiet
 }
 
 func medianInterval(observations []persistObservation) *float64 {
