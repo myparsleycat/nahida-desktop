@@ -1145,40 +1145,42 @@ async function loadAnimationFrame(
     (clip.sharedBuffers ?? []).map((buffer) => [buffer.id, buffer.path]),
   );
   const meshes = await Promise.all(
-    (frame.meshes ?? []).map(async (mesh) => ({
-      meshName: mesh.meshName,
-      indices: await loadOptionalUint32AnimationBuffer(
-        mesh.indicesBufferId,
-        mesh.indicesPath,
-        sharedBufferPathMap,
-        uint32Cache,
-      ),
-      position: await loadRequiredFloatAnimationBuffer(
-        mesh.positionBufferId,
-        mesh.positionPath,
-        sharedBufferPathMap,
-        floatCache,
-        `animation position buffer for ${mesh.meshName}`,
-      ),
-      normal: await loadOptionalFloatAnimationBuffer(
-        mesh.normalBufferId,
-        mesh.normalPath,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-      tangent: await loadOptionalFloatAnimationBuffer(
-        mesh.tangentBufferId,
-        mesh.tangentPath,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-      texcoord0: await loadOptionalFloatAnimationBuffer(
-        mesh.texcoord0BufferId,
-        mesh.texcoord0Path,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-    })),
+    (frame.meshes ?? []).map(async (mesh) => {
+      const [indices, position, normal, tangent, texcoord0] = await Promise.all([
+        loadOptionalUint32AnimationBuffer(
+          mesh.indicesBufferId,
+          mesh.indicesPath,
+          sharedBufferPathMap,
+          uint32Cache,
+        ),
+        loadRequiredFloatAnimationBuffer(
+          mesh.positionBufferId,
+          mesh.positionPath,
+          sharedBufferPathMap,
+          floatCache,
+          `animation position buffer for ${mesh.meshName}`,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.normalBufferId,
+          mesh.normalPath,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.tangentBufferId,
+          mesh.tangentPath,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.texcoord0BufferId,
+          mesh.texcoord0Path,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+      ]);
+      return { meshName: mesh.meshName, indices, position, normal, tangent, texcoord0 };
+    }),
   );
 
   return {
