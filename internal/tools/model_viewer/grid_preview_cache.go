@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,13 +16,21 @@ import (
 
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
-const gridPreviewCacheDir = "cache/mod-grid-preview-v1"
+const (
+	gridPreviewCacheDir       = "cache/mod-grid-preview-v2"
+	gridPreviewLegacyCacheDir = "cache/mod-grid-preview-v1"
+	gridPreviewUploadID       = "grid-preview-image"
+	gridPreviewImageMaxBytes  = 2 * 1024 * 1024
+	gridPreviewImageSize      = 512
+)
 
 type GridPreviewCache struct {
 	Fingerprint string `json:"fingerprint"`
-	Image       string `json:"image"`
+	// URL of the cached image, empty when the mod has no current render.
+	URL string `json:"url"`
 }
 
 func (t *Service) GetModGridPreviewCache(
@@ -37,33 +44,47 @@ func (t *Service) GetModGridPreviewCache(
 
 	t.gridPreviewMu.Lock()
 	defer t.gridPreviewMu.Unlock()
-	path, err := t.gridPreviewCachePath(modPath, variant)
+	t.gridPreviewLegacyCleanup.Do(t.removeLegacyGridPreviewCache)
+	path, err := t.gridPreviewCachePath(modPath, variant, result.Fingerprint)
 	if err != nil {
 		return result, err
 	}
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return result, nil
 	}
 	if err != nil {
 		return result, fmt.Errorf("read grid preview cache: %w", err)
 	}
-	var cached GridPreviewCache
-	// A damaged cache is disposable; the next render replaces it.
-	if json.Unmarshal(raw, &cached) == nil && cached.Fingerprint == result.Fingerprint {
-		if validateGridPreviewImage(cached.Image) == nil {
-			result.Image = cached.Image
-		}
+	defer func() { _ = file.Close() }()
+
+	// A damaged cache is disposable; the next render replaces it. Images are
+	// fully decoded before they are written, so the header is enough here.
+	if validateGridPreviewImageConfig(file) == nil {
+		result.URL = t.protocol.LocalFileURL(path, false)
 	}
 	return result, nil
 }
 
+// PrepareModGridPreviewCacheUpload opens the slot the renderer uploads a
+// rendered preview into, inside the model session that produced it.
+func (t *Service) PrepareModGridPreviewCacheUpload(sessionID string, byteLength int64) (string, error) {
+	if byteLength <= 0 || byteLength > gridPreviewImageMaxBytes {
+		return "", errors.New("invalid grid preview image size")
+	}
+	return t.protocol.CreateMemoryUpload(sessionID, gridPreviewUploadID, byteLength)
+}
+
 func (t *Service) SaveModGridPreviewCache(
-	ctx context.Context, modPath, variant, fingerprint, image string,
+	ctx context.Context, modPath, variant, fingerprint, sessionID string,
 ) (err error) {
 	defer func() { err = t.reportGridPreviewCacheError(err, "write", modPath) }()
 	if t.data == nil || fingerprint == "" {
 		return nil
+	}
+	image, err := t.protocol.TakeMemoryUpload(sessionID, gridPreviewUploadID)
+	if err != nil {
+		return fmt.Errorf("take grid preview upload: %w", err)
 	}
 	if err := validateGridPreviewImage(image); err != nil {
 		return err
@@ -79,35 +100,55 @@ func (t *Service) SaveModGridPreviewCache(
 
 	t.gridPreviewMu.Lock()
 	defer t.gridPreviewMu.Unlock()
-	path, err := t.gridPreviewCachePath(modPath, variant)
+	path, err := t.gridPreviewCachePath(modPath, variant, fingerprint)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create grid preview cache: %w", err)
 	}
-	raw, err := json.Marshal(GridPreviewCache{Fingerprint: fingerprint, Image: image})
-	if err != nil {
-		return fmt.Errorf("encode grid preview cache: %w", err)
-	}
-	// Serialize readers and writers, and rename only after the complete file is closed.
 	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, raw, 0o600); err != nil {
+	if err := os.WriteFile(temporary, image, 0o600); err != nil {
 		return fmt.Errorf("write grid preview cache: %w", err)
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := platform.ReplaceAtomic(temporary, path); err != nil {
 		return fmt.Errorf("replace grid preview cache: %w", err)
+	}
+
+	// Renders of earlier fingerprints can never be served again.
+	stale, err := filepath.Glob(gridPreviewCachePattern(path))
+	if err != nil {
+		return fmt.Errorf("list stale grid preview cache: %w", err)
+	}
+	for _, other := range stale {
+		if other != path {
+			_ = os.Remove(other)
+		}
 	}
 	return trimGridPreviewCache(filepath.Dir(path))
 }
 
-func (t *Service) gridPreviewCachePath(modPath, variant string) (string, error) {
+// The name carries the fingerprint, so a lookup is a single open and a stale
+// render is never read.
+func (t *Service) gridPreviewCachePath(modPath, variant, fingerprint string) (string, error) {
 	abs, err := filepath.Abs(modPath)
 	if err != nil {
 		return "", fmt.Errorf("resolve grid preview path: %w", err)
 	}
 	key := sha256.Sum256([]byte(strings.ToLower(abs) + "\x00" + variant))
-	return t.data.Resolve(filepath.Join(gridPreviewCacheDir, fmt.Sprintf("%x.json", key)))
+	revision := sha256.Sum256([]byte(fingerprint))
+	return t.data.Resolve(filepath.Join(gridPreviewCacheDir, fmt.Sprintf("%x-%x.png", key, revision[:8])))
+}
+
+func gridPreviewCachePattern(path string) string {
+	name := filepath.Base(path)
+	return filepath.Join(filepath.Dir(path), name[:sha256.Size*2]+"-*.png")
+}
+
+func (t *Service) removeLegacyGridPreviewCache() {
+	if legacy, err := t.data.Resolve(gridPreviewLegacyCacheDir); err == nil {
+		_ = os.RemoveAll(legacy)
+	}
 }
 
 // gridPreviewFingerprint identifies the mod's render sources by relative path, size, and
@@ -178,24 +219,26 @@ func isGridPreviewModFile(name string) bool {
 	}
 }
 
-func validateGridPreviewImage(image string) error {
-	const prefix = "data:image/png;base64,"
-	if len(image) > 2*1024*1024 || !strings.HasPrefix(image, prefix) {
+func validateGridPreviewImage(image []byte) error {
+	if len(image) > gridPreviewImageMaxBytes {
 		return errors.New("invalid grid preview image")
 	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(image, prefix))
-	if err != nil {
-		return fmt.Errorf("decode grid preview image: %w", err)
+	if err := validateGridPreviewImageConfig(bytes.NewReader(image)); err != nil {
+		return err
 	}
-	config, err := png.DecodeConfig(bytes.NewReader(raw))
+	if _, err := png.Decode(bytes.NewReader(image)); err != nil {
+		return fmt.Errorf("decode grid preview PNG: %w", err)
+	}
+	return nil
+}
+
+func validateGridPreviewImageConfig(image io.Reader) error {
+	config, err := png.DecodeConfig(image)
 	if err != nil {
 		return fmt.Errorf("read grid preview PNG: %w", err)
 	}
-	if config.Width != 512 || config.Height != 512 {
+	if config.Width != gridPreviewImageSize || config.Height != gridPreviewImageSize {
 		return errors.New("grid preview image must be 512 by 512")
-	}
-	if _, err := png.Decode(bytes.NewReader(raw)); err != nil {
-		return fmt.Errorf("decode grid preview PNG: %w", err)
 	}
 	return nil
 }
@@ -208,7 +251,7 @@ func trimGridPreviewCache(dir string) error {
 	files := make([]fs.FileInfo, 0, len(entries))
 	var total int64
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".png" {
 			continue
 		}
 		info, err := entry.Info()

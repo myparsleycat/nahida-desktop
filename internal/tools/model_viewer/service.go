@@ -16,6 +16,7 @@ type Options struct {
 type Service struct {
 	data                     *appdata.Store
 	gridPreviewMu            sync.Mutex
+	gridPreviewLegacyCleanup sync.Once
 	log                      *infra.Log
 	protocol                 *infra.Protocol
 	findModelViewerPreview   func(string) *string

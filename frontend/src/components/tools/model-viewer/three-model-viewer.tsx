@@ -18,7 +18,6 @@ import {
   useState,
 } from "react";
 import {
-  ACESFilmicToneMapping,
   Box3,
   BufferAttribute,
   BufferGeometry,
@@ -30,17 +29,12 @@ import {
   MathUtils,
   Mesh,
   MeshStandardMaterial,
-  NeutralToneMapping,
-  NoToneMapping,
   Object3D,
   PerspectiveCamera,
-  PMREMGenerator,
-  Scene,
   SRGBColorSpace,
   Texture,
   Vector3,
 } from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type {
@@ -66,6 +60,15 @@ import {
   setPayloadToonShadows,
 } from "./model-viewer-payload";
 import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
+import {
+  createModelViewerEnvironment,
+  frameCameraOnObject,
+  MODEL_VIEWER_FILL_LIGHT_POSITION,
+  MODEL_VIEWER_HEMISPHERE_GROUND_COLOR,
+  MODEL_VIEWER_KEY_LIGHT_POSITION,
+  modelViewerLighting,
+  modelViewerToneMapping,
+} from "./model-viewer-scene";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
@@ -153,32 +156,7 @@ export const ThreeModelViewer = memo(
       [],
     );
 
-    const lighting = useMemo(() => {
-      switch (threeEnvironment) {
-        case "none":
-          return {
-            ambient: 0.45,
-            directionalKey: 1.35,
-            directionalFill: 0.45,
-            hemisphere: 0,
-          };
-        case "soft":
-          return {
-            ambient: 0.5,
-            directionalKey: 1.5,
-            directionalFill: 0.6,
-            hemisphere: 0.55,
-          };
-        case "studio":
-        default:
-          return {
-            ambient: 0.6,
-            directionalKey: 1.8,
-            directionalFill: 0.8,
-            hemisphere: 0.9,
-          };
-      }
-    }, [threeEnvironment]);
+    const lighting = useMemo(() => modelViewerLighting(threeEnvironment), [threeEnvironment]);
 
     return (
       <div className={cn("h-full w-full", className)}>
@@ -198,12 +176,18 @@ export const ThreeModelViewer = memo(
           {lighting.hemisphere > 0 ? (
             <hemisphereLight
               intensity={lighting.hemisphere}
-              groundColor="#b9bec7"
+              groundColor={MODEL_VIEWER_HEMISPHERE_GROUND_COLOR}
               position={[0, 1, 0]}
             />
           ) : null}
-          <directionalLight intensity={lighting.directionalKey} position={[6, 8, 10]} />
-          <directionalLight intensity={lighting.directionalFill} position={[-6, 4, -8]} />
+          <directionalLight
+            intensity={lighting.directionalKey}
+            position={MODEL_VIEWER_KEY_LIGHT_POSITION}
+          />
+          <directionalLight
+            intensity={lighting.directionalFill}
+            position={MODEL_VIEWER_FILL_LIGHT_POSITION}
+          />
           <ThreeModelScene
             controllerRef={controllerRef}
             animationClip={animationClip}
@@ -300,12 +284,7 @@ function ThreeModelScene({
     // oxlint-disable-next-line react/immutability
     gl.outputColorSpace = SRGBColorSpace;
     // oxlint-disable-next-line react/immutability
-    gl.toneMapping =
-      threeToneMapping === "aces"
-        ? ACESFilmicToneMapping
-        : threeToneMapping === "none"
-          ? NoToneMapping
-          : NeutralToneMapping;
+    gl.toneMapping = modelViewerToneMapping(threeToneMapping);
     // oxlint-disable-next-line react/immutability
     gl.toneMappingExposure = Number.isFinite(threeExposure) ? threeExposure : 1;
     gl.setClearAlpha(0);
@@ -322,24 +301,18 @@ function ThreeModelScene({
       return;
     }
 
-    const environmentScene = new Scene();
-    const pmremGenerator = new PMREMGenerator(gl);
-    const roomEnvironment = new RoomEnvironment();
-    roomEnvironment.scale.setScalar(threeEnvironment === "soft" ? 0.85 : 1);
-    const environmentTarget = pmremGenerator.fromScene(environmentScene.add(roomEnvironment));
+    const environment = createModelViewerEnvironment(gl, threeEnvironment);
 
     // oxlint-disable-next-line react/immutability
-    scene.environment = environmentTarget.texture;
+    scene.environment = environment.texture;
     invalidate();
 
     return () => {
-      if (scene.environment === environmentTarget.texture) {
+      if (scene.environment === environment.texture) {
         // oxlint-disable-next-line react/immutability
         scene.environment = null;
       }
-      environmentTarget.dispose();
-      roomEnvironment.dispose();
-      pmremGenerator.dispose();
+      environment.dispose();
     };
   }, [gl, invalidate, scene, threeEnvironment]);
 
@@ -1814,23 +1787,12 @@ async function fitCameraToObject({
     return null;
   }
 
-  object.updateMatrixWorld(true);
-  const bounds = new Box3().setFromObject(object);
-  if (bounds.isEmpty()) {
+  const center = frameCameraOnObject(camera, object);
+  if (!center) {
     return null;
   }
 
-  const center = bounds.getCenter(new Vector3());
-  const size = bounds.getSize(new Vector3());
-  const radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
-  const fov = MathUtils.degToRad(camera.fov);
-  const distance = Math.max(radius / Math.sin(fov / 2), radius * 1.8);
-
   controls.target.copy(center);
-  camera.position.copy(center.clone().add(new Vector3(distance * 0.45, distance * 0.15, distance)));
-  camera.near = Math.max(distance / 100, 0.01);
-  camera.far = Math.max(distance * 20, 100);
-  camera.updateProjectionMatrix();
   controls.update();
   return center.clone();
 }
