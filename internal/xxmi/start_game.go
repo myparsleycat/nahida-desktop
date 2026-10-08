@@ -9,6 +9,16 @@ import (
 )
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
+	return x.startGame(ctx, importer, false)
+}
+
+// StartGameWithLogging starts the game without asking about 3DMigoto logging: the user chose to
+// keep it on, or the caller has no dialog to ask with.
+func (x *XXMI) StartGameWithLogging(ctx context.Context, importer string) error {
+	return x.startGame(ctx, importer, true)
+}
+
+func (x *XXMI) startGame(ctx context.Context, importer string, keepLogging bool) error {
 	importer = strings.ToUpper(strings.TrimSpace(importer))
 	if !x.acquireImporter(importer) {
 		return errors.New("XXMI_BUSY")
@@ -20,6 +30,11 @@ func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {
 		return err
+	}
+	if !keepLogging {
+		if err := x.rejectLogging(ctx, importer, external); err != nil {
+			return err
+		}
 	}
 	if external {
 		return x.startExternalGame(ctx, importer)

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const xxmi = vi.hoisted(() => ({
   StartGame: vi.fn(),
+  StartGameWithLogging: vi.fn(),
+  DisableLogging: vi.fn(),
   ClearLaunchBlockers: vi.fn(),
   GetImporterConfig: vi.fn(),
   SaveImporterConfig: vi.fn(),
@@ -42,6 +44,8 @@ afterEach(() => {
   xxmi.InstallUpdates.mockReset();
   toastWarning.mockClear();
   xxmi.StartGame.mockReset();
+  xxmi.StartGameWithLogging.mockReset();
+  xxmi.DisableLogging.mockReset();
   xxmi.ClearLaunchBlockers.mockReset();
   xxmi.GetImporterConfig.mockReset();
   xxmi.SaveImporterConfig.mockReset();
@@ -78,6 +82,7 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("WWMI_WOUNDED_FX_DECISION_REQUIRED")).toBe("wwmi-wounded");
   expect(launchDialog("WWMI_RESOURCE_TIER_DECISION_REQUIRED")).toBe("wwmi-resource-tier");
   expect(launchDialog("XXMI_D3D11_MODE_NOTICE_REQUIRED")).toBe("d3d11-mode");
+  expect(launchDialog("XXMI_LOGGING_ENABLED")).toBe("xxmi-logging");
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI is not configured")).toBeNull();
@@ -241,6 +246,55 @@ it("can keep the wounded effect when retrying launch", async () => {
     "WWMI",
     expect.objectContaining({ woundedFXDecided: true, wwmi: { disableWoundedFX: false } }),
   );
+});
+
+it("turns logging off before retrying launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_LOGGING_ENABLED"));
+  xxmi.StartGame.mockResolvedValueOnce(undefined);
+  xxmi.DisableLogging.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "page.mod.dialog.xxmi-logging.confirm" }));
+
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.DisableLogging).toHaveBeenCalledWith("GIMI");
+  expect(xxmi.StartGameWithLogging).not.toHaveBeenCalled();
+});
+
+it("keeps logging on through the later dialogs of the same launch", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_LOGGING_ENABLED"));
+  xxmi.StartGameWithLogging.mockRejectedValueOnce(new Error("NVIDIA_SMOOTH_MOTION_ENABLED"));
+  xxmi.StartGameWithLogging.mockResolvedValueOnce(undefined);
+  xxmi.ClearLaunchBlockers.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(await screen.findByRole("button", { name: "page.mod.dialog.xxmi-logging.keep" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "page.mod.dialog.smooth-motion.confirm" }),
+  );
+
+  await waitFor(() => expect(xxmi.StartGameWithLogging).toHaveBeenCalledTimes(2));
+  expect(xxmi.StartGameWithLogging).toHaveBeenCalledWith("GIMI");
+  expect(xxmi.ClearLaunchBlockers).toHaveBeenCalledWith("GIMI");
+  expect(xxmi.DisableLogging).not.toHaveBeenCalled();
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
+});
+
+it("does not launch when the logging dialog is cancelled", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("XXMI_LOGGING_ENABLED"));
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByRole("alertdialog");
+  fireEvent.click(screen.getByRole("button", { name: "g.cancel" }));
+
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(xxmi.DisableLogging).not.toHaveBeenCalled();
+  expect(xxmi.StartGameWithLogging).not.toHaveBeenCalled();
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
 });
 
 function Harness({ importer = "GIMI" }: { importer?: string }) {

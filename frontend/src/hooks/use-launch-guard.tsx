@@ -29,6 +29,8 @@ const LAUNCH_BLOCKER_WWMI_RESOURCE_TIER = "WWMI_RESOURCE_TIER_DECISION_REQUIRED"
 const WWMI_RESOURCE_TIERS = ["UHD", "HD", "SD"] as const;
 // Keep in sync with errD3D11ModeNoticeRequired in internal/xxmi/launch_builtin.go.
 const LAUNCH_BLOCKER_D3D11_MODE = "XXMI_D3D11_MODE_NOTICE_REQUIRED";
+// Keep in sync with errLoggingEnabled in internal/xxmi/launch_guard.go.
+const LAUNCH_BLOCKER_LOGGING = "XXMI_LOGGING_ENABLED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
 const launchErrorCodes = [
@@ -61,6 +63,7 @@ type LaunchDialog =
   | "wwmi-wounded"
   | "wwmi-resource-tier"
   | "d3d11-mode"
+  | "xxmi-logging"
   | "game-folder"
   | "runtime-repair";
 
@@ -84,6 +87,9 @@ export function launchDialog(message: string): LaunchDialog | null {
   }
   if (message.includes(LAUNCH_BLOCKER_D3D11_MODE)) {
     return "d3d11-mode";
+  }
+  if (message.includes(LAUNCH_BLOCKER_LOGGING)) {
+    return "xxmi-logging";
   }
   if (message.includes(LAUNCH_BLOCKER_WWMI_WOUNDED)) {
     return "wwmi-wounded";
@@ -116,6 +122,8 @@ export function useLaunchGuard() {
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
   const confirmGeneration = useRef(0);
+  // The user chose to launch with logging on; later dialogs of the same launch must not ask again.
+  const keepLogging = useRef(false);
   const queryClient = useQueryClient();
   const [pendingUpdate, setPendingUpdate] = useState<{
     importer: string;
@@ -123,9 +131,10 @@ export function useLaunchGuard() {
   } | null>(null);
 
   const launch = useCallback(
-    async (importer: string): Promise<LaunchGuardResult> => {
+    async (importer: string, withLogging = false): Promise<LaunchGuardResult> => {
+      keepLogging.current = withLogging;
       try {
-        await XXMI.StartGame(importer);
+        await (withLogging ? XXMI.StartGameWithLogging(importer) : XXMI.StartGame(importer));
         return { status: "started" };
       } catch (error) {
         const message = toErrorMessage(error);
@@ -244,6 +253,9 @@ export function useLaunchGuard() {
       } else if (dialog === "d3d11-mode") {
         const config = await XXMI.GetImporterConfig(importer);
         await XXMI.SaveImporterConfig(importer, { ...config, d3d11ModeNoticeShown: true });
+      } else if (dialog === "xxmi-logging") {
+        await XXMI.DisableLogging(importer);
+        void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
       } else {
         await XXMI.ClearLaunchBlockers(importer);
       }
@@ -273,18 +285,20 @@ export function useLaunchGuard() {
 
     // The blockers were just cleared for this importer, so a rejection here means the fix did
     // not take effect. Surface it instead of reopening the dialog and looping forever.
-    // The resource quality and the DirectX 11 reminder are saved answers that cannot be asked
-    // twice, and a first launch may still need another question, so those go through the guard again.
+    // The resource quality, the DirectX 11 reminder, and logging are saved answers that cannot be
+    // asked twice, and the launch may still need another question, so those go through the guard again.
     try {
-      if (dialog === "wwmi-resource-tier" || dialog === "d3d11-mode") {
-        await launch(importer);
+      if (dialog === "wwmi-resource-tier" || dialog === "d3d11-mode" || dialog === "xxmi-logging") {
+        await launch(importer, keepLogging.current);
+      } else if (keepLogging.current) {
+        await XXMI.StartGameWithLogging(importer);
       } else {
         await XXMI.StartGame(importer);
       }
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
-  }, [dialog, gameFolder, launch, pendingImporter, resourceTier]);
+  }, [dialog, gameFolder, launch, pendingImporter, queryClient, resourceTier]);
 
   const handleKeepWounded = useCallback(async () => {
     if (!pendingImporter) return;
@@ -301,13 +315,26 @@ export function useLaunchGuard() {
       });
       if (confirmGeneration.current !== generation) return;
       setPendingImporter(null);
-      await XXMI.StartGame(importer);
+      await (keepLogging.current ? XXMI.StartGameWithLogging(importer) : XXMI.StartGame(importer));
     } catch (error) {
       if (confirmGeneration.current === generation) toast.error(toErrorMessage(error));
     } finally {
       if (confirmGeneration.current === generation) setIsConfirming(false);
     }
   }, [pendingImporter]);
+
+  // Logging stays as configured, and the launch may still need another question.
+  const handleKeepLogging = useCallback(async () => {
+    if (!pendingImporter) return;
+    const importer = pendingImporter;
+    confirmGeneration.current += 1;
+    setPendingImporter(null);
+    try {
+      await launch(importer, true);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  }, [launch, pendingImporter]);
 
   const alert = useMemo(
     () => (
@@ -416,6 +443,15 @@ export function useLaunchGuard() {
             ) : (
               <AlertDialogCancel disabled={isConfirming}>{t("g.cancel")}</AlertDialogCancel>
             )}
+            {dialog === "xxmi-logging" && (
+              <AlertDialogAction
+                variant="outline"
+                disabled={isConfirming}
+                onClickPromise={handleKeepLogging}
+              >
+                {t("page.mod.dialog.xxmi-logging.keep")}
+              </AlertDialogAction>
+            )}
             <AlertDialogAction
               disabled={isConfirming || (dialog === "game-folder" && !gameFolder.trim())}
               onClickPromise={handleConfirm}
@@ -438,6 +474,7 @@ export function useLaunchGuard() {
       dialog,
       gameFolder,
       handleConfirm,
+      handleKeepLogging,
       handleKeepWounded,
       isConfirming,
       pendingImporter,
