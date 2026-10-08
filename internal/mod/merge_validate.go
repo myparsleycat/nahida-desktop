@@ -36,7 +36,7 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 	if !uniqueLexicalMergeLeaves(leaves) {
 		return &mergeValidationError{message: invalidMergeRequestMessage}
 	}
-	group, err := resolveForCompare(request.GroupPath)
+	group, err := resolveForCompare(request.GroupPath, nil)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 			return err
 		}
 		release()
-		resolved, err := resolveForCompare(leaf)
+		resolved, err := resolveForCompare(leaf, nil)
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func validateMergeOutputs(node MergePlanNode, group, packName string) error {
 	if name == "" {
 		name = "Merged"
 	}
-	output, err := resolveForCompare(filepath.Join(group, name))
+	output, err := resolveForCompare(filepath.Join(group, name), nil)
 	if err != nil || !strictChildPath(group, output) {
 		return &mergeValidationError{message: outsideMergeGroupMessage}
 	}

@@ -89,6 +89,7 @@ type Mod struct {
 	download          *infra.Download
 	xxmi              ImporterSource
 	log               *infra.Log
+	pathDiagnostic    infra.DiagnosticThrottle
 	dialog            *platform.Dialog
 	shaders           *ShaderFixes
 	transfer          *transfer.Transfer
@@ -861,7 +862,7 @@ func (m *Mod) resolvePreviewSetting(ctx context.Context, override *bool) (bool, 
 }
 
 func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error) {
-	target, err := resolveForCompare(strings.TrimSpace(target))
+	target, err := resolveForCompare(strings.TrimSpace(target), m.reportUnresolvedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -877,7 +878,7 @@ func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error)
 			roots = append(roots, *games[i].LinkedModFolderPath)
 		}
 		for _, root := range roots {
-			resolvedRoot, resolveErr := resolveForCompare(root)
+			resolvedRoot, resolveErr := resolveForCompare(root, m.reportUnresolvedPath)
 			if resolveErr != nil {
 				continue
 			}
@@ -894,7 +895,19 @@ func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error)
 	return best, nil
 }
 
-func resolveForCompare(target string) (string, error) {
+// reportUnresolvedPath records why an existing folder fell back to the parent walk.
+// The throttle keys on the path field, so it carries the volume: one record per
+// drive instead of one per folder the user opens.
+func (m *Mod) reportUnresolvedPath(path string, err error) {
+	m.pathDiagnostic.Report(m.log, err, "Mod", infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "resolve-owned-path", Stage: "eval-symlinks",
+		Fields: map[string]any{"path": filepath.VolumeName(path) + `\`, "inputPath": path},
+	})
+}
+
+// resolveForCompare calls onUnresolved, when set, for the deepest existing entry
+// whose physical path could not be read.
+func resolveForCompare(target string, onUnresolved func(path string, err error)) (string, error) {
 	// Follow Electron merge/validate resolveForCompare: cycle detection, readlink
 	// for dangling links, then parent walk. EvalSymlinks alone rejects in-tree
 	// dangling aliases that Electron still treats as owned.
@@ -925,14 +938,21 @@ func resolveForCompare(target string) (string, error) {
 				return resolve(next)
 			}
 			realPath, evalErr := filepath.EvalSymlinks(resolved)
-			if evalErr != nil {
-				return "", evalErr
+			if evalErr == nil {
+				return filepath.Clean(realPath), nil
 			}
-			return filepath.Clean(realPath), nil
-		}
-		if !os.IsNotExist(err) {
+			if onUnresolved != nil {
+				onUnresolved(resolved, evalErr)
+				onUnresolved = nil
+			}
+		} else if !os.IsNotExist(err) {
 			return "", err
 		}
+
+		// EvalSymlinks normalizes names with FindFirstFile, which some volumes
+		// refuse for a folder that exists. The parent walk still follows every
+		// symbolic link above this entry, so the entry is not rejected for that
+		// alone. Junctions stay in place, as they do when EvalSymlinks succeeds.
 		parent := filepath.Dir(resolved)
 		if parent == resolved {
 			return filepath.Clean(resolved), nil

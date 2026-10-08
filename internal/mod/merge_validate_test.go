@@ -1,11 +1,16 @@
 package mod
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func TestValidateMergeRequestRejectsInvalidPayloads(t *testing.T) {
@@ -311,5 +316,43 @@ func TestOwnedPathRejectsEscapingAndCyclicSymlinks(t *testing.T) {
 	}
 	if _, err := service.ownedPath(ctx, loop); err == nil {
 		t.Fatal("self-referential symlink accepted")
+	}
+}
+
+// Denying list access on the parent makes FindFirstFile, and with it EvalSymlinks,
+// fail for a child that Lstat still finds.
+func TestOwnedPathAcceptsExistingFolderWhenEvalSymlinksFails(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	var logs bytes.Buffer
+	service.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "group")
+	modPath := filepath.Join(group, "mod")
+	if err := os.MkdirAll(modPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("icacls", group, "/deny", "*"+current.Uid+":(RD)").CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot deny directory listing: %v (%s)", err, output)
+	}
+	t.Cleanup(func() { _ = exec.Command("icacls", group, "/remove:d", "*"+current.Uid).Run() })
+	if _, err := filepath.EvalSymlinks(modPath); err == nil {
+		t.Skip("filesystem does not enforce the listing denial")
+	}
+
+	game, err := service.ownedPath(ctx, modPath)
+	if err != nil || game.Game != "Game" {
+		t.Fatalf("ownedPath = %+v, %v; want the owning game", game, err)
+	}
+	if !strings.Contains(logs.String(), `"inputPath"`) || !strings.Contains(logs.String(), `"eval-symlinks"`) {
+		t.Fatalf("fallback was not recorded: %q", logs.String())
 	}
 }
