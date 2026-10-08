@@ -2206,6 +2206,9 @@
             "ZZMI_GAME_CONFIG_FAILED": "无法更改绝区零的画面设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
             "WWMI_GAME_CONFIG_FAILED": "无法更改鸣潮的设置。请检查游戏文件夹，或关闭自动配置游戏设置。"
           },
+          "launchWarnings": {
+            "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。"
+          },
           "importerFolder": "导入器文件夹",
           "gameFolder": "游戏文件夹",
           "mode": "运行时模式",

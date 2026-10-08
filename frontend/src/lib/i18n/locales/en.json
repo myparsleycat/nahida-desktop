@@ -2258,6 +2258,9 @@
             "ZZMI_GAME_CONFIG_FAILED": "Could not configure Zenless Zone Zero graphics settings. Check the game folder or disable Configure Game Settings.",
             "WWMI_GAME_CONFIG_FAILED": "Could not configure Wuthering Waves settings. Check the game folder or disable Configure Game Settings."
           },
+          "launchWarnings": {
+            "GIMI_DCR_UNREADABLE": "Could not read the dynamic character resolution setting. If it is on, mods may not apply correctly; check the game's graphics settings."
+          },
           "importerFolder": "Importer folder",
           "gameFolder": "Game folder",
           "mode": "Runtime mode",

@@ -183,8 +183,14 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	// would control for GIMI, and leaving it on only breaks mods silently.
 	checkDCR := key == "GIMI" && migotoDLLUsed
 	if checkDCR {
-		if err := x.launchSettings.disableGIMIDCR(ctx); err != nil {
+		err := x.launchSettings.disableGIMIDCR(ctx)
+		if err != nil && !errors.Is(err, errGimiDCRUnreadable) {
 			return err
+		}
+		if err != nil {
+			x.notifyLaunchWarning(key, launchWarning{code: launchWarningGimiDCRUnreadable, err: err})
+			// The guard would only fail the same read again and warn twice.
+			checkDCR = false
 		}
 	}
 	blockerTarget := gameExe

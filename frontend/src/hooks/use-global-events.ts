@@ -167,20 +167,27 @@ export function useGlobalEvents(
         const removeXXMILaunchListener = Events.On("xxmi:launch-progress", (event) => {
             const payload = Array.isArray(event.data) ? event.data[0] : event.data;
             if (!payload || typeof payload !== "object") return;
-            const { importer, stage, detail, optimized, warning } = payload as Record<
+            const { importer, stage, detail, optimized, warning, warningCode } = payload as Record<
                 string,
                 unknown
             >;
-            if (typeof importer !== "string" || typeof stage !== "string") return;
+            if (typeof importer !== "string") return;
+            // A coded launch warning carries no progress stage. Its id keeps the launch retried after a
+            // guard dialog from stacking a second copy.
+            if (typeof warningCode === "string" && warningCode) {
+                toast.warning(i18n.t(`page.setting.xxmi.builtin.launchWarnings.${warningCode}`), {
+                    id: `xxmi-launch-warning-${importer}-${warningCode}`,
+                });
+            } else if (typeof warning === "string" && warning) {
+                toast.warning(warning);
+            }
+            if (typeof stage !== "string") return;
             const id = `xxmi-launch-${importer}`;
             if (stage === "auto-update" && typeof detail === "string") {
                 toast.warning(i18n.t("page.setting.xxmi.builtin.autoUpdateFailed", { importer }));
             }
             if (stage === "ini-optimizer" && typeof optimized === "number" && optimized > 0) {
                 toast.success(i18n.t("page.setting.xxmi.builtin.optimized", { count: optimized }));
-            }
-            if (typeof warning === "string" && warning) {
-                toast.warning(warning);
             }
             if (stage === "finish" || stage === "failed") {
                 toast.dismiss(id);

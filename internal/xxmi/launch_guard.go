@@ -11,7 +11,13 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-const xxmiLaunchGuardWhere = "XXMI.launchGuard"
+const (
+	xxmiLaunchGuardWhere = "XXMI.launchGuard"
+
+	// The renderer localizes a launch warning by this code. Keep it in sync with the launchWarnings keys in
+	// frontend/src/lib/i18n/locales.
+	launchWarningGimiDCRUnreadable = "GIMI_DCR_UNREADABLE"
+)
 
 var (
 	// The renderer keys the launch-guard dialogs off these literals. Keep them in sync with
@@ -26,6 +32,12 @@ var (
 	// so a launch only warns about it instead of failing.
 	errSmoothMotionUnreadable = errors.New("NVIDIA smooth motion setting is unreadable")
 )
+
+// launchWarning is a user-facing launch notice that does not block the launch.
+type launchWarning struct {
+	code string
+	err  error
+}
 
 // launchChecker reads the settings that can block a game launch.
 type launchChecker interface {
@@ -45,35 +57,41 @@ func collectLaunchBlockers(
 	importer, exe string,
 	checkDCR bool,
 	src launchChecker,
-) ([]error, error) {
+) ([]error, []launchWarning, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var blocked []error
+	var warnings []launchWarning
 	if checkDCR && strings.EqualFold(importer, gimiImporterKey) {
 		enabled, err := src.gimiDCREnabled(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("read genshin dynamic character resolution: %w", err)
-		}
-		if enabled {
+		switch {
+		case err != nil && ctx.Err() != nil:
+			return nil, nil, err
+		case err != nil:
+			warnings = append(warnings, launchWarning{code: launchWarningGimiDCRUnreadable, err: err})
+		case enabled:
 			blocked = append(blocked, errGimiDCREnabled)
 		}
 	}
 	if exe == "" {
-		return blocked, nil
+		return blocked, warnings, nil
 	}
 	enabled, err := src.smoothMotionEnabled(ctx, exe)
 	if err != nil {
-		return blocked, fmt.Errorf("read nvidia smooth motion for %s: %w: %w", exe, errSmoothMotionUnreadable, err)
+		return blocked, warnings, fmt.Errorf(
+			"read nvidia smooth motion for %s: %w: %w", exe, errSmoothMotionUnreadable, err,
+		)
 	}
 	if enabled {
 		blocked = append(blocked, errSmoothMotionEnabled)
 	}
-	return blocked, nil
+	return blocked, warnings, nil
 }
 
 func applyLaunchFixes(ctx context.Context, importer, exe string, src launchFixer) error {
-	blockers, err := collectLaunchBlockers(ctx, importer, exe, true, src)
+	// An unreadable DCR setting is not a blocker, so it must not keep the other fixes from running.
+	blockers, _, err := collectLaunchBlockers(ctx, importer, exe, true, src)
 	if err != nil {
 		return err
 	}
@@ -100,6 +118,20 @@ func (x *XXMI) disableGIMIDCR(ctx context.Context) error {
 	return x.DisableGenshinDynamicCharacterResolution(ctx)
 }
 
+// notifyLaunchWarning emits a launch notice without a progress stage, because the external launch path
+// reports none.
+func (x *XXMI) notifyLaunchWarning(importer string, warning launchWarning) {
+	detail := warning.err.Error()
+	if x.log != nil && !infra.IsReportedError(warning.err) {
+		x.log.Warn(map[string]any{"importer": importer, "code": warning.code, "error": detail}, xxmiLaunchGuardWhere)
+	}
+	if x.eventEmit != nil {
+		x.eventEmit("xxmi:launch-progress", map[string]any{
+			"importer": importer, "warningCode": warning.code, "detail": detail,
+		})
+	}
+}
+
 // rejectLaunchBlockers fails the launch while a blocker is active. checkDCR is false when the launch
 // does not load the XXMI DLL, so Genshin's DCR setting is irrelevant.
 func (x *XXMI) rejectLaunchBlockers(ctx context.Context, importer, exe string, checkDCR bool) error {
@@ -112,7 +144,10 @@ func (x *XXMI) rejectLaunchBlockersFrom(
 	checkDCR bool,
 	src launchChecker,
 ) error {
-	blockers, err := collectLaunchBlockers(ctx, importer, exe, checkDCR, src)
+	blockers, warnings, err := collectLaunchBlockers(ctx, importer, exe, checkDCR, src)
+	for _, warning := range warnings {
+		x.notifyLaunchWarning(importer, warning)
+	}
 	if errors.Is(err, errSmoothMotionUnreadable) {
 		if x.log != nil {
 			x.log.Warn(map[string]any{"importer": importer, "executable": exe, "error": err.Error()},

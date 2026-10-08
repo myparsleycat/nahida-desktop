@@ -26,6 +26,11 @@ const (
 	gimiImporterKey          = "GIMI"
 )
 
+// errGimiDCRUnreadable marks a Genshin graphics record that is missing or has an unknown shape. Genshin either
+// never saved graphics settings in this Windows account or changed their format, and neither can be fixed
+// here, so a launch warns about it instead of failing.
+var errGimiDCRUnreadable = errors.New("genshin dynamic character resolution setting is unreadable")
+
 // genshinGeneralData keeps the registry record as ordered JSON so a rewrite preserves key order, number
 // text, and fields this code does not know about, like the reference launcher's dict round trip.
 type genshinGeneralData struct {
@@ -40,11 +45,11 @@ func (x *XXMI) DisableGenshinDynamicCharacterResolution(ctx context.Context) err
 	}
 	raw, err := readGenshinRegistryGeneralData()
 	if err != nil {
-		return x.reportDCRFailure(err, "read")
+		return x.reportDCRFailure(fmt.Errorf("%w: %w", errGimiDCRUnreadable, err), "read")
 	}
 	data, err := parseGenshinGeneralData(raw)
 	if err != nil {
-		return x.reportDCRFailure(err, "decode")
+		return x.reportDCRFailure(fmt.Errorf("%w: %w", errGimiDCRUnreadable, err), "decode")
 	}
 	if !data.disableDCR() {
 		return nil
@@ -78,8 +83,12 @@ func readGenshinDCR(ctx context.Context) (bool, error) {
 }
 
 func (x *XXMI) reportDCRFailure(err error, stage string) error {
+	severity := infra.DiagnosticError
+	if errors.Is(err, errGimiDCRUnreadable) {
+		severity = infra.DiagnosticWarn
+	}
 	return infra.ReportError(x.log, err, "XXMI", infra.Diagnostic{
-		Severity: infra.DiagnosticError, Operation: "disable-dcr", Stage: stage,
+		Severity: severity, Operation: "disable-dcr", Stage: stage,
 		Fields: map[string]any{"importer": gimiImporterKey},
 	})
 }

@@ -408,7 +408,7 @@ func TestLaunchProcessNameResolution(t *testing.T) {
 
 func TestLaunchWithoutGameFolder(t *testing.T) {
 	t.Parallel()
-	registryMissing := errors.New("genshin impact registry key is not found")
+	registryMissing := fmt.Errorf("%w: genshin impact registry key is not found", errGimiDCRUnreadable)
 	registryDenied := errors.New("registry write denied")
 	states := []struct {
 		name     string
@@ -420,7 +420,7 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 		{name: "DCR enabled", settings: fakeLaunch{dcr: true}, want: "XXMI_ELEVATION_DENIED"},
 		{
 			name: "registry missing", settings: fakeLaunch{disableDCRErr: registryMissing},
-			want: registryMissing.Error(), wantErr: registryMissing,
+			want: "XXMI_ELEVATION_DENIED",
 		},
 		{
 			name: "registry write denied", settings: fakeLaunch{dcr: true, disableDCRErr: registryDenied},
@@ -486,6 +486,12 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 				}
 				if settings.dcrDisabled != 1 {
 					t.Fatalf("DCR disable calls = %d; want 1 even without a game folder", settings.dcrDisabled)
+				}
+				if errors.Is(state.settings.disableDCRErr, errGimiDCRUnreadable) {
+					if settings.dcrReads != 0 || settings.smoothReads != 1 {
+						t.Fatalf("launch settings = %+v; want the remaining checks without a second DCR read", settings)
+					}
+					return
 				}
 				if state.settings.disableDCRErr != nil {
 					if settings.dcrReads != 0 || settings.smoothReads != 0 {
