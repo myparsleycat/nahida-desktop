@@ -405,6 +405,49 @@ describe("applyPayloadEval packed maps", () => {
         expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
     });
 
+    it("does not bind normal maps through outline normals stored as tangents", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute(
+            "normal",
+            new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
+        );
+        geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([0, 0, 1, 1, 0, 0, 1, -1, 0, 0, -1, 1]), 4),
+        );
+        const mesh = new Mesh(geometry, new MeshStandardMaterial());
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            baseNormals: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            lastPositionVariantIndex: null,
+        };
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["normal", new Texture()]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: "normal",
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
+    });
+
     it("uses Three.js's derivative tangent frame for RabbitFX normals", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));

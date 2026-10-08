@@ -58,6 +58,7 @@ type PayloadMeshUserData = {
     lastPositionVariantIndex?: number | null;
     lastShapeSignature?: string;
     geometryStale?: boolean;
+    tangentFrameUsable?: boolean;
     lastMaps?: {
         texKey: string | null;
         normalMapKey: string | null;
@@ -487,9 +488,9 @@ function applyEvaluatedMaps(
         userData.materialProfile === "wuwa:rabbitfx" &&
         object.geometry.attributes.normal &&
         object.geometry.attributes.uv;
+    userData.tangentFrameUsable ??= hasUsableTangentFrame(object.geometry);
     material.normalMap =
-        evaluated.normalMapKey &&
-        (object.geometry.attributes.tangent || canUseDerivativeTangentFrame)
+        evaluated.normalMapKey && (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
             ? (textures.get(evaluated.normalMapKey) ?? null)
             : null;
     if (material.normalMap) {
@@ -542,6 +543,29 @@ function applyEvaluatedMaps(
         lightMapKey: evaluated.lightMapKey,
         materialMapKey: evaluated.materialMapKey,
     };
+}
+
+// GIMI-style position buffers store the outline's smoothed normal in TANGENT.
+// It runs along the surface normal, so the tangent frame it yields is
+// degenerate and a normal map shaded through it comes out blotchy.
+function hasUsableTangentFrame(geometry: BufferGeometry): boolean {
+    const tangent = geometry.attributes.tangent;
+    if (!tangent) return false;
+    const normal = geometry.attributes.normal;
+    if (!normal) return true;
+
+    const step = Math.max(1, Math.floor(tangent.count / 2000));
+    let sampled = 0;
+    let alongNormal = 0;
+    for (let index = 0; index < tangent.count; index += step) {
+        const dot =
+            normal.getX(index) * tangent.getX(index) +
+            normal.getY(index) * tangent.getY(index) +
+            normal.getZ(index) * tangent.getZ(index);
+        sampled++;
+        if (Math.abs(dot) > 0.5) alongNormal++;
+    }
+    return alongNormal * 4 < sampled;
 }
 
 function configureDDSMaterialShader(material: MeshStandardMaterial): void {
