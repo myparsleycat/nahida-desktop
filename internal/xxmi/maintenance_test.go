@@ -22,7 +22,7 @@ func TestRelocateUserDataPathLeavesPackagePathsAndUnrelatedFolders(t *testing.T)
 	}{
 		{name: "mods", path: filepath.Join(source, "Mods"), want: filepath.Join(target, "Mods")},
 		{name: "nested-mod", path: filepath.Join(source, "Mods", "Character"), want: filepath.Join(target, "Mods", "Character")},
-		{name: "shader", path: filepath.Join(source, "ShaderFixes", "a.hlsl"), want: filepath.Join(target, "ShaderFixes", "a.hlsl")},
+		{name: "shader", path: filepath.Join(source, "ShaderFixes", "a.hlsl"), want: filepath.Join(source, "ShaderFixes", "a.hlsl")},
 		{name: "user-ini", path: filepath.Join(source, "d3dx_user.ini"), want: filepath.Join(target, "d3dx_user.ini")},
 		{name: "package", path: filepath.Join(source, "Core"), want: filepath.Join(source, "Core")},
 		{name: "similar-prefix", path: filepath.Join(source, "Mods2"), want: filepath.Join(source, "Mods2")},

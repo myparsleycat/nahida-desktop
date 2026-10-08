@@ -55,6 +55,15 @@ func (m *Mod) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.Imported
 				restored.onChange(saved.previous.changed)
 				*saved.current = restored
 			}
+
+			// An import leaves ShaderFixes behind, so shaders that enabled mods copied there are missing from the
+			// importer folder now in use. A rolled-back import changes no importer folder and finds nothing to do.
+			for _, game := range m.shaders.games() {
+				root := xxmi.RelocateUserDataPath(game.ModFolderPath, moved)
+				if err := m.shaders.reapplyRelocated(root); err != nil {
+					resumeErr = errors.Join(resumeErr, fmt.Errorf("reapply shader fixes under %q: %w", root, err))
+				}
+			}
 			c.opMu.Unlock()
 			c.requestMu.Unlock()
 			c.stopped.Store(wasStopped)
