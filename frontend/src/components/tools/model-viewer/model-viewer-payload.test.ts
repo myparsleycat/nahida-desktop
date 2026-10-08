@@ -249,7 +249,10 @@ describe("applyPayloadEval packed maps", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
         geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
-        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]), 4),
+        );
         const material = new MeshStandardMaterial();
         const mesh = new Mesh(geometry, material);
         mesh.userData = {
@@ -333,7 +336,10 @@ describe("applyPayloadEval packed maps", () => {
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
         geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
         geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
-        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]), 4),
+        );
         const material = new MeshStandardMaterial();
         const mesh = new Mesh(geometry, material);
         mesh.userData = {
@@ -405,6 +411,192 @@ describe("applyPayloadEval packed maps", () => {
         expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
     });
 
+    it("does not bind normal maps through outline normals stored as tangents", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute(
+            "normal",
+            new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
+        );
+        geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([0, 0, 1, 1, 0, 0, 1, -1, 0, 0, -1, 1]), 4),
+        );
+        const mesh = new Mesh(geometry, new MeshStandardMaterial());
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            baseNormals: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            lastPositionVariantIndex: null,
+        };
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["normal", new Texture()]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: "normal",
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
+    });
+
+    it.each([
+        [0, 0, 0],
+        [NaN, 0, 0],
+        [0, Infinity, 0],
+        [0, 0, -Infinity],
+    ])("does not bind normal maps with invalid tangent (%s, %s, %s)", (x, y, z) => {
+        const mesh = meshWithTargets([0, 0, 0], []);
+        mesh.geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([x, y, z, 1]), 4),
+        );
+        const root = new Group();
+        root.add(mesh);
+        root.userData.payloadTextures = new Map([["normal", new Texture()]]);
+        const evaluated = evalState({});
+        evaluated.meshes[0].normalMapKey = "normal";
+
+        applyPayloadEval(root, evaluated);
+
+        expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
+    });
+
+    it("does not let invalid samples dilute outline-tangent alignment", () => {
+        const mesh = meshWithTargets(new Array(15).fill(0), []);
+        mesh.geometry.attributes.normal.array.set([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]);
+        mesh.geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(
+                new Float32Array([0, 0, 1, 1, 0, 0, 0, 1, NaN, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
+                4,
+            ),
+        );
+        const root = new Group();
+        root.add(mesh);
+        root.userData.payloadTextures = new Map([["normal", new Texture()]]);
+        const evaluated = evalState({});
+        evaluated.meshes[0].normalMapKey = "normal";
+
+        applyPayloadEval(root, evaluated);
+
+        expect((mesh.material as MeshStandardMaterial).normalMap).toBeNull();
+    });
+
+    it.each(["normal", "tangent"] as const)(
+        "updates normal-map eligibility when the %s attribute changes with unchanged texture keys",
+        (attributeName) => {
+            const mesh = meshWithTargets([0, 0, 0], []);
+            mesh.geometry.attributes.normal.array.set([0, 0, 1]);
+            mesh.geometry.setAttribute(
+                "tangent",
+                new BufferAttribute(new Float32Array([1, 0, 0, 1]), 4),
+            );
+            const material = mesh.material as MeshStandardMaterial;
+            const root = new Group();
+            root.add(mesh);
+            const normalMap = new Texture();
+            root.userData.payloadTextures = new Map([["normal", normalMap]]);
+            const evaluated = evalState({});
+            evaluated.meshes[0].normalMapKey = "normal";
+            const attribute = mesh.geometry.attributes[attributeName];
+            const original = attribute.array.slice();
+            const unusable = attributeName === "normal" ? [1, 0, 0] : [0, 0, 1, 1];
+
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBe(normalMap);
+            const version = material.version;
+            applyPayloadEval(root, evaluated);
+            expect(material.version).toBe(version);
+
+            attribute.array.set(unusable);
+            attribute.needsUpdate = true;
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBeNull();
+            expect(material.version).toBeGreaterThan(version);
+            const disabledVersion = material.version;
+
+            attribute.array.set(original);
+            attribute.needsUpdate = true;
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBe(normalMap);
+            expect(material.version).toBeGreaterThan(disabledVersion);
+
+            mesh.geometry.setAttribute(
+                attributeName,
+                new BufferAttribute(new Float32Array(unusable), attribute.itemSize),
+            );
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBeNull();
+
+            mesh.geometry.setAttribute(attributeName, attribute);
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBe(normalMap);
+
+            if (attributeName === "tangent") {
+                mesh.geometry.deleteAttribute("tangent");
+                applyPayloadEval(root, evaluated);
+                expect(material.normalMap).toBeNull();
+
+                mesh.geometry.setAttribute("tangent", attribute);
+                applyPayloadEval(root, evaluated);
+                expect(material.normalMap).toBe(normalMap);
+            }
+        },
+    );
+
+    it.each([false, true])(
+        "rechecks normal maps after shape normals change (deferred: %s)",
+        (deferred) => {
+            const mesh = meshWithTargets(
+                [0, 0, 0, 1, 0, 0, 0, 1, 0],
+                [{ var: "shape", positions: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1]) }],
+            );
+            mesh.userData.baseNormals = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]);
+            mesh.geometry.attributes.normal.array.set(mesh.userData.baseNormals);
+            mesh.geometry.setAttribute(
+                "tangent",
+                new BufferAttribute(new Float32Array([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]), 4),
+            );
+            const root = new Group();
+            root.add(mesh);
+            const normalMap = new Texture();
+            root.userData.payloadTextures = new Map([["normal", normalMap]]);
+            const evaluated = evalState({ shape: 0 });
+            evaluated.meshes[0].normalMapKey = "normal";
+            const material = mesh.material as MeshStandardMaterial;
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBe(normalMap);
+
+            evaluated.meshes[0].shapeWeights.shape = 1;
+            commitPayloadEval(
+                root,
+                { evalResult: evaluated, positions: new Map() },
+                { deferGeometryUpdates: deferred },
+            );
+            if (deferred) finalizePayloadGeometry(root);
+            expect(material.normalMap).toBeNull();
+
+            evaluated.meshes[0].shapeWeights.shape = 0;
+            applyPayloadEval(root, evaluated);
+            expect(material.normalMap).toBe(normalMap);
+        },
+    );
+
     it("uses Three.js's derivative tangent frame for RabbitFX normals", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
@@ -429,7 +621,7 @@ describe("applyPayloadEval packed maps", () => {
         root.userData.payloadTextures = new Map([["normal", normal]]);
         root.add(mesh);
 
-        applyPayloadEval(root, {
+        const evaluated: EvaluatedViewerState = {
             state: {},
             meshes: [
                 {
@@ -443,20 +635,32 @@ describe("applyPayloadEval packed maps", () => {
                     positionVariantIndex: null,
                 },
             ],
-        });
+        };
+        applyPayloadEval(root, evaluated);
 
         expect(material.normalMap).toBe(normal);
         expect(material.normalScale.y).toBe(-1);
         expect(material.metalness).toBe(0);
         expect(material.roughness).toBe(1);
         expect(geometry.attributes.tangent).toBeUndefined();
+
+        geometry.deleteAttribute("normal");
+        applyPayloadEval(root, evaluated);
+        expect(material.normalMap).toBeNull();
+
+        geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
+        applyPayloadEval(root, evaluated);
+        expect(material.normalMap).toBe(normal);
     });
 
     it("adapts RabbitFX LightMap.G without occupying generic PBR map slots", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
         geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
-        geometry.setAttribute("tangent", new BufferAttribute(new Float32Array(12), 4));
+        geometry.setAttribute(
+            "tangent",
+            new BufferAttribute(new Float32Array([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]), 4),
+        );
         const material = new MeshStandardMaterial();
         const mesh = new Mesh(geometry, material);
         mesh.userData = {
