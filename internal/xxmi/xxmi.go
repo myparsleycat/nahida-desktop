@@ -144,6 +144,9 @@ type XXMI struct {
 	importerMaintenance      func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
+	// killExecutableProcess returns a terminator for processes running from one executable; tests
+	// replace it so no host process is opened or terminated.
+	killExecutableProcess func(executable string) func(pid int) error
 	// launchSettings accesses registry and driver settings; tests replace it to isolate host state.
 	launchSettings launchFixer
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
@@ -181,6 +184,7 @@ func NewWithOptions(opts Options) *XXMI {
 	x.installImporter = x.installBuiltinImporterPackage
 	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
+	x.killExecutableProcess = killProcessForExecutable
 	x.launchSettings = x
 	x.renameUserData = os.Rename
 	x.findSteam = gameplatform.FindSteam

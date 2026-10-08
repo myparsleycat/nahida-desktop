@@ -596,7 +596,7 @@ func (x *XXMI) installExternalImporterPackage(
 
 	stage = "close-launcher"
 	launcherExecutable := filepath.Join(launcher.path, "Resources", "Bin", launcherImageName)
-	if err := ensureLauncherClosedAt(ctx, launcherExecutable); err != nil {
+	if err := x.ensureLauncherClosedAt(ctx, launcherExecutable); err != nil {
 		return err
 	}
 

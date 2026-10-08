@@ -93,6 +93,32 @@ func TestFindProcessPIDMatchesExactExecutable(t *testing.T) {
 	}
 }
 
+// A launcher from another install shares the image name; it must not be reported for a path that has no file.
+func TestFindProcessPIDIgnoresSameNamedProcessForMissingExecutable(t *testing.T) {
+	t.Parallel()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "Resources", "Bin", filepath.Base(executable))
+	pid, err := findProcessPID(context.Background(), missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != 0 {
+		t.Fatalf("pid = %d, want 0", pid)
+	}
+}
+
+func TestKillProcessForExecutableRefusesOtherExecutable(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "Resources", "Bin", launcherImageName)
+	err := killProcessForExecutable(missing)(os.Getpid())
+	if err == nil || !strings.Contains(err.Error(), "process identity changed") {
+		t.Fatalf("error = %v, want identity mismatch", err)
+	}
+}
+
 func TestFindProcessPIDHonorsContextCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

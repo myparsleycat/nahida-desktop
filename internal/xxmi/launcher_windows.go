@@ -70,14 +70,15 @@ func ensureLauncherClosed(ctx context.Context, find func(context.Context, string
 	)
 }
 
-func ensureLauncherClosedAt(ctx context.Context, executable string) error {
+// ensureLauncherClosedAt closes only the launcher running from executable; a launcher installed elsewhere is left alone.
+func (x *XXMI) ensureLauncherClosedAt(ctx context.Context, executable string) error {
 	return ensureLauncherClosedWith(
 		ctx,
 		executable,
 		5*time.Second,
 		100*time.Millisecond,
-		findProcessPID,
-		killProcessForExecutable(executable),
+		x.findProcess,
+		x.killExecutableProcess(executable),
 	)
 }
 
@@ -294,6 +295,10 @@ func processMatchesExecutable(pid int, executable string) (bool, error) {
 	}
 	processPath := filepath.Clean(windows.UTF16ToString(buffer[:size]))
 	expectedInfo, err := os.Stat(filepath.Clean(executable))
+	if errors.Is(err, fs.ErrNotExist) {
+		// No process can run from a file that does not exist, so a same-named process belongs to another install.
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
