@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -207,6 +208,74 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 	writeGridPreviewTestFile(t, cachePath, []byte("corrupt"))
 	if get("settings-a").URL != "" {
 		t.Fatal("corrupt cache was reused")
+	}
+}
+
+func TestGridPreviewCacheClearRefreshesImageURL(t *testing.T) {
+	t.Parallel()
+	data, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	writeGridPreviewTestFile(t, filepath.Join(dir, "mod.ini"), []byte("ini"))
+	service := New()
+	service.UseAppData(data)
+	ctx := context.Background()
+	get := func() GridPreviewCache {
+		t.Helper()
+		cached, readErr := service.GetModGridPreviewCache(ctx, dir, "settings-a")
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return cached
+	}
+	initial := get()
+	saveGridPreviewTestImage(t, service, dir, "settings-a", initial.Fingerprint, gridPreviewTestImage(t))
+	cachePath, err := service.gridPreviewCachePath(dir, "settings-a", initial.Fingerprint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Unix(1_700_000_000, 0)
+	if err := os.Chtimes(cachePath, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	saved := get()
+	if saved.URL == "" {
+		t.Fatal("initial render was not cached")
+	}
+	if err := service.ClearModGridPreviewCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if cleared := get(); cleared.URL != "" || cleared.Fingerprint != initial.Fingerprint {
+		t.Fatalf("clear changed sources or retained an image: %+v", cleared)
+	}
+
+	updated := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	updated.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, updated); err != nil {
+		t.Fatal(err)
+	}
+	saveGridPreviewTestImage(t, service, dir, "settings-a", initial.Fingerprint, buffer.Bytes())
+	newTime := oldTime.Add(time.Hour)
+	if err := os.Chtimes(cachePath, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+	replaced := get()
+	if replaced.URL == "" || replaced.URL == saved.URL {
+		t.Fatal("rerender after clear reused the old image URL")
+	}
+	request := httptest.NewRequest(http.MethodGet, replaced.URL, nil)
+	response := httptest.NewRecorder()
+	service.protocol.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !bytes.Equal(response.Body.Bytes(), buffer.Bytes()) {
+		t.Fatalf("replacement image status=%d bytes=%d", response.Code, response.Body.Len())
+	}
+	service = New()
+	service.UseAppData(data)
+	if get().URL != replaced.URL {
+		t.Fatal("unchanged image URL was not stable after restart")
 	}
 }
 

@@ -1975,6 +1975,9 @@
           "title": "レイアウト",
           "gridModelPreview": "プレビューがないMODにモデルプレビューを表示",
           "gridModelPreviewDescription": "MODグリッドで画像や動画がない場合、現在のトグル状態を静止モデル画像として表示します。",
+          "gridModelPreviewClearCache": "モデルプレビューのキャッシュをクリア",
+          "gridModelPreviewClearCacheSuccess": "モデルプレビューのキャッシュをクリアしました。",
+          "gridModelPreviewClearCacheError": "モデルプレビューのキャッシュをクリアできませんでした。",
           "sidebar": {
             "mode": "サイドバーレイアウト",
             "modeDescription": "キャラクターサイドバーを行リストまたは正方形プレビューグリッドで表示します。",

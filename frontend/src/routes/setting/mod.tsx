@@ -1,5 +1,7 @@
+import { Tools } from "@bindings/tools";
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
 import { ModCompressionCard } from "@renderer/components/setting/mod-compression-card";
+import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { FieldGroup } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
@@ -19,6 +21,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import {
@@ -30,6 +33,8 @@ import {
   type SidebarLayoutMode,
 } from "@shared/mod";
 import { createFileRoute } from "@tanstack/react-router";
+import { BrushCleaningIcon, LoaderIcon } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -66,6 +71,7 @@ function ModSettingsRouteContent() {
   const { t } = useTranslation();
 
   const { settings, update, setSettings, isLoading } = useSettings(settingsConfig);
+  const [isClearingModelPreviewCache, setIsClearingModelPreviewCache] = useState(false);
 
   const archiveExtractPathModeOptions = [
     {
@@ -178,6 +184,18 @@ function ModSettingsRouteContent() {
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridFixedColumnCountChange");
       toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleClearModelPreviewCache = async () => {
+    setIsClearingModelPreviewCache(true);
+    try {
+      await Tools.ClearModGridPreviewCache();
+      toast.success(t("page.setting.mod.layout.gridModelPreviewClearCacheSuccess"));
+    } catch {
+      toast.error(t("page.setting.mod.layout.gridModelPreviewClearCacheError"));
+    } finally {
+      setIsClearingModelPreviewCache(false);
     }
   };
 
@@ -363,11 +381,37 @@ function ModSettingsRouteContent() {
               title={t("page.setting.mod.layout.gridModelPreview")}
               description={t("page.setting.mod.layout.gridModelPreviewDescription")}
             >
-              <Switch
-                checked={settings.gridModelPreview}
-                aria-labelledby={GRID_MODEL_PREVIEW_LABEL_ID}
-                onCheckedChange={(value) => update("gridModelPreview", value)}
-              />
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={isClearingModelPreviewCache}
+                        onClick={() => void handleClearModelPreviewCache()}
+                      />
+                    }
+                  >
+                    {isClearingModelPreviewCache ? (
+                      <LoaderIcon className="animate-spin" />
+                    ) : (
+                      <BrushCleaningIcon />
+                    )}
+                    <span className="sr-only">
+                      {t("page.setting.mod.layout.gridModelPreviewClearCache")}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("page.setting.mod.layout.gridModelPreviewClearCache")}
+                  </TooltipContent>
+                </Tooltip>
+                <Switch
+                  checked={settings.gridModelPreview}
+                  aria-labelledby={GRID_MODEL_PREVIEW_LABEL_ID}
+                  onCheckedChange={(value) => update("gridModelPreview", value)}
+                />
+              </div>
             </SectionRow>
             <div className="space-y-1">
               <span className="text-sm font-medium">{t("page.setting.mod.layout.grid.mode")}</span>

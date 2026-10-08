@@ -61,7 +61,19 @@ func (t *Service) GetModGridPreviewCache(
 	// A damaged cache is disposable; the next render replaces it. Images are
 	// fully decoded before they are written, so the header is enough here.
 	if validateGridPreviewImageConfig(file) == nil {
-		result.URL = t.protocol.LocalFileURL(path, false)
+		info, err := file.Stat()
+		if err != nil {
+			return result, fmt.Errorf("stat grid preview cache: %w", err)
+		}
+
+		// Clearing and rerendering unchanged sources reuses the path, so version
+		// the URL by the saved image to invalidate WebView's decoded image cache.
+		result.URL = fmt.Sprintf(
+			"%s&v=%d-%d",
+			t.protocol.LocalFileURL(path, false),
+			info.ModTime().UnixNano(),
+			info.Size(),
+		)
 	}
 	return result, nil
 }
@@ -128,6 +140,41 @@ func (t *Service) SaveModGridPreviewCache(
 		}
 	}
 	return trimGridPreviewCache(filepath.Dir(path))
+}
+
+// ClearModGridPreviewCache deletes every saved grid preview. Each mod renders
+// again the next time the grid looks it up.
+func (t *Service) ClearModGridPreviewCache(ctx context.Context) (err error) {
+	if t.data == nil {
+		return nil
+	}
+	var dir string
+	defer func() {
+		if err != nil && t.log != nil {
+			err = infra.ReportError(t.log, err, "Tools.ClearModGridPreviewCache", infra.Diagnostic{
+				Operation: "mod-grid-preview-cache",
+				Stage:     "clear",
+				Fields:    map[string]any{"cacheDir": dir},
+			})
+		}
+	}()
+
+	dir, err = t.data.Resolve(gridPreviewCacheDir)
+	if err != nil {
+		return fmt.Errorf("resolve grid preview cache: %w", err)
+	}
+	release, err := diskio.AcquireDir(ctx, filepath.Dir(dir))
+	if err != nil {
+		return fmt.Errorf("wait for grid preview cache disk: %w", err)
+	}
+	defer release()
+
+	t.gridPreviewMu.Lock()
+	defer t.gridPreviewMu.Unlock()
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("clear grid preview cache: %w", err)
+	}
+	return nil
 }
 
 // The name carries the fingerprint, so a lookup is a single open and a stale
