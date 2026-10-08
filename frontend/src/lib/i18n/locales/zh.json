@@ -1975,6 +1975,9 @@
           "title": "布局",
           "gridModelPreview": "为没有预览的模组显示模型预览",
           "gridModelPreviewDescription": "在模组网格中，当没有图片或视频时，将当前切换状态显示为静态模型图像。",
+          "gridModelPreviewClearCache": "清除模型预览缓存",
+          "gridModelPreviewClearCacheSuccess": "已清除模型预览缓存。",
+          "gridModelPreviewClearCacheError": "无法清除模型预览缓存。",
           "sidebar": {
             "mode": "侧边栏布局",
             "modeDescription": "将角色侧边栏显示为行列表或正方形预览网格。",
