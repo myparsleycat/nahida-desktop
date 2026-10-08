@@ -257,23 +257,24 @@ func (x *XXMI) DisableLogging(ctx context.Context, importer string) error {
 		return x.SaveImporterConfig(ctx, importer, cfg)
 	}
 
-	launcher, err := x.requireExternalLauncher(ctx)
+	configPath := ""
+	err = x.updateExternalConfig(ctx, func(launcher *externalLauncher) (bool, error) {
+		configPath = launcher.configPath()
+		migoto := launcher.migoto(importer)
+		if migoto == nil {
+			return false, fmt.Errorf("importer %s not found", importer)
+		}
+		if _, modern := migoto["log_level"]; modern {
+			migoto["log_level"] = "DISABLED"
+		} else {
+			migoto["calls_logging"], migoto["debug_logging"] = false, false
+		}
+		return true, nil
+	})
 	if err != nil {
-		return err
-	}
-	migoto := launcher.migoto(importer)
-	if migoto == nil {
-		return fmt.Errorf("importer %s not found", importer)
-	}
-	if _, modern := migoto["log_level"]; modern {
-		migoto["log_level"] = "DISABLED"
-	} else {
-		migoto["calls_logging"], migoto["debug_logging"] = false, false
-	}
-	if err := writeXXMIConfig(launcher.configPath(), launcher.config); err != nil {
 		return infra.ReportError(x.log, err, xxmiLaunchGuardWhere, infra.Diagnostic{
-			Operation: "disable-logging", Stage: "write-config",
-			Fields: map[string]any{"importer": importer, "configPath": launcher.configPath()},
+			Operation: "disable-logging", Stage: "update-config",
+			Fields: map[string]any{"importer": importer, "configPath": configPath},
 		})
 	}
 	return nil

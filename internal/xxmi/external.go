@@ -527,12 +527,14 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 
 	// The launcher would immediately replace a manually selected version on its next update check.
 	stage = "disable-auto-update"
-	launcherSection, ok := launcher.config["Launcher"].(map[string]any)
-	if !ok {
-		return errors.New("XXMI Launcher config is missing Launcher section")
-	}
-	launcherSection["auto_update"] = false
-	if err := writeXXMIConfig(launcher.configPath(), launcher.config); err != nil {
+	if err := x.updateExternalConfig(ctx, func(current *externalLauncher) (bool, error) {
+		launcherSection, ok := current.config["Launcher"].(map[string]any)
+		if !ok {
+			return false, errors.New("XXMI Launcher config is missing Launcher section")
+		}
+		launcherSection["auto_update"] = false
+		return true, nil
+	}); err != nil {
 		return err
 	}
 
@@ -646,6 +648,10 @@ func (x *XXMI) installExternalImporterPackage(
 	if stagedVersion == nil || normalizeVersion(*stagedVersion) != fileVersion {
 		return fmt.Errorf("package version mismatch: expected %s", version)
 	}
+
+	// The transaction reads the config here and writes or restores it on commit and rollback.
+	x.externalConfigMu.Lock()
+	defer x.externalConfigMu.Unlock()
 
 	stage = "recover-installation"
 	transaction, err := beginImporterInstallTransaction(ctx, importerFolder, configPath, spec.key)
@@ -785,6 +791,24 @@ func writeXXMIConfig(path string, config map[string]any) error {
 	)
 }
 
+// updateExternalConfig applies change to a fresh read of the launcher config and writes it back when
+// change reports true. externalConfigMu spans the read and the write, so one writer cannot put an
+// older snapshot back over another writer's change.
+func (x *XXMI) updateExternalConfig(ctx context.Context, change func(*externalLauncher) (bool, error)) error {
+	x.externalConfigMu.Lock()
+	defer x.externalConfigMu.Unlock()
+
+	launcher, err := x.requireExternalLauncher(ctx)
+	if err != nil {
+		return err
+	}
+	changed, err := change(launcher)
+	if err != nil || !changed {
+		return err
+	}
+	return writeXXMIConfig(launcher.configPath(), launcher.config)
+}
+
 func marshalXXMIConfig(config map[string]any) ([]byte, error) {
 	configJSON, err := json.MarshalIndent(config, "", "    ")
 	if err != nil {
@@ -808,22 +832,20 @@ func (x *XXMI) externalDeployedLibsVersion(ctx context.Context) (string, bool) {
 // enableExternalUnsafeMode lets the external launcher load a user-built d3d11.dll. The launcher
 // only honors unsafe mode with a signature made by its own per-install private key.
 func (x *XXMI) enableExternalUnsafeMode(ctx context.Context, importer string) error {
-	launcher, err := x.requireExternalLauncher(ctx)
-	if err != nil {
-		return err
-	}
-	migoto := launcher.migoto(importer)
-	unsafeMode, exists := migoto["unsafe_mode"].(bool)
-	if !exists || unsafeMode {
-		return nil
-	}
-	signature, err := unsafeModeSignature(launcher.path)
-	if err != nil {
-		return fmt.Errorf("sign XXMI unsafe mode: %w", err)
-	}
-	migoto["unsafe_mode"] = true
-	migoto["unsafe_mode_signature"] = signature
-	return writeXXMIConfig(launcher.configPath(), launcher.config)
+	return x.updateExternalConfig(ctx, func(launcher *externalLauncher) (bool, error) {
+		migoto := launcher.migoto(importer)
+		unsafeMode, exists := migoto["unsafe_mode"].(bool)
+		if !exists || unsafeMode {
+			return false, nil
+		}
+		signature, err := unsafeModeSignature(launcher.path)
+		if err != nil {
+			return false, fmt.Errorf("sign XXMI unsafe mode: %w", err)
+		}
+		migoto["unsafe_mode"] = true
+		migoto["unsafe_mode_signature"] = signature
+		return true, nil
+	})
 }
 
 func unsafeModeSignature(xxmiPath string) (string, error) {

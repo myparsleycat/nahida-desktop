@@ -114,6 +114,8 @@ type XXMI struct {
 	packageMu sync.Mutex
 	// disabledMu serializes read-modify-write updates of the disabled external importer list.
 	disabledMu sync.Mutex
+	// externalConfigMu serializes read-modify-write updates of the external launcher's Config.json.
+	externalConfigMu sync.Mutex
 	// customDLLMu serializes imports, selection writes, and cleanup of the custom DLL cache.
 	customDLLMu sync.Mutex
 	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
