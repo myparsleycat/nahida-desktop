@@ -51,8 +51,15 @@ func (t *Tools) GetModGridPreviewCache(
 	return t.modelViewer.GetModGridPreviewCache(ctx, modPath, variant)
 }
 
-func (t *Tools) SaveModGridPreviewCache(ctx context.Context, modPath, variant, fingerprint, image string) error {
-	return t.modelViewer.SaveModGridPreviewCache(ctx, modPath, variant, fingerprint, image)
+func (t *Tools) PrepareModGridPreviewCacheUpload(sessionID string, byteLength int64) (string, error) {
+	return t.modelViewer.PrepareModGridPreviewCacheUpload(sessionID, byteLength)
+}
+
+func (t *Tools) SaveModGridPreviewCache(
+	ctx context.Context,
+	modPath, variant, fingerprint, sessionID string,
+) error {
+	return t.modelViewer.SaveModGridPreviewCache(ctx, modPath, variant, fingerprint, sessionID)
 }
 
 func (t *Tools) CleanupModelViewer(ctx context.Context, memorySessionID string) (bool, error) {

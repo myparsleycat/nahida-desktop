@@ -3,10 +3,11 @@ package modelviewer
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"image"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,24 +154,29 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 		return cached
 	}
 	initial := get("settings-a")
-	if initial.Fingerprint == "" || initial.Image != "" {
+	if initial.Fingerprint == "" || initial.URL != "" {
 		t.Fatalf("unexpected initial cache: %+v", initial)
 	}
 	sourceInfo, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded := gridPreviewTestEncodedImage(t)
-	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
-		t.Fatal(err)
-	}
+	image := gridPreviewTestImage(t)
+	saveGridPreviewTestImage(t, service, dir, "settings-a", initial.Fingerprint, image)
 	service = New()
 	service.UseAppData(data)
-	if get("settings-a").Image != encoded {
+	saved := get("settings-a").URL
+	if saved == "" {
 		t.Fatal("new service did not reuse disk cache")
 	}
+	request := httptest.NewRequest(http.MethodGet, saved, nil)
+	response := httptest.NewRecorder()
+	service.protocol.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !bytes.Equal(response.Body.Bytes(), image) {
+		t.Fatalf("cached image status=%d bytes=%d", response.Code, response.Body.Len())
+	}
 	writeGridPreviewTestFile(t, filepath.Join(dir, "readme.txt"), []byte("new notes"))
-	if get("settings-a").Image != encoded || get("settings-b").Image != "" {
+	if get("settings-a").URL != saved || get("settings-b").URL != "" {
 		t.Fatal("ignored files or render settings were not handled correctly")
 	}
 	writeGridPreviewTestFile(t, path, []byte("replaced"))
@@ -178,25 +184,28 @@ func TestGridPreviewCachePersistsAndRejectsStaleImages(t *testing.T) {
 	if err := os.Chtimes(path, edited, edited); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
-		t.Fatal(err)
-	}
+	saveGridPreviewTestImage(t, service, dir, "settings-a", initial.Fingerprint, image)
 	changed := get("settings-a")
-	if changed.Image != "" || changed.Fingerprint == initial.Fingerprint {
+	if changed.URL != "" || changed.Fingerprint == initial.Fingerprint {
 		t.Fatal("stale image was reused after a source edit")
 	}
-	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", changed.Fingerprint, encoded); err != nil {
-		t.Fatal(err)
-	}
-	if get("settings-a").Image != encoded {
+	saveGridPreviewTestImage(t, service, dir, "settings-a", changed.Fingerprint, image)
+	if replaced := get("settings-a").URL; replaced == "" || replaced == saved {
 		t.Fatal("replacement image was not cached after a source edit")
 	}
-	cachePath, err := service.gridPreviewCachePath(dir, "settings-a")
+	stalePath, err := service.gridPreviewCachePath(dir, "settings-a", initial.Fingerprint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stalePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("render of the earlier fingerprint was kept: %v", err)
+	}
+	cachePath, err := service.gridPreviewCachePath(dir, "settings-a", changed.Fingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeGridPreviewTestFile(t, cachePath, []byte("corrupt"))
-	if get("settings-a").Image != "" {
+	if get("settings-a").URL != "" {
 		t.Fatal("corrupt cache was reused")
 	}
 }
@@ -221,13 +230,10 @@ func TestGridPreviewCacheInvalidatesOnTextureOnlyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded := gridPreviewTestEncodedImage(t)
-	if err := service.SaveModGridPreviewCache(ctx, dir, "settings-a", initial.Fingerprint, encoded); err != nil {
-		t.Fatal(err)
-	}
+	saveGridPreviewTestImage(t, service, dir, "settings-a", initial.Fingerprint, gridPreviewTestImage(t))
 	if cached, readErr := service.GetModGridPreviewCache(ctx, dir, "settings-a"); readErr != nil {
 		t.Fatal(readErr)
-	} else if cached.Image != encoded {
+	} else if cached.URL == "" {
 		t.Fatal("texture render was not cached")
 	}
 	// The INI and mesh files are untouched; only the texture changes.
@@ -236,7 +242,7 @@ func TestGridPreviewCacheInvalidatesOnTextureOnlyEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cached.Image != "" || cached.Fingerprint == initial.Fingerprint {
+	if cached.URL != "" || cached.Fingerprint == initial.Fingerprint {
 		t.Fatal("texture-only edit reused the stale cached render")
 	}
 }
@@ -256,22 +262,12 @@ func TestGridPreviewFingerprintRejectsMissingAndCancelledSources(t *testing.T) {
 
 func TestValidateGridPreviewImageRejectsTruncatedPNG(t *testing.T) {
 	t.Parallel()
-	encoded := gridPreviewTestEncodedImage(t)
-	raw, err := base64.StdEncoding.DecodeString(encoded[len("data:image/png;base64,"):])
-	if err != nil {
-		t.Fatal(err)
-	}
 	const pngHeaderLength = 33
-	truncated := raw[:pngHeaderLength]
-	config, err := png.DecodeConfig(bytes.NewReader(truncated))
-	if err != nil {
+	truncated := gridPreviewTestImage(t)[:pngHeaderLength]
+	if err := validateGridPreviewImageConfig(bytes.NewReader(truncated)); err != nil {
 		t.Fatalf("truncated PNG did not retain a valid configuration: %v", err)
 	}
-	if config.Width != 512 || config.Height != 512 {
-		t.Fatalf("unexpected truncated PNG dimensions: %d by %d", config.Width, config.Height)
-	}
-	image := "data:image/png;base64," + base64.StdEncoding.EncodeToString(truncated)
-	err = validateGridPreviewImage(image)
+	err := validateGridPreviewImage(truncated)
 	if err == nil {
 		t.Fatal("truncated PNG was accepted")
 	}
@@ -287,11 +283,44 @@ func writeGridPreviewTestFile(t *testing.T, path string, data []byte) {
 	}
 }
 
-func gridPreviewTestEncodedImage(t *testing.T) string {
+func gridPreviewTestImage(t *testing.T) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
 	if err := png.Encode(&buffer, image.NewRGBA(image.Rect(0, 0, 512, 512))); err != nil {
 		t.Fatal(err)
 	}
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buffer.Bytes())
+	return buffer.Bytes()
+}
+
+// saveGridPreviewTestImage follows the renderer's flow: open an upload slot in
+// a model session, PUT the image, then commit it to the cache.
+func saveGridPreviewTestImage(
+	t *testing.T,
+	service *Service,
+	modPath, variant, fingerprint string,
+	image []byte,
+) {
+	t.Helper()
+	sessionID := service.protocol.CreateMemorySession()
+	defer service.protocol.CleanupMemorySession(sessionID)
+	uploadURL, err := service.PrepareModGridPreviewCacheUpload(sessionID, int64(len(image)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPut, uploadURL, bytes.NewReader(image))
+	request.Header.Set("Content-Type", "application/octet-stream")
+	response := httptest.NewRecorder()
+	service.protocol.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("upload status = %d", response.Code)
+	}
+	if err := service.SaveModGridPreviewCache(
+		context.Background(),
+		modPath,
+		variant,
+		fingerprint,
+		sessionID,
+	); err != nil {
+		t.Fatal(err)
+	}
 }

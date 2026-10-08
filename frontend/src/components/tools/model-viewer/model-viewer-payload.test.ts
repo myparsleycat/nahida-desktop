@@ -17,6 +17,7 @@ import {
     applyPayloadEval,
     clearPayloadModelData,
     commitPayloadEval,
+    finalizePayloadGeometry,
     preparePayloadEval,
     setPayloadToonShadows,
 } from "./model-viewer-payload";
@@ -117,6 +118,36 @@ describe("applyPayloadEval midpoint targets", () => {
         applyPayloadEval(root, evalState({ shape: 0.75 }));
         applyPayloadEval(root, evalState({ shape: 0.75 }));
 
+        expect(normals).toHaveBeenCalledOnce();
+    });
+
+    it("defers normals and bounds until the geometry is finalized", () => {
+        const mesh = meshWithTargets(
+            [0, 0, 0],
+            [{ var: "shape", positions: new Float32Array([1, 0, 0]) }],
+        );
+        const root = new Group();
+        root.add(mesh);
+        const normals = vi.spyOn(mesh.geometry, "computeVertexNormals");
+        const bounds = vi.spyOn(mesh.geometry, "computeBoundingSphere");
+
+        commitPayloadEval(
+            root,
+            { evalResult: evalState({ shape: 0.5 }), positions: new Map() },
+            { deferGeometryUpdates: true },
+        );
+        expect(mesh.geometry.attributes.position.array[0]).toBe(0.5);
+        expect(normals).not.toHaveBeenCalled();
+        expect(bounds).not.toHaveBeenCalled();
+
+        expect(finalizePayloadGeometry(root)).toBe(true);
+        expect(normals).toHaveBeenCalledOnce();
+        expect(bounds).toHaveBeenCalledOnce();
+        expect(finalizePayloadGeometry(root)).toBe(false);
+        expect(normals).toHaveBeenCalledOnce();
+
+        // A settled deformation that repeats its signature stays finalized.
+        applyPayloadEval(root, evalState({ shape: 0.5 }));
         expect(normals).toHaveBeenCalledOnce();
     });
 

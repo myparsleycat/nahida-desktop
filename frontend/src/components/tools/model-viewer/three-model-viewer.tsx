@@ -18,7 +18,6 @@ import {
   useState,
 } from "react";
 import {
-  ACESFilmicToneMapping,
   Box3,
   BufferAttribute,
   BufferGeometry,
@@ -30,17 +29,12 @@ import {
   MathUtils,
   Mesh,
   MeshStandardMaterial,
-  NeutralToneMapping,
-  NoToneMapping,
   Object3D,
   PerspectiveCamera,
-  PMREMGenerator,
-  Scene,
   SRGBColorSpace,
   Texture,
   Vector3,
 } from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type {
@@ -60,11 +54,21 @@ import {
   buildPayloadModel,
   clearPayloadModelData,
   commitPayloadEval,
+  finalizePayloadGeometry,
   type PreparedPayloadEval,
   preparePayloadEval,
   setPayloadToonShadows,
 } from "./model-viewer-payload";
 import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
+import {
+  createModelViewerEnvironment,
+  frameCameraOnObject,
+  MODEL_VIEWER_FILL_LIGHT_POSITION,
+  MODEL_VIEWER_HEMISPHERE_GROUND_COLOR,
+  MODEL_VIEWER_KEY_LIGHT_POSITION,
+  modelViewerLighting,
+  modelViewerToneMapping,
+} from "./model-viewer-scene";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
@@ -81,11 +85,11 @@ const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
 const SMOOTH_ZOOM_MAX_DELTA = 1 / 30;
+const INTERACTIVE_COMMIT_WINDOW_MS = 150;
 const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
   alpha: true,
   antialias: true,
-  preserveDrawingBuffer: true,
 });
 
 type LoadedShapeKey = {
@@ -152,32 +156,7 @@ export const ThreeModelViewer = memo(
       [],
     );
 
-    const lighting = useMemo(() => {
-      switch (threeEnvironment) {
-        case "none":
-          return {
-            ambient: 0.45,
-            directionalKey: 1.35,
-            directionalFill: 0.45,
-            hemisphere: 0,
-          };
-        case "soft":
-          return {
-            ambient: 0.5,
-            directionalKey: 1.5,
-            directionalFill: 0.6,
-            hemisphere: 0.55,
-          };
-        case "studio":
-        default:
-          return {
-            ambient: 0.6,
-            directionalKey: 1.8,
-            directionalFill: 0.8,
-            hemisphere: 0.9,
-          };
-      }
-    }, [threeEnvironment]);
+    const lighting = useMemo(() => modelViewerLighting(threeEnvironment), [threeEnvironment]);
 
     return (
       <div className={cn("h-full w-full", className)}>
@@ -197,12 +176,18 @@ export const ThreeModelViewer = memo(
           {lighting.hemisphere > 0 ? (
             <hemisphereLight
               intensity={lighting.hemisphere}
-              groundColor="#b9bec7"
+              groundColor={MODEL_VIEWER_HEMISPHERE_GROUND_COLOR}
               position={[0, 1, 0]}
             />
           ) : null}
-          <directionalLight intensity={lighting.directionalKey} position={[6, 8, 10]} />
-          <directionalLight intensity={lighting.directionalFill} position={[-6, 4, -8]} />
+          <directionalLight
+            intensity={lighting.directionalKey}
+            position={MODEL_VIEWER_KEY_LIGHT_POSITION}
+          />
+          <directionalLight
+            intensity={lighting.directionalFill}
+            position={MODEL_VIEWER_FILL_LIGHT_POSITION}
+          />
           <ThreeModelScene
             controllerRef={controllerRef}
             animationClip={animationClip}
@@ -263,7 +248,9 @@ function ThreeModelScene({
   const animationClipRef = useRef(animationClip);
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
-  const applyPayloadVisualsRef = useRef(() => {});
+  const applyPayloadVisualsRef = useRef<(options?: { interactive?: boolean }) => void>(() => {});
+  const lastInteractiveCommitAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const geometryFinalizeTimerRef = useRef<number | undefined>(undefined);
   const positionLoaderRef = useRef<ModelViewerPositionLoader | null>(null);
   const computeControllerRef = useRef<ModelViewerComputeController | null>(null);
   const payloadEvalAbortRef = useRef<AbortController | null>(null);
@@ -297,16 +284,16 @@ function ThreeModelScene({
     // oxlint-disable-next-line react/immutability
     gl.outputColorSpace = SRGBColorSpace;
     // oxlint-disable-next-line react/immutability
-    gl.toneMapping =
-      threeToneMapping === "aces"
-        ? ACESFilmicToneMapping
-        : threeToneMapping === "none"
-          ? NoToneMapping
-          : NeutralToneMapping;
+    gl.toneMapping = modelViewerToneMapping(threeToneMapping);
     // oxlint-disable-next-line react/immutability
     gl.toneMappingExposure = Number.isFinite(threeExposure) ? threeExposure : 1;
     gl.setClearAlpha(0);
+    invalidate();
+  }, [gl, invalidate, threeExposure, threeToneMapping]);
 
+  // The PMREM environment is a GPU prefilter pass; keep it off the exposure and
+  // tone-mapping path so dragging the exposure slider does not rebuild it.
+  useEffect(() => {
     if (threeEnvironment === "none") {
       // oxlint-disable-next-line react/immutability
       scene.environment = null;
@@ -314,26 +301,20 @@ function ThreeModelScene({
       return;
     }
 
-    const environmentScene = new Scene();
-    const pmremGenerator = new PMREMGenerator(gl);
-    const roomEnvironment = new RoomEnvironment();
-    roomEnvironment.scale.setScalar(threeEnvironment === "soft" ? 0.85 : 1);
-    const environmentTarget = pmremGenerator.fromScene(environmentScene.add(roomEnvironment));
+    const environment = createModelViewerEnvironment(gl, threeEnvironment);
 
     // oxlint-disable-next-line react/immutability
-    scene.environment = environmentTarget.texture;
+    scene.environment = environment.texture;
     invalidate();
 
     return () => {
-      if (scene.environment === environmentTarget.texture) {
+      if (scene.environment === environment.texture) {
         // oxlint-disable-next-line react/immutability
         scene.environment = null;
       }
-      environmentTarget.dispose();
-      roomEnvironment.dispose();
-      pmremGenerator.dispose();
+      environment.dispose();
     };
-  }, [gl, invalidate, scene, threeEnvironment, threeExposure, threeToneMapping]);
+  }, [gl, invalidate, scene, threeEnvironment]);
 
   useEffect(() => {
     onLoadRef.current = onLoad;
@@ -360,13 +341,14 @@ function ThreeModelScene({
   }, [modelRoot]);
 
   useEffect(() => {
-    applyPayloadVisualsRef.current = () => {
+    applyPayloadVisualsRef.current = (options) => {
       const root = modelRootRef.current;
       const transport = payloadTransportRef.current;
       const toggleEval = payloadEvalRef.current;
       if (!root || !transport || !toggleEval) {
         return;
       }
+      const interactive = options?.interactive ?? false;
       const animationValues = animationValuesRef.current;
       const evalResult = Object.keys(animationValues).length
         ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
@@ -393,7 +375,27 @@ function ThreeModelScene({
         ) {
           return;
         }
-        commitPayloadEval(root, prepared);
+        // A slider drag commits on every pointer tick; recompute normals and
+        // bounds only once the ticks settle instead of on each one.
+        const now = performance.now();
+        const deferGeometryUpdates =
+          interactive && now - lastInteractiveCommitAtRef.current < INTERACTIVE_COMMIT_WINDOW_MS;
+        if (interactive) {
+          lastInteractiveCommitAtRef.current = now;
+        }
+        window.clearTimeout(geometryFinalizeTimerRef.current);
+        commitPayloadEval(root, prepared, { deferGeometryUpdates });
+        if (deferGeometryUpdates) {
+          geometryFinalizeTimerRef.current = window.setTimeout(() => {
+            if (root === modelRootRef.current && finalizePayloadGeometry(root)) {
+              invalidate();
+            }
+          }, INTERACTIVE_COMMIT_WINDOW_MS);
+        } else {
+          // The cleared timer may have owned a mesh whose shape signature this
+          // commit left unchanged, so nothing else would refresh it.
+          finalizePayloadGeometry(root);
+        }
         invalidate();
         // Defined below to keep the state-transition path together; refs make this
         // independent of render-time initialization order.
@@ -429,6 +431,7 @@ function ThreeModelScene({
     let disposed = false;
     payloadEvalAbortRef.current?.abort();
     payloadEvalAbortRef.current = null;
+    window.clearTimeout(geometryFinalizeTimerRef.current);
     preparedAnimationRingRef.current = [];
     positionLoaderRef.current?.dispose();
     positionLoaderRef.current = null;
@@ -596,7 +599,7 @@ function ThreeModelScene({
     if (!modelRoot || !payloadEval || !payloadTransport) {
       return;
     }
-    applyPayloadVisualsRef.current();
+    applyPayloadVisualsRef.current({ interactive: true });
   }, [modelRoot, payloadEval, payloadTransport]);
 
   useLayoutEffect(() => {
@@ -655,18 +658,13 @@ function ThreeModelScene({
   }, [camera, invalidate, modelRoot, rotation]);
 
   useEffect(() => {
+    const renderNow = () => gl.render(scene, camera);
     // oxlint-disable-next-line react/immutability
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),
-      captureSquarePngBlob: async () => {
-        const blob = await captureSquareCanvasPngBlob(gl.domElement, invalidate);
-        return blob;
-      },
-      captureSquarePngDataUrl: async () => {
-        const dataUrl = await captureSquareCanvasPngDataUrl(gl.domElement, invalidate);
-        return dataUrl;
-      },
+      captureSquarePngBlob: () => captureSquareCanvasPngBlob(gl.domElement, renderNow),
+      captureSquarePngDataUrl: () => captureSquareCanvasPngDataUrl(gl.domElement, renderNow),
       restoreCameraState: (state, options) => {
         restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options);
         desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
@@ -756,7 +754,7 @@ function ThreeModelScene({
     return () => {
       domElement.removeEventListener("wheel", onWheel);
     };
-  }, [camera, gl, invalidate]);
+  }, [camera, gl, invalidate, scene]);
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
@@ -796,6 +794,7 @@ function ThreeModelScene({
     return () => {
       payloadEvalAbortRef.current?.abort();
       payloadEvalAbortRef.current = null;
+      window.clearTimeout(geometryFinalizeTimerRef.current);
       positionLoaderRef.current?.dispose();
       positionLoaderRef.current = null;
       computeControllerRef.current?.dispose(false);
@@ -1123,40 +1122,42 @@ async function loadAnimationFrame(
     (clip.sharedBuffers ?? []).map((buffer) => [buffer.id, buffer.path]),
   );
   const meshes = await Promise.all(
-    (frame.meshes ?? []).map(async (mesh) => ({
-      meshName: mesh.meshName,
-      indices: await loadOptionalUint32AnimationBuffer(
-        mesh.indicesBufferId,
-        mesh.indicesPath,
-        sharedBufferPathMap,
-        uint32Cache,
-      ),
-      position: await loadRequiredFloatAnimationBuffer(
-        mesh.positionBufferId,
-        mesh.positionPath,
-        sharedBufferPathMap,
-        floatCache,
-        `animation position buffer for ${mesh.meshName}`,
-      ),
-      normal: await loadOptionalFloatAnimationBuffer(
-        mesh.normalBufferId,
-        mesh.normalPath,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-      tangent: await loadOptionalFloatAnimationBuffer(
-        mesh.tangentBufferId,
-        mesh.tangentPath,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-      texcoord0: await loadOptionalFloatAnimationBuffer(
-        mesh.texcoord0BufferId,
-        mesh.texcoord0Path,
-        sharedBufferPathMap,
-        floatCache,
-      ),
-    })),
+    (frame.meshes ?? []).map(async (mesh) => {
+      const [indices, position, normal, tangent, texcoord0] = await Promise.all([
+        loadOptionalUint32AnimationBuffer(
+          mesh.indicesBufferId,
+          mesh.indicesPath,
+          sharedBufferPathMap,
+          uint32Cache,
+        ),
+        loadRequiredFloatAnimationBuffer(
+          mesh.positionBufferId,
+          mesh.positionPath,
+          sharedBufferPathMap,
+          floatCache,
+          `animation position buffer for ${mesh.meshName}`,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.normalBufferId,
+          mesh.normalPath,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.tangentBufferId,
+          mesh.tangentPath,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+        loadOptionalFloatAnimationBuffer(
+          mesh.texcoord0BufferId,
+          mesh.texcoord0Path,
+          sharedBufferPathMap,
+          floatCache,
+        ),
+      ]);
+      return { meshName: mesh.meshName, indices, position, normal, tangent, texcoord0 };
+    }),
   );
 
   return {
@@ -1790,23 +1791,12 @@ async function fitCameraToObject({
     return null;
   }
 
-  object.updateMatrixWorld(true);
-  const bounds = new Box3().setFromObject(object);
-  if (bounds.isEmpty()) {
+  const center = frameCameraOnObject(camera, object);
+  if (!center) {
     return null;
   }
 
-  const center = bounds.getCenter(new Vector3());
-  const size = bounds.getSize(new Vector3());
-  const radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
-  const fov = MathUtils.degToRad(camera.fov);
-  const distance = Math.max(radius / Math.sin(fov / 2), radius * 1.8);
-
   controls.target.copy(center);
-  camera.position.copy(center.clone().add(new Vector3(distance * 0.45, distance * 0.15, distance)));
-  camera.near = Math.max(distance / 100, 0.01);
-  camera.far = Math.max(distance * 20, 100);
-  camera.updateProjectionMatrix();
   controls.update();
   return center.clone();
 }
@@ -1830,9 +1820,9 @@ function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {
 
 async function captureSquareCanvasPngDataUrl(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<string | null> {
-  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  const canvas = await copySquareCanvas(sourceCanvas, render);
   if (!canvas) {
     return null;
   }
@@ -1847,9 +1837,9 @@ async function captureSquareCanvasPngDataUrl(
 
 async function captureSquareCanvasPngBlob(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<Blob | null> {
-  const canvas = await copySquareCanvas(sourceCanvas, invalidate);
+  const canvas = await copySquareCanvas(sourceCanvas, render);
   if (!canvas) {
     return null;
   }
@@ -1859,13 +1849,12 @@ async function captureSquareCanvasPngBlob(
 
 async function copySquareCanvas(
   sourceCanvas: HTMLCanvasElement | null,
-  invalidate?: () => void,
+  render: () => void,
 ): Promise<HTMLCanvasElement | null> {
   if (!sourceCanvas) {
     return null;
   }
 
-  invalidate?.();
   await waitForNextFrame();
 
   const width = sourceCanvas.width;
@@ -1886,7 +1875,10 @@ async function copySquareCanvas(
     return null;
   }
 
+  // The drawing buffer is not preserved across frames, so the copy must
+  // follow a render in the same task.
   try {
+    render();
     context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
     return canvas;
   } catch (error) {

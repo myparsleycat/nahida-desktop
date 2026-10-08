@@ -80,8 +80,11 @@ type modelViewerMeshPayload struct {
 }
 
 type modelViewerPayloadOptions struct {
-	ddsPreviewMaxDimension   uint32
-	includeAllStateVariables bool
+	ddsPreviewMaxDimension uint32
+	// Smaller target reached through a stored mip, or else by decoding and
+	// scaling the texture into the fallback image.
+	ddsPreviewPreferredDimension uint32
+	includeAllStateVariables     bool
 }
 
 func writeModelViewerPayload(
@@ -113,10 +116,11 @@ func writeModelViewerPayload(
 			materialProfile := transport.MaterialProfile
 			directURL := t.protocol.LocalFileURL(texture.Path, true)
 			directMetadata := *texture.DDS
+			previewLimit, resample := modelViewerDDSPreviewLimit(*texture.DDS, options)
 			if plan, needed := modelViewerDDSPreviewPlanFor(
 				*texture.DDS,
-				options.ddsPreviewMaxDimension,
-			); needed && texture.DDS.Format != "" {
+				previewLimit,
+			); needed && texture.DDS.Format != "" && !resample {
 				previewURL, previewErr := t.protocol.StoreMemoryLoader(
 					sessionID,
 					"tex-dds-preview:"+key,
@@ -126,7 +130,7 @@ func writeModelViewerPayload(
 							loadCtx,
 							texture.Path,
 							*texture.DDS,
-							options.ddsPreviewMaxDimension,
+							previewLimit,
 						)
 						if loadErr != nil {
 							if t.log != nil {
@@ -181,7 +185,11 @@ func writeModelViewerPayload(
 				"image/png",
 				func(loadCtx context.Context) ([]byte, error) {
 					startedAt := time.Now()
-					data, loadErr := prepareModelViewerDDSFallback(loadCtx, texture.Path)
+					data, loadErr := prepareModelViewerDDSFallback(
+						loadCtx,
+						texture.Path,
+						options.ddsPreviewPreferredDimension,
+					)
 					if loadErr != nil {
 						if t.log != nil {
 							t.log.Warn(
@@ -223,6 +231,12 @@ func writeModelViewerPayload(
 			)
 			if err != nil {
 				return err
+			}
+			if resample {
+				// Without dimensions the renderer skips the compressed upload and
+				// loads the scaled fallback, while Format still drives its shader.
+				directURL = fallbackURL
+				directMetadata.Width, directMetadata.Height, directMetadata.MipCount = 0, 0, 0
 			}
 			transport.Textures[key] = ModelViewerTextureTransport{
 				URL:         directURL,

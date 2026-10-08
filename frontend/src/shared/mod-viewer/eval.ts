@@ -175,6 +175,10 @@ function menuGuardHolds(
     return false;
 }
 
+// Lower-cased key index per state object. Rules mutate the state they are
+// applied to, so the index is rebuilt when the key count changes.
+const loweredKeyIndexes = new WeakMap<object, { count: number; keys: Map<string, string> }>();
+
 function lookupStateValue(
     state: Record<string, ViewerStateValue>,
     variable: string,
@@ -183,6 +187,18 @@ function lookupStateValue(
         return state[variable];
     }
 
-    const lowered = variable.toLowerCase();
-    return Object.entries(state).find(([key]) => key.toLowerCase() === lowered)?.[1];
+    const keys = Object.keys(state);
+    let cached = loweredKeyIndexes.get(state);
+    if (!cached || cached.count !== keys.length) {
+        cached = { count: keys.length, keys: new Map() };
+        for (const key of keys) {
+            const lowered = key.toLowerCase();
+            if (!cached.keys.has(lowered)) {
+                cached.keys.set(lowered, key);
+            }
+        }
+        loweredKeyIndexes.set(state, cached);
+    }
+    const key = cached.keys.get(variable.toLowerCase());
+    return key === undefined ? undefined : state[key];
 }

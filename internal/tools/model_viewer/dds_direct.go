@@ -10,9 +10,15 @@ import (
 	"strings"
 
 	"github.com/myparsleycat/ddsutil"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 const modelViewerDDSPreviewMaxDimension uint32 = 2048
+
+// A grid preview is rendered at 512 pixels, and every texture byte crosses the
+// window's UI thread on its way to WebView2, so larger mips only add stalls.
+const modelViewerGridPreviewDDSDimension uint32 = 512
 const modelViewerDDSPreviewReadBufferBytes = 64 * 1024
 
 type modelViewerDDSPreviewPlan struct {
@@ -34,8 +40,8 @@ type modelViewerDDSMetadata struct {
 	AutoInvertAlpha bool
 }
 
-func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, error) {
-	decoded, err := decodeModelViewerTextureSource(ctx, path)
+func prepareModelViewerDDSFallback(ctx context.Context, path string, maxDimension uint32) ([]byte, error) {
+	decoded, err := decodeModelViewerDDSFallbackSource(ctx, path, maxDimension)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +59,50 @@ func prepareModelViewerDDSFallback(ctx context.Context, path string) ([]byte, er
 		return nil, err
 	}
 	return prepared.bytes, nil
+}
+
+func decodeModelViewerDDSFallbackSource(
+	ctx context.Context,
+	path string,
+	maxDimension uint32,
+) (*modelViewerDecodedTexture, error) {
+	if maxDimension == 0 {
+		return decodeModelViewerTextureSource(ctx, path)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
+		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
+	}
+
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	rgba, err := decodeModelViewerDDSWithMip(
+		path,
+		info.Size(),
+		func(width, height, mipmaps uint32) (uint32, uint32, uint32) {
+			// Resample from the smallest stored mip that still covers the limit.
+			mipmap := uint32(0)
+			for mipmap+1 < mipmaps &&
+				max(ddsutil.MipDimension(width, mipmap+1), ddsutil.MipDimension(height, mipmap+1)) >= maxDimension {
+				mipmap++
+			}
+			targetWidth, targetHeight := fitModelViewerDDSPreview(width, height, maxDimension)
+			return mipmap, targetWidth, targetHeight
+		},
+	)
+	release()
+	if err != nil {
+		return nil, err
+	}
+	return analyzeModelViewerTexture(rgba), nil
 }
 
 func prepareModelViewerDDSPreview(
@@ -157,6 +207,24 @@ func modelViewerDDSPreviewPlanFor(
 		sourceHeight: height,
 		sourceMip:    metadata.MipCount - 1,
 	}, true
+}
+
+// modelViewerDDSPreviewLimit returns the size limit for the compressed preview.
+// The preferred size is served compressed only from a stored mip; block
+// decimation is too lossy for it, so resample reports that the texture must be
+// decoded and scaled into the fallback image instead.
+func modelViewerDDSPreviewLimit(
+	metadata modelViewerDDSMetadata,
+	options modelViewerPayloadOptions,
+) (limit uint32, resample bool) {
+	plan, needed := modelViewerDDSPreviewPlanFor(metadata, options.ddsPreviewPreferredDimension)
+	if !needed {
+		return options.ddsPreviewMaxDimension, false
+	}
+	if plan.copyMip {
+		return options.ddsPreviewPreferredDimension, false
+	}
+	return options.ddsPreviewMaxDimension, true
 }
 
 func fitModelViewerDDSPreview(width, height, maxDimension uint32) (uint32, uint32) {

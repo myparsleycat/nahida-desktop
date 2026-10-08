@@ -1,11 +1,9 @@
 import { Tools } from "@bindings/tools";
-import type { ModelViewerHandle } from "@renderer/components/tools/model-viewer/model-viewer-contract";
-import { DEFAULT_MODEL_ORIENTATION } from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
 import { normalizeModelViewerTransport } from "@renderer/components/tools/model-viewer/model-viewer-transport";
-import { ThreeModelViewer } from "@renderer/components/tools/model-viewer/three-model-viewer";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import type { ModInfo } from "@renderer/types/mod";
+import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import type {
   EvaluatedViewerState,
@@ -19,14 +17,19 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
+
+import type {
+  GridModelPreviewRenderRequest,
+  GridModelPreviewRenderResponse,
+} from "./grid-model-preview.worker";
 
 const MODEL_PREVIEW_SIZE = 512;
 const MODEL_PREVIEW_CACHE_ENTRIES = 64;
 const MODEL_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
 const MODEL_PREVIEW_RENDER_TIMEOUT_MS = 30_000;
+const MODEL_PREVIEW_LOOKUP_CONCURRENCY = 4;
 
 const modelPreviewSettingsConfig = {
   enabled: "mod.gridModelPreview",
@@ -41,7 +44,7 @@ export type GridModelPreviewState =
   | { status: "loading" }
   | { status: "ready"; url: string };
 
-type ModelPreviewRenderSettings = {
+export type ModelPreviewRenderSettings = {
   toneMapping: "neutral" | "aces" | "none";
   environment: "studio" | "soft" | "none";
   exposure: number;
@@ -54,16 +57,15 @@ type PreviewEntry = {
   requestKey: string;
   mod: ModInfo;
   listeners: Set<PreviewListener>;
-  state: "queued" | "loading" | "rendering";
+  state: "checking" | "queued" | "loading" | "rendering";
+  variant: string;
+  fingerprint: string;
+  finalKey: string;
 };
 
 export type PreviewRenderTask = {
-  controllerId: number;
   entry: PreviewEntry;
   evaluated: EvaluatedViewerState;
-  finalKey: string;
-  fingerprint: string;
-  variant: string;
   finished: boolean;
   sessionId: string;
   timeout: ReturnType<typeof setTimeout> | null;
@@ -134,13 +136,14 @@ export class GridModelPreviewController {
   private readonly failedKeys = new Set<string>();
   private readonly cache = new GridModelPreviewCache();
   private readonly entries = new Map<string, PreviewEntry>();
+  private readonly lookupQueue: PreviewEntry[] = [];
   private readonly queue: PreviewEntry[] = [];
+  private activeLookups = 0;
   private activeEntry: PreviewEntry | null = null;
   private activeTask: PreviewRenderTask | null = null;
   private disposed = false;
 
   constructor(
-    readonly id: number,
     private readonly settings: ModelPreviewRenderSettings,
     private readonly showRenderTask: (task: PreviewRenderTask | null) => void,
   ) {}
@@ -157,26 +160,32 @@ export class GridModelPreviewController {
       requestKey,
       mod,
       listeners: new Set<PreviewListener>(),
-      state: "queued" as const,
+      state: "checking" as const,
+      variant: createGridModelPreviewRequestKey({ ...mod, mtime: 0 }, this.settings),
+      fingerprint: "",
+      finalKey: "",
     };
     entry.listeners.add(listener);
     listener({ status: "loading" });
 
     if (!existing) {
       this.entries.set(requestKey, entry);
-      this.queue.push(entry);
-      void this.pump();
+      this.lookupQueue.push(entry);
+      this.pumpLookups();
     }
 
     return () => {
       entry.listeners.delete(listener);
-      if (entry.state !== "queued" || entry.listeners.size > 0) {
+      if (entry.listeners.size > 0 || (entry.state !== "checking" && entry.state !== "queued")) {
         return;
       }
 
-      const index = this.queue.indexOf(entry);
-      if (index >= 0) {
-        this.queue.splice(index, 1);
+      // A lookup already in flight notices the entry is gone when it returns.
+      for (const pending of [this.lookupQueue, this.queue]) {
+        const index = pending.indexOf(entry);
+        if (index >= 0) {
+          pending.splice(index, 1);
+        }
       }
       this.entries.delete(entry.requestKey);
     };
@@ -204,47 +213,41 @@ export class GridModelPreviewController {
       );
     }
 
-    let state: GridModelPreviewState = { status: "unavailable" };
-    if (!this.disposed && blob) {
-      const url = this.cache.set(task.finalKey, blob);
-      state = { status: "ready", url };
-      if (task.fingerprint) {
-        await blobToDataURL(blob)
-          .then((image) =>
-            Tools.SaveModGridPreviewCache(
-              task.entry.mod.path,
-              task.variant,
-              task.fingerprint,
-              image,
-            ),
-          )
-          .catch((cacheError: unknown) =>
-            Logger.capture(
-              "mod-grid:model-preview-cache-save",
-              { modPath: task.entry.mod.path },
-              cacheError,
-            ),
-          );
+    const { entry } = task;
+    const persist = !this.disposed && blob !== null && entry.fingerprint !== "";
+    if (!this.disposed) {
+      if (blob) {
+        this.settle(entry, { status: "ready", url: this.cache.set(entry.finalKey, blob) });
+      } else {
+        if (entry.fingerprint) {
+          this.failedKeys.add(entry.finalKey);
+        }
+        this.settle(entry, { status: "unavailable" });
       }
-    } else if (!this.disposed && task.fingerprint) {
-      this.failedKeys.add(task.finalKey);
+
+      if (this.activeTask === task) {
+        this.activeTask = null;
+        this.activeEntry = null;
+        this.showRenderTask(null);
+      }
+      void this.pump();
     }
 
-    await cleanupModelPreviewSession(task.sessionId);
-    if (this.disposed) {
-      return;
+    // The upload goes through the model session, so it outlives the render
+    // slot released above and is cleaned up only after the save settles.
+    try {
+      if (persist && blob) {
+        await saveModelPreview(task, blob).catch((cacheError: unknown) =>
+          Logger.capture(
+            "mod-grid:model-preview-cache-save",
+            { modPath: entry.mod.path },
+            cacheError,
+          ),
+        );
+      }
+    } finally {
+      await cleanupModelPreviewSession(task.sessionId);
     }
-    for (const listener of task.entry.listeners) {
-      listener(state);
-    }
-    this.entries.delete(task.entry.requestKey);
-
-    if (this.activeTask === task) {
-      this.activeTask = null;
-      this.activeEntry = null;
-      this.showRenderTask(null);
-    }
-    void this.pump();
   }
 
   dispose() {
@@ -258,6 +261,7 @@ export class GridModelPreviewController {
         listener({ status: "unavailable" });
       }
     }
+    this.lookupQueue.splice(0);
     this.queue.splice(0);
     this.entries.clear();
     this.failedKeys.clear();
@@ -277,6 +281,53 @@ export class GridModelPreviewController {
     this.activeTask = null;
   }
 
+  private settle(entry: PreviewEntry, state: GridModelPreviewState) {
+    for (const listener of entry.listeners) {
+      listener(state);
+    }
+    this.entries.delete(entry.requestKey);
+  }
+
+  // Cache lookups run apart from the render queue so a saved image never
+  // waits behind another mod's model load and render.
+  private pumpLookups() {
+    while (this.activeLookups < MODEL_PREVIEW_LOOKUP_CONCURRENCY) {
+      const entry = this.lookupQueue.shift();
+      if (!entry) {
+        return;
+      }
+      this.activeLookups++;
+      void this.lookup(entry).finally(() => {
+        this.activeLookups--;
+        this.pumpLookups();
+      });
+    }
+  }
+
+  private async lookup(entry: PreviewEntry) {
+    const saved = await Tools.GetModGridPreviewCache(entry.mod.path, entry.variant).catch(
+      (error: unknown) => {
+        Logger.capture("mod-grid:model-preview-cache-read", { modPath: entry.mod.path }, error);
+        return { fingerprint: "", url: "" };
+      },
+    );
+    if (this.disposed || this.entries.get(entry.requestKey) !== entry) {
+      return;
+    }
+
+    entry.fingerprint = saved.fingerprint;
+    entry.finalKey = JSON.stringify([entry.variant, saved.fingerprint]);
+    const cached = saved.url || (saved.fingerprint ? this.cache.get(entry.finalKey) : undefined);
+    if (cached || this.failedKeys.has(entry.finalKey)) {
+      this.settle(entry, cached ? { status: "ready", url: cached } : { status: "unavailable" });
+      return;
+    }
+
+    entry.state = "queued";
+    this.queue.push(entry);
+    void this.pump();
+  }
+
   private async pump() {
     if (this.disposed || this.activeEntry) {
       return;
@@ -286,41 +337,11 @@ export class GridModelPreviewController {
     if (!entry) {
       return;
     }
-    if (entry.listeners.size === 0) {
-      this.entries.delete(entry.requestKey);
-      void this.pump();
-      return;
-    }
 
     this.activeEntry = entry;
     entry.state = "loading";
     let sessionId = "";
-    let validatedKey: string | undefined;
     try {
-      const variant = createGridModelPreviewRequestKey({ ...entry.mod, mtime: 0 }, this.settings);
-      const saved = await Tools.GetModGridPreviewCache(entry.mod.path, variant).catch(
-        (error: unknown) => {
-          Logger.capture("mod-grid:model-preview-cache-read", { modPath: entry.mod.path }, error);
-          return { fingerprint: "", image: "" };
-        },
-      );
-      if (this.disposed) {
-        this.activeEntry = null;
-        return;
-      }
-      const finalKey = JSON.stringify([variant, saved.fingerprint]);
-      validatedKey = saved.fingerprint ? finalKey : undefined;
-      const cached = saved.image || (saved.fingerprint ? this.cache.get(finalKey) : undefined);
-      if (cached || this.failedKeys.has(finalKey)) {
-        for (const listener of entry.listeners) {
-          listener(cached ? { status: "ready", url: cached } : { status: "unavailable" });
-        }
-        this.entries.delete(entry.requestKey);
-        this.activeEntry = null;
-        void this.pump();
-        return;
-      }
-
       const loaded = await Tools.LoadModGridPreview(entry.mod.path);
       sessionId = loaded.memorySessionId;
       if (this.disposed) {
@@ -336,12 +357,8 @@ export class GridModelPreviewController {
       );
       entry.state = "rendering";
       const task: PreviewRenderTask = {
-        controllerId: this.id,
         entry,
         evaluated,
-        finalKey,
-        fingerprint: saved.fingerprint,
-        variant,
         finished: false,
         sessionId,
         timeout: null,
@@ -362,12 +379,10 @@ export class GridModelPreviewController {
           { modName: entry.mod.name, modPath: entry.mod.path, sessionId },
           error,
         );
-        if (validatedKey) {
-          this.failedKeys.add(validatedKey);
+        if (entry.fingerprint) {
+          this.failedKeys.add(entry.finalKey);
         }
-        for (const listener of entry.listeners) {
-          listener({ status: "unavailable" });
-        }
+        this.settle(entry, { status: "unavailable" });
       }
       this.entries.delete(entry.requestKey);
       this.activeEntry = null;
@@ -391,7 +406,82 @@ const GridModelPreviewContext = createContext<GridModelPreviewContextValue>({
   viewport: null,
 });
 
-let nextModelPreviewControllerId = 1;
+// Renders previews in a worker-owned OffscreenCanvas so loading, shader
+// compilation, texture upload, and PNG encoding stay off the main thread.
+export class GridModelPreviewRenderer {
+  private worker: Worker | null = null;
+  private pending: {
+    id: number;
+    resolve: (blob: Blob) => void;
+    reject: (error: unknown) => void;
+  } | null = null;
+  private nextId = 1;
+
+  constructor(private readonly settings: ModelPreviewRenderSettings) {}
+
+  render(task: PreviewRenderTask): Promise<Blob> {
+    this.cancel();
+    const worker = (this.worker ??= this.start());
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pending = { id, resolve, reject };
+      worker.postMessage({
+        id,
+        size: MODEL_PREVIEW_SIZE,
+        transport: task.transport,
+        evaluated: task.evaluated,
+        settings: this.settings,
+      } satisfies GridModelPreviewRenderRequest);
+    });
+  }
+
+  // A render cannot be interrupted inside the worker, so abandoning one
+  // discards the worker along with its WebGL context.
+  cancel() {
+    if (this.pending) {
+      this.dispose();
+    }
+  }
+
+  dispose() {
+    this.pending = null;
+    this.worker?.terminate();
+    this.worker = null;
+  }
+
+  private start() {
+    const worker = new Worker(new URL("./grid-model-preview.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    worker.onmessage = (event: MessageEvent<GridModelPreviewRenderResponse>) => {
+      const response = event.data;
+      if (response.blob) {
+        if (this.pending?.id === response.id) {
+          this.pending.resolve(response.blob);
+          this.pending = null;
+        }
+        return;
+      }
+      this.fail(response.id, new Error(response.message, { cause: response.diagnostic }));
+    };
+    worker.onerror = (event) =>
+      this.fail(
+        this.pending?.id,
+        new Error(event.message || "Model preview worker failed.", { cause: event.error }),
+      );
+    return worker;
+  }
+
+  // The next preview starts a fresh worker, which recovers from a lost context.
+  private fail(id: number | undefined, error: Error) {
+    const pending = this.pending;
+    if (!pending || pending.id !== id) {
+      return;
+    }
+    this.dispose();
+    pending.reject(error);
+  }
+}
 
 export function GridModelPreviewProvider({
   children,
@@ -401,7 +491,6 @@ export function GridModelPreviewProvider({
   viewport: HTMLDivElement | null;
 }) {
   const { settings, isLoading } = useSettings(modelPreviewSettingsConfig);
-  const [renderTask, setRenderTask] = useState<PreviewRenderTask | null>(null);
   const enabled = !isLoading && settings.enabled;
   const renderSettings = useMemo<ModelPreviewRenderSettings | null>(
     () =>
@@ -415,101 +504,45 @@ export function GridModelPreviewProvider({
         : null,
     [enabled, settings.environment, settings.exposure, settings.toneMapping, settings.toonShadows],
   );
-  const controller = useMemo(() => {
+  const preview = useMemo(() => {
     if (!renderSettings) {
       return null;
     }
 
-    const id = nextModelPreviewControllerId++;
-    return new GridModelPreviewController(id, renderSettings, (task) => {
-      setRenderTask((current) => {
-        if (task) {
-          return task;
+    const renderer = new GridModelPreviewRenderer(renderSettings);
+    const controller: GridModelPreviewController = new GridModelPreviewController(
+      renderSettings,
+      (task) => {
+        if (!task) {
+          renderer.cancel();
+          return;
         }
-        return current?.controllerId === id ? null : current;
-      });
-    });
+        renderer.render(task).then(
+          (blob) => controller.complete(task, blob),
+          (error: unknown) => controller.complete(task, null, error),
+        );
+      },
+    );
+    return { controller, renderer };
   }, [renderSettings]);
 
-  useEffect(() => () => controller?.dispose(), [controller]);
+  useEffect(
+    () => () => {
+      preview?.controller.dispose();
+      preview?.renderer.dispose();
+    },
+    [preview],
+  );
 
   const subscribe = useCallback(
-    (mod: ModInfo, listener: PreviewListener) => controller?.subscribe(mod, listener) ?? (() => {}),
-    [controller],
+    (mod: ModInfo, listener: PreviewListener) =>
+      preview?.controller.subscribe(mod, listener) ?? (() => {}),
+    [preview],
   );
   const value = useMemo(() => ({ enabled, subscribe, viewport }), [enabled, subscribe, viewport]);
 
   return (
-    <GridModelPreviewContext.Provider value={value}>
-      {children}
-      {controller && renderSettings && renderTask?.controllerId === controller.id ? (
-        <GridModelPreviewRenderer
-          controller={controller}
-          settings={renderSettings}
-          task={renderTask}
-        />
-      ) : null}
-    </GridModelPreviewContext.Provider>
-  );
-}
-
-function GridModelPreviewRenderer({
-  controller,
-  settings,
-  task,
-}: {
-  controller: GridModelPreviewController;
-  settings: ModelPreviewRenderSettings;
-  task: PreviewRenderTask | null;
-}) {
-  const viewerRef = useRef<ModelViewerHandle | null>(null);
-  const captureTaskRef = useRef<PreviewRenderTask | null>(null);
-
-  const capture = useCallback(() => {
-    if (!task || captureTaskRef.current === task) {
-      return;
-    }
-    captureTaskRef.current = task;
-
-    void (async () => {
-      const viewer = viewerRef.current;
-      if (!viewer) {
-        throw new Error("Model preview renderer is unavailable.");
-      }
-      await viewer.setDoubleSided(true);
-      await viewer.updateFraming();
-      const blob = await viewer.captureSquarePngBlob();
-      if (!blob) {
-        throw new Error("Model preview capture returned no image.");
-      }
-      await controller.complete(task, blob);
-    })().catch((error: unknown) => controller.complete(task, null, error));
-  }, [controller, task]);
-
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed top-0 left-0 -z-50 overflow-hidden opacity-0"
-      inert
-      style={{ height: MODEL_PREVIEW_SIZE, width: MODEL_PREVIEW_SIZE }}
-    >
-      {task ? (
-        <ThreeModelViewer
-          ref={viewerRef}
-          className="h-full w-full"
-          orientation={DEFAULT_MODEL_ORIENTATION}
-          pixelRatio={1}
-          payloadTransport={task.transport}
-          payloadEval={task.evaluated}
-          threeToneMapping={settings.toneMapping}
-          threeEnvironment={settings.environment}
-          threeExposure={settings.exposure}
-          toonShadows={settings.toonShadows}
-          onLoad={capture}
-          onError={(error) => void controller.complete(task, null, error)}
-        />
-      ) : null}
-    </div>
+    <GridModelPreviewContext.Provider value={value}>{children}</GridModelPreviewContext.Provider>
   );
 }
 
@@ -620,19 +653,11 @@ export function createGridModelPreviewRequestKey(
   return JSON.stringify([mod.path.toLowerCase(), mod.mtime, toggles, settings, "512@1-v1"]);
 }
 
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Preview image reader returned no data URL."));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Unable to read preview image."));
-    reader.readAsDataURL(blob);
-  });
+async function saveModelPreview(task: PreviewRenderTask, blob: Blob) {
+  const { entry, sessionId } = task;
+  const uploadUrl = await Tools.PrepareModGridPreviewCacheUpload(sessionId, blob.size);
+  await uploadTypedArray(uploadUrl, new Uint8Array(await blob.arrayBuffer()));
+  await Tools.SaveModGridPreviewCache(entry.mod.path, entry.variant, entry.fingerprint, sessionId);
 }
 
 async function cleanupModelPreviewSession(sessionId: string) {

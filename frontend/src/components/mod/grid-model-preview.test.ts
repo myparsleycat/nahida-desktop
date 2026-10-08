@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { Tools } from "@bindings/tools";
 import type { ModInfo } from "@renderer/types/mod";
+import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerVariable } from "@shared/mod-viewer/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,12 +17,15 @@ vi.mock("@bindings/tools", () => ({
     Tools: {
         LoadModGridPreview: vi.fn(),
         GetModGridPreviewCache: vi.fn(),
+        PrepareModGridPreviewCacheUpload: vi.fn(),
         SaveModGridPreviewCache: vi.fn(),
         CleanupModelViewer: vi.fn(),
     },
 }));
 
 vi.mock("@renderer/lib/logger", () => ({ Logger: { capture: vi.fn() } }));
+
+vi.mock("@renderer/wails/binary-memory", () => ({ uploadTypedArray: vi.fn() }));
 
 const renderSettings = {
     toneMapping: "neutral" as const,
@@ -34,8 +38,10 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(Tools.GetModGridPreviewCache).mockResolvedValue({
         fingerprint: "files-v1",
-        image: "",
+        url: "",
     });
+    vi.mocked(Tools.PrepareModGridPreviewCacheUpload).mockResolvedValue("/upload");
+    vi.mocked(uploadTypedArray).mockResolvedValue(undefined);
     vi.mocked(Tools.SaveModGridPreviewCache).mockResolvedValue(undefined);
     vi.mocked(Tools.CleanupModelViewer).mockResolvedValue(true);
     let nextUrl = 0;
@@ -126,16 +132,14 @@ describe("GridModelPreviewController", () => {
         const saved = new Map<string, string>();
         vi.mocked(Tools.GetModGridPreviewCache).mockImplementation(async (_path, variant) => ({
             fingerprint: "files-v1",
-            image: saved.get(variant) ?? "",
+            url: saved.get(variant) ?? "",
         }));
-        vi.mocked(Tools.SaveModGridPreviewCache).mockImplementation(
-            async (_path, variant, _fingerprint, image) => {
-                saved.set(variant, image);
-            },
-        );
+        vi.mocked(Tools.SaveModGridPreviewCache).mockImplementation(async (_path, variant) => {
+            saved.set(variant, "/protocol/local?path=saved.png");
+        });
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("first"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const first = new GridModelPreviewController(1, renderSettings, renderTask);
+        const first = new GridModelPreviewController(renderSettings, renderTask);
         const mod = makeMod([]);
         first.subscribe(mod, vi.fn());
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
@@ -146,13 +150,13 @@ describe("GridModelPreviewController", () => {
         first.dispose();
 
         const nextRender = vi.fn();
-        const next = new GridModelPreviewController(2, renderSettings, nextRender);
+        const next = new GridModelPreviewController(renderSettings, nextRender);
         const listener = vi.fn();
         next.subscribe({ ...mod, mtime: 999 }, listener);
         await vi.waitFor(() =>
             expect(listener).toHaveBeenLastCalledWith({
                 status: "ready",
-                url: "data:image/png;base64,cG5n",
+                url: "/protocol/local?path=saved.png",
             }),
         );
         expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
@@ -163,14 +167,14 @@ describe("GridModelPreviewController", () => {
     it("revalidates files and rerenders when the source fingerprint changes", async () => {
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("model"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
         const mod = makeMod([]);
         controller.subscribe(mod, vi.fn());
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
         await controller.complete(renderTask.mock.calls[0][0]!, new Blob(["png"]));
         vi.mocked(Tools.GetModGridPreviewCache).mockResolvedValue({
             fingerprint: "files-v2",
-            image: "",
+            url: "",
         });
         controller.subscribe(mod, vi.fn());
         await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
@@ -182,7 +186,7 @@ describe("GridModelPreviewController", () => {
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("model"));
         vi.mocked(Tools.SaveModGridPreviewCache).mockRejectedValue(new Error("disk full"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
         const listener = vi.fn();
         controller.subscribe(makeMod([]), listener);
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
@@ -205,7 +209,7 @@ describe("GridModelPreviewController", () => {
             )
             .mockResolvedValueOnce(rawTransport("second"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
         const firstMod = makeMod([makeToggle("Character.ini", "$outfit", "0")]);
         const secondMod = { ...firstMod, path: "C:/Mods/Second", id: "second" };
 
@@ -227,9 +231,33 @@ describe("GridModelPreviewController", () => {
         controller.dispose();
     });
 
+    it("shows a saved image while another preview is still rendering", async () => {
+        vi.mocked(Tools.GetModGridPreviewCache).mockImplementation(async (path) => ({
+            fingerprint: "files-v1",
+            url: path === "C:/Mods/Saved" ? "/protocol/local?path=saved.png" : "",
+        }));
+        vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("rendering"));
+        const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
+        const savedListener = vi.fn();
+
+        controller.subscribe(makeMod([]), vi.fn());
+        await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
+        controller.subscribe({ ...makeMod([]), path: "C:/Mods/Saved", id: "saved" }, savedListener);
+
+        await vi.waitFor(() =>
+            expect(savedListener).toHaveBeenLastCalledWith({
+                status: "ready",
+                url: "/protocol/local?path=saved.png",
+            }),
+        );
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
+        controller.dispose();
+    });
+
     it("negative-caches a failed request", async () => {
         vi.mocked(Tools.LoadModGridPreview).mockRejectedValueOnce(new Error("broken"));
-        const controller = new GridModelPreviewController(1, renderSettings, vi.fn());
+        const controller = new GridModelPreviewController(renderSettings, vi.fn());
         const mod = makeMod([makeToggle("Character.ini", "$outfit", "0")]);
         const firstListener = vi.fn();
 
@@ -249,7 +277,7 @@ describe("GridModelPreviewController", () => {
             () => loaded.promise as ReturnType<typeof Tools.LoadModGridPreview>,
         );
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
 
         controller.subscribe(makeMod([]), vi.fn());
         await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1));
@@ -263,7 +291,7 @@ describe("GridModelPreviewController", () => {
     it("cleans up and negative-caches a capture failure", async () => {
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValueOnce(rawTransport("capture-failure"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
         const mod = makeMod([]);
         const listener = vi.fn();
 
@@ -286,7 +314,7 @@ describe("GridModelPreviewController", () => {
                 .mockResolvedValueOnce(rawTransport("stalled"))
                 .mockResolvedValueOnce(rawTransport("next"));
             const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-            const controller = new GridModelPreviewController(1, renderSettings, renderTask);
+            const controller = new GridModelPreviewController(renderSettings, renderTask);
             const firstMod = makeMod([]);
             const secondMod = { ...firstMod, path: "C:/Mods/Second", id: "second" };
 

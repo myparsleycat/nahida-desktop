@@ -25,7 +25,6 @@ import {
     SRGBColorSpace,
     ShaderChunk,
     Texture,
-    TextureLoader,
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
@@ -58,6 +57,7 @@ type PayloadMeshUserData = {
     toonShadows: boolean;
     lastPositionVariantIndex?: number | null;
     lastShapeSignature?: string;
+    geometryStale?: boolean;
     lastMaps?: {
         texKey: string | null;
         normalMapKey: string | null;
@@ -90,7 +90,6 @@ type DDSTextureMetadata = {
     direct: boolean;
 };
 
-const textureLoader = new TextureLoader();
 const noCompressedTextureCapabilities: ModelViewerTextureCapabilities = {
     maxTextureSize: 0,
     s3tc: false,
@@ -155,6 +154,7 @@ export async function buildPayloadModel(
                 const texture = await loadTexture(entry, textureCache, signal, textureCapabilities);
                 if (signal.aborted) {
                     texture?.dispose();
+                    if (texture) releaseTextureImage(texture);
                     signal.throwIfAborted();
                 }
                 if (texture) {
@@ -319,9 +319,20 @@ export async function preparePayloadEval(
     return { evalResult, positions: new Map(await Promise.all(requests)) };
 }
 
-export function commitPayloadEval(root: Object3D, prepared: PreparedPayloadEval): void {
+export type CommitPayloadEvalOptions = {
+    // Skip normal and bounds recomputation after a shape deformation. The caller
+    // owns a follow-up finalizePayloadGeometry once interaction settles.
+    deferGeometryUpdates?: boolean;
+};
+
+export function commitPayloadEval(
+    root: Object3D,
+    prepared: PreparedPayloadEval,
+    options?: CommitPayloadEvalOptions,
+): void {
     const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
     const evalById = new Map(prepared.evalResult.meshes.map((mesh) => [mesh.id, mesh]));
+    const deferGeometryUpdates = options?.deferGeometryUpdates ?? false;
     root.traverse((object) => {
         if (!(object instanceof Mesh)) {
             return;
@@ -330,14 +341,38 @@ export function commitPayloadEval(root: Object3D, prepared: PreparedPayloadEval)
         if (!meshId) {
             return;
         }
-        applyEvaluatedMesh(object, evalById.get(meshId), textures, prepared.positions.get(meshId));
+        applyEvaluatedMesh(
+            object,
+            evalById.get(meshId),
+            textures,
+            prepared.positions.get(meshId),
+            deferGeometryUpdates,
+        );
     });
+}
+
+export function finalizePayloadGeometry(root: Object3D): boolean {
+    let changed = false;
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        if (!userData.geometryStale) {
+            return;
+        }
+        refreshDeformedGeometry(object.geometry);
+        userData.geometryStale = false;
+        changed = true;
+    });
+    return changed;
 }
 
 export function clearPayloadModelData(root: Object3D): void {
     const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
-    for (const texture of textures?.values() ?? []) {
+    for (const texture of new Set(textures?.values())) {
         texture.dispose();
+        releaseTextureImage(texture);
     }
     textures?.clear();
     delete root.userData.payloadTextures;
@@ -354,7 +389,22 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.lastMaps = undefined;
         userData.lastPositionVariantIndex = undefined;
         userData.lastShapeSignature = undefined;
+        userData.geometryStale = undefined;
     });
+}
+
+// A decoded ImageBitmap keeps its pixels alive until closed, independent of
+// the GPU texture that three.js releases on dispose.
+function releaseTextureImage(texture: Texture): void {
+    const image: unknown = texture.image;
+    if (
+        image &&
+        typeof image === "object" &&
+        "close" in image &&
+        typeof image.close === "function"
+    ) {
+        image.close();
+    }
 }
 
 function disposeIncompletePayloadModel(root: Object3D): void {
@@ -384,6 +434,7 @@ function applyEvaluatedMesh(
     evaluated: EvaluatedViewerState["meshes"][number] | undefined,
     textures?: Map<string, Texture>,
     preparedPosition?: { variantIndex: number } & ModelViewerPositionGeometry,
+    deferGeometryUpdates = false,
 ): void {
     if (!evaluated) {
         return;
@@ -399,7 +450,7 @@ function applyEvaluatedMesh(
         applyEvaluatedMaps(material, object, userData, evaluated, textures);
     }
     if (evaluated.positionVariantIndex === null) {
-        applyShapeTargets(object, evaluated.shapeWeights);
+        applyShapeTargets(object, evaluated.shapeWeights, deferGeometryUpdates);
     }
 }
 
@@ -782,9 +833,14 @@ function applyPositionVariant(
         object.geometry.attributes.normal.needsUpdate = true;
     }
     if (bounds) applyGeometryBounds(object.geometry, bounds);
+    userData.geometryStale = false;
 }
 
-function applyShapeTargets(object: Mesh, weights: Record<string, number>): void {
+function applyShapeTargets(
+    object: Mesh,
+    weights: Record<string, number>,
+    deferGeometryUpdates: boolean,
+): void {
     const userData = object.userData as PayloadMeshUserData;
     const targets = userData.shapeTargets ?? [];
     if (targets.length === 0) {
@@ -842,17 +898,26 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
         }
     }
     attr.needsUpdate = true;
+    userData.lastShapeSignature = signature;
     if (!deformed) {
         object.geometry.attributes.normal.array.set(userData.baseNormals);
         object.geometry.attributes.normal.needsUpdate = true;
         if (userData.baseBounds) applyGeometryBounds(object.geometry, userData.baseBounds);
-        userData.lastShapeSignature = signature;
+        userData.geometryStale = false;
         return;
     }
-    object.geometry.computeVertexNormals();
-    object.geometry.computeBoundingBox();
-    object.geometry.computeBoundingSphere();
-    userData.lastShapeSignature = signature;
+    if (deferGeometryUpdates) {
+        userData.geometryStale = true;
+        return;
+    }
+    refreshDeformedGeometry(object.geometry);
+    userData.geometryStale = false;
+}
+
+function refreshDeformedGeometry(geometry: BufferGeometry): void {
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
 }
 
 function normalizeShapeWeight(value: number | undefined): string {
@@ -946,6 +1011,7 @@ async function loadPayloadTexture(
                     entry.format,
                     capabilities.maxTextureSize,
                     signal,
+                    entry.mipCount,
                 ),
                 entry.format,
                 capabilities.maxTextureSize,
@@ -976,32 +1042,36 @@ async function loadPayloadImageTexture(url: string, signal: AbortSignal): Promis
     if (!response.ok) return null;
     const blob = await response.blob();
     signal.throwIfAborted();
-    const objectUrl = URL.createObjectURL(blob);
-    let onAbort: (() => void) | undefined;
-    try {
-        return await new Promise<Texture>((resolve, reject) => {
-            onAbort = () => reject(signal.reason);
-            signal.addEventListener("abort", onAbort, { once: true });
-            textureLoader.load(
-                objectUrl,
-                (texture) => {
-                    // Image decoding may finish after cancellation; it must not retain a texture.
-                    if (signal.aborted) {
-                        texture.dispose();
-                        reject(signal.reason);
-                        return;
-                    }
 
-                    // TextureLoader's default flipY matches the mesh-builder 1-v UV flip.
-                    resolve(texture);
-                },
-                undefined,
-                reject,
-            );
-        });
+    // Decode off the main thread. The flip replaces TextureLoader's default
+    // flipY, which the GPU upload ignores for an ImageBitmap, and matches the
+    // mesh-builder 1-v UV flip.
+    const decoding = createImageBitmap(blob, {
+        imageOrientation: "flipY",
+        premultiplyAlpha: "none",
+    });
+    let onAbort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
+    aborted.catch(() => {});
+    try {
+        const image = await Promise.race([decoding, aborted]);
+        const texture = new Texture(image);
+        texture.flipY = false;
+        texture.needsUpdate = true;
+        return texture;
+    } catch (error) {
+        // Decoding cannot be cancelled; a bitmap finished after the abort won
+        // must not keep its pixels alive.
+        decoding.then(
+            (image) => image.close(),
+            () => {},
+        );
+        throw error;
     } finally {
         if (onAbort) signal.removeEventListener("abort", onAbort);
-        URL.revokeObjectURL(objectUrl);
     }
 }
 

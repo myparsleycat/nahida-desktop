@@ -30,14 +30,14 @@ import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
-import { CheckIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react";
+import { CheckIcon, Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import type { ModelViewerDialogSource, VariableStateValue } from "./model-viewer-dialog-types";
 
-import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
+import { ModelViewerAnimationBar } from "./model-viewer-animation-bar";
 import {
   formatOrientation,
   parseOrientation,
@@ -54,13 +54,11 @@ import {
   normalizeThreeToneMapping,
 } from "./model-viewer-dialog-utils";
 import { VariantSlider, VariantTile } from "./model-viewer-dialog-variants";
-import { ModelViewerFpsControl } from "./model-viewer-fps-control";
 import {
   useModelViewerIneffectiveValues,
   type IneffectiveSuggestion,
 } from "./model-viewer-ineffective";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
-import { useModelViewerScrubPlayback } from "./model-viewer-scrub";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
@@ -100,10 +98,10 @@ export function ModelViewerWorkspace({
     getInitialActiveState(source),
   );
   const [previewState, setPreviewState] = useState<Record<string, VariableStateValue> | null>(null);
+  const [toggleResetCount, setToggleResetCount] = useState(0);
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(() =>
     getInitialActiveAnimationId(source),
   );
-  const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
   const [animationPlaying, setAnimationPlaying] = useState(
     () => (source?.transport.animations[0]?.frames.length ?? 0) > 1,
   );
@@ -145,15 +143,9 @@ export function ModelViewerWorkspace({
 
     setActiveState(source?.transport.defaultState ?? {});
     setActiveAnimationId(source?.transport.animations[0]?.id ?? null);
-    setAnimationFrameIndex(0);
     setAnimationPlaying(false);
     setFpsOverride(null);
   }
-
-  useEffect(() => {
-    animationFrameIndexRef.current = animationFrameIndex;
-    viewerRef.current?.setAnimationFrame(animationFrameIndex);
-  }, [activeAnimationId, animationFrameIndex]);
 
   useEffect(() => {
     doubleSidedEnabledRef.current = doubleSidedEnabled;
@@ -210,29 +202,18 @@ export function ModelViewerWorkspace({
       activeAnimation ? { ...activeAnimation, fps: fpsOverride ?? activeAnimation.fps } : null,
     [activeAnimation, fpsOverride],
   );
-  const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
   const animationVariableIds = new Set(activeAnimation?.variableIds ?? []);
 
   const [prevActiveAnimation, setPrevActiveAnimation] = useState(activeAnimation);
   if (prevActiveAnimation !== activeAnimation) {
     setPrevActiveAnimation(activeAnimation);
-    setAnimationFrameIndex(0);
     setAnimationPlaying(Boolean(activeAnimation && activeAnimation.frames.length > 1));
     setFpsOverride(null);
   }
 
-  useModelViewerAnimationClock({
-    clip: effectiveAnimation,
-    frameIndex: animationFrameIndex,
-    playing: open && animationPlaying,
-    onFrame: setAnimationFrameIndex,
-    onComplete: () => setAnimationPlaying(false),
-  });
-
-  const scrubPlayback = useModelViewerScrubPlayback({
-    playing: animationPlaying,
-    setPlaying: setAnimationPlaying,
-  });
+  const handleAnimationFrameIndexChange = useCallback((frameIndex: number) => {
+    animationFrameIndexRef.current = frameIndex;
+  }, []);
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
@@ -304,6 +285,7 @@ export function ModelViewerWorkspace({
       return;
     }
     setActiveState(source.transport.defaultState);
+    setToggleResetCount((count) => count + 1);
   };
 
   const handleSaveTogglesToIni = async () => {
@@ -357,14 +339,6 @@ export function ModelViewerWorkspace({
       return next;
     });
     setPreviewState(null);
-  };
-
-  const handleAnimationTogglePlayback = () => {
-    if (!activeAnimation || activeAnimation.frames.length <= 1) {
-      return;
-    }
-
-    setAnimationPlaying((current) => !current);
   };
 
   const effectiveState = previewState ?? activeState;
@@ -774,8 +748,10 @@ export function ModelViewerWorkspace({
                         ))}
                       </div>
                       {sliderVariables.map((variable) => (
+                        // Remounting on reset cancels a queued slider commit
+                        // that would otherwise reapply the pre-reset value.
                         <VariantSlider
-                          key={variable.id}
+                          key={`${variable.id}:${toggleResetCount}`}
                           variable={variable}
                           activeValue={activeState[variable.id]}
                           realtime
@@ -790,73 +766,19 @@ export function ModelViewerWorkspace({
           ) : null}
         </div>
 
-        {activeAnimation ? (
-          <div className="flex items-center gap-2 px-2">
-            <div className="w-36 min-w-0">
-              {animationClips.length > 1 ? (
-                <Select value={activeAnimation.id} onValueChange={setActiveAnimationId}>
-                  <SelectTrigger
-                    className="h-8 w-full"
-                    aria-label={t("page.tools.model_viewer.animation_clip")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {animationClips.map((clip) => (
-                        <SelectItem key={clip.id} value={clip.id}>
-                          {clip.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="text-sm font-medium">{activeAnimation.label}</div>
-              )}
-              <div className="text-xs whitespace-nowrap text-muted-foreground">
-                <ModelViewerFpsControl
-                  fps={fpsOverride ?? activeAnimation.fps}
-                  defaultFps={activeAnimation.fps}
-                  onFpsChange={setFpsOverride}
-                />{" "}
-                · Frame {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
-                {activeAnimation.frameEnd}
-              </div>
-            </div>
-
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {activeAnimation.frameStart}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(activeAnimation.frames.length - 1, 0)}
-                step={1}
-                value={animationFrameIndex}
-                className="w-full accent-primary"
-                {...scrubPlayback}
-                onChange={(event) => {
-                  setAnimationFrameIndex(Number(event.currentTarget.value));
-                }}
-              />
-              <span className="text-right text-xs text-muted-foreground tabular-nums">
-                {activeAnimation.frameEnd}
-              </span>
-            </div>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={handleAnimationTogglePlayback}
-              disabled={activeAnimation.frames.length <= 1}
-              aria-label={animationPlaying ? "Pause" : "Play"}
-            >
-              {animationPlaying ? <PauseIcon /> : <PlayIcon />}
-            </Button>
-          </div>
+        {activeAnimation && effectiveAnimation ? (
+          <ModelViewerAnimationBar
+            clip={activeAnimation}
+            clips={animationClips}
+            effectiveClip={effectiveAnimation}
+            fpsOverride={fpsOverride}
+            onClipChange={setActiveAnimationId}
+            onFpsChange={setFpsOverride}
+            onFrameIndexChange={handleAnimationFrameIndexChange}
+            playing={open && animationPlaying}
+            setPlaying={setAnimationPlaying}
+            viewerRef={viewerRef}
+          />
         ) : null}
       </div>
 

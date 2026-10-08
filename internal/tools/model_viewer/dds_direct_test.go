@@ -179,6 +179,80 @@ func TestPrepareModelViewerDDSPreviewReusesExistingMip(t *testing.T) {
 	}
 }
 
+func TestModelViewerDDSPreviewLimitResamplesWithoutStoredMip(t *testing.T) {
+	options := modelViewerPayloadOptions{ddsPreviewMaxDimension: 2048, ddsPreviewPreferredDimension: 512}
+	tests := []struct {
+		name         string
+		metadata     modelViewerDDSMetadata
+		options      modelViewerPayloadOptions
+		wantLimit    uint32
+		wantResample bool
+	}{
+		{"stored mip fits", modelViewerDDSMetadata{Width: 4096, Height: 4096, MipCount: 13}, options, 512, false},
+		{"mip chain stops early", modelViewerDDSMetadata{Width: 4096, Height: 4096, MipCount: 2}, options, 2048, true},
+		{"no mips", modelViewerDDSMetadata{Width: 2048, Height: 2048, MipCount: 1}, options, 2048, true},
+		{"already small", modelViewerDDSMetadata{Width: 512, Height: 256, MipCount: 1}, options, 2048, false},
+		{
+			"no preferred size",
+			modelViewerDDSMetadata{Width: 4096, Height: 4096, MipCount: 1},
+			modelViewerPayloadOptions{ddsPreviewMaxDimension: 2048},
+			2048,
+			false,
+		},
+	}
+	for _, test := range tests {
+		limit, resample := modelViewerDDSPreviewLimit(test.metadata, test.options)
+		if limit != test.wantLimit || resample != test.wantResample {
+			t.Errorf(
+				"%s: limit=%d resample=%t, want %d %t",
+				test.name, limit, resample, test.wantLimit, test.wantResample,
+			)
+		}
+	}
+}
+
+func TestWriteModelViewerPayloadScalesMiplessDDSIntoFallback(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mipless.dds")
+	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 16, 16, 1, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protocol := infra.NewProtocol()
+	transport := ModelViewerTransport{Textures: make(map[string]ModelViewerTextureTransport)}
+	err = writeModelViewerPayload(
+		context.Background(),
+		NewWithOptions(Options{Protocol: protocol}),
+		protocol.CreateMemorySession(),
+		&transport,
+		nil,
+		map[string]modelViewerTexturePayload{
+			"body": {Key: "body", Role: "diffuse", Path: path, DDS: &metadata},
+		},
+		modelViewerPayloadOptions{ddsPreviewMaxDimension: 2048, ddsPreviewPreferredDimension: 8},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	texture := transport.Textures["body"]
+	if texture.Encoding != "dds" || texture.Format != "bc1-unorm" || texture.URL != texture.FallbackURL ||
+		texture.Width != 0 || texture.Height != 0 || texture.MipCount != 0 {
+		t.Fatalf("transport texture = %#v", texture)
+	}
+
+	response := httptest.NewRecorder()
+	protocol.ServeHTTP(response, httptest.NewRequest(http.MethodGet, texture.FallbackURL, nil))
+	decoded, err := png.Decode(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size := decoded.Bounds().Size(); size.X != 8 || size.Y != 8 {
+		t.Fatalf("fallback size = %v, want 8x8", size)
+	}
+}
+
 func TestPrepareModelViewerDDSPreviewDecimatesOddFinalMip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "odd-mips.dds")
 	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 15, 9, 2, 1), 0o600); err != nil {
@@ -305,7 +379,7 @@ func TestRunModelViewerTextureJobsPreservesDetectedDDSAlphaInversion(t *testing.
 	if stats.DirectDDS != 1 || stats.Decodes != 0 || stats.Encodes != 0 {
 		t.Fatalf("stats = %#v", stats)
 	}
-	fallback, err := prepareModelViewerDDSFallback(context.Background(), path)
+	fallback, err := prepareModelViewerDDSFallback(context.Background(), path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

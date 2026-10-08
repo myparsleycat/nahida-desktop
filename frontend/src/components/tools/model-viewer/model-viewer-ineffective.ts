@@ -23,45 +23,55 @@ export type IneffectiveMap = Map<
 
 const empty: IneffectiveMap = new Map();
 
+// A realtime slider changes the state on every pointer tick; wait for the
+// ticks to settle before asking the backend to re-evaluate every variable.
+export const INEFFECTIVE_VALUES_DEBOUNCE_MS = 150;
+
 export function useModelViewerIneffectiveValues(
     sessionId: string | undefined,
     state: Record<string, ViewerStateValue>,
 ): IneffectiveMap {
     const [result, setResult] = useState<{
         sessionId: string;
-        state: typeof state;
         values: IneffectiveMap;
     }>();
     useEffect(() => {
         if (!sessionId) return;
         let ignore = false;
-        const request = Tools.GetModelViewerIneffectiveValues(sessionId, state);
-        void request
-            .then((entries) => {
-                if (ignore) return;
-                const values: IneffectiveMap = new Map();
-                for (const entry of entries ?? []) {
-                    const variable = values.get(entry.variableId) ?? new Map();
-                    variable.set(entry.value, {
-                        blockingVars: entry.blockingVars ?? [],
-                        suggestions: (entry.suggestions ?? []).map((suggestion) => ({
-                            ...suggestion,
-                            changes: suggestion.changes ?? [],
-                        })),
-                    });
-                    values.set(entry.variableId, variable);
-                }
-                setResult({ sessionId, state, values });
-            })
-            .catch((error: unknown) => {
-                if (!ignore) Logger.capture("model-viewer:ineffective-values", error);
-            });
+        let request: ReturnType<typeof Tools.GetModelViewerIneffectiveValues> | undefined;
+        const timer = window.setTimeout(() => {
+            request = Tools.GetModelViewerIneffectiveValues(sessionId, state);
+            void request
+                .then((entries) => {
+                    if (ignore) return;
+                    const values: IneffectiveMap = new Map();
+                    for (const entry of entries ?? []) {
+                        const variable = values.get(entry.variableId) ?? new Map();
+                        variable.set(entry.value, {
+                            blockingVars: entry.blockingVars ?? [],
+                            suggestions: (entry.suggestions ?? []).map((suggestion) => ({
+                                ...suggestion,
+                                changes: suggestion.changes ?? [],
+                            })),
+                        });
+                        values.set(entry.variableId, variable);
+                    }
+                    setResult({ sessionId, values });
+                })
+                .catch((error: unknown) => {
+                    if (ignore) return;
+                    Logger.capture("model-viewer:ineffective-values", error);
+                    setResult(undefined);
+                });
+        }, INEFFECTIVE_VALUES_DEBOUNCE_MS);
         return () => {
             ignore = true;
-            void request.cancel();
+            window.clearTimeout(timer);
+            void request?.cancel();
         };
     }, [sessionId, state]);
-    return result && result.sessionId === sessionId && result.state === state
-        ? result.values
-        : empty;
+
+    // Keep the previous answer visible while the next one is pending so an
+    // open dropdown does not flash to "all effective" on every state change.
+    return result && result.sessionId === sessionId ? result.values : empty;
 }
