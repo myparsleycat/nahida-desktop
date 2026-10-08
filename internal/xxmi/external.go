@@ -812,9 +812,7 @@ func (x *XXMI) enableExternalUnsafeMode(ctx context.Context, importer string) er
 	if err != nil {
 		return err
 	}
-	importers, _ := launcher.config["Importers"].(map[string]any)
-	section, _ := importers[importer].(map[string]any)
-	migoto, _ := section["Migoto"].(map[string]any)
+	migoto := launcher.migoto(importer)
 	unsafeMode, exists := migoto["unsafe_mode"].(bool)
 	if !exists || unsafeMode {
 		return nil

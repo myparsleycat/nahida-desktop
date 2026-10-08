@@ -3,6 +3,7 @@ package xxmi
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -235,7 +236,8 @@ func TestExternalLoggingEnabled(t *testing.T) {
 	}{
 		{"missing section", nil, false},
 		{"level disabled", map[string]any{"log_level": "DISABLED"}, false},
-		{"level warning", map[string]any{"log_level": "WARNING"}, true},
+		{"level warning", map[string]any{"log_level": "WARNING"}, false},
+		{"level info", map[string]any{"log_level": "INFO"}, true},
 		{"level debug", map[string]any{"log_level": "debug"}, true},
 		{"level wins over old switches", map[string]any{"log_level": "DISABLED", "debug_logging": true}, false},
 		{"old switches off", map[string]any{"calls_logging": false, "debug_logging": false}, false},
@@ -280,15 +282,35 @@ func TestBuiltinLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 		t.Fatalf("launch without the XXMI DLL = %v", err)
 	}
 
+	// A launch that will stop at the missing importer files must not offer to save the config first.
+	store(`{"schemaVersion":2,"enabled":true,"migoto":{"logLevel":"Debug"}}`)
+	if err := service.rejectLogging(ctx, "GIMI", false); err != nil {
+		t.Fatalf("importer without its files = %v", err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, "d3dx.ini"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	store(`{"schemaVersion":2,"enabled":true,"migoto":{"logLevel":"Warning"}}`)
-	err := service.rejectLogging(ctx, "GIMI", false)
+	if err := service.rejectLogging(ctx, "GIMI", false); err != nil {
+		t.Fatalf("warnings only = %v", err)
+	}
+
+	store(`{"schemaVersion":2,"enabled":true,"migoto":{"logLevel":"Info"}}`)
+	err = service.rejectLogging(ctx, "GIMI", false)
 	if !errors.Is(err, errLoggingEnabled) || !strings.Contains(err.Error(), "XXMI_LOGGING_ENABLED") {
 		t.Fatalf("error = %v, want the logging question", err)
 	}
 	if err := service.DisableLogging(ctx, " gimi "); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	cfg, err = service.GetImporterConfig(ctx, "GIMI")
 	if err != nil || cfg.Migoto.LogLevel != "Disabled" || !cfg.Enabled {
 		t.Fatalf("config after disabling = %+v, %v", cfg.Migoto, err)
 	}

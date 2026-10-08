@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
@@ -194,8 +196,9 @@ func (x *XXMI) rejectLogging(ctx context.Context, importer string, external bool
 	})
 }
 
-// loggingEnabled reports whether launching importer loads the XXMI DLL with 3DMigoto logging on.
-// An importer that cannot launch reports false, so the launch itself explains why.
+// loggingEnabled reports whether launching importer loads the XXMI DLL with a 3DMigoto log level
+// that slows the game down. Warnings alone do not, and releases before migotoLogLevelVersion write
+// nothing at that level. An importer that cannot launch reports false, so the launch itself explains why.
 func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external bool) (bool, error) {
 	if external {
 		launcher, err := x.loadExternalLauncher(ctx)
@@ -209,10 +212,15 @@ func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external boo
 	if err != nil {
 		return false, err
 	}
-	if !cfg.Enabled || cfg.Migoto.LogLevel == "Disabled" {
+	if !cfg.Enabled || cfg.Migoto.LogLevel != "Info" && cfg.Migoto.LogLevel != "Debug" {
 		return false, nil
 	}
-	return x.migotoDLLUsed(ctx, cfg)
+	used, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil || !used {
+		return false, err
+	}
+	_, statErr := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini"))
+	return statErr == nil && validateInstalledImporterPackage(importer, cfg) == nil, nil
 }
 
 // migoto returns the importer's Migoto section of the launcher config, or nil when it has none.
@@ -226,7 +234,7 @@ func (l externalLauncher) migoto(importer string) map[string]any {
 // externalLoggingEnabled reads log_level, or the two switches XXMI Launcher used before 2.3.
 func externalLoggingEnabled(migoto map[string]any) bool {
 	if level, ok := migoto["log_level"].(string); ok {
-		return !strings.EqualFold(level, "DISABLED")
+		return strings.EqualFold(level, "INFO") || strings.EqualFold(level, "DEBUG")
 	}
 	calls, _ := migoto["calls_logging"].(bool)
 	debug, _ := migoto["debug_logging"].(bool)
