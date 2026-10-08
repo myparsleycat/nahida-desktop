@@ -59,6 +59,12 @@ type PayloadMeshUserData = {
     lastShapeSignature?: string;
     geometryStale?: boolean;
     tangentFrameUsable?: boolean;
+    tangentFrameAttributes?: {
+        normal: BufferGeometry["attributes"][string] | undefined;
+        normalVersion: number | undefined;
+        tangent: BufferGeometry["attributes"][string] | undefined;
+        tangentVersion: number | undefined;
+    };
     lastMaps?: {
         texKey: string | null;
         normalMapKey: string | null;
@@ -353,6 +359,7 @@ export function commitPayloadEval(
 }
 
 export function finalizePayloadGeometry(root: Object3D): boolean {
+    const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
     let changed = false;
     root.traverse((object) => {
         if (!(object instanceof Mesh) || !object.userData.meshId) {
@@ -364,6 +371,9 @@ export function finalizePayloadGeometry(root: Object3D): boolean {
         }
         refreshDeformedGeometry(object.geometry);
         userData.geometryStale = false;
+        if (object.material instanceof MeshStandardMaterial && textures && userData.lastMaps) {
+            applyEvaluatedMaps(object.material, object, userData, userData.lastMaps, textures);
+        }
         changed = true;
     });
     return changed;
@@ -391,6 +401,8 @@ export function clearPayloadModelData(root: Object3D): void {
         userData.lastPositionVariantIndex = undefined;
         userData.lastShapeSignature = undefined;
         userData.geometryStale = undefined;
+        userData.tangentFrameUsable = undefined;
+        userData.tangentFrameAttributes = undefined;
     });
 }
 
@@ -446,12 +458,12 @@ function applyEvaluatedMesh(
     }
     const userData = object.userData as PayloadMeshUserData;
     applyPositionVariant(object, userData, evaluated.positionVariantIndex, preparedPosition);
+    if (evaluated.positionVariantIndex === null) {
+        applyShapeTargets(object, evaluated.shapeWeights, deferGeometryUpdates);
+    }
     const material = object.material;
     if (material instanceof MeshStandardMaterial && textures) {
         applyEvaluatedMaps(material, object, userData, evaluated, textures);
-    }
-    if (evaluated.positionVariantIndex === null) {
-        applyShapeTargets(object, evaluated.shapeWeights, deferGeometryUpdates);
     }
 }
 
@@ -459,7 +471,7 @@ function applyEvaluatedMaps(
     material: MeshStandardMaterial,
     object: Mesh,
     userData: PayloadMeshUserData,
-    evaluated: EvaluatedViewerState["meshes"][number],
+    evaluated: NonNullable<PayloadMeshUserData["lastMaps"]>,
     textures: Map<string, Texture>,
 ): void {
     if (userData.materialProfile === "zzmi") {
@@ -468,13 +480,37 @@ function applyEvaluatedMaps(
         configureRabbitFXMaterialShader(material, userData.toonShadows);
     }
     configureDDSMaterialShader(material);
+    const normal = object.geometry.attributes.normal;
+    const tangent = object.geometry.attributes.tangent;
+    const normalVersion = normal instanceof BufferAttribute ? normal.version : normal?.data.version;
+    const tangentVersion =
+        tangent instanceof BufferAttribute ? tangent.version : tangent?.data.version;
+    const frame = userData.tangentFrameAttributes;
+    if (
+        !frame ||
+        frame.normal !== normal ||
+        frame.normalVersion !== normalVersion ||
+        frame.tangent !== tangent ||
+        frame.tangentVersion !== tangentVersion
+    ) {
+        userData.tangentFrameUsable = undefined;
+        userData.tangentFrameAttributes = { normal, normalVersion, tangent, tangentVersion };
+    }
+    userData.tangentFrameUsable ??= hasUsableTangentFrame(object.geometry);
+    const canUseDerivativeTangentFrame =
+        userData.materialProfile === "wuwa:rabbitfx" && normal && object.geometry.attributes.uv;
+    const normalMap =
+        evaluated.normalMapKey && (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
+            ? (textures.get(evaluated.normalMapKey) ?? null)
+            : null;
     const last = userData.lastMaps;
     if (
         last &&
         last.texKey === evaluated.texKey &&
         last.normalMapKey === evaluated.normalMapKey &&
         last.lightMapKey === evaluated.lightMapKey &&
-        last.materialMapKey === evaluated.materialMapKey
+        last.materialMapKey === evaluated.materialMapKey &&
+        material.normalMap === normalMap
     ) {
         return;
     }
@@ -484,15 +520,7 @@ function applyEvaluatedMaps(
     const hadMetalnessMap = Boolean(material.metalnessMap);
     const hadRoughnessMap = Boolean(material.roughnessMap);
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
-    const canUseDerivativeTangentFrame =
-        userData.materialProfile === "wuwa:rabbitfx" &&
-        object.geometry.attributes.normal &&
-        object.geometry.attributes.uv;
-    userData.tangentFrameUsable ??= hasUsableTangentFrame(object.geometry);
-    material.normalMap =
-        evaluated.normalMapKey && (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
-            ? (textures.get(evaluated.normalMapKey) ?? null)
-            : null;
+    material.normalMap = normalMap;
     if (material.normalMap) {
         material.normalScale.y = -1;
     }
@@ -552,18 +580,27 @@ function hasUsableTangentFrame(geometry: BufferGeometry): boolean {
     const tangent = geometry.attributes.tangent;
     if (!tangent) return false;
     const normal = geometry.attributes.normal;
-    if (!normal) return true;
 
     const step = Math.max(1, Math.floor(tangent.count / 2000));
     let sampled = 0;
     let alongNormal = 0;
     for (let index = 0; index < tangent.count; index += step) {
-        const dot =
-            normal.getX(index) * tangent.getX(index) +
-            normal.getY(index) * tangent.getY(index) +
-            normal.getZ(index) * tangent.getZ(index);
+        const x = tangent.getX(index);
+        const y = tangent.getY(index);
+        const z = tangent.getZ(index);
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !Number.isFinite(z) ||
+            x * x + y * y + z * z === 0
+        ) {
+            continue;
+        }
         sampled++;
-        if (Math.abs(dot) > 0.5) alongNormal++;
+        if (normal) {
+            const dot = normal.getX(index) * x + normal.getY(index) * y + normal.getZ(index) * z;
+            if (Math.abs(dot) > 0.5) alongNormal++;
+        }
     }
     return alongNormal * 4 < sampled;
 }
