@@ -2,6 +2,7 @@ import type {
     GameBananaGameKey,
     GameBananaModIndexSort,
 } from "@renderer/hooks/use-gamebanana-data";
+import { rendererState } from "@renderer/wails/renderer-state";
 import { createStore, useStore } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -142,7 +143,9 @@ export const gameBananaStore = createStore<GameBananaState>()(
         }),
         {
             name: "nahida.gamebanana.view",
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => rendererState),
+            // main.tsx rehydrates once the renderer state has been loaded from the backend.
+            skipHydration: true,
             partialize: (state) => ({
                 selectedGame: state.selectedGame,
                 selectedCategoryId: state.selectedCategoryId,

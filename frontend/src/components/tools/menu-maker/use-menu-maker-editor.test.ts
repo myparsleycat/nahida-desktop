@@ -23,6 +23,20 @@ const mocks = vi.hoisted(() => ({
     deleteBlobs: vi.fn(),
     error: vi.fn(),
     t: (key: string) => key,
+    storage: new Map<string, string>(),
+}));
+vi.mock("@renderer/wails/renderer-state", () => ({
+    rendererState: {
+        getItem: (key: string) => mocks.storage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+            mocks.storage.set(key, value);
+            return Promise.resolve(true);
+        },
+        removeItem: (key: string) => {
+            mocks.storage.delete(key);
+            return Promise.resolve(true);
+        },
+    },
 }));
 vi.mock("@bindings/tools", () => ({
     Tools: {
@@ -77,13 +91,7 @@ const metadata: MenuMakerDraftMeta = {
 };
 beforeEach(() => {
     vi.clearAllMocks();
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-        getItem: (key: string) => storage.get(key) ?? null,
-        setItem: (key: string, value: string) => storage.set(key, value),
-        removeItem: (key: string) => storage.delete(key),
-        clear: () => storage.clear(),
-    });
+    mocks.storage.clear();
     mocks.load.mockResolvedValue(source);
     mocks.generate.mockResolvedValue(generated);
     mocks.parse.mockResolvedValue(source.document);
@@ -177,7 +185,7 @@ describe("Menu Maker editor boundaries", () => {
         expect(mocks.saveBlobs).not.toHaveBeenCalled();
         await act(async () => vi.advanceTimersByTimeAsync(1));
         expect(mocks.saveBlobs).toHaveBeenCalledTimes(1);
-        const saved = JSON.parse(localStorage.getItem("nahida.menu-maker.drafts") ?? "[]");
+        const saved = JSON.parse(mocks.storage.get("nahida.menu-maker.drafts") ?? "[]");
         expect(saved[0]).toMatchObject({
             id: metadata.id,
             sourceEncoding: "utf8",
@@ -193,7 +201,7 @@ describe("Menu Maker editor boundaries", () => {
         window.dispatchEvent(new Event("beforeunload"));
         expect(mocks.saveBlobs).toHaveBeenCalledTimes(3);
         expect(
-            JSON.parse(localStorage.getItem("nahida.menu-maker.settings") ?? "{}"),
+            JSON.parse(mocks.storage.get("nahida.menu-maker.settings") ?? "{}"),
         ).not.toHaveProperty("panelImageDataUrl");
     });
     it("restores a draft without its source file while preserving source availability", async () => {

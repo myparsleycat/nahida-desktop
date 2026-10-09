@@ -104,7 +104,6 @@ func (w *Window) Create() application.Window {
 	consoleOpen := w.consoleOpen
 	w.mu.Unlock()
 
-	// The renderer theme is unknown until it loads, and it defaults to following the system.
 	initialTheme := application.Light
 	if w32.IsCurrentlyDarkMode() {
 		initialTheme = application.Dark
@@ -152,6 +151,14 @@ func (w *Window) Create() application.Window {
 		opts.URL = "/#" + route
 	}
 	if settings != nil {
+		if theme, err := settings.GetTheme(context.Background()); err == nil {
+			switch theme {
+			case setting.ThemeLight:
+				opts.Windows.Theme = application.Light
+			case setting.ThemeDark:
+				opts.Windows.Theme = application.Dark
+			}
+		}
 		if enabled, err := settings.GetOpenConsole(context.Background()); err == nil {
 			consoleOpen = enabled
 			opts.DevToolsEnabled = enabled

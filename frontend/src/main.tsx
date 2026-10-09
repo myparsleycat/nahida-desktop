@@ -3,7 +3,9 @@ import "@renderer/wails/file-drop";
 import "@renderer/lib/i18n";
 import { Shell } from "@bindings/platform";
 import { Logger } from "@renderer/lib/logger";
+import { gameBananaStore } from "@renderer/store/gamebanana";
 import { installExternalWindowHandler } from "@renderer/wails/external-window";
+import { hydrateRendererState } from "@renderer/wails/renderer-state";
 import { TITLE_BAR_HEIGHT } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
@@ -72,5 +74,9 @@ const Root = () => {
 const rootElement = document.getElementById("root")!;
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
-  root.render(<Root />);
+  // Stored renderer state is read synchronously during the first render.
+  void hydrateRendererState()
+    .catch((error: unknown) => Logger.capture("renderer:hydrate-state", error))
+    .then(() => gameBananaStore.persist.rehydrate())
+    .finally(() => root.render(<Root />));
 }

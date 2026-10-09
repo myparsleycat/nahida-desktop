@@ -17,6 +17,7 @@ const (
 	KeyGeneralBisectPreserveD3dx                 = "general.bisectPreserveD3dx"
 	KeyGeneralTitlebarActivityBadgeClickNavigate = "general.titlebarActivityBadgeClickNavigate"
 	KeyGeneralElevatedHelperEnabled              = "general.elevatedHelperEnabled"
+	KeyGeneralTheme                              = "general.theme"
 
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
@@ -109,6 +110,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralBisectPreserveD3dx, ScopeGeneral, "general_bisect_preserve_d3dx"},
 	{KeyGeneralTitlebarActivityBadgeClickNavigate, ScopeGeneral, "general_titlebar_activity_badge_click_navigate"},
 	{KeyGeneralElevatedHelperEnabled, ScopeGeneral, "general_elevated_helper_enabled"},
+	{KeyGeneralTheme, ScopeGeneral, "general_theme"},
 
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},

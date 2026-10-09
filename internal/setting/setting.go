@@ -3,8 +3,11 @@ package setting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
@@ -246,6 +249,52 @@ func (s *Setting) ClearImageCache(ctx context.Context) error {
 	return settingError(s.client.ImageCache.DeleteAll(ctx), "image-cache", "clear", "", infra.DiagnosticError)
 }
 
+// rendererStatePrefix keeps renderer-owned rows apart from backend state in app_state.
+const rendererStatePrefix = "renderer:"
+
+func (s *Setting) GetRendererState(ctx context.Context) (map[string]string, error) {
+	rows, err := s.client.AppState.ListByPrefix(ctx, rendererStatePrefix)
+	if err != nil {
+		return nil, settingError(err, "renderer-state", "read", "", infra.DiagnosticError)
+	}
+	state := make(map[string]string, len(rows))
+	for _, row := range rows {
+		state[strings.TrimPrefix(row.Key, rendererStatePrefix)] = row.Value
+	}
+	return state, nil
+}
+
+// SetRendererState stores one renderer-owned value; a nil value removes it.
+func (s *Setting) SetRendererState(ctx context.Context, key string, value *string) error {
+	if key == "" {
+		return settingError(
+			errors.New("renderer state key is empty"),
+			"renderer-state",
+			"validate-key",
+			key,
+			infra.DiagnosticWarn,
+		)
+	}
+	stored := rendererStatePrefix + key
+	if value == nil {
+		return settingError(
+			s.client.AppState.Delete(ctx, stored),
+			"renderer-state",
+			"delete",
+			key,
+			infra.DiagnosticError,
+		)
+	}
+	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	return settingError(
+		s.client.AppState.Upsert(ctx, stored, *value, updatedAt),
+		"renderer-state",
+		"write",
+		key,
+		infra.DiagnosticError,
+	)
+}
+
 type AdvancedRow struct {
 	Key   string  `json:"key"`
 	Value *string `json:"value"`
@@ -382,6 +431,10 @@ func (s *Setting) GetRunInBackground(ctx context.Context) (bool, error) {
 
 func (s *Setting) SetRunInBackground(ctx context.Context, enabled bool) error {
 	return s.Set(ctx, KeyGeneralRunInBackground, enabled)
+}
+
+func (s *Setting) GetTheme(ctx context.Context) (string, error) {
+	return s.getString(ctx, KeyGeneralTheme)
 }
 
 func (s *Setting) GetElevatedHelperEnabled(ctx context.Context) (bool, error) {

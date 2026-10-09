@@ -1,8 +1,8 @@
 import { Tools, type MenuMakerSource } from "@bindings/tools";
 import { Logger } from "@renderer/lib/logger";
+import { rendererState } from "@renderer/wails/renderer-state";
 import {
     canRestoreDraft,
-    deleteDraftBlobs,
     detachDraftMedia,
     loadDraftBlobs,
     loadDraftMetadata,
@@ -59,11 +59,6 @@ export function useMenuMakerDrafts(
         } catch (error) {
             Logger.error({ error, draftId: id }, "MenuMakerPage:saveDraftMetadata");
         }
-        for (const draft of superseded) {
-            void deleteDraftBlobs(draft.id).catch((error) =>
-                Logger.error({ error, draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
-            );
-        }
         void saveDraftBlobs(id, { originalText: source.text, ...detached.blobs }).catch((error) =>
             Logger.error({ error, draftId: id }, "MenuMakerPage:saveDraftBlobs"),
         );
@@ -81,7 +76,7 @@ export function useMenuMakerDrafts(
         };
     }, [persistDraft]);
     useEffect(() => {
-        localStorage.setItem(
+        void rendererState.setItem(
             "nahida.menu-maker.settings",
             JSON.stringify({ ...state.settings, panelImageDataUrl: undefined }),
         );
@@ -150,10 +145,9 @@ export async function restoreSourceDraft(source: MenuMakerSource) {
 }
 
 export function loadStoredSettings(): MenuMakerSettings {
-    if (typeof localStorage === "undefined") return DEFAULT_MENU_MAKER_SETTINGS;
     try {
         const value: unknown = JSON.parse(
-            localStorage.getItem("nahida.menu-maker.settings") ?? "null",
+            rendererState.getItem("nahida.menu-maker.settings") ?? "null",
         );
         if (!value || typeof value !== "object") return DEFAULT_MENU_MAKER_SETTINGS;
         const stored = value as Partial<MenuMakerSettings>;
