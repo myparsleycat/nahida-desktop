@@ -42,6 +42,7 @@ import { Events, Updater as WailsUpdater } from "@wailsio/runtime";
 import {
   ArrowLeftIcon,
   DownloadIcon,
+  Loader2Icon,
   RefreshCwIcon,
   ServerOffIcon,
   TriangleAlertIcon,
@@ -223,13 +224,15 @@ function RootComponent() {
 
       <AppTitlebar
         trailing={
-          shouldShowUpdateButton ? (
+          updaterDownloading ? (
+            <UpdateDownloadIndicator />
+          ) : shouldShowUpdateButton ? (
             <Button
               type="button"
               size="xs"
               variant="ghost"
               className="mr-2 h-6 px-2 text-[11.5px]"
-              isLoading={isUpdateActionPending || updaterDownloading}
+              isLoading={isUpdateActionPending}
               onClick={async () => {
                 setIsUpdateActionPending(true);
                 try {
@@ -281,6 +284,26 @@ function RootComponent() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+// Subscribes to progress on its own so download ticks do not rerender the root layout.
+function UpdateDownloadIndicator() {
+  const { t } = useTranslation();
+  const downloadWritten = useGlobalStore((state) => state.downloadWritten);
+  const downloadTotal = useGlobalStore((state) => state.downloadTotal);
+
+  return (
+    <div className="mr-2 flex h-6 items-center gap-1.5 px-2 text-[11.5px] font-medium text-muted-foreground">
+      <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+      <span className="tabular-nums">
+        {downloadTotal > 0
+          ? t("updater.titlebar.downloadingProgress", {
+              percent: Math.round((downloadWritten / downloadTotal) * 100),
+            })
+          : t("updater.titlebar.downloading")}
+      </span>
     </div>
   );
 }

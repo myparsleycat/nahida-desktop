@@ -2656,7 +2656,9 @@
   "updater": {
     "titlebar": {
       "action": "クリックして再起動し、アップデート",
-      "downloadAction": "アップデートをダウンロード"
+      "downloadAction": "アップデートをダウンロード",
+      "downloading": "アップデートをダウンロード中",
+      "downloadingProgress": "アップデートをダウンロード中 ({{percent}}%)"
     },
     "actions": {
       "download": "アップデートをダウンロード",

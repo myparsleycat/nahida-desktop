@@ -2658,7 +2658,9 @@
   "updater": {
     "titlebar": {
       "action": "Review update",
-      "downloadAction": "Download update"
+      "downloadAction": "Download update",
+      "downloading": "Downloading update",
+      "downloadingProgress": "Downloading update ({{percent}}%)"
     },
     "actions": {
       "download": "Download update",

@@ -2656,7 +2656,9 @@
   "updater": {
     "titlebar": {
       "action": "업데이트 확인",
-      "downloadAction": "업데이트 다운로드"
+      "downloadAction": "업데이트 다운로드",
+      "downloading": "업데이트 다운로드 중",
+      "downloadingProgress": "업데이트 다운로드 중 ({{percent}}%)"
     },
     "actions": {
       "download": "업데이트 다운로드",
