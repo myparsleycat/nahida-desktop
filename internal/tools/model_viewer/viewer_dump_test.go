@@ -607,6 +607,74 @@ filename = Textures/Components-2 t=beef0020.png
 	}
 }
 
+func TestLoadModViewerKeepsPsT0TextureOverSlotBoundWWMIDump(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef001f.png", encodeFlatPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef0020.png", encodeColorPNG(32, 32))
+	result := loadViewerMod(t, dir, `[TextureOverrideComponent2]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t0 = ResourceTexture31
+ps-t1 = ResourceTexture32
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture31]
+filename = Textures/Components-2 t=beef001f.png
+[ResourceTexture32]
+filename = Textures/Components-2 t=beef0020.png
+`)
+	if len(result.Meshes) < 1 {
+		t.Fatal(result.Meshes)
+	}
+	for _, mesh := range result.Meshes {
+		if !strings.Contains(texKey(mesh), "beef001f.png") {
+			t.Fatalf("texKey = %q", texKey(mesh))
+		}
+	}
+}
+
+func TestLoadModViewerDoesNotPickSlotBoundWWMIDumpWithHelperRole(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/Components-2 t=beef001f.png", encodeColorPNG(32, 32))
+	result := loadViewerMod(t, dir, `[TextureOverrideComponent2]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t1 = ResourceBodyLightMap
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyLightMap]
+filename = Textures/Components-2 t=beef001f.png
+`)
+	if len(result.Meshes) < 1 {
+		t.Fatal(result.Meshes)
+	}
+	for _, mesh := range result.Meshes {
+		if texKey(mesh) != "" {
+			t.Fatalf("texKey = %q", texKey(mesh))
+		}
+	}
+}
+
 func TestLoadModViewerUnionsWWMINonDiffuseDumpExclusions(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "Textures/Components-3 t=beef001f.png", encodeColorPNG(32, 32))

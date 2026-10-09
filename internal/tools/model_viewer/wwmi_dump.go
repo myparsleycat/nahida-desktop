@@ -167,6 +167,7 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 	}
 
 	excludedByIndex := make(map[string]map[string]bool)
+	helperByIndex := make(map[string]map[string]bool)
 	for _, mesh := range targets {
 		index := wwmiComponentIndex(mesh.component)
 		if index == "" || !needsDump[index] {
@@ -174,13 +175,27 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		}
 		if excludedByIndex[index] == nil {
 			excludedByIndex[index] = make(map[string]bool)
+			helperByIndex[index] = make(map[string]bool)
 		}
 		for _, file := range mesh.nonDiffuseTextureFiles {
 			excludedByIndex[index][slashPath(file)] = true
 		}
+		for _, assignment := range mesh.textureAssignments {
+			if assignment.role != "diffuse" {
+				helperByIndex[index][slashPath(assignment.file)] = true
+			}
+		}
 	}
 
+	// A dump file bound at a non-zero ps-t slot is usually a helper map, so
+	// unbound dump files are tried first. EFMI binds every dump texture at a
+	// game-specific slot (the diffuse at ps-t13, for example), so a mesh that
+	// would otherwise stay untextured lets the bound files compete on their
+	// format hints. A mesh that already has a texture keeps it, and a bound file
+	// whose helper role is known from an assignment or its resource name never
+	// competes.
 	filesByIndex := make(map[string][]string)
+	boundFilesByIndex := make(map[string][]string)
 	for _, resource := range resources {
 		file := resource.Filename
 		match := wwmiDumpTexRE.FindStringSubmatch(slashPath(file))
@@ -188,15 +203,21 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 			continue
 		}
 		for _, index := range strings.Split(match[1], "-") {
-			if !needsDump[index] || excludedByIndex[index][slashPath(file)] {
+			if !needsDump[index] {
+				continue
+			}
+			if excludedByIndex[index][slashPath(file)] {
+				if !helperByIndex[index][slashPath(file)] &&
+					classifyModelViewerTextureRole(resource.Name) == "diffuse" {
+					boundFilesByIndex[index] = append(boundFilesByIndex[index], file)
+				}
 				continue
 			}
 			filesByIndex[index] = append(filesByIndex[index], file)
 		}
 	}
 
-	pickedByIndex := make(map[string]string)
-	for index, files := range filesByIndex {
+	pick := func(files []string) string {
 		var scored []wwmiDumpCandidate
 		for order, file := range files {
 			hint := inspect(file)
@@ -208,8 +229,17 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 				wwmiDumpCandidate{File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: order},
 			)
 		}
-		if picked := pickWwmiDumpDiffuse(scored); picked != "" {
+		return pickWwmiDumpDiffuse(scored)
+	}
+	pickedByIndex := make(map[string]string)
+	boundPickedByIndex := make(map[string]string)
+	for index := range needsDump {
+		if picked := pick(filesByIndex[index]); picked != "" {
 			pickedByIndex[index] = picked
+			continue
+		}
+		if picked := pick(boundFilesByIndex[index]); picked != "" {
+			boundPickedByIndex[index] = picked
 		}
 	}
 
@@ -221,7 +251,11 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 	}
 
 	for _, mesh := range targets {
-		dumpPick := pickedByIndex[wwmiComponentIndex(mesh.component)]
+		index := wwmiComponentIndex(mesh.component)
+		dumpPick := pickedByIndex[index]
+		if dumpPick == "" && mesh.textureDefaultFile == "" {
+			dumpPick = boundPickedByIndex[index]
+		}
 		if meshHasBoundAuthoredDiffuse(mesh) {
 			continue
 		}
