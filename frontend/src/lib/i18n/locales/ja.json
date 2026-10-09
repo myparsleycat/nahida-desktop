@@ -2286,7 +2286,6 @@
           "extraLibrariesDescription": "ReShade など、ゲームに一緒に注入する追加 DLL です。",
           "reshade": {
             "title": "ReShade",
-            "description": "ReShade のアドオンビルドをダウンロードし、ゲームに直接注入します。起動前スクリプトや追加 DLL の設定は不要で、ゲームフォルダーには何も書き込みません。アドオンビルドはオンラインゲームのアンチチートに検出される可能性があります。自己責任で使用してください。",
             "binary": "ReShade バイナリ",
             "installed": "インストール済み: {{version}}",
             "notInstalled": "インストールされていません。ReShade を有効にしたゲームを初めて起動するときに自動でダウンロードします。",
@@ -2308,16 +2307,14 @@
             "effectUnsupported": "非対応",
             "removeEffect": "{{name}} を削除",
             "folders": "共有フォルダー",
-            "foldersDescription": "自分で入手したシェーダー、アドオン、プリセットを入れるフォルダーです。",
             "folderNames": {
               "shaders": "シェーダー",
               "textures": "テクスチャ",
               "addons": "アドオン",
               "presets": "プリセット"
             },
-            "toggleDescription": "ゲームの起動時に ReShade も読み込みます。フック注入はその起動だけ直接注入に切り替わり、ゲーム内では Home キーでオーバーレイを開きます。",
+            "toggleDescription": "ゲームの起動時に ReShade も読み込みます。オーバーレイはゲーム内で Home キーを押すと開きます。",
             "legacyUnsupported": "3DMigoto ランタイムでは、注入方式がネイティブのときだけ ReShade を使用できます。",
-            "gameFolderDescription": "ゲームごとに ReShade.ini、プリセット、ログを保存する設定フォルダーがあります。",
             "gameFolder": "設定フォルダーを開く",
             "games": "ゲームごとの使用",
             "gamesEmpty": "インストール済みのインポーターがありません。",

@@ -2286,7 +2286,6 @@
           "extraLibrariesDescription": "一并注入游戏的附加 DLL，例如 ReShade。",
           "reshade": {
             "title": "ReShade",
-            "description": "下载 ReShade 插件版并直接注入游戏。无需启动前脚本或附加 DLL 设置，也不会向游戏文件夹写入任何文件。插件版在网络游戏中可能被反作弊检测到，请自行承担风险。",
             "binary": "ReShade 程序文件",
             "installed": "已安装：{{version}}",
             "notInstalled": "尚未安装。首次启动已启用 ReShade 的游戏时会自动下载。",
@@ -2308,16 +2307,14 @@
             "effectUnsupported": "不支持",
             "removeEffect": "移除 {{name}}",
             "folders": "共用文件夹",
-            "foldersDescription": "用于放置自行下载的着色器、插件和预设。",
             "folderNames": {
               "shaders": "着色器",
               "textures": "纹理",
               "addons": "插件",
               "presets": "预设"
             },
-            "toggleDescription": "启动游戏时一并加载 ReShade。钩子注入会在该次启动中改为直接注入，在游戏内按 Home 键打开覆盖层。",
+            "toggleDescription": "启动游戏时一并加载 ReShade。在游戏内按 Home 键打开覆盖层。",
             "legacyUnsupported": "使用 3DMigoto 运行时时，只有注入方式为原生时才能使用 ReShade。",
-            "gameFolderDescription": "每个游戏都有各自的设置文件夹，用于存放 ReShade.ini、预设和日志。",
             "gameFolder": "打开设置文件夹",
             "games": "按游戏启用",
             "gamesEmpty": "尚未安装任何导入器。",

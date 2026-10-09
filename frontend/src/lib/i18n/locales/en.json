@@ -2338,7 +2338,6 @@
           "extraLibrariesDescription": "Additional DLLs to inject into the game, such as ReShade.",
           "reshade": {
             "title": "ReShade",
-            "description": "Downloads the ReShade add-on build and injects it into the game directly. No pre-launch script or extra DLL setup is needed, and nothing is written to the game folder. The add-on build can be detected by anti-cheat in online games; use it at your own risk.",
             "binary": "ReShade binary",
             "installed": "Installed: {{version}}",
             "notInstalled": "Not installed. It is downloaded the first time a game with ReShade enabled is launched.",
@@ -2360,16 +2359,14 @@
             "effectUnsupported": "Unsupported",
             "removeEffect": "Remove {{name}}",
             "folders": "Shared folders",
-            "foldersDescription": "Put shaders, add-ons, and presets you downloaded yourself here.",
             "folderNames": {
               "shaders": "Shaders",
               "textures": "Textures",
               "addons": "Add-ons",
               "presets": "Presets"
             },
-            "toggleDescription": "Loads ReShade when the game starts. Hook injection becomes direct injection for that launch, and the Home key opens the overlay in game.",
+            "toggleDescription": "Loads ReShade when the game starts. The Home key opens the overlay in game.",
             "legacyUnsupported": "With the 3DMigoto runtime, ReShade works only when the injection method is Native.",
-            "gameFolderDescription": "Each game has its own settings folder for its ReShade.ini, presets, and log.",
             "gameFolder": "Open settings folder",
             "games": "Games",
             "gamesEmpty": "No importers are installed.",

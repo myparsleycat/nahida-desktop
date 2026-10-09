@@ -70,9 +70,6 @@ export function ReShadeSettings() {
         <Section>
           <SectionHeader>
             <SectionTitle>{t("page.setting.xxmi.builtin.reshade.title")}</SectionTitle>
-            <SectionDescription>
-              {t("page.setting.xxmi.builtin.reshade.description")}
-            </SectionDescription>
           </SectionHeader>
           <SectionContent>
             <SectionRow
@@ -135,10 +132,6 @@ export function ReShadeSettings() {
         <Section>
           <SectionHeader>
             <SectionTitle>{t("page.setting.xxmi.builtin.reshade.games")}</SectionTitle>
-            <SectionDescription>
-              {t("page.setting.xxmi.builtin.reshade.toggleDescription")}{" "}
-              {t("page.setting.xxmi.builtin.reshade.gameFolderDescription")}
-            </SectionDescription>
           </SectionHeader>
           <SectionContent>
             {importers.map((importer) => (
@@ -157,9 +150,6 @@ export function ReShadeSettings() {
         <Section>
           <SectionHeader>
             <SectionTitle>{t("page.setting.xxmi.builtin.reshade.folders")}</SectionTitle>
-            <SectionDescription>
-              {t("page.setting.xxmi.builtin.reshade.foldersDescription")}
-            </SectionDescription>
           </SectionHeader>
           <SectionContent>
             <div className="flex flex-wrap gap-2">
