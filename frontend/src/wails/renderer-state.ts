@@ -17,13 +17,15 @@ let loaded = false;
 const unsaved = new Set<string>();
 // Bound calls are handled concurrently, so they are sent one at a time to keep the last value last.
 let writes = Promise.resolve(true);
+// The latest queued write of each key, which carries the value the cache already holds.
+const pending = new Map<string, Promise<boolean>>();
 
 function persist(key: string, value: string | null) {
     if (!loaded) {
         unsaved.add(key);
         return Promise.resolve(false);
     }
-    writes = writes
+    const write = writes
         .then(() => Setting.SetRendererState(key, value))
         .then(
             () => {
@@ -39,7 +41,13 @@ function persist(key: string, value: string | null) {
                 return false;
             },
         );
-    return writes;
+    writes = write;
+
+    pending.set(key, write);
+    void write.then(() => {
+        if (pending.get(key) === write) pending.delete(key);
+    });
+    return write;
 }
 
 /**
@@ -50,12 +58,14 @@ export const rendererState = {
     getItem: (key: string) => cache.get(key) ?? null,
     /** Resolves to whether the value reached the database; the in-memory value changes either way. */
     setItem(key: string, value: string) {
-        if (cache.get(key) === value && !unsaved.has(key)) return Promise.resolve(true);
+        if (cache.get(key) === value && !unsaved.has(key))
+            return pending.get(key) ?? Promise.resolve(true);
         cache.set(key, value);
         return persist(key, value);
     },
     removeItem(key: string) {
-        if (!cache.delete(key) && !unsaved.has(key)) return Promise.resolve(true);
+        if (!cache.delete(key) && !unsaved.has(key))
+            return pending.get(key) ?? Promise.resolve(true);
         return persist(key, null);
     },
 };
@@ -71,14 +81,28 @@ export async function hydrateRendererState() {
     loaded = true;
 
     for (const key of LEGACY_LOCAL_STORAGE_KEYS) {
-        const legacy = localStorage.getItem(key);
-        if (legacy === null) continue;
-        if (cache.has(key)) {
-            localStorage.removeItem(key);
-            continue;
+        const report = (error: unknown) =>
+            Logger.capture("wails/renderer-state.ts", "Failed to migrate legacy renderer state", {
+                key,
+                error,
+            });
+
+        // localStorage can throw, and one unreadable key must not strand the others.
+        try {
+            const legacy = localStorage.getItem(key);
+            if (legacy === null) continue;
+            if (cache.has(key)) {
+                localStorage.removeItem(key);
+                continue;
+            }
+            void rendererState
+                .setItem(key, legacy)
+                .then((saved) => {
+                    if (saved) localStorage.removeItem(key);
+                })
+                .catch(report);
+        } catch (error) {
+            report(error);
         }
-        void rendererState.setItem(key, legacy).then((saved) => {
-            if (saved) localStorage.removeItem(key);
-        });
     }
 }

@@ -69,9 +69,10 @@ export function saveDraftMetadata(drafts: MenuMakerDraftMeta[]): MenuMakerDraftM
         .setItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`, JSON.stringify(kept))
         .then((saved) => {
             if (!saved) return;
-            // A later save may have brought a dropped draft back.
-            const current = new Set(loadDraftMetadata().map((draft) => draft.id));
-            const orphaned = [...droppedDraftIds].filter((id) => !current.has(id));
+            // The stored list is the one this save wrote, while the in-memory list may already
+            // hold a later save that is still queued and may bring a dropped draft back or fail.
+            const referenced = new Set([...kept, ...loadDraftMetadata()].map((draft) => draft.id));
+            const orphaned = [...droppedDraftIds].filter((id) => !referenced.has(id));
             for (const id of orphaned) droppedDraftIds.delete(id);
             return Promise.all(orphaned.map((id) => deleteDraftBlobs(id)));
         })

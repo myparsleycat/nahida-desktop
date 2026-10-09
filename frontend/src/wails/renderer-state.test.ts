@@ -33,4 +33,20 @@ describe("renderer state", () => {
         await expect(rendererState.setItem("drafts", "[]")).resolves.toBe(true);
         expect(mocks.set).toHaveBeenCalledWith("drafts", "[]");
     });
+
+    it("reports the queued write's result for a repeated value", async () => {
+        mocks.get.mockResolvedValue({ drafts: "[1]" });
+        mocks.set.mockRejectedValue(new Error("database is locked"));
+        const { hydrateRendererState, rendererState } = await import("./renderer-state");
+        await hydrateRendererState();
+
+        const first = rendererState.setItem("drafts", "[]");
+        await expect(rendererState.setItem("drafts", "[]")).resolves.toBe(false);
+        await expect(first).resolves.toBe(false);
+        expect(mocks.set).toHaveBeenCalledTimes(1);
+
+        void rendererState.removeItem("drafts");
+        await expect(rendererState.removeItem("drafts")).resolves.toBe(false);
+        await expect(rendererState.removeItem("view")).resolves.toBe(true);
+    });
 });

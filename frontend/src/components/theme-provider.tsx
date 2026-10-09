@@ -27,10 +27,24 @@ const LEGACY_STORAGE_KEY = "vite-ui-theme";
 const LEGACY_MIGRATED_KEY = "nahida.theme.legacy-migrated";
 let legacyChecked = false;
 
+// localStorage can throw, and the stored theme must keep working without the legacy value.
+function readLegacyTheme() {
+  try {
+    return localStorage.getItem(LEGACY_STORAGE_KEY);
+  } catch (error) {
+    Logger.capture("components/theme-provider.tsx", "Failed to read the legacy theme", error);
+    return null;
+  }
+}
+
 function retireLegacyTheme() {
-  if (!isRendererStateLoaded() || localStorage.getItem(LEGACY_STORAGE_KEY) === null) return;
+  if (!isRendererStateLoaded() || readLegacyTheme() === null) return;
   void rendererState.setItem(LEGACY_MIGRATED_KEY, "1");
-  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch (error) {
+    Logger.capture("components/theme-provider.tsx", "Failed to remove the legacy theme", error);
+  }
 }
 
 // Bound calls are handled concurrently, so saves are sent one at a time to keep the last theme last.
@@ -61,7 +75,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (isPending || legacyChecked || !isRendererStateLoaded()) return;
     legacyChecked = true;
 
-    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    const legacy = readLegacyTheme();
     const pending = rendererState.getItem(LEGACY_MIGRATED_KEY) === null;
     if (pending && (legacy === "light" || legacy === "dark")) setTheme(legacy);
     else retireLegacyTheme();
