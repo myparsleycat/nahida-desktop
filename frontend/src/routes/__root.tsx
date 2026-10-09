@@ -23,7 +23,7 @@ import { DEFAULT_BG } from "@renderer/const";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useModFixInspectionTitlebarActivity } from "@renderer/hooks/use-mod-fix-inspection";
-import { useTitleBarOverlay } from "@renderer/hooks/use-title-bar-overlay";
+import { useNativeWindowTheme } from "@renderer/hooks/use-native-window-theme";
 import { Logger } from "@renderer/lib/logger";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
@@ -68,7 +68,7 @@ function RootComponent() {
   const setTransfers = useGlobalStore((state) => state.setTransfers);
   const { i18n, t } = useTranslation();
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
-  useTitleBarOverlay();
+  useNativeWindowTheme();
   useTransferTitlebarActivity();
   const elevatedHelperDialog = useElevatedHelper();
   use4001FixerTitlebarActivity();
@@ -203,7 +203,7 @@ function RootComponent() {
   const shouldShowUpdateButton = shouldOfferManualDownload || updateDownloaded;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="app-shell flex h-screen flex-col overflow-hidden">
       <Toaster position="bottom-right" richColors closeButton />
 
       {shouldShowUpdateDialog && <UpdateAlertDialog />}
@@ -276,13 +276,13 @@ function RootComponent() {
         <TitlebarActivityBadges />
       </AppTitlebar>
 
-      <main className={cn("flex min-h-0 flex-1 overflow-hidden", DEFAULT_BG)}>
+      <main className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex w-full flex-row">
           {!isNoSidebar && <Sidebar />}
 
           <div
             className={cn(
-              "relative min-w-0 flex-1 overflow-hidden border-l",
+              "relative min-w-0 flex-1 overflow-hidden border-l has-[.glass-pane]:bg-transparent",
               DEFAULT_BG,
               !isNoSidebar && "rounded-tl-xl border-t",
             )}
@@ -336,9 +336,7 @@ function AppTitlebar({
 }) {
   return (
     <>
-      <div
-        className={cn("titlebar no-drag flex shrink-0 items-center pl-2 select-none", DEFAULT_BG)}
-      >
+      <div className="titlebar no-drag flex shrink-0 items-center pl-2 select-none">
         {children}
         <div className="ml-auto flex h-full shrink-0 items-center">
           {trailing}

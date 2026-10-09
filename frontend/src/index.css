@@ -46,7 +46,6 @@
 
 :root {
     --app-titlebar-height: 36px;
-    --titlebar-overlay-symbol-color: #252525;
     --radius: 0.625rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -82,7 +81,6 @@
 }
 
 .dark {
-    --titlebar-overlay-symbol-color: #fafafa;
     --background: oklch(0.18 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -195,6 +193,16 @@ body {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
+}
+
+/* The main window has a native Acrylic backdrop; the shell tints it and the content panel stays opaque. */
+body:has(.app-shell) {
+    background: color-mix(in oklab, var(--background) 70%, transparent);
+}
+
+/* Route navigation that sits on the shell backdrop; its presence makes the root content panel transparent. */
+.glass-pane {
+    background: color-mix(in oklab, var(--background) 50%, transparent);
 }
 
 .titlebar {

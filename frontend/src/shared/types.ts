@@ -30,10 +30,6 @@ export interface IpcHandlers {
     "mod:classifyMergePacks": (paths: string[]) => Promise<ClassifyMergePacksResult>;
 }
 
-export interface TitleBarOverlaySyncOptions {
-    symbolColor: string;
-}
-
 export interface AppStatus {
     version: string;
     isPackaged: boolean;

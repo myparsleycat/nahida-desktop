@@ -142,7 +142,7 @@ export function XXMIImporterList() {
   };
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-sidebar">
+    <aside className="glass-pane flex w-64 shrink-0 flex-col border-r border-border">
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
         <button
           type="button"

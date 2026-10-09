@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Label } from "@renderer/components/ui/label";
+import { DEFAULT_BG } from "@renderer/const";
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
@@ -30,6 +31,7 @@ import {
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
+import { cn } from "@renderer/lib/utils";
 import { modStore, useModStore } from "@renderer/store/mod";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
 import {
@@ -409,7 +411,7 @@ function ModRouteContent() {
         <div
           id={FileDropTargetID.modContent}
           data-file-drop-target={selectedGroupPath ? "" : undefined}
-          className="relative flex flex-1 flex-col overflow-hidden"
+          className={cn("relative flex flex-1 flex-col overflow-hidden", DEFAULT_BG)}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}

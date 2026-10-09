@@ -38,6 +38,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Textarea } from "@renderer/components/ui/textarea";
+import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
 import type { AgentStreamEvent, LiveAgentChatEntry } from "@renderer/lib/agent-stream";
 import {
@@ -605,8 +606,8 @@ function AgentRoute() {
       : snapshot?.contextUsage;
 
   return (
-    <div className="agent-page flex h-full min-h-0 overflow-hidden bg-background text-foreground">
-      <aside className="flex h-full w-(--agent-sidebar-width) max-w-(--agent-sidebar-width) min-w-(--agent-sidebar-width) flex-none flex-col overflow-hidden border-r border-border/78 bg-[color-mix(in_oklab,var(--sidebar)_76%,var(--muted))] px-3 py-1.5">
+    <div className="agent-page flex h-full min-h-0 overflow-hidden text-foreground">
+      <aside className="glass-pane flex h-full w-(--agent-sidebar-width) max-w-(--agent-sidebar-width) min-w-(--agent-sidebar-width) flex-none flex-col overflow-hidden border-r border-border/78 px-3 py-1.5">
         <div className="mb-2 flex h-[60px] flex-none items-center px-1 py-2">
           <div className="flex w-full max-w-full min-w-0 items-center gap-[9px] overflow-hidden text-[17px] font-semibold tracking-[-0.01em]">
             <span className="inline-grid size-6 flex-none place-items-center text-accent">
@@ -735,7 +736,7 @@ function AgentRoute() {
         </ScrollArea>
       </aside>
 
-      <main className="relative flex h-full max-w-full min-w-0 flex-1 flex-col bg-background">
+      <main className={cn("relative flex h-full max-w-full min-w-0 flex-1 flex-col", DEFAULT_BG)}>
         <header
           className={cn(
             "flex min-h-[76px] flex-none flex-col border-b border-border pt-2.5 pr-7 pl-5",
