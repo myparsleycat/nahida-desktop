@@ -243,11 +243,6 @@ body:has(.app-shell) {
     --wails-non-client-region: close;
 }
 
-body:has(.titlebar) [data-slot="dialog-overlay"],
-body:has(.titlebar) [data-slot="alert-dialog-overlay"] {
-    top: var(--app-titlebar-height);
-}
-
 body:has(.titlebar) [data-slot="dialog-content"],
 body:has(.titlebar) [data-slot="alert-dialog-content"] {
     top: calc(var(--app-titlebar-height) + (100vh - var(--app-titlebar-height)) / 2);
