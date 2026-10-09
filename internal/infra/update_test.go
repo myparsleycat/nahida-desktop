@@ -337,6 +337,16 @@ func TestUpdaterNotifyFlow(t *testing.T) {
 	if engine.downloads != 0 {
 		t.Fatalf("notify mode downloads = %d", engine.downloads)
 	}
+
+	engine.release = &wailsupdater.Release{Version: "1.2.4", Notes: "Changes"}
+	if err := u.CheckForUpdates(context.Background(), true); err != nil {
+		t.Fatalf("user-initiated recheck: %v", err)
+	}
+	status, _ = u.GetStatus(context.Background())
+	if status.ReleaseVersion == nil || *status.ReleaseVersion != "1.2.4" || engine.downloads != 0 {
+		t.Fatalf("rechecked status = %#v, downloads=%d", status, engine.downloads)
+	}
+
 	if err := u.DownloadUpdate(context.Background()); err != nil {
 		t.Fatalf("DownloadUpdate: %v", err)
 	}

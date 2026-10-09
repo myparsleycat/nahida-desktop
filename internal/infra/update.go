@@ -360,6 +360,10 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 		return err
 	}
 	if available {
+		// The known candidate may be stale, so an explicit check looks again.
+		if userInitiated && !downloading {
+			return u.refreshUpdateCandidate(ctx, true)
+		}
 		if mode == "auto" && !downloading {
 			return u.DownloadUpdate(ctx)
 		}

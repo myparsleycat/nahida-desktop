@@ -2664,7 +2664,8 @@
     },
     "actions": {
       "download": "Download update",
-      "install": "Install update"
+      "install": "Install update",
+      "check": "Check for updates"
     },
     "status": {
       "idle": "You're using the latest version.",
