@@ -1,12 +1,12 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useSetting } from "@renderer/hooks/use-settings";
+import { Logger } from "@renderer/lib/logger";
+import { setSetting } from "@renderer/lib/settings";
+import { isRendererStateLoaded, rendererState } from "@renderer/wails/renderer-state";
+import type { Theme } from "@shared/settings";
+import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 
-export type Theme = "dark" | "light" | "system";
-
-type ThemeProviderProps = {
-  children: React.ReactNode;
-  defaultTheme?: Theme;
-  storageKey?: string;
-};
+export type { Theme };
 
 type ThemeProviderState = {
   theme: Theme;
@@ -20,17 +20,55 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
-export function ThemeProvider({
-  children,
-  defaultTheme = "system",
-  storageKey = "vite-ui-theme",
-  ...props
-}: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
+// The theme lived in localStorage before it became a setting.
+const LEGACY_STORAGE_KEY = "vite-ui-theme";
+// A damaged profile can bring the legacy value back after it was removed, so the database
+// records that it was already handled.
+const LEGACY_MIGRATED_KEY = "nahida.theme.legacy-migrated";
+let legacyChecked = false;
+
+function retireLegacyTheme() {
+  if (!isRendererStateLoaded() || localStorage.getItem(LEGACY_STORAGE_KEY) === null) return;
+  void rendererState.setItem(LEGACY_MIGRATED_KEY, "1");
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+}
+
+// Bound calls are handled concurrently, so saves are sent one at a time to keep the last theme last.
+let saves = Promise.resolve();
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  const { data, isPending } = useSetting("general.theme");
+  const theme = data ?? "system";
+
+  const setTheme = useCallback(
+    (next: Theme) => {
+      queryClient.setQueryData(["settings", "general.theme"], next);
+      saves = saves
+        .then(() => setSetting("general.theme", next))
+        .then(
+          // The legacy value stays until a choice is stored, so a failed migration is retried.
+          retireLegacyTheme,
+          (error: unknown) =>
+            Logger.capture("components/theme-provider.tsx", "Failed to save the theme", error),
+        );
+    },
+    [queryClient],
   );
 
   useEffect(() => {
+    // Without the stored marker there is no telling whether the legacy value was already applied.
+    if (isPending || legacyChecked || !isRendererStateLoaded()) return;
+    legacyChecked = true;
+
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    const pending = rendererState.getItem(LEGACY_MIGRATED_KEY) === null;
+    if (pending && (legacy === "light" || legacy === "dark")) setTheme(legacy);
+    else retireLegacyTheme();
+  }, [isPending, setTheme]);
+
+  useEffect(() => {
+    if (isPending) return;
     const root = window.document.documentElement;
 
     root.classList.remove("light", "dark");
@@ -49,32 +87,14 @@ export function ThemeProvider({
 
     root.classList.add(theme);
     return;
-  }, [theme]);
+  }, [isPending, theme]);
 
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === storageKey && e.newValue) {
-        setTheme(e.newValue as Theme);
-      }
-    };
+  const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [storageKey]);
+  // Rendering before the stored theme is known would paint the wrong theme for a frame.
+  if (isPending) return null;
 
-  const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme);
-      setTheme(theme);
-    },
-  };
-
-  return (
-    <ThemeProviderContext.Provider {...props} value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  );
+  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
 }
 
 export const useTheme = () => {

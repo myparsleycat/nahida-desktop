@@ -1,4 +1,5 @@
 import { Logger } from "@renderer/lib/logger";
+import { rendererState } from "@renderer/wails/renderer-state";
 import DOMPurify from "dompurify";
 import { iconNames } from "lucide-react/dynamic";
 
@@ -157,7 +158,7 @@ export async function downloadIconifyCollection(
 export function getFavoriteIconifyPrefixes(): string[] {
     try {
         const value: unknown = JSON.parse(
-            localStorage.getItem("nahida.menu-maker.iconify.favorites") ?? "[]",
+            rendererState.getItem("nahida.menu-maker.iconify.favorites") ?? "[]",
         );
         return Array.isArray(value)
             ? value.filter((prefix): prefix is string => typeof prefix === "string")
@@ -173,7 +174,7 @@ export function toggleFavoriteIconifyPrefix(prefix: string): string[] {
     const next = current.includes(prefix)
         ? current.filter((item) => item !== prefix)
         : [...current, prefix];
-    localStorage.setItem("nahida.menu-maker.iconify.favorites", JSON.stringify(next));
+    void rendererState.setItem("nahida.menu-maker.iconify.favorites", JSON.stringify(next));
     return next;
 }
 

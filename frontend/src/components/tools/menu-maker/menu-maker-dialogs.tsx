@@ -5,9 +5,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
-import { deleteDraftBlobs, loadDraftMetadata, saveDraftMetadata } from "@shared/menu-maker/drafts";
+import { loadDraftMetadata, saveDraftMetadata } from "@shared/menu-maker/drafts";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,12 +38,9 @@ export function DraftDialog({
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => {
-                void deleteDraftBlobs(draft.id).catch((error) =>
-                  Logger.error({ error, draftId: draft.id }, "MenuMakerPage:deleteDraftBlobs"),
-                );
-                setDrafts(saveDraftMetadata(drafts.filter((item) => item.id !== draft.id)));
-              }}
+              onClick={() =>
+                setDrafts(saveDraftMetadata(drafts.filter((item) => item.id !== draft.id)))
+              }
             >
               <XIcon />
             </Button>
@@ -55,12 +51,7 @@ export function DraftDialog({
         <Button
           className="mt-3"
           variant="destructive"
-          onClick={() => {
-            void Promise.all(drafts.map((draft) => deleteDraftBlobs(draft.id))).catch((error) =>
-              Logger.error({ error }, "MenuMakerPage:clearDraftBlobs"),
-            );
-            setDrafts(saveDraftMetadata([]));
-          }}
+          onClick={() => setDrafts(saveDraftMetadata([]))}
         >
           {t("page.tools.menu_maker.delete_all")}
         </Button>

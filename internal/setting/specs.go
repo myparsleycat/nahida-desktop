@@ -189,6 +189,7 @@ func buildSpecs() map[string]spec {
 			true,
 		),
 		KeyGeneralElevatedHelperEnabled: elevatedHelper,
+		KeyGeneralTheme:                 enumSpec(definitionsByKey[KeyGeneralTheme], ThemeSystem, themes),
 
 		KeyModArchiveExtractPathMode: enumSpec(
 			definitionsByKey[KeyModArchiveExtractPathMode],

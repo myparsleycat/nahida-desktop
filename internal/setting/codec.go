@@ -61,6 +61,10 @@ const (
 	defaultModGridLayout       = "responsive"
 	defaultDisabledPrefix      = "space"
 	defaultAutoUpdateMode      = "auto"
+
+	ThemeSystem = "system"
+	ThemeLight  = "light"
+	ThemeDark   = "dark"
 )
 
 var (
@@ -76,6 +80,7 @@ var (
 	modelViewerToneMappings   = []string{"neutral", "aces", "none"}
 	modelViewerEnvironments   = []string{"studio", "soft", "none"}
 	logLevels                 = []string{"trace", "debug", "info", "warn", "error", "fatal"}
+	themes                    = []string{ThemeSystem, ThemeLight, ThemeDark}
 	defaultDownloadSources    = []string{"gamebanana"}
 	sensitiveKeyParts         = []string{"password", "token", "secret", "credentials", "api_key"}
 )

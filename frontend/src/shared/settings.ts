@@ -11,6 +11,8 @@ import type { AutoUpdateMode } from "./updater";
 
 export type BackupInterval = "6h" | "12h" | "24h" | "7d";
 
+export type Theme = "system" | "light" | "dark";
+
 export interface AppSettings {
     "general.runOnStartup": boolean;
     "general.language": string;
@@ -24,6 +26,7 @@ export interface AppSettings {
     "general.bisectPreserveD3dx": boolean;
     "general.titlebarActivityBadgeClickNavigate": boolean;
     "general.elevatedHelperEnabled": boolean;
+    "general.theme": Theme;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -160,6 +163,11 @@ export const APP_SETTINGS = {
         publicKey: "general.elevatedHelperEnabled",
         scope: "general",
         storageKey: "general_elevated_helper_enabled",
+    },
+    "general.theme": {
+        publicKey: "general.theme",
+        scope: "general",
+        storageKey: "general_theme",
     },
 
     "mod.archiveExtractPathMode": {

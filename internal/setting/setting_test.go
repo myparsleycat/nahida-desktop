@@ -838,3 +838,33 @@ func snakeCase(s string) string {
 	}
 	return b.String()
 }
+
+func TestRendererStateStaysInsideItsNamespace(t *testing.T) {
+	t.Parallel()
+
+	s, _ := openTemp(t, Options{})
+	ctx := context.Background()
+	if err := s.Client().AppState.Upsert(ctx, "github:core-rate", "backend", ""); err != nil {
+		t.Fatalf("seed backend state: %v", err)
+	}
+
+	value := "view"
+	if err := s.SetRendererState(ctx, "github:core-rate", &value); err != nil {
+		t.Fatalf("SetRendererState: %v", err)
+	}
+	state, err := s.GetRendererState(ctx)
+	if err != nil || len(state) != 1 || state["github:core-rate"] != "view" {
+		t.Fatalf("GetRendererState = %#v, %v, want only the renderer value", state, err)
+	}
+
+	if err := s.SetRendererState(ctx, "github:core-rate", nil); err != nil {
+		t.Fatalf("SetRendererState(nil): %v", err)
+	}
+	if state, err := s.GetRendererState(ctx); err != nil || len(state) != 0 {
+		t.Fatalf("GetRendererState after removal = %#v, %v, want empty", state, err)
+	}
+	backend, err := s.Client().AppState.GetValue(ctx, "github:core-rate")
+	if err != nil || backend == nil || *backend != "backend" {
+		t.Fatalf("backend state = %v, %v, want it untouched", backend, err)
+	}
+}

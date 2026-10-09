@@ -1,4 +1,5 @@
 import { Logger } from "@renderer/lib/logger";
+import { rendererState } from "@renderer/wails/renderer-state";
 
 import type { MenuMakerSettings, MenuMakerSlot } from "./types";
 
@@ -46,7 +47,7 @@ export function evictDrafts(
 export function loadDraftMetadata(): MenuMakerDraftMeta[] {
     try {
         const value: unknown = JSON.parse(
-            localStorage.getItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`) ?? "[]",
+            rendererState.getItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`) ?? "[]",
         );
         return Array.isArray(value) ? value.filter(isDraftMeta) : [];
     } catch (error) {
@@ -55,10 +56,26 @@ export function loadDraftMetadata(): MenuMakerDraftMeta[] {
     }
 }
 
+// Drafts that left the list but whose blobs wait for a stored list that no longer references
+// them. They outlive a failed save, because the in-memory list has already forgotten them.
+const droppedDraftIds = new Set<string>();
+
 export function saveDraftMetadata(drafts: MenuMakerDraftMeta[]): MenuMakerDraftMeta[] {
     const { kept, removed } = evictDrafts(drafts);
-    localStorage.setItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`, JSON.stringify(kept));
-    void Promise.all(removed.map((draft) => deleteDraftBlobs(draft.id)));
+    for (const draft of [...loadDraftMetadata(), ...removed]) droppedDraftIds.add(draft.id);
+    for (const draft of kept) droppedDraftIds.delete(draft.id);
+
+    void rendererState
+        .setItem(`${MENU_MAKER_STORAGE_PREFIX}.drafts`, JSON.stringify(kept))
+        .then((saved) => {
+            if (!saved) return;
+            // A later save may have brought a dropped draft back.
+            const current = new Set(loadDraftMetadata().map((draft) => draft.id));
+            const orphaned = [...droppedDraftIds].filter((id) => !current.has(id));
+            for (const id of orphaned) droppedDraftIds.delete(id);
+            return Promise.all(orphaned.map((id) => deleteDraftBlobs(id)));
+        })
+        .catch((error: unknown) => Logger.capture("shared/menu-maker/drafts.ts", error));
     return kept;
 }
 
