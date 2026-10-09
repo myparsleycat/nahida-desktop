@@ -1,7 +1,5 @@
 import { Mod } from "@bindings/mod";
 import type { GameConfig } from "@bindings/mod/models";
-import { Shell } from "@bindings/platform";
-import { ReShade } from "@bindings/reshade";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type CustomDLL, type ImporterConfig } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
@@ -52,12 +50,11 @@ import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { isEqual } from "es-toolkit";
 import {
   CheckIcon,
   FileTextIcon,
-  FolderOpenIcon,
   PlayIcon,
   ScanSearchIcon,
   ShieldAlertIcon,
@@ -101,6 +98,7 @@ async function resolveImporterGameFolder(importer: string, next: ImporterConfig)
 export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { startImporter, launchGuardDialog } = useLaunchGuard();
   const { data: saved } = useQuery({
     queryKey: ["xxmi:config", importer],
@@ -595,23 +593,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     >
                       <div className="flex items-center justify-between gap-4">
                         <p className="text-xs text-muted-foreground">
-                          {t("page.setting.xxmi.builtin.reshade.gameFolderDescription")}
+                          {t("page.setting.xxmi.builtin.reshade.managePageDescription")}
                         </p>
                         <Button
                           variant="outline"
                           size="sm"
                           className="shrink-0"
-                          onClickPromise={async () => {
-                            try {
-                              const paths = await ReShade.Paths(importer);
-                              await Shell.OpenPath(paths.game);
-                            } catch (error) {
-                              toast.error(toErrorMessage(error));
-                            }
-                          }}
+                          onClick={() => void navigate({ to: "/xxmi/reshade" })}
                         >
-                          <FolderOpenIcon />
-                          {t("page.setting.xxmi.builtin.reshade.gameFolder")}
+                          {t("page.setting.xxmi.builtin.reshade.managePage")}
                         </Button>
                       </div>
                     </ToggleRow>

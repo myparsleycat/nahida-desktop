@@ -2209,7 +2209,7 @@
             "HIMI_FPS_UNLOCK_FAILED": "崩壊3rd の FPS 目標値を設定できませんでした。ゲーム内の FPS 設定を一度変更して再試行してください。",
             "ZZMI_GAME_CONFIG_FAILED": "ゼンレスゾーンゼロのグラフィック設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。",
             "WWMI_GAME_CONFIG_FAILED": "鳴潮の設定を変更できませんでした。ゲームフォルダーを確認するか、ゲーム設定の自動調整を無効にしてください。",
-            "RESHADE_NOT_INSTALLED": "ReShade を準備できませんでした。ネットワーク接続を確認するか、XXMI 設定で ReShade をダウンロードしてください。"
+            "RESHADE_NOT_INSTALLED": "ReShade を準備できませんでした。ネットワーク接続を確認するか、XXMI の ReShade ページでダウンロードしてください。"
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "動的キャラクター解像度の設定を確認できませんでした。有効になっていると MOD が正しく適用されない可能性があるため、ゲームのグラフィック設定を確認してください。"
@@ -2296,9 +2296,7 @@
             "version": "ReShade のバージョン",
             "versionDescription": "最新版に追従するか、特定のバージョンに固定します。",
             "effects": "エフェクトパック",
-            "effectsDescription": "すべてのゲームで共有するシェーダーとテクスチャをインストールします。",
-            "manageEffects": "エフェクトパックを管理",
-            "effectsDialogDescription": "ReShade 公式リストのエフェクトパックです。インストールするパックを選択してください。",
+            "effectsDescription": "ReShade 公式リストのエフェクトパックです。インストールしたシェーダーとテクスチャはすべてのゲームで共有されます。",
             "effectsLoading": "エフェクトパックの一覧を読み込み中",
             "effectsLoadFailed": "エフェクトパックの一覧を読み込めませんでした。",
             "selectRecommended": "おすすめを選択",
@@ -2316,8 +2314,12 @@
             },
             "toggleDescription": "ゲームの起動時に ReShade も読み込みます。フック注入はその起動だけ直接注入に切り替わり、ゲーム内では Home キーでオーバーレイを開きます。",
             "legacyUnsupported": "3DMigoto ランタイムでは、注入方式がネイティブのときだけ ReShade を使用できます。",
-            "gameFolderDescription": "このゲームの ReShade.ini、プリセット、ログが保存されるフォルダーです。",
-            "gameFolder": "設定フォルダーを開く"
+            "gameFolderDescription": "ゲームごとに ReShade.ini、プリセット、ログを保存する設定フォルダーがあります。",
+            "gameFolder": "設定フォルダーを開く",
+            "games": "ゲームごとの使用",
+            "gamesEmpty": "インストール済みのインポーターがありません。",
+            "managePage": "ReShade を管理",
+            "managePageDescription": "バージョン、エフェクトパック、設定フォルダーは ReShade ページで管理します。"
           },
           "enforceRenderingDescription": "d3dx.ini の [Rendering] オプションを、このインポーターに必要な値に保ちます。",
           "enableHuntingDescription": "テンキーの 0 でハンティングモードを切り替えられます。MOD 制作時にシェーダーやバッファのハッシュを調べるために使います。",

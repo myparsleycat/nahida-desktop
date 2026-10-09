@@ -26,7 +26,6 @@ import {
   SectionHeader,
   SectionTitle,
 } from "@renderer/components/ui/section";
-import { ReShadeSettings } from "@renderer/components/xxmi/reshade-settings";
 import { CUSTOM_DLL_SOURCE, CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import { XXMIExternalLauncher } from "@renderer/components/xxmi/xxmi-external-launcher";
 import {
@@ -446,8 +445,6 @@ export function XXMIDashboard() {
                 )}
               </SectionContent>
             </Section>
-
-            <ReShadeSettings />
 
             <Section>
               <SectionHeader>

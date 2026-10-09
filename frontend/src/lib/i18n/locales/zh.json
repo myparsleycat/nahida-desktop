@@ -2209,7 +2209,7 @@
             "HIMI_FPS_UNLOCK_FAILED": "无法设置崩坏3的目标帧率。请先在游戏中更改一次帧率设置，然后重试。",
             "ZZMI_GAME_CONFIG_FAILED": "无法更改绝区零的画面设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
             "WWMI_GAME_CONFIG_FAILED": "无法更改鸣潮的设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
-            "RESHADE_NOT_INSTALLED": "无法准备 ReShade。请检查网络连接，或在 XXMI 设置中下载 ReShade。"
+            "RESHADE_NOT_INSTALLED": "无法准备 ReShade。请检查网络连接，或在 XXMI 的 ReShade 页面中下载。"
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。"
@@ -2296,9 +2296,7 @@
             "version": "ReShade 版本",
             "versionDescription": "跟随最新版本，或固定为某个版本。",
             "effects": "效果包",
-            "effectsDescription": "安装所有游戏共用的着色器和纹理。",
-            "manageEffects": "管理效果包",
-            "effectsDialogDescription": "来自 ReShade 官方列表的效果包。请选择要安装的效果包。",
+            "effectsDescription": "来自 ReShade 官方列表的效果包。已安装的着色器和纹理由所有游戏共用。",
             "effectsLoading": "正在加载效果包列表",
             "effectsLoadFailed": "无法加载效果包列表。",
             "selectRecommended": "选择推荐项",
@@ -2316,8 +2314,12 @@
             },
             "toggleDescription": "启动游戏时一并加载 ReShade。钩子注入会在该次启动中改为直接注入，在游戏内按 Home 键打开覆盖层。",
             "legacyUnsupported": "使用 3DMigoto 运行时时，只有注入方式为原生时才能使用 ReShade。",
-            "gameFolderDescription": "存放此游戏的 ReShade.ini、预设和日志的文件夹。",
-            "gameFolder": "打开设置文件夹"
+            "gameFolderDescription": "每个游戏都有各自的设置文件夹，用于存放 ReShade.ini、预设和日志。",
+            "gameFolder": "打开设置文件夹",
+            "games": "按游戏启用",
+            "gamesEmpty": "尚未安装任何导入器。",
+            "managePage": "管理 ReShade",
+            "managePageDescription": "版本、效果包和设置文件夹在 ReShade 页面中管理。"
           },
           "enforceRenderingDescription": "将 d3dx.ini 中的 [Rendering] 选项保持为此导入器所需的值。",
           "enableHuntingDescription": "可用小键盘 0 开关捕获模式。制作模组时用于查找着色器和缓冲区的哈希。",

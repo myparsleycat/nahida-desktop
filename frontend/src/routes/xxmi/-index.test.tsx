@@ -99,7 +99,6 @@ vi.mock("@tanstack/react-router", () => ({
   Outlet: () => null,
 }));
 vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
-vi.mock("@renderer/components/xxmi/reshade-settings", () => ({ ReShadeSettings: () => null }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 

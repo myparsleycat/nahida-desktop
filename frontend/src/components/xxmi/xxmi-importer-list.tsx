@@ -21,6 +21,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import reshadeIcon from "@/renderer/assets/xxmi/reshade.webp";
+
 const importerKeys = ["GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI"] as const;
 
 export function XXMIImporterList() {
@@ -144,21 +146,44 @@ export function XXMIImporterList() {
   return (
     <aside className="glass-pane flex w-64 shrink-0 flex-col border-r border-border">
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
-        <button
-          type="button"
-          aria-current={pathname === "/xxmi" ? "page" : undefined}
-          onClick={() => void navigate({ to: "/xxmi" })}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm transition-colors",
-            pathname === "/xxmi"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent",
-          )}
-        >
-          <LayoutDashboardIcon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 truncate">{t("page.setting.xxmi.builtin.manage")}</span>
-          {pendingUpdates.length > 0 && <Badge>{pendingUpdates.length}</Badge>}
-        </button>
+        <div className="space-y-0.5">
+          {(
+            [
+              [
+                "/xxmi",
+                <LayoutDashboardIcon
+                  key="icon"
+                  className="size-4 shrink-0 text-muted-foreground"
+                />,
+                t("page.setting.xxmi.builtin.manage"),
+              ],
+              [
+                "/xxmi/reshade",
+                <img key="icon" src={reshadeIcon} alt="" className="size-4 shrink-0" />,
+                t("page.setting.xxmi.builtin.reshade.title"),
+              ],
+            ] as const
+          ).map(([to, icon, label]) => (
+            <button
+              key={to}
+              type="button"
+              aria-current={pathname === to ? "page" : undefined}
+              onClick={() => void navigate({ to })}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm transition-colors",
+                pathname === to
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent",
+              )}
+            >
+              {icon}
+              <span className="flex-1 truncate">{label}</span>
+              {to === "/xxmi" && pendingUpdates.length > 0 && (
+                <Badge>{pendingUpdates.length}</Badge>
+              )}
+            </button>
+          ))}
+        </div>
 
         <div>
           <div className="mb-1 flex items-center justify-between px-2">
