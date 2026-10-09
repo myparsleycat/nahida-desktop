@@ -86,6 +86,7 @@ export interface AppSettings {
     "xxmi.launchGuardDcr": boolean;
     "xxmi.launchGuardSmoothMotion": boolean;
     "xxmi.launchGuardLogging": boolean;
+    "xxmi.launchGuardTextures": boolean;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -436,5 +437,10 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.launchGuardLogging",
         scope: "xxmi",
         storageKey: "xxmi_launch_guard_logging",
+    },
+    "xxmi.launchGuardTextures": {
+        publicKey: "xxmi.launchGuardTextures",
+        scope: "xxmi",
+        storageKey: "xxmi_launch_guard_textures",
     },
 } as const satisfies Record<SettingKey, SettingDefinition>;

@@ -1,4 +1,5 @@
 import type { PresetEffects } from "@bindings/reshade";
+import type { TextureResizeResult, UncompressedTexture } from "@bindings/tools/texture";
 import { XXMI } from "@bindings/xxmi";
 import {
   AlertDialog,
@@ -14,6 +15,7 @@ import { Button } from "@renderer/components/ui/button";
 import { ButtonGroup } from "@renderer/components/ui/button-group";
 import { Input } from "@renderer/components/ui/input";
 import { ReShadePresetEffectsDialog } from "@renderer/components/xxmi/reshade-preset-effects-dialog";
+import { UncompressedTexturesDialog } from "@renderer/components/xxmi/uncompressed-textures-dialog";
 import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -61,6 +63,9 @@ const launchErrorCodes = [
 // Package IDs and effect file names the user declined at launch, which are not brought up again
 // until the app restarts.
 const declinedEffects = new Set<string>();
+// Paths of the uncompressed textures the user launched with anyway, which are not brought up again
+// until the app restarts.
+const ignoredTextures = new Set<string>();
 
 type LaunchDialog =
   | "gimi-dcr"
@@ -77,7 +82,13 @@ export type LaunchGuardResult =
   | { status: "started" }
   | {
       status: "blocked";
-      kind: LaunchDialog | "importer-setup" | "launch-error" | "update" | "preset-effects";
+      kind:
+        | LaunchDialog
+        | "importer-setup"
+        | "launch-error"
+        | "update"
+        | "preset-effects"
+        | "uncompressed-textures";
     };
 
 export function launchErrorCode(message: string): (typeof launchErrorCodes)[number] | null {
@@ -142,6 +153,10 @@ export function useLaunchGuard() {
     importer: string;
     effects: PresetEffects;
   } | null>(null);
+  const [pendingTextures, setPendingTextures] = useState<{
+    importer: string;
+    textures: UncompressedTexture[];
+  } | null>(null);
 
   const launch = useCallback(
     async (importer: string, withLogging = false): Promise<LaunchGuardResult> => {
@@ -179,6 +194,20 @@ export function useLaunchGuard() {
     [navigate, t],
   );
 
+  const launchWithTextures = useCallback(
+    async (importer: string): Promise<LaunchGuardResult> => {
+      // A failed scan must not keep the game from launching.
+      const found = await XXMI.LaunchUncompressedTextures(importer).catch(() => null);
+      const textures = found?.filter((texture) => !ignoredTextures.has(texture.path));
+      if (textures?.length) {
+        setPendingTextures({ importer, textures });
+        return { status: "blocked", kind: "uncompressed-textures" };
+      }
+      return launch(importer);
+    },
+    [launch],
+  );
+
   const launchWithEffects = useCallback(
     async (importer: string): Promise<LaunchGuardResult> => {
       // A failed check must not keep the game from launching.
@@ -190,9 +219,9 @@ export function useLaunchGuard() {
         setPendingEffects({ importer, effects });
         return { status: "blocked", kind: "preset-effects" };
       }
-      return launch(importer);
+      return launchWithTextures(importer);
     },
-    [launch],
+    [launchWithTextures],
   );
 
   const startImporter = useCallback(
@@ -217,12 +246,41 @@ export function useLaunchGuard() {
       }
       setPendingEffects(null);
       try {
-        await launch(pendingEffects.importer);
+        await launchWithTextures(pendingEffects.importer);
       } catch (error) {
         toast.error(toErrorMessage(error));
       }
     },
-    [launch, pendingEffects],
+    [launchWithTextures, pendingEffects],
+  );
+
+  const launchPendingTextures = useCallback(
+    async (ignored: string[]) => {
+      if (!pendingTextures) return;
+      ignored.forEach((path) => ignoredTextures.add(path));
+      setPendingTextures(null);
+      try {
+        await launch(pendingTextures.importer);
+      } catch (error) {
+        toast.error(toErrorMessage(error));
+      }
+    },
+    [launch, pendingTextures],
+  );
+
+  // A texture that could not be compressed launches as it is, and asking about it again on the
+  // next launch would only fail the same way.
+  const handleTexturesCompressed = useCallback(
+    async (result: TextureResizeResult) => {
+      const failed = (result.files ?? [])
+        .filter((file) => file.status === "failed")
+        .map((file) => file.filePath);
+      if (failed.length) {
+        toast.warning(t("page.mod.dialog.uncompressed-textures.failed", { count: failed.length }));
+      }
+      await launchPendingTextures(failed);
+    },
+    [launchPendingTextures, t],
   );
 
   const handleUpdateConfirm = useCallback(async () => {
@@ -553,6 +611,15 @@ export function useLaunchGuard() {
           onInstalled={() => launchPendingEffects(false)}
           onSkip={() => launchPendingEffects(true)}
           onClose={() => setPendingEffects(null)}
+        />
+        <UncompressedTexturesDialog
+          importer={pendingTextures?.importer ?? null}
+          textures={pendingTextures?.textures ?? null}
+          onIgnore={() =>
+            launchPendingTextures(pendingTextures?.textures.map((texture) => texture.path) ?? [])
+          }
+          onCompressed={handleTexturesCompressed}
+          onClose={() => setPendingTextures(null)}
         />
       </>
     ),

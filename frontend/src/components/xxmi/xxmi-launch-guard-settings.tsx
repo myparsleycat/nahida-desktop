@@ -13,8 +13,9 @@ const settingsConfig = {
   dcr: "xxmi.launchGuardDcr",
   smoothMotion: "xxmi.launchGuardSmoothMotion",
   logging: "xxmi.launchGuardLogging",
+  textures: "xxmi.launchGuardTextures",
 } as const;
-const guards = ["dcr", "smoothMotion", "logging"] as const;
+const guards = ["dcr", "smoothMotion", "logging", "textures"] as const;
 
 export function XXMILaunchGuardSettings() {
   const { t } = useTranslation();
@@ -37,7 +38,7 @@ export function XXMILaunchGuardSettings() {
               key={guard}
               label={t(`page.setting.xxmi.launchGuard.${guard}`)}
               description={t(`page.setting.xxmi.launchGuard.${guard}Description`)}
-              checked={settings[guard] ?? true}
+              checked={settings[guard] ?? guard !== "textures"}
               onCheckedChange={(value) => void update(guard, value)}
             />
           ))}

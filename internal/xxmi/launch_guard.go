@@ -23,6 +23,7 @@ const (
 	launchGuardDCRKey          = "xxmi_launch_guard_dcr"
 	launchGuardSmoothMotionKey = "xxmi_launch_guard_smooth_motion"
 	launchGuardLoggingKey      = "xxmi_launch_guard_logging"
+	launchGuardTexturesKey     = "xxmi_launch_guard_textures"
 )
 
 var (
@@ -76,22 +77,25 @@ func (dcrAllowed) gimiDCREnabled(context.Context) (bool, error) {
 // launchGuards is the launch guards the user left on. A guard that is off neither stops the launch nor
 // changes the setting it watches.
 type launchGuards struct {
-	dcr, smoothMotion, logging bool
+	dcr, smoothMotion, logging, textures bool
 }
 
-// launchGuards reads the guard settings, which are all on until the user turns them off. Turning the
-// guard itself off turns every guard off.
+// launchGuards reads the guard settings. All are on until the user turns them off, except the texture
+// guard, which the user turns on. Turning the guard itself off turns every guard off.
 func (x *XXMI) launchGuards(ctx context.Context) (launchGuards, error) {
 	client, err := x.settingsClient()
 	if err != nil {
 		return launchGuards{}, err
 	}
-	enabled := func(key string) (bool, error) {
+	enabled := func(key string, unset bool) (bool, error) {
 		value, err := client.Settings.GetValue(ctx, key)
-		return value == nil || *value == "true", err
+		if value == nil {
+			return unset, err
+		}
+		return *value == "true", err
 	}
 
-	if on, err := enabled(launchGuardKey); err != nil || !on {
+	if on, err := enabled(launchGuardKey, true); err != nil || !on {
 		return launchGuards{}, err
 	}
 	var guards launchGuards
@@ -100,9 +104,12 @@ func (x *XXMI) launchGuards(ctx context.Context) (launchGuards, error) {
 		launchGuardSmoothMotionKey: &guards.smoothMotion,
 		launchGuardLoggingKey:      &guards.logging,
 	} {
-		if *guard, err = enabled(key); err != nil {
+		if *guard, err = enabled(key, true); err != nil {
 			return launchGuards{}, err
 		}
+	}
+	if guards.textures, err = enabled(launchGuardTexturesKey, false); err != nil {
+		return launchGuards{}, err
 	}
 	return guards, nil
 }
