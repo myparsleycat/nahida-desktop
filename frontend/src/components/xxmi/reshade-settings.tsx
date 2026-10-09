@@ -6,9 +6,9 @@ import { GameIcon } from "@renderer/components/game-icon";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
+import { Input } from "@renderer/components/ui/input";
 import {
   Section,
-  SectionAction,
   SectionContent,
   SectionDescription,
   SectionHeader,
@@ -16,11 +16,12 @@ import {
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { FOLLOW_LATEST, SelectRow } from "@renderer/components/xxmi/xxmi-fields";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
-import { DownloadIcon, FolderOpenIcon, Loader2Icon, Trash2Icon } from "lucide-react";
+import { DownloadIcon, FolderOpenIcon, Loader2Icon, SearchIcon, Trash2Icon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -246,28 +247,44 @@ function GameRow({ importer }: { importer: string }) {
   );
 }
 
+type EffectCategory = "available" | "installed";
+
 function EffectPackages() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [chosen, setChosen] = useState<EffectCategory>("available");
+  const [search, setSearch] = useState("");
   const query = useQuery({
     queryKey: ["reshade:effects"],
     queryFn: ReShade.ListEffectPackages,
     retry: false,
   });
   const packages = query.data ?? [];
+  const installed = packages.filter((pkg) => pkg.installed);
+  const available = packages.filter((pkg) => !pkg.installed);
+  // An emptied category has nothing to act on, so the other one is shown in its place.
+  const category =
+    installed.length === 0 ? "available" : available.length === 0 ? "installed" : chosen;
+  const shown = category === "installed" ? installed : available;
+  // Hidden by the search or not, a checked package stays part of the batch.
+  const picked = shown.map((pkg) => pkg.id).filter((id) => selected.includes(id));
+  const needle = search.trim().toLowerCase();
+  const matched = shown.filter((pkg) =>
+    `${pkg.name}\n${pkg.description}`.toLowerCase().includes(needle),
+  );
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (ids: string[], action: () => Promise<unknown>) => {
     setBusy(true);
     try {
       await action();
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
-    // A failed batch still installs the packages before the failure.
+    // A failed batch still applies to the packages before the failure.
     await queryClient.invalidateQueries({ queryKey: ["reshade:effects"] });
-    setSelected([]);
+    setSelected((current) => current.filter((id) => !ids.includes(id)));
     setBusy(false);
   };
 
@@ -278,30 +295,6 @@ function EffectPackages() {
         <SectionDescription>
           {t("page.setting.xxmi.builtin.reshade.effectsDescription")}
         </SectionDescription>
-        <SectionAction className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || packages.length === 0}
-            onClick={() =>
-              setSelected(
-                packages
-                  .filter((pkg) => pkg.recommended && pkg.supported && !pkg.installed)
-                  .map((pkg) => pkg.id),
-              )
-            }
-          >
-            {t("page.setting.xxmi.builtin.reshade.selectRecommended")}
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy || selected.length === 0}
-            onClickPromise={() => run(() => ReShade.InstallEffectPackages(selected))}
-          >
-            <DownloadIcon />
-            {t("page.setting.xxmi.builtin.reshade.installSelected", { count: selected.length })}
-          </Button>
-        </SectionAction>
       </SectionHeader>
       <SectionContent>
         {query.isPending ? (
@@ -319,22 +312,97 @@ function EffectPackages() {
             </Button>
           </div>
         ) : (
-          <ul className="-mx-2 max-h-96 space-y-1 overflow-y-auto">
-            {packages.map((pkg) => (
-              <EffectPackageItem
-                key={pkg.id}
-                pkg={pkg}
-                busy={busy}
-                checked={selected.includes(pkg.id)}
-                onCheckedChange={(checked) =>
-                  setSelected(
-                    checked ? [...selected, pkg.id] : selected.filter((id) => id !== pkg.id),
-                  )
-                }
-                onRemove={() => run(() => ReShade.RemoveEffectPackage(pkg.id))}
+          <Tabs value={category} onValueChange={(value: EffectCategory) => setChosen(value)}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <TabsList>
+                <TabsTrigger value="available" disabled={available.length === 0}>
+                  {t("page.setting.xxmi.builtin.reshade.effectAvailable")} ({available.length})
+                </TabsTrigger>
+                <TabsTrigger value="installed" disabled={installed.length === 0}>
+                  {t("page.setting.xxmi.builtin.reshade.effectInstalled")} ({installed.length})
+                </TabsTrigger>
+              </TabsList>
+              {category === "installed" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || picked.length === 0}
+                  onClickPromise={() =>
+                    run(picked, async () => {
+                      for (const id of picked) await ReShade.RemoveEffectPackage(id);
+                    })
+                  }
+                >
+                  <Trash2Icon />
+                  {t("page.setting.xxmi.builtin.reshade.removeSelected", { count: picked.length })}
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      setSelected(
+                        available
+                          .filter((pkg) => pkg.recommended && pkg.supported)
+                          .map((pkg) => pkg.id),
+                      )
+                    }
+                  >
+                    {t("page.setting.xxmi.builtin.reshade.selectRecommended")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={busy || picked.length === 0}
+                    onClickPromise={() => run(picked, () => ReShade.InstallEffectPackages(picked))}
+                  >
+                    <DownloadIcon />
+                    {t("page.setting.xxmi.builtin.reshade.installSelected", {
+                      count: picked.length,
+                    })}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="relative flex items-center">
+              <SearchIcon className="absolute left-2 size-4 text-muted-foreground" />
+              <Input
+                className="h-8 pl-7 dark:bg-transparent"
+                placeholder={t("g.search")}
+                aria-label={t("g.search")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
               />
-            ))}
-          </ul>
+            </div>
+            <TabsContent value={category}>
+              {matched.length === 0 && (
+                <p className="py-3 text-xs text-muted-foreground">
+                  {t("page.setting.xxmi.builtin.reshade.effectsNoMatch")}
+                </p>
+              )}
+              <ul className="-mx-2 max-h-96 space-y-1 overflow-y-auto">
+                {matched.map((pkg) => (
+                  <EffectPackageItem
+                    key={pkg.id}
+                    pkg={pkg}
+                    busy={busy}
+                    checked={selected.includes(pkg.id)}
+                    onCheckedChange={(checked) =>
+                      setSelected((current) =>
+                        checked ? [...current, pkg.id] : current.filter((id) => id !== pkg.id),
+                      )
+                    }
+                    onRemove={
+                      pkg.installed
+                        ? () => run([pkg.id], () => ReShade.RemoveEffectPackage(pkg.id))
+                        : undefined
+                    }
+                  />
+                ))}
+              </ul>
+            </TabsContent>
+          </Tabs>
         )}
       </SectionContent>
     </Section>
@@ -352,7 +420,7 @@ function EffectPackageItem({
   busy: boolean;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  onRemove: () => Promise<void>;
+  onRemove?: () => Promise<void>;
 }) {
   const { t } = useTranslation();
 
@@ -362,17 +430,12 @@ function EffectPackageItem({
         <Checkbox
           className="mt-0.5"
           checked={checked}
-          disabled={busy || !pkg.supported}
+          disabled={busy || (!pkg.supported && !pkg.installed)}
           onCheckedChange={(value) => onCheckedChange(value === true)}
         />
         <span className="min-w-0 flex-1 space-y-0.5">
           <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
             {pkg.name}
-            {pkg.installed && (
-              <Badge variant="secondary">
-                {t("page.setting.xxmi.builtin.reshade.effectInstalled")}
-              </Badge>
-            )}
             {!pkg.supported && (
               <Badge variant="outline">
                 {t("page.setting.xxmi.builtin.reshade.effectUnsupported")}
@@ -384,7 +447,7 @@ function EffectPackageItem({
           )}
         </span>
       </label>
-      {pkg.installed && (
+      {onRemove && (
         <Button
           variant="ghost"
           size="icon"
