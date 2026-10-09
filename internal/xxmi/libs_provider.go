@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/semver"
+
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
@@ -33,15 +35,19 @@ type libsProviderSpec struct {
 	// versionMark separates the signed libraries version a provider release is built on from the provider's
 	// own revision, as in "1.2.2-nhd.1".
 	versionMark string
+	// smoothMotionSince is the first release whose d3d11.dll renders alongside NVIDIA Smooth Motion, or ""
+	// when Smooth Motion has to be off for mods to load.
+	smoothMotionSince string
 }
 
 var libsProviders = []libsProviderSpec{
 	{id: defaultLibsProvider, repo: libsRepo},
 	{
-		id:             "myparsleycat",
-		repo:           github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
-		overlayPackage: "xxmi-libs-myparsleycat",
-		versionMark:    "-nhd.",
+		id:                "myparsleycat",
+		repo:              github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
+		overlayPackage:    "xxmi-libs-myparsleycat",
+		versionMark:       "-nhd.",
+		smoothMotionSince: "1.2.2-nhd.3",
 	},
 }
 
@@ -321,6 +327,23 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 		return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 	}
 	return &providerRuntimeDLL{source: spec.overlayPackage + "@" + version, data: data}, nil
+}
+
+// smoothMotionSupported reports whether the d3d11.dll the importer's next deployment writes renders alongside
+// NVIDIA Smooth Motion. A release that cannot be resolved counts as unsupported; the deployment that follows
+// reports why.
+func (x *XXMI) smoothMotionSupported(ctx context.Context, cfg ImporterConfig) bool {
+	spec, err := x.deployedLibsProvider(ctx, cfg)
+	if err != nil || spec.smoothMotionSince == "" {
+		return false
+	}
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return false
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+	return err == nil && semver.IsValid("v"+version) &&
+		semver.Compare("v"+version, "v"+spec.smoothMotionSince) >= 0
 }
 
 // providerPin moves a pinned libraries version to a provider: to the release built on the same signed

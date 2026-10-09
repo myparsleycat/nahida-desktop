@@ -52,6 +52,22 @@ type launchFixer interface {
 	disableSmoothMotion(context.Context, string) error
 }
 
+// smoothMotionAllowed is the launch settings of a launch whose d3d11.dll renders alongside NVIDIA Smooth
+// Motion: the setting neither blocks the launch nor gets turned off.
+type smoothMotionAllowed struct{ launchFixer }
+
+func (smoothMotionAllowed) smoothMotionEnabled(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+// builtinLaunchSettings returns the settings a built-in launch of cfg is held to.
+func (x *XXMI) builtinLaunchSettings(ctx context.Context, cfg ImporterConfig, migotoDLLUsed bool) launchFixer {
+	if migotoDLLUsed && x.smoothMotionSupported(ctx, cfg) {
+		return smoothMotionAllowed{x.launchSettings}
+	}
+	return x.launchSettings
+}
+
 func collectLaunchBlockers(
 	ctx context.Context,
 	importer, exe string,
@@ -184,7 +200,7 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 		if err != nil {
 			return err
 		}
-		return x.clearLaunchBlockers(ctx, importer, gameExecutable)
+		return x.clearLaunchBlockers(ctx, importer, gameExecutable, x.launchSettings)
 	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
@@ -202,11 +218,18 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 		}
 		gameExecutable = game.ExePath
 	}
-	return x.clearLaunchBlockers(ctx, importer, gameExecutable)
+	cfg, _ = withoutReplacedReShadeLibraries(cfg)
+	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil {
+		return x.reportLaunchGuard(err, "clear-launch-blockers", importer, gameExecutable)
+	}
+	return x.clearLaunchBlockers(
+		ctx, importer, gameExecutable, x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed),
+	)
 }
 
-func (x *XXMI) clearLaunchBlockers(ctx context.Context, importer, gameExecutable string) error {
-	if err := applyLaunchFixes(ctx, importer, gameExecutable, x.launchSettings); err != nil {
+func (x *XXMI) clearLaunchBlockers(ctx context.Context, importer, gameExecutable string, src launchFixer) error {
+	if err := applyLaunchFixes(ctx, importer, gameExecutable, src); err != nil {
 		if infra.IsReportedError(err) {
 			return err
 		}

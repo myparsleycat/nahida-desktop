@@ -158,7 +158,11 @@ func (x *XXMI) launchesCustomDLL(ctx context.Context, cfg ImporterConfig) (bool,
 	// and the user may have replaced the DLL since.
 	manifest, ok := readXXMIRuntimeManifest(cfg.ImporterFolder)
 	if !ok {
-		return false, nil
+		// A folder nothing was deployed to yet has no manifest, and the deployment keeps the DLL already in it.
+		_, err := os.Stat(filepath.Join(cfg.ImporterFolder, runtimeManifestName))
+		if !errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
 	}
 	current, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, customDLLName))
 	if err != nil {

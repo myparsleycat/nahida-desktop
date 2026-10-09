@@ -434,3 +434,50 @@ func TestCollectLaunchBlockersHonorsCancellation(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) {
+	ctx := context.Background()
+	supporting, older := testCustomDLLImage("1.2.2-nhd.3"), testCustomDLLImage("1.2.2-nhd.2")
+	service, _, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.3", data: supporting, digest: providerTestDigest(supporting)},
+		{tag: "v1.2.2-nhd.2", data: older, digest: providerTestDigest(older)},
+	})
+	service.launchSettings = &fakeLaunch{smooth: true}
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+
+	for _, tc := range []struct {
+		name          string
+		provider      string
+		pin           VersionPin
+		migotoDLLUsed bool
+		blocked       bool
+	}{
+		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}, true, false},
+		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false},
+		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.2"}, true, true},
+		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true},
+		{"launch without the XXMI DLL", "myparsleycat", VersionPin{Follow: "latest"}, false, true},
+	} {
+		cfg.LibsProvider, cfg.XXMIVersion = tc.provider, tc.pin
+		settings := service.builtinLaunchSettings(ctx, cfg, tc.migotoDLLUsed)
+		err := service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
+		if blocked := errors.Is(err, errSmoothMotionEnabled); blocked != tc.blocked || err != nil && !blocked {
+			t.Fatalf("%s: error = %v, want blocked = %t", tc.name, err, tc.blocked)
+		}
+	}
+
+	// Unsafe mode keeps a DLL found in a folder nothing was deployed to yet, so the supporting release the
+	// importer is set to is not the one the game loads.
+	cfg.LibsProvider, cfg.XXMIVersion = "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}
+	cfg.Migoto.UnsafeMode = true
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, customDLLName), older)
+	settings := service.builtinLaunchSettings(ctx, cfg, true)
+	err = service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
+	if !errors.Is(err, errSmoothMotionEnabled) {
+		t.Fatalf("kept DLL without a manifest: error = %v, want the smooth motion blocker", err)
+	}
+}

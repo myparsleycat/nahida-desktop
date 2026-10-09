@@ -116,28 +116,9 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if cfg.ReShade.Enabled && !reshadeUsed {
 		warn("ReShade needs native injection with the 3DMigoto runtime and was left out of this launch")
 	}
-	if reshadeUsed && cfg.ExtraLibraries.Enabled {
-		// Libraries left from a manual ReShade setup would load a second copy of it.
-		kept := make([]string, 0, len(cfg.ExtraLibraries.Paths))
-		wrapperSkipped := false
-		for _, library := range cfg.ExtraLibraries.Paths {
-			name := filepath.Base(library)
-			wrapper := strings.EqualFold(name, "RabbitWrapper.dll")
-			if !wrapper && !strings.EqualFold(name, "ReShade64.dll") {
-				kept = append(kept, library)
-				continue
-			}
-			wrapperSkipped = wrapperSkipped || wrapper
-			warn("Skipped an extra library that the built-in ReShade replaces: " + library)
-		}
-		cfg.ExtraLibraries.Paths = kept
-
-		// That setup bypasses XXMI DLL injection because the wrapper loads the DLL itself. Without the
-		// wrapper nothing would, so this launch injects it.
-		if wrapperSkipped && cfg.XXMIDLLInjectMode == "Bypass" {
-			cfg.XXMIDLLInjectMode = "Inject"
-			warn("XXMI DLL injection was switched from Bypass to Inject for this launch so mods still load")
-		}
+	cfg, reshadeWarnings := withoutReplacedReShadeLibraries(cfg)
+	for _, warning := range reshadeWarnings {
+		warn(warning)
 	}
 
 	// Like the reference launcher, a launch that leaves the XXMI DLL out prepares none of the
@@ -226,7 +207,8 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if blockerTarget == "" {
 		blockerTarget = processName
 	}
-	if err := x.rejectLaunchBlockers(ctx, key, blockerTarget, checkDCR); err != nil {
+	launchSettings := x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed)
+	if err := x.rejectLaunchBlockersFrom(ctx, key, blockerTarget, checkDCR, launchSettings); err != nil {
 		return err
 	}
 	if x.elevated == nil {
@@ -571,6 +553,40 @@ func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions, logLeve
 	boolean("Logging", "show_warnings", options.MuteWarnings, "0", "1")
 	boolean("Hunting", "hunting", options.EnableHunting, "2", "0")
 	boolean("Hunting", "marking_actions", options.DumpShaders, "clipboard hlsl asm regex", "clipboard")
+}
+
+// withoutReplacedReShadeLibraries returns cfg as a launch with the built-in ReShade runs it, along with a
+// warning for each change. Whether the launch loads the XXMI DLL depends on the result.
+func withoutReplacedReShadeLibraries(cfg ImporterConfig) (ImporterConfig, []string) {
+	if !cfg.usesReShade() || !cfg.ExtraLibraries.Enabled {
+		return cfg, nil
+	}
+
+	// Libraries left from a manual ReShade setup would load a second copy of it.
+	var warnings []string
+	kept := make([]string, 0, len(cfg.ExtraLibraries.Paths))
+	wrapperSkipped := false
+	for _, library := range cfg.ExtraLibraries.Paths {
+		name := filepath.Base(library)
+		wrapper := strings.EqualFold(name, "RabbitWrapper.dll")
+		if !wrapper && !strings.EqualFold(name, "ReShade64.dll") {
+			kept = append(kept, library)
+			continue
+		}
+		wrapperSkipped = wrapperSkipped || wrapper
+		warnings = append(warnings, "Skipped an extra library that the built-in ReShade replaces: "+library)
+	}
+	cfg.ExtraLibraries.Paths = kept
+
+	// That setup bypasses XXMI DLL injection because the wrapper loads the DLL itself. Without the
+	// wrapper nothing would, so this launch injects it.
+	if wrapperSkipped && cfg.XXMIDLLInjectMode == "Bypass" {
+		cfg.XXMIDLLInjectMode = "Inject"
+		warnings = append(
+			warnings, "XXMI DLL injection was switched from Bypass to Inject for this launch so mods still load",
+		)
+	}
+	return cfg, warnings
 }
 
 func (x *XXMI) builtinLaunchSpec(
