@@ -76,7 +76,15 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -183,6 +191,10 @@ function AgentRoute() {
   const displayedSessionId = useRef<string | undefined>(undefined);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatPaneRef = useRef<HTMLDivElement>(null);
+  const chatViewportRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const followingBottom = useRef(true);
   const hasPendingApproval = hasPendingAgentApproval(snapshot?.approvals);
 
   const refreshSessions = useCallback(async () => {
@@ -292,8 +304,41 @@ function AgentRoute() {
   }, [openSnapshot, refreshSessions]);
 
   useEffect(() => {
+    followingBottom.current = true;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [snapshot?.entries, liveEntries]);
+
+  // The composer overlays the bottom of the conversation and grows with hunting controls, the
+  // revert notice, attachments, and the draft, so the conversation reserves its measured height.
+  useEffect(() => {
+    const pane = chatPaneRef.current;
+    const composer = composerRef.current;
+    const viewport = chatViewportRef.current;
+    if (!pane || !composer || !viewport) return;
+
+    // Only an upward scroll stops following. A smooth scroll toward the bottom is still short of
+    // it when the composer resizes in the same frame, so distance alone would miss that case.
+    let lastScrollTop = viewport.scrollTop;
+    const trackFollowing = () => {
+      if (viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 4) {
+        followingBottom.current = true;
+      } else if (viewport.scrollTop < lastScrollTop) {
+        followingBottom.current = false;
+      }
+      lastScrollTop = viewport.scrollTop;
+    };
+    const observer = new ResizeObserver(() => {
+      pane.style.setProperty("--agent-composer-height", `${composer.offsetHeight}px`);
+      if (followingBottom.current) bottomRef.current?.scrollIntoView();
+    });
+
+    viewport.addEventListener("scroll", trackFollowing, { passive: true });
+    observer.observe(composer);
+    return () => {
+      viewport.removeEventListener("scroll", trackFollowing);
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (!renameTarget) return;
@@ -793,8 +838,9 @@ function AgentRoute() {
           </div>
         </header>
 
-        <div className="relative flex min-h-0 flex-1">
+        <div ref={chatPaneRef} className="relative flex min-h-0 flex-1">
           <ScrollArea
+            viewportRef={chatViewportRef}
             className={cn(
               "min-w-0 flex-1",
               scrollAreaClasses,
@@ -805,7 +851,7 @@ function AgentRoute() {
             )}
             viewportClassName="min-h-full"
           >
-            <div className="relative mx-auto flex min-h-full w-[min(var(--agent-chat-width),calc(100%_-_64px))] flex-col gap-[18px] overflow-hidden pt-7 pb-[180px] select-text max-[980px]:w-[calc(100%_-_40px)] [&>*]:max-w-full [&>*]:min-w-0">
+            <div className="relative mx-auto flex min-h-full w-[min(var(--agent-chat-width),calc(100%_-_64px))] flex-col gap-[18px] overflow-hidden pt-7 pb-[calc(var(--agent-composer-height,158px)_+_22px)] select-text max-[980px]:w-[calc(100%_-_40px)] [&>*]:max-w-full [&>*]:min-w-0">
               {loading && (
                 <Loader2Icon className="m-auto size-5 animate-spin text-muted-foreground" />
               )}
@@ -858,6 +904,7 @@ function AgentRoute() {
           </ScrollArea>
 
           <Composer
+            ref={composerRef}
             draft={draft}
             setDraft={setDraft}
             images={images}
@@ -1173,6 +1220,7 @@ function HuntingControls({
 }
 
 function Composer({
+  ref,
   draft,
   setDraft,
   images,
@@ -1191,6 +1239,7 @@ function Composer({
   onSend,
   onUnrevert,
 }: {
+  ref: RefObject<HTMLDivElement | null>;
   draft: string;
   setDraft: (value: string) => void;
   images: PendingImage[];
@@ -1226,6 +1275,7 @@ function Composer({
 
   return (
     <div
+      ref={ref}
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 z-7 flex justify-center bg-[linear-gradient(180deg,transparent_0,var(--background)_36px)] px-4 pt-9 pb-3",
         empty && "top-[clamp(190px,42%,350px)] bottom-auto bg-transparent bg-none pt-0",
